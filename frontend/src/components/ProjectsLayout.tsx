@@ -1331,7 +1331,18 @@ export function ProjectsLayout() {
                 </ol>
               ) : (
                 <div className="p-5">
-                  <p className="rounded-xl border border-dashed border-border p-4 text-sm font-semibold text-muted-foreground">연결된 실행 항목이 아직 없습니다.</p>
+                  <div className="rounded-xl border border-dashed border-border bg-background p-4">
+                    <div role="status" aria-live="polite">
+                      <p className="text-sm font-bold text-foreground">연결된 실행 항목이 아직 없습니다.</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        서명 세션의 작업 API에 프로젝트와 연결된 메일, 문서, 스레드 근거가 기록되면 이 목록에 표시됩니다.
+                      </p>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <a href="/tasks" className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">작업 보드 열기</a>
+                      <a href="/search" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-bold hover:bg-secondary">관련 근거 찾기</a>
+                    </div>
+                  </div>
                 </div>
               )}
             </section>
