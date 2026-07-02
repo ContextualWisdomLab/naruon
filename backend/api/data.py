@@ -82,6 +82,7 @@ DataRoomArtifactType = Literal[
     "evidence_samples_json",
     "readiness_summary_json",
 ]
+CloseGateStatus = Literal["blocked", "ready"]
 RemediationPriority = Literal["critical", "high", "medium"]
 DiligenceRecommendation = Literal[
     "ready_for_diligence",
@@ -489,6 +490,21 @@ class DataDiligenceRiskMatrixEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceCloseProofPlanEntry(BaseModel):
+    proof_key: str
+    severity_code: RemediationPriority
+    owner_area: str
+    related_artifact: str
+    exception_count: int
+    required_proof_artifact: str
+    acceptance_criteria: str
+    verification_method: str
+    buyer_close_dependency: str
+    close_gate_status: CloseGateStatus
+    next_action: str
+    provider_write_executed: bool
+
+
 class DataEvidenceSnapshotQualityCheck(BaseModel):
     check_key: str
     display_name: str
@@ -532,6 +548,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
         default_factory=list
     )
     diligence_risk_matrix: list[DataDiligenceRiskMatrixEntry] = Field(
+        default_factory=list
+    )
+    diligence_close_proof_plan: list[DataDiligenceCloseProofPlanEntry] = Field(
         default_factory=list
     )
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
@@ -783,6 +802,11 @@ _RISK_LABEL_BY_SEVERITY = {
     "critical": "Critical close blocker concentration",
     "high": "High diligence evidence gap",
     "medium": "Medium diligence coverage gap",
+}
+_CLOSE_DEPENDENCY_BY_SEVERITY = {
+    "critical": "critical evidence gate",
+    "high": "high priority evidence gate",
+    "medium": "coverage exception gate",
 }
 _ACQUISITION_KPI_TARGETS_BY_CHECK_KEY = {
     "thread_id_integrity": {
@@ -1596,6 +1620,37 @@ def _diligence_risk_matrix(
     return entries
 
 
+def _diligence_close_proof_plan(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> list[DataDiligenceCloseProofPlanEntry]:
+    return [
+        DataDiligenceCloseProofPlanEntry(
+            proof_key=f"proof_{risk.matrix_key}",
+            severity_code=risk.severity_code,
+            owner_area=risk.owner_area,
+            related_artifact=risk.related_artifact,
+            exception_count=risk.exception_count,
+            required_proof_artifact=risk.related_artifact,
+            acceptance_criteria=(
+                f"All {risk.exception_count} exception(s) for {risk.owner_area} "
+                f"are resolved and {risk.related_artifact} is regenerated without "
+                "raw content or stable IDs."
+            ),
+            verification_method=(
+                "Regenerate the evidence snapshot and run python "
+                "scripts/verify_evidence_snapshot.py <snapshot.json>."
+            ),
+            buyer_close_dependency=_CLOSE_DEPENDENCY_BY_SEVERITY[
+                risk.severity_code
+            ],
+            close_gate_status="blocked" if risk.blocks_close else "ready",
+            next_action=risk.recommended_next_action,
+            provider_write_executed=False,
+        )
+        for risk in snapshot.diligence_risk_matrix
+    ]
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -1853,6 +1908,11 @@ def _evidence_snapshot_from_surface(
     )
     snapshot = snapshot.model_copy(
         update={"diligence_risk_matrix": _diligence_risk_matrix(snapshot)}
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "diligence_close_proof_plan": _diligence_close_proof_plan(snapshot)
+        }
     )
     digest_payload = _snapshot_digest_payload(snapshot)
     return snapshot.model_copy(

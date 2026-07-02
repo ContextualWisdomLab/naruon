@@ -1036,6 +1036,41 @@ def _expected_diligence_risk_matrix():
     ]
 
 
+def _expected_diligence_close_proof_plan():
+    dependency_by_severity = {
+        "critical": "critical evidence gate",
+        "high": "high priority evidence gate",
+        "medium": "coverage exception gate",
+    }
+    return [
+        {
+            "proof_key": f"proof_{risk['matrix_key']}",
+            "severity_code": risk["severity_code"],
+            "owner_area": risk["owner_area"],
+            "related_artifact": risk["related_artifact"],
+            "exception_count": risk["exception_count"],
+            "required_proof_artifact": risk["related_artifact"],
+            "acceptance_criteria": (
+                f"All {risk['exception_count']} exception(s) for "
+                f"{risk['owner_area']} are resolved and "
+                f"{risk['related_artifact']} is regenerated without raw content "
+                "or stable IDs."
+            ),
+            "verification_method": (
+                "Regenerate the evidence snapshot and run python "
+                "scripts/verify_evidence_snapshot.py <snapshot.json>."
+            ),
+            "buyer_close_dependency": dependency_by_severity[
+                risk["severity_code"]
+            ],
+            "close_gate_status": "blocked",
+            "next_action": risk["recommended_next_action"],
+            "provider_write_executed": False,
+        }
+        for risk in _expected_diligence_risk_matrix()
+    ]
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1601,6 +1636,11 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     )
     assert "diligence_risk_matrix" in snapshot["canonical_payload_fields"]
     assert snapshot["diligence_risk_matrix"] == _expected_diligence_risk_matrix()
+    assert "diligence_close_proof_plan" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["diligence_close_proof_plan"]
+        == _expected_diligence_close_proof_plan()
+    )
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -1758,6 +1798,39 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert risk_matrix[-1]["severity_code"] == "medium"
     assert risk_matrix[-1]["exception_count"] == 1
     assert all(item["blocks_close"] is True for item in risk_matrix)
+    proof_plan = snapshot["diligence_close_proof_plan"]
+    assert len(proof_plan) == 6
+    assert proof_plan[0] == {
+        "proof_key": "proof_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "severity_code": "critical",
+        "owner_area": "email_ingestion",
+        "related_artifact": "acquisition-readiness-summary.json",
+        "exception_count": 2,
+        "required_proof_artifact": "acquisition-readiness-summary.json",
+        "acceptance_criteria": (
+            "All 2 exception(s) for email_ingestion are resolved and "
+            "acquisition-readiness-summary.json is regenerated without raw content "
+            "or stable IDs."
+        ),
+        "verification_method": (
+            "Regenerate the evidence snapshot and run python "
+            "scripts/verify_evidence_snapshot.py <snapshot.json>."
+        ),
+        "buyer_close_dependency": "critical evidence gate",
+        "close_gate_status": "blocked",
+        "next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "provider_write_executed": False,
+    }
+    assert proof_plan[-1]["proof_key"] == (
+        "proof_risk_medium_attachment_parsing_remediation_actions_json"
+    )
+    assert proof_plan[-1]["severity_code"] == "medium"
+    assert proof_plan[-1]["required_proof_artifact"] == "remediation-actions.json"
+    assert proof_plan[-1]["close_gate_status"] == "blocked"
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {
