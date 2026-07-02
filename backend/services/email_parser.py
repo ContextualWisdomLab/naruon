@@ -4,7 +4,8 @@ from pathlib import Path
 import datetime
 from email.utils import formataddr, getaddresses
 from email.utils import parsedate_to_datetime
-from typing import TypedDict
+from typing import NotRequired, TypedDict
+from .attachment_parser import parse_email_attachment
 from .exceptions import EmailParseError
 from .text_safety import strip_html_markup
 
@@ -22,6 +23,8 @@ class EmailData(TypedDict):
     references: str | None
     date: datetime.datetime
     body: str
+    body_content_type: NotRequired[str]
+    body_parse_content: NotRequired[str]
     attachments: list[dict]
 
 
@@ -60,15 +63,23 @@ def _process_multipart_body(msg: Message) -> tuple[str, str, list[dict]]:
         filename = part.get_filename()
         # Skip attachments
         if filename:
-            if content_type == "text/plain":
-                part_content = part.get_content()
-                if isinstance(part_content, str):
-                    attachments.append(
-                        {
-                            "filename": _sanitize_display_text(filename),
-                            "content": _sanitize_display_text(part_content),
-                        }
-                    )
+            parsed_attachment = parse_email_attachment(
+                filename=filename,
+                content_type=content_type,
+                raw_content=_attachment_part_content(part),
+            )
+            attachments.append(
+                {
+                    "filename": parsed_attachment.filename,
+                    "content": parsed_attachment.content,
+                    "content_type": parsed_attachment.content_type,
+                    "parse_content": parsed_attachment.parse_content,
+                    "parse_content_type": parsed_attachment.parse_content_type,
+                    "parser_key": parsed_attachment.parser_key,
+                    "parse_status": parsed_attachment.parse_status,
+                    "parse_error_code": parsed_attachment.parse_error_code,
+                }
+            )
             continue
 
         if content_type == "text/plain":
@@ -80,6 +91,14 @@ def _process_multipart_body(msg: Message) -> tuple[str, str, list[dict]]:
             if isinstance(part_content, str):
                 html_body += part_content
     return plain_body, html_body, attachments
+
+
+def _attachment_part_content(part: Message) -> object:
+    try:
+        return part.get_content()
+    except (LookupError, TypeError, ValueError):
+        payload = part.get_payload(decode=True)
+        return payload if payload is not None else ""
 
 
 def _process_singlepart_body(msg: Message) -> tuple[str, str, list[dict]]:
@@ -95,14 +114,15 @@ def _process_singlepart_body(msg: Message) -> tuple[str, str, list[dict]]:
     return plain_body, html_body, []
 
 
-def _extract_body_and_attachments(msg: Message) -> tuple[str, list[dict]]:
+def _extract_body_and_attachments(msg: Message) -> tuple[str, str, list[dict]]:
     if msg.is_multipart():
         plain_body, html_body, attachments = _process_multipart_body(msg)
     else:
         plain_body, html_body, attachments = _process_singlepart_body(msg)
 
-    body = plain_body if plain_body else html_body
-    return body, attachments
+    if plain_body:
+        return plain_body, "text/plain", attachments
+    return html_body, "text/html" if html_body else "text/plain", attachments
 
 
 def _extract_date(msg: Message) -> datetime.datetime:
@@ -137,7 +157,7 @@ def _extract_thread_id(msg: Message, message_id: str) -> str | None:
 
 
 def _message_to_email_data(msg: Message) -> EmailData:
-    body, attachments = _extract_body_and_attachments(msg)
+    body, body_content_type, attachments = _extract_body_and_attachments(msg)
     parsed_date = _extract_date(msg)
     message_id = _sanitize_nul(msg.get("Message-ID", ""))
     thread_id = _extract_thread_id(msg, message_id)
@@ -163,6 +183,8 @@ def _message_to_email_data(msg: Message) -> EmailData:
         ),
         "date": parsed_date,
         "body": _sanitize_display_text(body),
+        "body_content_type": body_content_type,
+        "body_parse_content": _sanitize_nul(body),
         "attachments": attachments,
     }
 

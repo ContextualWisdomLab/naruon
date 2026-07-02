@@ -519,6 +519,15 @@ class Email(Base):
     attachments: Mapped[list["Attachment"]] = relationship(
         back_populates="email", cascade="all, delete-orphan"
     )
+    content_nodes: Mapped[list["ContentNodeRecord"]] = relationship(
+        back_populates="email", cascade="all, delete-orphan"
+    )
+    content_segments: Mapped[list["ContentSegmentRecord"]] = relationship(
+        back_populates="email"
+    )
+    knowledge_graph_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
+        back_populates="email", cascade="all, delete-orphan"
+    )
     ticket_tasks: Mapped[list["TicketTask"]] = relationship(
         back_populates="related_email", cascade="all, delete-orphan"
     )
@@ -583,10 +592,224 @@ class Attachment(Base):
     email_id: Mapped[int] = mapped_column(ForeignKey("email_records.id"))
     filename: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)
+    content_type: Mapped[str] = mapped_column(
+        String(120), default="text/plain", nullable=False
+    )
+    parse_status: Mapped[str] = mapped_column(
+        String(64), default="parsed", nullable=False
+    )
+    parse_content_type: Mapped[str] = mapped_column(
+        String(120), default="text/plain", nullable=False
+    )
+    parser_key: Mapped[str] = mapped_column(
+        String(64), default="plain_text", nullable=False
+    )
+    parse_error_code: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
 
     email: Mapped["Email"] = relationship(back_populates="attachments")
+    content_nodes: Mapped[list["ContentNodeRecord"]] = relationship(
+        back_populates="attachment"
+    )
+    content_segments: Mapped[list["ContentSegmentRecord"]] = relationship(
+        back_populates="attachment"
+    )
+    knowledge_graph_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
+        back_populates="attachment"
+    )
+
+
+class ContentNodeRecord(Base):
+    __tablename__ = "content_nodes"
+    __table_args__ = (
+        UniqueConstraint("content_node_uid", name="uq_content_nodes_uid"),
+        Index(
+            "ix_content_nodes_email_source",
+            "email_id",
+            "source_kind",
+            "source_record_uid",
+            "ordinal_index",
+        ),
+        Index("ix_content_nodes_attachment", "attachment_id", "ordinal_index"),
+        Index("ix_content_nodes_hash", "content_hash"),
+    )
+
+    content_node_id: Mapped[int] = mapped_column(primary_key=True)
+    content_node_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id"), nullable=False
+    )
+    attachment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_attachments.id"), nullable=True
+    )
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)
+    parent_node_uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    node_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    node_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    ordinal_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_label: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    safe_text_content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email"] = relationship(back_populates="content_nodes")
+    attachment: Mapped["Attachment | None"] = relationship(
+        back_populates="content_nodes"
+    )
+    segments: Mapped[list["ContentSegmentRecord"]] = relationship(
+        back_populates="content_node", cascade="all, delete-orphan"
+    )
+    outgoing_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
+        "KnowledgeGraphEdgeRecord",
+        back_populates="source_node",
+        foreign_keys="KnowledgeGraphEdgeRecord.source_node_id",
+    )
+    incoming_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
+        "KnowledgeGraphEdgeRecord",
+        back_populates="target_node",
+        foreign_keys="KnowledgeGraphEdgeRecord.target_node_id",
+    )
+
+
+class ContentSegmentRecord(Base):
+    __tablename__ = "content_segments"
+    __table_args__ = (
+        UniqueConstraint("content_segment_uid", name="uq_content_segments_uid"),
+        Index(
+            "ix_content_segments_email_source",
+            "email_id",
+            "source_kind",
+            "source_record_uid",
+            "ordinal_index",
+        ),
+        Index("ix_content_segments_attachment", "attachment_id", "ordinal_index"),
+        Index("ix_content_segments_node", "content_node_id"),
+        Index("ix_content_segments_hash", "content_hash"),
+    )
+
+    content_segment_id: Mapped[int] = mapped_column(primary_key=True)
+    content_segment_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id"), nullable=False
+    )
+    attachment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_attachments.id"), nullable=True
+    )
+    content_node_id: Mapped[int] = mapped_column(
+        ForeignKey("content_nodes.content_node_id"), nullable=False
+    )
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)
+    segment_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    segment_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    ordinal_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    heading_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    safe_text_content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email"] = relationship(back_populates="content_segments")
+    attachment: Mapped["Attachment | None"] = relationship(
+        back_populates="content_segments"
+    )
+    content_node: Mapped["ContentNodeRecord"] = relationship(back_populates="segments")
+    outgoing_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
+        "KnowledgeGraphEdgeRecord",
+        back_populates="source_segment",
+        foreign_keys="KnowledgeGraphEdgeRecord.source_segment_id",
+    )
+    incoming_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
+        "KnowledgeGraphEdgeRecord",
+        back_populates="target_segment",
+        foreign_keys="KnowledgeGraphEdgeRecord.target_segment_id",
+    )
+
+
+class KnowledgeGraphEdgeRecord(Base):
+    __tablename__ = "knowledge_graph_edges"
+    __table_args__ = (
+        UniqueConstraint("edge_uid", name="uq_knowledge_graph_edges_uid"),
+        Index(
+            "ix_knowledge_graph_edges_email_kind",
+            "email_id",
+            "edge_kind",
+            "ordinal_index",
+        ),
+        Index("ix_knowledge_graph_edges_attachment", "attachment_id", "edge_kind"),
+        Index("ix_knowledge_graph_edges_source_node", "source_node_id"),
+        Index("ix_knowledge_graph_edges_target_node", "target_node_id"),
+        Index("ix_knowledge_graph_edges_source_segment", "source_segment_id"),
+        Index("ix_knowledge_graph_edges_target_segment", "target_segment_id"),
+    )
+
+    knowledge_graph_edge_id: Mapped[int] = mapped_column(primary_key=True)
+    edge_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id"), nullable=False
+    )
+    attachment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_attachments.id"), nullable=True
+    )
+    source_node_id: Mapped[int | None] = mapped_column(
+        ForeignKey("content_nodes.content_node_id"), nullable=True
+    )
+    target_node_id: Mapped[int | None] = mapped_column(
+        ForeignKey("content_nodes.content_node_id"), nullable=True
+    )
+    source_segment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("content_segments.content_segment_id"), nullable=True
+    )
+    target_segment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("content_segments.content_segment_id"), nullable=True
+    )
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)
+    edge_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    edge_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    ordinal_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email"] = relationship(back_populates="knowledge_graph_edges")
+    attachment: Mapped["Attachment | None"] = relationship(
+        back_populates="knowledge_graph_edges"
+    )
+    source_node: Mapped["ContentNodeRecord | None"] = relationship(
+        "ContentNodeRecord",
+        back_populates="outgoing_edges",
+        foreign_keys=[source_node_id],
+    )
+    target_node: Mapped["ContentNodeRecord | None"] = relationship(
+        "ContentNodeRecord",
+        back_populates="incoming_edges",
+        foreign_keys=[target_node_id],
+    )
+    source_segment: Mapped["ContentSegmentRecord | None"] = relationship(
+        "ContentSegmentRecord",
+        back_populates="outgoing_edges",
+        foreign_keys=[source_segment_id],
+    )
+    target_segment: Mapped["ContentSegmentRecord | None"] = relationship(
+        "ContentSegmentRecord",
+        back_populates="incoming_edges",
+        foreign_keys=[target_segment_id],
+    )
 
 
 class TenantConfig(Base):
