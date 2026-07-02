@@ -1031,6 +1031,45 @@ const diligenceCloseAcceptanceChecklist = diligenceCloseTraceabilityMap.map((ite
   provider_write_executed: false,
 }));
 
+const diligenceCloseAcceptanceSummary = {
+  summary_key: "buyer_close_acceptance",
+  decision_code: "close_blocked",
+  total_acceptance_count: diligenceCloseAcceptanceChecklist.length,
+  blocked_acceptance_count: diligenceCloseAcceptanceChecklist.length,
+  ready_acceptance_count: 0,
+  reviewer_role_count: 3,
+  reviewer_roles: [
+    "coverage reviewer",
+    "data quality reviewer",
+    "executive diligence reviewer",
+  ],
+  required_artifact_count: 5,
+  required_artifacts: [
+    "acquisition-readiness-summary.json",
+    "dom-paragraph-evidence-samples.json",
+    "knowledge-graph-evidence-samples.json",
+    "remediation-actions.json",
+    "semantic-relation-evidence-samples.json",
+  ],
+  blocker_count: 9,
+  blocker_keys: [
+    "exception_attach_kg_evidence_endpoints",
+    "exception_backfill_content_graph_coverage",
+    "exception_backfill_dedupe_fingerprints",
+    "exception_backfill_knowledge_graph_coverage",
+    "exception_backfill_semantic_relation_sources",
+    "exception_expand_attachment_parse_coverage",
+    "exception_recover_attachment_content",
+    "exception_repair_segment_text_readiness",
+    "exception_repair_thread_id_integrity",
+  ],
+  close_gate_status: "blocked",
+  snapshot_verification_required: true,
+  buyer_summary_text: "Buyer acceptance remains blocked by 6 item(s) across 5 artifact(s) and 9 blocker key(s).",
+  next_action_text: "Resolve blocker keys, regenerate the evidence snapshot, run the offline verifier, and reissue the acceptance checklist.",
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1398,6 +1437,7 @@ const dataEvidenceSnapshot = {
     "content_graph_topology_counts",
     "data_room_package_manifest",
     "diligence_close_acceptance_checklist",
+    "diligence_close_acceptance_summary",
     "diligence_exception_register",
     "diligence_close_artifact_review_queue",
     "diligence_close_owner_handoff_queue",
@@ -1496,6 +1536,7 @@ const dataEvidenceSnapshot = {
   diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
   diligence_close_traceability_map: diligenceCloseTraceabilityMap,
   diligence_close_acceptance_checklist: diligenceCloseAcceptanceChecklist,
+  diligence_close_acceptance_summary: diligenceCloseAcceptanceSummary,
   diligence_close_decision_summary: diligenceCloseDecisionSummary,
   diligence_close_proof_plan: diligenceCloseProofPlan,
   diligence_risk_matrix: diligenceRiskMatrix,
@@ -2158,6 +2199,16 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("review_acquisition_readiness_summary_json");
     expect(container.textContent).toContain("handoff_email_ingestion");
     expect(container.textContent).toContain("close proof traceability");
+    expect(container.textContent).toContain("Diligence close acceptance summary");
+    expect(container.textContent).toContain("Buyer acceptance remains blocked");
+    expect(container.textContent).toContain("Acceptance items");
+    expect(container.textContent).toContain("total 6");
+    expect(container.textContent).toContain("ready 0");
+    expect(container.textContent).toContain("Reviewer roles");
+    expect(container.textContent).toContain("Required artifacts");
+    expect(container.textContent).toContain("Blocker keys");
+    expect(container.textContent).toContain("exception_attach_kg_evidence_endpoints");
+    expect(container.textContent).toContain("offline verifier");
     expect(container.textContent).toContain("Diligence close acceptance checklist");
     expect(container.textContent).toContain("verify the copied snapshot digest");
     expect(container.textContent).toContain("Verification command");
@@ -2428,6 +2479,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.diligence_close_acceptance_checklist[2].source_field).toBe("content_graph_evidence_samples");
     expect(copiedSnapshot.diligence_close_acceptance_checklist[3].data_room_artifact).toBe("knowledge-graph-evidence-samples.json");
     expect(copiedSnapshot.diligence_close_acceptance_checklist[5].blocker_keys).toEqual(["exception_expand_attachment_parse_coverage"]);
+    expect(copiedSnapshot.diligence_close_acceptance_summary).toEqual(diligenceCloseAcceptanceSummary);
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

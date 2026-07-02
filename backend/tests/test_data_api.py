@@ -1426,6 +1426,56 @@ def _expected_diligence_close_acceptance_checklist():
     ]
 
 
+def _expected_diligence_close_acceptance_summary():
+    checklist = _expected_diligence_close_acceptance_checklist()
+    blocked = [item for item in checklist if item["acceptance_status"] == "blocked"]
+    ready = [
+        item for item in checklist if item["acceptance_status"] == "ready_for_acceptance"
+    ]
+    reviewer_roles = sorted(
+        {role for item in checklist for role in item["reviewer_roles"]}
+    )
+    required_artifacts = sorted({item["data_room_artifact"] for item in checklist})
+    blocker_keys = sorted({key for item in blocked for key in item["blocker_keys"]})
+    return {
+        "summary_key": "buyer_close_acceptance",
+        "decision_code": "close_blocked" if blocked else "ready_to_close",
+        "total_acceptance_count": len(checklist),
+        "blocked_acceptance_count": len(blocked),
+        "ready_acceptance_count": len(ready),
+        "reviewer_role_count": len(reviewer_roles),
+        "reviewer_roles": reviewer_roles,
+        "required_artifact_count": len(required_artifacts),
+        "required_artifacts": required_artifacts,
+        "blocker_count": len(blocker_keys),
+        "blocker_keys": blocker_keys,
+        "close_gate_status": "blocked" if blocked else "ready",
+        "snapshot_verification_required": any(
+            item["snapshot_verification_required"] for item in checklist
+        ),
+        "buyer_summary_text": (
+            f"Buyer acceptance remains blocked by {len(blocked)} item(s) "
+            f"across {len(required_artifacts)} artifact(s) and "
+            f"{len(blocker_keys)} blocker key(s)."
+        )
+        if blocked
+        else (
+            f"Buyer acceptance is ready for {len(ready)} item(s) across "
+            f"{len(required_artifacts)} artifact(s)."
+        ),
+        "next_action_text": (
+            "Resolve blocker keys, regenerate the evidence snapshot, run the "
+            "offline verifier, and reissue the acceptance checklist."
+        )
+        if blocked
+        else (
+            "Share the verified snapshot and acceptance checklist with buyer "
+            "reviewers."
+        ),
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -2029,6 +2079,13 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         snapshot["diligence_close_acceptance_checklist"]
         == _expected_diligence_close_acceptance_checklist()
     )
+    assert "diligence_close_acceptance_summary" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_acceptance_summary"]
+        == _expected_diligence_close_acceptance_summary()
+    )
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -2414,6 +2471,51 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert all(
         item["provider_write_executed"] is False for item in acceptance_checklist
     )
+    acceptance_summary = snapshot["diligence_close_acceptance_summary"]
+    assert acceptance_summary == {
+        "summary_key": "buyer_close_acceptance",
+        "decision_code": "close_blocked",
+        "total_acceptance_count": 6,
+        "blocked_acceptance_count": 6,
+        "ready_acceptance_count": 0,
+        "reviewer_role_count": 3,
+        "reviewer_roles": [
+            "coverage reviewer",
+            "data quality reviewer",
+            "executive diligence reviewer",
+        ],
+        "required_artifact_count": 5,
+        "required_artifacts": [
+            "acquisition-readiness-summary.json",
+            "dom-paragraph-evidence-samples.json",
+            "knowledge-graph-evidence-samples.json",
+            "remediation-actions.json",
+            "semantic-relation-evidence-samples.json",
+        ],
+        "blocker_count": 9,
+        "blocker_keys": [
+            "exception_attach_kg_evidence_endpoints",
+            "exception_backfill_content_graph_coverage",
+            "exception_backfill_dedupe_fingerprints",
+            "exception_backfill_knowledge_graph_coverage",
+            "exception_backfill_semantic_relation_sources",
+            "exception_expand_attachment_parse_coverage",
+            "exception_recover_attachment_content",
+            "exception_repair_segment_text_readiness",
+            "exception_repair_thread_id_integrity",
+        ],
+        "close_gate_status": "blocked",
+        "snapshot_verification_required": True,
+        "buyer_summary_text": (
+            "Buyer acceptance remains blocked by 6 item(s) across 5 artifact(s) "
+            "and 9 blocker key(s)."
+        ),
+        "next_action_text": (
+            "Resolve blocker keys, regenerate the evidence snapshot, run the "
+            "offline verifier, and reissue the acceptance checklist."
+        ),
+        "provider_write_executed": False,
+    }
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {

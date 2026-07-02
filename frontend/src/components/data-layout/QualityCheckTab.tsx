@@ -44,6 +44,7 @@ export function QualityCheckTab({
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
   const acceptanceChecklist = evidenceSnapshot?.diligence_close_acceptance_checklist ?? [];
+  const acceptanceSummary = evidenceSnapshot?.diligence_close_acceptance_summary;
   const copyEvidenceSnapshot = React.useCallback(async () => {
     if (!evidenceSnapshot) return;
     try {
@@ -567,6 +568,70 @@ export function QualityCheckTab({
                   )}
                   {acceptanceChecklist.length > 0 && (
                     <div className="border-t border-border p-5">
+                      {acceptanceSummary && (
+                        <div className="mb-3 rounded-xl border border-border bg-background p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-muted-foreground">Diligence close acceptance summary</p>
+                              <h3 className="mt-1 text-sm font-black">{toSafeReactText(acceptanceSummary.decision_code)}</h3>
+                              <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(acceptanceSummary.buyer_summary_text)}</p>
+                              <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(acceptanceSummary.next_action_text)}</p>
+                            </div>
+                            <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(acceptanceSummary.close_gate_status)}
+                            </span>
+                          </div>
+                          <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                            <div>
+                              <dt className="font-black text-muted-foreground">Acceptance items</dt>
+                              <dd className="mt-1 text-sm font-bold">
+                                total {formatCount(acceptanceSummary.total_acceptance_count)} · blocked {formatCount(acceptanceSummary.blocked_acceptance_count)} · ready {formatCount(acceptanceSummary.ready_acceptance_count)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-black text-muted-foreground">Reviewer roles</dt>
+                              <dd className="mt-1 text-sm font-bold">{formatCount(acceptanceSummary.reviewer_role_count)}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-black text-muted-foreground">Required artifacts</dt>
+                              <dd className="mt-1 text-sm font-bold">{formatCount(acceptanceSummary.required_artifact_count)}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-black text-muted-foreground">Blocker keys</dt>
+                              <dd className="mt-1 text-sm font-bold">{formatCount(acceptanceSummary.blocker_count)}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-black text-muted-foreground">Snapshot verification</dt>
+                              <dd className="mt-1 text-sm font-bold">{acceptanceSummary.snapshot_verification_required ? 'required' : 'not required'}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                              <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acceptanceSummary.provider_write_executed)}</dd>
+                            </div>
+                          </dl>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {acceptanceSummary.reviewer_roles.map((role) => (
+                              <span key={role} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                {toSafeReactText(role)}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {acceptanceSummary.required_artifacts.map((artifact) => (
+                              <span key={artifact} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                {toSafeReactText(artifact)}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {acceptanceSummary.blocker_keys.map((blockerKey) => (
+                              <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                {toSafeReactText(blockerKey)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <p className="text-xs font-black text-muted-foreground">Diligence close acceptance checklist</p>
                       <div className="mt-3 grid gap-3 md:grid-cols-2">
                         {acceptanceChecklist.map((item) => (

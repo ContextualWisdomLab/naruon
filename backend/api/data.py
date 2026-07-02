@@ -599,6 +599,25 @@ class DataDiligenceCloseAcceptanceChecklistEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceCloseAcceptanceSummary(BaseModel):
+    summary_key: str
+    decision_code: DiligenceCloseDecision
+    total_acceptance_count: int
+    blocked_acceptance_count: int
+    ready_acceptance_count: int
+    reviewer_role_count: int
+    reviewer_roles: list[str]
+    required_artifact_count: int
+    required_artifacts: list[str]
+    blocker_count: int
+    blocker_keys: list[str]
+    close_gate_status: CloseGateStatus
+    snapshot_verification_required: bool
+    buyer_summary_text: str
+    next_action_text: str
+    provider_write_executed: bool
+
+
 def _default_diligence_close_decision_summary() -> DataDiligenceCloseDecisionSummary:
     return DataDiligenceCloseDecisionSummary(
         summary_key="buyer_close_decision",
@@ -615,6 +634,29 @@ def _default_diligence_close_decision_summary() -> DataDiligenceCloseDecisionSum
         snapshot_verification_required=False,
         buyer_summary_text="No close proof requirements are present.",
         next_action_text="Generate the evidence snapshot before buyer close review.",
+        provider_write_executed=False,
+    )
+
+
+def _default_diligence_close_acceptance_summary() -> (
+    DataDiligenceCloseAcceptanceSummary
+):
+    return DataDiligenceCloseAcceptanceSummary(
+        summary_key="buyer_close_acceptance",
+        decision_code="ready_to_close",
+        total_acceptance_count=0,
+        blocked_acceptance_count=0,
+        ready_acceptance_count=0,
+        reviewer_role_count=0,
+        reviewer_roles=[],
+        required_artifact_count=0,
+        required_artifacts=[],
+        blocker_count=0,
+        blocker_keys=[],
+        close_gate_status="ready",
+        snapshot_verification_required=False,
+        buyer_summary_text="No buyer acceptance requirements are present.",
+        next_action_text="Generate the evidence snapshot before buyer acceptance.",
         provider_write_executed=False,
     )
 
@@ -682,6 +724,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     diligence_close_acceptance_checklist: list[
         DataDiligenceCloseAcceptanceChecklistEntry
     ] = Field(default_factory=list)
+    diligence_close_acceptance_summary: DataDiligenceCloseAcceptanceSummary = Field(
+        default_factory=_default_diligence_close_acceptance_summary
+    )
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
     content_graph_topology_counts: list[DataEvidenceSnapshotContentTopologyCount]
@@ -2048,6 +2093,63 @@ def _diligence_close_acceptance_checklist(
     ]
 
 
+def _diligence_close_acceptance_summary(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> DataDiligenceCloseAcceptanceSummary:
+    checklist = snapshot.diligence_close_acceptance_checklist
+    blocked = [item for item in checklist if item.acceptance_status == "blocked"]
+    ready = [
+        item for item in checklist if item.acceptance_status == "ready_for_acceptance"
+    ]
+    reviewer_roles = sorted(
+        {role for item in checklist for role in item.reviewer_roles}
+    )
+    required_artifacts = sorted({item.data_room_artifact for item in checklist})
+    blocker_keys = sorted({key for item in blocked for key in item.blocker_keys})
+    snapshot_verification_required = any(
+        item.snapshot_verification_required for item in checklist
+    )
+
+    if blocked:
+        buyer_summary_text = (
+            f"Buyer acceptance remains blocked by {len(blocked)} item(s) "
+            f"across {len(required_artifacts)} artifact(s) and "
+            f"{len(blocker_keys)} blocker key(s)."
+        )
+        next_action_text = (
+            "Resolve blocker keys, regenerate the evidence snapshot, run the "
+            "offline verifier, and reissue the acceptance checklist."
+        )
+    else:
+        buyer_summary_text = (
+            f"Buyer acceptance is ready for {len(ready)} item(s) across "
+            f"{len(required_artifacts)} artifact(s)."
+        )
+        next_action_text = (
+            "Share the verified snapshot and acceptance checklist with buyer "
+            "reviewers."
+        )
+
+    return DataDiligenceCloseAcceptanceSummary(
+        summary_key="buyer_close_acceptance",
+        decision_code="close_blocked" if blocked else "ready_to_close",
+        total_acceptance_count=len(checklist),
+        blocked_acceptance_count=len(blocked),
+        ready_acceptance_count=len(ready),
+        reviewer_role_count=len(reviewer_roles),
+        reviewer_roles=reviewer_roles,
+        required_artifact_count=len(required_artifacts),
+        required_artifacts=required_artifacts,
+        blocker_count=len(blocker_keys),
+        blocker_keys=blocker_keys,
+        close_gate_status="blocked" if blocked else "ready",
+        snapshot_verification_required=snapshot_verification_required,
+        buyer_summary_text=buyer_summary_text,
+        next_action_text=next_action_text,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -2343,6 +2445,13 @@ def _evidence_snapshot_from_surface(
         update={
             "diligence_close_acceptance_checklist": (
                 _diligence_close_acceptance_checklist(snapshot)
+            )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "diligence_close_acceptance_summary": (
+                _diligence_close_acceptance_summary(snapshot)
             )
         }
     )

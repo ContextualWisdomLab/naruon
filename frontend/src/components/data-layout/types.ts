@@ -420,6 +420,24 @@ export type DataEvidenceSnapshotResponse = {
     snapshot_verification_required: boolean;
     provider_write_executed: boolean;
   }>;
+  diligence_close_acceptance_summary: {
+    summary_key: string;
+    decision_code: DiligenceCloseDecision;
+    total_acceptance_count: number;
+    blocked_acceptance_count: number;
+    ready_acceptance_count: number;
+    reviewer_role_count: number;
+    reviewer_roles: string[];
+    required_artifact_count: number;
+    required_artifacts: string[];
+    blocker_count: number;
+    blocker_keys: string[];
+    close_gate_status: CloseGateStatus;
+    snapshot_verification_required: boolean;
+    buyer_summary_text: string;
+    next_action_text: string;
+    provider_write_executed: boolean;
+  };
   parser_manifest_summary: Array<{
     parser_key: string;
     display_name: string;
