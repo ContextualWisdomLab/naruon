@@ -120,6 +120,10 @@ def test_content_graph_records_have_incremental_revision():
     assert '"content_segments"' in revision_text
     assert '"content_node_uid"' in revision_text
     assert '"content_segment_uid"' in revision_text
+    assert '"content_node_id"' in revision_text
+    assert '"content_segment_id"' in revision_text
+    assert '"word_count"' in revision_text
+    assert '"token_count"' not in revision_text
     assert '"email_id"' in revision_text
     assert '"attachment_id"' in revision_text
     assert "ix_content_nodes_email_source" in revision_text
@@ -141,6 +145,7 @@ def test_knowledge_graph_edges_have_incremental_revision():
     assert 'revision = "0006_knowledge_graph_edges"' in revision_text
     assert 'down_revision = "0005_content_graph_records"' in revision_text
     assert '"knowledge_graph_edges"' in revision_text
+    assert '"knowledge_graph_edge_id"' in revision_text
     assert '"edge_uid"' in revision_text
     assert '"email_id"' in revision_text
     assert '"attachment_id"' in revision_text
@@ -148,6 +153,8 @@ def test_knowledge_graph_edges_have_incremental_revision():
     assert '"target_node_id"' in revision_text
     assert '"source_segment_id"' in revision_text
     assert '"target_segment_id"' in revision_text
+    assert '"content_nodes.content_node_id"' in revision_text
+    assert '"content_segments.content_segment_id"' in revision_text
     assert '"source_kind"' in revision_text
     assert '"source_record_uid"' in revision_text
     assert '"edge_kind"' in revision_text

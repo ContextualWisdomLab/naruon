@@ -747,7 +747,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :user_id, :organization_id, :message_id, :thread_id,
                 :fingerprint, :sender, :recipients, :subject, now(), :body
             )
-            RETURNING id
+            RETURNING content_node_id
             """
         ),
         {
@@ -773,7 +773,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :user_id, :organization_id, :message_id, :sender,
                 :recipients, :subject, now(), :body
             )
-            RETURNING id
+            RETURNING content_node_id
             """
         ),
         {
@@ -873,7 +873,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
             INSERT INTO content_segments (
                 content_segment_uid, email_id, content_node_id, source_kind,
                 source_record_uid, segment_kind, segment_path, ordinal_index,
-                safe_text_content, content_hash, token_count, created_at
+                safe_text_content, content_hash, word_count, created_at
             )
             VALUES
             (
@@ -914,14 +914,16 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 ordinal_index, created_at
             )
             SELECT
-                :first_edge_uid, :first_email_id, :first_node_id, first_segment.id,
+                :first_edge_uid, :first_email_id, :first_node_id,
+                first_segment.content_segment_id,
                 'email_body', :first_source_record_uid, 'node_has_segment',
                 '/document[1]/paragraph[1]/has/smoke', 1, now()
             FROM content_segments AS first_segment
             WHERE first_segment.content_segment_uid = :first_segment_uid
             UNION ALL
             SELECT
-                :rival_edge_uid, :rival_email_id, :rival_node_id, rival_segment.id,
+                :rival_edge_uid, :rival_email_id, :rival_node_id,
+                rival_segment.content_segment_id,
                 'email_body', :rival_source_record_uid, 'node_has_segment',
                 '/document[1]/paragraph[1]/has/rival', 1, now()
             FROM content_segments AS rival_segment

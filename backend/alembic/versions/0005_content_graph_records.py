@@ -22,7 +22,7 @@ def upgrade() -> None:
     if not inspector.has_table(_NODE_TABLE):
         op.create_table(
             _NODE_TABLE,
-            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("content_node_id", sa.Integer(), nullable=False),
             sa.Column("content_node_uid", sa.String(length=64), nullable=False),
             sa.Column("email_id", sa.Integer(), nullable=False),
             sa.Column("attachment_id", sa.Integer(), nullable=True),
@@ -38,14 +38,14 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.ForeignKeyConstraint(["attachment_id"], ["email_attachments.id"]),
             sa.ForeignKeyConstraint(["email_id"], ["email_records.id"]),
-            sa.PrimaryKeyConstraint("id"),
+            sa.PrimaryKeyConstraint("content_node_id"),
             sa.UniqueConstraint("content_node_uid", name="uq_content_nodes_uid"),
         )
 
     if not inspector.has_table(_SEGMENT_TABLE):
         op.create_table(
             _SEGMENT_TABLE,
-            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("content_segment_id", sa.Integer(), nullable=False),
             sa.Column("content_segment_uid", sa.String(length=64), nullable=False),
             sa.Column("email_id", sa.Integer(), nullable=False),
             sa.Column("attachment_id", sa.Integer(), nullable=True),
@@ -58,12 +58,14 @@ def upgrade() -> None:
             sa.Column("heading_path", sa.String(length=512), nullable=True),
             sa.Column("safe_text_content", sa.Text(), nullable=False),
             sa.Column("content_hash", sa.String(length=64), nullable=False),
-            sa.Column("token_count", sa.Integer(), nullable=False),
+            sa.Column("word_count", sa.Integer(), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.ForeignKeyConstraint(["attachment_id"], ["email_attachments.id"]),
-            sa.ForeignKeyConstraint(["content_node_id"], ["content_nodes.id"]),
+            sa.ForeignKeyConstraint(
+                ["content_node_id"], ["content_nodes.content_node_id"]
+            ),
             sa.ForeignKeyConstraint(["email_id"], ["email_records.id"]),
-            sa.PrimaryKeyConstraint("id"),
+            sa.PrimaryKeyConstraint("content_segment_id"),
             sa.UniqueConstraint("content_segment_uid", name="uq_content_segments_uid"),
         )
 

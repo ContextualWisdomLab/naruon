@@ -16,6 +16,22 @@ _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 _RAW_TEXT_TAGS = {"script", "style", "template"}
 _SEGMENT_TAGS = _HEADING_TAGS | {"p", "li", "blockquote", "pre", "td", "th"}
+_VOID_HTML_TAGS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
 _SUPPORTED_MARKDOWN_TYPES = {
     "text/markdown",
     "text/x-markdown",
@@ -92,7 +108,7 @@ class _BuildContext:
             heading_path=heading_path,
             safe_text_content=safe_text_content,
             content_hash=_hash_text(safe_text_content),
-            token_count=_token_count(safe_text_content),
+            word_count=_word_count(safe_text_content),
         )
         self.segments.append(segment)
         return segment
@@ -136,6 +152,11 @@ class _ContentHTMLParser(HTMLParser):
         if normalized in _RAW_TEXT_TAGS:
             self._raw_text_depth += 1
             return
+        if normalized in _VOID_HTML_TAGS:
+            if normalized == "br":
+                self._append_text_to_stack("\n")
+            self._add_leaf_node(normalized)
+            return
 
         parent_path = self._stack[-1].node_path if self._stack else "/document[1]"
         self._child_counts[parent_path][normalized] += 1
@@ -162,7 +183,16 @@ class _ContentHTMLParser(HTMLParser):
         normalized = tag.lower()
         if normalized in _RAW_TEXT_TAGS:
             return
+        if normalized == "br":
+            self._append_text_to_stack("\n")
 
+        self._add_leaf_node(normalized)
+
+    def _append_text_to_stack(self, value: str) -> None:
+        for pending in self._stack:
+            pending.text_parts.append(value)
+
+    def _add_leaf_node(self, normalized: str) -> None:
         parent_path = self._stack[-1].node_path if self._stack else "/document[1]"
         self._child_counts[parent_path][normalized] += 1
         ordinal_index = self._child_counts[parent_path][normalized]
@@ -203,8 +233,7 @@ class _ContentHTMLParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._raw_text_depth:
             return
-        for pending in self._stack:
-            pending.text_parts.append(data)
+        self._append_text_to_stack(data)
 
     def close(self) -> None:
         super().close()
@@ -436,5 +465,5 @@ def _stable_uid(prefix: str, *parts: str) -> str:
     return f"{prefix}_{digest[:24]}"
 
 
-def _token_count(value: str) -> int:
+def _word_count(value: str) -> int:
     return len(value.split())

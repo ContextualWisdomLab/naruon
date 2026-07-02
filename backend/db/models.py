@@ -622,7 +622,7 @@ class ContentNodeRecord(Base):
         Index("ix_content_nodes_hash", "content_hash"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    content_node_id: Mapped[int] = mapped_column(primary_key=True)
     content_node_uid: Mapped[str] = mapped_column(String(64), nullable=False)
     email_id: Mapped[int] = mapped_column(
         ForeignKey("email_records.id"), nullable=False
@@ -680,7 +680,7 @@ class ContentSegmentRecord(Base):
         Index("ix_content_segments_hash", "content_hash"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    content_segment_id: Mapped[int] = mapped_column(primary_key=True)
     content_segment_uid: Mapped[str] = mapped_column(String(64), nullable=False)
     email_id: Mapped[int] = mapped_column(
         ForeignKey("email_records.id"), nullable=False
@@ -689,7 +689,7 @@ class ContentSegmentRecord(Base):
         ForeignKey("email_attachments.id"), nullable=True
     )
     content_node_id: Mapped[int] = mapped_column(
-        ForeignKey("content_nodes.id"), nullable=False
+        ForeignKey("content_nodes.content_node_id"), nullable=False
     )
     source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -699,7 +699,7 @@ class ContentSegmentRecord(Base):
     heading_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     safe_text_content: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
@@ -740,7 +740,7 @@ class KnowledgeGraphEdgeRecord(Base):
         Index("ix_knowledge_graph_edges_target_segment", "target_segment_id"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    knowledge_graph_edge_id: Mapped[int] = mapped_column(primary_key=True)
     edge_uid: Mapped[str] = mapped_column(String(64), nullable=False)
     email_id: Mapped[int] = mapped_column(
         ForeignKey("email_records.id"), nullable=False
@@ -749,16 +749,16 @@ class KnowledgeGraphEdgeRecord(Base):
         ForeignKey("email_attachments.id"), nullable=True
     )
     source_node_id: Mapped[int | None] = mapped_column(
-        ForeignKey("content_nodes.id"), nullable=True
+        ForeignKey("content_nodes.content_node_id"), nullable=True
     )
     target_node_id: Mapped[int | None] = mapped_column(
-        ForeignKey("content_nodes.id"), nullable=True
+        ForeignKey("content_nodes.content_node_id"), nullable=True
     )
     source_segment_id: Mapped[int | None] = mapped_column(
-        ForeignKey("content_segments.id"), nullable=True
+        ForeignKey("content_segments.content_segment_id"), nullable=True
     )
     target_segment_id: Mapped[int | None] = mapped_column(
-        ForeignKey("content_segments.id"), nullable=True
+        ForeignKey("content_segments.content_segment_id"), nullable=True
     )
     source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)

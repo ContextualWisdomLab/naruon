@@ -21,7 +21,7 @@ def upgrade() -> None:
     if not inspector.has_table(_EDGE_TABLE):
         op.create_table(
             _EDGE_TABLE,
-            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("knowledge_graph_edge_id", sa.Integer(), nullable=False),
             sa.Column("edge_uid", sa.String(length=64), nullable=False),
             sa.Column("email_id", sa.Integer(), nullable=False),
             sa.Column("attachment_id", sa.Integer(), nullable=True),
@@ -37,11 +37,19 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.ForeignKeyConstraint(["attachment_id"], ["email_attachments.id"]),
             sa.ForeignKeyConstraint(["email_id"], ["email_records.id"]),
-            sa.ForeignKeyConstraint(["source_node_id"], ["content_nodes.id"]),
-            sa.ForeignKeyConstraint(["target_node_id"], ["content_nodes.id"]),
-            sa.ForeignKeyConstraint(["source_segment_id"], ["content_segments.id"]),
-            sa.ForeignKeyConstraint(["target_segment_id"], ["content_segments.id"]),
-            sa.PrimaryKeyConstraint("id"),
+            sa.ForeignKeyConstraint(
+                ["source_node_id"], ["content_nodes.content_node_id"]
+            ),
+            sa.ForeignKeyConstraint(
+                ["target_node_id"], ["content_nodes.content_node_id"]
+            ),
+            sa.ForeignKeyConstraint(
+                ["source_segment_id"], ["content_segments.content_segment_id"]
+            ),
+            sa.ForeignKeyConstraint(
+                ["target_segment_id"], ["content_segments.content_segment_id"]
+            ),
+            sa.PrimaryKeyConstraint("knowledge_graph_edge_id"),
             sa.UniqueConstraint("edge_uid", name="uq_knowledge_graph_edges_uid"),
         )
 

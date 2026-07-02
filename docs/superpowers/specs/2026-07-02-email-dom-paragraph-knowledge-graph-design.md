@@ -30,7 +30,7 @@ Live GitHub state checked on 2026-07-02:
 - Repo is public and license metadata is `Other`, matching proprietary product posture.
 - Open PRs #889 to #894 target `develop` and are currently blocked, so new implementation work should use a focused branch and expect central required checks.
 - Fresh clone on macOS shows case-collision working tree noise for `.Jules/palette.md` versus `.jules/palette.md` and `.Jules/sentinel.md` versus `.jules/sentinel.md`; do not touch those files in this work.
-- CodeGraph is not initialized in this fresh clone. Per AGENTS.md, `codegraph init -i` should be run only after user confirmation.
+- CodeGraph was initialized locally with `codegraph init -i` because AGENTS.md allows autonomous initialization; generated `.codegraph/` and `.cursor/rules/codegraph.mdc` artifacts stay local.
 
 Relevant current implementation:
 
@@ -160,7 +160,7 @@ Names follow the repo rule against new single-token columns.
 - `heading_path`
 - `safe_text_content`
 - `content_hash`
-- `token_count`
+- `word_count`
 - `embedding_status_code`
 - `created_at`
 
@@ -207,7 +207,48 @@ Figma scope:
 
 - FigJam architecture diagram created for the pipeline.
 - No Figma Code Connect.
-- Future design work should create three screen concepts only after this spec is approved: Data ingestion coverage, Mail attachment analysis, and Context Search segment detail.
+- Future design work should create three screen concepts after this backend evidence slice is stable: Data ingestion coverage, Mail attachment analysis, and Context Search segment detail.
+
+## Project Management Automation Map
+
+The commercial product should treat every paragraph segment as a traceable evidence unit, then project-management objects become graph projections over those segments rather than manually maintained records.
+
+Phase A: evidence capture and auto-registration
+
+- Project auto registration: detect repeated project names, customer names, repository names, contract names, and kickoff language across email threads and attachments; create a draft `project_workspace_uid` with source segment citations, not an active project until a user confirms or a policy rule auto-accepts it.
+- Project scope tracking: connect scope statements, exclusions, assumptions, acceptance criteria, and change requests to `project_scope_item` nodes; show whether each scope item has a current owner, due date, and linked deliverable.
+- Project people updates: extract sender, recipient, mentioned person, role phrases, and decision authority language into `project_participant` nodes with role confidence and source provenance.
+
+Phase B: requirements and definition tracking
+
+- Requirement analysis: classify segments into business requirement, functional requirement, non-functional requirement, data requirement, infrastructure requirement, security requirement, and integration requirement.
+- Requirement traceability: maintain edges from requirement segments to source email, attachment section, decision, issue, task, WBS item, ERD entity, wireframe frame, release, and acceptance evidence.
+- Feature-definition tracking: separate product capability, user story, acceptance criteria, rule, constraint, and out-of-scope text so feature definitions are versioned by evidence rather than copied into a static wiki page.
+- Wireframe tracking: link Figma frame URLs, exported screenshots, mockup filenames, and UI requirement segments into `wireframe_artifact` nodes; keep Figma Code Connect out of scope.
+
+Phase C: schedule, issues, and WBS
+
+- Schedule tracking: extract date mentions, milestone language, dependency phrases, delay signals, and meeting outcomes into milestone and schedule-risk nodes.
+- Issue tracking: convert blocker, defect, risk, question, approval-needed, and decision-needed segments into source-linked issue candidates; dedupe by thread, requirement, and semantic fingerprint.
+- WBS auto management: create `wbs_work_item` nodes from scope/requirement/deliverable segments and maintain both waterfall and agile projections:
+  - Waterfall: phase, work package, deliverable, owner, planned date, actual date, dependency, sign-off.
+  - Agile: epic, story, task, acceptance criteria, sprint candidate, blocker, done evidence.
+- Deliverable tracking: attach proposal, PRD, SRS, ERD, wireframe, infrastructure design, test report, weekly report, and daily report artifacts to deliverable nodes with completion evidence.
+
+Phase D: data, infra, ERD, and wiki
+
+- Data requirement definition: extract entity, attribute, data source, retention, privacy class, quality rule, and reporting requirement segments into a data-requirement subgraph.
+- ERD management: map data-requirement nodes to ERD entity and relationship candidates; keep candidate/generated ERD distinct from approved ERD.
+- Infrastructure requirement management: extract environment, network, host, secret, runner, storage, backup, SLO, deployment, and compliance constraints into infrastructure requirement nodes.
+- Project wiki auto generation: generate LLM Wiki-style pages from graph projections, with every paragraph citing segment UIDs and source paths; pages are regenerated views, not a separate truth source.
+- Daily and weekly report generation: summarize graph deltas by project, requirement, issue, schedule, WBS, deliverable, participant change, and risk movement; include citations and unresolved gaps.
+
+Commercial completion standard:
+
+- A pilot customer can import a private 1,000-message corpus with attachments and see project candidates, requirements, WBS, issues, deliverables, people, ERD candidates, infrastructure requirements, and report drafts within the same evidence graph.
+- Every generated object must have at least one segment citation, owner scope, confidence score or deterministic extraction method, and a correction path.
+- Unsupported binary formats must appear as `parser_pending` or `parser_unsupported`, never as successful empty analysis.
+- The Data workspace must expose coverage and quality for each automation family so sales, delivery, and due diligence can verify not only that the feature exists, but what portion of the customer's corpus it actually covers.
 
 ## KPI Framework
 
@@ -247,8 +288,8 @@ Phase 0: design and evidence
 
 - Keep this spec as the design gate.
 - Create FigJam architecture diagram.
-- Wait for user approval before code implementation, unless the user explicitly authorizes implementation without a review gate.
-- If approved, run `codegraph init -i` and use CodeGraph for structural exploration.
+- User has explicitly authorized autonomous implementation without waiting for a review gate.
+- Run `codegraph init -i` when needed and use CodeGraph for structural exploration; keep generated CodeGraph artifacts local unless a separate PR intentionally adds them.
 
 Phase 1: internal parser package
 
@@ -319,21 +360,23 @@ Minimum verification before merge:
 
 - Microsoft 365 Copilot connectors show the enterprise pattern Naruon should match: secure indexed or federated connection to data beyond the office suite while preserving search and Copilot experiences.
   - https://learn.microsoft.com/en-us/microsoft-365/copilot/connectors/overview
+- Microsoft 365 Copilot connector extensibility distinguishes synced connectors, which ingest/index external content, and federated connectors, which retrieve content in real time through MCP.
+  - https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/overview-copilot-connector
 - Microsoft Graph positions connectors and Data Connect as the way to derive insights and extend Microsoft 365 experiences from Microsoft and external datasets.
   - https://learn.microsoft.com/en-us/graph/overview
 - Gmail attachment retrieval is message/attachment scoped, reinforcing the need to persist provider source IDs and attachment provenance separately from display text.
   - https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages.attachments/get
 - Gartner's 2026 GraphRAG trend framing supports the architectural choice to combine RAG with contextual knowledge graphs for high-accuracy complex use cases.
   - https://www.gartner.com/en/documents/7444326
-- Enterprise knowledge graph market estimates indicate this is a commercial infrastructure category, not only an internal parser feature.
+- 2026 enterprise knowledge graph market estimates indicate this is a commercial infrastructure category, not only an internal parser feature.
   - https://www.grandviewresearch.com/industry-analysis/enterprise-knowledge-graph-market-report
 
 ## Open Decisions
 
-- CodeGraph initialization is pending explicit user confirmation because the fresh clone has no `.codegraph/` directory and AGENTS.md requires asking first.
+- CodeGraph initialization is allowed by AGENTS.md and should be done locally before structural changes; generated index/rule artifacts remain uncommitted.
 - PDF/DOCX/HWP parser dependencies should wait for a pilot corpus requirement and security review.
 - The exact UI mockup generation step should wait until the user approves this design brief; Figma Code Connect remains excluded.
 
 ## Approval Gate
 
-This document is ready for user review. After approval, the next step is to convert this design into an implementation plan and begin Phase 1 on a focused branch.
+This document is the current implementation guide for PR #895. The user authorized autonomous execution, so Phase 1 and Phase 2 work can proceed on the focused branch while review feedback is handled as ordinary implementation input.

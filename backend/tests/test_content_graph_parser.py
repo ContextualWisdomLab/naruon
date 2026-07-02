@@ -43,7 +43,7 @@ def test_html_content_preserves_block_dom_paths_and_safe_heading_context():
     <html>
       <body>
         <h1>Launch</h1>
-        <p>Hello <strong>team</strong></p>
+        <p>Hello<br><strong>team</strong></p>
         <script>alert('bad')</script>
         <style>body { color: red; }</style>
         <div><p>Second <img src=x onerror=alert(1)> paragraph</p></div>
@@ -77,6 +77,10 @@ def test_html_content_preserves_block_dom_paths_and_safe_heading_context():
     assert "/document[1]/html[1]/body[1]/div[1]/p[1]" in {
         node.node_path for node in result.nodes
     }
+    assert "/document[1]/html[1]/body[1]/p[1]/br[1]" in {
+        node.node_path for node in result.nodes
+    }
+    assert not any("/br[1]/strong[1]" in node.node_path for node in result.nodes)
     joined = " ".join(segment.safe_text_content for segment in result.segments).lower()
     assert "<" not in joined
     assert "script" not in joined

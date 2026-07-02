@@ -1088,7 +1088,7 @@ async def _get_content_graph_stats(
     content_graph_result = await db.execute(
         select(
             func.count(func.distinct(ContentSegmentRecord.email_id)),
-            func.count(ContentSegmentRecord.id),
+            func.count(ContentSegmentRecord.content_segment_id),
         )
         .join(Email, ContentSegmentRecord.email_id == Email.id)
         .where(*email_scope)
@@ -1109,7 +1109,7 @@ async def _get_knowledge_graph_stats(
     knowledge_graph_result = await db.execute(
         select(
             func.count(func.distinct(KnowledgeGraphEdgeRecord.email_id)),
-            func.count(KnowledgeGraphEdgeRecord.id),
+            func.count(KnowledgeGraphEdgeRecord.knowledge_graph_edge_id),
         )
         .join(Email, KnowledgeGraphEdgeRecord.email_id == Email.id)
         .where(*email_scope)

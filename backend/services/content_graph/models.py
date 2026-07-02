@@ -29,7 +29,7 @@ class ContentSegment:
     heading_path: str | None
     safe_text_content: str
     content_hash: str
-    token_count: int
+    word_count: int
 
 
 @dataclass(frozen=True, slots=True)

@@ -371,7 +371,7 @@ def _append_parse_result_records(
             heading_path=parsed_segment.heading_path,
             safe_text_content=parsed_segment.safe_text_content,
             content_hash=parsed_segment.content_hash,
-            token_count=parsed_segment.token_count,
+            word_count=parsed_segment.word_count,
         )
         node_records_by_uid[parsed_segment.content_node_uid].segments.append(
             segment_record
