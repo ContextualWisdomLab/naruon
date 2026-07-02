@@ -297,6 +297,111 @@ const dataQualitySurface = {
   ],
 };
 
+const dataEvidenceSnapshot = {
+  snapshot_version: "data_quality_evidence_snapshot.v1",
+  generated_at: "2026-07-02T00:00:00Z",
+  audit_event: "data.quality_surface.evidence_snapshot.viewed",
+  scope_label: "signed_workspace_scope",
+  privacy_redaction_policy: {
+    raw_content_exposed: false,
+    stable_identifiers_exposed: false,
+    provider_credentials_exposed: false,
+    redacted_fields: [
+      "raw_email_body",
+      "raw_html",
+      "attachment_bytes",
+      "message_id",
+      "attachment_id",
+      "source_record_id",
+      "stable_database_id",
+      "provider_credentials",
+      "db_evidence_column_strings",
+    ],
+    allowed_sample_fields: [
+      "sample_key",
+      "source_kind",
+      "segment_kind",
+      "edge_kind",
+      "segment_path",
+      "edge_path",
+      "word_count",
+      "endpoint_status",
+    ],
+  },
+  validation_status: {
+    status_code: "needs_attention",
+    checks_passed: 2,
+    checks_with_issues: 8,
+    total_checks: 10,
+  },
+  parser_manifest_summary: [
+    {
+      parser_key: "plain_text",
+      display_name: "Plain text attachments",
+      parse_status: "parsed",
+      content_types: ["text/plain"],
+      extensions: [".txt", ".text"],
+    },
+    {
+      parser_key: "html",
+      display_name: "HTML attachments",
+      parse_status: "parsed",
+      content_types: ["text/html"],
+      extensions: [".html", ".htm"],
+    },
+    {
+      parser_key: "markdown",
+      display_name: "Markdown attachments",
+      parse_status: "parsed",
+      content_types: ["text/markdown", "text/x-markdown", "application/markdown"],
+      extensions: [".md", ".markdown"],
+    },
+    {
+      parser_key: "unsupported_binary",
+      display_name: "Unsupported binary attachments",
+      parse_status: "unsupported_content_type",
+      content_types: ["application/octet-stream"],
+      extensions: [],
+    },
+  ],
+  quality_checks: [
+    {
+      check_key: "content_graph_coverage",
+      display_name: "Content graph coverage",
+      status_code: "needs_attention",
+      issue_count: 1,
+      total_count: 4,
+      detail_text: "Some scoped email records still need DOM paragraph graph records.",
+    },
+  ],
+  content_graph_topology_counts: [
+    { source_kind: "email_body", segment_kind: "paragraph", object_count: 6 },
+    { source_kind: "attachment", segment_kind: "heading", object_count: 2 },
+  ],
+  knowledge_graph_topology_counts: [
+    { source_kind: "email_body", edge_kind: "node_has_segment", object_count: 8 },
+    { source_kind: "attachment", edge_kind: "heading_contains_segment", object_count: 2 },
+  ],
+  content_graph_evidence_samples: [
+    {
+      sample_key: "snapshot_segment_hidden_1",
+      source_kind: "email_body",
+      segment_kind: "paragraph",
+      segment_path: "/document[1]/paragraph[1]",
+      word_count: 12,
+    },
+  ],
+  knowledge_graph_evidence_samples: [
+    {
+      sample_key: "snapshot_edge_hidden_1",
+      source_kind: "email_body",
+      edge_kind: "node_has_segment",
+      edge_path: "/document[1]/paragraph[1]/has/segment[1]",
+      endpoint_status: "segment_backed",
+    },
+  ],
+};
+
 function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 500) {
   return {
     ok,
@@ -312,6 +417,10 @@ function mockWebdavFetch() {
     if (path === "/api/data/quality-surface") {
       void init;
       return jsonResponse(dataQualitySurface);
+    }
+    if (path === "/api/data/quality-surface/evidence-snapshot") {
+      void init;
+      return jsonResponse(dataEvidenceSnapshot);
     }
     if (path === "/api/webdav/accounts") {
       return jsonResponse([
@@ -713,12 +822,42 @@ describe("DataPage", () => {
     ]) {
       expect(requestHeaders[publicHeader]).toBeUndefined();
     }
+    const snapshotCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/data/quality-surface/evidence-snapshot");
+    expect(snapshotCall).toBeDefined();
+    const [, snapshotInit] = snapshotCall ?? [];
+    expect(snapshotInit?.credentials).toBe("same-origin");
+    const snapshotHeaderEntries =
+      snapshotInit?.headers instanceof Headers
+        ? Array.from(snapshotInit.headers.entries())
+        : Object.entries((snapshotInit?.headers as Record<string, string>) ?? {});
+    const snapshotHeaders = Object.fromEntries(
+      snapshotHeaderEntries.map(([key, value]) => [key.toLowerCase(), String(value)]),
+    );
+    expect(snapshotHeaders).toEqual(expect.objectContaining({
+      "content-type": "application/json",
+    }));
+    expect(snapshotHeaders.authorization).toBeUndefined();
+    for (const publicHeader of [
+      "x-user-id",
+      "x-organization-id",
+      "x-group-id",
+      "x-group-ids",
+      "x-user-role",
+      "x-dev-auth-token",
+    ]) {
+      expect(snapshotHeaders[publicHeader]).toBeUndefined();
+    }
     expect(container.textContent).not.toContain("28,401");
     expect(container.textContent).not.toContain("23건");
     expect(container.textContent).not.toContain("<asset-ready@example.com>");
   });
 
   it("renders API-backed pipeline embedding and quality tabs", async () => {
+    const writeText = vi.fn(async (_snapshotJson: string) => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
     vi.stubGlobal("fetch", mockWebdavFetch());
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -763,6 +902,7 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("실사 스냅샷");
     expect(container.textContent).toContain("실사 스냅샷 JSON 복사");
     expect(container.textContent).toContain("raw 본문/첨부 원문 제외");
+    expect(container.textContent).toContain("4");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
     expect(container.textContent).toContain("text/markdown");
@@ -789,7 +929,69 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("knowledge_graph_edges.edge_path");
     expect(container.textContent).not.toContain("segment_hidden_1");
     expect(container.textContent).not.toContain("edge_hidden_1");
+    expect(container.textContent).not.toContain("snapshot_segment_hidden_1");
+    expect(container.textContent).not.toContain("snapshot_edge_hidden_1");
     expect(container.textContent).not.toContain("발견된 심각한 데이터 품질 문제가 없습니다.");
+
+    const snapshotButton = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("실사 스냅샷 JSON 복사"),
+    );
+    expect(snapshotButton).toBeDefined();
+    await act(async () => {
+      snapshotButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copiedSnapshot = JSON.parse(writeText.mock.calls[0][0]);
+    expect(copiedSnapshot.generated_at).toBe("2026-07-02T00:00:00Z");
+    expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
+    expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
+      "sample_key",
+      "source_kind",
+      "segment_kind",
+      "edge_kind",
+      "segment_path",
+      "edge_path",
+      "word_count",
+      "endpoint_status",
+    ]);
+  });
+
+  it("keeps quality checks usable when evidence snapshot fetch fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/data/quality-surface") return jsonResponse(dataQualitySurface);
+      if (path === "/api/data/quality-surface/evidence-snapshot") {
+        return jsonResponse({ detail: "snapshot unavailable" }, false, 500);
+      }
+      if (path === "/api/webdav/accounts") return jsonResponse([]);
+      if (path === "/api/webdav/folders") return jsonResponse([]);
+      throw new Error(`Unhandled fetch: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+
+    const qualityTab = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("품질 점검"),
+    );
+    await act(async () => {
+      qualityTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("Thread id integrity");
+    expect(container.textContent).toContain("Content segment text readiness");
+    expect(container.textContent).not.toContain("실사 스냅샷 JSON 복사");
+    expect(container.textContent).not.toContain("snapshot_segment_hidden_1");
+    expect(container.textContent).not.toContain("segment_hidden_1");
+    expect(JSON.stringify(consoleError.mock.calls)).toContain("Data evidence snapshot fetch error");
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("raw email");
   });
 
   it("does not expose permanent ready-soon Data workspace action buttons", async () => {
