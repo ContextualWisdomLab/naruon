@@ -803,6 +803,84 @@ const diligenceCloseArtifactReviewQueue = [
   },
 ];
 
+const diligenceCloseOwnerHandoffQueue = [
+  {
+    handoff_key: "handoff_attachment_parsing",
+    owner_area: "attachment_parsing",
+    related_artifacts: ["remediation-actions.json"],
+    proof_count: 2,
+    blocked_proof_count: 2,
+    ready_proof_count: 0,
+    highest_severity: "high",
+    buyer_review_roles: ["data quality reviewer", "coverage reviewer"],
+    handoff_status: "blocked",
+    acceptance_summary: "2 proof requirement(s) assigned to attachment_parsing affect 1 artifact(s) before close.",
+    next_action: "Resolve exception_recover_attachment_content, then regenerate the evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    handoff_key: "handoff_content_graph",
+    owner_area: "content_graph",
+    related_artifacts: ["dom-paragraph-evidence-samples.json"],
+    proof_count: 1,
+    blocked_proof_count: 1,
+    ready_proof_count: 0,
+    highest_severity: "high",
+    buyer_review_roles: ["data quality reviewer"],
+    handoff_status: "blocked",
+    acceptance_summary: "1 proof requirement(s) assigned to content_graph affect 1 artifact(s) before close.",
+    next_action: "Resolve exception_backfill_content_graph_coverage, exception_repair_segment_text_readiness, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    handoff_key: "handoff_email_ingestion",
+    owner_area: "email_ingestion",
+    related_artifacts: ["acquisition-readiness-summary.json"],
+    proof_count: 1,
+    blocked_proof_count: 1,
+    ready_proof_count: 0,
+    highest_severity: "critical",
+    buyer_review_roles: ["executive diligence reviewer"],
+    handoff_status: "blocked",
+    acceptance_summary: "1 proof requirement(s) assigned to email_ingestion affect 1 artifact(s) before close.",
+    next_action: "Resolve exception_repair_thread_id_integrity, exception_backfill_dedupe_fingerprints, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    handoff_key: "handoff_knowledge_graph",
+    owner_area: "knowledge_graph",
+    related_artifacts: ["knowledge-graph-evidence-samples.json"],
+    proof_count: 1,
+    blocked_proof_count: 1,
+    ready_proof_count: 0,
+    highest_severity: "high",
+    buyer_review_roles: ["data quality reviewer"],
+    handoff_status: "blocked",
+    acceptance_summary: "1 proof requirement(s) assigned to knowledge_graph affect 1 artifact(s) before close.",
+    next_action: "Resolve exception_backfill_knowledge_graph_coverage, exception_attach_kg_evidence_endpoints, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    handoff_key: "handoff_semantic_kg",
+    owner_area: "semantic_kg",
+    related_artifacts: ["semantic-relation-evidence-samples.json"],
+    proof_count: 1,
+    blocked_proof_count: 1,
+    ready_proof_count: 0,
+    highest_severity: "high",
+    buyer_review_roles: ["data quality reviewer"],
+    handoff_status: "blocked",
+    acceptance_summary: "1 proof requirement(s) assigned to semantic_kg affect 1 artifact(s) before close.",
+    next_action: "Resolve exception_backfill_semantic_relation_sources, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+];
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1171,6 +1249,7 @@ const dataEvidenceSnapshot = {
     "data_room_package_manifest",
     "diligence_exception_register",
     "diligence_close_artifact_review_queue",
+    "diligence_close_owner_handoff_queue",
     "diligence_close_decision_summary",
     "diligence_close_proof_plan",
     "diligence_risk_matrix",
@@ -1262,6 +1341,7 @@ const dataEvidenceSnapshot = {
   data_room_package_manifest: dataRoomPackageManifest,
   diligence_exception_register: diligenceExceptionRegister,
   diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
+  diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
   diligence_close_decision_summary: diligenceCloseDecisionSummary,
   diligence_close_proof_plan: diligenceCloseProofPlan,
   diligence_risk_matrix: diligenceRiskMatrix,
@@ -1913,6 +1993,11 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("total 2");
     expect(container.textContent).toContain("blocked 2");
     expect(container.textContent).toContain("attachment_parsing");
+    expect(container.textContent).toContain("Diligence close owner handoff queue");
+    expect(container.textContent).toContain("coverage reviewer");
+    expect(container.textContent).toContain("Reviewer roles");
+    expect(container.textContent).toContain("Handoff status");
+    expect(container.textContent).toContain("assigned to attachment_parsing");
     expect(container.textContent).toContain("Diligence close proof plan");
     expect(container.textContent).toContain("critical evidence gate");
     expect(container.textContent).toContain("blocked");
@@ -2000,6 +2085,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_proof_plan");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_decision_summary");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_artifact_review_queue");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_owner_handoff_queue");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -2104,6 +2190,24 @@ describe("DataPage", () => {
     expect(copiedSnapshot.diligence_close_artifact_review_queue[3].required_proof_artifact).toBe("remediation-actions.json");
     expect(copiedSnapshot.diligence_close_artifact_review_queue[3].proof_count).toBe(2);
     expect(copiedSnapshot.diligence_close_artifact_review_queue[3].buyer_review_role).toBe("data quality reviewer");
+    expect(copiedSnapshot.diligence_close_owner_handoff_queue).toHaveLength(5);
+    expect(copiedSnapshot.diligence_close_owner_handoff_queue[0]).toEqual({
+      handoff_key: "handoff_attachment_parsing",
+      owner_area: "attachment_parsing",
+      related_artifacts: ["remediation-actions.json"],
+      proof_count: 2,
+      blocked_proof_count: 2,
+      ready_proof_count: 0,
+      highest_severity: "high",
+      buyer_review_roles: ["data quality reviewer", "coverage reviewer"],
+      handoff_status: "blocked",
+      acceptance_summary: "2 proof requirement(s) assigned to attachment_parsing affect 1 artifact(s) before close.",
+      next_action: "Resolve exception_recover_attachment_content, then regenerate the evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, then regenerate the evidence snapshot.",
+      snapshot_verification_required: true,
+      provider_write_executed: false,
+    });
+    expect(copiedSnapshot.diligence_close_owner_handoff_queue[2].owner_area).toBe("email_ingestion");
+    expect(copiedSnapshot.diligence_close_owner_handoff_queue[2].buyer_review_roles).toEqual(["executive diligence reviewer"]);
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

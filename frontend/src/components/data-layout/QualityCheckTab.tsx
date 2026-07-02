@@ -41,6 +41,7 @@ export function QualityCheckTab({
   const evidenceSnapshot = dataEvidenceSnapshot;
   const closeDecisionSummary = evidenceSnapshot?.diligence_close_decision_summary;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
+  const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const copyEvidenceSnapshot = React.useCallback(async () => {
     if (!evidenceSnapshot) return;
     try {
@@ -422,6 +423,63 @@ export function QualityCheckTab({
                               {item.owner_areas.map((ownerArea) => (
                                 <span key={ownerArea} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
                                   {toSafeReactText(ownerArea)}
+                                </span>
+                              ))}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {ownerHandoffQueue.length > 0 && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Diligence close owner handoff queue</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {ownerHandoffQueue.map((item) => (
+                          <article key={item.handoff_key} className="rounded-xl border border-border bg-background p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <h3 className="break-all text-sm font-black">{toSafeReactText(item.owner_area)}</h3>
+                                <p className="mt-1 text-sm font-semibold text-muted-foreground">{toSafeReactText(item.buyer_review_roles.join(', '))}</p>
+                                <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(item.acceptance_summary)}</p>
+                                <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(item.next_action)}</p>
+                              </div>
+                              <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                {toSafeReactText(item.handoff_status)}
+                              </span>
+                            </div>
+                            <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                              <div>
+                                <dt className="font-black text-muted-foreground">Reviewer roles</dt>
+                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.buyer_review_roles.join(', '))}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Proof counts</dt>
+                                <dd className="mt-1 text-sm font-bold">
+                                  total {formatCount(item.proof_count)} · blocked {formatCount(item.blocked_proof_count)} · ready {formatCount(item.ready_proof_count)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Highest severity</dt>
+                                <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.highest_severity)}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Handoff status</dt>
+                                <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.handoff_status)}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Snapshot verification</dt>
+                                <dd className="mt-1 text-sm font-bold">{item.snapshot_verification_required ? 'required' : 'not required'}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
+                              </div>
+                            </dl>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {item.related_artifacts.map((artifact) => (
+                                <span key={artifact} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                  {toSafeReactText(artifact)}
                                 </span>
                               ))}
                             </div>
