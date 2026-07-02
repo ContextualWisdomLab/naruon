@@ -14,14 +14,14 @@ Add a deterministic owner-area handoff queue to the redacted evidence snapshot s
 
 ## Implementation Plan
 
-- [ ] Add `diligence_close_owner_handoff_queue` to the evidence snapshot response.
-- [ ] Derive queue entries from `diligence_close_proof_plan`, grouped by `owner_area`.
-- [ ] Include related artifacts, proof counts, blocked/ready counts, highest severity, buyer reviewer roles, handoff status, acceptance summary, next action, snapshot verification requirement, and write boundary.
-- [ ] Include the field in the canonical digest payload and backend fixture assertions.
-- [ ] Add a UI section after the artifact review queue and before the detailed proof plan.
-- [ ] Add frontend fixture, copied JSON, and visible rendering coverage.
-- [ ] Generate a FigJam diagram for the proof-plan-to-owner-handoff flow without Code Connect.
-- [ ] Run backend tests, ruff, frontend tests, frontend lint, diff review, and Ponytail review.
+- [x] Add `diligence_close_owner_handoff_queue` to the evidence snapshot response.
+- [x] Derive queue entries from `diligence_close_proof_plan`, grouped by `owner_area`.
+- [x] Include related artifacts, proof counts, blocked/ready counts, highest severity, buyer reviewer roles, handoff status, acceptance summary, next action, snapshot verification requirement, and write boundary.
+- [x] Include the field in the canonical digest payload and backend fixture assertions.
+- [x] Add a UI section after the artifact review queue and before the detailed proof plan.
+- [x] Add frontend fixture, copied JSON, and visible rendering coverage.
+- [x] Generate a FigJam diagram for the proof-plan-to-owner-handoff flow without Code Connect.
+- [x] Run backend tests, ruff, frontend tests, frontend lint, diff review, and Ponytail review.
 - [ ] Push the PR branch and update PR #895 with Phase 28 evidence.
 
 ## Acceptance Criteria
@@ -36,4 +36,10 @@ Add a deterministic owner-area handoff queue to the redacted evidence snapshot s
 
 ## Evidence
 
-- Pending.
+- Backend model/API: `diligence_close_owner_handoff_queue` is derived deterministically from `diligence_close_proof_plan` and included before canonical digest generation.
+- Backend coverage: `python3 -m pytest backend/tests/test_data_api.py -q` passed with 9 passed and 1 skipped.
+- Backend lint: `ruff check backend/api/data.py backend/tests/test_data_api.py` passed.
+- Frontend coverage: `npm test -- src/app/data/page.test.tsx` passed with 12 tests.
+- Frontend lint: `npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` passed.
+- FigJam: https://www.figma.com/board/mjH0tpDIvz5kj44kL6354R
+- Ponytail review: the change stays inside the existing evidence snapshot and Data Quality UI contract; no separate library, package, or submodule is warranted for this phase.
