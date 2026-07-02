@@ -86,6 +86,7 @@ CloseGateStatus = Literal["blocked", "ready"]
 DiligenceCloseDecision = Literal["ready_to_close", "close_blocked"]
 DiligenceCloseSeverity = Literal["critical", "high", "medium", "none"]
 DiligenceArtifactReviewStatus = Literal["blocked", "ready_for_review"]
+DiligenceOwnerHandoffStatus = Literal["blocked", "ready_for_handoff"]
 RemediationPriority = Literal["critical", "high", "medium"]
 DiligenceRecommendation = Literal[
     "ready_for_diligence",
@@ -542,6 +543,22 @@ class DataDiligenceCloseArtifactReviewQueueEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceCloseOwnerHandoffQueueEntry(BaseModel):
+    handoff_key: str
+    owner_area: str
+    related_artifacts: list[str]
+    proof_count: int
+    blocked_proof_count: int
+    ready_proof_count: int
+    highest_severity: DiligenceCloseSeverity
+    buyer_review_roles: list[str]
+    handoff_status: DiligenceOwnerHandoffStatus
+    acceptance_summary: str
+    next_action: str
+    snapshot_verification_required: bool
+    provider_write_executed: bool
+
+
 def _default_diligence_close_decision_summary() -> DataDiligenceCloseDecisionSummary:
     return DataDiligenceCloseDecisionSummary(
         summary_key="buyer_close_decision",
@@ -615,6 +632,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     )
     diligence_close_artifact_review_queue: list[
         DataDiligenceCloseArtifactReviewQueueEntry
+    ] = Field(default_factory=list)
+    diligence_close_owner_handoff_queue: list[
+        DataDiligenceCloseOwnerHandoffQueueEntry
     ] = Field(default_factory=list)
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
@@ -1832,6 +1852,60 @@ def _diligence_close_artifact_review_queue(
     return entries
 
 
+def _diligence_close_owner_handoff_queue(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> list[DataDiligenceCloseOwnerHandoffQueueEntry]:
+    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = {}
+    for proof in snapshot.diligence_close_proof_plan:
+        groups.setdefault(proof.owner_area, []).append(proof)
+
+    entries: list[DataDiligenceCloseOwnerHandoffQueueEntry] = []
+    for owner_area, proofs in sorted(groups.items()):
+        blocked_count = sum(
+            1 for proof in proofs if proof.close_gate_status == "blocked"
+        )
+        ready_count = len(proofs) - blocked_count
+        highest_severity: DiligenceCloseSeverity = min(
+            (proof.severity_code for proof in proofs),
+            key=lambda severity: _RISK_SEVERITY_RANK[severity],
+        )
+        buyer_review_roles = [
+            _ARTIFACT_REVIEW_ROLE_BY_SEVERITY[severity]
+            for severity in sorted(
+                {proof.severity_code for proof in proofs},
+                key=lambda severity: _RISK_SEVERITY_RANK[severity],
+            )
+        ]
+        related_artifacts = sorted(
+            {proof.required_proof_artifact for proof in proofs}
+        )
+        handoff_status: DiligenceOwnerHandoffStatus = (
+            "blocked" if blocked_count else "ready_for_handoff"
+        )
+        next_actions = list(dict.fromkeys(proof.next_action for proof in proofs))
+        entries.append(
+            DataDiligenceCloseOwnerHandoffQueueEntry(
+                handoff_key=f"handoff_{_risk_matrix_key_part(owner_area)}",
+                owner_area=owner_area,
+                related_artifacts=related_artifacts,
+                proof_count=len(proofs),
+                blocked_proof_count=blocked_count,
+                ready_proof_count=ready_count,
+                highest_severity=highest_severity,
+                buyer_review_roles=buyer_review_roles,
+                handoff_status=handoff_status,
+                acceptance_summary=(
+                    f"{len(proofs)} proof requirement(s) assigned to {owner_area} "
+                    f"affect {len(related_artifacts)} artifact(s) before close."
+                ),
+                next_action="; ".join(next_actions),
+                snapshot_verification_required=True,
+                provider_write_executed=False,
+            )
+        )
+    return entries
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -2106,6 +2180,13 @@ def _evidence_snapshot_from_surface(
         update={
             "diligence_close_artifact_review_queue": (
                 _diligence_close_artifact_review_queue(snapshot)
+            )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "diligence_close_owner_handoff_queue": (
+                _diligence_close_owner_handoff_queue(snapshot)
             )
         }
     )

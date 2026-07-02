@@ -1218,6 +1218,120 @@ def _expected_diligence_close_artifact_review_queue():
     ]
 
 
+def _expected_diligence_close_owner_handoff_queue():
+    return [
+        {
+            "handoff_key": "handoff_attachment_parsing",
+            "owner_area": "attachment_parsing",
+            "related_artifacts": ["remediation-actions.json"],
+            "proof_count": 2,
+            "blocked_proof_count": 2,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_roles": ["data quality reviewer", "coverage reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "2 proof requirement(s) assigned to attachment_parsing affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_recover_attachment_content, then regenerate the "
+                "evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, "
+                "then regenerate the evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "handoff_key": "handoff_content_graph",
+            "owner_area": "content_graph",
+            "related_artifacts": ["dom-paragraph-evidence-samples.json"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_roles": ["data quality reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) assigned to content_graph affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_content_graph_coverage, "
+                "exception_repair_segment_text_readiness, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "handoff_key": "handoff_email_ingestion",
+            "owner_area": "email_ingestion",
+            "related_artifacts": ["acquisition-readiness-summary.json"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "critical",
+            "buyer_review_roles": ["executive diligence reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) assigned to email_ingestion affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_repair_thread_id_integrity, "
+                "exception_backfill_dedupe_fingerprints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "handoff_key": "handoff_knowledge_graph",
+            "owner_area": "knowledge_graph",
+            "related_artifacts": ["knowledge-graph-evidence-samples.json"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_roles": ["data quality reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) assigned to knowledge_graph affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_knowledge_graph_coverage, "
+                "exception_attach_kg_evidence_endpoints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "handoff_key": "handoff_semantic_kg",
+            "owner_area": "semantic_kg",
+            "related_artifacts": ["semantic-relation-evidence-samples.json"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_roles": ["data quality reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) assigned to semantic_kg affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_semantic_relation_sources, then "
+                "regenerate the evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+    ]
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1800,6 +1914,13 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         snapshot["diligence_close_artifact_review_queue"]
         == _expected_diligence_close_artifact_review_queue()
     )
+    assert "diligence_close_owner_handoff_queue" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_owner_handoff_queue"]
+        == _expected_diligence_close_owner_handoff_queue()
+    )
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -2055,6 +2176,39 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     )
     assert all(
         item["provider_write_executed"] is False for item in artifact_review_queue
+    )
+    owner_handoff_queue = snapshot["diligence_close_owner_handoff_queue"]
+    assert len(owner_handoff_queue) == 5
+    assert owner_handoff_queue[0] == {
+        "handoff_key": "handoff_attachment_parsing",
+        "owner_area": "attachment_parsing",
+        "related_artifacts": ["remediation-actions.json"],
+        "proof_count": 2,
+        "blocked_proof_count": 2,
+        "ready_proof_count": 0,
+        "highest_severity": "high",
+        "buyer_review_roles": ["data quality reviewer", "coverage reviewer"],
+        "handoff_status": "blocked",
+        "acceptance_summary": (
+            "2 proof requirement(s) assigned to attachment_parsing affect "
+            "1 artifact(s) before close."
+        ),
+        "next_action": (
+            "Resolve exception_recover_attachment_content, then regenerate the "
+            "evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, "
+            "then regenerate the evidence snapshot."
+        ),
+        "snapshot_verification_required": True,
+        "provider_write_executed": False,
+    }
+    assert owner_handoff_queue[2]["owner_area"] == "email_ingestion"
+    assert owner_handoff_queue[2]["highest_severity"] == "critical"
+    assert owner_handoff_queue[2]["buyer_review_roles"] == [
+        "executive diligence reviewer"
+    ]
+    assert owner_handoff_queue[-1]["owner_area"] == "semantic_kg"
+    assert all(
+        item["provider_write_executed"] is False for item in owner_handoff_queue
     )
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
