@@ -598,6 +598,8 @@ function routeJson(route, body, status = 200) {
 }
 
 async function installRoutes(page) {
+  let emailSendCount = 0;
+
   await page.route("**/auth/session", (route) => routeJson(route, {
     claims: {
       userId: "smoke-user",
@@ -633,7 +635,10 @@ async function installRoutes(page) {
     if (endpoint === "/api/llm/summarize") return routeJson(route, { summary: "20억 판매 검토용 맥락 종합입니다.", todos: ["근거 확인"], confidence: 0.86 });
     if (endpoint === "/api/llm/draft") return routeJson(route, { draft: "검토 가능한 답장 초안입니다." });
     if (endpoint === "/api/llm/translate") return routeJson(route, { translation: "번역된 맥락입니다." });
-    if (endpoint === "/api/emails/send") return routeJson(route, { simulated: true });
+    if (endpoint === "/api/emails/send") {
+      emailSendCount += 1;
+      return routeJson(route, { simulated: emailSendCount === 1 });
+    }
     if (endpoint === "/api/tasks") return routeJson(route, [task, knowledgeTask]);
     if (endpoint === "/api/tasks/from-email") return routeJson(route, { created: 1 });
     if (endpoint === "/api/tasks/reply-sla-escalations") {
@@ -665,13 +670,13 @@ async function installRoutes(page) {
         requires_if_match: true,
         if_match: calendarWritebackSource.etag,
         provenance: { source: "full-product-smoke" },
-        audit_event: "calendar.writeback_intent.created",
-        provider_write_executed: false,
-        status: executeProvider ? "queued" : "intent_ready",
+        audit_event: executeProvider ? "calendar.writeback.executed" : "calendar.writeback_intent.created",
+        provider_write_executed: executeProvider,
+        status: executeProvider ? "executed" : "intent_ready",
         runner_request_id: executeProvider ? "runner-calendar-20b" : null,
-        provider_status: null,
+        provider_status: executeProvider ? 204 : null,
         error_code: null,
-        retry_item_uid: executeProvider ? "retry-calendar-20b" : null,
+        retry_item_uid: null,
       });
     }
     if (endpoint === "/api/webdav/folders") return routeJson(route, [projectFolder]);
@@ -698,7 +703,7 @@ async function installRoutes(page) {
       const executeProvider = requestBody.execute_provider === true;
       return routeJson(route, {
         intent: "knowledge_materialization",
-        status: executeProvider ? "queued" : "intent_ready",
+        status: executeProvider ? "executed" : "intent_ready",
         task_id: requestBody.source_task_id ?? knowledgeTask.id,
         source_type: "self_sent_knowledge",
         source_email_id: knowledgeTask.source_email_id,
@@ -708,12 +713,12 @@ async function installRoutes(page) {
         target_path: "/Projects/Naruon_20B_Readiness/knowledge-note.md",
         requires_if_match: true,
         provenance: "server-authoritative",
-        provider_write_executed: false,
-        audit_event: "webdav.knowledge_materialization_intent.created",
+        provider_write_executed: executeProvider,
+        audit_event: executeProvider ? "webdav.knowledge_materialization.executed" : "webdav.knowledge_materialization_intent.created",
         runner_request_id: executeProvider ? "runner-knowledge-20b" : null,
-        provider_status: null,
+        provider_status: executeProvider ? 201 : null,
         error_code: null,
-        retry_item_uid: executeProvider ? "retry-knowledge-20b" : null,
+        retry_item_uid: null,
       });
     }
     if (endpoint === "/api/data/quality-surface") return routeJson(route, dataQualitySurface);
@@ -738,8 +743,8 @@ async function installRoutes(page) {
       return routeJson(route, {
         action_id: "doc-webdav-smoke",
         document_name: "20b-readiness.md",
-        message: "WebDAV materialization intent recorded; no provider write executed.",
-        provider_write_executed: false,
+        message: "WebDAV materialization executed by the connector.",
+        provider_write_executed: true,
       });
     }
     if (endpoint.startsWith("/api/data/documents/")) return routeJson(route, { action_id: "doc-action-smoke", status: "accepted" });
@@ -837,6 +842,10 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.waitForFunction(() => document.querySelector("#reply-draft")?.value.includes("검토 가능한 답장 초안입니다."));
     await page.getByRole("button", { name: "답장 보내기", exact: true }).click();
     await page.getByText("개발 모드에서 답장을 시뮬레이션했습니다. 실제 메일은 전송되지 않았습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "답장 초안 생성", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector("#reply-draft")?.value.includes("검토 가능한 답장 초안입니다."));
+    await page.getByRole("button", { name: "답장 보내기", exact: true }).click();
+    await page.getByText("답장을 전송했습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     const createTaskButton = page.getByRole("button", { name: "실행 항목 생성" }).first();
     await createTaskButton.waitFor({ state: "visible", timeout: 10_000 });
     await createTaskButton.click();
@@ -846,6 +855,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
       evidence("mail:open-source-drawer"),
       evidence("mail:generate-reply-draft"),
       evidence("mail:send-simulated-reply"),
+      evidence("mail:send-provider-reply"),
       evidence("mail:create-source-linked-task"),
     ];
   }
@@ -875,13 +885,14 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByRole("button", { name: "ETag 업데이트 점검", exact: true }).click();
     await page.getByText("If-Match 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "ETag 실행 요청", exact: true }).click();
-    await page.getByText("커넥터 실행 요청 접수", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByText("재시도 대기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("외부 원본 쓰기 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("재시도 없음", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("calendar:create-writeback-intent"),
       evidence("calendar:verify-etag-update-intent"),
-      evidence("calendar:request-provider-execution"),
-      evidence("calendar:verify-provider-retry-state"),
+      evidence("calendar:request-provider-write"),
+      evidence("calendar:verify-provider-completion-state"),
+      evidence("calendar:verify-provider-no-retry-state"),
     ];
   }
 
@@ -893,14 +904,15 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByRole("button", { name: "나에게 보낸 지식 메모 정리 WebDAV 지식 노트 의도 생성", exact: true }).click();
     await page.getByText("WebDAV/Notes 의도 준비", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "나에게 보낸 지식 메모 정리 WebDAV 지식 노트 실행 요청", exact: true }).click();
-    await page.getByText("커넥터 실행 요청 접수", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByText("재시도 대기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("외부 쓰기 실행됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("재시도 없음", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("tasks:create-reply-sla-followup"),
       evidence("tasks:complete-source-linked-task"),
       evidence("tasks:create-knowledge-webdav-intent"),
-      evidence("tasks:request-knowledge-provider-execution"),
-      evidence("tasks:verify-knowledge-retry-state"),
+      evidence("tasks:request-knowledge-provider-write"),
+      evidence("tasks:verify-knowledge-provider-completion-state"),
+      evidence("tasks:verify-knowledge-provider-no-retry-state"),
     ];
   }
 
@@ -923,7 +935,8 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByRole("button", { name: "HWP 변환 의도", exact: true }).click();
     await page.getByText("HWP conversion intent recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "WebDAV 문서 실행 요청", exact: true }).click();
-    await page.getByText("WebDAV materialization intent recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("WebDAV materialization executed by the connector.", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("외부 쓰기 실행됨", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "WebDAV 반영 의도 점검", exact: true }).click();
     await page.getByText("원본 반영 의도", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("If-Match 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -934,7 +947,8 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     return [
       evidence("data:create-embedding-regeneration-intent"),
       evidence("data:create-hwp-conversion-intent"),
-      evidence("data:request-webdav-materialization"),
+      evidence("data:execute-webdav-materialization"),
+      evidence("data:verify-webdav-materialization-completion-state"),
       evidence("data:create-webdav-writeback-intent"),
       evidence("data:create-unique-thread-intent"),
       evidence("data:open-quality-checks"),
