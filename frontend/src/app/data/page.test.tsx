@@ -881,6 +881,138 @@ const diligenceCloseOwnerHandoffQueue = [
   },
 ];
 
+const diligenceCloseTraceabilityMap = [
+  {
+    trace_key: "trace_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+    source_field: "acquisition_readiness_gate",
+    data_room_artifact: "acquisition-readiness-summary.json",
+    manifest_key: "acquisition_readiness_summary",
+    exception_keys: [
+      "exception_repair_thread_id_integrity",
+      "exception_backfill_dedupe_fingerprints",
+    ],
+    risk_key: "risk_critical_email_ingestion_acquisition_readiness_summary_json",
+    proof_key: "proof_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+    artifact_review_key: "review_acquisition_readiness_summary_json",
+    owner_handoff_key: "handoff_email_ingestion",
+    owner_area: "email_ingestion",
+    severity_code: "critical",
+    exception_count: 2,
+    close_gate_status: "blocked",
+    buyer_review_roles: ["executive diligence reviewer"],
+    trace_summary: "acquisition_readiness_gate feeds acquisition-readiness-summary.json for email_ingestion close proof traceability.",
+    next_action: "Resolve exception_repair_thread_id_integrity, exception_backfill_dedupe_fingerprints, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    trace_key: "trace_risk_high_attachment_parsing_remediation_actions_json",
+    source_field: "acquisition_readiness_gate.remediation_actions",
+    data_room_artifact: "remediation-actions.json",
+    manifest_key: "remediation_actions",
+    exception_keys: ["exception_recover_attachment_content"],
+    risk_key: "risk_high_attachment_parsing_remediation_actions_json",
+    proof_key: "proof_risk_high_attachment_parsing_remediation_actions_json",
+    artifact_review_key: "review_remediation_actions_json",
+    owner_handoff_key: "handoff_attachment_parsing",
+    owner_area: "attachment_parsing",
+    severity_code: "high",
+    exception_count: 1,
+    close_gate_status: "blocked",
+    buyer_review_roles: ["data quality reviewer", "coverage reviewer"],
+    trace_summary: "acquisition_readiness_gate.remediation_actions feeds remediation-actions.json for attachment_parsing close proof traceability.",
+    next_action: "Resolve exception_recover_attachment_content, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    trace_key: "trace_risk_high_content_graph_dom_paragraph_evidence_samples_json",
+    source_field: "content_graph_evidence_samples",
+    data_room_artifact: "dom-paragraph-evidence-samples.json",
+    manifest_key: "dom_paragraph_samples",
+    exception_keys: [
+      "exception_backfill_content_graph_coverage",
+      "exception_repair_segment_text_readiness",
+    ],
+    risk_key: "risk_high_content_graph_dom_paragraph_evidence_samples_json",
+    proof_key: "proof_risk_high_content_graph_dom_paragraph_evidence_samples_json",
+    artifact_review_key: "review_dom_paragraph_evidence_samples_json",
+    owner_handoff_key: "handoff_content_graph",
+    owner_area: "content_graph",
+    severity_code: "high",
+    exception_count: 2,
+    close_gate_status: "blocked",
+    buyer_review_roles: ["data quality reviewer"],
+    trace_summary: "content_graph_evidence_samples feeds dom-paragraph-evidence-samples.json for content_graph close proof traceability.",
+    next_action: "Resolve exception_backfill_content_graph_coverage, exception_repair_segment_text_readiness, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    trace_key: "trace_risk_high_knowledge_graph_knowledge_graph_evidence_samples_json",
+    source_field: "knowledge_graph_evidence_samples",
+    data_room_artifact: "knowledge-graph-evidence-samples.json",
+    manifest_key: "knowledge_graph_samples",
+    exception_keys: [
+      "exception_backfill_knowledge_graph_coverage",
+      "exception_attach_kg_evidence_endpoints",
+    ],
+    risk_key: "risk_high_knowledge_graph_knowledge_graph_evidence_samples_json",
+    proof_key: "proof_risk_high_knowledge_graph_knowledge_graph_evidence_samples_json",
+    artifact_review_key: "review_knowledge_graph_evidence_samples_json",
+    owner_handoff_key: "handoff_knowledge_graph",
+    owner_area: "knowledge_graph",
+    severity_code: "high",
+    exception_count: 2,
+    close_gate_status: "blocked",
+    buyer_review_roles: ["data quality reviewer"],
+    trace_summary: "knowledge_graph_evidence_samples feeds knowledge-graph-evidence-samples.json for knowledge_graph close proof traceability.",
+    next_action: "Resolve exception_backfill_knowledge_graph_coverage, exception_attach_kg_evidence_endpoints, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    trace_key: "trace_risk_high_semantic_kg_semantic_relation_evidence_samples_json",
+    source_field: "semantic_relation_evidence_samples",
+    data_room_artifact: "semantic-relation-evidence-samples.json",
+    manifest_key: "semantic_relation_samples",
+    exception_keys: ["exception_backfill_semantic_relation_sources"],
+    risk_key: "risk_high_semantic_kg_semantic_relation_evidence_samples_json",
+    proof_key: "proof_risk_high_semantic_kg_semantic_relation_evidence_samples_json",
+    artifact_review_key: "review_semantic_relation_evidence_samples_json",
+    owner_handoff_key: "handoff_semantic_kg",
+    owner_area: "semantic_kg",
+    severity_code: "high",
+    exception_count: 1,
+    close_gate_status: "blocked",
+    buyer_review_roles: ["data quality reviewer"],
+    trace_summary: "semantic_relation_evidence_samples feeds semantic-relation-evidence-samples.json for semantic_kg close proof traceability.",
+    next_action: "Resolve exception_backfill_semantic_relation_sources, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    trace_key: "trace_risk_medium_attachment_parsing_remediation_actions_json",
+    source_field: "acquisition_readiness_gate.remediation_actions",
+    data_room_artifact: "remediation-actions.json",
+    manifest_key: "remediation_actions",
+    exception_keys: ["exception_expand_attachment_parse_coverage"],
+    risk_key: "risk_medium_attachment_parsing_remediation_actions_json",
+    proof_key: "proof_risk_medium_attachment_parsing_remediation_actions_json",
+    artifact_review_key: "review_remediation_actions_json",
+    owner_handoff_key: "handoff_attachment_parsing",
+    owner_area: "attachment_parsing",
+    severity_code: "medium",
+    exception_count: 1,
+    close_gate_status: "blocked",
+    buyer_review_roles: ["data quality reviewer", "coverage reviewer"],
+    trace_summary: "acquisition_readiness_gate.remediation_actions feeds remediation-actions.json for attachment_parsing close proof traceability.",
+    next_action: "Resolve exception_expand_attachment_parse_coverage, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+];
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1250,6 +1382,7 @@ const dataEvidenceSnapshot = {
     "diligence_exception_register",
     "diligence_close_artifact_review_queue",
     "diligence_close_owner_handoff_queue",
+    "diligence_close_traceability_map",
     "diligence_close_decision_summary",
     "diligence_close_proof_plan",
     "diligence_risk_matrix",
@@ -1342,6 +1475,7 @@ const dataEvidenceSnapshot = {
   diligence_exception_register: diligenceExceptionRegister,
   diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
   diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
+  diligence_close_traceability_map: diligenceCloseTraceabilityMap,
   diligence_close_decision_summary: diligenceCloseDecisionSummary,
   diligence_close_proof_plan: diligenceCloseProofPlan,
   diligence_risk_matrix: diligenceRiskMatrix,
@@ -1998,6 +2132,12 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Reviewer roles");
     expect(container.textContent).toContain("Handoff status");
     expect(container.textContent).toContain("assigned to attachment_parsing");
+    expect(container.textContent).toContain("Diligence close traceability map");
+    expect(container.textContent).toContain("acquisition_readiness_gate");
+    expect(container.textContent).toContain("Trace keys");
+    expect(container.textContent).toContain("review_acquisition_readiness_summary_json");
+    expect(container.textContent).toContain("handoff_email_ingestion");
+    expect(container.textContent).toContain("close proof traceability");
     expect(container.textContent).toContain("Diligence close proof plan");
     expect(container.textContent).toContain("critical evidence gate");
     expect(container.textContent).toContain("blocked");
@@ -2086,6 +2226,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_decision_summary");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_artifact_review_queue");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_owner_handoff_queue");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_traceability_map");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -2208,6 +2349,36 @@ describe("DataPage", () => {
     });
     expect(copiedSnapshot.diligence_close_owner_handoff_queue[2].owner_area).toBe("email_ingestion");
     expect(copiedSnapshot.diligence_close_owner_handoff_queue[2].buyer_review_roles).toEqual(["executive diligence reviewer"]);
+    expect(copiedSnapshot.diligence_close_traceability_map).toHaveLength(6);
+    expect(copiedSnapshot.diligence_close_traceability_map[0]).toEqual({
+      trace_key: "trace_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+      source_field: "acquisition_readiness_gate",
+      data_room_artifact: "acquisition-readiness-summary.json",
+      manifest_key: "acquisition_readiness_summary",
+      exception_keys: [
+        "exception_repair_thread_id_integrity",
+        "exception_backfill_dedupe_fingerprints",
+      ],
+      risk_key: "risk_critical_email_ingestion_acquisition_readiness_summary_json",
+      proof_key: "proof_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+      artifact_review_key: "review_acquisition_readiness_summary_json",
+      owner_handoff_key: "handoff_email_ingestion",
+      owner_area: "email_ingestion",
+      severity_code: "critical",
+      exception_count: 2,
+      close_gate_status: "blocked",
+      buyer_review_roles: ["executive diligence reviewer"],
+      trace_summary: "acquisition_readiness_gate feeds acquisition-readiness-summary.json for email_ingestion close proof traceability.",
+      next_action: "Resolve exception_repair_thread_id_integrity, exception_backfill_dedupe_fingerprints, then regenerate the evidence snapshot.",
+      snapshot_verification_required: true,
+      provider_write_executed: false,
+    });
+    expect(copiedSnapshot.diligence_close_traceability_map[2].source_field).toBe("content_graph_evidence_samples");
+    expect(copiedSnapshot.diligence_close_traceability_map[2].data_room_artifact).toBe("dom-paragraph-evidence-samples.json");
+    expect(copiedSnapshot.diligence_close_traceability_map[3].source_field).toBe("knowledge_graph_evidence_samples");
+    expect(copiedSnapshot.diligence_close_traceability_map[3].data_room_artifact).toBe("knowledge-graph-evidence-samples.json");
+    expect(copiedSnapshot.diligence_close_traceability_map[5].source_field).toBe("acquisition_readiness_gate.remediation_actions");
+    expect(copiedSnapshot.diligence_close_traceability_map[5].owner_handoff_key).toBe("handoff_attachment_parsing");
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

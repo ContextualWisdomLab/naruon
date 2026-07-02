@@ -382,6 +382,26 @@ export type DataEvidenceSnapshotResponse = {
     snapshot_verification_required: boolean;
     provider_write_executed: boolean;
   }>;
+  diligence_close_traceability_map: Array<{
+    trace_key: string;
+    source_field: string;
+    data_room_artifact: string;
+    manifest_key: string;
+    exception_keys: string[];
+    risk_key: string;
+    proof_key: string;
+    artifact_review_key: string;
+    owner_handoff_key: string;
+    owner_area: string;
+    severity_code: DiligenceCloseSeverity;
+    exception_count: number;
+    close_gate_status: CloseGateStatus;
+    buyer_review_roles: string[];
+    trace_summary: string;
+    next_action: string;
+    snapshot_verification_required: boolean;
+    provider_write_executed: boolean;
+  }>;
   parser_manifest_summary: Array<{
     parser_key: string;
     display_name: string;
