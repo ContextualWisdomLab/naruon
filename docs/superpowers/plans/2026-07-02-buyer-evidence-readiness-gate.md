@@ -27,7 +27,7 @@
 - Expects `DataEvidenceSnapshotResponse.acquisition_readiness_gate`
 - Expects `DataAcquisitionReadinessGate.blocking_check_keys: list[str]`
 
-- [ ] **Step 1: Add quality-surface assertions**
+- [x] **Step 1: Add quality-surface assertions**
 
 In `test_data_quality_surface_returns_source_backed_counts_without_secrets`, assert the mock surface gate:
 
@@ -60,7 +60,7 @@ assert data["acquisition_readiness_gate"] == {
 }
 ```
 
-- [ ] **Step 2: Add snapshot assertions**
+- [x] **Step 2: Add snapshot assertions**
 
 In `test_data_quality_evidence_snapshot_returns_shareable_redacted_surface`, assert the same gate is present and included in `canonical_payload_fields`:
 
@@ -80,7 +80,7 @@ assert snapshot["acquisition_readiness_gate"]["blocking_check_keys"] == [
 ]
 ```
 
-- [ ] **Step 3: Run focused backend tests to verify failure**
+- [x] **Step 3: Run focused backend tests to verify failure**
 
 Run:
 
@@ -101,7 +101,7 @@ Expected: FAIL because `acquisition_readiness_gate` is not implemented yet.
 - Produces `_acquisition_readiness_gate(...) -> DataAcquisitionReadinessGate`
 - Adds `acquisition_readiness_gate` to quality-surface and evidence-snapshot responses
 
-- [ ] **Step 1: Add gate types**
+- [x] **Step 1: Add gate types**
 
 Add:
 
@@ -125,7 +125,7 @@ class DataAcquisitionReadinessGate(BaseModel):
     detail_text: str
 ```
 
-- [ ] **Step 2: Add the helper**
+- [x] **Step 2: Add the helper**
 
 Implement:
 
@@ -183,7 +183,7 @@ def _acquisition_readiness_gate(
     )
 ```
 
-- [ ] **Step 3: Wire the response models and constructors**
+- [x] **Step 3: Wire the response models and constructors**
 
 Add `acquisition_readiness_gate: DataAcquisitionReadinessGate` to `DataQualitySurfaceResponse` and `DataEvidenceSnapshotResponse`.
 
@@ -191,7 +191,7 @@ In `get_data_quality_surface`, create `quality_checks` before building the respo
 
 In `_evidence_snapshot_from_surface`, copy `surface.acquisition_readiness_gate` into the snapshot. The digest will automatically include it because `snapshot_digest_payload()` sorts the model dump.
 
-- [ ] **Step 4: Run backend tests**
+- [x] **Step 4: Run backend tests**
 
 Run:
 
@@ -214,13 +214,13 @@ Expected: PASS.
 - Consumes `DataQualitySurfaceResponse.acquisition_readiness_gate`
 - Consumes `DataEvidenceSnapshotResponse.acquisition_readiness_gate`
 
-- [ ] **Step 1: Add TypeScript types and fixtures**
+- [x] **Step 1: Add TypeScript types and fixtures**
 
 Add `AcquisitionReadinessState = 'ready' | 'needs_attention' | 'pending'` and a shared gate shape to both surface and snapshot response types.
 
 In `page.test.tsx`, add the fixture gate to `dataQualitySurface`, `dataEvidenceSnapshot`, and `canonical_payload_fields`.
 
-- [ ] **Step 2: Render the gate**
+- [x] **Step 2: Render the gate**
 
 In `QualityCheckTab`, add a section above the three quality check summary cards:
 
@@ -241,7 +241,7 @@ Render:
 - blocking count and safe `blocking_check_keys`
 - `detail_text`
 
-- [ ] **Step 3: Add UI assertions**
+- [x] **Step 3: Add UI assertions**
 
 In `renders API-backed pipeline embedding and quality tabs`, assert:
 
@@ -260,7 +260,7 @@ expect(copiedSnapshot.acquisition_readiness_gate.gate_key).toBe("buyer_evidence_
 expect(copiedSnapshot.acquisition_readiness_gate.readiness_score).toBe(25);
 ```
 
-- [ ] **Step 4: Run frontend tests**
+- [x] **Step 4: Run frontend tests**
 
 Run:
 
@@ -280,7 +280,7 @@ Expected: PASS.
 - Produces a FigJam Phase 16 diagram and local screenshot evidence
 - Produces commits and PR update
 
-- [ ] **Step 1: Generate a FigJam diagram**
+- [x] **Step 1: Generate a FigJam diagram**
 
 Use Figma/FigJam, not Figma Code Connect, to add a diagram with this flow:
 
@@ -301,7 +301,7 @@ Expected screenshot path:
 work/figjam-phase16-buyer-evidence-readiness-gate.png
 ```
 
-- [ ] **Step 2: Run final validation**
+- [x] **Step 2: Run final validation**
 
 Run:
 
@@ -317,11 +317,11 @@ git diff --check
 
 Expected: PASS.
 
-- [ ] **Step 3: Mark this plan complete**
+- [x] **Step 3: Mark this plan complete**
 
 Replace unchecked boxes with checked boxes after implementation and validation evidence exists.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Commit plan, implementation, and completion marker separately when practical:
 
@@ -336,3 +336,13 @@ git push origin HEAD:plan/email-dom-paragraph-kg-2026-07-02
 ```
 
 Expected: PR #895 head updates, unrelated `.Jules/*` files remain unstaged.
+
+## Completion Evidence
+
+- Backend final focused tests: `3 passed in 0.18s`.
+- Backend lint: `python -m ruff check api/data.py tests/test_data_api.py` returned `All checks passed!`.
+- Frontend Data page test: `12 passed`.
+- FigJam board: `https://www.figma.com/board/zXkcwT2E2aBtNhMVznLT4l`
+- FigJam group: `39:718` (`Phase 16 Buyer Evidence Readiness Gate Group`).
+- Screenshot: `/Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase16-buyer-evidence-readiness-gate.png`
+- Library/submodule decision: no split. The readiness gate composes existing Data API evidence and adding a separate package or submodule would increase integration, auth, and release risk without a reusable parser boundary.
