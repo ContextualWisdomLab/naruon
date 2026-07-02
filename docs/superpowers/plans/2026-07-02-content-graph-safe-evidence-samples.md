@@ -300,7 +300,7 @@ git push origin HEAD:plan/email-dom-paragraph-kg-2026-07-02
 
 Update PR #895 body with Phase 9 summary, validation, FigJam artifact, and current head SHA.
 
-- [ ] **Step 3: Live PR verification**
+- [x] **Step 3: Live PR verification**
 
 Run:
 
