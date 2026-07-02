@@ -23,6 +23,8 @@ sellable-pilot-hardening-2026-07-02
 Recent local hardening commits before this report update:
 
 ```text
+51a77ea Cover project evidence edit in full smoke
+c45a38a Expand search graph selection evidence
 8d0be95 Cover search graph detail controls
 4224b10 Cover source drawer focus trap in full smoke
 6b454e4 Cover security permission evidence in full smoke
