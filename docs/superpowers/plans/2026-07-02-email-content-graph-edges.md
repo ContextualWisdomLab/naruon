@@ -29,21 +29,21 @@
 - Produces: `KnowledgeGraphEdgeRecord`.
 - Consumes: `Email`, `Attachment`, `ContentNodeRecord`, `ContentSegmentRecord`.
 
-- [ ] **Step 1: Write failing migration test**
+- [x] **Step 1: Write failing migration test**
 
 Add `test_knowledge_graph_edges_have_incremental_revision` asserting revision `0006_knowledge_graph_edges`, down revision `0005_content_graph_records`, table `knowledge_graph_edges`, stable `edge_uid`, scoped `email_id`, optional `attachment_id`, node/segment source and target FKs, edge kind/path fields, and idempotent index create/drop calls.
 
-- [ ] **Step 2: Run migration test to verify failure**
+- [x] **Step 2: Run migration test to verify failure**
 
 Run: `cd backend && python -m pytest -q tests/test_alembic_migrations.py::test_knowledge_graph_edges_have_incremental_revision`
 
 Expected: FAIL because the revision file and ORM model do not exist yet.
 
-- [ ] **Step 3: Implement model and migration**
+- [x] **Step 3: Implement model and migration**
 
 Add `KnowledgeGraphEdgeRecord` with deterministic uniqueness on `edge_uid`, owner scoping through `email_id`, optional attachment scope, source/target node and segment references, `edge_kind`, `edge_path`, `ordinal_index`, and `created_at`.
 
-- [ ] **Step 4: Verify migration test passes**
+- [x] **Step 4: Verify migration test passes**
 
 Run: `cd backend && python -m pytest -q tests/test_alembic_migrations.py`
 
@@ -59,7 +59,7 @@ Expected: PASS.
 - Consumes: populated `Email.content_nodes` and `Email.content_segments`.
 - Produces: `Email.knowledge_graph_edges`.
 
-- [ ] **Step 1: Write failing import aggregate test**
+- [x] **Step 1: Write failing import aggregate test**
 
 Assert that `_build_email_object(...)` creates:
 
@@ -69,13 +69,13 @@ Assert that `_build_email_object(...)` creates:
 
 Also assert deterministic edge UID uniqueness and heading containment from `Launch -> Hello team` and `Plan -> Ship graph`.
 
-- [ ] **Step 2: Run import edge test to verify failure**
+- [x] **Step 2: Run import edge test to verify failure**
 
 Run: `cd backend && python -m pytest -q tests/test_email_import_service.py::test_build_email_object_attaches_knowledge_graph_edges`
 
 Expected: FAIL because knowledge graph edges are not populated yet.
 
-- [ ] **Step 3: Implement edge builder**
+- [x] **Step 3: Implement edge builder**
 
 Create deterministic edges after content graph records are appended:
 - `node_contains_node`: parent content node to child content node.
@@ -83,7 +83,7 @@ Create deterministic edges after content graph records are appended:
 - `segment_next`: adjacent segments inside the same source record.
 - `heading_contains_segment`: nearest heading segment to following paragraph segments under that heading path.
 
-- [ ] **Step 4: Verify import tests pass**
+- [x] **Step 4: Verify import tests pass**
 
 Run: `cd backend && python -m pytest -q tests/test_email_import_service.py tests/test_content_graph_parser.py tests/test_email_parser.py`
 
@@ -99,24 +99,24 @@ Expected: PASS.
 - Produces: `knowledge_graph_inventory` pipeline stage and `knowledge_graph_coverage` quality check.
 - Consumes: `KnowledgeGraphEdgeRecord` counts joined to scoped `Email`.
 
-- [ ] **Step 1: Write failing data quality test**
+- [x] **Step 1: Write failing data quality test**
 
 Add mocked KG stats `(2, 10)` for 4 scoped emails. Assert:
 - `knowledge_graph_inventory` shows 2 of 4 emails with 10 graph edges.
 - `knowledge_graph_coverage` reports 2 uncovered scoped emails.
 - Evidence source is only `knowledge_graph_edges`.
 
-- [ ] **Step 2: Run data API test to verify failure**
+- [x] **Step 2: Run data API test to verify failure**
 
 Run: `cd backend && python -m pytest -q tests/test_data_api.py::test_data_quality_surface_returns_source_backed_counts_without_secrets`
 
 Expected: FAIL because the API does not query graph-edge coverage yet.
 
-- [ ] **Step 3: Implement KPI query and response wiring**
+- [x] **Step 3: Implement KPI query and response wiring**
 
 Add `KnowledgeGraphQualityStats`, `_get_knowledge_graph_stats`, pipeline stage wiring, and quality check wiring. Do not return edge payload contents.
 
-- [ ] **Step 4: Verify data API tests pass**
+- [x] **Step 4: Verify data API tests pass**
 
 Run: `cd backend && python -m pytest -q tests/test_data_api.py`
 
@@ -130,7 +130,7 @@ Expected: PASS.
 **Interfaces:**
 - Produces: pushed PR #895 update and refreshed PR body/check status.
 
-- [ ] **Step 1: Run focused backend tests**
+- [x] **Step 1: Run focused backend tests**
 
 Run:
 
@@ -144,7 +144,7 @@ python -m pytest -q \
   tests/test_alembic_migrations.py
 ```
 
-- [ ] **Step 2: Run full verification**
+- [x] **Step 2: Run full verification**
 
 Run:
 
@@ -155,7 +155,7 @@ ruff check .
 git diff --check
 ```
 
-- [ ] **Step 3: Sync CodeGraph and push**
+- [x] **Step 3: Sync CodeGraph and push**
 
 Run:
 

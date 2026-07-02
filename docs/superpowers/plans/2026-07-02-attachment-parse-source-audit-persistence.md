@@ -249,7 +249,7 @@ cd ..
 git diff --check
 ```
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Stage only Phase 6 files. Do not stage `.Jules/*`.
 
@@ -258,7 +258,7 @@ git commit -m "feat: persist attachment parser audit metadata"
 git push origin HEAD:plan/email-dom-paragraph-kg-2026-07-02
 ```
 
-- [ ] **Step 5: Update PR body and check live PR status**
+- [x] **Step 5: Update PR body and check live PR status**
 
 Run:
 

@@ -28,7 +28,7 @@
 - Produces: `EmailData["body_content_type"] -> str`, `EmailData["body_parse_content"] -> str`, attachment `content_type`.
 - Consumes: existing parser functions and `strip_html_markup`.
 
-- [ ] **Step 1: Write failing parser tests**
+- [x] **Step 1: Write failing parser tests**
 
 Add assertions to `test_parse_eml_multipart_html_fallback`:
 
@@ -45,17 +45,17 @@ assert parsed["attachments"] == [
 ]
 ```
 
-- [ ] **Step 2: Run parser tests to verify failure**
+- [x] **Step 2: Run parser tests to verify failure**
 
 Run: `cd backend && python -m pytest -q tests/test_email_parser.py`
 
 Expected: FAIL because `body_content_type`, `body_parse_content`, and attachment `content_type` do not exist yet.
 
-- [ ] **Step 3: Implement metadata**
+- [x] **Step 3: Implement metadata**
 
 Update `EmailData` with `NotRequired[str]` keys for `body_content_type` and `body_parse_content`. Return selected body MIME type and NUL-sanitized parse content while keeping `body` display-safe.
 
-- [ ] **Step 4: Verify parser tests pass**
+- [x] **Step 4: Verify parser tests pass**
 
 Run: `cd backend && python -m pytest -q tests/test_email_parser.py`
 
@@ -72,7 +72,7 @@ Expected: PASS.
 - Produces: `ContentNodeRecord`, `ContentSegmentRecord`.
 - Consumes: `Email`, `Attachment`, SQLAlchemy `Base`.
 
-- [ ] **Step 1: Write migration scaffold test**
+- [x] **Step 1: Write migration scaffold test**
 
 Add `test_content_graph_records_have_incremental_revision` asserting:
 
@@ -95,17 +95,17 @@ assert "op.drop_index(" in revision_text
 assert "if_exists=True" in revision_text
 ```
 
-- [ ] **Step 2: Run migration test to verify failure**
+- [x] **Step 2: Run migration test to verify failure**
 
 Run: `cd backend && python -m pytest -q tests/test_alembic_migrations.py::test_content_graph_records_have_incremental_revision`
 
 Expected: FAIL because the revision file does not exist.
 
-- [ ] **Step 3: Implement models and migration**
+- [x] **Step 3: Implement models and migration**
 
 Add `ContentNodeRecord` and `ContentSegmentRecord` SQLAlchemy models with owner scope via `email_id`, optional `attachment_id`, deterministic UID uniqueness, and cascade relationships from `Email` and `Attachment`.
 
-- [ ] **Step 4: Verify migration test passes**
+- [x] **Step 4: Verify migration test passes**
 
 Run: `cd backend && python -m pytest -q tests/test_alembic_migrations.py`
 
@@ -121,7 +121,7 @@ Expected: PASS.
 - Consumes: `parse_content(...) -> ParseResult`, `EmailData.body_parse_content`, attachment `content_type`.
 - Produces: `_append_content_graph(email_obj, parsed, message_id)`.
 
-- [ ] **Step 1: Write failing import aggregate test**
+- [x] **Step 1: Write failing import aggregate test**
 
 Add a unit test that calls `_build_email_object(...)` with an HTML body parse source and one Markdown attachment. Assert that:
 
@@ -137,17 +137,17 @@ assert email_obj.content_segments[1].heading_path == "Launch"
 assert email_obj.attachments[0].content_segments[0].safe_text_content == "Plan"
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 Run: `cd backend && python -m pytest -q tests/test_email_import_service.py::test_build_email_object_attaches_content_graph_records`
 
 Expected: FAIL because content graph ORM relationships are not populated.
 
-- [ ] **Step 3: Implement aggregate appending**
+- [x] **Step 3: Implement aggregate appending**
 
 Call `parse_content` for the email body and each text attachment. Create `ContentNodeRecord` and `ContentSegmentRecord` objects from parse results, attach body records to `Email`, and attach attachment records through both `Email` and `Attachment` relationships.
 
-- [ ] **Step 4: Verify import tests pass**
+- [x] **Step 4: Verify import tests pass**
 
 Run: `cd backend && python -m pytest -q tests/test_email_import_service.py tests/test_content_graph_parser.py tests/test_email_parser.py`
 
@@ -163,7 +163,7 @@ Expected: PASS.
 - Produces: quality check `content_graph_coverage` and pipeline stage `content_graph_inventory`.
 - Consumes: `ContentSegmentRecord` counts joined to scoped `Email`.
 
-- [ ] **Step 1: Write failing quality surface test**
+- [x] **Step 1: Write failing quality surface test**
 
 Update `mock_db` result sequence to include content graph stats `(4, 6)`, where 4 emails and 6 segments are covered. Assert:
 
@@ -173,17 +173,17 @@ assert quality_by_key["content_graph_coverage"]["issue_count"] == 0
 assert quality_by_key["content_graph_coverage"]["evidence_source"] == "content_segments"
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 Run: `cd backend && python -m pytest -q tests/test_data_api.py::test_data_quality_surface_returns_source_backed_counts_without_secrets`
 
 Expected: FAIL because the API does not query content segment coverage yet.
 
-- [ ] **Step 3: Implement KPI query and response wiring**
+- [x] **Step 3: Implement KPI query and response wiring**
 
 Add `ContentGraphQualityStats`, `_get_content_graph_stats`, `_check_content_graph_coverage`, and a `content_graph_inventory` pipeline stage. Do not expose raw content.
 
-- [ ] **Step 4: Verify data API tests pass**
+- [x] **Step 4: Verify data API tests pass**
 
 Run: `cd backend && python -m pytest -q tests/test_data_api.py`
 
@@ -197,7 +197,7 @@ Expected: PASS.
 **Interfaces:**
 - Produces: pushed PR #895 update.
 
-- [ ] **Step 1: Run focused backend tests**
+- [x] **Step 1: Run focused backend tests**
 
 Run:
 
@@ -213,7 +213,7 @@ python -m pytest -q \
 
 Expected: PASS.
 
-- [ ] **Step 2: Run lint and formatting checks**
+- [x] **Step 2: Run lint and formatting checks**
 
 Run:
 
@@ -225,7 +225,7 @@ python -m ruff format --check services/content_graph services/email_parser.py se
 
 Expected: PASS.
 
-- [ ] **Step 3: Sync CodeGraph and check git diff**
+- [x] **Step 3: Sync CodeGraph and check git diff**
 
 Run:
 
@@ -238,7 +238,7 @@ git status --short
 
 Expected: CodeGraph index up to date; only intended files plus pre-existing `.Jules/*` changes.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Run:
 
