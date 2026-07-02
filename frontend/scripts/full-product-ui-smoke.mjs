@@ -610,6 +610,8 @@ function routeJson(route, body, status = 200) {
 
 async function installRoutes(page) {
   let emailSendCount = 0;
+  let savedAccountConfig = { ...accountConfig };
+  let savedLlmProviders = [{ ...llmProvider }];
 
   await page.route("**/auth/session", (route) => routeJson(route, {
     claims: {
@@ -780,7 +782,35 @@ async function installRoutes(page) {
     }
     if (endpoint === "/api/ai-hub/surface") return routeJson(route, aiHubSurface);
     if (endpoint === "/api/security/access-surface") return routeJson(route, securitySurface);
-    if (endpoint === "/api/accounts/config") return routeJson(route, accountConfig);
+    if (endpoint === "/api/accounts/config") {
+      if (request.method() === "PUT") {
+        let requestBody = {};
+        try {
+          requestBody = request.postDataJSON();
+        } catch {
+          requestBody = {};
+        }
+        savedAccountConfig = {
+          ...savedAccountConfig,
+          smtp_server: requestBody.smtp_server ?? null,
+          smtp_port: requestBody.smtp_port ?? null,
+          smtp_username: requestBody.smtp_username ?? null,
+          has_smtp_password: Boolean(requestBody.smtp_password) || savedAccountConfig.has_smtp_password,
+          imap_server: requestBody.imap_server ?? null,
+          imap_port: requestBody.imap_port ?? null,
+          imap_username: requestBody.imap_username ?? null,
+          has_imap_password: Boolean(requestBody.imap_password) || savedAccountConfig.has_imap_password,
+          pop3_server: requestBody.pop3_server ?? null,
+          pop3_port: requestBody.pop3_port ?? null,
+          pop3_username: requestBody.pop3_username ?? null,
+          has_pop3_password: Boolean(requestBody.pop3_password) || savedAccountConfig.has_pop3_password,
+          oauth_client_id: requestBody.oauth_client_id ?? null,
+          oauth_redirect_uri: requestBody.oauth_redirect_uri ?? null,
+          has_oauth_client_secret: Boolean(requestBody.oauth_client_secret) || savedAccountConfig.has_oauth_client_secret,
+        };
+      }
+      return routeJson(route, savedAccountConfig);
+    }
     if (endpoint === "/api/llm-providers" && request.method() === "POST") {
       let requestBody = {};
       try {
@@ -788,7 +818,7 @@ async function installRoutes(page) {
       } catch {
         requestBody = {};
       }
-      return routeJson(route, {
+      const createdProvider = {
         ...llmProvider,
         id: 2,
         name: requestBody.name ?? "Local Gemma4",
@@ -798,9 +828,11 @@ async function installRoutes(page) {
         embedding_model: requestBody.embedding_model ?? "embeddinggemma",
         fingerprint: null,
         updated_at: "2026-07-02T05:30:00Z",
-      });
+      };
+      savedLlmProviders = [createdProvider, ...savedLlmProviders.filter((provider) => provider.id !== createdProvider.id)];
+      return routeJson(route, createdProvider);
     }
-    if (endpoint === "/api/llm-providers") return routeJson(route, [llmProvider]);
+    if (endpoint === "/api/llm-providers") return routeJson(route, savedLlmProviders);
     if (endpoint.startsWith("/api/llm-providers/")) {
       let requestBody = {};
       try {
@@ -808,11 +840,15 @@ async function installRoutes(page) {
       } catch {
         requestBody = {};
       }
-      return routeJson(route, {
-        ...llmProvider,
+      const providerId = Number.parseInt(endpoint.split("/").at(-1) ?? "", 10);
+      const currentProvider = savedLlmProviders.find((provider) => provider.id === providerId) ?? llmProvider;
+      const updatedProvider = {
+        ...currentProvider,
         embedding_model: requestBody.embedding_model ?? llmProvider.embedding_model,
         updated_at: "2026-07-02T05:31:00Z",
-      });
+      };
+      savedLlmProviders = savedLlmProviders.map((provider) => (provider.id === updatedProvider.id ? updatedProvider : provider));
+      return routeJson(route, updatedProvider);
     }
     if (endpoint === "/api/runner-config") return routeJson(route, runnerConfig);
     if (endpoint === "/api/runner-config/rotate") return routeJson(route, runnerConfig);
@@ -1051,11 +1087,20 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByRole("button", { name: "AI 모델", exact: true }).click();
     await page.getByText("/api/llm-providers", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("heading", { name: "Primary OpenAI", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("radio", { name: /text-embedding-3-large/ }).check();
     await page.getByRole("button", { name: "임베딩 모델 저장", exact: true }).click();
     await page.getByText("임베딩 모델 지정을 저장했습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("region", { name: "등록된 AI 모델", exact: true }).getByText("text-embedding-3-large", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "연결 계정", exact: true }).click();
+    await page.locator("#smtp-server").fill("smtp.20b.example.com");
+    await page.locator("#smtp-port").fill("587");
+    await page.locator("#smtp-username").fill("pilot.sender@20b.example.com");
+    await page.locator("#smtp-password").fill("smoke-secret-only");
     await page.getByRole("button", { name: "계정 설정 저장", exact: true }).click();
     await page.getByText("계정 설정을 저장했습니다. 저장된 secret은 응답에 노출되지 않습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("smtp.20b.example.com:587", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("pilot.sender@20b.example.com", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("저장된 secret 유지", { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "워크스페이스", exact: true }).click();
     const calendarStartupButton = page.locator("button").filter({ hasText: "일정 관리" }).last();
     await calendarStartupButton.click();
@@ -1071,15 +1116,25 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     if (!persistedCalendarStartupClass?.includes("border-primary")) {
       throw new Error("Settings startup view selector did not persist the calendar option after reload");
     }
+    await page.getByRole("button", { name: "AI 모델", exact: true }).click();
+    await page.getByRole("region", { name: "등록된 AI 모델", exact: true }).getByText("text-embedding-3-large", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "연결 계정", exact: true }).click();
+    await page.getByText("smtp.20b.example.com:587", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("pilot.sender@20b.example.com", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("저장된 secret 유지", { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "개발자", exact: true }).click();
     await page.getByRole("button", { name: "등록 토큰 회전", exact: true }).click();
     await page.getByText("등록 토큰이 생성되었습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("settings:switch-ai-model-tab"),
       evidence("settings:save-embedding-model"),
+      evidence("settings:verify-embedding-model-save-state"),
       evidence("settings:save-account-config"),
+      evidence("settings:verify-account-save-state"),
       evidence("settings:select-calendar-startup-view"),
       evidence("settings:verify-startup-view-persistence"),
+      evidence("settings:verify-embedding-model-reload-persistence"),
+      evidence("settings:verify-account-reload-persistence"),
       evidence("settings:rotate-connector-token"),
     ];
   }
