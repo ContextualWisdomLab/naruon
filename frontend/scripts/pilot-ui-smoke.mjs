@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { chromium } from "@playwright/test";
 
@@ -10,12 +10,17 @@ const frontendDir = path.resolve(scriptDir, "..");
 const baseUrl = process.env.NARUON_PILOT_BASE_URL || "http://127.0.0.1:3001";
 const mailScreenshotPath = process.env.NARUON_PILOT_MAIL_SCREENSHOT || "/tmp/naruon-pilot-mail.png";
 const searchScreenshotPath = process.env.NARUON_PILOT_SEARCH_SCREENSHOT || "/tmp/naruon-pilot-search.png";
-const ALLOWED_PILOT_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+const ALLOWED_PILOT_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
-const pilotBaseUrl = new URL(baseUrl);
-if (!ALLOWED_PILOT_HOSTS.has(pilotBaseUrl.hostname)) {
-  throw new Error(`Pilot smoke must run only against localhost targets, got: ${pilotBaseUrl.hostname}`);
+export function resolvePilotBaseUrl(rawBaseUrl) {
+  const pilotBaseUrl = new URL(rawBaseUrl);
+  if (!ALLOWED_PILOT_HOSTS.has(pilotBaseUrl.hostname)) {
+    throw new Error(`Pilot smoke must run only against localhost targets, got: ${pilotBaseUrl.hostname}`);
+  }
+  return pilotBaseUrl;
 }
+
+resolvePilotBaseUrl(baseUrl);
 
 const sensitiveMailBody = "Sensitive source body must stay out of analytics payloads.";
 const sensitiveDraftBody = "상용 파일럿 답장 초안입니다. 내부 원문은 이벤트에 남지 않아야 합니다.";
@@ -387,7 +392,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

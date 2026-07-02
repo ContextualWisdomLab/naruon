@@ -25,6 +25,7 @@ The acceptable outcome is not "the whole company can publicly launch Naruon." Th
 ### Task 1: Harden Runtime Safety
 
 - [x] Restrict `frontend/scripts/pilot-ui-smoke.mjs` to localhost targets only.
+- [x] Add a regression test for localhost-only smoke targets.
 - [x] Keep deterministic mocked local APIs for `/auth/session`, `/api/emails`, `/api/llm/*`, `/api/search`, `/api/ontology/*`, task, calendar, and WebDAV endpoints.
 - [x] Make source drawer smoke selection resilient to duplicate text matches in the mail layout.
 
@@ -64,7 +65,7 @@ The acceptable outcome is not "the whole company can publicly launch Naruon." Th
 
 Executed on 2026-07-02 KST from branch `sellable-pilot-hardening-2026-07-02`:
 
-- `pnpm --dir frontend test`: passed, 43 test files and 320 tests.
+- `pnpm --dir frontend test`: passed, 44 test files and 322 tests.
 - `pnpm --dir frontend typecheck`: passed.
 - `pnpm --dir frontend build`: passed, optimized Next 16 production build.
 - `pnpm --dir frontend pilot:smoke`: passed, mail/search flows exercised, screenshots saved at `/tmp/naruon-pilot-mail.png` and `/tmp/naruon-pilot-search.png`.

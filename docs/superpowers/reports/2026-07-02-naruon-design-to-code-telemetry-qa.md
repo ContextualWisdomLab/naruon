@@ -57,6 +57,7 @@ This is not a claim that Naruon is ready for public SaaS launch or final enterpr
 - `SourceDrawer.tsx` uses per-instance React IDs for `aria-labelledby` and `aria-describedby`, avoiding duplicate ARIA targets when multiple drawers are rendered.
 - `product-events.ts` caps browser-local product-event history to the most recent 200 events and keeps fallback event IDs single-prefixed.
 - `pilot-ui-smoke.mjs` rejects non-localhost `NARUON_PILOT_BASE_URL` values so the smoke flow cannot accidentally execute against staging or production.
+- `pilot-ui-smoke.test.mjs` verifies localhost-only smoke targets, including IPv6 loopback normalization, and rejects staging/production-like hosts.
 - Browser QA on `http://127.0.0.1:3001/mail` with mocked local APIs opened `근거 원본 보기`, verified the source drawer, focus on `근거 원본 닫기`, close button, Escape close, and local `source_chip_opened`/`context_synthesis_viewed` events without raw email body in event payloads.
 - Browser QA on `http://127.0.0.1:3001/search` with mocked local APIs verified search submit, result open, relation capture, `context_search_result_action_created`, and no raw query text in event payloads.
 - Browser QA completed with no console errors or warnings after the local `/api/network/graph` mock returned the expected `{ nodes, edges }` shape.
@@ -64,7 +65,7 @@ This is not a claim that Naruon is ready for public SaaS launch or final enterpr
 - `pnpm --dir frontend pilot:smoke` passed and saved `/tmp/naruon-pilot-mail.png` plus `/tmp/naruon-pilot-search.png` with no console errors or warnings.
 - Commercial pilot screenshots are non-empty 1440 x 1024 PNGs.
 - `pnpm --dir frontend test src/components/EmailDetail.test.tsx src/components/SearchLayout.test.tsx src/lib/product-events.test.ts` passed: 3 test files, 33 tests.
-- `pnpm --dir frontend test` passed: 43 test files, 320 tests.
+- `pnpm --dir frontend test` passed: 44 test files, 322 tests.
 - `pnpm --dir frontend typecheck` passed.
 - `pnpm --dir frontend build` passed with an optimized Next 16 production build.
 - `git diff --check` passed.
