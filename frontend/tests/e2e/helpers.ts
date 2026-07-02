@@ -664,6 +664,38 @@ const dataQualitySurface = {
       provider_write_executed: false,
     },
   ],
+  content_graph_breakdown: [
+    {
+      source_kind: 'email_body',
+      segment_kind: 'paragraph',
+      object_count: 6,
+      evidence_source: 'content_segments.source_kind, content_segments.segment_kind',
+      provider_write_executed: false,
+    },
+    {
+      source_kind: 'attachment',
+      segment_kind: 'heading',
+      object_count: 2,
+      evidence_source: 'content_segments.source_kind, content_segments.segment_kind',
+      provider_write_executed: false,
+    },
+  ],
+  knowledge_graph_breakdown: [
+    {
+      source_kind: 'email_body',
+      edge_kind: 'node_has_segment',
+      object_count: 8,
+      evidence_source: 'knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind',
+      provider_write_executed: false,
+    },
+    {
+      source_kind: 'attachment',
+      edge_kind: 'heading_contains_segment',
+      object_count: 2,
+      evidence_source: 'knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind',
+      provider_write_executed: false,
+    },
+  ],
   connector_events: [
     {
       event_uid: 'connector_evt_data_quality',

@@ -35,6 +35,12 @@ ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
     "email_attachments.parse_content_type, "
     "email_attachments.parse_status, email_attachments.parser_key"
 )
+CONTENT_GRAPH_BREAKDOWN_EVIDENCE_SOURCE = (
+    "content_segments.source_kind, content_segments.segment_kind"
+)
+KNOWLEDGE_GRAPH_BREAKDOWN_EVIDENCE_SOURCE = (
+    "knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind"
+)
 WEB_DAV_ERROR_STATUS_CODES = {
     "no_webdav_account": 422,
     "webdav_account_not_found": 422,
@@ -155,6 +161,22 @@ class DataAttachmentParseBreakdown(BaseModel):
     provider_write_executed: bool
 
 
+class DataContentGraphBreakdown(BaseModel):
+    source_kind: str
+    segment_kind: str
+    object_count: int
+    evidence_source: str
+    provider_write_executed: bool
+
+
+class DataKnowledgeGraphBreakdown(BaseModel):
+    source_kind: str
+    edge_kind: str
+    object_count: int
+    evidence_source: str
+    provider_write_executed: bool
+
+
 class DataConnectorEvent(BaseModel):
     event_uid: str
     signal_key: str
@@ -222,6 +244,8 @@ class DataQualitySurfaceResponse(BaseModel):
     embedding_collections: list[DataEmbeddingCollection]
     quality_checks: list[DataQualityCheck]
     attachment_parse_breakdown: list[DataAttachmentParseBreakdown]
+    content_graph_breakdown: list[DataContentGraphBreakdown]
+    knowledge_graph_breakdown: list[DataKnowledgeGraphBreakdown]
     connector_events: list[DataConnectorEvent]
 
 
@@ -284,6 +308,34 @@ def _attachment_parse_breakdown_row(
         display_name=descriptor.display_name,
         object_count=int(object_count or 0),
         evidence_source=ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE,
+        provider_write_executed=False,
+    )
+
+
+def _content_graph_breakdown_row(
+    source_kind: str | None,
+    segment_kind: str | None,
+    object_count: int,
+) -> DataContentGraphBreakdown:
+    return DataContentGraphBreakdown(
+        source_kind=_safe_display_text(source_kind, "unknown")[:64],
+        segment_kind=_safe_display_text(segment_kind, "unknown")[:64],
+        object_count=int(object_count or 0),
+        evidence_source=CONTENT_GRAPH_BREAKDOWN_EVIDENCE_SOURCE,
+        provider_write_executed=False,
+    )
+
+
+def _knowledge_graph_breakdown_row(
+    source_kind: str | None,
+    edge_kind: str | None,
+    object_count: int,
+) -> DataKnowledgeGraphBreakdown:
+    return DataKnowledgeGraphBreakdown(
+        source_kind=_safe_display_text(source_kind, "unknown")[:64],
+        edge_kind=_safe_display_text(edge_kind, "unknown")[:64],
+        object_count=int(object_count or 0),
+        evidence_source=KNOWLEDGE_GRAPH_BREAKDOWN_EVIDENCE_SOURCE,
         provider_write_executed=False,
     )
 
@@ -1239,6 +1291,75 @@ async def _get_knowledge_graph_stats(
     )
 
 
+async def _get_content_graph_breakdown(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> list[DataContentGraphBreakdown]:
+    object_count = func.count(ContentSegmentRecord.content_segment_id).label(
+        "object_count"
+    )
+    result = await db.execute(
+        select(
+            ContentSegmentRecord.source_kind,
+            ContentSegmentRecord.segment_kind,
+            object_count,
+        )
+        .join(Email, ContentSegmentRecord.email_id == Email.id)
+        .where(*email_scope)
+        .group_by(ContentSegmentRecord.source_kind, ContentSegmentRecord.segment_kind)
+        .order_by(
+            object_count.desc(),
+            ContentSegmentRecord.source_kind.asc(),
+            ContentSegmentRecord.segment_kind.asc(),
+        )
+        .limit(12)
+    )
+    return [
+        _content_graph_breakdown_row(
+            source_kind=source_kind,
+            segment_kind=segment_kind,
+            object_count=count,
+        )
+        for source_kind, segment_kind, count in result.all()
+    ]
+
+
+async def _get_knowledge_graph_breakdown(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> list[DataKnowledgeGraphBreakdown]:
+    object_count = func.count(KnowledgeGraphEdgeRecord.knowledge_graph_edge_id).label(
+        "object_count"
+    )
+    result = await db.execute(
+        select(
+            KnowledgeGraphEdgeRecord.source_kind,
+            KnowledgeGraphEdgeRecord.edge_kind,
+            object_count,
+        )
+        .join(Email, KnowledgeGraphEdgeRecord.email_id == Email.id)
+        .where(*email_scope)
+        .group_by(
+            KnowledgeGraphEdgeRecord.source_kind,
+            KnowledgeGraphEdgeRecord.edge_kind,
+        )
+        .order_by(
+            object_count.desc(),
+            KnowledgeGraphEdgeRecord.source_kind.asc(),
+            KnowledgeGraphEdgeRecord.edge_kind.asc(),
+        )
+        .limit(12)
+    )
+    return [
+        _knowledge_graph_breakdown_row(
+            source_kind=source_kind,
+            edge_kind=edge_kind,
+            object_count=count,
+        )
+        for source_kind, edge_kind, count in result.all()
+    ]
+
+
 async def _get_attachment_parse_stats(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
@@ -1374,6 +1495,8 @@ async def get_data_quality_surface(
     attachment_stats = await _get_attachment_stats(db, email_scope)
     content_graph_stats = await _get_content_graph_stats(db, email_scope)
     knowledge_graph_stats = await _get_knowledge_graph_stats(db, email_scope)
+    content_graph_breakdown = await _get_content_graph_breakdown(db, email_scope)
+    knowledge_graph_breakdown = await _get_knowledge_graph_breakdown(db, email_scope)
     attachment_parse_stats = await _get_attachment_parse_stats(db, email_scope)
     email_count = email_stats.count
     missing_thread_count = email_stats.missing_thread_count
@@ -1449,6 +1572,8 @@ async def get_data_quality_surface(
             connector_event_count=len(connector_events),
         ),
         attachment_parse_breakdown=attachment_parse_breakdown,
+        content_graph_breakdown=content_graph_breakdown,
+        knowledge_graph_breakdown=knowledge_graph_breakdown,
         connector_events=[
             DataConnectorEvent(
                 event_uid=event.event_uid,

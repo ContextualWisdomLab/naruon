@@ -216,6 +216,38 @@ const dataQualitySurface = {
       provider_write_executed: false,
     },
   ],
+  content_graph_breakdown: [
+    {
+      source_kind: "email_body",
+      segment_kind: "paragraph",
+      object_count: 6,
+      evidence_source: "content_segments.source_kind, content_segments.segment_kind",
+      provider_write_executed: false,
+    },
+    {
+      source_kind: "attachment",
+      segment_kind: "heading",
+      object_count: 2,
+      evidence_source: "content_segments.source_kind, content_segments.segment_kind",
+      provider_write_executed: false,
+    },
+  ],
+  knowledge_graph_breakdown: [
+    {
+      source_kind: "email_body",
+      edge_kind: "node_has_segment",
+      object_count: 8,
+      evidence_source: "knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind",
+      provider_write_executed: false,
+    },
+    {
+      source_kind: "attachment",
+      edge_kind: "heading_contains_segment",
+      object_count: 2,
+      evidence_source: "knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind",
+      provider_write_executed: false,
+    },
+  ],
   connector_events: [
     {
       event_uid: "connector_evt_data_quality",
@@ -692,9 +724,16 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("text/markdown");
     expect(container.textContent).toContain("application/pdf");
     expect(container.textContent).toContain("unsupported_content_type");
+    expect(container.textContent).toContain("DOM/문단 구조별 현황");
+    expect(container.textContent).toContain("KG edge 형식별 현황");
+    expect(container.textContent).toContain("email_body");
+    expect(container.textContent).toContain("paragraph");
+    expect(container.textContent).toContain("node_has_segment");
     expect(container.textContent).toContain("의도만 기록");
     expect(container.textContent).not.toContain("provider_write_executed=false");
     expect(container.textContent).not.toContain("email_attachments.content_type");
+    expect(container.textContent).not.toContain("content_segments.source_kind");
+    expect(container.textContent).not.toContain("knowledge_graph_edges.source_kind");
     expect(container.textContent).not.toContain("발견된 심각한 데이터 품질 문제가 없습니다.");
   });
 

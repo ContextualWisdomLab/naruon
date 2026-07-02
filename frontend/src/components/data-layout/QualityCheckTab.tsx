@@ -21,6 +21,8 @@ export function QualityCheckTab({
   dataQualitySurface,
 }: QualityCheckTabProps) {
   const attachmentParseBreakdown = dataQualitySurface?.attachment_parse_breakdown ?? [];
+  const contentGraphBreakdown = dataQualitySurface?.content_graph_breakdown ?? [];
+  const knowledgeGraphBreakdown = dataQualitySurface?.knowledge_graph_breakdown ?? [];
 
   return (
 <div className="space-y-6">
@@ -90,6 +92,70 @@ export function QualityCheckTab({
                   ))}
                 </div>
               </div>
+              {contentGraphBreakdown.length > 0 && (
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-border bg-secondary/30">
+                    <h2 className="font-bold text-lg">DOM/문단 구조별 현황</h2>
+                  </div>
+                  <div className="grid gap-3 p-5">
+                    {contentGraphBreakdown.map((item) => (
+                      <article key={`${item.source_kind}:${item.segment_kind}`} className="rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(item.segment_kind)}</h3>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">source {toSafeReactText(item.source_kind)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            segment
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                          <div>
+                            <dt className="font-black text-muted-foreground">건수</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(item.object_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {knowledgeGraphBreakdown.length > 0 && (
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-border bg-secondary/30">
+                    <h2 className="font-bold text-lg">KG edge 형식별 현황</h2>
+                  </div>
+                  <div className="grid gap-3 p-5">
+                    {knowledgeGraphBreakdown.map((item) => (
+                      <article key={`${item.source_kind}:${item.edge_kind}`} className="rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(item.edge_kind)}</h3>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">source {toSafeReactText(item.source_kind)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            edge
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                          <div>
+                            <dt className="font-black text-muted-foreground">건수</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(item.object_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
               {attachmentParseBreakdown.length > 0 && (
                 <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
                   <div className="p-5 border-b border-border bg-secondary/30">

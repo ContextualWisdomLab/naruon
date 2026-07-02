@@ -245,6 +245,14 @@ def mock_db():
             (3, 1, 1),  # attachment stats
             (3, 8),  # content graph stats
             (2, 10),  # knowledge graph stats
+            [
+                ("email_body", "paragraph", 6),
+                ("attachment", "heading", 2),
+            ],  # content graph breakdown
+            [
+                ("email_body", "node_has_segment", 8),
+                ("attachment", "heading_contains_segment", 2),
+            ],  # knowledge graph breakdown
             (2, 1),  # attachment parse stats
             [
                 (
@@ -388,6 +396,46 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "detail_text": "Some scoped attachments need parser coverage.",
         "provider_write_executed": False,
     }
+    assert data["content_graph_breakdown"] == [
+        {
+            "source_kind": "email_body",
+            "segment_kind": "paragraph",
+            "object_count": 6,
+            "evidence_source": (
+                "content_segments.source_kind, content_segments.segment_kind"
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "source_kind": "attachment",
+            "segment_kind": "heading",
+            "object_count": 2,
+            "evidence_source": (
+                "content_segments.source_kind, content_segments.segment_kind"
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+    assert data["knowledge_graph_breakdown"] == [
+        {
+            "source_kind": "email_body",
+            "edge_kind": "node_has_segment",
+            "object_count": 8,
+            "evidence_source": (
+                "knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind"
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "source_kind": "attachment",
+            "edge_kind": "heading_contains_segment",
+            "object_count": 2,
+            "evidence_source": (
+                "knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind"
+            ),
+            "provider_write_executed": False,
+        },
+    ]
     assert data["attachment_parse_breakdown"] == [
         {
             "content_type": "application/octet-stream",

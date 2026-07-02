@@ -117,6 +117,20 @@ export type DataQualitySurfaceResponse = {
     evidence_source: string;
     provider_write_executed: boolean;
   }>;
+  content_graph_breakdown?: Array<{
+    source_kind: string;
+    segment_kind: string;
+    object_count: number;
+    evidence_source: string;
+    provider_write_executed: boolean;
+  }>;
+  knowledge_graph_breakdown?: Array<{
+    source_kind: string;
+    edge_kind: string;
+    object_count: number;
+    evidence_source: string;
+    provider_write_executed: boolean;
+  }>;
   connector_events: Array<{
     event_uid: string;
     signal_key: string;
