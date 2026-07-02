@@ -28,7 +28,7 @@
 - Expects `DataAcquisitionReadinessGate.decision_summary`
 - Expects `DataAcquisitionDecisionSummary`
 
-- [ ] **Step 1: Add expected decision-summary helper**
+- [x] **Step 1: Add expected decision-summary helper**
 
 Add `_expected_acquisition_decision_summary()` near `_expected_acquisition_readiness_kpis()`:
 
@@ -51,7 +51,7 @@ def _expected_acquisition_decision_summary():
     }
 ```
 
-- [ ] **Step 2: Extend quality-surface gate assertion**
+- [x] **Step 2: Extend quality-surface gate assertion**
 
 In `test_data_quality_surface_returns_source_backed_counts_without_secrets`, add:
 
@@ -61,7 +61,7 @@ In `test_data_quality_surface_returns_source_backed_counts_without_secrets`, add
 
 inside `data["acquisition_readiness_gate"]`.
 
-- [ ] **Step 3: Extend snapshot assertion**
+- [x] **Step 3: Extend snapshot assertion**
 
 In `test_data_quality_evidence_snapshot_returns_shareable_redacted_surface`, add the same `decision_summary` field to the expected snapshot gate and assert:
 
@@ -73,7 +73,7 @@ assert summary["target_gap_count"] == 9
 assert summary["provider_write_executed"] is False
 ```
 
-- [ ] **Step 4: Run focused backend tests to verify failure**
+- [x] **Step 4: Run focused backend tests to verify failure**
 
 Run:
 
@@ -93,7 +93,7 @@ Expected: FAIL because `decision_summary` is not implemented yet.
 - Produces `DataAcquisitionDecisionSummary`
 - Produces `_acquisition_decision_summary(...) -> DataAcquisitionDecisionSummary`
 
-- [ ] **Step 1: Add literal types and model**
+- [x] **Step 1: Add literal types and model**
 
 Add:
 
@@ -124,7 +124,7 @@ class DataAcquisitionDecisionSummary(BaseModel):
 
 Add `decision_summary: DataAcquisitionDecisionSummary` to `DataAcquisitionReadinessGate`.
 
-- [ ] **Step 2: Add deterministic summary builder**
+- [x] **Step 2: Add deterministic summary builder**
 
 Implement:
 
@@ -183,11 +183,11 @@ def _acquisition_decision_summary(
     )
 ```
 
-- [ ] **Step 3: Wire the gate without recomputing inputs**
+- [x] **Step 3: Wire the gate without recomputing inputs**
 
 In `_acquisition_readiness_gate`, compute `kpis` and `remediation_actions` once, then pass `decision_summary=_acquisition_decision_summary(...)` into `DataAcquisitionReadinessGate`.
 
-- [ ] **Step 4: Run focused backend validation**
+- [x] **Step 4: Run focused backend validation**
 
 Run:
 
@@ -210,11 +210,11 @@ Expected: PASS.
 - Consumes `AcquisitionReadinessGate.decision_summary`
 - Produces visible `Acquisition decision summary` UI block
 
-- [ ] **Step 1: Add TypeScript types and fixtures**
+- [x] **Step 1: Add TypeScript types and fixtures**
 
 Add `AcquisitionDecisionSummary` with the same fields as the backend model, add `decision_summary` to `AcquisitionReadinessGate`, and add the same expected fixture object to both `dataQualitySurface.acquisition_readiness_gate` and `dataEvidenceSnapshot.acquisition_readiness_gate`.
 
-- [ ] **Step 2: Render the decision summary in the buyer evidence card**
+- [x] **Step 2: Render the decision summary in the buyer evidence card**
 
 In `QualityCheckTab.tsx`, render a bordered block after the top readiness `<dl>` and before blocking check keys:
 
@@ -237,7 +237,7 @@ In `QualityCheckTab.tsx`, render a bordered block after the top readiness `<dl>`
 
 Include counts for target gaps, critical/high/medium actions, and provider-write boundary in a nested `<dl>`.
 
-- [ ] **Step 3: Extend frontend tests**
+- [x] **Step 3: Extend frontend tests**
 
 In `frontend/src/app/data/page.test.tsx`, assert that the rendered page includes:
 
@@ -255,7 +255,7 @@ expect(copiedSnapshot.acquisition_readiness_gate.decision_summary.recommendation
 expect(copiedSnapshot.acquisition_readiness_gate.decision_summary.target_gap_count).toBe(9);
 ```
 
-- [ ] **Step 4: Run frontend validation**
+- [x] **Step 4: Run frontend validation**
 
 Run:
 
@@ -276,7 +276,7 @@ Expected: PASS.
 - Produces FigJam group named `Phase 19 Acquisition Diligence Decision Summary Group`
 - Updates PR #895 body with Phase 19 evidence
 
-- [ ] **Step 1: Generate the FigJam diagram**
+- [x] **Step 1: Generate the FigJam diagram**
 
 Use the Figma plugin, not Figma Code Connect. Generate a FigJam diagram named `Phase 19 Acquisition Diligence Decision Summary` showing:
 
@@ -292,7 +292,7 @@ flowchart LR
   ui --> reviewers
 ```
 
-- [ ] **Step 2: Capture screenshot evidence**
+- [x] **Step 2: Capture screenshot evidence**
 
 Save a screenshot to:
 
@@ -300,7 +300,7 @@ Save a screenshot to:
 /Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase19-acquisition-diligence-decision-summary.png
 ```
 
-- [ ] **Step 3: Run final validation**
+- [x] **Step 3: Run final validation**
 
 Run:
 
@@ -316,7 +316,7 @@ git diff --check
 
 Expected: PASS.
 
-- [ ] **Step 4: Mark this plan complete and commit**
+- [x] **Step 4: Mark this plan complete and commit**
 
 Change every checkbox in this plan to `[x]`, add a short completion evidence section, then commit:
 
@@ -326,7 +326,7 @@ git commit -m "feat: add acquisition diligence decision summary"
 git commit -m "docs: mark phase 19 plan complete"
 ```
 
-- [ ] **Step 5: Push and update PR #895**
+- [x] **Step 5: Push and update PR #895**
 
 Run:
 
@@ -337,3 +337,15 @@ gh pr view 895 --repo ContextualWisdomLab/naruon --json url,headRefOid,mergeable
 ```
 
 Expected: branch pushed, PR body includes Phase 19 validation and screenshot evidence, unresolved review threads remain zero unless a new reviewer comment appears.
+
+## Completion Evidence
+
+- Backend contract added `decision_summary` to `acquisition_readiness_gate` for both `/api/data/quality-surface` and `/api/data/quality-surface/evidence-snapshot`.
+- Frontend Data Quality UI renders `Acquisition decision summary` with recommendation, risk, target-gap count, action counts, summary key, next step, and write boundary.
+- FigJam evidence: `Phase 19 Acquisition Diligence Decision Summary Group` (`45:828`) in `zXkcwT2E2aBtNhMVznLT4l`.
+- Screenshot evidence: `/Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase19-acquisition-diligence-decision-summary.png`.
+- Validation passed:
+  - `python -m pytest -q tests/test_data_api.py::test_data_quality_surface_returns_source_backed_counts_without_secrets tests/test_data_api.py::test_data_quality_evidence_snapshot_returns_shareable_redacted_surface tests/test_data_api.py::test_member_data_quality_queries_are_owner_scoped`
+  - `python -m ruff check api/data.py tests/test_data_api.py`
+  - `npx vitest run src/app/data/page.test.tsx`
+  - `git diff --check`
