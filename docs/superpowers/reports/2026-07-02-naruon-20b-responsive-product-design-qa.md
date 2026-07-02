@@ -41,7 +41,7 @@ Result:
 Naruon full-product route smoke passed.
 Routes: /, /mail, /search, /calendar, /tasks, /projects, /data, /ai-hub, /security, /settings
 Viewports: desktop(1440x1024), mobile(390x844)
-Critical interactions: desktop:mail:select-message, desktop:mail:create-source-linked-task, desktop:search:select-result, desktop:search:capture-sender-relationship, desktop:calendar:create-writeback-intent, desktop:tasks:create-reply-sla-followup, desktop:projects:open-decision-log, desktop:data:create-embedding-regeneration-intent, desktop:data:open-quality-checks, desktop:ai-hub:open-run-history, desktop:security:open-sharing-review, desktop:security:open-policy-order, desktop:settings:switch-ai-model-tab, desktop:settings:select-calendar-startup-view, mobile:mail:select-message, mobile:mail:create-source-linked-task, mobile:search:select-result, mobile:search:capture-sender-relationship, mobile:calendar:create-writeback-intent, mobile:tasks:create-reply-sla-followup, mobile:projects:open-decision-log, mobile:data:create-embedding-regeneration-intent, mobile:data:open-quality-checks, mobile:ai-hub:open-run-history, mobile:security:open-sharing-review, mobile:security:open-policy-order, mobile:settings:switch-ai-model-tab, mobile:settings:select-calendar-startup-view
+Critical interactions: desktop:mail:select-message, desktop:mail:create-source-linked-task, desktop:search:select-result, desktop:search:capture-sender-relationship, desktop:calendar:create-writeback-intent, desktop:tasks:create-reply-sla-followup, desktop:projects:open-decision-log, desktop:data:create-embedding-regeneration-intent, desktop:data:open-quality-checks, desktop:ai-hub:open-run-history, desktop:security:open-sharing-review, desktop:security:open-policy-order, desktop:settings:switch-ai-model-tab, desktop:settings:select-calendar-startup-view, desktop:settings:rotate-connector-token, mobile:mail:select-message, mobile:mail:create-source-linked-task, mobile:search:select-result, mobile:search:capture-sender-relationship, mobile:calendar:create-writeback-intent, mobile:tasks:create-reply-sla-followup, mobile:projects:open-decision-log, mobile:data:create-embedding-regeneration-intent, mobile:data:open-quality-checks, mobile:ai-hub:open-run-history, mobile:security:open-sharing-review, mobile:security:open-policy-order, mobile:settings:switch-ai-model-tab, mobile:settings:select-calendar-startup-view, mobile:settings:rotate-connector-token
 Accessibility checks: home:a11y-basics, mail:a11y-basics, search:a11y-basics, calendar:a11y-basics, tasks:a11y-basics, projects:a11y-basics, data:a11y-basics, ai-hub:a11y-basics, security:a11y-basics, settings:a11y-basics, home:a11y-basics, mail:a11y-basics, search:a11y-basics, calendar:a11y-basics, tasks:a11y-basics, projects:a11y-basics, data:a11y-basics, ai-hub:a11y-basics, security:a11y-basics, settings:a11y-basics
 ```
 
@@ -49,8 +49,8 @@ Figma placement result:
 
 ```text
 QA Notes board created and verified.
-Contact-sheet upload accepted with response imageHash c6e74f31e31f9cc88dcd545079e851e53aa38be3.
-Figma node 18:7 verified with image fill hash c6e74f31e31f9cc88dcd545079e851e53aa38be3 and FIT scale mode.
+Contact-sheet upload accepted with response imageHash 2bd03ae7c3573055d88ae55609fab2c717d9b670.
+Figma node 18:7 verified with image fill hash 2bd03ae7c3573055d88ae55609fab2c717d9b670 and FIT scale mode.
 Verification screenshot confirmed the contact sheet and notes are visible inside board node 18:3.
 ```
 
@@ -87,7 +87,7 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
 
 1. Desktop route and broad selected interaction coverage is now stable enough for buyer technical review.
    - Evidence: all ten IA routes render expected buyer-visible text and produce non-empty screenshots.
-   - Interaction evidence: mail source task creation, search relationship capture, calendar writeback intent, task reply-SLA escalation, project decision log, data embedding intent and quality checks, AI Hub run history, security sharing/policy tabs, and settings tab/startup selection all passed.
+   - Interaction evidence: mail source task creation, search relationship capture, calendar writeback intent, task reply-SLA escalation, project decision log, data embedding intent and quality checks, AI Hub run history, security sharing/policy tabs, settings tab/startup selection, and connector token rotation all passed.
    - Health: pass for route-level and selected interaction smoke.
 
 2. Mobile route and broad selected interaction coverage is now stable enough for buyer technical review.
@@ -129,7 +129,7 @@ The remaining Product Design P0/P1 work is:
    - data WebDAV materialization and document action result variants
    - AI Hub run/log detail beyond tab navigation
    - security permission review
-   - settings save persistence and connector rotation
+   - settings save persistence beyond connector rotation
 2. Expand accessibility evidence beyond the basic gate:
    - deterministic focus order for primary workflows
    - modal/drawer focus trapping

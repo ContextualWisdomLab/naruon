@@ -740,7 +740,14 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     if (!calendarStartupClass?.includes("border-primary")) {
       throw new Error("Settings startup view selector did not mark the calendar option as active");
     }
-    return [evidence("settings:switch-ai-model-tab"), evidence("settings:select-calendar-startup-view")];
+    await page.getByRole("button", { name: "개발자", exact: true }).click();
+    await page.getByRole("button", { name: "등록 토큰 회전", exact: true }).click();
+    await page.getByText("등록 토큰이 생성되었습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [
+      evidence("settings:switch-ai-model-tab"),
+      evidence("settings:select-calendar-startup-view"),
+      evidence("settings:rotate-connector-token"),
+    ];
   }
 
   return [];

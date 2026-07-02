@@ -228,7 +228,7 @@ P0 for 20B final sale readiness:
 
 P1 for buyer technical review:
 
-- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts selected desktop/mobile buyer interactions for mail, search, calendar, tasks, projects, data, AI Hub, security, and settings, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
+- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts selected desktop/mobile buyer interactions for mail, search, calendar, tasks, projects, data, AI Hub, security, and settings including connector token rotation, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
 - Mobile Settings startup-view cards were fixed from a 3-column mobile grid to `grid-cols-1 sm:grid-cols-3` after responsive QA found awkward Korean label wrapping.
 - Product events do not yet cover full-product funnels beyond mail/search.
 - External analytics destination, retention, and consent are not approved.
