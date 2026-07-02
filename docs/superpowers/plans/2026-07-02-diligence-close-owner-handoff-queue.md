@@ -22,7 +22,7 @@ Add a deterministic owner-area handoff queue to the redacted evidence snapshot s
 - [x] Add frontend fixture, copied JSON, and visible rendering coverage.
 - [x] Generate a FigJam diagram for the proof-plan-to-owner-handoff flow without Code Connect.
 - [x] Run backend tests, ruff, frontend tests, frontend lint, diff review, and Ponytail review.
-- [ ] Push the PR branch and update PR #895 with Phase 28 evidence.
+- [x] Push the PR branch and update PR #895 with Phase 28 evidence.
 
 ## Acceptance Criteria
 
@@ -43,3 +43,4 @@ Add a deterministic owner-area handoff queue to the redacted evidence snapshot s
 - Frontend lint: `npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` passed.
 - FigJam: https://www.figma.com/board/mjH0tpDIvz5kj44kL6354R
 - Ponytail review: the change stays inside the existing evidence snapshot and Data Quality UI contract; no separate library, package, or submodule is warranted for this phase.
+- PR #895 was updated with Phase 28 evidence after pushing head `47da7327339d295ec879f0d4024791075114ffdf`; live state was mergeable, blocked only by queued checks, with 0 unresolved review threads at that verification point.
