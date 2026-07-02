@@ -48,6 +48,39 @@ Definitions are directionally sound, but event names and logging destinations ar
 
 No live dashboard or chart exists. The recommended dashboard cuts in the spec are presentation-ready as a dashboard brief, but not validated as rendered visuals.
 
+### ROI Model And Claim Gate
+
+The ROI model is defined for buyer-pilot measurement planning only. It separates fields that must come from live measured data from commercial assumptions that require buyer/operator approval. The current branch has no live event warehouse, payroll/cost source, contract source, or measured pilot period; therefore `estimated_period_value_krw` must not be presented as a proven value.
+
+Formula:
+
+```text
+estimated_period_value_krw =
+  time_saved_per_user_per_week_hours
+  * fully_loaded_hourly_cost_krw
+  * weekly_active_users
+  * pilot_period_weeks
+  * risk_reduction_adjustment
+```
+
+| Metric | Current value source | Current status | Allowed use |
+| --- | --- | --- | --- |
+| `time_saved_per_user_per_week_hours` | Live pilot task timing, before/after workflow logs, or reviewed buyer baseline | Measured value unavailable in this branch | Assumption only until pilot measurement exists |
+| `fully_loaded_hourly_cost_krw` | Buyer-approved finance or HR cost model | Measured value unavailable in this branch | Assumption only, buyer-owned |
+| `weekly_active_users` | Live product telemetry with workspace/user denominator rules | Measured value unavailable in this branch | Assumption only until telemetry destination is approved |
+| `evidence_open_rate` | `source_chip_opened` over eligible source chips | Event contract exists; live metric unavailable | Quality/diagnostic assumption only |
+| `decision_to_action_conversion_rate` | `action_item_created` after `decision_point_viewed` | Event contract exists; denominator decision pending | Quality/diagnostic assumption only |
+| `pilot_period_weeks` | Signed pilot plan | Measured value unavailable in this branch | Planning input only |
+| `risk_reduction_adjustment` | Buyer/operator risk review of audit, permission, and provider-write incidents | Measured value unavailable in this branch | Assumption only; cannot be used as proof |
+
+Claim gate:
+
+- Allowed: "Naruon has a KPI and ROI measurement framework for a controlled pilot."
+- Allowed: "Live KPI and ROI evidence require a measured pilot with approved telemetry and buyer-owned cost inputs."
+- Rejected: "Naruon has proven a 20B KRW ROI."
+- Rejected: "Naruon is final-procurement ready based on this KPI report."
+- Rejected: "The current branch contains live ROI evidence."
+
 ### Suggested Improvements
 
 1. Add an event dictionary with event name, owner, trigger, entity IDs, timestamp timezone, required payload fields, and privacy classification.

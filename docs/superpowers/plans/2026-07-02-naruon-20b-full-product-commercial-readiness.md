@@ -373,7 +373,7 @@ Expected:
 No event is marked implemented unless code emits it and tests cover privacy-safe payloads.
 ```
 
-- [ ] **Step 2: Define ROI model**
+- [x] **Step 2: Define ROI model**
 
 Minimum model:
 
@@ -403,6 +403,11 @@ Expected:
 ```text
 The report labels all unmeasured values as assumptions and does not claim live performance.
 ```
+
+Evidence:
+
+- `docs/superpowers/reports/2026-07-02-naruon-kpi-validation.md` now includes `ROI Model And Claim Gate`, the `estimated_period_value_krw` formula, measured-vs-assumption status for every model input, and rejected ROI/procurement claims.
+- `backend/tests/test_release_governance.py` now keeps the KPI/ROI caveat contract under CI.
 
 ## Task 7: Extend Full Product Smoke Gates
 
