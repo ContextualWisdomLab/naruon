@@ -893,6 +893,149 @@ def _expected_diligence_exception_register():
     ]
 
 
+def _expected_diligence_risk_matrix():
+    return [
+        {
+            "matrix_key": (
+                "risk_critical_email_ingestion_acquisition_readiness_summary_json"
+            ),
+            "severity_code": "critical",
+            "owner_area": "email_ingestion",
+            "related_artifact": "acquisition-readiness-summary.json",
+            "exception_count": 2,
+            "representative_exception_keys": [
+                "exception_repair_thread_id_integrity",
+                "exception_backfill_dedupe_fingerprints",
+            ],
+            "risk_label": "Critical close blocker concentration",
+            "buyer_implication": (
+                "2 critical exception(s) in email_ingestion affect "
+                "acquisition-readiness-summary.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_repair_thread_id_integrity, "
+                "exception_backfill_dedupe_fingerprints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": "risk_high_attachment_parsing_remediation_actions_json",
+            "severity_code": "high",
+            "owner_area": "attachment_parsing",
+            "related_artifact": "remediation-actions.json",
+            "exception_count": 1,
+            "representative_exception_keys": [
+                "exception_recover_attachment_content",
+            ],
+            "risk_label": "High diligence evidence gap",
+            "buyer_implication": (
+                "1 high exception(s) in attachment_parsing affect "
+                "remediation-actions.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_recover_attachment_content, then regenerate "
+                "the evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": "risk_high_content_graph_dom_paragraph_evidence_samples_json",
+            "severity_code": "high",
+            "owner_area": "content_graph",
+            "related_artifact": "dom-paragraph-evidence-samples.json",
+            "exception_count": 2,
+            "representative_exception_keys": [
+                "exception_backfill_content_graph_coverage",
+                "exception_repair_segment_text_readiness",
+            ],
+            "risk_label": "High diligence evidence gap",
+            "buyer_implication": (
+                "2 high exception(s) in content_graph affect "
+                "dom-paragraph-evidence-samples.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_backfill_content_graph_coverage, "
+                "exception_repair_segment_text_readiness, then regenerate the "
+                "evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": (
+                "risk_high_knowledge_graph_knowledge_graph_evidence_samples_json"
+            ),
+            "severity_code": "high",
+            "owner_area": "knowledge_graph",
+            "related_artifact": "knowledge-graph-evidence-samples.json",
+            "exception_count": 2,
+            "representative_exception_keys": [
+                "exception_backfill_knowledge_graph_coverage",
+                "exception_attach_kg_evidence_endpoints",
+            ],
+            "risk_label": "High diligence evidence gap",
+            "buyer_implication": (
+                "2 high exception(s) in knowledge_graph affect "
+                "knowledge-graph-evidence-samples.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_backfill_knowledge_graph_coverage, "
+                "exception_attach_kg_evidence_endpoints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": (
+                "risk_high_semantic_kg_semantic_relation_evidence_samples_json"
+            ),
+            "severity_code": "high",
+            "owner_area": "semantic_kg",
+            "related_artifact": "semantic-relation-evidence-samples.json",
+            "exception_count": 1,
+            "representative_exception_keys": [
+                "exception_backfill_semantic_relation_sources",
+            ],
+            "risk_label": "High diligence evidence gap",
+            "buyer_implication": (
+                "1 high exception(s) in semantic_kg affect "
+                "semantic-relation-evidence-samples.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_backfill_semantic_relation_sources, then "
+                "regenerate the evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": "risk_medium_attachment_parsing_remediation_actions_json",
+            "severity_code": "medium",
+            "owner_area": "attachment_parsing",
+            "related_artifact": "remediation-actions.json",
+            "exception_count": 1,
+            "representative_exception_keys": [
+                "exception_expand_attachment_parse_coverage",
+            ],
+            "risk_label": "Medium diligence coverage gap",
+            "buyer_implication": (
+                "1 medium exception(s) in attachment_parsing affect "
+                "remediation-actions.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_expand_attachment_parse_coverage, then "
+                "regenerate the evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+    ]
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1456,6 +1599,8 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         snapshot["diligence_exception_register"]
         == _expected_diligence_exception_register()
     )
+    assert "diligence_risk_matrix" in snapshot["canonical_payload_fields"]
+    assert snapshot["diligence_risk_matrix"] == _expected_diligence_risk_matrix()
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -1582,6 +1727,37 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert exception_register[-1]["severity_code"] == "medium"
     assert exception_register[-1]["related_artifact"] == "remediation-actions.json"
     assert all(item["blocks_close"] is True for item in exception_register)
+    risk_matrix = snapshot["diligence_risk_matrix"]
+    assert len(risk_matrix) == 6
+    assert risk_matrix[0] == {
+        "matrix_key": "risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "severity_code": "critical",
+        "owner_area": "email_ingestion",
+        "related_artifact": "acquisition-readiness-summary.json",
+        "exception_count": 2,
+        "representative_exception_keys": [
+            "exception_repair_thread_id_integrity",
+            "exception_backfill_dedupe_fingerprints",
+        ],
+        "risk_label": "Critical close blocker concentration",
+        "buyer_implication": (
+            "2 critical exception(s) in email_ingestion affect "
+            "acquisition-readiness-summary.json and block buyer close."
+        ),
+        "recommended_next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "blocks_close": True,
+        "provider_write_executed": False,
+    }
+    assert risk_matrix[-1]["matrix_key"] == (
+        "risk_medium_attachment_parsing_remediation_actions_json"
+    )
+    assert risk_matrix[-1]["severity_code"] == "medium"
+    assert risk_matrix[-1]["exception_count"] == 1
+    assert all(item["blocks_close"] is True for item in risk_matrix)
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {

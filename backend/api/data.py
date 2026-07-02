@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import hashlib
 import json
+import re
 from typing import Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -474,6 +475,20 @@ class DataDiligenceExceptionRegisterEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceRiskMatrixEntry(BaseModel):
+    matrix_key: str
+    severity_code: RemediationPriority
+    owner_area: str
+    related_artifact: str
+    exception_count: int
+    representative_exception_keys: list[str]
+    risk_label: str
+    buyer_implication: str
+    recommended_next_action: str
+    blocks_close: bool
+    provider_write_executed: bool
+
+
 class DataEvidenceSnapshotQualityCheck(BaseModel):
     check_key: str
     display_name: str
@@ -514,6 +529,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
         default_factory=list
     )
     diligence_exception_register: list[DataDiligenceExceptionRegisterEntry] = Field(
+        default_factory=list
+    )
+    diligence_risk_matrix: list[DataDiligenceRiskMatrixEntry] = Field(
         default_factory=list
     )
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
@@ -759,6 +777,12 @@ _EXCEPTION_ARTIFACT_BY_CHECK_KEY = {
     ),
     "semantic_relation_source_backing": "semantic-relation-evidence-samples.json",
     "attachment_parse_coverage": "remediation-actions.json",
+}
+_RISK_SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2}
+_RISK_LABEL_BY_SEVERITY = {
+    "critical": "Critical close blocker concentration",
+    "high": "High diligence evidence gap",
+    "medium": "Medium diligence coverage gap",
 }
 _ACQUISITION_KPI_TARGETS_BY_CHECK_KEY = {
     "thread_id_integrity": {
@@ -1514,6 +1538,64 @@ def _diligence_exception_register(
     ]
 
 
+def _risk_matrix_key_part(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+
+
+def _diligence_risk_matrix(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> list[DataDiligenceRiskMatrixEntry]:
+    groups: dict[
+        tuple[RemediationPriority, str, str],
+        list[DataDiligenceExceptionRegisterEntry],
+    ] = {}
+    for exception in snapshot.diligence_exception_register:
+        key = (
+            exception.severity_code,
+            exception.owner_area,
+            exception.related_artifact,
+        )
+        groups.setdefault(key, []).append(exception)
+
+    entries: list[DataDiligenceRiskMatrixEntry] = []
+    for (severity, owner_area, related_artifact), exceptions in sorted(
+        groups.items(),
+        key=lambda item: (
+            _RISK_SEVERITY_RANK[item[0][0]],
+            item[0][1],
+            item[0][2],
+        ),
+    ):
+        exception_keys = [exception.exception_key for exception in exceptions]
+        entries.append(
+            DataDiligenceRiskMatrixEntry(
+                matrix_key=(
+                    "risk_"
+                    f"{severity}_"
+                    f"{_risk_matrix_key_part(owner_area)}_"
+                    f"{_risk_matrix_key_part(related_artifact)}"
+                ),
+                severity_code=severity,
+                owner_area=owner_area,
+                related_artifact=related_artifact,
+                exception_count=len(exceptions),
+                representative_exception_keys=exception_keys,
+                risk_label=_RISK_LABEL_BY_SEVERITY[severity],
+                buyer_implication=(
+                    f"{len(exceptions)} {severity} exception(s) in {owner_area} "
+                    f"affect {related_artifact} and block buyer close."
+                ),
+                recommended_next_action=(
+                    f"Resolve {', '.join(exception_keys)}, then regenerate the "
+                    "evidence snapshot."
+                ),
+                blocks_close=any(exception.blocks_close for exception in exceptions),
+                provider_write_executed=False,
+            )
+        )
+    return entries
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -1768,6 +1850,9 @@ def _evidence_snapshot_from_surface(
         update={
             "diligence_exception_register": _diligence_exception_register(snapshot)
         }
+    )
+    snapshot = snapshot.model_copy(
+        update={"diligence_risk_matrix": _diligence_risk_matrix(snapshot)}
     )
     digest_payload = _snapshot_digest_payload(snapshot)
     return snapshot.model_copy(
