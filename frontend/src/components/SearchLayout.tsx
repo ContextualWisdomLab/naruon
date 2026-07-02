@@ -753,7 +753,7 @@ export function SearchLayout() {
                             <div>
                               <p className="text-sm font-black text-purple-900">판단 보조</p>
                               <p className="mt-2 text-sm leading-6 text-purple-900/80">
-                                이 화면의 AI/관계 정보는 검색 점수, 원본 메시지, 스레드 범위를 함께 보여주는 보조 근거입니다. 외부 실행은 사용자가 메일, 일정, 관계 캡처 액션을 명시적으로 선택할 때만 진행됩니다.
+                                이 화면의 AI/관계 정보는 맥락 검색 점수, 원본 메시지, 스레드 범위를 함께 보여주는 보조 근거입니다. 외부 실행은 사용자가 메일, 일정, 관계 캡처 액션을 명시적으로 선택할 때만 진행됩니다.
                               </p>
                             </div>
                           </div>

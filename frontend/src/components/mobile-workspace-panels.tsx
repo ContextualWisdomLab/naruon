@@ -31,7 +31,7 @@ type MobilePanelCopy = {
 
 const mobileSearchCopy: MobilePanelCopy = {
   eyebrow: '맥락 검색',
-  title: '메일, 첨부, 일정, 사람을 한 번에 검색합니다.',
+  title: '메일, 첨부, 일정, 사람을 한 번에 맥락 검색합니다.',
   description: '흩어진 대화와 파일을 하나의 판단 흐름으로 묶어 보여주는 모바일 맥락 검색 진입점입니다.',
   loading: '맥락 검색 결과를 불러오는 중입니다.',
   empty: '맥락 검색 결과가 없습니다.',
