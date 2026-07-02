@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Float,
     Index,
     Integer,
     JSON,
@@ -809,6 +810,197 @@ class KnowledgeGraphEdgeRecord(Base):
         "ContentSegmentRecord",
         back_populates="incoming_edges",
         foreign_keys=[target_segment_id],
+    )
+
+
+class ProjectGraphObjectRecord(Base):
+    __tablename__ = "project_graph_objects"
+    __table_args__ = (
+        UniqueConstraint("object_uid", name="uq_project_graph_objects_uid"),
+        Index(
+            "ix_project_graph_objects_scope_type_status",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "object_type",
+            "status_code",
+        ),
+        Index("ix_project_graph_objects_email", "email_id"),
+        Index("ix_project_graph_objects_primary_segment", "primary_content_segment_id"),
+        Index("ix_project_graph_objects_extractor", "extractor_name", "extractor_version"),
+    )
+
+    project_graph_object_id: Mapped[int] = mapped_column(primary_key=True)
+    object_uid: Mapped[str] = mapped_column(String(96), nullable=False)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    email_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id"), nullable=False
+    )
+    attachment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_attachments.id"), nullable=True
+    )
+    primary_content_segment_id: Mapped[int] = mapped_column(
+        ForeignKey("content_segments.content_segment_id"), nullable=False
+    )
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    status_code: Mapped[str] = mapped_column(
+        String(64), default="candidate", nullable=False
+    )
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    source_segment_uids: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    attributes_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    extractor_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    extractor_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email"] = relationship("Email")
+    attachment: Mapped["Attachment | None"] = relationship("Attachment")
+    primary_content_segment: Mapped["ContentSegmentRecord"] = relationship(
+        "ContentSegmentRecord"
+    )
+    outgoing_edges: Mapped[list["ProjectGraphEdgeRecord"]] = relationship(
+        "ProjectGraphEdgeRecord",
+        back_populates="source_object",
+        foreign_keys="ProjectGraphEdgeRecord.source_object_id",
+    )
+    incoming_edges: Mapped[list["ProjectGraphEdgeRecord"]] = relationship(
+        "ProjectGraphEdgeRecord",
+        back_populates="target_object",
+        foreign_keys="ProjectGraphEdgeRecord.target_object_id",
+    )
+    corrections: Mapped[list["ProjectGraphCorrectionRecord"]] = relationship(
+        "ProjectGraphCorrectionRecord",
+        back_populates="project_object",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProjectGraphEdgeRecord(Base):
+    __tablename__ = "project_graph_edges"
+    __table_args__ = (
+        UniqueConstraint("edge_uid", name="uq_project_graph_edges_uid"),
+        Index(
+            "ix_project_graph_edges_scope_type",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "edge_type",
+        ),
+        Index("ix_project_graph_edges_source_object", "source_object_id"),
+        Index("ix_project_graph_edges_target_object", "target_object_id"),
+        Index("ix_project_graph_edges_primary_segment", "primary_content_segment_id"),
+    )
+
+    project_graph_edge_id: Mapped[int] = mapped_column(primary_key=True)
+    edge_uid: Mapped[str] = mapped_column(String(96), nullable=False)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    source_uid: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_uid: Mapped[str] = mapped_column(String(160), nullable=False)
+    edge_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    source_segment_uids: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    source_object_id: Mapped[int | None] = mapped_column(
+        ForeignKey("project_graph_objects.project_graph_object_id"),
+        nullable=True,
+    )
+    target_object_id: Mapped[int | None] = mapped_column(
+        ForeignKey("project_graph_objects.project_graph_object_id"),
+        nullable=True,
+    )
+    primary_content_segment_id: Mapped[int] = mapped_column(
+        ForeignKey("content_segments.content_segment_id"), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    source_object: Mapped["ProjectGraphObjectRecord | None"] = relationship(
+        "ProjectGraphObjectRecord",
+        back_populates="outgoing_edges",
+        foreign_keys=[source_object_id],
+    )
+    target_object: Mapped["ProjectGraphObjectRecord | None"] = relationship(
+        "ProjectGraphObjectRecord",
+        back_populates="incoming_edges",
+        foreign_keys=[target_object_id],
+    )
+    primary_content_segment: Mapped["ContentSegmentRecord"] = relationship(
+        "ContentSegmentRecord"
+    )
+
+
+class ProjectGraphCorrectionRecord(Base):
+    __tablename__ = "project_graph_corrections"
+    __table_args__ = (
+        UniqueConstraint("correction_uid", name="uq_project_graph_corrections_uid"),
+        Index(
+            "ix_project_graph_corrections_scope_time",
+            "user_id",
+            "organization_id",
+            "workspace_id",
+            "created_at",
+        ),
+        Index("ix_project_graph_corrections_object", "project_graph_object_id"),
+    )
+
+    project_graph_correction_id: Mapped[int] = mapped_column(primary_key=True)
+    correction_uid: Mapped[str] = mapped_column(
+        String(96),
+        default=lambda: f"project_correction_{uuid.uuid4().hex}",
+        nullable=False,
+    )
+    project_graph_object_id: Mapped[int] = mapped_column(
+        ForeignKey("project_graph_objects.project_graph_object_id"),
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    correction_action: Mapped[str] = mapped_column(String(64), nullable=False)
+    before_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    after_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_segment_uids: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    project_object: Mapped["ProjectGraphObjectRecord"] = relationship(
+        "ProjectGraphObjectRecord",
+        back_populates="corrections",
     )
 
 
