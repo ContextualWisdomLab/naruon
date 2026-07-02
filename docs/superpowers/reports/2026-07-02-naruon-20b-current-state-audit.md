@@ -219,7 +219,7 @@ Acceptable later extraction:
 P0 for 20B final sale readiness:
 
 - Figma required pages were repaired through `use_figma`, but full screen coverage and durable QA screenshots for every buyer flow are not complete.
-- Full ten-area Product Design route audit now has desktop/mobile evidence and selected desktop critical-interaction evidence, but full interaction-state audit is not complete.
+- Full ten-area Product Design route audit now has desktop/mobile evidence, selected desktop critical-interaction evidence, and basic automated accessibility evidence, but full interaction-state and assistive-technology audit is not complete.
 - Production deployment and rollback evidence is not packaged.
 - Live provider-send and provider-write execution evidence is incomplete.
 - Issue #634 has a branch-level fix, but remains open as a governance risk until merged and proven on the trusted base branch.
@@ -228,11 +228,11 @@ P0 for 20B final sale readiness:
 
 P1 for buyer technical review:
 
-- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts selected desktop buyer interactions for mail, search, tasks, and settings, but does not yet assert every critical interaction inside each route.
+- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts selected desktop buyer interactions for mail, search, tasks, and settings, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
 - Mobile Settings startup-view cards were fixed from a 3-column mobile grid to `grid-cols-1 sm:grid-cols-3` after responsive QA found awkward Korean label wrapping.
 - Product events do not yet cover full-product funnels beyond mail/search.
 - External analytics destination, retention, and consent are not approved.
-- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile contact sheet with selected desktop interaction-state evidence; detailed mobile interaction-state screenshot placement remains incomplete.
+- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile contact sheet with selected desktop interaction-state and basic accessibility evidence; detailed mobile interaction-state and assistive-technology evidence remains incomplete.
 
 Non-blockers:
 

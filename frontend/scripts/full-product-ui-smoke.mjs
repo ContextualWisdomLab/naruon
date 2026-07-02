@@ -30,6 +30,11 @@ export const FULL_PRODUCT_VIEWPORTS = [
 ];
 
 export const FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES = ["mail", "search", "tasks", "settings"];
+export const FULL_PRODUCT_ACCESSIBILITY_CHECK_NAMES = [
+  "visible-duplicate-id",
+  "visible-interactive-accessible-name",
+  "keyboard-tab-focus-entry",
+];
 
 export function resolveFullProductBaseUrl(rawBaseUrl) {
   const fullProductBaseUrl = new URL(rawBaseUrl);
@@ -619,6 +624,121 @@ async function runDesktopInteractionSmoke(page, routeSpec, viewportSpec) {
   return [];
 }
 
+async function runAccessibilitySmoke(page, routeSpec) {
+  const findings = await page.evaluate(() => {
+    function isVisible(element) {
+      if (!(element instanceof HTMLElement) && !(element instanceof SVGElement)) return false;
+      if (element.closest("[hidden], [aria-hidden='true']")) return false;
+      const style = window.getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
+      return element.getClientRects().length > 0;
+    }
+
+    function textFromIdRefs(value) {
+      return value
+        .split(/\s+/)
+        .map((id) => document.getElementById(id)?.textContent?.trim() || "")
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+    }
+
+    function accessibleName(element) {
+      const ariaLabel = element.getAttribute("aria-label")?.trim();
+      if (ariaLabel) return ariaLabel;
+      const labelledBy = element.getAttribute("aria-labelledby");
+      if (labelledBy) {
+        const label = textFromIdRefs(labelledBy);
+        if (label) return label;
+      }
+      if ("labels" in element && element.labels?.length) {
+        const label = Array.from(element.labels)
+          .map((item) => item.textContent?.trim() || "")
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        if (label) return label;
+      }
+      const title = element.getAttribute("title")?.trim();
+      if (title) return title;
+      const text = element.textContent?.replace(/\s+/g, " ").trim();
+      if (text) return text;
+      return "";
+    }
+
+    const visibleIds = new Map();
+    for (const element of Array.from(document.querySelectorAll("[id]"))) {
+      if (!isVisible(element)) continue;
+      const id = element.getAttribute("id");
+      if (!id) continue;
+      visibleIds.set(id, (visibleIds.get(id) || 0) + 1);
+    }
+    const duplicateIds = Array.from(visibleIds.entries())
+      .filter(([, count]) => count > 1)
+      .map(([id, count]) => `${id}(${count})`);
+
+    const selector = [
+      "button",
+      "a[href]",
+      "input",
+      "select",
+      "textarea",
+      "[role='button']",
+      "[role='link']",
+      "[role='tab']",
+      "[role='searchbox']",
+      "[role='menuitem']",
+    ].join(",");
+    const unnamedInteractive = Array.from(document.querySelectorAll(selector))
+      .filter((element) => isVisible(element))
+      .filter((element) => !element.hasAttribute("disabled"))
+      .filter((element) => element.getAttribute("aria-disabled") !== "true")
+      .filter((element) => !accessibleName(element))
+      .slice(0, 10)
+      .map((element) => {
+        const tag = element.tagName.toLowerCase();
+        const role = element.getAttribute("role");
+        const type = element.getAttribute("type");
+        return [tag, role ? `role=${role}` : "", type ? `type=${type}` : ""].filter(Boolean).join("[") + (role || type ? "]" : "");
+      });
+
+    return { duplicateIds, unnamedInteractive };
+  });
+
+  if (findings.duplicateIds.length > 0) {
+    throw new Error(`Route ${routeSpec.path} has visible duplicate IDs: ${findings.duplicateIds.join(", ")}`);
+  }
+  if (findings.unnamedInteractive.length > 0) {
+    throw new Error(`Route ${routeSpec.path} has visible interactive controls without accessible names: ${findings.unnamedInteractive.join(", ")}`);
+  }
+
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  let focusTarget = null;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await page.keyboard.press("Tab");
+    focusTarget = await page.evaluate(() => {
+      const element = document.activeElement;
+      if (!element) return null;
+      return {
+        tagName: element.tagName,
+        role: element.getAttribute("role"),
+        ariaLabel: element.getAttribute("aria-label"),
+        text: element.textContent?.replace(/\s+/g, " ").trim().slice(0, 80) || "",
+      };
+    });
+    if (focusTarget && focusTarget.tagName !== "BODY" && focusTarget.tagName !== "HTML") break;
+  }
+  if (!focusTarget || focusTarget.tagName === "BODY" || focusTarget.tagName === "HTML") {
+    throw new Error(`Route ${routeSpec.path} did not expose a keyboard focus target after pressing Tab`);
+  }
+
+  return [`${routeSpec.name}:a11y-basics`];
+}
+
 async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
   const page = await context.newPage();
   const consoleErrors = [];
@@ -647,10 +767,11 @@ async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
     throw new Error(`Route ${routeSpec.path} emitted console errors:\n${consoleErrors.join("\n")}`);
   }
   const interactionEvidence = await runDesktopInteractionSmoke(page, routeSpec, viewportSpec);
+  const accessibilityEvidence = await runAccessibilitySmoke(page, routeSpec);
   const screenshotPath = path.join(screenshotDir, fullProductScreenshotName(routeSpec, viewportSpec, viewportCount));
   await page.screenshot({ path: screenshotPath, fullPage: false });
   await page.close();
-  return { screenshotPath, interactionEvidence };
+  return { screenshotPath, interactionEvidence, accessibilityEvidence };
 }
 
 async function main() {
@@ -662,6 +783,7 @@ async function main() {
     browser = await launchBrowser();
     const screenshots = [];
     const interactions = [];
+    const accessibility = [];
     const viewportSpecs = resolveFullProductViewportSpecs(process.env.NARUON_FULL_PRODUCT_VIEWPORTS || "desktop");
     for (const viewportSpec of viewportSpecs) {
       const context = await browser.newContext({
@@ -672,6 +794,7 @@ async function main() {
         const result = await runRouteSmoke(context, routeSpec, viewportSpec, viewportSpecs.length);
         screenshots.push(result.screenshotPath);
         interactions.push(...result.interactionEvidence);
+        accessibility.push(...result.accessibilityEvidence);
       }
       await context.close();
     }
@@ -681,6 +804,7 @@ async function main() {
     if (interactions.length > 0) {
       log(`Desktop interactions: ${interactions.join(", ")}`);
     }
+    log(`Accessibility checks: ${accessibility.join(", ")}`);
     log(`Screenshots: ${screenshots.join(", ")}`);
   } finally {
     if (browser) await browser.close().catch(() => {});

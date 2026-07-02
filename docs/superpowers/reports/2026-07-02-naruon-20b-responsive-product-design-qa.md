@@ -42,13 +42,15 @@ Naruon full-product route smoke passed.
 Routes: /, /mail, /search, /calendar, /tasks, /projects, /data, /ai-hub, /security, /settings
 Viewports: desktop(1440x1024), mobile(390x844)
 Desktop interactions: mail:select-message, mail:create-source-linked-task, search:select-result, search:capture-sender-relationship, tasks:create-reply-sla-followup, settings:switch-ai-model-tab, settings:select-calendar-startup-view
+Accessibility checks: home:a11y-basics, mail:a11y-basics, search:a11y-basics, calendar:a11y-basics, tasks:a11y-basics, projects:a11y-basics, data:a11y-basics, ai-hub:a11y-basics, security:a11y-basics, settings:a11y-basics, home:a11y-basics, mail:a11y-basics, search:a11y-basics, calendar:a11y-basics, tasks:a11y-basics, projects:a11y-basics, data:a11y-basics, ai-hub:a11y-basics, security:a11y-basics, settings:a11y-basics
 ```
 
 Figma placement result:
 
 ```text
 QA Notes board created and verified.
-Contact-sheet image uploaded with imageHash e24db3022236c27033c8689526ab8d83845b7192.
+Contact-sheet upload accepted with response imageHash bd92459336bc9e6f738a501435f38f40962807d1.
+Figma node 18:7 verified with image fill hash 9a0afeec7bb84c24f4369154c88d1e9c5a775a1f and FIT scale mode.
 Verification screenshot confirmed the contact sheet and notes are visible inside board node 18:3.
 ```
 
@@ -92,24 +94,28 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
    - Evidence: all ten IA routes render expected buyer-visible text and produce mobile screenshots.
    - Health: pass for route-level smoke.
 
-3. Mobile Settings had a responsive label wrapping defect before correction.
+3. Desktop and mobile accessibility basics now have repeatable smoke evidence.
+   - Evidence: all ten IA routes passed visible duplicate-ID, visible interactive accessible-name, and keyboard Tab focus-entry checks on desktop and mobile.
+   - Health: pass for basic automated accessibility smoke.
+
+4. Mobile Settings had a responsive label wrapping defect before correction.
    - Evidence: `mobile-settings.png` initially showed `일정 관리` split awkwardly inside a narrow 3-column card.
    - Fix: `frontend/src/components/SettingsLayout.tsx` now switches the startup view selector from `grid-cols-3` to `grid-cols-1 sm:grid-cols-3`.
    - Health: fixed and re-captured.
 
-4. The smoke gate still does not prove full workflow completion.
-   - Evidence: the command now checks expected route text, console errors, not-found states, screenshot creation, and selected desktop interactions.
+5. The smoke gate still does not prove full workflow completion.
+   - Evidence: the command now checks expected route text, console errors, not-found states, screenshot creation, selected desktop interactions, and basic automated accessibility checks.
    - Remaining gap: send, writeback confirmation, graph expansion, permission edits, connector rotation, settings save persistence, and mobile interaction-state need workflow-specific assertions before final procurement readiness.
 
 ## Accessibility Risks
 
-- Screenshots alone do not prove keyboard order, focus trapping, screen-reader semantics, or color contrast compliance.
-- The fixed mobile settings selector reduces visible text wrapping risk, but a full accessibility pass still needs keyboard and accessibility-tree checks.
-- Bottom mobile navigation is visually present across routes; target-size and focus-state verification remain unproven from screenshots alone.
+- The current automated gate proves only three basic checks: no visible duplicate IDs, no visible interactive controls without accessible names, and keyboard Tab entry reaches a focusable element.
+- It does not prove full keyboard order, focus trapping, screen-reader semantics, color contrast, zoom reflow, target size, or assistive-technology robustness.
+- Bottom mobile navigation is visually present across routes; target-size and full focus-order verification remain unproven from screenshots and the basic gate alone.
 
 ## Product Design Assessment
 
-The current branch now has repeatable desktop and mobile visual evidence for the ten buyer-review IA routes plus selected desktop critical-interaction smoke evidence. This moves the package from route-existence evidence to responsive route-level evidence with partial workflow proof, but it does not prove full sale readiness.
+The current branch now has repeatable desktop and mobile visual evidence for the ten buyer-review IA routes, selected desktop critical-interaction smoke evidence, and basic automated accessibility evidence across desktop and mobile. This moves the package from route-existence evidence to responsive route-level evidence with partial workflow and accessibility proof, but it does not prove full sale readiness.
 
 The remaining Product Design P0/P1 work is:
 
@@ -123,6 +129,10 @@ The remaining Product Design P0/P1 work is:
    - AI Hub run/log detail
    - security permission review
    - settings save persistence and connector rotation
-2. Capture keyboard/focus evidence for mobile and desktop.
+2. Expand accessibility evidence beyond the basic gate:
+   - deterministic focus order for primary workflows
+   - modal/drawer focus trapping
+   - contrast sampling
+   - screen-reader semantics for evidence drawers and workflow panels
 3. Keep placing final screenshot evidence in Figma `QA Notes` after each accepted run.
 4. Avoid claiming public launch or final procurement readiness until live provider, production deployment, rollback, support, security, and measured ROI evidence exist.
