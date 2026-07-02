@@ -413,6 +413,139 @@ const evidencePacketChecklist = [
   },
 ];
 
+const dataRoomPackageManifest = [
+  {
+    manifest_key: "evidence_snapshot_json",
+    file_name: "naruon-evidence-snapshot.json",
+    artifact_type: "snapshot_json",
+    display_name: "Evidence snapshot JSON",
+    state_code: "ready",
+    source_field: "snapshot_version,snapshot_digest,canonical_payload_fields",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Canonical redacted evidence snapshot for buyer diligence and offline digest verification.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "offline_verifier",
+    file_name: "verify-evidence-snapshot.py",
+    artifact_type: "verifier_script",
+    display_name: "Offline digest verifier",
+    state_code: "ready",
+    source_field: "verification_handoff",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Offline verifier script and expected exit-code contract for snapshot tamper checks.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "privacy_policy",
+    file_name: "privacy-redaction-policy.json",
+    artifact_type: "policy_json",
+    display_name: "Privacy redaction policy",
+    state_code: "ready",
+    source_field: "privacy_redaction_policy",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Redaction policy proving raw content, credentials, and stable IDs are excluded.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "attachment_parser_manifest",
+    file_name: "attachment-parser-manifest.json",
+    artifact_type: "manifest_json",
+    display_name: "Attachment parser manifest",
+    state_code: "ready",
+    source_field: "parser_manifest_summary",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Supported attachment parser families, content types, extensions, and unsupported fallback.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "dom_paragraph_samples",
+    file_name: "dom-paragraph-evidence-samples.json",
+    artifact_type: "evidence_samples_json",
+    display_name: "DOM paragraph evidence samples",
+    state_code: "ready",
+    source_field: "content_graph_evidence_samples",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Redacted DOM and paragraph samples for email and attachment content segmentation.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "knowledge_graph_samples",
+    file_name: "knowledge-graph-evidence-samples.json",
+    artifact_type: "evidence_samples_json",
+    display_name: "Knowledge graph evidence samples",
+    state_code: "ready",
+    source_field: "knowledge_graph_evidence_samples",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Redacted KG edge samples with safe paths and endpoint readiness.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "semantic_relation_samples",
+    file_name: "semantic-relation-evidence-samples.json",
+    artifact_type: "evidence_samples_json",
+    display_name: "Semantic relation evidence samples",
+    state_code: "ready",
+    source_field: "semantic_relation_evidence_samples",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Source-backed semantic relation samples with confidence and next action.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "evidence_packet_checklist",
+    file_name: "buyer-evidence-packet-checklist.json",
+    artifact_type: "manifest_json",
+    display_name: "Buyer evidence packet checklist",
+    state_code: "needs_attention",
+    source_field: "evidence_packet_checklist",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Checklist mapping buyer-required packet artifacts to safe snapshot fields.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "acquisition_readiness_summary",
+    file_name: "acquisition-readiness-summary.json",
+    artifact_type: "readiness_summary_json",
+    display_name: "Acquisition readiness summary",
+    state_code: "needs_attention",
+    source_field: "acquisition_readiness_gate",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Buyer readiness score, close recommendation, KPI gaps, and blocking checks.",
+    provider_write_executed: false,
+  },
+  {
+    manifest_key: "remediation_actions",
+    file_name: "remediation-actions.json",
+    artifact_type: "readiness_summary_json",
+    display_name: "Remediation actions",
+    state_code: "needs_attention",
+    source_field: "acquisition_readiness_gate.remediation_actions",
+    required_for_close: true,
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    detail_text: "Required remediation actions to close remaining diligence gaps.",
+    provider_write_executed: false,
+  },
+];
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -778,6 +911,7 @@ const dataEvidenceSnapshot = {
     "audit_event",
     "content_graph_evidence_samples",
     "content_graph_topology_counts",
+    "data_room_package_manifest",
     "evidence_packet_checklist",
     "generated_at",
     "knowledge_graph_evidence_samples",
@@ -863,6 +997,7 @@ const dataEvidenceSnapshot = {
   },
   verification_handoff: snapshotVerificationHandoff,
   evidence_packet_checklist: evidencePacketChecklist,
+  data_room_package_manifest: dataRoomPackageManifest,
   parser_manifest_summary: [
     {
       parser_key: "plain_text",
@@ -1479,6 +1614,13 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Offline snapshot verification");
     expect(container.textContent).toContain("redacted_snapshot_policy");
     expect(container.textContent).toContain("buyer_evidence_readiness_gate");
+    expect(container.textContent).toContain("Data room package manifest");
+    expect(container.textContent).toContain("naruon-evidence-snapshot.json");
+    expect(container.textContent).toContain("verify-evidence-snapshot.py");
+    expect(container.textContent).toContain("knowledge-graph-evidence-samples.json");
+    expect(container.textContent).toContain("acquisition-readiness-summary.json");
+    expect(container.textContent).toContain("raw content: no");
+    expect(container.textContent).toContain("stable IDs: no");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
     expect(container.textContent).toContain("text/markdown");
@@ -1559,6 +1701,10 @@ describe("DataPage", () => {
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
     expect(copiedSnapshot.evidence_packet_checklist[0].checklist_key).toBe("privacy_redaction_policy");
     expect(copiedSnapshot.evidence_packet_checklist[8].state_code).toBe("needs_attention");
+    expect(copiedSnapshot.data_room_package_manifest).toHaveLength(10);
+    expect(copiedSnapshot.data_room_package_manifest[0].file_name).toBe("naruon-evidence-snapshot.json");
+    expect(copiedSnapshot.data_room_package_manifest[8].state_code).toBe("needs_attention");
+    expect(copiedSnapshot.data_room_package_manifest.every((item: { contains_raw_content: boolean }) => !item.contains_raw_content)).toBe(true);
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

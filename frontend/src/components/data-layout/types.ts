@@ -277,6 +277,19 @@ export type DataEvidenceSnapshotResponse = {
     detail_text: string;
     provider_write_executed: boolean;
   }>;
+  data_room_package_manifest: Array<{
+    manifest_key: string;
+    file_name: string;
+    artifact_type: 'snapshot_json' | 'verifier_script' | 'policy_json' | 'manifest_json' | 'evidence_samples_json' | 'readiness_summary_json';
+    display_name: string;
+    state_code: AcquisitionReadinessState;
+    source_field: string;
+    required_for_close: boolean;
+    contains_raw_content: boolean;
+    contains_stable_identifiers: boolean;
+    detail_text: string;
+    provider_write_executed: boolean;
+  }>;
   parser_manifest_summary: Array<{
     parser_key: string;
     display_name: string;

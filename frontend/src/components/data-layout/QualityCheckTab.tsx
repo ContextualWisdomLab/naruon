@@ -159,6 +159,53 @@ export function QualityCheckTab({
                       </div>
                     </div>
                   )}
+                  {evidenceSnapshot.data_room_package_manifest.length > 0 && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Data room package manifest</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {evidenceSnapshot.data_room_package_manifest.map((item) => (
+                          <article key={item.manifest_key} className="rounded-xl border border-border bg-background p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <h3 className="break-all text-sm font-black">{toSafeReactText(item.file_name)}</h3>
+                                <p className="mt-1 text-sm font-semibold text-muted-foreground">{toSafeReactText(item.display_name)}</p>
+                                <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(item.detail_text)}</p>
+                              </div>
+                              <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(item.state_code)}`}>
+                                {getSurfaceStatusLabel(item.state_code)}
+                              </span>
+                            </div>
+                            <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+                              <div>
+                                <dt className="font-black text-muted-foreground">Artifact type</dt>
+                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.artifact_type)}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Source field</dt>
+                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.source_field)}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Close required</dt>
+                                <dd className="mt-1 text-sm font-bold">{item.required_for_close ? 'yes' : 'no'}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Raw content</dt>
+                                <dd className="mt-1 text-sm font-bold">raw content: {item.contains_raw_content ? 'yes' : 'no'}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Stable IDs</dt>
+                                <dd className="mt-1 text-sm font-bold">stable IDs: {item.contains_stable_identifiers ? 'yes' : 'no'}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
+                              </div>
+                            </dl>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {snapshotCopyStatus !== 'idle' && (
                     <p className="border-t border-border px-5 py-3 text-xs font-bold text-muted-foreground">
                       {snapshotCopyStatus === 'copied' ? '스냅샷 JSON을 복사했습니다.' : '클립보드 복사를 사용할 수 없습니다.'}
