@@ -28,7 +28,7 @@
 - Expects `DataEvidenceSnapshotResponse.semantic_extraction_manifest`
 - Expects quality check `semantic_kg_readiness`
 
-- [ ] **Step 1: Extend quality-surface assertions**
+- [x] **Step 1: Extend quality-surface assertions**
 
 In `test_data_quality_surface_returns_source_backed_counts_without_secrets`, add assertions for:
 
@@ -50,7 +50,7 @@ assert quality_by_key["semantic_kg_readiness"] == {
 
 Also assert `data["semantic_extraction_manifest"]` contains one item with `manifest_key == "entity_relation_extraction"` and `state_code == "provenance_gate_pending"`.
 
-- [ ] **Step 2: Extend evidence-snapshot assertions**
+- [x] **Step 2: Extend evidence-snapshot assertions**
 
 In `test_data_quality_evidence_snapshot_returns_shareable_redacted_surface`, update validation totals to include the new pending check:
 
@@ -60,7 +60,7 @@ assert snapshot["validation_status"]["total_checks"] == 11
 
 Assert the copied snapshot includes `semantic_extraction_manifest`, the manifest appears in `canonical_payload_fields`, and forbidden raw/private strings are still absent.
 
-- [ ] **Step 3: Verify initial failure**
+- [x] **Step 3: Verify initial failure**
 
 Run:
 
@@ -81,7 +81,7 @@ Expected: FAIL because the API contract does not expose the manifest yet.
 - Produces `_semantic_extraction_manifest() -> list[DataSemanticExtractionManifest]`
 - Produces `_check_semantic_kg_readiness() -> DataQualityCheck`
 
-- [ ] **Step 1: Add constants and model**
+- [x] **Step 1: Add constants and model**
 
 Add evidence-source and allowed snapshot field constants:
 
@@ -104,7 +104,7 @@ detail_text: str
 provider_write_executed: bool
 ```
 
-- [ ] **Step 2: Add manifest helper and quality check**
+- [x] **Step 2: Add manifest helper and quality check**
 
 Implement `_semantic_extraction_manifest(knowledge_graph_edge_count: int)`, returning one safe item:
 
@@ -126,11 +126,11 @@ provider_write_executed=False
 
 Implement `_check_semantic_kg_readiness()` with status `pending`, issue count `0`, and total count `1`.
 
-- [ ] **Step 3: Wire response and snapshot**
+- [x] **Step 3: Wire response and snapshot**
 
 Add `semantic_extraction_manifest` to `DataQualitySurfaceResponse` and `DataEvidenceSnapshotResponse`, copy it in `_evidence_snapshot_from_surface`, and include it in `get_data_quality_surface(...)` using the current `knowledge_graph_edge_count`.
 
-- [ ] **Step 4: Verify backend pass**
+- [x] **Step 4: Verify backend pass**
 
 Run:
 
@@ -152,11 +152,11 @@ Expected: PASS.
 **Interfaces:**
 - Consumes `semantic_extraction_manifest` from both surface and snapshot.
 
-- [ ] **Step 1: Update TypeScript contracts and fixtures**
+- [x] **Step 1: Update TypeScript contracts and fixtures**
 
 Add `semantic_extraction_manifest` arrays to `DataQualitySurfaceResponse` and `DataEvidenceSnapshotResponse`. Update test fixtures and `canonical_payload_fields` to include `semantic_extraction_manifest`.
 
-- [ ] **Step 2: Render buyer-visible readiness**
+- [x] **Step 2: Render buyer-visible readiness**
 
 In `QualityCheckTab`, derive:
 
@@ -166,7 +166,7 @@ const semanticExtractionManifest = dataQualitySurface?.semantic_extraction_manif
 
 Render a compact section titled `Semantic KG readiness` after the KG evidence samples. Show display name, state, structural edge count, semantic relation count, required evidence, detail text, and write boundary. Do not show backend evidence-source strings.
 
-- [ ] **Step 3: Verify frontend assertions**
+- [x] **Step 3: Verify frontend assertions**
 
 In `renders API-backed pipeline embedding and quality tabs`, assert the UI contains:
 
@@ -180,7 +180,7 @@ expect(container.textContent).not.toContain("knowledge_graph_edges.edge_kind");
 
 Also assert copied snapshot contains `semantic_extraction_manifest`.
 
-- [ ] **Step 4: Verify frontend pass**
+- [x] **Step 4: Verify frontend pass**
 
 Run:
 
@@ -196,7 +196,7 @@ Expected: PASS.
 **Files:**
 - No repo file unless screenshot is intentionally stored outside the repo.
 
-- [ ] **Step 1: Add Phase 14 diagram**
+- [x] **Step 1: Add Phase 14 diagram**
 
 Use `generate_diagram` on FigJam board `zXkcwT2E2aBtNhMVznLT4l` with a flowchart showing:
 
@@ -206,7 +206,7 @@ Use `generate_diagram` on FigJam board `zXkcwT2E2aBtNhMVznLT4l` with a flowchart
 - Buyer snapshot packet
 - Future approved entity/relation extractor
 
-- [ ] **Step 2: Group and screenshot**
+- [x] **Step 2: Group and screenshot**
 
 Group generated nodes as `Phase 14 Semantic KG Readiness Manifest Group` and download a screenshot for local visual inspection.
 
@@ -216,7 +216,7 @@ Group generated nodes as `Phase 14 Semantic KG Readiness Manifest Group` and dow
 - Modify: `docs/superpowers/plans/2026-07-02-semantic-kg-readiness-manifest.md`
 - Modify: PR body via `gh pr edit`
 
-- [ ] **Step 1: Run final focused validation**
+- [x] **Step 1: Run final focused validation**
 
 Run:
 
@@ -232,7 +232,7 @@ git diff --check
 
 Expected: PASS/no output.
 
-- [ ] **Step 2: Commit implementation**
+- [x] **Step 2: Commit implementation**
 
 Stage only Phase 14 files and commit:
 
@@ -240,15 +240,15 @@ Stage only Phase 14 files and commit:
 git commit -m "feat: add semantic kg readiness manifest"
 ```
 
-- [ ] **Step 3: Push**
+- [x] **Step 3: Push**
 
 Push to `plan/email-dom-paragraph-kg-2026-07-02`.
 
-- [ ] **Step 4: Update PR body**
+- [x] **Step 4: Update PR body**
 
 Add Phase 14 scope, validation results, FigJam screenshot path, and current head SHA to PR #895.
 
-- [ ] **Step 5: Mark plan complete and commit docs**
+- [x] **Step 5: Mark plan complete and commit docs**
 
 Check off completed ship steps, commit:
 
@@ -256,6 +256,6 @@ Check off completed ship steps, commit:
 git commit -m "docs: mark phase 14 plan complete"
 ```
 
-- [ ] **Step 6: Live PR check**
+- [x] **Step 6: Live PR check**
 
 Re-check PR #895 head, mergeability, reviewThreads, checks, and body. Treat queued/pending/review status as non-blocking and failed checks as actionable.
