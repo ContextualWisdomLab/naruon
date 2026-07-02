@@ -85,6 +85,7 @@ DataRoomArtifactType = Literal[
 CloseGateStatus = Literal["blocked", "ready"]
 DiligenceCloseDecision = Literal["ready_to_close", "close_blocked"]
 DiligenceCloseSeverity = Literal["critical", "high", "medium", "none"]
+DiligenceArtifactReviewStatus = Literal["blocked", "ready_for_review"]
 RemediationPriority = Literal["critical", "high", "medium"]
 DiligenceRecommendation = Literal[
     "ready_for_diligence",
@@ -525,6 +526,22 @@ class DataDiligenceCloseDecisionSummary(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceCloseArtifactReviewQueueEntry(BaseModel):
+    queue_key: str
+    required_proof_artifact: str
+    owner_areas: list[str]
+    proof_count: int
+    blocked_proof_count: int
+    ready_proof_count: int
+    highest_severity: DiligenceCloseSeverity
+    buyer_review_role: str
+    review_status: DiligenceArtifactReviewStatus
+    acceptance_summary: str
+    next_action: str
+    snapshot_verification_required: bool
+    provider_write_executed: bool
+
+
 def _default_diligence_close_decision_summary() -> DataDiligenceCloseDecisionSummary:
     return DataDiligenceCloseDecisionSummary(
         summary_key="buyer_close_decision",
@@ -596,6 +613,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     diligence_close_decision_summary: DataDiligenceCloseDecisionSummary = Field(
         default_factory=_default_diligence_close_decision_summary
     )
+    diligence_close_artifact_review_queue: list[
+        DataDiligenceCloseArtifactReviewQueueEntry
+    ] = Field(default_factory=list)
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
     content_graph_topology_counts: list[DataEvidenceSnapshotContentTopologyCount]
@@ -850,6 +870,12 @@ _CLOSE_DEPENDENCY_BY_SEVERITY = {
     "critical": "critical evidence gate",
     "high": "high priority evidence gate",
     "medium": "coverage exception gate",
+}
+_ARTIFACT_REVIEW_ROLE_BY_SEVERITY = {
+    "critical": "executive diligence reviewer",
+    "high": "data quality reviewer",
+    "medium": "coverage reviewer",
+    "none": "buyer reviewer",
 }
 _ACQUISITION_KPI_TARGETS_BY_CHECK_KEY = {
     "thread_id_integrity": {
@@ -1761,6 +1787,51 @@ def _diligence_close_decision_summary(
     )
 
 
+def _diligence_close_artifact_review_queue(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> list[DataDiligenceCloseArtifactReviewQueueEntry]:
+    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = {}
+    for proof in snapshot.diligence_close_proof_plan:
+        groups.setdefault(proof.required_proof_artifact, []).append(proof)
+
+    entries: list[DataDiligenceCloseArtifactReviewQueueEntry] = []
+    for artifact, proofs in sorted(groups.items()):
+        blocked_count = sum(
+            1 for proof in proofs if proof.close_gate_status == "blocked"
+        )
+        ready_count = len(proofs) - blocked_count
+        highest_severity: DiligenceCloseSeverity = min(
+            (proof.severity_code for proof in proofs),
+            key=lambda severity: _RISK_SEVERITY_RANK[severity],
+        )
+        buyer_review_role = _ARTIFACT_REVIEW_ROLE_BY_SEVERITY[highest_severity]
+        review_status: DiligenceArtifactReviewStatus = (
+            "blocked" if blocked_count else "ready_for_review"
+        )
+        next_actions = list(dict.fromkeys(proof.next_action for proof in proofs))
+        entries.append(
+            DataDiligenceCloseArtifactReviewQueueEntry(
+                queue_key=f"review_{_risk_matrix_key_part(artifact)}",
+                required_proof_artifact=artifact,
+                owner_areas=sorted({proof.owner_area for proof in proofs}),
+                proof_count=len(proofs),
+                blocked_proof_count=blocked_count,
+                ready_proof_count=ready_count,
+                highest_severity=highest_severity,
+                buyer_review_role=buyer_review_role,
+                review_status=review_status,
+                acceptance_summary=(
+                    f"{len(proofs)} proof requirement(s) for {artifact} need "
+                    f"{buyer_review_role} review before close."
+                ),
+                next_action="; ".join(next_actions),
+                snapshot_verification_required=True,
+                provider_write_executed=False,
+            )
+        )
+    return entries
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -2028,6 +2099,13 @@ def _evidence_snapshot_from_surface(
         update={
             "diligence_close_decision_summary": (
                 _diligence_close_decision_summary(snapshot)
+            )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "diligence_close_artifact_review_queue": (
+                _diligence_close_artifact_review_queue(snapshot)
             )
         }
     )

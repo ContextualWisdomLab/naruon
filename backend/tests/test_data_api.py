@@ -1104,6 +1104,120 @@ def _expected_diligence_close_decision_summary():
     }
 
 
+def _expected_diligence_close_artifact_review_queue():
+    return [
+        {
+            "queue_key": "review_acquisition_readiness_summary_json",
+            "required_proof_artifact": "acquisition-readiness-summary.json",
+            "owner_areas": ["email_ingestion"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "critical",
+            "buyer_review_role": "executive diligence reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) for acquisition-readiness-summary.json "
+                "need executive diligence reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_repair_thread_id_integrity, "
+                "exception_backfill_dedupe_fingerprints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "queue_key": "review_dom_paragraph_evidence_samples_json",
+            "required_proof_artifact": "dom-paragraph-evidence-samples.json",
+            "owner_areas": ["content_graph"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_role": "data quality reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) for dom-paragraph-evidence-samples.json "
+                "need data quality reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_content_graph_coverage, "
+                "exception_repair_segment_text_readiness, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "queue_key": "review_knowledge_graph_evidence_samples_json",
+            "required_proof_artifact": "knowledge-graph-evidence-samples.json",
+            "owner_areas": ["knowledge_graph"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_role": "data quality reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) for knowledge-graph-evidence-samples.json "
+                "need data quality reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_knowledge_graph_coverage, "
+                "exception_attach_kg_evidence_endpoints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "queue_key": "review_remediation_actions_json",
+            "required_proof_artifact": "remediation-actions.json",
+            "owner_areas": ["attachment_parsing"],
+            "proof_count": 2,
+            "blocked_proof_count": 2,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_role": "data quality reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "2 proof requirement(s) for remediation-actions.json need "
+                "data quality reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_recover_attachment_content, then regenerate the "
+                "evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, "
+                "then regenerate the evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "queue_key": "review_semantic_relation_evidence_samples_json",
+            "required_proof_artifact": "semantic-relation-evidence-samples.json",
+            "owner_areas": ["semantic_kg"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_role": "data quality reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) for semantic-relation-evidence-samples.json "
+                "need data quality reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_semantic_relation_sources, then "
+                "regenerate the evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+    ]
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1679,6 +1793,13 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         snapshot["diligence_close_decision_summary"]
         == _expected_diligence_close_decision_summary()
     )
+    assert "diligence_close_artifact_review_queue" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_artifact_review_queue"]
+        == _expected_diligence_close_artifact_review_queue()
+    )
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -1899,6 +2020,42 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         ),
         "provider_write_executed": False,
     }
+    artifact_review_queue = snapshot["diligence_close_artifact_review_queue"]
+    assert len(artifact_review_queue) == 5
+    assert artifact_review_queue[0] == {
+        "queue_key": "review_acquisition_readiness_summary_json",
+        "required_proof_artifact": "acquisition-readiness-summary.json",
+        "owner_areas": ["email_ingestion"],
+        "proof_count": 1,
+        "blocked_proof_count": 1,
+        "ready_proof_count": 0,
+        "highest_severity": "critical",
+        "buyer_review_role": "executive diligence reviewer",
+        "review_status": "blocked",
+        "acceptance_summary": (
+            "1 proof requirement(s) for acquisition-readiness-summary.json need "
+            "executive diligence reviewer review before close."
+        ),
+        "next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "snapshot_verification_required": True,
+        "provider_write_executed": False,
+    }
+    assert artifact_review_queue[3]["required_proof_artifact"] == (
+        "remediation-actions.json"
+    )
+    assert artifact_review_queue[3]["proof_count"] == 2
+    assert artifact_review_queue[3]["highest_severity"] == "high"
+    assert artifact_review_queue[3]["buyer_review_role"] == "data quality reviewer"
+    assert artifact_review_queue[-1]["required_proof_artifact"] == (
+        "semantic-relation-evidence-samples.json"
+    )
+    assert all(
+        item["provider_write_executed"] is False for item in artifact_review_queue
+    )
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {
