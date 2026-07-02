@@ -563,6 +563,32 @@ def _expected_acquisition_decision_summary():
     }
 
 
+def _expected_snapshot_verification_handoff():
+    return {
+        "verifier_key": "offline_evidence_snapshot_verifier",
+        "verifier_command": "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+        "accepted_input": "file_path_or_stdin",
+        "digest_algorithm": "sha256",
+        "excluded_digest_fields": [
+            "canonical_payload_fields",
+            "digest_algorithm",
+            "snapshot_digest",
+        ],
+        "success_exit_code": 0,
+        "failure_exit_codes": {
+            "invalid_json": 1,
+            "missing_snapshot_digest": 2,
+            "unsupported_digest_algorithm": 3,
+            "digest_mismatch": 4,
+        },
+        "handoff_text": (
+            "Save the copied evidence snapshot JSON and verify it with the offline "
+            "verifier before sharing diligence materials."
+        ),
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1115,6 +1141,8 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     ).encode("utf-8")
     assert snapshot["snapshot_digest"] == hashlib.sha256(canonical_payload).hexdigest()
     assert snapshot["canonical_payload_fields"] == sorted(digest_payload)
+    assert "verification_handoff" in snapshot["canonical_payload_fields"]
+    assert snapshot["verification_handoff"] == _expected_snapshot_verification_handoff()
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",

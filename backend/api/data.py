@@ -414,6 +414,18 @@ class DataEvidenceSnapshotValidationStatus(BaseModel):
     total_checks: int
 
 
+class DataEvidenceSnapshotVerificationHandoff(BaseModel):
+    verifier_key: str
+    verifier_command: str
+    accepted_input: str
+    digest_algorithm: Literal["sha256"]
+    excluded_digest_fields: list[str]
+    success_exit_code: int
+    failure_exit_codes: dict[str, int]
+    handoff_text: str
+    provider_write_executed: bool
+
+
 class DataEvidenceSnapshotQualityCheck(BaseModel):
     check_key: str
     display_name: str
@@ -446,6 +458,7 @@ class DataEvidenceSnapshotResponse(BaseModel):
     privacy_redaction_policy: DataEvidenceSnapshotPrivacyPolicy
     acquisition_readiness_gate: DataAcquisitionReadinessGate
     validation_status: DataEvidenceSnapshotValidationStatus
+    verification_handoff: DataEvidenceSnapshotVerificationHandoff
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
     content_graph_topology_counts: list[DataEvidenceSnapshotContentTopologyCount]
@@ -1033,6 +1046,28 @@ def _snapshot_validation_status(
     )
 
 
+def _snapshot_verification_handoff() -> DataEvidenceSnapshotVerificationHandoff:
+    return DataEvidenceSnapshotVerificationHandoff(
+        verifier_key="offline_evidence_snapshot_verifier",
+        verifier_command="python scripts/verify_evidence_snapshot.py <snapshot.json>",
+        accepted_input="file_path_or_stdin",
+        digest_algorithm="sha256",
+        excluded_digest_fields=sorted(SNAPSHOT_DIGEST_EXCLUDED_FIELDS),
+        success_exit_code=0,
+        failure_exit_codes={
+            "invalid_json": 1,
+            "missing_snapshot_digest": 2,
+            "unsupported_digest_algorithm": 3,
+            "digest_mismatch": 4,
+        },
+        handoff_text=(
+            "Save the copied evidence snapshot JSON and verify it with the offline "
+            "verifier before sharing diligence materials."
+        ),
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -1236,6 +1271,7 @@ def _evidence_snapshot_from_surface(
         privacy_redaction_policy=_snapshot_privacy_policy(),
         acquisition_readiness_gate=surface.acquisition_readiness_gate,
         validation_status=_snapshot_validation_status(surface.quality_checks),
+        verification_handoff=_snapshot_verification_handoff(),
         parser_manifest_summary=_snapshot_parser_manifest_summary(),
         quality_checks=[
             DataEvidenceSnapshotQualityCheck(

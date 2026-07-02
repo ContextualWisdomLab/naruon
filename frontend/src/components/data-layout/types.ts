@@ -257,6 +257,17 @@ export type DataEvidenceSnapshotResponse = {
     checks_with_issues: number;
     total_checks: number;
   };
+  verification_handoff: {
+    verifier_key: string;
+    verifier_command: string;
+    accepted_input: string;
+    digest_algorithm: 'sha256';
+    excluded_digest_fields: string[];
+    success_exit_code: number;
+    failure_exit_codes: Record<string, number>;
+    handoff_text: string;
+    provider_write_executed: boolean;
+  };
   parser_manifest_summary: Array<{
     parser_key: string;
     display_name: string;

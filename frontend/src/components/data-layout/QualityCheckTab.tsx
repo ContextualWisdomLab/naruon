@@ -93,6 +93,38 @@ export function QualityCheckTab({
                       <dd className="mt-1 text-sm font-bold">{formatCount(evidenceSnapshot.knowledge_graph_evidence_samples.length)}</dd>
                     </div>
                   </dl>
+                  <div className="border-t border-border p-5">
+                    <p className="text-xs font-black text-muted-foreground">Snapshot verification handoff</p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-muted-foreground">{toSafeReactText(evidenceSnapshot.verification_handoff.handoff_text)}</p>
+                    <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+                      <div>
+                        <dt className="font-black text-muted-foreground">Verifier command</dt>
+                        <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(evidenceSnapshot.verification_handoff.verifier_command)}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-black text-muted-foreground">Accepted input</dt>
+                        <dd className="mt-1 text-sm font-bold">{toSafeReactText(evidenceSnapshot.verification_handoff.accepted_input)}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-black text-muted-foreground">Algorithm</dt>
+                        <dd className="mt-1 text-sm font-bold">{toSafeReactText(evidenceSnapshot.verification_handoff.digest_algorithm)}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-black text-muted-foreground">Excluded digest fields</dt>
+                        <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(evidenceSnapshot.verification_handoff.excluded_digest_fields.join(', '))}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-black text-muted-foreground">Exit codes</dt>
+                        <dd className="mt-1 break-all text-sm font-bold">
+                          ok:{formatCount(evidenceSnapshot.verification_handoff.success_exit_code)} · {toSafeReactText(Object.entries(evidenceSnapshot.verification_handoff.failure_exit_codes).map(([code, exitCode]) => `${code}:${exitCode}`).join(', '))}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                        <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(evidenceSnapshot.verification_handoff.provider_write_executed)}</dd>
+                      </div>
+                    </dl>
+                  </div>
                   {snapshotCopyStatus !== 'idle' && (
                     <p className="border-t border-border px-5 py-3 text-xs font-bold text-muted-foreground">
                       {snapshotCopyStatus === 'copied' ? '스냅샷 JSON을 복사했습니다.' : '클립보드 복사를 사용할 수 없습니다.'}

@@ -299,6 +299,27 @@ const acquisitionDecisionSummary = {
   provider_write_executed: false,
 };
 
+const snapshotVerificationHandoff = {
+  verifier_key: "offline_evidence_snapshot_verifier",
+  verifier_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+  accepted_input: "file_path_or_stdin",
+  digest_algorithm: "sha256",
+  excluded_digest_fields: [
+    "canonical_payload_fields",
+    "digest_algorithm",
+    "snapshot_digest",
+  ],
+  success_exit_code: 0,
+  failure_exit_codes: {
+    invalid_json: 1,
+    missing_snapshot_digest: 2,
+    unsupported_digest_algorithm: 3,
+    digest_mismatch: 4,
+  },
+  handoff_text: "Save the copied evidence snapshot JSON and verify it with the offline verifier before sharing diligence materials.",
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -675,6 +696,7 @@ const dataEvidenceSnapshot = {
     "scope_label",
     "snapshot_version",
     "validation_status",
+    "verification_handoff",
   ],
   privacy_redaction_policy: {
     raw_content_exposed: false,
@@ -745,6 +767,7 @@ const dataEvidenceSnapshot = {
     checks_with_issues: 9,
     total_checks: 12,
   },
+  verification_handoff: snapshotVerificationHandoff,
   parser_manifest_summary: [
     {
       parser_key: "plain_text",
@@ -1349,6 +1372,10 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("raw 본문/첨부 원문 제외");
     expect(container.textContent).toContain("0123456789ab");
     expect(container.textContent).toContain("sha256");
+    expect(container.textContent).toContain("Snapshot verification handoff");
+    expect(container.textContent).toContain("python scripts/verify_evidence_snapshot.py <snapshot.json>");
+    expect(container.textContent).toContain("file_path_or_stdin");
+    expect(container.textContent).toContain("digest_mismatch");
     expect(container.textContent).toContain("4");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
@@ -1425,6 +1452,8 @@ describe("DataPage", () => {
     expect(copiedSnapshot.generated_at).toBe("2026-07-02T00:00:00Z");
     expect(copiedSnapshot.snapshot_digest).toBe("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
     expect(copiedSnapshot.digest_algorithm).toBe("sha256");
+    expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
+    expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",
