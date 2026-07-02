@@ -559,6 +559,27 @@ class DataDiligenceCloseOwnerHandoffQueueEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceCloseTraceabilityMapEntry(BaseModel):
+    trace_key: str
+    source_field: str
+    data_room_artifact: str
+    manifest_key: str
+    exception_keys: list[str]
+    risk_key: str
+    proof_key: str
+    artifact_review_key: str
+    owner_handoff_key: str
+    owner_area: str
+    severity_code: DiligenceCloseSeverity
+    exception_count: int
+    close_gate_status: CloseGateStatus
+    buyer_review_roles: list[str]
+    trace_summary: str
+    next_action: str
+    snapshot_verification_required: bool
+    provider_write_executed: bool
+
+
 def _default_diligence_close_decision_summary() -> DataDiligenceCloseDecisionSummary:
     return DataDiligenceCloseDecisionSummary(
         summary_key="buyer_close_decision",
@@ -635,6 +656,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     ] = Field(default_factory=list)
     diligence_close_owner_handoff_queue: list[
         DataDiligenceCloseOwnerHandoffQueueEntry
+    ] = Field(default_factory=list)
+    diligence_close_traceability_map: list[
+        DataDiligenceCloseTraceabilityMapEntry
     ] = Field(default_factory=list)
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
@@ -1906,6 +1930,73 @@ def _diligence_close_owner_handoff_queue(
     return entries
 
 
+def _diligence_close_traceability_map(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> list[DataDiligenceCloseTraceabilityMapEntry]:
+    risk_by_key = {risk.matrix_key: risk for risk in snapshot.diligence_risk_matrix}
+    manifest_by_file = {
+        item.file_name: item for item in snapshot.data_room_package_manifest
+    }
+    artifact_review_by_artifact = {
+        item.required_proof_artifact: item
+        for item in snapshot.diligence_close_artifact_review_queue
+    }
+    owner_handoff_by_owner = {
+        item.owner_area: item for item in snapshot.diligence_close_owner_handoff_queue
+    }
+
+    entries: list[DataDiligenceCloseTraceabilityMapEntry] = []
+    for proof in snapshot.diligence_close_proof_plan:
+        risk_key = proof.proof_key.removeprefix("proof_")
+        risk = risk_by_key.get(risk_key)
+        manifest = manifest_by_file.get(proof.required_proof_artifact)
+        artifact_review = artifact_review_by_artifact.get(
+            proof.required_proof_artifact
+        )
+        owner_handoff = owner_handoff_by_owner.get(proof.owner_area)
+        source_field = manifest.source_field if manifest else proof.related_artifact
+        data_room_artifact = proof.required_proof_artifact
+        buyer_review_roles = (
+            owner_handoff.buyer_review_roles
+            if owner_handoff
+            else (
+                [artifact_review.buyer_review_role]
+                if artifact_review
+                else [_ARTIFACT_REVIEW_ROLE_BY_SEVERITY[proof.severity_code]]
+            )
+        )
+        entries.append(
+            DataDiligenceCloseTraceabilityMapEntry(
+                trace_key=f"trace_{risk_key}",
+                source_field=source_field,
+                data_room_artifact=data_room_artifact,
+                manifest_key=manifest.manifest_key if manifest else "",
+                exception_keys=(
+                    risk.representative_exception_keys if risk else []
+                ),
+                risk_key=risk_key,
+                proof_key=proof.proof_key,
+                artifact_review_key=(
+                    artifact_review.queue_key if artifact_review else ""
+                ),
+                owner_handoff_key=owner_handoff.handoff_key if owner_handoff else "",
+                owner_area=proof.owner_area,
+                severity_code=proof.severity_code,
+                exception_count=proof.exception_count,
+                close_gate_status=proof.close_gate_status,
+                buyer_review_roles=buyer_review_roles,
+                trace_summary=(
+                    f"{source_field} feeds {data_room_artifact} for "
+                    f"{proof.owner_area} close proof traceability."
+                ),
+                next_action=proof.next_action,
+                snapshot_verification_required=True,
+                provider_write_executed=False,
+            )
+        )
+    return entries
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -2187,6 +2278,13 @@ def _evidence_snapshot_from_surface(
         update={
             "diligence_close_owner_handoff_queue": (
                 _diligence_close_owner_handoff_queue(snapshot)
+            )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "diligence_close_traceability_map": (
+                _diligence_close_traceability_map(snapshot)
             )
         }
     )

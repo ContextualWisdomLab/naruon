@@ -1332,6 +1332,59 @@ def _expected_diligence_close_owner_handoff_queue():
     ]
 
 
+def _expected_diligence_close_traceability_map():
+    risk_by_key = {
+        risk["matrix_key"]: risk for risk in _expected_diligence_risk_matrix()
+    }
+    manifest_by_file = {
+        item["file_name"]: item for item in _expected_data_room_package_manifest()
+    }
+    artifact_review_by_artifact = {
+        item["required_proof_artifact"]: item
+        for item in _expected_diligence_close_artifact_review_queue()
+    }
+    owner_handoff_by_owner = {
+        item["owner_area"]: item for item in _expected_diligence_close_owner_handoff_queue()
+    }
+
+    entries = []
+    for proof in _expected_diligence_close_proof_plan():
+        risk_key = proof["proof_key"].removeprefix("proof_")
+        risk = risk_by_key[risk_key]
+        manifest = manifest_by_file[proof["required_proof_artifact"]]
+        artifact_review = artifact_review_by_artifact[
+            proof["required_proof_artifact"]
+        ]
+        owner_handoff = owner_handoff_by_owner[proof["owner_area"]]
+        entries.append(
+            {
+                "trace_key": f"trace_{risk_key}",
+                "source_field": manifest["source_field"],
+                "data_room_artifact": proof["required_proof_artifact"],
+                "manifest_key": manifest["manifest_key"],
+                "exception_keys": risk["representative_exception_keys"],
+                "risk_key": risk_key,
+                "proof_key": proof["proof_key"],
+                "artifact_review_key": artifact_review["queue_key"],
+                "owner_handoff_key": owner_handoff["handoff_key"],
+                "owner_area": proof["owner_area"],
+                "severity_code": proof["severity_code"],
+                "exception_count": proof["exception_count"],
+                "close_gate_status": proof["close_gate_status"],
+                "buyer_review_roles": owner_handoff["buyer_review_roles"],
+                "trace_summary": (
+                    f"{manifest['source_field']} feeds "
+                    f"{proof['required_proof_artifact']} for "
+                    f"{proof['owner_area']} close proof traceability."
+                ),
+                "next_action": proof["next_action"],
+                "snapshot_verification_required": True,
+                "provider_write_executed": False,
+            }
+        )
+    return entries
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1921,6 +1974,13 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         snapshot["diligence_close_owner_handoff_queue"]
         == _expected_diligence_close_owner_handoff_queue()
     )
+    assert "diligence_close_traceability_map" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_traceability_map"]
+        == _expected_diligence_close_traceability_map()
+    )
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -2209,6 +2269,54 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert owner_handoff_queue[-1]["owner_area"] == "semantic_kg"
     assert all(
         item["provider_write_executed"] is False for item in owner_handoff_queue
+    )
+    traceability_map = snapshot["diligence_close_traceability_map"]
+    assert len(traceability_map) == 6
+    assert traceability_map[0] == {
+        "trace_key": "trace_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "source_field": "acquisition_readiness_gate",
+        "data_room_artifact": "acquisition-readiness-summary.json",
+        "manifest_key": "acquisition_readiness_summary",
+        "exception_keys": [
+            "exception_repair_thread_id_integrity",
+            "exception_backfill_dedupe_fingerprints",
+        ],
+        "risk_key": "risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "proof_key": "proof_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "artifact_review_key": "review_acquisition_readiness_summary_json",
+        "owner_handoff_key": "handoff_email_ingestion",
+        "owner_area": "email_ingestion",
+        "severity_code": "critical",
+        "exception_count": 2,
+        "close_gate_status": "blocked",
+        "buyer_review_roles": ["executive diligence reviewer"],
+        "trace_summary": (
+            "acquisition_readiness_gate feeds "
+            "acquisition-readiness-summary.json for email_ingestion close proof "
+            "traceability."
+        ),
+        "next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "snapshot_verification_required": True,
+        "provider_write_executed": False,
+    }
+    assert traceability_map[2]["source_field"] == "content_graph_evidence_samples"
+    assert traceability_map[2]["data_room_artifact"] == (
+        "dom-paragraph-evidence-samples.json"
+    )
+    assert traceability_map[3]["source_field"] == "knowledge_graph_evidence_samples"
+    assert traceability_map[3]["data_room_artifact"] == (
+        "knowledge-graph-evidence-samples.json"
+    )
+    assert traceability_map[-1]["source_field"] == (
+        "acquisition_readiness_gate.remediation_actions"
+    )
+    assert traceability_map[-1]["owner_handoff_key"] == "handoff_attachment_parsing"
+    assert all(
+        item["provider_write_executed"] is False for item in traceability_map
     )
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
