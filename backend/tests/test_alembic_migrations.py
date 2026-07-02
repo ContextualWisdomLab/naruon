@@ -186,6 +186,37 @@ def test_attachment_parse_metadata_has_incremental_revision():
     assert "op.drop_column(" in revision_text
 
 
+def test_project_graph_projection_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0009_project_graph_projection.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0009_project_graph_projection"' in revision_text
+    assert 'down_revision = "0008_attachment_parser_audit_metadata"' in revision_text
+    assert '"project_graph_objects"' in revision_text
+    assert '"project_graph_edges"' in revision_text
+    assert '"project_graph_corrections"' in revision_text
+    assert '"object_uid"' in revision_text
+    assert '"edge_uid"' in revision_text
+    assert '"correction_uid"' in revision_text
+    assert '"workspace_id"' in revision_text
+    assert '"source_segment_uids"' in revision_text
+    assert '"attributes_json"' in revision_text
+    assert '"before_json"' in revision_text
+    assert '"after_json"' in revision_text
+    assert '"content_segments.content_segment_id"' in revision_text
+    assert "ix_project_graph_objects_scope_type_status" in revision_text
+    assert "ix_project_graph_edges_scope_type" in revision_text
+    assert "ix_project_graph_corrections_scope_time" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+
+
 def test_migration_runner_uses_alembic_upgrade_head_not_bootstrap_create_all():
     migration_runner = BACKEND_ROOT / "scripts" / "migrate_db.py"
 
