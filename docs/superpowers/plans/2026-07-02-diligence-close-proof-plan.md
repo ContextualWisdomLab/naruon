@@ -1,6 +1,6 @@
 # Diligence Close Proof Plan Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
 **Goal:** Add a buyer-facing diligence close proof plan to the redacted evidence snapshot so acquisition reviewers can see exactly which proof artifacts and acceptance criteria unblock close.
 
@@ -30,7 +30,7 @@
 - Produces: `DataDiligenceCloseProofPlanEntry` with fields `proof_key`, `severity_code`, `owner_area`, `related_artifact`, `exception_count`, `required_proof_artifact`, `acceptance_criteria`, `verification_method`, `buyer_close_dependency`, `close_gate_status`, `next_action`, `provider_write_executed`.
 - Produces: `diligence_close_proof_plan: list[DataDiligenceCloseProofPlanEntry]` on `DataEvidenceSnapshotResponse`.
 
-- [ ] **Step 1: Add backend expected fixture**
+- [x] **Step 1: Add backend expected fixture**
 
 Add `_expected_diligence_close_proof_plan()` to `backend/tests/test_data_api.py`. It must produce one proof plan entry per `_expected_diligence_risk_matrix()` row in the same order.
 
@@ -64,11 +64,11 @@ The first expected entry must be:
 
 The final expected entry must be `proof_risk_medium_attachment_parsing_remediation_actions_json`, severity `medium`, required proof artifact `remediation-actions.json`, and `close_gate_status: "blocked"`.
 
-- [ ] **Step 2: Add model and proof helper**
+- [x] **Step 2: Add model and proof helper**
 
 In `backend/api/data.py`, add `CloseGateStatus = Literal["blocked", "ready"]`, `DataDiligenceCloseProofPlanEntry`, and `_diligence_close_proof_plan(snapshot)`. The helper must only read `snapshot.diligence_risk_matrix`.
 
-- [ ] **Step 3: Add dependency labels**
+- [x] **Step 3: Add dependency labels**
 
 Add `_CLOSE_DEPENDENCY_BY_SEVERITY`:
 
@@ -82,11 +82,11 @@ _CLOSE_DEPENDENCY_BY_SEVERITY = {
 
 Use `close_gate_status="blocked"` when a risk entry `blocks_close` and `close_gate_status="ready"` otherwise.
 
-- [ ] **Step 4: Include proof plan in digest**
+- [x] **Step 4: Include proof plan in digest**
 
 Populate `diligence_close_proof_plan` after `diligence_risk_matrix` and before `_snapshot_digest_payload(snapshot)` so `canonical_payload_fields` includes it.
 
-- [ ] **Step 5: Run backend validation**
+- [x] **Step 5: Run backend validation**
 
 Run:
 
@@ -95,7 +95,7 @@ cd backend && python -m pytest -q tests/test_data_api.py::test_data_quality_evid
 cd backend && python -m ruff check api/data.py tests/test_data_api.py scripts/verify_evidence_snapshot.py tests/test_evidence_snapshot_verifier.py
 ```
 
-- [ ] **Step 6: Commit backend implementation**
+- [x] **Step 6: Commit backend implementation**
 
 Run:
 
@@ -115,19 +115,19 @@ git commit -m "feat: add diligence close proof plan"
 - Consumes: `dataEvidenceSnapshot.diligence_close_proof_plan`.
 - Produces: an existing-style section titled `Diligence close proof plan` inside the `실사 스냅샷` card.
 
-- [ ] **Step 1: Add TypeScript type and fixture**
+- [x] **Step 1: Add TypeScript type and fixture**
 
 Add `diligence_close_proof_plan` to `DataEvidenceSnapshotResponse` and mirror the backend fixture in `frontend/src/app/data/page.test.tsx`.
 
-- [ ] **Step 2: Render proof plan entries**
+- [x] **Step 2: Render proof plan entries**
 
 Render each entry with severity badge, close gate status, owner area, required proof artifact, exception count, buyer-close dependency, acceptance criteria, verification method, next action, and write boundary. Use existing card, typography, and safe text helpers.
 
-- [ ] **Step 3: Assert UI and copied JSON**
+- [x] **Step 3: Assert UI and copied JSON**
 
 Assert the UI contains `Diligence close proof plan`, `critical evidence gate`, `blocked`, `acquisition-readiness-summary.json`, `All 2 exception(s)`, and `verify_evidence_snapshot.py`. Assert copied JSON has six proof plan entries and the first proof key is `proof_risk_critical_email_ingestion_acquisition_readiness_summary_json`.
 
-- [ ] **Step 4: Run frontend validation**
+- [x] **Step 4: Run frontend validation**
 
 Run:
 
@@ -136,7 +136,7 @@ cd frontend && npx vitest run src/app/data/page.test.tsx
 git diff --check
 ```
 
-- [ ] **Step 5: Commit frontend implementation**
+- [x] **Step 5: Commit frontend implementation**
 
 Run:
 
@@ -150,15 +150,15 @@ git commit -m "feat: show diligence close proof plan"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-02-diligence-close-proof-plan.md`
 
-- [ ] **Step 1: Generate FigJam flowchart**
+- [x] **Step 1: Generate FigJam flowchart**
 
 Create a FigJam flowchart showing risk matrix -> close proof requirements -> acceptance criteria -> offline verification -> buyer close decision.
 
-- [ ] **Step 2: Run Ponytail diff review**
+- [x] **Step 2: Run Ponytail diff review**
 
 Review the diff for avoidable complexity. Expected acceptable result: no new dependency, no submodule, no speculative package split.
 
-- [ ] **Step 3: Mark plan complete and commit**
+- [x] **Step 3: Mark plan complete and commit**
 
 Update all checkboxes to `[x]`, add execution evidence, and commit:
 
@@ -167,6 +167,19 @@ git add docs/superpowers/plans/2026-07-02-diligence-close-proof-plan.md
 git commit -m "docs: mark phase 25 plan complete"
 ```
 
-- [ ] **Step 4: Push, update PR, verify live state**
+- [x] **Step 4: Push, update PR, verify live state**
 
 Push to `plan/email-dom-paragraph-kg-2026-07-02`, append Phase 25 evidence to PR #895, and verify live `headRefOid`, checks, merge state, and unresolved review thread count.
+
+## Execution Evidence
+
+- Plan commit: `9d8e3aa3 docs: plan diligence close proof plan`
+- Backend implementation commit: `b4377eaf feat: add diligence close proof plan`
+- Frontend implementation commit: `35335b2f feat: show diligence close proof plan`
+- FigJam diagram: https://www.figma.com/board/WtZE5mxermJv53hWAtTnYg?utm_source=codex&utm_content=edit_in_figjam&oai_id=&request_id=bdf3f6ac-6623-4622-9a27-654b0e69715e
+- Backend validation: `python -m pytest -q tests/test_data_api.py::test_data_quality_evidence_snapshot_returns_shareable_redacted_surface tests/test_evidence_snapshot_verifier.py` -> `6 passed`; `python -m ruff check api/data.py tests/test_data_api.py scripts/verify_evidence_snapshot.py tests/test_evidence_snapshot_verifier.py` -> `All checks passed!`
+- Frontend validation: `npx vitest run src/app/data/page.test.tsx` -> `12 passed`; `git diff --check` -> clean.
+- Ponytail complexity review: `Lean already. Ship.`
+- Scope controls: no new library, no package split, no git submodule, no Figma Code Connect.
+- Privacy controls: close proof plan is derived from redacted `diligence_risk_matrix`; `provider_write_executed` remains `false`.
+- Worktree controls: `.Jules/palette.md` and `.Jules/sentinel.md` were preserved and not staged.
