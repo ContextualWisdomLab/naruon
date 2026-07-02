@@ -31,7 +31,9 @@ router = APIRouter(prefix="/api/data", tags=["data"])
 
 DATA_VECTOR_DIMENSIONS = 1536
 ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
-    "email_attachments.content_type, email_attachments.parse_status"
+    "email_attachments.content_type, "
+    "email_attachments.parse_content_type, "
+    "email_attachments.parse_status, email_attachments.parser_key"
 )
 WEB_DAV_ERROR_STATUS_CODES = {
     "no_webdav_account": 422,
@@ -144,6 +146,7 @@ class DataQualityCheck(BaseModel):
 
 class DataAttachmentParseBreakdown(BaseModel):
     content_type: str
+    parse_content_type: str
     parse_status: str
     parser_key: str
     display_name: str
@@ -242,6 +245,9 @@ _ATTACHMENT_PARSER_BY_CONTENT_TYPE = {
     for descriptor in get_attachment_parser_manifest()
     for content_type in descriptor.content_types
 }
+_ATTACHMENT_PARSER_BY_KEY = {
+    descriptor.parser_key: descriptor for descriptor in get_attachment_parser_manifest()
+}
 _UNSUPPORTED_ATTACHMENT_PARSER = _ATTACHMENT_PARSER_BY_CONTENT_TYPE[
     "application/octet-stream"
 ]
@@ -253,30 +259,28 @@ def _normalize_attachment_content_type(value: str | None) -> str:
     return normalized or "application/octet-stream"
 
 
-def _attachment_parser_descriptor_for(content_type: str, parse_status: str):
-    if parse_status == "unsupported_content_type":
-        return _UNSUPPORTED_ATTACHMENT_PARSER
-    return _ATTACHMENT_PARSER_BY_CONTENT_TYPE.get(
-        content_type,
-        _UNSUPPORTED_ATTACHMENT_PARSER,
-    )
-
-
 def _attachment_parse_breakdown_row(
     content_type: str | None,
+    parse_content_type: str | None,
     parse_status: str | None,
+    parser_key: str | None,
     object_count: int,
 ) -> DataAttachmentParseBreakdown:
     normalized_content_type = _normalize_attachment_content_type(content_type)
+    normalized_parse_content_type = _normalize_attachment_content_type(
+        parse_content_type
+    )
     safe_parse_status = _safe_display_text(parse_status, "unknown")[:64]
-    descriptor = _attachment_parser_descriptor_for(
-        normalized_content_type,
-        safe_parse_status,
+    safe_parser_key = _safe_display_text(parser_key, "unsupported_binary")[:64]
+    descriptor = _ATTACHMENT_PARSER_BY_KEY.get(
+        safe_parser_key,
+        _UNSUPPORTED_ATTACHMENT_PARSER,
     )
     return DataAttachmentParseBreakdown(
         content_type=normalized_content_type,
+        parse_content_type=normalized_parse_content_type,
         parse_status=safe_parse_status,
-        parser_key=descriptor.parser_key,
+        parser_key=safe_parser_key,
         display_name=descriptor.display_name,
         object_count=int(object_count or 0),
         evidence_source=ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE,
@@ -1274,26 +1278,43 @@ async def _get_attachment_parse_breakdown(
     attachment_parse_breakdown_result = await db.execute(
         select(
             Attachment.content_type,
+            Attachment.parse_content_type,
             Attachment.parse_status,
+            Attachment.parser_key,
             object_count,
         )
         .join(Email)
         .where(*email_scope)
-        .group_by(Attachment.content_type, Attachment.parse_status)
+        .group_by(
+            Attachment.content_type,
+            Attachment.parse_content_type,
+            Attachment.parse_status,
+            Attachment.parser_key,
+        )
         .order_by(
             object_count.desc(),
             Attachment.content_type.asc(),
+            Attachment.parse_content_type.asc(),
             Attachment.parse_status.asc(),
+            Attachment.parser_key.asc(),
         )
         .limit(12)
     )
     return [
         _attachment_parse_breakdown_row(
             content_type=content_type,
+            parse_content_type=parse_content_type,
             parse_status=parse_status,
+            parser_key=parser_key,
             object_count=count,
         )
-        for content_type, parse_status, count in attachment_parse_breakdown_result.all()
+        for (
+            content_type,
+            parse_content_type,
+            parse_status,
+            parser_key,
+            count,
+        ) in attachment_parse_breakdown_result.all()
     ]
 
 

@@ -598,6 +598,12 @@ class Attachment(Base):
     parse_status: Mapped[str] = mapped_column(
         String(64), default="parsed", nullable=False
     )
+    parse_content_type: Mapped[str] = mapped_column(
+        String(120), default="text/plain", nullable=False
+    )
+    parser_key: Mapped[str] = mapped_column(
+        String(64), default="plain_text", nullable=False
+    )
     parse_error_code: Mapped[str | None] = mapped_column(
         String(120), nullable=True
     )

@@ -73,6 +73,7 @@ class AttachmentParseResult:
     content_type: str
     parse_content: str
     parse_content_type: str
+    parser_key: str
     parse_status: str
     parse_error_code: str | None
 
@@ -95,16 +96,22 @@ def parse_email_attachment(
     )
 
     if parse_content_type not in _SUPPORTED_CONTENT_TYPES:
+        parser_key = _parser_key_for(
+            parse_content_type,
+            "unsupported_content_type",
+        )
         return AttachmentParseResult(
             filename=safe_filename,
             content="",
             content_type=normalized_content_type,
             parse_content="",
             parse_content_type=normalized_content_type,
+            parser_key=parser_key,
             parse_status="unsupported_content_type",
             parse_error_code="unsupported_content_type",
         )
 
+    parser_key = _parser_key_for(parse_content_type, "parsed")
     parse_content = _coerce_text(raw_content).strip()
     if len(parse_content) > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
         return AttachmentParseResult(
@@ -113,6 +120,7 @@ def parse_email_attachment(
             content_type=normalized_content_type,
             parse_content="",
             parse_content_type=parse_content_type,
+            parser_key=parser_key,
             parse_status="parse_size_limit_exceeded",
             parse_error_code="parse_size_limit_exceeded",
         )
@@ -123,6 +131,7 @@ def parse_email_attachment(
         content_type=normalized_content_type,
         parse_content=parse_content,
         parse_content_type=parse_content_type,
+        parser_key=parser_key,
         parse_status="parsed",
         parse_error_code=None,
     )
@@ -139,6 +148,15 @@ def _parse_content_type_for(filename: str, content_type: str) -> str:
         return content_type
     extension = Path(filename).suffix.lower()
     return _EXTENSION_CONTENT_TYPES.get(extension, content_type)
+
+
+def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
+    if parse_status == "unsupported_content_type":
+        return "unsupported_binary"
+    for descriptor in _PARSER_MANIFEST:
+        if parse_content_type in descriptor.content_types:
+            return descriptor.parser_key
+    return "unsupported_binary"
 
 
 def _safe_filename(filename: str | None) -> str:

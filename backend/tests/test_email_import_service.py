@@ -206,6 +206,7 @@ def test_build_email_object_persists_attachment_parse_metadata():
                 "content_type": "text/html",
                 "parse_content": "<h1>Launch</h1><p>Ship</p>",
                 "parse_content_type": "text/html",
+                "parser_key": "html",
                 "parse_status": "parsed",
                 "parse_error_code": None,
             },
@@ -215,6 +216,7 @@ def test_build_email_object_persists_attachment_parse_metadata():
                 "content_type": "application/pdf",
                 "parse_content": "",
                 "parse_content_type": "application/pdf",
+                "parser_key": "unsupported_binary",
                 "parse_status": "unsupported_content_type",
                 "parse_error_code": "unsupported_content_type",
             },
@@ -239,11 +241,23 @@ def test_build_email_object_persists_attachment_parse_metadata():
 
     assert attachment_count == 2
     assert [
-        (attachment.filename, attachment.content_type, attachment.parse_status)
+        (
+            attachment.filename,
+            attachment.content_type,
+            attachment.parse_content_type,
+            attachment.parser_key,
+            attachment.parse_status,
+        )
         for attachment in email_obj.attachments
     ] == [
-        ("page.html", "text/html", "parsed"),
-        ("contract.pdf", "application/pdf", "unsupported_content_type"),
+        ("page.html", "text/html", "text/html", "html", "parsed"),
+        (
+            "contract.pdf",
+            "application/pdf",
+            "application/pdf",
+            "unsupported_binary",
+            "unsupported_content_type",
+        ),
     ]
     assert email_obj.attachments[1].parse_error_code == "unsupported_content_type"
     assert [

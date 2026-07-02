@@ -268,14 +268,28 @@ def _build_email_object(
 
     attachment_count = 0
     for attachment_index, attachment in enumerate(attachment_payloads, start=1):
+        attachment_content_type = str(
+            attachment.get("content_type") or "application/octet-stream"
+        )
+        attachment_parse_status = str(attachment.get("parse_status") or "parsed")
+        attachment_parse_content_type = str(
+            attachment.get("parse_content_type") or attachment_content_type
+        )
+        attachment_parser_key = str(
+            attachment.get("parser_key")
+            or _fallback_attachment_parser_key(
+                attachment_parse_content_type,
+                attachment_parse_status,
+            )
+        )
         email_obj.attachments.append(
             Attachment(
                 filename=str(attachment.get("filename") or "attachment.txt"),
                 content=str(attachment.get("content") or ""),
-                content_type=str(
-                    attachment.get("content_type") or "application/octet-stream"
-                ),
-                parse_status=str(attachment.get("parse_status") or "parsed"),
+                content_type=attachment_content_type,
+                parse_status=attachment_parse_status,
+                parse_content_type=attachment_parse_content_type,
+                parser_key=attachment_parser_key,
                 parse_error_code=(
                     str(attachment.get("parse_error_code"))
                     if attachment.get("parse_error_code") is not None
@@ -299,6 +313,21 @@ def _build_email_object(
     _append_knowledge_graph_edges(email_obj)
 
     return email_obj, attachment_count
+
+
+def _fallback_attachment_parser_key(
+    parse_content_type: str,
+    parse_status: str,
+) -> str:
+    if parse_status == "unsupported_content_type":
+        return "unsupported_binary"
+    if parse_content_type == "text/html":
+        return "html"
+    if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
+        return "markdown"
+    if parse_content_type == "text/plain":
+        return "plain_text"
+    return "unsupported_binary"
 
 
 def _append_email_content_graph(

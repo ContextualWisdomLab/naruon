@@ -101,7 +101,10 @@ export function QualityCheckTab({
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
                             <h3 className="text-sm font-black">{toSafeReactText(item.display_name)}</h3>
-                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">{toSafeReactText(item.content_type)}</p>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">원본 MIME {toSafeReactText(item.content_type)}</p>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">
+                              Parse source {toSafeReactText(item.parse_content_type ?? item.content_type)}
+                            </p>
                           </div>
                           <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
                             {toSafeReactText(item.parse_status)}

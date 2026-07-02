@@ -32,6 +32,7 @@ def test_markdown_attachment_is_parseable_markdown():
     assert result.content == "# Plan Ship graph"
     assert result.parse_content == "# Plan\n\nShip graph"
     assert result.parse_content_type == "text/markdown"
+    assert result.parser_key == "markdown"
     assert result.parse_status == "parsed"
 
 
@@ -56,6 +57,7 @@ def test_generic_binary_content_type_can_fall_back_to_markdown_extension():
 
     assert result.content_type == "application/octet-stream"
     assert result.parse_content_type == "text/markdown"
+    assert result.parser_key == "markdown"
     assert result.parse_status == "parsed"
     assert result.content == "# Plan Ship graph"
 
@@ -70,6 +72,7 @@ def test_oversized_text_attachment_is_metadata_only_without_raw_content():
     assert result.content == ""
     assert result.parse_content == ""
     assert result.parse_content_type == "text/plain"
+    assert result.parser_key == "plain_text"
     assert result.parse_status == "parse_size_limit_exceeded"
     assert result.parse_error_code == "parse_size_limit_exceeded"
 
@@ -86,5 +89,6 @@ def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
     assert result.content == ""
     assert result.parse_content == ""
     assert result.parse_content_type == "application/pdf"
+    assert result.parser_key == "unsupported_binary"
     assert result.parse_status == "unsupported_content_type"
     assert result.parse_error_code == "unsupported_content_type"

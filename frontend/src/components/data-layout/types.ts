@@ -109,6 +109,7 @@ export type DataQualitySurfaceResponse = {
   }>;
   attachment_parse_breakdown?: Array<{
     content_type: string;
+    parse_content_type?: string;
     parse_status: string;
     parser_key: string;
     display_name: string;
