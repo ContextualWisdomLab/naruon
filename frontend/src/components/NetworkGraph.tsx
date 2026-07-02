@@ -10,6 +10,7 @@ interface Node {
 }
 
 interface Edge {
+  id?: number | string;
   from: number | string;
   to: number | string;
   [key: string]: unknown;
@@ -31,6 +32,11 @@ interface NetworkData {
 interface NormalizedNetworkData {
   nodes: Node[];
   edges: Edge[];
+}
+
+interface GraphSelectionEvent {
+  nodes?: Array<number | string>;
+  edges?: Array<number | string>;
 }
 
 function textOnlyTooltip(value: unknown): HTMLElement {
@@ -79,6 +85,15 @@ function isGraphId(value: unknown): value is number | string {
   return typeof value === 'number' || typeof value === 'string';
 }
 
+function graphIdEquals(left: unknown, right: unknown) {
+  return isGraphId(left) && isGraphId(right) && String(left) === String(right);
+}
+
+function stableEdgeId(edge: Edge, index: number) {
+  if (isGraphId(edge.id)) return edge.id;
+  return `relationship-${index}-${String(edge.from)}-${String(edge.to)}`;
+}
+
 function normalizeEdge(edge: ApiEdge): Edge | null {
   const from = edge.from ?? edge.source;
   const to = edge.to ?? edge.target;
@@ -98,22 +113,44 @@ function normalizeEdge(edge: ApiEdge): Edge | null {
 function sanitizeNetworkData(data: NetworkData): NormalizedNetworkData {
   return {
     nodes: data.nodes.map(sanitizeGraphItem),
-    edges: data.edges.flatMap((edge) => {
+    edges: data.edges.flatMap((edge, index) => {
       const normalized = normalizeEdge(edge);
-      return normalized ? [sanitizeGraphItem(normalized)] : [];
+      return normalized ? [sanitizeGraphItem({ ...normalized, id: stableEdgeId(normalized, index) })] : [];
     }),
   };
+}
+
+function titleText(value: unknown) {
+  if (typeof HTMLElement !== 'undefined' && value instanceof HTMLElement) {
+    return value.textContent?.trim() ?? '';
+  }
+  return value == null ? '' : String(value).trim();
+}
+
+function findNodeLabel(nodes: Node[], id: number | string) {
+  const node = nodes.find((candidate) => graphIdEquals(candidate.id, id));
+  return String(node?.label ?? id);
+}
+
+function describeEdge(edge: Edge, nodes: Node[]) {
+  const fromLabel = findNodeLabel(nodes, edge.from);
+  const toLabel = findNodeLabel(nodes, edge.to);
+  const title = titleText(edge.title);
+  return title ? `${fromLabel} -> ${toLabel} (${title})` : `${fromLabel} -> ${toLabel}`;
 }
 
 import { apiClient } from '@/lib/api-client';
 
 export default function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const networkRef = useRef<Network | null>(null);
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedGraphDetail, setSelectedGraphDetail] = useState<string | null>(null);
+  const [graphActionStatus, setGraphActionStatus] = useState('그래프 준비 완료');
 
   useEffect(() => {
     apiClient.get<NetworkData>('/api/network/graph')
@@ -140,10 +177,36 @@ export default function NetworkGraph() {
         nodes: { shape: 'dot', size: 16 },
         edges: { arrows: 'to' }
       });
+      networkRef.current = network;
 
       const fitGraph = () => {
         network.fit({ animation: false });
       };
+
+      const selectEdge = (edgeId: number | string) => {
+        const edge = edges.find((candidate) => graphIdEquals(candidate.id, edgeId));
+        if (!edge) return;
+        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes)}`);
+        setGraphActionStatus('그래프에서 관계를 선택했습니다.');
+      };
+
+      const selectNode = (nodeId: number | string) => {
+        setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, nodeId)}`);
+        setGraphActionStatus('그래프에서 노드를 선택했습니다.');
+      };
+
+      const handleEdgeSelection = (event: GraphSelectionEvent) => {
+        const edgeId = event.edges?.[0];
+        if (isGraphId(edgeId)) selectEdge(edgeId);
+      };
+
+      const handleNodeSelection = (event: GraphSelectionEvent) => {
+        const nodeId = event.nodes?.[0];
+        if (isGraphId(nodeId)) selectNode(nodeId);
+      };
+
+      network.on('selectEdge', handleEdgeSelection);
+      network.on('selectNode', handleNodeSelection);
 
       let resizeTimer: ReturnType<typeof setTimeout> | null = null;
       const resizeObserver = typeof ResizeObserver === 'undefined'
@@ -162,6 +225,11 @@ export default function NetworkGraph() {
           clearTimeout(resizeTimer);
         }
         resizeObserver?.disconnect();
+        network.off('selectEdge', handleEdgeSelection);
+        network.off('selectNode', handleNodeSelection);
+        if (networkRef.current === network) {
+          networkRef.current = null;
+        }
         network.destroy();
       };
     }
@@ -173,6 +241,28 @@ export default function NetworkGraph() {
       .filter(Boolean)
       .slice(0, 5);
   }, [nodes]);
+
+  const firstEdge = edges[0] ?? null;
+
+  const handleSelectFirstRelationship = () => {
+    if (!firstEdge) return;
+    setSelectedGraphDetail(`선택된 관계: ${describeEdge(firstEdge, nodes)}`);
+    setGraphActionStatus('첫 관계를 선택했습니다.');
+    if (isGraphId(firstEdge.id)) {
+      networkRef.current?.selectEdges([firstEdge.id]);
+    }
+    networkRef.current?.fit({ nodes: [firstEdge.from, firstEdge.to], animation: false });
+  };
+
+  const handleZoomGraph = () => {
+    networkRef.current?.moveTo({ scale: 1.15, animation: false });
+    setGraphActionStatus('그래프 확대 완료');
+  };
+
+  const handleFitGraph = () => {
+    networkRef.current?.fit({ animation: false });
+    setGraphActionStatus('그래프 맞춤 완료');
+  };
 
   if (loading) {
     return <div role="status" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center text-sm text-muted-foreground sm:min-h-[420px]">관계 그래프를 불러오는 중입니다...</div>;
@@ -213,6 +303,37 @@ export default function NetworkGraph() {
           <p className="mt-1">
             관련 노드: {nodeLabels.join(', ')}
           </p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleSelectFirstRelationship}
+            disabled={!firstEdge}
+            className="rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            첫 관계 보기
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomGraph}
+            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            그래프 확대
+          </button>
+          <button
+            type="button"
+            onClick={handleFitGraph}
+            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            전체 그래프 맞춤
+          </button>
+        </div>
+        <div aria-live="polite" className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
+          <p className="font-semibold text-foreground">관계 상세</p>
+          <p className="mt-1">
+            {selectedGraphDetail ?? '관계를 선택하면 담당자와 일정 흐름을 확인합니다.'}
+          </p>
+          <p className="mt-1 font-medium text-primary">{graphActionStatus}</p>
         </div>
       </div>
       <div

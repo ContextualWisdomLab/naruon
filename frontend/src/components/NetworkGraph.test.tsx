@@ -5,10 +5,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const destroyMock = vi.fn();
 const fitMock = vi.fn();
+const moveToMock = vi.fn();
+const offMock = vi.fn();
+const onMock = vi.fn();
+const selectEdgesMock = vi.fn();
 
 vi.mock("vis-network", () => ({
   Network: vi.fn(function MockNetwork() {
-    return { destroy: destroyMock, fit: fitMock };
+    return {
+      destroy: destroyMock,
+      fit: fitMock,
+      moveTo: moveToMock,
+      off: offMock,
+      on: onMock,
+      selectEdges: selectEdgesMock,
+    };
   }),
 }));
 
@@ -190,6 +201,60 @@ describe("NetworkGraph", () => {
     expect(mountedContainer.textContent).not.toContain("nodes and");
   });
 
+  it("exposes accessible relationship detail and zoom controls for the graph", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({
+          nodes: [
+            { id: "sender-1", label: "김지현", title: "PM" },
+            { id: "recipient-1", label: "사용자", title: "Owner" },
+          ],
+          edges: [{ source: "sender-1", target: "recipient-1", title: "메일 2건" }],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderGraph();
+    await flushAsyncWork();
+
+    const mountedContainer = getMountedContainer();
+    const buttons = Array.from(mountedContainer.querySelectorAll("button"));
+    const relationshipButton = buttons.find((button) => button.textContent === "첫 관계 보기");
+    const zoomButton = buttons.find((button) => button.textContent === "그래프 확대");
+    const fitButton = buttons.find((button) => button.textContent === "전체 그래프 맞춤");
+
+    expect(relationshipButton).toBeInstanceOf(HTMLButtonElement);
+    expect(zoomButton).toBeInstanceOf(HTMLButtonElement);
+    expect(fitButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      relationshipButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(selectEdgesMock).toHaveBeenCalledWith(["relationship-0-sender-1-recipient-1"]);
+    expect(fitMock).toHaveBeenCalledWith({
+      nodes: ["sender-1", "recipient-1"],
+      animation: false,
+    });
+    expect(mountedContainer.textContent).toContain("선택된 관계: 김지현 -> 사용자 (메일 2건)");
+    expect(mountedContainer.textContent).toContain("첫 관계를 선택했습니다.");
+
+    await act(async () => {
+      zoomButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(moveToMock).toHaveBeenCalledWith({ scale: 1.15, animation: false });
+    expect(mountedContainer.textContent).toContain("그래프 확대 완료");
+
+    await act(async () => {
+      fitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(fitMock).toHaveBeenLastCalledWith({ animation: false });
+    expect(mountedContainer.textContent).toContain("그래프 맞춤 완료");
+  });
+
   it("normalizes backend source target edges before rendering the graph", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
@@ -210,7 +275,12 @@ describe("NetworkGraph", () => {
     expect(Network).toHaveBeenCalledTimes(1);
     const networkData = vi.mocked(Network).mock.calls[0]?.[1];
     const edges = Array.isArray(networkData?.edges) ? networkData.edges : [];
-    expect(edges[0]).toMatchObject({ from: "sender-1", to: "recipient-1", weight: 2 });
+    expect(edges[0]).toMatchObject({
+      from: "sender-1",
+      id: "relationship-0-sender-1-recipient-1",
+      to: "recipient-1",
+      weight: 2,
+    });
     expect(edges[0]).not.toHaveProperty("source");
     expect(edges[0]).not.toHaveProperty("target");
   });

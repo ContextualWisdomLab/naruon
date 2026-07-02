@@ -949,6 +949,13 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("3개 노드와 2개 관계가 이 스레드 맥락에 연결되어 있습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("관련 노드: PM 김지현, 20B readiness thread, 이사회 일정", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.locator('[aria-label="3개 노드와 2개 관계가 있는 관계 맥락"]').waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "첫 관계 보기", exact: true }).click();
+    await page.getByText("선택된 관계: PM 김지현 -> 20B readiness thread (메일 2건)", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("첫 관계를 선택했습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "그래프 확대", exact: true }).click();
+    await page.getByText("그래프 확대 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "전체 그래프 맞춤", exact: true }).click();
+    await page.getByText("그래프 맞춤 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("search:select-result"),
       evidence("search:open-source-evidence-tab"),
@@ -958,6 +965,10 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
       evidence("search:open-network-graph"),
       evidence("search:verify-network-graph-summary"),
       evidence("search:verify-network-graph-canvas-label"),
+      evidence("search:select-network-relationship"),
+      evidence("search:verify-network-relationship-detail"),
+      evidence("search:zoom-network-graph"),
+      evidence("search:fit-network-graph"),
     ];
   }
 

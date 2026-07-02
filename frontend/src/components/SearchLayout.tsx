@@ -611,7 +611,7 @@ export function SearchLayout() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-        <aside className="max-h-[42dvh] w-full shrink-0 overflow-y-auto border-b border-border bg-card md:max-h-none md:w-[400px] md:border-b-0 md:border-r">
+        <aside className="max-h-[34dvh] w-full shrink-0 overflow-y-auto border-b border-border bg-card sm:max-h-[42dvh] md:max-h-none md:w-[400px] md:border-b-0 md:border-r">
           <div className="flex items-center justify-between border-b border-border p-5">
             <h2 className="font-bold">통합 맥락 검색 결과</h2>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
