@@ -83,6 +83,8 @@ DataRoomArtifactType = Literal[
     "readiness_summary_json",
 ]
 CloseGateStatus = Literal["blocked", "ready"]
+DiligenceCloseDecision = Literal["ready_to_close", "close_blocked"]
+DiligenceCloseSeverity = Literal["critical", "high", "medium", "none"]
 RemediationPriority = Literal["critical", "high", "medium"]
 DiligenceRecommendation = Literal[
     "ready_for_diligence",
@@ -505,6 +507,44 @@ class DataDiligenceCloseProofPlanEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceCloseDecisionSummary(BaseModel):
+    summary_key: str
+    decision_code: DiligenceCloseDecision
+    total_proof_count: int
+    blocked_proof_count: int
+    ready_proof_count: int
+    critical_blocker_count: int
+    high_blocker_count: int
+    medium_blocker_count: int
+    required_artifact_count: int
+    required_artifacts: list[str]
+    highest_severity: DiligenceCloseSeverity
+    snapshot_verification_required: bool
+    buyer_summary_text: str
+    next_action_text: str
+    provider_write_executed: bool
+
+
+def _default_diligence_close_decision_summary() -> DataDiligenceCloseDecisionSummary:
+    return DataDiligenceCloseDecisionSummary(
+        summary_key="buyer_close_decision",
+        decision_code="ready_to_close",
+        total_proof_count=0,
+        blocked_proof_count=0,
+        ready_proof_count=0,
+        critical_blocker_count=0,
+        high_blocker_count=0,
+        medium_blocker_count=0,
+        required_artifact_count=0,
+        required_artifacts=[],
+        highest_severity="none",
+        snapshot_verification_required=False,
+        buyer_summary_text="No close proof requirements are present.",
+        next_action_text="Generate the evidence snapshot before buyer close review.",
+        provider_write_executed=False,
+    )
+
+
 class DataEvidenceSnapshotQualityCheck(BaseModel):
     check_key: str
     display_name: str
@@ -552,6 +592,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     )
     diligence_close_proof_plan: list[DataDiligenceCloseProofPlanEntry] = Field(
         default_factory=list
+    )
+    diligence_close_decision_summary: DataDiligenceCloseDecisionSummary = Field(
+        default_factory=_default_diligence_close_decision_summary
     )
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
@@ -1651,6 +1694,73 @@ def _diligence_close_proof_plan(
     ]
 
 
+def _diligence_close_decision_summary(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> DataDiligenceCloseDecisionSummary:
+    proof_plan = snapshot.diligence_close_proof_plan
+    blocked = [
+        item for item in proof_plan if item.close_gate_status == "blocked"
+    ]
+    ready = [item for item in proof_plan if item.close_gate_status == "ready"]
+    required_artifacts = sorted(
+        {item.required_proof_artifact for item in proof_plan}
+    )
+    critical_blocker_count = sum(
+        1 for item in blocked if item.severity_code == "critical"
+    )
+    high_blocker_count = sum(
+        1 for item in blocked if item.severity_code == "high"
+    )
+    medium_blocker_count = sum(
+        1 for item in blocked if item.severity_code == "medium"
+    )
+    highest_severity: DiligenceCloseSeverity = "none"
+    if critical_blocker_count:
+        highest_severity = "critical"
+    elif high_blocker_count:
+        highest_severity = "high"
+    elif medium_blocker_count:
+        highest_severity = "medium"
+
+    if blocked:
+        buyer_summary_text = (
+            f"Close remains blocked by {len(blocked)} proof requirement(s) "
+            f"across {len(required_artifacts)} required artifact(s)."
+        )
+        next_action_text = (
+            "Resolve critical and high proof blockers, regenerate the "
+            "evidence snapshot, and verify the copied JSON with the offline "
+            "snapshot verifier."
+        )
+    else:
+        buyer_summary_text = (
+            f"Close is ready with {len(ready)} verified proof requirement(s) "
+            f"across {len(required_artifacts)} required artifact(s)."
+        )
+        next_action_text = (
+            "Share the verified evidence snapshot and close proof artifacts "
+            "with buyer reviewers."
+        )
+
+    return DataDiligenceCloseDecisionSummary(
+        summary_key="buyer_close_decision",
+        decision_code="close_blocked" if blocked else "ready_to_close",
+        total_proof_count=len(proof_plan),
+        blocked_proof_count=len(blocked),
+        ready_proof_count=len(ready),
+        critical_blocker_count=critical_blocker_count,
+        high_blocker_count=high_blocker_count,
+        medium_blocker_count=medium_blocker_count,
+        required_artifact_count=len(required_artifacts),
+        required_artifacts=required_artifacts,
+        highest_severity=highest_severity,
+        snapshot_verification_required=bool(proof_plan),
+        buyer_summary_text=buyer_summary_text,
+        next_action_text=next_action_text,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -1912,6 +2022,13 @@ def _evidence_snapshot_from_surface(
     snapshot = snapshot.model_copy(
         update={
             "diligence_close_proof_plan": _diligence_close_proof_plan(snapshot)
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "diligence_close_decision_summary": (
+                _diligence_close_decision_summary(snapshot)
+            )
         }
     )
     digest_payload = _snapshot_digest_payload(snapshot)

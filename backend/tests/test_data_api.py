@@ -1071,6 +1071,39 @@ def _expected_diligence_close_proof_plan():
     ]
 
 
+def _expected_diligence_close_decision_summary():
+    return {
+        "summary_key": "buyer_close_decision",
+        "decision_code": "close_blocked",
+        "total_proof_count": 6,
+        "blocked_proof_count": 6,
+        "ready_proof_count": 0,
+        "critical_blocker_count": 1,
+        "high_blocker_count": 4,
+        "medium_blocker_count": 1,
+        "required_artifact_count": 5,
+        "required_artifacts": [
+            "acquisition-readiness-summary.json",
+            "dom-paragraph-evidence-samples.json",
+            "knowledge-graph-evidence-samples.json",
+            "remediation-actions.json",
+            "semantic-relation-evidence-samples.json",
+        ],
+        "highest_severity": "critical",
+        "snapshot_verification_required": True,
+        "buyer_summary_text": (
+            "Close remains blocked by 6 proof requirement(s) across "
+            "5 required artifact(s)."
+        ),
+        "next_action_text": (
+            "Resolve critical and high proof blockers, regenerate the "
+            "evidence snapshot, and verify the copied JSON with the offline "
+            "snapshot verifier."
+        ),
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1641,6 +1674,11 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         snapshot["diligence_close_proof_plan"]
         == _expected_diligence_close_proof_plan()
     )
+    assert "diligence_close_decision_summary" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["diligence_close_decision_summary"]
+        == _expected_diligence_close_decision_summary()
+    )
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -1831,6 +1869,36 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert proof_plan[-1]["severity_code"] == "medium"
     assert proof_plan[-1]["required_proof_artifact"] == "remediation-actions.json"
     assert proof_plan[-1]["close_gate_status"] == "blocked"
+    assert snapshot["diligence_close_decision_summary"] == {
+        "summary_key": "buyer_close_decision",
+        "decision_code": "close_blocked",
+        "total_proof_count": 6,
+        "blocked_proof_count": 6,
+        "ready_proof_count": 0,
+        "critical_blocker_count": 1,
+        "high_blocker_count": 4,
+        "medium_blocker_count": 1,
+        "required_artifact_count": 5,
+        "required_artifacts": [
+            "acquisition-readiness-summary.json",
+            "dom-paragraph-evidence-samples.json",
+            "knowledge-graph-evidence-samples.json",
+            "remediation-actions.json",
+            "semantic-relation-evidence-samples.json",
+        ],
+        "highest_severity": "critical",
+        "snapshot_verification_required": True,
+        "buyer_summary_text": (
+            "Close remains blocked by 6 proof requirement(s) across "
+            "5 required artifact(s)."
+        ),
+        "next_action_text": (
+            "Resolve critical and high proof blockers, regenerate the "
+            "evidence snapshot, and verify the copied JSON with the offline "
+            "snapshot verifier."
+        ),
+        "provider_write_executed": False,
+    }
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {
