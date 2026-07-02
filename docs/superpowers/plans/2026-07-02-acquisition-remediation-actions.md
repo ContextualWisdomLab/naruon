@@ -26,7 +26,7 @@
 - Expects `DataAcquisitionReadinessGate.remediation_actions`
 - Expects `DataAcquisitionRemediationAction`
 
-- [ ] **Step 1: Extend quality-surface gate assertions**
+- [x] **Step 1: Extend quality-surface gate assertions**
 
 In `test_data_quality_surface_returns_source_backed_counts_without_secrets`, add these fields to the expected `acquisition_readiness_gate`:
 
@@ -68,7 +68,7 @@ assert data["acquisition_readiness_gate"]["remediation_actions"][-1] == {
 }
 ```
 
-- [ ] **Step 2: Extend snapshot assertions**
+- [x] **Step 2: Extend snapshot assertions**
 
 In `test_data_quality_evidence_snapshot_returns_shareable_redacted_surface`, assert:
 
@@ -82,7 +82,7 @@ assert actions[-1]["action_key"] == "expand_attachment_parse_coverage"
 
 Keep the existing forbidden-string assertions so raw source values remain blocked.
 
-- [ ] **Step 3: Run focused backend tests to verify failure**
+- [x] **Step 3: Run focused backend tests to verify failure**
 
 Run:
 
@@ -102,7 +102,7 @@ Expected: FAIL because `remediation_actions` is not implemented yet.
 - Produces `DataAcquisitionRemediationAction`
 - Produces `_acquisition_remediation_actions(quality_checks: list[DataQualityCheck]) -> list[DataAcquisitionRemediationAction]`
 
-- [ ] **Step 1: Add action types**
+- [x] **Step 1: Add action types**
 
 Add:
 
@@ -124,7 +124,7 @@ class DataAcquisitionRemediationAction(BaseModel):
 
 Add `remediation_actions: list[DataAcquisitionRemediationAction]` to `DataAcquisitionReadinessGate`.
 
-- [ ] **Step 2: Add deterministic remediation mapping**
+- [x] **Step 2: Add deterministic remediation mapping**
 
 Implement a static map keyed by `check_key`. Include mappings for:
 
@@ -143,7 +143,7 @@ Implement a static map keyed by `check_key`. Include mappings for:
 
 Use only generic, safe copy. Do not include counts, record IDs, evidence-source columns, provider names, raw addresses, or source paths.
 
-- [ ] **Step 3: Wire gate helper**
+- [x] **Step 3: Wire gate helper**
 
 In `_acquisition_readiness_gate`, compute:
 
@@ -153,7 +153,7 @@ remediation_actions = _acquisition_remediation_actions(quality_checks)
 
 Return the list inside `DataAcquisitionReadinessGate`.
 
-- [ ] **Step 4: Run backend validation**
+- [x] **Step 4: Run backend validation**
 
 Run:
 
@@ -175,13 +175,13 @@ Expected: PASS.
 **Interfaces:**
 - Consumes `acquisition_readiness_gate.remediation_actions`
 
-- [ ] **Step 1: Add TypeScript type fields and fixtures**
+- [x] **Step 1: Add TypeScript type fields and fixtures**
 
 Add `AcquisitionRemediationAction` and include `remediation_actions` in `AcquisitionReadinessGate`.
 
 Update the `dataQualitySurface` and `dataEvidenceSnapshot` fixtures with the nine safe remediation actions.
 
-- [ ] **Step 2: Render remediation actions**
+- [x] **Step 2: Render remediation actions**
 
 Inside the Buyer evidence readiness card, below blocking check keys, render:
 
@@ -192,7 +192,7 @@ Inside the Buyer evidence readiness card, below blocking check keys, render:
 - recommended next step
 - provider write boundary
 
-- [ ] **Step 3: Add UI and clipboard assertions**
+- [x] **Step 3: Add UI and clipboard assertions**
 
 In `renders API-backed pipeline embedding and quality tabs`, assert:
 
@@ -211,7 +211,7 @@ expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions).toHaveLeng
 expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions[0].action_key).toBe("repair_thread_id_integrity");
 ```
 
-- [ ] **Step 4: Run frontend validation**
+- [x] **Step 4: Run frontend validation**
 
 Run:
 
@@ -230,7 +230,7 @@ Expected: PASS.
 **Interfaces:**
 - Produces a Phase 17 FigJam diagram, screenshot evidence, commits, and PR update
 
-- [ ] **Step 1: Generate FigJam diagram**
+- [x] **Step 1: Generate FigJam diagram**
 
 Use Figma/FigJam, not Figma Code Connect, to add this flow to board `zXkcwT2E2aBtNhMVznLT4l`:
 
@@ -251,7 +251,7 @@ Expected local screenshot path:
 /Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase17-acquisition-remediation-actions.png
 ```
 
-- [ ] **Step 2: Run final validation**
+- [x] **Step 2: Run final validation**
 
 Run:
 
@@ -267,11 +267,11 @@ git diff --check
 
 Expected: PASS.
 
-- [ ] **Step 3: Mark this plan complete**
+- [x] **Step 3: Mark this plan complete**
 
 Replace implementation task checkboxes with `[x]` and add completion evidence.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Use separate commits:
 
@@ -286,3 +286,13 @@ git push origin HEAD:plan/email-dom-paragraph-kg-2026-07-02
 ```
 
 Expected: PR #895 head updates, unrelated `.Jules/*` files remain unstaged.
+
+## Completion Evidence
+
+- Backend contract and implementation added deterministic, safe `remediation_actions` to `acquisition_readiness_gate` for both `/api/data/quality-surface` and `/api/data/quality-evidence-snapshot`.
+- Frontend Data Quality UI now renders a buyer-facing remediation action queue and includes it in copied evidence snapshots.
+- FigJam board: `https://www.figma.com/board/zXkcwT2E2aBtNhMVznLT4l`
+- FigJam group: `41:753` (`Phase 17 Acquisition Remediation Actions Group`)
+- Screenshot evidence: `/Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase17-acquisition-remediation-actions.png`
+- Library/submodule decision: no new library, submodule, dependency, or migration in Phase 17. The remediation mapper is deterministic and still tightly coupled to the existing Data API quality-check contract; extraction becomes appropriate only after the parser/quality action contract is reused by another runtime boundary.
+- Safety boundary: no Figma Code Connect, raw email content export, attachment bytes, provider write, LLM call, source-path leak, credential exposure, or public identity header added.
