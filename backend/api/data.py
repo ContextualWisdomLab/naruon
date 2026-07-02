@@ -1948,43 +1948,30 @@ def _diligence_close_traceability_map(
     entries: list[DataDiligenceCloseTraceabilityMapEntry] = []
     for proof in snapshot.diligence_close_proof_plan:
         risk_key = proof.proof_key.removeprefix("proof_")
-        risk = risk_by_key.get(risk_key)
-        manifest = manifest_by_file.get(proof.required_proof_artifact)
-        artifact_review = artifact_review_by_artifact.get(
+        risk = risk_by_key[risk_key]
+        manifest = manifest_by_file[proof.required_proof_artifact]
+        artifact_review = artifact_review_by_artifact[
             proof.required_proof_artifact
-        )
-        owner_handoff = owner_handoff_by_owner.get(proof.owner_area)
-        source_field = manifest.source_field if manifest else proof.related_artifact
+        ]
+        owner_handoff = owner_handoff_by_owner[proof.owner_area]
+        source_field = manifest.source_field
         data_room_artifact = proof.required_proof_artifact
-        buyer_review_roles = (
-            owner_handoff.buyer_review_roles
-            if owner_handoff
-            else (
-                [artifact_review.buyer_review_role]
-                if artifact_review
-                else [_ARTIFACT_REVIEW_ROLE_BY_SEVERITY[proof.severity_code]]
-            )
-        )
         entries.append(
             DataDiligenceCloseTraceabilityMapEntry(
                 trace_key=f"trace_{risk_key}",
                 source_field=source_field,
                 data_room_artifact=data_room_artifact,
-                manifest_key=manifest.manifest_key if manifest else "",
-                exception_keys=(
-                    risk.representative_exception_keys if risk else []
-                ),
+                manifest_key=manifest.manifest_key,
+                exception_keys=risk.representative_exception_keys,
                 risk_key=risk_key,
                 proof_key=proof.proof_key,
-                artifact_review_key=(
-                    artifact_review.queue_key if artifact_review else ""
-                ),
-                owner_handoff_key=owner_handoff.handoff_key if owner_handoff else "",
+                artifact_review_key=artifact_review.queue_key,
+                owner_handoff_key=owner_handoff.handoff_key,
                 owner_area=proof.owner_area,
                 severity_code=proof.severity_code,
                 exception_count=proof.exception_count,
                 close_gate_status=proof.close_gate_status,
-                buyer_review_roles=buyer_review_roles,
+                buyer_review_roles=owner_handoff.buyer_review_roles,
                 trace_summary=(
                     f"{source_field} feeds {data_room_artifact} for "
                     f"{proof.owner_area} close proof traceability."
