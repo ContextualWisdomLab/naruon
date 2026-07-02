@@ -676,11 +676,25 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
 
   if (routeSpec.name === "mail") {
     await page.getByText("20B smoke source", { exact: true }).first().click();
+    await page.getByRole("button", { name: "근거 원본 보기", exact: true }).click();
+    await page.getByRole("dialog", { name: "맥락 종합 근거", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "근거 원본 닫기", exact: true }).click();
+    await page.getByRole("dialog", { name: "맥락 종합 근거", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
+    await page.getByRole("button", { name: "답장 초안 생성", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector("#reply-draft")?.value.includes("검토 가능한 답장 초안입니다."));
+    await page.getByRole("button", { name: "답장 보내기", exact: true }).click();
+    await page.getByText("개발 모드에서 답장을 시뮬레이션했습니다. 실제 메일은 전송되지 않았습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     const createTaskButton = page.getByRole("button", { name: "실행 항목 생성" }).first();
     await createTaskButton.waitFor({ state: "visible", timeout: 10_000 });
     await createTaskButton.click();
     await page.getByText("1개 실행 항목을 티켓형 실행 항목으로 추적합니다.").waitFor({ state: "visible", timeout: 10_000 });
-    return [evidence("mail:select-message"), evidence("mail:create-source-linked-task")];
+    return [
+      evidence("mail:select-message"),
+      evidence("mail:open-source-drawer"),
+      evidence("mail:generate-reply-draft"),
+      evidence("mail:send-simulated-reply"),
+      evidence("mail:create-source-linked-task"),
+    ];
   }
 
   if (routeSpec.name === "search") {
