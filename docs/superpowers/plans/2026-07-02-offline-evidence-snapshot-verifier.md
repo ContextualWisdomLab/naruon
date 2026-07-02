@@ -194,7 +194,7 @@ Group generated nodes as `Phase 13 Offline Evidence Snapshot Verification Group`
 - Modify: `docs/superpowers/plans/2026-07-02-offline-evidence-snapshot-verifier.md`
 - Modify: PR body via `gh pr edit`
 
-- [ ] **Step 1: Run final focused validation**
+- [x] **Step 1: Run final focused validation**
 
 Run:
 
@@ -207,7 +207,7 @@ git diff --check
 
 Expected: PASS/no output.
 
-- [ ] **Step 2: Commit implementation**
+- [x] **Step 2: Commit implementation**
 
 Stage only Phase 13 files and commit:
 
@@ -215,15 +215,15 @@ Stage only Phase 13 files and commit:
 git commit -m "feat: add offline evidence snapshot verifier"
 ```
 
-- [ ] **Step 3: Push**
+- [x] **Step 3: Push**
 
 Push to `plan/email-dom-paragraph-kg-2026-07-02`.
 
-- [ ] **Step 4: Update PR body**
+- [x] **Step 4: Update PR body**
 
 Add Phase 13 scope, validation results, FigJam screenshot path, and current head SHA to PR #895.
 
-- [ ] **Step 5: Mark plan complete and commit docs**
+- [x] **Step 5: Mark plan complete and commit docs**
 
 Check off completed ship steps, commit:
 
@@ -231,6 +231,6 @@ Check off completed ship steps, commit:
 git commit -m "docs: mark phase 13 plan complete"
 ```
 
-- [ ] **Step 6: Live PR check**
+- [x] **Step 6: Live PR check**
 
 Re-check PR #895 head, mergeability, reviewThreads, checks, and body. Treat queued/pending/review status as non-blocking and failed checks as actionable.
