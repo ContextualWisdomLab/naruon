@@ -29,7 +29,17 @@ export const FULL_PRODUCT_VIEWPORTS = [
   { name: "mobile", width: 390, height: 844, isMobile: true },
 ];
 
-export const FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES = ["mail", "search", "tasks", "settings"];
+export const FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES = [
+  "mail",
+  "search",
+  "calendar",
+  "tasks",
+  "projects",
+  "data",
+  "ai-hub",
+  "security",
+  "settings",
+];
 export const FULL_PRODUCT_CRITICAL_INTERACTION_VIEWPORT_NAMES = ["desktop", "mobile"];
 export const FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES = FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES;
 export const FULL_PRODUCT_ACCESSIBILITY_CHECK_NAMES = [
@@ -194,10 +204,34 @@ const task = {
   updated_at: "2026-07-02T05:00:00Z",
 };
 
+const calendarWritebackSource = {
+  source_id: "calendar-source-20b",
+  provider: "caldav",
+  protocol: "caldav",
+  owner_id: "smoke-user",
+  organization_id: "org-acme",
+  capabilities: ["read", "write", "etag"],
+  writeback_enabled: true,
+  etag: "calendar-etag-20b",
+};
+
 const projectFolder = {
   folder_uid: "project-20b",
   project_name: "Naruon 20B Readiness",
   webdav_path: "/Projects/Naruon_20B_Readiness",
+};
+
+const webdavAccount = {
+  source_id: "webdav-source-20b",
+  display_label: "20B readiness WebDAV",
+  provider: "webdav",
+  protocol: "webdav",
+  owner_id: "smoke-user",
+  organization_id: "org-acme",
+  webdav_path: "/Projects/Naruon_20B_Readiness",
+  capabilities: ["read", "write", "etag"],
+  writeback_enabled: true,
+  etag: "webdav-etag-20b",
 };
 
 const aiHubSurface = {
@@ -546,14 +580,65 @@ async function installRoutes(page) {
       });
     }
     if (endpoint.startsWith("/api/tasks/")) return routeJson(route, { ...task, status: "done" });
-    if (endpoint === "/api/calendar/writeback-sources") return routeJson(route, []);
-    if (endpoint === "/api/calendar/writeback-intent") return routeJson(route, { intent_id: "calendar-intent-1", provider_write_executed: false });
+    if (endpoint === "/api/calendar/writeback-sources") return routeJson(route, [calendarWritebackSource]);
+    if (endpoint === "/api/calendar/writeback-intent") {
+      return routeJson(route, {
+        workspace_id: "workspace-org-acme",
+        target_source_id: calendarWritebackSource.source_id,
+        protocol: calendarWritebackSource.protocol,
+        writeback_mode: "customer_owned",
+        requires_if_match: true,
+        if_match: calendarWritebackSource.etag,
+        provenance: { source: "full-product-smoke" },
+        audit_event: "calendar.writeback_intent.created",
+        provider_write_executed: false,
+        status: "intent_ready",
+        runner_request_id: null,
+        provider_status: null,
+        error_code: null,
+      });
+    }
     if (endpoint === "/api/webdav/folders") return routeJson(route, [projectFolder]);
-    if (endpoint === "/api/webdav/accounts") return routeJson(route, []);
-    if (endpoint === "/api/webdav/writeback-intent") return routeJson(route, { intent: "writeback", provider_write_executed: false });
+    if (endpoint === "/api/webdav/accounts") return routeJson(route, [webdavAccount]);
+    if (endpoint === "/api/webdav/writeback-intent") {
+      return routeJson(route, {
+        intent: "writeback",
+        source_id: webdavAccount.source_id,
+        target_label: webdavAccount.display_label,
+        requires_if_match: true,
+        if_match: webdavAccount.etag,
+        provenance: "server-authoritative",
+        audit_event: "webdav.writeback_intent.created",
+        provider_write_executed: false,
+      });
+    }
     if (endpoint === "/api/webdav/knowledge-materialization-intent") return routeJson(route, { intent: "knowledge_materialization", provider_write_executed: false });
     if (endpoint === "/api/data/quality-surface") return routeJson(route, dataQualitySurface);
     if (endpoint === "/api/data/documents") return routeJson(route, { document_id: "doc-smoke", status: "stored" });
+    if (endpoint === "/api/data/documents/doc_repository_ready/embedding-regeneration-intent") {
+      return routeJson(route, {
+        action_id: "doc-embedding-smoke",
+        document_name: "20b-readiness.md",
+        message: "Embedding regeneration intent recorded; no provider write executed.",
+        provider_write_executed: false,
+      });
+    }
+    if (endpoint === "/api/data/documents/doc_repository_ready/hwp-conversion-intent") {
+      return routeJson(route, {
+        action_id: "doc-hwp-smoke",
+        document_name: "20b-readiness.md",
+        message: "HWP conversion intent recorded; no provider write executed.",
+        provider_write_executed: false,
+      });
+    }
+    if (endpoint === "/api/data/documents/doc_repository_ready/webdav-materialization-intent") {
+      return routeJson(route, {
+        action_id: "doc-webdav-smoke",
+        document_name: "20b-readiness.md",
+        message: "WebDAV materialization intent recorded; no provider write executed.",
+        provider_write_executed: false,
+      });
+    }
     if (endpoint.startsWith("/api/data/documents/")) return routeJson(route, { action_id: "doc-action-smoke", status: "accepted" });
     if (endpoint === "/api/ai-hub/surface") return routeJson(route, aiHubSurface);
     if (endpoint === "/api/security/access-surface") return routeJson(route, securitySurface);
@@ -605,10 +690,44 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     return [evidence("search:select-result"), evidence("search:capture-sender-relationship")];
   }
 
+  if (routeSpec.name === "calendar") {
+    await page.getByRole("button", { name: "새 일정 intent 점검", exact: true }).click();
+    await page.getByText("기록됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [evidence("calendar:create-writeback-intent")];
+  }
+
   if (routeSpec.name === "tasks") {
     await page.getByRole("button", { name: "보낸 메일 미답변 팔로업 작업 생성" }).click();
     await page.getByText("미답변 팔로업 결과가 보드에 반영되었습니다.").waitFor({ state: "visible", timeout: 10_000 });
     return [evidence("tasks:create-reply-sla-followup")];
+  }
+
+  if (routeSpec.name === "projects") {
+    await page.getByRole("button", { name: "프로젝트 의사결정 추가" }).first().click();
+    await page.getByRole("region", { name: "프로젝트 내용" }).getByText("작업 흐름 반영", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [evidence("projects:open-decision-log")];
+  }
+
+  if (routeSpec.name === "data") {
+    await page.getByRole("button", { name: "임베딩 재생성 의도", exact: true }).click();
+    await page.getByText("Embedding regeneration intent recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "품질 점검", exact: true }).click();
+    await page.getByRole("heading", { name: "Thread id integrity", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [evidence("data:create-embedding-regeneration-intent"), evidence("data:open-quality-checks")];
+  }
+
+  if (routeSpec.name === "ai-hub") {
+    await page.getByRole("tab", { name: "실행 이력", exact: true }).click();
+    await page.getByRole("tabpanel", { name: "실행 이력", exact: true }).getByText("agent_run_records", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [evidence("ai-hub:open-run-history")];
+  }
+
+  if (routeSpec.name === "security") {
+    await page.getByRole("button", { name: "외부 공유", exact: true }).click();
+    await page.getByText("외부 공유 / 쓰기 경계", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "정책", exact: true }).click();
+    await page.getByText("차단 우선 정책 순서", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [evidence("security:open-sharing-review"), evidence("security:open-policy-order")];
   }
 
   if (routeSpec.name === "settings") {

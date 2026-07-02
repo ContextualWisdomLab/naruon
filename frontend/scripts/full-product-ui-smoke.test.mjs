@@ -59,10 +59,20 @@ describe("full product UI smoke base URL guard", () => {
 
   it("tracks only buyer-critical interaction routes with existing smoke route names", () => {
     const routeNames = new Set(FULL_PRODUCT_ROUTES.map((route) => route.name));
-    expect(FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES).toEqual(["mail", "search", "tasks", "settings"]);
+    expect(FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES).toEqual([
+      "mail",
+      "search",
+      "calendar",
+      "tasks",
+      "projects",
+      "data",
+      "ai-hub",
+      "security",
+      "settings",
+    ]);
     expect(FULL_PRODUCT_CRITICAL_INTERACTION_VIEWPORT_NAMES).toEqual(["desktop", "mobile"]);
     expect(FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES.every((routeName) => routeNames.has(routeName))).toBe(true);
-    expect(FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES).toEqual(["mail", "search", "tasks", "settings"]);
+    expect(FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES).toEqual(FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES);
   });
 
   it("keeps the full-product accessibility smoke scoped to basic automatable checks", () => {
