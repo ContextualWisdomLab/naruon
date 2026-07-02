@@ -410,6 +410,20 @@ describe("ProjectsPage", () => {
     expect(container.textContent).toContain("상태 자동 업데이트: PG timeout risk 검토 필요");
     expect(container.textContent).toContain("다음 액션: PG timeout risk 확인");
     expect(container.textContent).toContain("검토자 액션: 2개 보고 초안 근거 확인");
+    expect(container.textContent).toContain("컨트롤 준비도");
+    expect(container.textContent).toContain("Control readiness score");
+    expect(container.textContent).toContain("Missing evidence count");
+    expect(container.textContent).toContain("Acceptance-to-action coverage");
+    expect(container.textContent).toContain("Scope-risk balance");
+    expect(container.textContent).toContain("5 / 5 controls ready");
+    expect(container.textContent).toContain("Diligence KPI: source-backed control readiness");
+    expect(container.textContent).toContain("Acceptance coverage");
+    expect(container.textContent).toContain("Schedule confidence");
+    expect(container.textContent).toContain("Scope clarity");
+    expect(container.textContent).toContain("Data/infra readiness");
+    expect(container.textContent).toContain("Owner/action readiness");
+    expect(container.textContent).toContain("실행 준비 요약: 5개 컨트롤이 문단 근거로 준비됨");
+    expect(container.textContent).toContain("검토자 액션: 누락 근거 없음, 인수 검토 가능");
 
     const reviewButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("문단 근거 검토 저장"));
     expect(reviewButton).toBeDefined();
