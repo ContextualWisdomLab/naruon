@@ -219,7 +219,7 @@ Acceptable later extraction:
 P0 for 20B final sale readiness:
 
 - Figma required pages were repaired through `use_figma`, but full screen coverage and durable QA screenshots for every buyer flow are not complete.
-- Full ten-area Product Design route audit now has desktop/mobile evidence, broad selected desktop/mobile critical-interaction evidence across nine IA routes, mail workflow-state evidence through source drawer, draft generation, simulated send, and source-linked task creation, and basic automated accessibility evidence, but complete workflow-state and assistive-technology audit is not complete.
+- Full ten-area Product Design route audit now has desktop/mobile evidence, expanded selected desktop/mobile workflow-state evidence across nine IA routes, and basic automated accessibility evidence, but live provider completion, full result variants, and assistive-technology audit are not complete.
 - Production deployment and rollback evidence is not packaged.
 - Live provider-send and provider-write execution evidence is incomplete.
 - Issue #634 has a branch-level fix, but remains open as a governance risk until merged and proven on the trusted base branch.
@@ -228,11 +228,11 @@ P0 for 20B final sale readiness:
 
 P1 for buyer technical review:
 
-- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts selected desktop/mobile buyer interactions for mail, search, calendar, tasks, projects, data, AI Hub, security, and settings, including mail source drawer, reply draft generation, simulated send, source-linked task creation, and settings connector token rotation, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
+- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts expanded selected desktop/mobile buyer workflow states for mail, search, calendar, tasks, projects, data, AI Hub, security, and settings, including provider-execution request/retry states, knowledge WebDAV intent, project source boundary, data WebDAV/unique-thread intents, AI Hub workflow/evaluation/run-history navigation, security deny samples, settings save actions, and connector token rotation, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
 - Mobile Settings startup-view cards were fixed from a 3-column mobile grid to `grid-cols-1 sm:grid-cols-3` after responsive QA found awkward Korean label wrapping.
 - Product events do not yet cover full-product funnels beyond mail/search.
 - External analytics destination, retention, and consent are not approved.
-- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile contact sheet with broad selected desktop/mobile interaction-state, mail workflow-state, and basic accessibility evidence; complete workflow-state and assistive-technology evidence remains incomplete.
+- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile contact sheet with expanded selected desktop/mobile workflow-state and basic accessibility evidence; live provider completion and assistive-technology evidence remain incomplete.
 
 Non-blockers:
 

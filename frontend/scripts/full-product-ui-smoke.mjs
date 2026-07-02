@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, access } from "node:fs/promises";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -10,6 +11,8 @@ const frontendDir = path.resolve(scriptDir, "..");
 const baseUrl = process.env.NARUON_FULL_PRODUCT_BASE_URL || "http://127.0.0.1:3001";
 const screenshotDir = process.env.NARUON_FULL_PRODUCT_SCREENSHOT_DIR || "/tmp/naruon-full-product-smoke";
 const ALLOWED_FULL_PRODUCT_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+const SERVER_PROBE_TIMEOUT_MS = 5_000;
+const SERVER_READY_TIMEOUT_MS = 90_000;
 
 export const FULL_PRODUCT_ROUTES = [
   { path: "/", name: "home", expectedText: "Naruon" },
@@ -98,7 +101,7 @@ function log(message) {
 async function isServerReady(url) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1000);
+    const timeout = setTimeout(() => controller.abort(), SERVER_PROBE_TIMEOUT_MS);
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
     return response.status < 500;
@@ -107,9 +110,29 @@ async function isServerReady(url) {
   }
 }
 
+export async function isTcpPortOpen(url) {
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  const port = Number(url.port || (url.protocol === "https:" ? 443 : 80));
+  if (!Number.isInteger(port) || port <= 0) return false;
+
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port });
+    const done = (result) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(result);
+    };
+
+    socket.setTimeout(1000);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+  });
+}
+
 async function waitForServer(url, child) {
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 30_000) {
+  while (Date.now() - startedAt < SERVER_READY_TIMEOUT_MS) {
     if (child?.exitCode !== null && child?.exitCode !== undefined) {
       throw new Error(`Next dev server exited before becoming ready with code ${child.exitCode}`);
     }
@@ -127,6 +150,11 @@ async function startServerIfNeeded() {
     throw new Error(`Server is not reachable and cannot be auto-started for non-local URL: ${baseUrl}`);
   }
 
+  if (await isTcpPortOpen(url)) {
+    await waitForServer(baseUrl, null);
+    return null;
+  }
+
   const child = spawn(
     "pnpm",
     ["dev", "--hostname", url.hostname, "--port", url.port || "3001"],
@@ -139,8 +167,13 @@ async function startServerIfNeeded() {
   );
   child.stdout.on("data", (chunk) => process.stdout.write(chunk));
   child.stderr.on("data", (chunk) => process.stderr.write(chunk));
-  await waitForServer(baseUrl, child);
-  return child;
+  try {
+    await waitForServer(baseUrl, child);
+    return child;
+  } catch (error) {
+    await stopServerProcess(child);
+    throw error;
+  }
 }
 
 async function stopServerProcess(child) {
@@ -204,6 +237,17 @@ const task = {
   updated_at: "2026-07-02T05:00:00Z",
 };
 
+const knowledgeTask = {
+  id: "task-knowledge-20b",
+  title: "나에게 보낸 지식 메모 정리",
+  status: "open",
+  priority: "normal",
+  source_type: "self_sent_knowledge",
+  source_email_id: String(sourceEmail.id),
+  related_thread_id: sourceEmail.thread_id,
+  updated_at: "2026-07-02T05:10:00Z",
+};
+
 const calendarWritebackSource = {
   source_id: "calendar-source-20b",
   provider: "caldav",
@@ -219,6 +263,8 @@ const projectFolder = {
   folder_uid: "project-20b",
   project_name: "Naruon 20B Readiness",
   webdav_path: "/Projects/Naruon_20B_Readiness",
+  owner_user_id: "smoke-user",
+  organization_id: "org-acme",
 };
 
 const webdavAccount = {
@@ -473,6 +519,19 @@ const accountConfig = {
   has_oauth_client_secret: false,
 };
 
+const llmProvider = {
+  id: 1,
+  name: "Primary OpenAI",
+  provider_type: "openai",
+  base_url: "https://api.openai.com/v1",
+  model_identifier: "gpt-5.4",
+  embedding_model: "text-embedding-3-small",
+  is_active: true,
+  configured: true,
+  fingerprint: "***1234",
+  updated_at: "2026-06-11T03:00:00Z",
+};
+
 const runnerConfig = {
   workspace_id: "workspace-org-acme",
   configured: true,
@@ -539,7 +598,13 @@ function routeJson(route, body, status = 200) {
 }
 
 async function installRoutes(page) {
-  await page.route("**/auth/session", (route) => routeJson(route, { claims: {} }));
+  await page.route("**/auth/session", (route) => routeJson(route, {
+    claims: {
+      userId: "smoke-user",
+      organizationId: "org-acme",
+      workspaceId: "workspace-org-acme",
+    },
+  }));
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const endpoint = new URL(request.url()).pathname;
@@ -569,19 +634,29 @@ async function installRoutes(page) {
     if (endpoint === "/api/llm/draft") return routeJson(route, { draft: "검토 가능한 답장 초안입니다." });
     if (endpoint === "/api/llm/translate") return routeJson(route, { translation: "번역된 맥락입니다." });
     if (endpoint === "/api/emails/send") return routeJson(route, { simulated: true });
-    if (endpoint === "/api/tasks") return routeJson(route, [task]);
+    if (endpoint === "/api/tasks") return routeJson(route, [task, knowledgeTask]);
     if (endpoint === "/api/tasks/from-email") return routeJson(route, { created: 1 });
     if (endpoint === "/api/tasks/reply-sla-escalations") {
       return routeJson(route, {
         evaluated: 1,
         created: 1,
         policy: { overdue_hours: 48 },
-        tasks: [task],
+        tasks: [task, knowledgeTask],
       });
     }
-    if (endpoint.startsWith("/api/tasks/")) return routeJson(route, { ...task, status: "done" });
+    if (endpoint.startsWith("/api/tasks/")) {
+      const targetTask = endpoint.includes(knowledgeTask.id) ? knowledgeTask : task;
+      return routeJson(route, { ...targetTask, status: "done" });
+    }
     if (endpoint === "/api/calendar/writeback-sources") return routeJson(route, [calendarWritebackSource]);
     if (endpoint === "/api/calendar/writeback-intent") {
+      let requestBody = {};
+      try {
+        requestBody = request.postDataJSON();
+      } catch {
+        requestBody = {};
+      }
+      const executeProvider = requestBody.execute_provider === true;
       return routeJson(route, {
         workspace_id: "workspace-org-acme",
         target_source_id: calendarWritebackSource.source_id,
@@ -592,10 +667,11 @@ async function installRoutes(page) {
         provenance: { source: "full-product-smoke" },
         audit_event: "calendar.writeback_intent.created",
         provider_write_executed: false,
-        status: "intent_ready",
-        runner_request_id: null,
+        status: executeProvider ? "queued" : "intent_ready",
+        runner_request_id: executeProvider ? "runner-calendar-20b" : null,
         provider_status: null,
         error_code: null,
+        retry_item_uid: executeProvider ? "retry-calendar-20b" : null,
       });
     }
     if (endpoint === "/api/webdav/folders") return routeJson(route, [projectFolder]);
@@ -612,7 +688,34 @@ async function installRoutes(page) {
         provider_write_executed: false,
       });
     }
-    if (endpoint === "/api/webdav/knowledge-materialization-intent") return routeJson(route, { intent: "knowledge_materialization", provider_write_executed: false });
+    if (endpoint === "/api/webdav/knowledge-materialization-intent") {
+      let requestBody = {};
+      try {
+        requestBody = request.postDataJSON();
+      } catch {
+        requestBody = {};
+      }
+      const executeProvider = requestBody.execute_provider === true;
+      return routeJson(route, {
+        intent: "knowledge_materialization",
+        status: executeProvider ? "queued" : "intent_ready",
+        task_id: requestBody.source_task_id ?? knowledgeTask.id,
+        source_type: "self_sent_knowledge",
+        source_email_id: knowledgeTask.source_email_id,
+        source_thread_id: knowledgeTask.related_thread_id,
+        source_id: webdavAccount.source_id,
+        target_label: webdavAccount.display_label,
+        target_path: "/Projects/Naruon_20B_Readiness/knowledge-note.md",
+        requires_if_match: true,
+        provenance: "server-authoritative",
+        provider_write_executed: false,
+        audit_event: "webdav.knowledge_materialization_intent.created",
+        runner_request_id: executeProvider ? "runner-knowledge-20b" : null,
+        provider_status: null,
+        error_code: null,
+        retry_item_uid: executeProvider ? "retry-knowledge-20b" : null,
+      });
+    }
     if (endpoint === "/api/data/quality-surface") return routeJson(route, dataQualitySurface);
     if (endpoint === "/api/data/documents") return routeJson(route, { document_id: "doc-smoke", status: "stored" });
     if (endpoint === "/api/data/documents/doc_repository_ready/embedding-regeneration-intent") {
@@ -640,11 +743,61 @@ async function installRoutes(page) {
       });
     }
     if (endpoint.startsWith("/api/data/documents/")) return routeJson(route, { action_id: "doc-action-smoke", status: "accepted" });
+    if (endpoint === "/api/emails/unique-thread-intent") {
+      return routeJson(route, {
+        status: "intent_ready",
+        candidates_checked: 2,
+        duplicates_found: 2,
+        provider_write_executed: false,
+        provenance: "server-authoritative",
+        audit_event: "email.unique_thread_intent.created",
+        thread_updates: [
+          {
+            candidate_key: "full-product-smoke-message-id",
+            canonical_thread_id: "full-product-thread",
+            dedupe_key: "full-product-smoke@example.com",
+            match_reason: "message_id",
+            existing_message_id: "full-product-smoke@example.com",
+          },
+        ],
+      });
+    }
     if (endpoint === "/api/ai-hub/surface") return routeJson(route, aiHubSurface);
     if (endpoint === "/api/security/access-surface") return routeJson(route, securitySurface);
     if (endpoint === "/api/accounts/config") return routeJson(route, accountConfig);
-    if (endpoint === "/api/llm-providers") return routeJson(route, []);
-    if (endpoint.startsWith("/api/llm-providers/")) return routeJson(route, { id: 1, configured: true });
+    if (endpoint === "/api/llm-providers" && request.method() === "POST") {
+      let requestBody = {};
+      try {
+        requestBody = request.postDataJSON();
+      } catch {
+        requestBody = {};
+      }
+      return routeJson(route, {
+        ...llmProvider,
+        id: 2,
+        name: requestBody.name ?? "Local Gemma4",
+        provider_type: requestBody.provider_type ?? "ollama",
+        base_url: requestBody.base_url ?? "http://ollama:11434/v1",
+        model_identifier: requestBody.model_identifier ?? "gemma4:e2b-it-qat",
+        embedding_model: requestBody.embedding_model ?? "embeddinggemma",
+        fingerprint: null,
+        updated_at: "2026-07-02T05:30:00Z",
+      });
+    }
+    if (endpoint === "/api/llm-providers") return routeJson(route, [llmProvider]);
+    if (endpoint.startsWith("/api/llm-providers/")) {
+      let requestBody = {};
+      try {
+        requestBody = request.postDataJSON();
+      } catch {
+        requestBody = {};
+      }
+      return routeJson(route, {
+        ...llmProvider,
+        embedding_model: requestBody.embedding_model ?? llmProvider.embedding_model,
+        updated_at: "2026-07-02T05:31:00Z",
+      });
+    }
     if (endpoint === "/api/runner-config") return routeJson(route, runnerConfig);
     if (endpoint === "/api/runner-config/rotate") return routeJson(route, runnerConfig);
     if (endpoint === "/api/observability/operational-signals") return routeJson(route, operationalSignals);
@@ -699,54 +852,136 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
 
   if (routeSpec.name === "search") {
     await page.getByText("20B readiness result", { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("tab", { name: "관계 원본", exact: true }).click();
+    await page.getByText("원본 메시지 필터로 관계 API를 조회합니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("tab", { name: "판단 보조", exact: true }).click();
+    await page.getByText("외부 실행은 사용자가 메일, 일정, 관계 캡처 액션을 명시적으로 선택할 때만 진행됩니다.", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "관계 캡처", exact: true }).click();
     await page.getByText("계약 검토 담당자를 확인합니다.").waitFor({ state: "visible", timeout: 10_000 });
-    return [evidence("search:select-result"), evidence("search:capture-sender-relationship")];
+    await page.getByRole("tab", { name: "관계 원본", exact: true }).click();
+    await page.getByText("1개 관계 연결", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [
+      evidence("search:select-result"),
+      evidence("search:open-source-evidence-tab"),
+      evidence("search:open-decision-assist-tab"),
+      evidence("search:capture-sender-relationship"),
+      evidence("search:verify-captured-relationship-state"),
+    ];
   }
 
   if (routeSpec.name === "calendar") {
     await page.getByRole("button", { name: "새 일정 intent 점검", exact: true }).click();
     await page.getByText("기록됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    return [evidence("calendar:create-writeback-intent")];
+    await page.getByRole("button", { name: "ETag 업데이트 점검", exact: true }).click();
+    await page.getByText("If-Match 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "ETag 실행 요청", exact: true }).click();
+    await page.getByText("커넥터 실행 요청 접수", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("재시도 대기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [
+      evidence("calendar:create-writeback-intent"),
+      evidence("calendar:verify-etag-update-intent"),
+      evidence("calendar:request-provider-execution"),
+      evidence("calendar:verify-provider-retry-state"),
+    ];
   }
 
   if (routeSpec.name === "tasks") {
     await page.getByRole("button", { name: "보낸 메일 미답변 팔로업 작업 생성" }).click();
     await page.getByText("미답변 팔로업 결과가 보드에 반영되었습니다.").waitFor({ state: "visible", timeout: 10_000 });
-    return [evidence("tasks:create-reply-sla-followup")];
+    await page.getByRole("button", { name: "20억 판매 검토 실행 항목 상태를 완료로 변경", exact: true }).click();
+    await page.getByText("20억 판매 검토 실행 항목 상태를 완료로 변경했습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "나에게 보낸 지식 메모 정리 WebDAV 지식 노트 의도 생성", exact: true }).click();
+    await page.getByText("WebDAV/Notes 의도 준비", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "나에게 보낸 지식 메모 정리 WebDAV 지식 노트 실행 요청", exact: true }).click();
+    await page.getByText("커넥터 실행 요청 접수", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("재시도 대기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [
+      evidence("tasks:create-reply-sla-followup"),
+      evidence("tasks:complete-source-linked-task"),
+      evidence("tasks:create-knowledge-webdav-intent"),
+      evidence("tasks:request-knowledge-provider-execution"),
+      evidence("tasks:verify-knowledge-retry-state"),
+    ];
   }
 
   if (routeSpec.name === "projects") {
     await page.getByRole("button", { name: "프로젝트 의사결정 추가" }).first().click();
     await page.getByRole("region", { name: "프로젝트 내용" }).getByText("작업 흐름 반영", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    return [evidence("projects:open-decision-log")];
+    await page.getByRole("button", { name: "프로젝트 상세 열기", exact: true }).click();
+    await page.getByRole("region", { name: "프로젝트 내용" }).getByText("프로젝트 개요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("region", { name: "프로젝트 내용" }).getByText("저장소 경계 확인됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [
+      evidence("projects:open-decision-log"),
+      evidence("projects:reopen-project-detail"),
+      evidence("projects:verify-source-boundary"),
+    ];
   }
 
   if (routeSpec.name === "data") {
     await page.getByRole("button", { name: "임베딩 재생성 의도", exact: true }).click();
     await page.getByText("Embedding regeneration intent recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "HWP 변환 의도", exact: true }).click();
+    await page.getByText("HWP conversion intent recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "WebDAV 문서 실행 요청", exact: true }).click();
+    await page.getByText("WebDAV materialization intent recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "WebDAV 반영 의도 점검", exact: true }).click();
+    await page.getByText("원본 반영 의도", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("If-Match 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "중복 메일 스레드 의도 점검", exact: true }).click();
+    await page.getByText("Message-ID 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "품질 점검", exact: true }).click();
     await page.getByRole("heading", { name: "Thread id integrity", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    return [evidence("data:create-embedding-regeneration-intent"), evidence("data:open-quality-checks")];
+    return [
+      evidence("data:create-embedding-regeneration-intent"),
+      evidence("data:create-hwp-conversion-intent"),
+      evidence("data:request-webdav-materialization"),
+      evidence("data:create-webdav-writeback-intent"),
+      evidence("data:create-unique-thread-intent"),
+      evidence("data:open-quality-checks"),
+    ];
   }
 
   if (routeSpec.name === "ai-hub") {
+    await page.getByRole("tab", { name: "워크플로우", exact: true }).click();
+    await page.getByRole("tabpanel", { name: "워크플로우", exact: true }).getByText("의사결정 로그 자동 작성", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("tab", { name: "평가", exact: true }).click();
+    await page.getByRole("tabpanel", { name: "평가", exact: true }).getByText("연동 준비도", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "평가 근거 보기", exact: true }).first().click();
     await page.getByRole("tab", { name: "실행 이력", exact: true }).click();
     await page.getByRole("tabpanel", { name: "실행 이력", exact: true }).getByText("agent_run_records", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    return [evidence("ai-hub:open-run-history")];
+    return [
+      evidence("ai-hub:open-workflow-tab"),
+      evidence("ai-hub:open-evaluation-tab"),
+      evidence("ai-hub:open-run-history-from-evidence"),
+      evidence("ai-hub:open-run-history"),
+    ];
   }
 
   if (routeSpec.name === "security") {
     await page.getByRole("button", { name: "외부 공유", exact: true }).click();
     await page.getByText("외부 공유 / 쓰기 경계", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "정책", exact: true }).click();
     await page.getByText("차단 우선 정책 순서", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    return [evidence("security:open-sharing-review"), evidence("security:open-policy-order")];
+    await page.getByText("교차 조직 제공자 secret", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("조직 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    return [
+      evidence("security:open-sharing-review"),
+      evidence("security:verify-external-write-block"),
+      evidence("security:open-policy-order"),
+      evidence("security:verify-deny-sample"),
+    ];
   }
 
   if (routeSpec.name === "settings") {
     await page.getByRole("button", { name: "AI 모델", exact: true }).click();
     await page.getByText("/api/llm-providers", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("heading", { name: "Primary OpenAI", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "임베딩 모델 저장", exact: true }).click();
+    await page.getByText("임베딩 모델 지정을 저장했습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "연결 계정", exact: true }).click();
+    await page.getByRole("button", { name: "계정 설정 저장", exact: true }).click();
+    await page.getByText("계정 설정을 저장했습니다. 저장된 secret은 응답에 노출되지 않습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "워크스페이스", exact: true }).click();
     const calendarStartupButton = page.locator("button").filter({ hasText: "일정 관리" }).last();
     await calendarStartupButton.click();
@@ -759,6 +994,8 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("등록 토큰이 생성되었습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("settings:switch-ai-model-tab"),
+      evidence("settings:save-embedding-model"),
+      evidence("settings:save-account-config"),
       evidence("settings:select-calendar-startup-view"),
       evidence("settings:rotate-connector-token"),
     ];

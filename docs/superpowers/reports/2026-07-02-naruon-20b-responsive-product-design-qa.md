@@ -41,7 +41,7 @@ Result:
 Naruon full-product route smoke passed.
 Routes: /, /mail, /search, /calendar, /tasks, /projects, /data, /ai-hub, /security, /settings
 Viewports: desktop(1440x1024), mobile(390x844)
-Critical interactions: desktop:mail:select-message, desktop:mail:open-source-drawer, desktop:mail:generate-reply-draft, desktop:mail:send-simulated-reply, desktop:mail:create-source-linked-task, desktop:search:select-result, desktop:search:capture-sender-relationship, desktop:calendar:create-writeback-intent, desktop:tasks:create-reply-sla-followup, desktop:projects:open-decision-log, desktop:data:create-embedding-regeneration-intent, desktop:data:open-quality-checks, desktop:ai-hub:open-run-history, desktop:security:open-sharing-review, desktop:security:open-policy-order, desktop:settings:switch-ai-model-tab, desktop:settings:select-calendar-startup-view, desktop:settings:rotate-connector-token, mobile:mail:select-message, mobile:mail:open-source-drawer, mobile:mail:generate-reply-draft, mobile:mail:send-simulated-reply, mobile:mail:create-source-linked-task, mobile:search:select-result, mobile:search:capture-sender-relationship, mobile:calendar:create-writeback-intent, mobile:tasks:create-reply-sla-followup, mobile:projects:open-decision-log, mobile:data:create-embedding-regeneration-intent, mobile:data:open-quality-checks, mobile:ai-hub:open-run-history, mobile:security:open-sharing-review, mobile:security:open-policy-order, mobile:settings:switch-ai-model-tab, mobile:settings:select-calendar-startup-view, mobile:settings:rotate-connector-token
+Critical interactions: desktop:mail:select-message, desktop:mail:open-source-drawer, desktop:mail:generate-reply-draft, desktop:mail:send-simulated-reply, desktop:mail:create-source-linked-task, desktop:search:select-result, desktop:search:open-source-evidence-tab, desktop:search:open-decision-assist-tab, desktop:search:capture-sender-relationship, desktop:search:verify-captured-relationship-state, desktop:calendar:create-writeback-intent, desktop:calendar:verify-etag-update-intent, desktop:calendar:request-provider-execution, desktop:calendar:verify-provider-retry-state, desktop:tasks:create-reply-sla-followup, desktop:tasks:complete-source-linked-task, desktop:tasks:create-knowledge-webdav-intent, desktop:tasks:request-knowledge-provider-execution, desktop:tasks:verify-knowledge-retry-state, desktop:projects:open-decision-log, desktop:projects:reopen-project-detail, desktop:projects:verify-source-boundary, desktop:data:create-embedding-regeneration-intent, desktop:data:create-hwp-conversion-intent, desktop:data:request-webdav-materialization, desktop:data:create-webdav-writeback-intent, desktop:data:create-unique-thread-intent, desktop:data:open-quality-checks, desktop:ai-hub:open-workflow-tab, desktop:ai-hub:open-evaluation-tab, desktop:ai-hub:open-run-history-from-evidence, desktop:ai-hub:open-run-history, desktop:security:open-sharing-review, desktop:security:verify-external-write-block, desktop:security:open-policy-order, desktop:security:verify-deny-sample, desktop:settings:switch-ai-model-tab, desktop:settings:save-embedding-model, desktop:settings:save-account-config, desktop:settings:select-calendar-startup-view, desktop:settings:rotate-connector-token, mobile:mail:select-message, mobile:mail:open-source-drawer, mobile:mail:generate-reply-draft, mobile:mail:send-simulated-reply, mobile:mail:create-source-linked-task, mobile:search:select-result, mobile:search:open-source-evidence-tab, mobile:search:open-decision-assist-tab, mobile:search:capture-sender-relationship, mobile:search:verify-captured-relationship-state, mobile:calendar:create-writeback-intent, mobile:calendar:verify-etag-update-intent, mobile:calendar:request-provider-execution, mobile:calendar:verify-provider-retry-state, mobile:tasks:create-reply-sla-followup, mobile:tasks:complete-source-linked-task, mobile:tasks:create-knowledge-webdav-intent, mobile:tasks:request-knowledge-provider-execution, mobile:tasks:verify-knowledge-retry-state, mobile:projects:open-decision-log, mobile:projects:reopen-project-detail, mobile:projects:verify-source-boundary, mobile:data:create-embedding-regeneration-intent, mobile:data:create-hwp-conversion-intent, mobile:data:request-webdav-materialization, mobile:data:create-webdav-writeback-intent, mobile:data:create-unique-thread-intent, mobile:data:open-quality-checks, mobile:ai-hub:open-workflow-tab, mobile:ai-hub:open-evaluation-tab, mobile:ai-hub:open-run-history-from-evidence, mobile:ai-hub:open-run-history, mobile:security:open-sharing-review, mobile:security:verify-external-write-block, mobile:security:open-policy-order, mobile:security:verify-deny-sample, mobile:settings:switch-ai-model-tab, mobile:settings:save-embedding-model, mobile:settings:save-account-config, mobile:settings:select-calendar-startup-view, mobile:settings:rotate-connector-token
 Accessibility checks: home:a11y-basics, mail:a11y-basics, search:a11y-basics, calendar:a11y-basics, tasks:a11y-basics, projects:a11y-basics, data:a11y-basics, ai-hub:a11y-basics, security:a11y-basics, settings:a11y-basics, home:a11y-basics, mail:a11y-basics, search:a11y-basics, calendar:a11y-basics, tasks:a11y-basics, projects:a11y-basics, data:a11y-basics, ai-hub:a11y-basics, security:a11y-basics, settings:a11y-basics
 ```
 
@@ -49,8 +49,8 @@ Figma placement result:
 
 ```text
 QA Notes board created and verified.
-Contact-sheet upload accepted with response imageHash 9796692ba73fc91175ed7ee4ac97519cd18be7b7.
-Figma node 18:7 verified with image fill hash 9796692ba73fc91175ed7ee4ac97519cd18be7b7 and FIT scale mode.
+Contact-sheet upload accepted with response imageHash e4162ee8c49646e320d48fff2eaf3b948006b0fa.
+Figma node 18:7 verified with image fill hash e4162ee8c49646e320d48fff2eaf3b948006b0fa and FIT scale mode.
 Verification screenshot confirmed the contact sheet and notes are visible inside board node 18:3.
 ```
 
@@ -85,12 +85,12 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
 
 ## Findings
 
-1. Desktop route and broad selected interaction coverage is now stable enough for buyer technical review.
+1. Desktop route and expanded selected workflow-state coverage is now stable enough for buyer technical review.
    - Evidence: all ten IA routes render expected buyer-visible text and produce non-empty screenshots.
-   - Interaction evidence: mail source drawer opening, reply draft generation, simulated send, source task creation, search relationship capture, calendar writeback intent, task reply-SLA escalation, project decision log, data embedding intent and quality checks, AI Hub run history, security sharing/policy tabs, settings tab/startup selection, and connector token rotation all passed.
+   - Interaction evidence: mail source drawer, reply draft, simulated send, source task creation; search evidence/assist tabs and captured relationship state; calendar create/update/provider-execution request and retry state; task completion plus knowledge WebDAV intent and execution request; project decision/detail/source boundary; data embedding, HWP, WebDAV materialization, writeback, unique-thread, and quality checks; AI Hub workflow/evaluation/run history; security external-write block and deny sample; settings embedding save, account save, startup selection, and connector token rotation all passed.
    - Health: pass for route-level and selected interaction smoke.
 
-2. Mobile route and broad selected interaction coverage is now stable enough for buyer technical review.
+2. Mobile route and expanded selected workflow-state coverage is now stable enough for buyer technical review.
    - Evidence: all ten IA routes render expected buyer-visible text and produce mobile screenshots.
    - Interaction evidence: the same selected buyer-critical flows passed on the mobile viewport.
    - Health: pass for route-level and selected interaction smoke.
@@ -106,7 +106,7 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
 
 5. The smoke gate still does not prove full workflow completion.
    - Evidence: the command now checks expected route text, console errors, not-found states, screenshot creation, broad selected desktop/mobile interactions across nine IA routes, and basic automated accessibility checks.
-   - Remaining gap: live provider send, writeback confirmation, graph expansion, permission edits, settings save persistence, and remaining route-specific drawer/modal states need workflow-specific assertions before final procurement readiness.
+   - Remaining gap: live provider send/write execution, post-provider delivery confirmation, true graph visualization expansion, permission edit/save flows, reload-backed settings persistence, and remaining route-specific drawer/modal variants need workflow-specific assertions before final procurement readiness.
 
 ## Accessibility Risks
 
@@ -116,18 +116,18 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
 
 ## Product Design Assessment
 
-The current branch now has repeatable desktop and mobile visual evidence for the ten buyer-review IA routes, broad selected desktop/mobile critical-interaction smoke evidence across nine IA routes, mail workflow-state evidence through source drawer, draft generation, simulated send, and source-linked task creation, and basic automated accessibility evidence across desktop and mobile. This moves the package from route-existence evidence to responsive route-level evidence with partial workflow and accessibility proof, but it does not prove full sale readiness.
+The current branch now has repeatable desktop and mobile visual evidence for the ten buyer-review IA routes, expanded selected desktop/mobile workflow-state smoke evidence across nine IA routes, and basic automated accessibility evidence across desktop and mobile. This moves the package from route-existence evidence to responsive route-level evidence with materially broader workflow and accessibility proof, but it does not prove full sale readiness.
 
 The remaining Product Design P0/P1 work is:
 
 1. Expand interaction-state coverage from selected actions to complete workflow completion paths:
    - mail live provider send and delivery-state persistence
-   - search result source drawer and graph expansion
-   - calendar writeback confirmation states
-   - task completion
-   - project evidence opening
-   - data WebDAV materialization and document action result variants
-   - AI Hub run/log detail beyond tab navigation
+   - search graph visualization expansion beyond captured relationship state
+   - calendar provider write completion and conflict/result variants
+   - task assignment, delegation, and provider-backed completion variants
+   - project evidence opening and source attachment variants
+   - data provider-executed WebDAV materialization and document action failure variants
+   - AI Hub run/log detail beyond workflow, evaluation, and run-history navigation
    - security permission review
    - settings save persistence beyond connector rotation
 2. Expand accessibility evidence beyond the basic gate:

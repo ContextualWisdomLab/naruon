@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import net from "node:net";
 
 import {
   FULL_PRODUCT_ACCESSIBILITY_CHECK_NAMES,
@@ -7,6 +8,7 @@ import {
   FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES,
   FULL_PRODUCT_ROUTES,
   fullProductScreenshotName,
+  isTcpPortOpen,
   resolveFullProductBaseUrl,
   resolveFullProductViewportSpecs,
 } from "./full-product-ui-smoke.mjs";
@@ -81,5 +83,19 @@ describe("full product UI smoke base URL guard", () => {
       "visible-interactive-accessible-name",
       "keyboard-tab-focus-entry",
     ]);
+  });
+
+  it("detects an existing local TCP listener before spawning another dev server", async () => {
+    const server = net.createServer();
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+    try {
+      const address = server.address();
+      expect(address).not.toBeNull();
+      expect(typeof address).not.toBe("string");
+      await expect(isTcpPortOpen(new URL(`http://127.0.0.1:${address.port}`))).resolves.toBe(true);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });
