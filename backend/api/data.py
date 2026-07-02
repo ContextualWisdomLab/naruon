@@ -19,6 +19,7 @@ from db.models import (
     ContentSegmentRecord,
     Document,
     Email,
+    KnowledgeGraphEdgeRecord,
     ProjectFolder,
     WebdavAccount,
 )
@@ -68,6 +69,11 @@ class AttachmentQualityStats(NamedTuple):
 class ContentGraphQualityStats(NamedTuple):
     segmented_email_count: int
     segment_count: int
+
+
+class KnowledgeGraphQualityStats(NamedTuple):
+    edged_email_count: int
+    edge_count: int
 
 
 class DataRepositorySummary(BaseModel):
@@ -584,6 +590,8 @@ def _pipeline_stages(
     object_total: int,
     segmented_email_count: int,
     content_segment_count: int,
+    edged_email_count: int,
+    knowledge_graph_edge_count: int,
     connector_event_count: int,
 ) -> list[DataPipelineStage]:
     thread_ready = max(0, email_count - missing_thread_count)
@@ -636,6 +644,18 @@ def _pipeline_stages(
             detail_text=(
                 f"{segmented_email_count} of {email_count} emails have paragraph "
                 f"segments; {content_segment_count} segments are stored."
+            ),
+            provider_write_executed=False,
+        ),
+        DataPipelineStage(
+            stage_key="knowledge_graph_inventory",
+            display_name="Knowledge graph inventory",
+            status_code=_status_from_ratio(email_count, edged_email_count),
+            progress_percent=_progress_percent(email_count, edged_email_count),
+            evidence_source="knowledge_graph_edges",
+            detail_text=(
+                f"{edged_email_count} of {email_count} emails have graph edges; "
+                f"{knowledge_graph_edge_count} edges are stored."
             ),
             provider_write_executed=False,
         ),
@@ -791,6 +811,29 @@ def _check_content_graph_coverage(
     )
 
 
+def _check_knowledge_graph_coverage(
+    email_count: int,
+    edged_email_count: int,
+) -> DataQualityCheck:
+    issue_count = max(0, email_count - edged_email_count)
+    return DataQualityCheck(
+        check_key="knowledge_graph_coverage",
+        display_name="Knowledge graph coverage",
+        status_code=_quality_status(email_count, issue_count),
+        issue_count=issue_count,
+        total_count=email_count,
+        evidence_source="knowledge_graph_edges",
+        detail_text=_quality_detail(
+            total_count=email_count,
+            issue_count=issue_count,
+            ready_text="All scoped emails have persisted knowledge graph edges.",
+            empty_text="No scoped emails are available yet.",
+            issue_text="Some scoped emails need persisted knowledge graph edges.",
+        ),
+        provider_write_executed=False,
+    )
+
+
 def _check_connector_signal_coverage(connector_event_count: int) -> DataQualityCheck:
     return DataQualityCheck(
         check_key="connector_signal",
@@ -817,6 +860,7 @@ def _quality_checks(
     blank_attachment_count: int,
     source_count: int,
     segmented_email_count: int,
+    edged_email_count: int,
     connector_event_count: int,
 ) -> list[DataQualityCheck]:
     return [
@@ -835,6 +879,10 @@ def _quality_checks(
         _check_content_graph_coverage(
             email_count=email_count,
             segmented_email_count=segmented_email_count,
+        ),
+        _check_knowledge_graph_coverage(
+            email_count=email_count,
+            edged_email_count=edged_email_count,
         ),
         _check_source_registry_coverage(source_count),
         _check_connector_signal_coverage(connector_event_count),
@@ -1054,6 +1102,27 @@ async def _get_content_graph_stats(
     )
 
 
+async def _get_knowledge_graph_stats(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> KnowledgeGraphQualityStats:
+    knowledge_graph_result = await db.execute(
+        select(
+            func.count(func.distinct(KnowledgeGraphEdgeRecord.email_id)),
+            func.count(KnowledgeGraphEdgeRecord.id),
+        )
+        .join(Email, KnowledgeGraphEdgeRecord.email_id == Email.id)
+        .where(*email_scope)
+    )
+    knowledge_graph_stats = knowledge_graph_result.one_or_none()
+    edged_email_count = knowledge_graph_stats[0] if knowledge_graph_stats else 0
+    edge_count = knowledge_graph_stats[1] if knowledge_graph_stats else 0
+    return KnowledgeGraphQualityStats(
+        edged_email_count=int(edged_email_count or 0),
+        edge_count=int(edge_count or 0),
+    )
+
+
 async def _get_attachment_assets(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
@@ -1109,6 +1178,7 @@ async def get_data_quality_surface(
     email_stats = await _get_email_stats(db, email_scope)
     attachment_stats = await _get_attachment_stats(db, email_scope)
     content_graph_stats = await _get_content_graph_stats(db, email_scope)
+    knowledge_graph_stats = await _get_knowledge_graph_stats(db, email_scope)
     email_count = email_stats.count
     missing_thread_count = email_stats.missing_thread_count
     missing_fingerprint_count = email_stats.missing_fingerprint_count
@@ -1118,6 +1188,8 @@ async def get_data_quality_surface(
     embedded_attachment_count = attachment_stats.embedded_count
     segmented_email_count = content_graph_stats.segmented_email_count
     content_segment_count = content_graph_stats.segment_count
+    edged_email_count = knowledge_graph_stats.edged_email_count
+    knowledge_graph_edge_count = knowledge_graph_stats.edge_count
 
     connector_events = await _get_connector_events(db, auth_context)
     attachment_asset_rows = await _get_attachment_assets(db, email_scope)
@@ -1150,6 +1222,8 @@ async def get_data_quality_surface(
             object_total=object_total,
             segmented_email_count=segmented_email_count,
             content_segment_count=content_segment_count,
+            edged_email_count=edged_email_count,
+            knowledge_graph_edge_count=knowledge_graph_edge_count,
             connector_event_count=len(connector_events),
         ),
         embedding_collections=_embedding_collections(
@@ -1166,6 +1240,7 @@ async def get_data_quality_surface(
             blank_attachment_count=blank_attachment_count,
             source_count=source_count,
             segmented_email_count=segmented_email_count,
+            edged_email_count=edged_email_count,
             connector_event_count=len(connector_events),
         ),
         connector_events=[

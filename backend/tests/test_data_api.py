@@ -244,6 +244,7 @@ def mock_db():
             (4, 1, 2, 3),  # email stats
             (3, 1, 1),  # attachment stats
             (3, 8),  # content graph stats
+            (2, 10),  # knowledge graph stats
             [_connector_event("connector_evt_data_quality")],
             [
                 (_attachment("roadmap.pdf", "extracted attachment text"), ready_email),
@@ -307,6 +308,15 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "detail_text": "3 of 4 emails have paragraph segments; 8 segments are stored.",
         "provider_write_executed": False,
     }
+    assert stage_by_key["knowledge_graph_inventory"] == {
+        "stage_key": "knowledge_graph_inventory",
+        "display_name": "Knowledge graph inventory",
+        "status_code": "running",
+        "progress_percent": 50,
+        "evidence_source": "knowledge_graph_edges",
+        "detail_text": "2 of 4 emails have graph edges; 10 edges are stored.",
+        "provider_write_executed": False,
+    }
     assert data["embedding_collections"][0] == {
         "collection_key": "emails_embedding",
         "display_name": "Email vectors",
@@ -330,6 +340,16 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "total_count": 4,
         "evidence_source": "content_segments",
         "detail_text": "Some scoped emails need DOM paragraph segmentation.",
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["knowledge_graph_coverage"] == {
+        "check_key": "knowledge_graph_coverage",
+        "display_name": "Knowledge graph coverage",
+        "status_code": "needs_attention",
+        "issue_count": 2,
+        "total_count": 4,
+        "evidence_source": "knowledge_graph_edges",
+        "detail_text": "Some scoped emails need persisted knowledge graph edges.",
         "provider_write_executed": False,
     }
     assert data["connector_events"][0]["event_uid"] == "connector_evt_data_quality"
@@ -797,6 +817,8 @@ async def _seed_smoke_test_data(conn, ids: dict):
     rival_email_id = rival_email.scalar_one()
     first_node_uid = f"cnode_{uuid.uuid4().hex[:24]}"
     rival_node_uid = f"cnode_{uuid.uuid4().hex[:24]}"
+    first_segment_uid = f"cseg_{uuid.uuid4().hex[:24]}"
+    rival_segment_uid = f"cseg_{uuid.uuid4().hex[:24]}"
     first_node = await conn.execute(
         text(
             """
@@ -843,6 +865,8 @@ async def _seed_smoke_test_data(conn, ids: dict):
             "content_hash": hashlib.sha256(b"rival segmented body text").hexdigest(),
         },
     )
+    first_node_id = first_node.scalar_one()
+    rival_node_id = rival_node.scalar_one()
     await conn.execute(
         text(
             """
@@ -867,18 +891,54 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
         ),
         {
-            "first_segment_uid": f"cseg_{uuid.uuid4().hex[:24]}",
+            "first_segment_uid": first_segment_uid,
             "first_email_id": first_email_id,
-            "first_content_node_id": first_node.scalar_one(),
+            "first_content_node_id": first_node_id,
             "first_source_record_uid": f"email:{first_email_id}",
             "first_content_hash": hashlib.sha256(b"segmented body text").hexdigest(),
-            "rival_segment_uid": f"cseg_{uuid.uuid4().hex[:24]}",
+            "rival_segment_uid": rival_segment_uid,
             "rival_email_id": rival_email_id,
-            "rival_content_node_id": rival_node.scalar_one(),
+            "rival_content_node_id": rival_node_id,
             "rival_source_record_uid": f"email:{rival_email_id}",
             "rival_content_hash": hashlib.sha256(
                 b"rival segmented body text"
             ).hexdigest(),
+        },
+    )
+    await conn.execute(
+        text(
+            """
+            INSERT INTO knowledge_graph_edges (
+                edge_uid, email_id, source_node_id, target_segment_id,
+                source_kind, source_record_uid, edge_kind, edge_path,
+                ordinal_index, created_at
+            )
+            SELECT
+                :first_edge_uid, :first_email_id, :first_node_id, first_segment.id,
+                'email_body', :first_source_record_uid, 'node_has_segment',
+                '/document[1]/paragraph[1]/has/smoke', 1, now()
+            FROM content_segments AS first_segment
+            WHERE first_segment.content_segment_uid = :first_segment_uid
+            UNION ALL
+            SELECT
+                :rival_edge_uid, :rival_email_id, :rival_node_id, rival_segment.id,
+                'email_body', :rival_source_record_uid, 'node_has_segment',
+                '/document[1]/paragraph[1]/has/rival', 1, now()
+            FROM content_segments AS rival_segment
+            WHERE rival_segment.content_segment_uid = :rival_segment_uid
+            """
+        ),
+        {
+            "first_edge_uid": f"kgedge_{uuid.uuid4().hex[:32]}",
+            "first_email_id": first_email_id,
+            "first_node_id": first_node_id,
+            "first_source_record_uid": f"email:{first_email_id}",
+            "first_segment_uid": first_segment_uid,
+            "rival_edge_uid": f"kgedge_{uuid.uuid4().hex[:32]}",
+            "rival_email_id": rival_email_id,
+            "rival_node_id": rival_node_id,
+            "rival_source_record_uid": f"email:{rival_email_id}",
+            "rival_segment_uid": rival_segment_uid,
         },
     )
     await conn.execute(
@@ -981,6 +1041,18 @@ async def _seed_smoke_test_data(conn, ids: dict):
 
 
 async def _teardown_smoke_test_data(conn, ids: dict):
+    await conn.execute(
+        text(
+            """
+            DELETE FROM knowledge_graph_edges
+            WHERE email_id IN (
+                SELECT id FROM email_records
+                WHERE user_id IN (:user_id, :rival_user_id)
+            )
+            """
+        ),
+        {"user_id": ids["user_id"], "rival_user_id": ids["rival_user_id"]},
+    )
     await conn.execute(
         text(
             """
@@ -1145,6 +1217,7 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     assert quality_by_key["dedupe_fingerprint"]["issue_count"] == 1
     assert quality_by_key["attachment_content"]["issue_count"] == 1
     assert quality_by_key["content_graph_coverage"]["issue_count"] == 1
+    assert quality_by_key["knowledge_graph_coverage"]["issue_count"] == 1
     assert event_uid in {event["event_uid"] for event in data["connector_events"]}
     asset_names = {asset["display_name"] for asset in data["repository_assets"]}
     assert {"ready.txt", "blank.txt"} <= asset_names

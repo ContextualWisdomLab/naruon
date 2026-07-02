@@ -119,6 +119,74 @@ def test_build_email_object_attaches_content_graph_records():
     }
 
 
+def test_build_email_object_attaches_knowledge_graph_edges():
+    parsed = {
+        "message_id": "<graph@example.com>",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": "owner@example.com",
+        "subject": "Graph",
+        "in_reply_to": None,
+        "references": None,
+        "body": "Launch\n\nHello team",
+        "body_parse_content": "<h1>Launch</h1><p>Hello <strong>team</strong></p>",
+        "body_content_type": "text/html",
+        "attachments": [
+            {
+                "filename": "plan.md",
+                "content": "# Plan\n\nShip graph",
+                "content_type": "text/markdown",
+            }
+        ],
+    }
+
+    email_obj, _attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<graph@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-1",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=list(parsed["attachments"]),
+        fitted_embeddings=[
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+        ],
+    )
+
+    edge_kinds = {edge.edge_kind for edge in email_obj.knowledge_graph_edges}
+    assert {
+        "node_contains_node",
+        "node_has_segment",
+        "segment_next",
+        "heading_contains_segment",
+    } <= edge_kinds
+    assert len({edge.edge_uid for edge in email_obj.knowledge_graph_edges}) == len(
+        email_obj.knowledge_graph_edges
+    )
+    assert all(
+        "<" not in edge.edge_path and ">" not in edge.edge_path
+        for edge in email_obj.knowledge_graph_edges
+    )
+
+    heading_pairs = {
+        (edge.source_segment.safe_text_content, edge.target_segment.safe_text_content)
+        for edge in email_obj.knowledge_graph_edges
+        if edge.edge_kind == "heading_contains_segment"
+    }
+    assert ("Launch", "Hello team") in heading_pairs
+    assert ("Plan", "Ship graph") in heading_pairs
+
+    next_pairs = {
+        (edge.source_segment.safe_text_content, edge.target_segment.safe_text_content)
+        for edge in email_obj.knowledge_graph_edges
+        if edge.edge_kind == "segment_next"
+    }
+    assert ("Launch", "Hello team") in next_pairs
+    assert ("Plan", "Ship graph") in next_pairs
+
+
 @pytest.mark.asyncio
 async def test_import_single_eml_offloads_read_and_parse(monkeypatch, tmp_path):
     eml_path = tmp_path / "message.eml"
