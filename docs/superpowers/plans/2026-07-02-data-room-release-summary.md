@@ -146,7 +146,7 @@ Commit, push to `plan/email-dom-paragraph-kg-2026-07-02`, and verify live PR #90
 
 - Backend validation: `python3 -m pytest backend/tests/test_data_api.py -q` passed with 9 passed and 1 skipped.
 - Backend lint: `python3 -m ruff check backend/api/data.py backend/tests/test_data_api.py` passed.
-- Frontend coverage: `npm test -- src/app/data/page.test.tsx` passed with 12 tests.
+- Frontend coverage: `npm test -- src/app/data/page.test.tsx` passed with 13 tests.
 - Frontend lint: `npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` passed.
 - FigJam: https://www.figma.com/board/mjH0tpDIvz5kj44kL6354R
 - Ponytail complexity review: Lean already. Ship.

@@ -636,7 +636,7 @@ export function QualityCheckTab({
                       </div>
                     </div>
                   )}
-                  {acceptanceChecklist.length > 0 && (
+                  {(acceptanceSummary || acceptanceChecklist.length > 0) && (
                     <div className="border-t border-border p-5">
                       {acceptanceSummary && (
                         <div className="mb-3 rounded-xl border border-border bg-background p-4">
@@ -702,9 +702,11 @@ export function QualityCheckTab({
                           </div>
                         </div>
                       )}
-                      <p className="text-xs font-black text-muted-foreground">Diligence close acceptance checklist</p>
-                      <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        {acceptanceChecklist.map((item) => (
+                      {acceptanceChecklist.length > 0 && (
+                        <>
+                          <p className="text-xs font-black text-muted-foreground">Diligence close acceptance checklist</p>
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            {acceptanceChecklist.map((item) => (
                           <article key={item.acceptance_key} className="rounded-xl border border-border bg-background p-4">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                               <div className="min-w-0">
@@ -756,8 +758,10 @@ export function QualityCheckTab({
                               ))}
                             </div>
                           </article>
-                        ))}
-                      </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                   {evidenceSnapshot.diligence_close_proof_plan.length > 0 && (

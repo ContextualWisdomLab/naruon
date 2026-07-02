@@ -2551,6 +2551,58 @@ describe("DataPage", () => {
     expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions[0].action_key).toBe("repair_thread_id_integrity");
   });
 
+  it("renders acceptance summary when the checklist has no rows", async () => {
+    const summaryOnlySnapshot = {
+      ...dataEvidenceSnapshot,
+      diligence_close_acceptance_checklist: [],
+      diligence_close_acceptance_summary: {
+        ...diligenceCloseAcceptanceSummary,
+        decision_code: "ready_to_close",
+        total_acceptance_count: 0,
+        blocked_acceptance_count: 0,
+        ready_acceptance_count: 0,
+        reviewer_role_count: 0,
+        reviewer_roles: [],
+        required_artifact_count: 0,
+        required_artifacts: [],
+        blocker_count: 0,
+        blocker_keys: [],
+        close_gate_status: "ready",
+        snapshot_verification_required: false,
+        buyer_summary_text: "No buyer acceptance requirements are present.",
+        next_action_text: "Generate the evidence snapshot before buyer acceptance.",
+      },
+    };
+    const baseFetch = mockWebdavFetch();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/data/quality-surface/evidence-snapshot") {
+        void init;
+        return jsonResponse(summaryOnlySnapshot);
+      }
+      return baseFetch(input, init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+
+    const qualityTab = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("품질 점검"),
+    );
+    await act(async () => {
+      qualityTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("Diligence close acceptance summary");
+    expect(container.textContent).toContain("No buyer acceptance requirements are present.");
+    expect(container.textContent).not.toContain("Diligence close acceptance checklist");
+  });
+
   it("keeps quality checks usable when evidence snapshot fetch fails", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
