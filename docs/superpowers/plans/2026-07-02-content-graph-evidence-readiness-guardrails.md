@@ -202,7 +202,7 @@ git status --short
 
 Expected: only intended Phase 8 files plus unrelated `.Jules/*` modifications in status.
 
-- [ ] **Step 2: Commit, push, and update PR**
+- [x] **Step 2: Commit, push, and update PR**
 
 Commit with:
 
@@ -213,7 +213,7 @@ git push origin HEAD:plan/email-dom-paragraph-kg-2026-07-02
 
 Update PR #895 body with Phase 8 summary, validation, FigJam artifact, and current head SHA.
 
-- [ ] **Step 3: Live PR verification**
+- [x] **Step 3: Live PR verification**
 
 Run:
 
