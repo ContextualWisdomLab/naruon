@@ -137,6 +137,40 @@ export function QualityCheckTab({
                       <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acquisitionReadinessGate.provider_write_executed)}</dd>
                     </div>
                   </dl>
+                  <div className="border-t border-border p-5">
+                    <p className="text-xs font-black text-muted-foreground">Acquisition decision summary</p>
+                    <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-black">{toSafeReactText(acquisitionReadinessGate.decision_summary.headline_text)}</h3>
+                          <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(acquisitionReadinessGate.decision_summary.next_step_text)}</p>
+                        </div>
+                        <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                          {toSafeReactText(acquisitionReadinessGate.decision_summary.recommendation_code)} · {toSafeReactText(acquisitionReadinessGate.decision_summary.risk_level)}
+                        </span>
+                      </div>
+                      <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-4">
+                        <div>
+                          <dt className="font-black text-muted-foreground">Target gaps</dt>
+                          <dd className="mt-1 text-sm font-bold">{formatCount(acquisitionReadinessGate.decision_summary.target_gap_count)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-black text-muted-foreground">Critical / high / medium</dt>
+                          <dd className="mt-1 text-sm font-bold">
+                            {formatCount(acquisitionReadinessGate.decision_summary.critical_action_count)} / {formatCount(acquisitionReadinessGate.decision_summary.high_action_count)} / {formatCount(acquisitionReadinessGate.decision_summary.medium_action_count)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-black text-muted-foreground">Summary key</dt>
+                          <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(acquisitionReadinessGate.decision_summary.summary_key)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                          <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acquisitionReadinessGate.decision_summary.provider_write_executed)}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </div>
                   {acquisitionReadinessGate.blocking_check_keys.length > 0 && (
                     <div className="border-t border-border p-5">
                       <p className="text-xs font-black text-muted-foreground">Blocking check keys</p>

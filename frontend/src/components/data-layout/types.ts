@@ -50,6 +50,8 @@ export type SurfaceStatusCode = 'ready' | 'running' | 'needs_attention' | 'pendi
 export type QualityStatusCode = 'pass' | 'needs_attention' | 'pending';
 export type AcquisitionReadinessState = 'ready' | 'needs_attention' | 'pending';
 export type RemediationPriority = 'critical' | 'high' | 'medium';
+export type DiligenceRecommendation = 'ready_for_diligence' | 'remediate_before_close' | 'insufficient_evidence';
+export type DiligenceRiskLevel = 'low' | 'medium' | 'high';
 export type RepositoryAssetState = 'ready' | 'needs_attention';
 
 export type AcquisitionRemediationAction = {
@@ -78,6 +80,19 @@ export type AcquisitionReadinessKpi = {
   provider_write_executed: boolean;
 };
 
+export type AcquisitionDecisionSummary = {
+  summary_key: string;
+  recommendation_code: DiligenceRecommendation;
+  risk_level: DiligenceRiskLevel;
+  target_gap_count: number;
+  critical_action_count: number;
+  high_action_count: number;
+  medium_action_count: number;
+  headline_text: string;
+  next_step_text: string;
+  provider_write_executed: boolean;
+};
+
 export type AcquisitionReadinessGate = {
   gate_key: string;
   display_name: string;
@@ -92,6 +107,7 @@ export type AcquisitionReadinessGate = {
   snapshot_verification_ready: boolean;
   provider_write_executed: boolean;
   kpis: AcquisitionReadinessKpi[];
+  decision_summary: AcquisitionDecisionSummary;
   remediation_actions: AcquisitionRemediationAction[];
   detail_text: string;
 };

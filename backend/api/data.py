@@ -72,6 +72,12 @@ SurfaceStatus = Literal[
 QualityStatus = Literal["pass", "needs_attention", "pending"]
 AcquisitionReadinessState = Literal["ready", "needs_attention", "pending"]
 RemediationPriority = Literal["critical", "high", "medium"]
+DiligenceRecommendation = Literal[
+    "ready_for_diligence",
+    "remediate_before_close",
+    "insufficient_evidence",
+]
+DiligenceRiskLevel = Literal["low", "medium", "high"]
 EndpointStatus = Literal["segment_backed", "node_only", "missing_endpoint"]
 ConfidenceBucket = Literal["high", "medium", "low", "unknown"]
 RelationSourceScope = Literal["message_thread", "message", "thread", "unknown"]
@@ -213,6 +219,19 @@ class DataAcquisitionReadinessKpi(BaseModel):
     provider_write_executed: bool
 
 
+class DataAcquisitionDecisionSummary(BaseModel):
+    summary_key: str
+    recommendation_code: DiligenceRecommendation
+    risk_level: DiligenceRiskLevel
+    target_gap_count: int
+    critical_action_count: int
+    high_action_count: int
+    medium_action_count: int
+    headline_text: str
+    next_step_text: str
+    provider_write_executed: bool
+
+
 class DataAcquisitionReadinessGate(BaseModel):
     gate_key: str
     display_name: str
@@ -227,6 +246,7 @@ class DataAcquisitionReadinessGate(BaseModel):
     snapshot_verification_ready: bool
     provider_write_executed: bool
     kpis: list[DataAcquisitionReadinessKpi]
+    decision_summary: DataAcquisitionDecisionSummary
     remediation_actions: list[DataAcquisitionRemediationAction]
     detail_text: str
 
@@ -1065,6 +1085,60 @@ def _acquisition_readiness_kpis(
     return sorted(kpis, key=lambda kpi: kpi.priority_rank)
 
 
+def _acquisition_decision_summary(
+    *,
+    kpis: list[DataAcquisitionReadinessKpi],
+    remediation_actions: list[DataAcquisitionRemediationAction],
+    evidence_packet_ready: bool,
+    snapshot_verification_ready: bool,
+) -> DataAcquisitionDecisionSummary:
+    target_gap_count = sum(1 for kpi in kpis if not kpi.target_met)
+    critical_action_count = sum(
+        1 for action in remediation_actions if action.priority_code == "critical"
+    )
+    high_action_count = sum(
+        1 for action in remediation_actions if action.priority_code == "high"
+    )
+    medium_action_count = sum(
+        1 for action in remediation_actions if action.priority_code == "medium"
+    )
+    if not evidence_packet_ready or not snapshot_verification_ready:
+        recommendation_code: DiligenceRecommendation = "insufficient_evidence"
+        risk_level: DiligenceRiskLevel = "high"
+        headline_text = "Evidence is insufficient for buyer diligence."
+        next_step_text = (
+            "Generate the evidence packet and snapshot verification before sharing "
+            "diligence materials."
+        )
+    elif critical_action_count > 0 or target_gap_count > 0:
+        recommendation_code = "remediate_before_close"
+        risk_level = "high" if critical_action_count > 0 else "medium"
+        headline_text = "Remediate acquisition evidence gaps before close."
+        next_step_text = (
+            "Resolve critical and high remediation actions, then regenerate the "
+            "diligence evidence snapshot."
+        )
+    else:
+        recommendation_code = "ready_for_diligence"
+        risk_level = "low"
+        headline_text = "Evidence is ready for buyer diligence review."
+        next_step_text = (
+            "Share the verified evidence snapshot with buyer diligence reviewers."
+        )
+    return DataAcquisitionDecisionSummary(
+        summary_key="buyer_diligence_decision",
+        recommendation_code=recommendation_code,
+        risk_level=risk_level,
+        target_gap_count=target_gap_count,
+        critical_action_count=critical_action_count,
+        high_action_count=high_action_count,
+        medium_action_count=medium_action_count,
+        headline_text=headline_text,
+        next_step_text=next_step_text,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_readiness_gate(
     *,
     quality_checks: list[DataQualityCheck],
@@ -1088,6 +1162,8 @@ def _acquisition_readiness_gate(
         and knowledge_graph_evidence_samples
         and semantic_relation_evidence_samples
     )
+    kpis = _acquisition_readiness_kpis(quality_checks)
+    remediation_actions = _acquisition_remediation_actions(quality_checks)
     if issue_check_keys:
         state_code: AcquisitionReadinessState = "needs_attention"
         detail_text = (
@@ -1115,8 +1191,14 @@ def _acquisition_readiness_gate(
         evidence_packet_ready=evidence_packet_ready,
         snapshot_verification_ready=True,
         provider_write_executed=False,
-        kpis=_acquisition_readiness_kpis(quality_checks),
-        remediation_actions=_acquisition_remediation_actions(quality_checks),
+        kpis=kpis,
+        decision_summary=_acquisition_decision_summary(
+            kpis=kpis,
+            remediation_actions=remediation_actions,
+            evidence_packet_ready=evidence_packet_ready,
+            snapshot_verification_ready=True,
+        ),
+        remediation_actions=remediation_actions,
         detail_text=detail_text,
     )
 

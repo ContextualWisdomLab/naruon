@@ -286,6 +286,19 @@ const acquisitionReadinessKpis = [
   },
 ];
 
+const acquisitionDecisionSummary = {
+  summary_key: "buyer_diligence_decision",
+  recommendation_code: "remediate_before_close",
+  risk_level: "high",
+  target_gap_count: 9,
+  critical_action_count: 2,
+  high_action_count: 6,
+  medium_action_count: 1,
+  headline_text: "Remediate acquisition evidence gaps before close.",
+  next_step_text: "Resolve critical and high remediation actions, then regenerate the diligence evidence snapshot.",
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -314,6 +327,7 @@ const dataQualitySurface = {
     snapshot_verification_ready: true,
     provider_write_executed: false,
     kpis: acquisitionReadinessKpis,
+    decision_summary: acquisitionDecisionSummary,
     remediation_actions: acquisitionRemediationActions,
     detail_text: "Buyer evidence packet is generated, but blocking quality checks remain.",
   },
@@ -721,6 +735,7 @@ const dataEvidenceSnapshot = {
     snapshot_verification_ready: true,
     provider_write_executed: false,
     kpis: acquisitionReadinessKpis,
+    decision_summary: acquisitionDecisionSummary,
     remediation_actions: acquisitionRemediationActions,
     detail_text: "Buyer evidence packet is generated, but blocking quality checks remain.",
   },
@@ -1357,6 +1372,11 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("증거 패킷 생성됨");
     expect(container.textContent).toContain("Snapshot verification ready");
     expect(container.textContent).toContain("thread_id_integrity");
+    expect(container.textContent).toContain("Acquisition decision summary");
+    expect(container.textContent).toContain("Remediate acquisition evidence gaps before close.");
+    expect(container.textContent).toContain("remediate_before_close");
+    expect(container.textContent).toContain("Resolve critical and high remediation actions");
+    expect(container.textContent).toContain("buyer_diligence_decision");
     expect(container.textContent).toContain("Acquisition KPI targets");
     expect(container.textContent).toContain("Thread id integrity target");
     expect(container.textContent).toContain("75% / 100%");
@@ -1434,6 +1454,8 @@ describe("DataPage", () => {
     expect(copiedSnapshot.acquisition_readiness_gate.readiness_score).toBe(25);
     expect(copiedSnapshot.acquisition_readiness_gate.kpis).toHaveLength(12);
     expect(copiedSnapshot.acquisition_readiness_gate.kpis[0].kpi_key).toBe("thread_id_integrity_target");
+    expect(copiedSnapshot.acquisition_readiness_gate.decision_summary.recommendation_code).toBe("remediate_before_close");
+    expect(copiedSnapshot.acquisition_readiness_gate.decision_summary.target_gap_count).toBe(9);
     expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions).toHaveLength(9);
     expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions[0].action_key).toBe("repair_thread_id_integrity");
   });

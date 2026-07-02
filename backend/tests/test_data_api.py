@@ -545,6 +545,24 @@ def _expected_acquisition_readiness_kpis():
     ]
 
 
+def _expected_acquisition_decision_summary():
+    return {
+        "summary_key": "buyer_diligence_decision",
+        "recommendation_code": "remediate_before_close",
+        "risk_level": "high",
+        "target_gap_count": 9,
+        "critical_action_count": 2,
+        "high_action_count": 6,
+        "medium_action_count": 1,
+        "headline_text": "Remediate acquisition evidence gaps before close.",
+        "next_step_text": (
+            "Resolve critical and high remediation actions, then regenerate the "
+            "diligence evidence snapshot."
+        ),
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -717,6 +735,7 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "snapshot_verification_ready": True,
         "provider_write_executed": False,
         "kpis": _expected_acquisition_readiness_kpis(),
+        "decision_summary": _expected_acquisition_decision_summary(),
         "remediation_actions": _expected_acquisition_remediation_actions(),
         "detail_text": (
             "Buyer evidence packet is generated, but blocking quality checks remain."
@@ -1165,6 +1184,7 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "snapshot_verification_ready": True,
         "provider_write_executed": False,
         "kpis": _expected_acquisition_readiness_kpis(),
+        "decision_summary": _expected_acquisition_decision_summary(),
         "remediation_actions": _expected_acquisition_remediation_actions(),
         "detail_text": (
             "Buyer evidence packet is generated, but blocking quality checks remain."
@@ -1175,6 +1195,11 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert kpis[0]["kpi_key"] == "thread_id_integrity_target"
     assert kpis[0]["current_percent"] == 75
     assert kpis[-1]["target_met"] is True
+    summary = snapshot["acquisition_readiness_gate"]["decision_summary"]
+    assert summary["recommendation_code"] == "remediate_before_close"
+    assert summary["risk_level"] == "high"
+    assert summary["target_gap_count"] == 9
+    assert summary["provider_write_executed"] is False
     actions = snapshot["acquisition_readiness_gate"]["remediation_actions"]
     assert len(actions) == 9
     assert actions[0]["action_key"] == "repair_thread_id_integrity"
