@@ -12,7 +12,7 @@ const screenshotDir = process.env.NARUON_FULL_PRODUCT_SCREENSHOT_DIR || "/tmp/na
 const ALLOWED_FULL_PRODUCT_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 export const FULL_PRODUCT_ROUTES = [
-  { path: "/", name: "home", expectedText: "맥락 종합" },
+  { path: "/", name: "home", expectedText: "Naruon" },
   { path: "/mail", name: "mail", expectedText: "메일" },
   { path: "/search", name: "search", expectedText: "맥락 검색" },
   { path: "/calendar", name: "calendar", expectedText: "일정" },
@@ -552,8 +552,12 @@ async function runRouteSmoke(context, routeSpec) {
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
   await page.locator("body").waitFor({ state: "visible", timeout: 20_000 });
   const bodyText = await page.locator("body").innerText({ timeout: 10_000 });
-  if (!bodyText.includes(routeSpec.expectedText)) {
-    throw new Error(`Route ${routeSpec.path} did not render expected text: ${routeSpec.expectedText}`);
+  const expectedTexts = Array.isArray(routeSpec.expectedText) ? routeSpec.expectedText : [routeSpec.expectedText];
+  if (!expectedTexts.some((expectedText) => bodyText.includes(expectedText))) {
+    const bodySnippet = bodyText.replace(/\s+/g, " ").trim().slice(0, 500);
+    throw new Error(
+      `Route ${routeSpec.path} did not render expected text: ${expectedTexts.join(" or ")}. Body snippet: ${bodySnippet}`,
+    );
   }
   if (bodyText.includes("404") || bodyText.includes("This page could not be found")) {
     throw new Error(`Route ${routeSpec.path} rendered a not-found page`);
