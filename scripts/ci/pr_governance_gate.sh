@@ -168,7 +168,7 @@ fi
 
 if [ "${#BLOCKERS[@]}" -gt 0 ]; then
   post_or_update_blocker_comment "$HEAD_REF_OID"
-  exit 0
+  exit 1
 fi
 
 if [ "${#WAITING[@]}" -gt 0 ]; then

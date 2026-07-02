@@ -480,15 +480,15 @@ Screenshots: /tmp/naruon-full-product-smoke/home.png, /tmp/naruon-full-product-s
 ## Task 8: Close Security Governance Gaps
 
 **Files:**
-- Modify later: `scripts/ci/pr_governance_gate.sh`
-- Modify later: `.github` central workflow only if repository policy requires it outside this repo.
-- Create later: `docs/superpowers/reports/2026-07-02-naruon-security-governance-followup.md`
+- Modify: `scripts/ci/pr_governance_gate.sh`
+- Modify: `scripts/ci/test_pr_governance_gate.sh`
+- Create: `docs/superpowers/reports/2026-07-02-naruon-security-governance-followup.md`
 
 **Interfaces:**
 - Consumes: issue #634.
 - Produces: proof that future request-changes or missing required-check metadata cannot pass as green governance.
 
-- [ ] **Step 1: Reproduce issue #634 condition**
+- [x] **Step 1: Reproduce issue #634 condition**
 
 Read issue #634 and inspect current governance script behavior.
 
@@ -498,7 +498,7 @@ Expected:
 The report identifies whether the green governance check can still occur when blocker metadata is unreadable.
 ```
 
-- [ ] **Step 2: Patch the smallest policy path**
+- [x] **Step 2: Patch the smallest policy path**
 
 Ponytail rule:
 
@@ -510,6 +510,24 @@ Expected:
 
 ```text
 The gate exits non-zero when it emits a blocker comment about unreadable required-check metadata.
+```
+
+Actual implementation:
+
+```text
+scripts/ci/pr_governance_gate.sh exits 1 after posting/updating a blocker comment.
+scripts/ci/test_pr_governance_gate.sh now records and asserts blocker, wait-state, and pass exit codes.
+No `.github` workflow change was required because the trusted workflow already runs the central script.
+```
+
+Validation evidence captured on 2026-07-02 KST:
+
+```text
+bash scripts/ci/test_pr_governance_gate.sh
+test_pr_governance_gate: PASS
+
+cd backend && python3 -m pytest tests/test_release_governance.py -q
+29 passed in 0.21s
 ```
 
 ## Task 9: Build Commercial Handoff Package

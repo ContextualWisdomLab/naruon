@@ -66,8 +66,9 @@ Open issue:
 - `#634 Track post-merge security gate failure on PR #631`
 - URL: `https://github.com/ContextualWisdomLab/naruon/issues/634`
 - Status: open
-- Meaning: governance/security gate hardening remains an enterprise-readiness risk.
-- Current interpretation: this is not a current PR #893 code failure, but it must be resolved or explicitly disclosed before treating the program as final procurement-ready.
+- Branch follow-up: `scripts/ci/pr_governance_gate.sh` now exits non-zero after posting or updating a blocker comment, with regression evidence in `docs/superpowers/reports/2026-07-02-naruon-security-governance-followup.md`.
+- Meaning: governance/security gate hardening remains an enterprise-readiness risk until this patch lands on the trusted base branch and issue #634 is closed with remote evidence.
+- Current interpretation: this is not a current PR #893 product-code failure, but it must be resolved or explicitly disclosed before treating the program as final procurement-ready.
 
 ## Product Design Context
 
@@ -218,7 +219,7 @@ P0 for 20B final sale readiness:
 - Full ten-area Product Design audit is not complete.
 - Production deployment and rollback evidence is not packaged.
 - Live provider-send and provider-write execution evidence is incomplete.
-- Issue #634 remains open as a governance risk.
+- Issue #634 has a branch-level fix, but remains open as a governance risk until merged and proven on the trusted base branch.
 - Security questionnaire, data-processing terms, SLA/support, and incident runbook are not packaged for buyer handoff.
 - ROI model is not backed by live measured data.
 
@@ -241,6 +242,6 @@ Non-blockers:
 2. Wire the localhost-only full-product smoke into CI after runtime cost and flake risk are bounded.
 3. Capture Product Design screenshots for all ten IA routes across desktop and mobile.
 4. Extend analytics and ROI reports without claiming live KPI values.
-5. Triage issue #634 and patch governance centrally if the failure mode still exists.
+5. Merge the issue #634 governance patch and close the issue only after trusted-base remote evidence proves blocker comments fail the governance check.
 6. Create buyer package, demo script, security questionnaire, and SLA/support draft.
 7. Run local and remote verification before any completion claim.
