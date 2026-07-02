@@ -1120,6 +1120,11 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     }
     await sourceGovernance.getByText("충돌 검사", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await sourceGovernance.getByText("허용", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    const permissionEditor = page.getByRole("region", { name: "보안 권한 편집", exact: true });
+    await permissionEditor.getByLabel("권한 판정 변경", { exact: true }).selectOption({ label: "외부 쓰기 차단" });
+    await permissionEditor.getByText("조직 차단 - 외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
+    await permissionEditor.getByText("권한 변경이 저장되었습니다: 외부 쓰기 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "감사 로그", exact: true }).click();
     const auditRegion = page.getByRole("region", { name: "보안 감사 로그", exact: true });
     await auditRegion.getByText("지속 감사 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1135,10 +1140,20 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("차단 우선 정책 순서", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("교차 조직 제공자 secret", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("조직 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "접근 권한", exact: true }).click();
+    const finalPermissionEditor = page.getByRole("region", { name: "보안 권한 편집", exact: true });
+    await finalPermissionEditor.getByLabel("권한 판정 변경", { exact: true }).selectOption({ label: "외부 쓰기 차단" });
+    await finalPermissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
+    await finalPermissionEditor.scrollIntoViewIfNeeded();
+    await finalPermissionEditor.getByText("권한 변경이 저장되었습니다: 외부 쓰기 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("security:verify-access-source-governance"),
       evidence("security:verify-write-capability-boundary"),
       evidence("security:verify-policy-allow-decision"),
+      evidence("security:edit-permission-decision"),
+      evidence("security:save-permission-decision"),
+      evidence("security:verify-denial-result-state"),
+      evidence("security:return-permission-editor-evidence"),
       evidence("security:open-audit-log"),
       evidence("security:verify-durable-audit-event"),
       evidence("security:verify-connector-observation"),

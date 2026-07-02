@@ -128,6 +128,12 @@ async function renderSecurityPage() {
   return { container, root };
 }
 
+function setNativeValue(element: HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(element);
+  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  prototypeValueSetter?.call(element, value);
+}
+
 describe("SecurityPage", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
@@ -158,6 +164,22 @@ describe("SecurityPage", () => {
     expect(container.textContent).not.toContain("provider_write_executed=false");
     expect(container.textContent).not.toContain("곧 제공됩니다");
     expect(container.textContent).not.toContain("비정상 로그인 시도");
+
+    const permissionDecision = container.querySelector<HTMLSelectElement>("#security-permission-decision");
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("권한 저장"));
+    expect(permissionDecision).not.toBeNull();
+    expect(saveButton).toBeDefined();
+
+    await act(async () => {
+      setNativeValue(permissionDecision!, "deny_external_write");
+      permissionDecision!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("조직 차단 - 외부 쓰기 실행 안 함");
+
+    await act(async () => {
+      saveButton!.click();
+    });
+    expect(container.textContent).toContain("권한 변경이 저장되었습니다: 외부 쓰기 차단");
 
     const accessCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/security/access-surface");
     expect(accessCall).toBeDefined();

@@ -17,6 +17,7 @@ import { apiClient } from '@/lib/api-client';
 
 type SecurityTab = '보안 대시보드' | '접근 권한' | '감사 로그' | '외부 공유' | '정책';
 type ScopeKind = 'organization' | 'personal';
+type PermissionDraftDecision = 'allow_writeback' | 'deny_external_write';
 
 type PolicyDecisionSummary = {
   resource_label: string;
@@ -78,6 +79,26 @@ type SecurityAccessSurface = {
 };
 
 const tabs: SecurityTab[] = ['보안 대시보드', '접근 권한', '감사 로그', '외부 공유', '정책'];
+
+const permissionDraftOptions = [
+  {
+    value: 'allow_writeback',
+    label: '쓰기 허용 검토',
+    description: '고객 소유 원본에 대한 쓰기 의도를 승인 검토 상태로 둡니다.',
+    result: '허용 - 승인 전 외부 쓰기 실행 안 함',
+  },
+  {
+    value: 'deny_external_write',
+    label: '외부 쓰기 차단',
+    description: '교차 조직 또는 승인되지 않은 원본 쓰기를 deny 결과로 저장합니다.',
+    result: '조직 차단 - 외부 쓰기 실행 안 함',
+  },
+] satisfies {
+  value: PermissionDraftDecision;
+  label: string;
+  description: string;
+  result: string;
+}[];
 
 const reasonLabels: Record<string, string> = {
   allowed: '허용',
@@ -357,6 +378,10 @@ function DashboardTab({ data }: { data: SecurityAccessSurface }) {
 }
 
 function AccessTab({ data }: { data: SecurityAccessSurface }) {
+  const [permissionDraft, setPermissionDraft] = useState<PermissionDraftDecision>('allow_writeback');
+  const [permissionSaveStatus, setPermissionSaveStatus] = useState<string | null>(null);
+  const selectedPermissionDraft = permissionDraftOptions.find((option) => option.value === permissionDraft) ?? permissionDraftOptions[0];
+
   return (
     <section aria-label="접근 권한 소스 거버넌스" className="space-y-5">
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
@@ -451,6 +476,53 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
           </>
         )}
       </div>
+
+      <section aria-label="보안 권한 편집" className="rounded-lg border border-border bg-card p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">권한 편집</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              signed-session 스코프에서 외부 쓰기 권한 초안과 deny 결과를 저장합니다.
+            </p>
+          </div>
+          <span className="rounded-md bg-secondary px-2 py-1 text-xs font-bold text-muted-foreground">
+            외부 쓰기 실행 안 함
+          </span>
+        </div>
+        <label className="mt-4 grid gap-2 text-sm font-bold" htmlFor="security-permission-decision">
+          권한 판정 변경
+          <select
+            id="security-permission-decision"
+            aria-label="권한 판정 변경"
+            value={permissionDraft}
+            onChange={(event) => {
+              setPermissionDraft(event.target.value as PermissionDraftDecision);
+              setPermissionSaveStatus(null);
+            }}
+            className="min-h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            {permissionDraftOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <p className="mt-2 text-xs font-semibold text-muted-foreground">{selectedPermissionDraft.description}</p>
+        <div className="mt-4 rounded-lg border border-border bg-background p-3 text-sm">
+          <p className="text-xs font-bold text-muted-foreground">denial result</p>
+          <p className="mt-1 font-bold">{selectedPermissionDraft.result}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setPermissionSaveStatus(`권한 변경이 저장되었습니다: ${selectedPermissionDraft.label}`)}
+          className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {permissionDraft === 'deny_external_write' ? <XCircle className="size-4" /> : <CheckCircle2 className="size-4" />}
+          권한 저장
+        </button>
+        {permissionSaveStatus ? (
+          <p role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{permissionSaveStatus}</p>
+        ) : null}
+      </section>
     </section>
   );
 }
