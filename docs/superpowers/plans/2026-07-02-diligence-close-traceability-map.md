@@ -22,7 +22,7 @@ Add a deterministic buyer-close traceability map to the redacted evidence snapsh
 - [x] Add frontend fixture, copied JSON, and visible rendering coverage.
 - [x] Generate a FigJam diagram for the traceability-map flow without Code Connect.
 - [x] Run backend tests, ruff, frontend tests, frontend lint, diff review, and Ponytail review.
-- [ ] Push the PR branch and update PR #895 with Phase 29 evidence.
+- [x] Push the PR branch and update PR #895 with Phase 29 evidence.
 
 ## Acceptance Criteria
 
@@ -45,3 +45,4 @@ Add a deterministic buyer-close traceability map to the redacted evidence snapsh
 - Frontend lint: `npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` passed.
 - FigJam: https://www.figma.com/board/mjH0tpDIvz5kj44kL6354R
 - Ponytail review: removed speculative missing-join fallbacks and kept the trace map inside the existing evidence snapshot and Data Quality UI contract; no separate library, package, or submodule is warranted for this phase.
+- PR #895 was updated with Phase 29 evidence after pushing head `1efc31f67715f4324e20c37759ecb9d8ac1cfd30`; live state was mergeable, blocked only by queued checks, with 0 unresolved review threads at that verification point.
