@@ -2049,6 +2049,199 @@ def _expected_commercial_close_kpi_operating_model():
     }
 
 
+def _expected_commercial_close_buyer_brief():
+    return {
+        "brief_key": "commercial_close_buyer_brief",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "brief_blocked",
+        "readiness_headline_text": (
+            "Commercial close remains blocked: readiness score 62/100, 5 KPI "
+            "operating metric(s), 6 execution lane(s), and 9 exception(s) require "
+            "attention."
+        ),
+        "proof_thesis_text": (
+            "Naruon can package redacted DOM, paragraph, knowledge-graph, semantic "
+            "relation, data-room, KPI, and offline verifier evidence for buyer review "
+            "without exposing raw content, stable IDs, provider credentials, or "
+            "provider writes."
+        ),
+        "evidence_basis_bullets": [
+            {
+                "bullet_key": "buyer_brief_readiness_score",
+                "display_name": "Commercial readiness score",
+                "source_field": "commercial_close_readiness_scorecard.total_score",
+                "detail_text": (
+                    "Commercial readiness is 62/100 for 2,000,000,000 KRW target "
+                    "review; status is commercially_blocked."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_data_room_release",
+                "display_name": "Data-room release",
+                "source_field": "data_room_release_summary.ready_artifact_count",
+                "detail_text": (
+                    "Data-room release has 7/10 artifact(s) ready and 3 blocked "
+                    "artifact(s)."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_acceptance_clearance",
+                "display_name": "Buyer acceptance clearance",
+                "source_field": (
+                    "diligence_close_acceptance_summary.ready_acceptance_count"
+                ),
+                "detail_text": (
+                    "Buyer acceptance has 0/6 acceptance item(s) ready with 9 "
+                    "blocker key(s)."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_kpi_operating_model",
+                "display_name": "KPI operating model",
+                "source_field": (
+                    "commercial_close_kpi_operating_model.target_met_metric_count"
+                ),
+                "detail_text": (
+                    "KPI operating model has 3/8 metric(s) at target and 0 "
+                    "guardrail breach(es)."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_offline_verifier",
+                "display_name": "Offline verifier",
+                "source_field": "verification_handoff.verifier_command",
+                "detail_text": (
+                    "Copied snapshot JSON can be verified with python "
+                    "scripts/verify_evidence_snapshot.py <snapshot.json>."
+                ),
+                "provider_write_executed": False,
+            },
+        ],
+        "blocker_bullets": [
+            {
+                "bullet_key": "buyer_brief_blocker_exception_repair_thread_id_integrity",
+                "display_name": "Canonical thread repair",
+                "source_field": "quality_checks.thread_id_integrity",
+                "detail_text": (
+                    "critical blocker owned by email_ingestion for "
+                    "acquisition-readiness-summary.json: Run canonical threading "
+                    "repair for affected scoped emails."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": (
+                    "buyer_brief_blocker_exception_backfill_dedupe_fingerprints"
+                ),
+                "display_name": "Duplicate fingerprint backfill",
+                "source_field": "quality_checks.dedupe_fingerprint",
+                "detail_text": (
+                    "critical blocker owned by email_ingestion for "
+                    "acquisition-readiness-summary.json: Backfill "
+                    "duplicate-detection fingerprints for scoped email records."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_blocker_exception_recover_attachment_content",
+                "display_name": "Attachment content extraction",
+                "source_field": "quality_checks.attachment_content",
+                "detail_text": (
+                    "high blocker owned by attachment_parsing for "
+                    "remediation-actions.json: Re-run attachment extraction for scoped "
+                    "attachments with blank safe content."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": (
+                    "buyer_brief_blocker_exception_backfill_content_graph_coverage"
+                ),
+                "display_name": "DOM paragraph segmentation backfill",
+                "source_field": "quality_checks.content_graph_coverage",
+                "detail_text": (
+                    "high blocker owned by content_graph for "
+                    "dom-paragraph-evidence-samples.json: Backfill DOM paragraph "
+                    "segmentation for unsegmented scoped emails."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": (
+                    "buyer_brief_blocker_exception_backfill_knowledge_graph_coverage"
+                ),
+                "display_name": "Knowledge graph edge persistence",
+                "source_field": "quality_checks.knowledge_graph_coverage",
+                "detail_text": (
+                    "high blocker owned by knowledge_graph for "
+                    "knowledge-graph-evidence-samples.json: Persist deterministic "
+                    "knowledge graph edges for emails missing graph coverage."
+                ),
+                "provider_write_executed": False,
+            },
+        ],
+        "guardrail_bullets": [
+            {
+                "bullet_key": "buyer_brief_privacy_redaction",
+                "display_name": "Privacy redaction",
+                "source_field": "privacy_redaction_policy",
+                "detail_text": (
+                    "Privacy policy exposes raw content: no, stable IDs: no, "
+                    "provider credentials: no."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_data_room_exposure",
+                "display_name": "Data-room exposure controls",
+                "source_field": "data_room_release_summary.privacy_exposure_count",
+                "detail_text": (
+                    "Data-room summary reports 0 privacy exposure(s), 0 raw content "
+                    "exposure(s), 0 stable ID exposure(s), and 0 credential "
+                    "exposure(s)."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_provider_write_boundary",
+                "display_name": "Provider write boundary",
+                "source_field": "provider_write_executed",
+                "detail_text": (
+                    "Provider write execution count is 0; buyer evidence generation "
+                    "remains read-only."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_snapshot_verifier",
+                "display_name": "Snapshot verifier",
+                "source_field": "verification_handoff",
+                "detail_text": (
+                    "Snapshot verification is required: yes; command python "
+                    "scripts/verify_evidence_snapshot.py <snapshot.json>."
+                ),
+                "provider_write_executed": False,
+            },
+        ],
+        "reviewer_handoff_text": (
+            "Buyer reviewers should start from commercial_close_buyer_brief, verify "
+            "copied JSON with python scripts/verify_evidence_snapshot.py "
+            "<snapshot.json>, then review 5 blocker bullet(s) before release."
+        ),
+        "next_action_text": (
+            "Resolve top blocker bullets, rerun parser and graph remediation, "
+            "regenerate the snapshot, rerun the offline verifier, and reissue the "
+            "buyer brief."
+        ),
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -2625,6 +2818,11 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert (
         snapshot["commercial_close_kpi_operating_model"]
         == _expected_commercial_close_kpi_operating_model()
+    )
+    assert "commercial_close_buyer_brief" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["commercial_close_buyer_brief"]
+        == _expected_commercial_close_buyer_brief()
     )
     assert "diligence_exception_register" in snapshot["canonical_payload_fields"]
     assert (

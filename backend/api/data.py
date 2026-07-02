@@ -85,6 +85,7 @@ CommercialCloseExecutionLaneStatus = Literal["ready", "blocked"]
 CommercialCloseKpiMetricKind = Literal["primary", "driver", "guardrail"]
 CommercialCloseKpiMetricStatus = Literal["target_met", "needs_attention"]
 CommercialCloseKpiOperatingStatus = Literal["operating_ready", "operating_blocked"]
+CommercialCloseBuyerBriefStatus = Literal["brief_ready", "brief_blocked"]
 DataRoomArtifactType = Literal[
     "snapshot_json",
     "verifier_script",
@@ -609,6 +610,29 @@ class DataCommercialCloseKpiOperatingModel(BaseModel):
     provider_write_executed: bool
 
 
+class DataCommercialCloseBuyerBriefBullet(BaseModel):
+    bullet_key: str
+    display_name: str
+    source_field: str
+    detail_text: str
+    provider_write_executed: bool
+
+
+class DataCommercialCloseBuyerBrief(BaseModel):
+    brief_key: str
+    target_contract_value_krw: int
+    target_contract_label: str
+    status_code: CommercialCloseBuyerBriefStatus
+    readiness_headline_text: str
+    proof_thesis_text: str
+    evidence_basis_bullets: list[DataCommercialCloseBuyerBriefBullet]
+    blocker_bullets: list[DataCommercialCloseBuyerBriefBullet]
+    guardrail_bullets: list[DataCommercialCloseBuyerBriefBullet]
+    reviewer_handoff_text: str
+    next_action_text: str
+    provider_write_executed: bool
+
+
 class DataDiligenceExceptionRegisterEntry(BaseModel):
     exception_key: str
     blocking_check_key: str
@@ -879,6 +903,23 @@ def _default_commercial_close_kpi_operating_model() -> (
     )
 
 
+def _default_commercial_close_buyer_brief() -> DataCommercialCloseBuyerBrief:
+    return DataCommercialCloseBuyerBrief(
+        brief_key="commercial_close_buyer_brief",
+        target_contract_value_krw=2_000_000_000,
+        target_contract_label="2,000,000,000 KRW",
+        status_code="brief_blocked",
+        readiness_headline_text="No commercial close buyer brief is present.",
+        proof_thesis_text="Generate the evidence snapshot before buyer brief review.",
+        evidence_basis_bullets=[],
+        blocker_bullets=[],
+        guardrail_bullets=[],
+        reviewer_handoff_text="No reviewer handoff is present.",
+        next_action_text="Generate the evidence snapshot before buyer brief review.",
+        provider_write_executed=False,
+    )
+
+
 def _default_diligence_close_acceptance_summary() -> (
     DataDiligenceCloseAcceptanceSummary
 ):
@@ -953,6 +994,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     commercial_close_kpi_operating_model: (
         DataCommercialCloseKpiOperatingModel
     ) = Field(default_factory=_default_commercial_close_kpi_operating_model)
+    commercial_close_buyer_brief: DataCommercialCloseBuyerBrief = Field(
+        default_factory=_default_commercial_close_buyer_brief
+    )
     diligence_exception_register: list[DataDiligenceExceptionRegisterEntry] = Field(
         default_factory=list
     )
@@ -3061,6 +3105,217 @@ def _commercial_close_kpi_operating_model(
     )
 
 
+def _commercial_close_buyer_brief(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> DataCommercialCloseBuyerBrief:
+    decision_summary = snapshot.diligence_close_decision_summary
+    acquisition_gate = snapshot.acquisition_readiness_gate
+    release_summary = snapshot.data_room_release_summary
+    acceptance_summary = snapshot.diligence_close_acceptance_summary
+    scorecard = snapshot.commercial_close_readiness_scorecard
+    execution_plan = snapshot.commercial_close_execution_plan
+    kpi_model = snapshot.commercial_close_kpi_operating_model
+    verification_handoff = snapshot.verification_handoff
+    privacy_policy = snapshot.privacy_redaction_policy
+    target_label = scorecard.target_contract_label
+    provider_write_count = sum(
+        int(write_executed)
+        for write_executed in (
+            decision_summary.provider_write_executed,
+            acquisition_gate.provider_write_executed,
+            release_summary.provider_write_executed,
+            acceptance_summary.provider_write_executed,
+            scorecard.provider_write_executed,
+            execution_plan.provider_write_executed,
+            kpi_model.provider_write_executed,
+            verification_handoff.provider_write_executed,
+        )
+    )
+
+    def yes_no(value: bool) -> str:
+        return "yes" if value else "no"
+
+    def bullet(
+        *,
+        bullet_key: str,
+        display_name: str,
+        source_field: str,
+        detail_text: str,
+    ) -> DataCommercialCloseBuyerBriefBullet:
+        return DataCommercialCloseBuyerBriefBullet(
+            bullet_key=bullet_key,
+            display_name=display_name,
+            source_field=source_field,
+            detail_text=detail_text,
+            provider_write_executed=False,
+        )
+
+    evidence_basis_bullets = [
+        bullet(
+            bullet_key="buyer_brief_readiness_score",
+            display_name="Commercial readiness score",
+            source_field="commercial_close_readiness_scorecard.total_score",
+            detail_text=(
+                f"Commercial readiness is {scorecard.total_score}/"
+                f"{scorecard.max_score} for {target_label} target review; "
+                f"status is {scorecard.status_code}."
+            ),
+        ),
+        bullet(
+            bullet_key="buyer_brief_data_room_release",
+            display_name="Data-room release",
+            source_field="data_room_release_summary.ready_artifact_count",
+            detail_text=(
+                f"Data-room release has {release_summary.ready_artifact_count}/"
+                f"{release_summary.total_artifact_count} artifact(s) ready and "
+                f"{release_summary.needs_attention_artifact_count} blocked artifact(s)."
+            ),
+        ),
+        bullet(
+            bullet_key="buyer_brief_acceptance_clearance",
+            display_name="Buyer acceptance clearance",
+            source_field="diligence_close_acceptance_summary.ready_acceptance_count",
+            detail_text=(
+                f"Buyer acceptance has {acceptance_summary.ready_acceptance_count}/"
+                f"{acceptance_summary.total_acceptance_count} acceptance item(s) "
+                f"ready with {acceptance_summary.blocker_count} blocker key(s)."
+            ),
+        ),
+        bullet(
+            bullet_key="buyer_brief_kpi_operating_model",
+            display_name="KPI operating model",
+            source_field="commercial_close_kpi_operating_model.target_met_metric_count",
+            detail_text=(
+                f"KPI operating model has {kpi_model.target_met_metric_count}/"
+                f"{kpi_model.total_metric_count} metric(s) at target and "
+                f"{kpi_model.guardrail_breach_count} guardrail breach(es)."
+            ),
+        ),
+        bullet(
+            bullet_key="buyer_brief_offline_verifier",
+            display_name="Offline verifier",
+            source_field="verification_handoff.verifier_command",
+            detail_text=(
+                "Copied snapshot JSON can be verified with "
+                f"{verification_handoff.verifier_command}."
+            ),
+        ),
+    ]
+    blocker_bullets = [
+        bullet(
+            bullet_key=f"buyer_brief_blocker_{entry.exception_key}",
+            display_name=entry.display_name,
+            source_field=entry.source_field,
+            detail_text=(
+                f"{entry.severity_code} blocker owned by {entry.owner_area} for "
+                f"{entry.related_artifact}: {entry.next_action}"
+            ),
+        )
+        for entry in snapshot.diligence_exception_register[:5]
+    ]
+    guardrail_bullets = [
+        bullet(
+            bullet_key="buyer_brief_privacy_redaction",
+            display_name="Privacy redaction",
+            source_field="privacy_redaction_policy",
+            detail_text=(
+                "Privacy policy exposes raw content: "
+                f"{yes_no(privacy_policy.raw_content_exposed)}, stable IDs: "
+                f"{yes_no(privacy_policy.stable_identifiers_exposed)}, provider "
+                f"credentials: {yes_no(privacy_policy.provider_credentials_exposed)}."
+            ),
+        ),
+        bullet(
+            bullet_key="buyer_brief_data_room_exposure",
+            display_name="Data-room exposure controls",
+            source_field="data_room_release_summary.privacy_exposure_count",
+            detail_text=(
+                f"Data-room summary reports {release_summary.privacy_exposure_count} "
+                f"privacy exposure(s), {release_summary.raw_content_exposure_count} "
+                "raw content exposure(s), "
+                f"{release_summary.stable_identifier_exposure_count} stable ID "
+                f"exposure(s), and {release_summary.provider_credential_exposure_count} "
+                "credential exposure(s)."
+            ),
+        ),
+        bullet(
+            bullet_key="buyer_brief_provider_write_boundary",
+            display_name="Provider write boundary",
+            source_field="provider_write_executed",
+            detail_text=(
+                f"Provider write execution count is {provider_write_count}; buyer "
+                "evidence generation remains read-only."
+            ),
+        ),
+        bullet(
+            bullet_key="buyer_brief_snapshot_verifier",
+            display_name="Snapshot verifier",
+            source_field="verification_handoff",
+            detail_text=(
+                "Snapshot verification is required: "
+                f"{yes_no(release_summary.snapshot_verification_required)}; "
+                f"command {verification_handoff.verifier_command}."
+            ),
+        ),
+    ]
+    status_code: CommercialCloseBuyerBriefStatus = (
+        "brief_ready"
+        if (
+            decision_summary.decision_code == "ready_to_close"
+            and acquisition_gate.state_code == "ready"
+            and release_summary.release_status == "release_ready"
+            and acceptance_summary.decision_code == "ready_to_close"
+            and scorecard.status_code == "commercially_ready"
+            and execution_plan.status_code == "execution_ready"
+            and kpi_model.status_code == "operating_ready"
+            and provider_write_count == 0
+        )
+        else "brief_blocked"
+    )
+    readiness_headline_text = (
+        "Commercial close remains blocked: readiness score "
+        f"{scorecard.total_score}/{scorecard.max_score}, "
+        f"{kpi_model.needs_attention_metric_count} KPI operating metric(s), "
+        f"{execution_plan.blocked_lane_count} execution lane(s), and "
+        f"{len(snapshot.diligence_exception_register)} exception(s) require attention."
+        if status_code == "brief_blocked"
+        else (
+            f"Commercial close buyer brief is ready for {target_label} target review."
+        )
+    )
+    proof_thesis_text = (
+        "Naruon can package redacted DOM, paragraph, knowledge-graph, semantic "
+        "relation, data-room, KPI, and offline verifier evidence for buyer review "
+        "without exposing raw content, stable IDs, provider credentials, or provider "
+        "writes."
+    )
+    reviewer_handoff_text = (
+        "Buyer reviewers should start from commercial_close_buyer_brief, verify "
+        f"copied JSON with {verification_handoff.verifier_command}, then review "
+        f"{len(blocker_bullets)} blocker bullet(s) before release."
+    )
+    next_action_text = (
+        "Resolve top blocker bullets, rerun parser and graph remediation, regenerate "
+        "the snapshot, rerun the offline verifier, and reissue the buyer brief."
+        if status_code == "brief_blocked"
+        else "Share the verified buyer brief with commercial diligence reviewers."
+    )
+    return DataCommercialCloseBuyerBrief(
+        brief_key="commercial_close_buyer_brief",
+        target_contract_value_krw=scorecard.target_contract_value_krw,
+        target_contract_label=target_label,
+        status_code=status_code,
+        readiness_headline_text=readiness_headline_text,
+        proof_thesis_text=proof_thesis_text,
+        evidence_basis_bullets=evidence_basis_bullets,
+        blocker_bullets=blocker_bullets,
+        guardrail_bullets=guardrail_bullets,
+        reviewer_handoff_text=reviewer_handoff_text,
+        next_action_text=next_action_text,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -3388,6 +3643,11 @@ def _evidence_snapshot_from_surface(
             "commercial_close_kpi_operating_model": (
                 _commercial_close_kpi_operating_model(snapshot)
             )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "commercial_close_buyer_brief": _commercial_close_buyer_brief(snapshot)
         }
     )
     digest_payload = _snapshot_digest_payload(snapshot)

@@ -58,6 +58,7 @@ export type CommercialCloseExecutionLaneStatus = 'ready' | 'blocked';
 export type CommercialCloseKpiMetricKind = 'primary' | 'driver' | 'guardrail';
 export type CommercialCloseKpiMetricStatus = 'target_met' | 'needs_attention';
 export type CommercialCloseKpiOperatingStatus = 'operating_ready' | 'operating_blocked';
+export type CommercialCloseBuyerBriefStatus = 'brief_ready' | 'brief_blocked';
 export type CloseGateStatus = 'blocked' | 'ready';
 export type DiligenceCloseDecision = 'ready_to_close' | 'close_blocked';
 export type DiligenceCloseSeverity = RemediationPriority | 'none';
@@ -423,6 +424,38 @@ export type DataEvidenceSnapshotResponse = {
       next_action_text: string;
       provider_write_executed: boolean;
     }>;
+    provider_write_executed: boolean;
+  };
+  commercial_close_buyer_brief: {
+    brief_key: string;
+    target_contract_value_krw: number;
+    target_contract_label: string;
+    status_code: CommercialCloseBuyerBriefStatus;
+    readiness_headline_text: string;
+    proof_thesis_text: string;
+    evidence_basis_bullets: Array<{
+      bullet_key: string;
+      display_name: string;
+      source_field: string;
+      detail_text: string;
+      provider_write_executed: boolean;
+    }>;
+    blocker_bullets: Array<{
+      bullet_key: string;
+      display_name: string;
+      source_field: string;
+      detail_text: string;
+      provider_write_executed: boolean;
+    }>;
+    guardrail_bullets: Array<{
+      bullet_key: string;
+      display_name: string;
+      source_field: string;
+      detail_text: string;
+      provider_write_executed: boolean;
+    }>;
+    reviewer_handoff_text: string;
+    next_action_text: string;
     provider_write_executed: boolean;
   };
   diligence_exception_register: Array<{

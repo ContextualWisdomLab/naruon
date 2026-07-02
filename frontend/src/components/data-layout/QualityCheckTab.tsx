@@ -44,11 +44,19 @@ export function QualityCheckTab({
   const commercialCloseScorecard = evidenceSnapshot?.commercial_close_readiness_scorecard;
   const commercialCloseExecutionPlan = evidenceSnapshot?.commercial_close_execution_plan;
   const commercialCloseKpiOperatingModel = evidenceSnapshot?.commercial_close_kpi_operating_model;
+  const commercialCloseBuyerBrief = evidenceSnapshot?.commercial_close_buyer_brief;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
   const acceptanceChecklist = evidenceSnapshot?.diligence_close_acceptance_checklist ?? [];
   const acceptanceSummary = evidenceSnapshot?.diligence_close_acceptance_summary;
+  const commercialCloseBuyerBriefSections = commercialCloseBuyerBrief
+    ? [
+        { title: 'Evidence basis', bullets: commercialCloseBuyerBrief.evidence_basis_bullets },
+        { title: 'Top blocker bullets', bullets: commercialCloseBuyerBrief.blocker_bullets },
+        { title: 'Guardrail bullets', bullets: commercialCloseBuyerBrief.guardrail_bullets },
+      ]
+    : [];
   const copyEvidenceSnapshot = React.useCallback(async () => {
     if (!evidenceSnapshot) return;
     try {
@@ -506,6 +514,65 @@ export function QualityCheckTab({
                               </dl>
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {commercialCloseBuyerBrief && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Commercial close buyer brief</p>
+                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseBuyerBrief.status_code)}</h3>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.readiness_headline_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.proof_thesis_text)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {toSafeReactText(commercialCloseBuyerBrief.brief_key)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Target review value</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseBuyerBrief.target_contract_label)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Evidence basis</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerBrief.evidence_basis_bullets.length)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Top blockers</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerBrief.blocker_bullets.length)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Guardrails</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerBrief.guardrail_bullets.length)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseBuyerBrief.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                          {commercialCloseBuyerBriefSections.map((section) => (
+                            <div key={section.title}>
+                              <p className="text-xs font-black text-muted-foreground">{section.title}</p>
+                              <div className="mt-3 space-y-3">
+                                {section.bullets.map((bullet) => (
+                                  <div key={bullet.bullet_key} className="border-t border-border pt-3 first:border-t-0 first:pt-0">
+                                    <h4 className="text-sm font-black">{toSafeReactText(bullet.display_name)}</h4>
+                                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(bullet.detail_text)}</p>
+                                    <p className="mt-1 break-all text-xs font-bold text-muted-foreground">{toSafeReactText(bullet.bullet_key)} · {toSafeReactText(bullet.source_field)}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-4 border-t border-border pt-4">
+                          <p className="text-sm font-semibold leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.reviewer_handoff_text)}</p>
+                          <p className="mt-1 text-sm font-semibold leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.next_action_text)}</p>
                         </div>
                       </div>
                     </div>
