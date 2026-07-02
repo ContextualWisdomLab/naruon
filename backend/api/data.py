@@ -87,6 +87,7 @@ DiligenceCloseDecision = Literal["ready_to_close", "close_blocked"]
 DiligenceCloseSeverity = Literal["critical", "high", "medium", "none"]
 DiligenceArtifactReviewStatus = Literal["blocked", "ready_for_review"]
 DiligenceOwnerHandoffStatus = Literal["blocked", "ready_for_handoff"]
+DiligenceAcceptanceStatus = Literal["blocked", "ready_for_acceptance"]
 RemediationPriority = Literal["critical", "high", "medium"]
 DiligenceRecommendation = Literal[
     "ready_for_diligence",
@@ -580,6 +581,24 @@ class DataDiligenceCloseTraceabilityMapEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceCloseAcceptanceChecklistEntry(BaseModel):
+    acceptance_key: str
+    trace_key: str
+    data_room_artifact: str
+    source_field: str
+    owner_area: str
+    reviewer_roles: list[str]
+    acceptance_status: DiligenceAcceptanceStatus
+    close_gate_status: CloseGateStatus
+    blocker_keys: list[str]
+    acceptance_criteria: str
+    verification_command: str
+    reviewer_evidence_summary: str
+    next_action: str
+    snapshot_verification_required: bool
+    provider_write_executed: bool
+
+
 def _default_diligence_close_decision_summary() -> DataDiligenceCloseDecisionSummary:
     return DataDiligenceCloseDecisionSummary(
         summary_key="buyer_close_decision",
@@ -659,6 +678,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     ] = Field(default_factory=list)
     diligence_close_traceability_map: list[
         DataDiligenceCloseTraceabilityMapEntry
+    ] = Field(default_factory=list)
+    diligence_close_acceptance_checklist: list[
+        DataDiligenceCloseAcceptanceChecklistEntry
     ] = Field(default_factory=list)
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
@@ -1984,6 +2006,48 @@ def _diligence_close_traceability_map(
     return entries
 
 
+def _diligence_close_acceptance_checklist(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> list[DataDiligenceCloseAcceptanceChecklistEntry]:
+    verification_command = snapshot.verification_handoff.verifier_command
+    return [
+        DataDiligenceCloseAcceptanceChecklistEntry(
+            acceptance_key=f"accept_{trace.trace_key.removeprefix('trace_')}",
+            trace_key=trace.trace_key,
+            data_room_artifact=trace.data_room_artifact,
+            source_field=trace.source_field,
+            owner_area=trace.owner_area,
+            reviewer_roles=trace.buyer_review_roles,
+            acceptance_status=(
+                "blocked"
+                if trace.close_gate_status == "blocked"
+                else "ready_for_acceptance"
+            ),
+            close_gate_status=trace.close_gate_status,
+            blocker_keys=(
+                trace.exception_keys
+                if trace.close_gate_status == "blocked"
+                else []
+            ),
+            acceptance_criteria=(
+                f"Resolve {trace.exception_count} exception(s), regenerate "
+                f"{trace.data_room_artifact} from {trace.source_field}, and "
+                "verify the copied snapshot digest before buyer acceptance."
+            ),
+            verification_command=verification_command,
+            reviewer_evidence_summary=(
+                f"{', '.join(trace.buyer_review_roles)} review "
+                f"{trace.data_room_artifact} for {trace.owner_area}; "
+                f"{trace.trace_key} covers {trace.exception_count} exception(s)."
+            ),
+            next_action=trace.next_action,
+            snapshot_verification_required=trace.snapshot_verification_required,
+            provider_write_executed=False,
+        )
+        for trace in snapshot.diligence_close_traceability_map
+    ]
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -2272,6 +2336,13 @@ def _evidence_snapshot_from_surface(
         update={
             "diligence_close_traceability_map": (
                 _diligence_close_traceability_map(snapshot)
+            )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "diligence_close_acceptance_checklist": (
+                _diligence_close_acceptance_checklist(snapshot)
             )
         }
     )

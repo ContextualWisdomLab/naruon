@@ -1385,6 +1385,47 @@ def _expected_diligence_close_traceability_map():
     return entries
 
 
+def _expected_diligence_close_acceptance_checklist():
+    return [
+        {
+            "acceptance_key": f"accept_{trace['trace_key'].removeprefix('trace_')}",
+            "trace_key": trace["trace_key"],
+            "data_room_artifact": trace["data_room_artifact"],
+            "source_field": trace["source_field"],
+            "owner_area": trace["owner_area"],
+            "reviewer_roles": trace["buyer_review_roles"],
+            "acceptance_status": (
+                "blocked"
+                if trace["close_gate_status"] == "blocked"
+                else "ready_for_acceptance"
+            ),
+            "close_gate_status": trace["close_gate_status"],
+            "blocker_keys": (
+                trace["exception_keys"]
+                if trace["close_gate_status"] == "blocked"
+                else []
+            ),
+            "acceptance_criteria": (
+                f"Resolve {trace['exception_count']} exception(s), regenerate "
+                f"{trace['data_room_artifact']} from {trace['source_field']}, and "
+                "verify the copied snapshot digest before buyer acceptance."
+            ),
+            "verification_command": (
+                "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+            ),
+            "reviewer_evidence_summary": (
+                f"{', '.join(trace['buyer_review_roles'])} review "
+                f"{trace['data_room_artifact']} for {trace['owner_area']}; "
+                f"{trace['trace_key']} covers {trace['exception_count']} exception(s)."
+            ),
+            "next_action": trace["next_action"],
+            "snapshot_verification_required": trace["snapshot_verification_required"],
+            "provider_write_executed": False,
+        }
+        for trace in _expected_diligence_close_traceability_map()
+    ]
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1981,6 +2022,13 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         snapshot["diligence_close_traceability_map"]
         == _expected_diligence_close_traceability_map()
     )
+    assert "diligence_close_acceptance_checklist" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_acceptance_checklist"]
+        == _expected_diligence_close_acceptance_checklist()
+    )
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -2317,6 +2365,54 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert traceability_map[-1]["owner_handoff_key"] == "handoff_attachment_parsing"
     assert all(
         item["provider_write_executed"] is False for item in traceability_map
+    )
+    acceptance_checklist = snapshot["diligence_close_acceptance_checklist"]
+    assert len(acceptance_checklist) == 6
+    assert acceptance_checklist[0] == {
+        "acceptance_key": "accept_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "trace_key": "trace_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "data_room_artifact": "acquisition-readiness-summary.json",
+        "source_field": "acquisition_readiness_gate",
+        "owner_area": "email_ingestion",
+        "reviewer_roles": ["executive diligence reviewer"],
+        "acceptance_status": "blocked",
+        "close_gate_status": "blocked",
+        "blocker_keys": [
+            "exception_repair_thread_id_integrity",
+            "exception_backfill_dedupe_fingerprints",
+        ],
+        "acceptance_criteria": (
+            "Resolve 2 exception(s), regenerate "
+            "acquisition-readiness-summary.json from acquisition_readiness_gate, "
+            "and verify the copied snapshot digest before buyer acceptance."
+        ),
+        "verification_command": (
+            "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+        ),
+        "reviewer_evidence_summary": (
+            "executive diligence reviewer review "
+            "acquisition-readiness-summary.json for email_ingestion; "
+            "trace_risk_critical_email_ingestion_acquisition_readiness_summary_json "
+            "covers 2 exception(s)."
+        ),
+        "next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "snapshot_verification_required": True,
+        "provider_write_executed": False,
+    }
+    assert acceptance_checklist[2]["source_field"] == "content_graph_evidence_samples"
+    assert acceptance_checklist[2]["reviewer_roles"] == ["data quality reviewer"]
+    assert acceptance_checklist[3]["data_room_artifact"] == (
+        "knowledge-graph-evidence-samples.json"
+    )
+    assert acceptance_checklist[-1]["blocker_keys"] == [
+        "exception_expand_attachment_parse_coverage"
+    ]
+    assert all(
+        item["provider_write_executed"] is False for item in acceptance_checklist
     )
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
