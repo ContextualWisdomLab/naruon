@@ -1,4 +1,5 @@
 import logging
+import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -26,7 +27,7 @@ from services.email_import_service import (
         (".", "upload"),
         ("..", "upload"),
         ("/tmp/..", "upload"),  # nosec B108
-    ]
+    ],
 )
 def test_safe_upload_filename(input_name, expected):
     assert email_import_module._safe_upload_filename(input_name) == expected
@@ -39,20 +40,83 @@ def test_safe_upload_filename(input_name, expected):
         ("my_archive.zip", None, "my_archive.zip"),
         ("", None, "upload"),
         ("/path/to/my_archive.zip", None, "my_archive.zip"),
-
         # matching eml_path
         ("my_file.eml", Path("my_file.eml"), "my_file.eml"),
         ("/path/my_file.eml", Path("/other/path/my_file.eml"), "my_file.eml"),
         ("  my_file.eml  ", Path("my_file.eml"), "my_file.eml"),
-
         # differing eml_path
         ("my_archive.zip", Path("email_1.eml"), "my_archive.zip:email_1.eml"),
-        ("/path/my_archive.zip", Path("/some/folder/email_1.eml"), "my_archive.zip:email_1.eml"),
+        (
+            "/path/my_archive.zip",
+            Path("/some/folder/email_1.eml"),
+            "my_archive.zip:email_1.eml",
+        ),
         ("", Path("email_1.eml"), "upload:email_1.eml"),
-    ]
+    ],
 )
 def test_safe_item_filename(upload_name, eml_path, expected):
     assert email_import_module._safe_item_filename(upload_name, eml_path) == expected
+
+
+def test_build_email_object_attaches_content_graph_records():
+    parsed = {
+        "message_id": "<graph@example.com>",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": "owner@example.com",
+        "subject": "Graph",
+        "in_reply_to": None,
+        "references": None,
+        "body": "Launch\n\nHello team",
+        "body_parse_content": "<h1>Launch</h1><p>Hello <strong>team</strong></p>",
+        "body_content_type": "text/html",
+        "attachments": [
+            {
+                "filename": "plan.md",
+                "content": "# Plan\n\nShip graph",
+                "content_type": "text/markdown",
+            }
+        ],
+    }
+
+    email_obj, attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<graph@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-1",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=list(parsed["attachments"]),
+        fitted_embeddings=[
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+        ],
+    )
+
+    assert attachment_count == 1
+    assert [segment.safe_text_content for segment in email_obj.content_segments] == [
+        "Launch",
+        "Hello team",
+        "Plan",
+        "Ship graph",
+    ]
+    assert [segment.segment_kind for segment in email_obj.content_segments] == [
+        "heading",
+        "paragraph",
+        "heading",
+        "paragraph",
+    ]
+    assert email_obj.content_segments[1].heading_path == "Launch"
+    assert [node.node_kind for node in email_obj.content_nodes].count("document") == 2
+    assert [
+        segment.safe_text_content
+        for segment in email_obj.attachments[0].content_segments
+    ] == ["Plan", "Ship graph"]
+    assert {node.source_kind for node in email_obj.content_nodes} == {
+        "email_body",
+        "attachment",
+    }
 
 
 @pytest.mark.asyncio
@@ -70,9 +134,7 @@ async def test_import_single_eml_offloads_read_and_parse(monkeypatch, tmp_path):
         calls.append(("to_thread", func, args))
         return func(*args)
 
-    monkeypatch.setattr(
-        email_import_module, "_read_and_parse_eml", fake_read_and_parse
-    )
+    monkeypatch.setattr(email_import_module, "_read_and_parse_eml", fake_read_and_parse)
     monkeypatch.setattr(email_import_module.asyncio, "to_thread", fake_to_thread)
 
     result = await email_import_module._import_single_eml(

@@ -54,6 +54,8 @@ Content-Type: text/html; charset="utf-8"
     try:
         parsed = parse_eml(temp_path)
         assert parsed["body"] == "This is HTML content"
+        assert parsed["body_content_type"] == "text/html"
+        assert parsed["body_parse_content"] == "<p>This is HTML content</p>"
     finally:
         os.unlink(temp_path)
 
@@ -132,7 +134,13 @@ Content-Disposition: attachment; filename="<img src=x onerror=alert(1)>.txt"
 
     try:
         parsed = parse_eml(temp_path)
-        assert parsed["attachments"] == [{"filename": ".txt", "content": "report"}]
+        assert parsed["attachments"] == [
+            {
+                "filename": ".txt",
+                "content": "report",
+                "content_type": "text/plain",
+            }
+        ]
     finally:
         os.unlink(temp_path)
 
@@ -247,6 +255,7 @@ Test"""
     finally:
         os.unlink(temp_path)
 
+
 def test_parse_eml_mocked_oserror():
     with patch("builtins.open", side_effect=OSError("Mocked OS Error")):
         with pytest.raises(
@@ -278,6 +287,7 @@ def test_sanitize_nul():
     assert _sanitize_nul(12.3) == "12.3"
     assert _sanitize_nul(True) == "True"
 
+
 def test_sanitize_display_text():
     from services.email_parser import _sanitize_display_text
 
@@ -290,7 +300,10 @@ def test_sanitize_display_text():
     # Strings with HTML tags
     assert _sanitize_display_text("<b>hello</b> world") == "hello world"
     assert _sanitize_display_text("<script>alert('xss')</script>") == ""
-    assert _sanitize_display_text("hello <img src=x onerror=alert(1)>world") == "hello world"
+    assert (
+        _sanitize_display_text("hello <img src=x onerror=alert(1)>world")
+        == "hello world"
+    )
 
     # Strings combining NUL and HTML
     assert _sanitize_display_text("<b>hello\x00</b>") == "hello"

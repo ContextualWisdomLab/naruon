@@ -16,6 +16,7 @@ from core.config import settings
 from db.models import (
     Attachment,
     ConnectorSignalEvent,
+    ContentSegmentRecord,
     Document,
     Email,
     ProjectFolder,
@@ -62,6 +63,11 @@ class AttachmentQualityStats(NamedTuple):
     count: int
     blank_content_count: int
     embedded_count: int
+
+
+class ContentGraphQualityStats(NamedTuple):
+    segmented_email_count: int
+    segment_count: int
 
 
 class DataRepositorySummary(BaseModel):
@@ -576,6 +582,8 @@ def _pipeline_stages(
     missing_thread_count: int,
     embedded_total: int,
     object_total: int,
+    segmented_email_count: int,
+    content_segment_count: int,
     connector_event_count: int,
 ) -> list[DataPipelineStage]:
     thread_ready = max(0, email_count - missing_thread_count)
@@ -617,6 +625,18 @@ def _pipeline_stages(
             progress_percent=_progress_percent(object_total, embedded_total),
             evidence_source="emails.embedding, attachments.embedding",
             detail_text=f"{embedded_total} of {object_total} objects have vectors.",
+            provider_write_executed=False,
+        ),
+        DataPipelineStage(
+            stage_key="content_graph_inventory",
+            display_name="Content graph inventory",
+            status_code=_status_from_ratio(email_count, segmented_email_count),
+            progress_percent=_progress_percent(email_count, segmented_email_count),
+            evidence_source="content_segments",
+            detail_text=(
+                f"{segmented_email_count} of {email_count} emails have paragraph "
+                f"segments; {content_segment_count} segments are stored."
+            ),
             provider_write_executed=False,
         ),
         DataPipelineStage(
@@ -748,6 +768,29 @@ def _check_source_registry_coverage(source_count: int) -> DataQualityCheck:
     )
 
 
+def _check_content_graph_coverage(
+    email_count: int,
+    segmented_email_count: int,
+) -> DataQualityCheck:
+    issue_count = max(0, email_count - segmented_email_count)
+    return DataQualityCheck(
+        check_key="content_graph_coverage",
+        display_name="Content graph coverage",
+        status_code=_quality_status(email_count, issue_count),
+        issue_count=issue_count,
+        total_count=email_count,
+        evidence_source="content_segments",
+        detail_text=_quality_detail(
+            total_count=email_count,
+            issue_count=issue_count,
+            ready_text="All scoped emails have DOM paragraph segments.",
+            empty_text="No scoped emails are available yet.",
+            issue_text="Some scoped emails need DOM paragraph segmentation.",
+        ),
+        provider_write_executed=False,
+    )
+
+
 def _check_connector_signal_coverage(connector_event_count: int) -> DataQualityCheck:
     return DataQualityCheck(
         check_key="connector_signal",
@@ -773,6 +816,7 @@ def _quality_checks(
     missing_fingerprint_count: int,
     blank_attachment_count: int,
     source_count: int,
+    segmented_email_count: int,
     connector_event_count: int,
 ) -> list[DataQualityCheck]:
     return [
@@ -787,6 +831,10 @@ def _quality_checks(
         _check_attachment_content(
             attachment_count=attachment_count,
             blank_attachment_count=blank_attachment_count,
+        ),
+        _check_content_graph_coverage(
+            email_count=email_count,
+            segmented_email_count=segmented_email_count,
         ),
         _check_source_registry_coverage(source_count),
         _check_connector_signal_coverage(connector_event_count),
@@ -985,6 +1033,27 @@ async def _get_attachment_stats(
     )
 
 
+async def _get_content_graph_stats(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> ContentGraphQualityStats:
+    content_graph_result = await db.execute(
+        select(
+            func.count(func.distinct(ContentSegmentRecord.email_id)),
+            func.count(ContentSegmentRecord.id),
+        )
+        .join(Email, ContentSegmentRecord.email_id == Email.id)
+        .where(*email_scope)
+    )
+    content_graph_stats = content_graph_result.one_or_none()
+    segmented_email_count = content_graph_stats[0] if content_graph_stats else 0
+    segment_count = content_graph_stats[1] if content_graph_stats else 0
+    return ContentGraphQualityStats(
+        segmented_email_count=int(segmented_email_count or 0),
+        segment_count=int(segment_count or 0),
+    )
+
+
 async def _get_attachment_assets(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
@@ -1039,6 +1108,7 @@ async def get_data_quality_surface(
 
     email_stats = await _get_email_stats(db, email_scope)
     attachment_stats = await _get_attachment_stats(db, email_scope)
+    content_graph_stats = await _get_content_graph_stats(db, email_scope)
     email_count = email_stats.count
     missing_thread_count = email_stats.missing_thread_count
     missing_fingerprint_count = email_stats.missing_fingerprint_count
@@ -1046,6 +1116,8 @@ async def get_data_quality_surface(
     attachment_count = attachment_stats.count
     blank_attachment_count = attachment_stats.blank_content_count
     embedded_attachment_count = attachment_stats.embedded_count
+    segmented_email_count = content_graph_stats.segmented_email_count
+    content_segment_count = content_graph_stats.segment_count
 
     connector_events = await _get_connector_events(db, auth_context)
     attachment_asset_rows = await _get_attachment_assets(db, email_scope)
@@ -1076,6 +1148,8 @@ async def get_data_quality_surface(
             missing_thread_count=missing_thread_count,
             embedded_total=embedded_total,
             object_total=object_total,
+            segmented_email_count=segmented_email_count,
+            content_segment_count=content_segment_count,
             connector_event_count=len(connector_events),
         ),
         embedding_collections=_embedding_collections(
@@ -1091,6 +1165,7 @@ async def get_data_quality_surface(
             missing_fingerprint_count=missing_fingerprint_count,
             blank_attachment_count=blank_attachment_count,
             source_count=source_count,
+            segmented_email_count=segmented_email_count,
             connector_event_count=len(connector_events),
         ),
         connector_events=[

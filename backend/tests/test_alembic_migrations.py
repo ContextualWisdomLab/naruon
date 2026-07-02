@@ -108,6 +108,30 @@ def test_ai_hub_workflow_runs_have_incremental_revision():
     assert "if_exists=True" in revision_text
 
 
+def test_content_graph_records_have_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0005_content_graph_records.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0005_content_graph_records"' in revision_text
+    assert 'down_revision = "0004_ai_hub_workflow_runs"' in revision_text
+    assert '"content_nodes"' in revision_text
+    assert '"content_segments"' in revision_text
+    assert '"content_node_uid"' in revision_text
+    assert '"content_segment_uid"' in revision_text
+    assert '"email_id"' in revision_text
+    assert '"attachment_id"' in revision_text
+    assert "ix_content_nodes_email_source" in revision_text
+    assert "ix_content_segments_email_source" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+
+
 def test_migration_runner_uses_alembic_upgrade_head_not_bootstrap_create_all():
     migration_runner = BACKEND_ROOT / "scripts" / "migrate_db.py"
 

@@ -519,6 +519,12 @@ class Email(Base):
     attachments: Mapped[list["Attachment"]] = relationship(
         back_populates="email", cascade="all, delete-orphan"
     )
+    content_nodes: Mapped[list["ContentNodeRecord"]] = relationship(
+        back_populates="email", cascade="all, delete-orphan"
+    )
+    content_segments: Mapped[list["ContentSegmentRecord"]] = relationship(
+        back_populates="email"
+    )
     ticket_tasks: Mapped[list["TicketTask"]] = relationship(
         back_populates="related_email", cascade="all, delete-orphan"
     )
@@ -587,6 +593,108 @@ class Attachment(Base):
     embedding = mapped_column(Vector(1536), deferred=True)
 
     email: Mapped["Email"] = relationship(back_populates="attachments")
+    content_nodes: Mapped[list["ContentNodeRecord"]] = relationship(
+        back_populates="attachment"
+    )
+    content_segments: Mapped[list["ContentSegmentRecord"]] = relationship(
+        back_populates="attachment"
+    )
+
+
+class ContentNodeRecord(Base):
+    __tablename__ = "content_nodes"
+    __table_args__ = (
+        UniqueConstraint("content_node_uid", name="uq_content_nodes_uid"),
+        Index(
+            "ix_content_nodes_email_source",
+            "email_id",
+            "source_kind",
+            "source_record_uid",
+            "ordinal_index",
+        ),
+        Index("ix_content_nodes_attachment", "attachment_id", "ordinal_index"),
+        Index("ix_content_nodes_hash", "content_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    content_node_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id"), nullable=False
+    )
+    attachment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_attachments.id"), nullable=True
+    )
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)
+    parent_node_uid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    node_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    node_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    ordinal_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_label: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    safe_text_content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email"] = relationship(back_populates="content_nodes")
+    attachment: Mapped["Attachment | None"] = relationship(
+        back_populates="content_nodes"
+    )
+    segments: Mapped[list["ContentSegmentRecord"]] = relationship(
+        back_populates="content_node", cascade="all, delete-orphan"
+    )
+
+
+class ContentSegmentRecord(Base):
+    __tablename__ = "content_segments"
+    __table_args__ = (
+        UniqueConstraint("content_segment_uid", name="uq_content_segments_uid"),
+        Index(
+            "ix_content_segments_email_source",
+            "email_id",
+            "source_kind",
+            "source_record_uid",
+            "ordinal_index",
+        ),
+        Index("ix_content_segments_attachment", "attachment_id", "ordinal_index"),
+        Index("ix_content_segments_node", "content_node_id"),
+        Index("ix_content_segments_hash", "content_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    content_segment_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id"), nullable=False
+    )
+    attachment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_attachments.id"), nullable=True
+    )
+    content_node_id: Mapped[int] = mapped_column(
+        ForeignKey("content_nodes.id"), nullable=False
+    )
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_record_uid: Mapped[str] = mapped_column(String(256), nullable=False)
+    segment_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    segment_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    ordinal_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    heading_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    safe_text_content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email"] = relationship(back_populates="content_segments")
+    attachment: Mapped["Attachment | None"] = relationship(
+        back_populates="content_segments"
+    )
+    content_node: Mapped["ContentNodeRecord"] = relationship(back_populates="segments")
 
 
 class TenantConfig(Base):

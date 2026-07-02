@@ -14,8 +14,9 @@ from typing import Literal
 from sqlalchemy import bindparam, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Attachment, Email
+from db.models import Attachment, ContentNodeRecord, ContentSegmentRecord, Email
 from services.archive import extract_backup_async
+from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
@@ -274,7 +275,109 @@ def _build_email_object(
         )
         attachment_count += 1
 
+    _append_email_content_graph(
+        email_obj=email_obj,
+        parsed=parsed,
+        message_id=message_id,
+        attachment_payloads=attachment_payloads,
+    )
+
     return email_obj, attachment_count
+
+
+def _append_email_content_graph(
+    *,
+    email_obj: Email,
+    parsed: EmailData,
+    message_id: str,
+    attachment_payloads: list[dict],
+) -> None:
+    body_parse_result = parse_content(
+        source_kind="email_body",
+        source_record_uid=_content_graph_source_record_uid("email", message_id),
+        content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
+        content_type=str(parsed.get("body_content_type") or "text/plain"),
+        display_name="Email body",
+    )
+    _append_parse_result_records(
+        email_obj=email_obj,
+        attachment_obj=None,
+        parse_result=body_parse_result,
+    )
+
+    for attachment_index, (attachment_obj, attachment_payload) in enumerate(
+        zip(email_obj.attachments, attachment_payloads),
+        start=1,
+    ):
+        attachment_parse_result = parse_content(
+            source_kind="attachment",
+            source_record_uid=_content_graph_source_record_uid(
+                "attachment",
+                message_id,
+                str(attachment_index),
+                attachment_obj.filename,
+            ),
+            content=str(attachment_payload.get("content") or ""),
+            content_type=str(attachment_payload.get("content_type") or "text/plain"),
+            display_name=attachment_obj.filename,
+        )
+        _append_parse_result_records(
+            email_obj=email_obj,
+            attachment_obj=attachment_obj,
+            parse_result=attachment_parse_result,
+        )
+
+
+def _append_parse_result_records(
+    *,
+    email_obj: Email,
+    attachment_obj: Attachment | None,
+    parse_result: ParseResult,
+) -> None:
+    node_records_by_uid: dict[str, ContentNodeRecord] = {}
+    for parsed_node in parse_result.nodes:
+        node_record = ContentNodeRecord(
+            content_node_uid=parsed_node.content_node_uid,
+            source_kind=parsed_node.source_kind,
+            source_record_uid=parsed_node.source_record_uid,
+            parent_node_uid=parsed_node.parent_node_uid,
+            node_kind=parsed_node.node_kind,
+            node_path=parsed_node.node_path,
+            ordinal_index=parsed_node.ordinal_index,
+            display_label=parsed_node.display_label,
+            safe_text_content=parsed_node.safe_text_content,
+            content_hash=parsed_node.content_hash,
+        )
+        email_obj.content_nodes.append(node_record)
+        if attachment_obj is not None:
+            attachment_obj.content_nodes.append(node_record)
+        node_records_by_uid[parsed_node.content_node_uid] = node_record
+
+    for parsed_segment in parse_result.segments:
+        segment_record = ContentSegmentRecord(
+            content_segment_uid=parsed_segment.content_segment_uid,
+            source_kind=parsed_segment.source_kind,
+            source_record_uid=parsed_segment.source_record_uid,
+            segment_kind=parsed_segment.segment_kind,
+            segment_path=parsed_segment.segment_path,
+            ordinal_index=parsed_segment.ordinal_index,
+            heading_path=parsed_segment.heading_path,
+            safe_text_content=parsed_segment.safe_text_content,
+            content_hash=parsed_segment.content_hash,
+            token_count=parsed_segment.token_count,
+        )
+        node_records_by_uid[parsed_segment.content_node_uid].segments.append(
+            segment_record
+        )
+        email_obj.content_segments.append(segment_record)
+        if attachment_obj is not None:
+            attachment_obj.content_segments.append(segment_record)
+
+
+def _content_graph_source_record_uid(prefix: str, *parts: str) -> str:
+    payload = "\x00".join(str(part) for part in parts)
+    digest = hashlib.sha256(payload.encode("utf-8", errors="surrogatepass")).hexdigest()
+    return f"{prefix}:{digest[:32]}"
 
 
 async def _import_single_eml(

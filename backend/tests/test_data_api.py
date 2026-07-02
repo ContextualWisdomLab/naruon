@@ -243,6 +243,7 @@ def mock_db():
             [_project_folder("webdav_folder_roadmap")],
             (4, 1, 2, 3),  # email stats
             (3, 1, 1),  # attachment stats
+            (3, 8),  # content graph stats
             [_connector_event("connector_evt_data_quality")],
             [
                 (_attachment("roadmap.pdf", "extracted attachment text"), ready_email),
@@ -296,6 +297,16 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
     assert data["pipeline_stages"][1]["detail_text"] == (
         "4 emails and 3 attachments are visible in the signed workspace scope."
     )
+    stage_by_key = {stage["stage_key"]: stage for stage in data["pipeline_stages"]}
+    assert stage_by_key["content_graph_inventory"] == {
+        "stage_key": "content_graph_inventory",
+        "display_name": "Content graph inventory",
+        "status_code": "running",
+        "progress_percent": 75,
+        "evidence_source": "content_segments",
+        "detail_text": "3 of 4 emails have paragraph segments; 8 segments are stored.",
+        "provider_write_executed": False,
+    }
     assert data["embedding_collections"][0] == {
         "collection_key": "emails_embedding",
         "display_name": "Email vectors",
@@ -311,6 +322,16 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
     assert quality_by_key["thread_id_integrity"]["issue_count"] == 1
     assert quality_by_key["dedupe_fingerprint"]["issue_count"] == 2
     assert quality_by_key["attachment_content"]["issue_count"] == 1
+    assert quality_by_key["content_graph_coverage"] == {
+        "check_key": "content_graph_coverage",
+        "display_name": "Content graph coverage",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 4,
+        "evidence_source": "content_segments",
+        "detail_text": "Some scoped emails need DOM paragraph segmentation.",
+        "provider_write_executed": False,
+    }
     assert data["connector_events"][0]["event_uid"] == "connector_evt_data_quality"
     assert data["repository_assets"][0] == {
         "asset_key": data["repository_assets"][0]["asset_key"],
@@ -344,6 +365,7 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "https://files.acme.example",
         "webdav_path",
         "/Projects/Naruon_Roadmap_2026",
+        "segmented body text",
         "<asset-ready@example.com>",
         "thread-ready",
     ):
@@ -773,6 +795,92 @@ async def _seed_smoke_test_data(conn, ids: dict):
     first_email_id = first_email.scalar_one()
     second_email_id = second_email.scalar_one()
     rival_email_id = rival_email.scalar_one()
+    first_node_uid = f"cnode_{uuid.uuid4().hex[:24]}"
+    rival_node_uid = f"cnode_{uuid.uuid4().hex[:24]}"
+    first_node = await conn.execute(
+        text(
+            """
+            INSERT INTO content_nodes (
+                content_node_uid, email_id, source_kind, source_record_uid,
+                node_kind, node_path, ordinal_index, safe_text_content,
+                content_hash, created_at
+            )
+            VALUES (
+                :content_node_uid, :email_id, 'email_body',
+                :source_record_uid, 'paragraph', '/document[1]/paragraph[1]',
+                1, 'segmented body text', :content_hash, now()
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "content_node_uid": first_node_uid,
+            "email_id": first_email_id,
+            "source_record_uid": f"email:{first_email_id}",
+            "content_hash": hashlib.sha256(b"segmented body text").hexdigest(),
+        },
+    )
+    rival_node = await conn.execute(
+        text(
+            """
+            INSERT INTO content_nodes (
+                content_node_uid, email_id, source_kind, source_record_uid,
+                node_kind, node_path, ordinal_index, safe_text_content,
+                content_hash, created_at
+            )
+            VALUES (
+                :content_node_uid, :email_id, 'email_body',
+                :source_record_uid, 'paragraph', '/document[1]/paragraph[1]',
+                1, 'rival segmented body text', :content_hash, now()
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "content_node_uid": rival_node_uid,
+            "email_id": rival_email_id,
+            "source_record_uid": f"email:{rival_email_id}",
+            "content_hash": hashlib.sha256(b"rival segmented body text").hexdigest(),
+        },
+    )
+    await conn.execute(
+        text(
+            """
+            INSERT INTO content_segments (
+                content_segment_uid, email_id, content_node_id, source_kind,
+                source_record_uid, segment_kind, segment_path, ordinal_index,
+                safe_text_content, content_hash, token_count, created_at
+            )
+            VALUES
+            (
+                :first_segment_uid, :first_email_id, :first_content_node_id,
+                'email_body', :first_source_record_uid, 'paragraph',
+                '/document[1]/paragraph[1]', 1, 'segmented body text',
+                :first_content_hash, 3, now()
+            ),
+            (
+                :rival_segment_uid, :rival_email_id, :rival_content_node_id,
+                'email_body', :rival_source_record_uid, 'paragraph',
+                '/document[1]/paragraph[1]', 1, 'rival segmented body text',
+                :rival_content_hash, 4, now()
+            )
+            """
+        ),
+        {
+            "first_segment_uid": f"cseg_{uuid.uuid4().hex[:24]}",
+            "first_email_id": first_email_id,
+            "first_content_node_id": first_node.scalar_one(),
+            "first_source_record_uid": f"email:{first_email_id}",
+            "first_content_hash": hashlib.sha256(b"segmented body text").hexdigest(),
+            "rival_segment_uid": f"cseg_{uuid.uuid4().hex[:24]}",
+            "rival_email_id": rival_email_id,
+            "rival_content_node_id": rival_node.scalar_one(),
+            "rival_source_record_uid": f"email:{rival_email_id}",
+            "rival_content_hash": hashlib.sha256(
+                b"rival segmented body text"
+            ).hexdigest(),
+        },
+    )
     await conn.execute(
         text(
             """
@@ -873,6 +981,30 @@ async def _seed_smoke_test_data(conn, ids: dict):
 
 
 async def _teardown_smoke_test_data(conn, ids: dict):
+    await conn.execute(
+        text(
+            """
+            DELETE FROM content_segments
+            WHERE email_id IN (
+                SELECT id FROM email_records
+                WHERE user_id IN (:user_id, :rival_user_id)
+            )
+            """
+        ),
+        {"user_id": ids["user_id"], "rival_user_id": ids["rival_user_id"]},
+    )
+    await conn.execute(
+        text(
+            """
+            DELETE FROM content_nodes
+            WHERE email_id IN (
+                SELECT id FROM email_records
+                WHERE user_id IN (:user_id, :rival_user_id)
+            )
+            """
+        ),
+        {"user_id": ids["user_id"], "rival_user_id": ids["rival_user_id"]},
+    )
     await conn.execute(
         text(
             """
@@ -1012,6 +1144,7 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     assert quality_by_key["thread_id_integrity"]["issue_count"] == 1
     assert quality_by_key["dedupe_fingerprint"]["issue_count"] == 1
     assert quality_by_key["attachment_content"]["issue_count"] == 1
+    assert quality_by_key["content_graph_coverage"]["issue_count"] == 1
     assert event_uid in {event["event_uid"] for event in data["connector_events"]}
     asset_names = {asset["display_name"] for asset in data["repository_assets"]}
     assert {"ready.txt", "blank.txt"} <= asset_names
