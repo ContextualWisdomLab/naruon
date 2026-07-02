@@ -6,6 +6,8 @@ Question being answered: whether the follow-up package turns the Figma/Product D
 
 Final result: passed.
 
+PR handoff: https://github.com/ContextualWisdomLab/naruon/pull/893
+
 ## Commercial Pilot Readiness
 
 This package is suitable for a controlled paid-pilot demonstration after the release gates pass. It is not a public-launch readiness claim: hosted deployment, real tenant authorization review, provider-send email, live private-mailbox integration, external analytics governance, billing/legal review, SLA, and support operations remain outside this slice.
