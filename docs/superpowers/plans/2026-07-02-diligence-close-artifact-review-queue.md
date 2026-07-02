@@ -22,7 +22,7 @@ Add a deterministic buyer-close artifact review queue to the redacted evidence s
 - [x] Add frontend fixture, copied JSON, and visible rendering coverage.
 - [x] Generate a FigJam diagram for the proof-plan-to-artifact-review flow without Code Connect.
 - [x] Run backend tests, ruff, frontend tests, diff review, and Ponytail review.
-- [ ] Push the PR branch and update PR #895 with Phase 27 evidence.
+- [x] Push the PR branch and update PR #895 with Phase 27 evidence.
 
 ## Acceptance Criteria
 
@@ -42,3 +42,5 @@ Add a deterministic buyer-close artifact review queue to the redacted evidence s
 - Frontend style: `npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` passed.
 - Figma/FigJam: https://www.figma.com/board/mjH0tpDIvz5kj44kL6354R?utm_source=codex&utm_content=edit_in_figjam&oai_id=&request_id=13a088da-bb84-46fa-b47e-9a2de963735a
 - Ponytail review: Lean already. Ship.
+- PR #895 body updated with Phase 27 evidence.
+- Live PR state after first Phase 27 push: head `74706cd3239bf50945cf3a588979b17af11cd2a7`, mergeable `MERGEABLE`, merge state `BLOCKED` only by queued checks at verification time, unresolved review threads `0`.
