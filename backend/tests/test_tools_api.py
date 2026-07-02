@@ -244,15 +244,17 @@ def test_execute_tool_sync_handler_success():
 
 @pytest.mark.asyncio
 async def test_execute_tool_no_handler_registered():
-    from api.tools import ToolInfo
     try:
-        # Register a tool but deliberately remove its handler to trigger line 53
-        registry._tools["no_handler_tool"] = ToolInfo(
-            code="no_handler_tool",
-            name="No Handler",
-            description="Test tool with no handler",
-            category="Test"
+        registry.register(
+            ToolInfo(
+                code="no_handler_tool",
+                name="No Handler",
+                description="Test tool with no handler",
+                category="Test",
+            ),
+            lambda params: "ok",
         )
+        registry._handlers.pop("no_handler_tool", None)
         with pytest.raises(ValueError, match="No handler registered for tool no_handler_tool"):
             await registry.execute("no_handler_tool", {})
     finally:
