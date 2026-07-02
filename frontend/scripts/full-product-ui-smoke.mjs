@@ -248,6 +248,17 @@ const knowledgeTask = {
   updated_at: "2026-07-02T05:10:00Z",
 };
 
+const webdavTask = {
+  id: "task-webdav-evidence-20b",
+  title: "첨부파일 WebDAV 폴더 정리",
+  status: "in_progress",
+  priority: "normal",
+  source_type: "webdav",
+  source_email_id: String(sourceEmail.id),
+  related_thread_id: sourceEmail.thread_id,
+  updated_at: "2026-07-02T05:20:00Z",
+};
+
 const calendarWritebackSource = {
   source_id: "calendar-source-20b",
   provider: "caldav",
@@ -639,18 +650,18 @@ async function installRoutes(page) {
       emailSendCount += 1;
       return routeJson(route, { simulated: emailSendCount === 1 });
     }
-    if (endpoint === "/api/tasks") return routeJson(route, [task, knowledgeTask]);
+    if (endpoint === "/api/tasks") return routeJson(route, [task, knowledgeTask, webdavTask]);
     if (endpoint === "/api/tasks/from-email") return routeJson(route, { created: 1 });
     if (endpoint === "/api/tasks/reply-sla-escalations") {
       return routeJson(route, {
         evaluated: 1,
         created: 1,
         policy: { overdue_hours: 48 },
-        tasks: [task, knowledgeTask],
+        tasks: [task, knowledgeTask, webdavTask],
       });
     }
     if (endpoint.startsWith("/api/tasks/")) {
-      const targetTask = endpoint.includes(knowledgeTask.id) ? knowledgeTask : task;
+      const targetTask = [task, knowledgeTask, webdavTask].find((candidate) => endpoint.includes(candidate.id)) ?? task;
       return routeJson(route, { ...targetTask, status: "done" });
     }
     if (endpoint === "/api/calendar/writeback-sources") return routeJson(route, [calendarWritebackSource]);
@@ -936,15 +947,29 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
   }
 
   if (routeSpec.name === "projects") {
+    const projectContent = page.getByRole("region", { name: "프로젝트 내용" });
+    await page.getByRole("link", { name: "관련 문서/메일 연결", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "프로젝트 의사결정 추가" }).first().click();
-    await page.getByRole("region", { name: "프로젝트 내용" }).getByText("작업 흐름 반영", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("작업 흐름 반영", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("근거: WebDAV 폴더", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "프로젝트 상세 열기", exact: true }).click();
-    await page.getByRole("region", { name: "프로젝트 내용" }).getByText("프로젝트 개요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("region", { name: "프로젝트 내용" }).getByText("저장소 경계 확인됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("프로젝트 개요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("저장소 경계 확인됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("WebDAV 폴더 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("스레드 근거 연결됨", { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("문서 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    const connectedResources = page.getByRole("region", { name: "연결된 자원" });
+    await connectedResources.getByText("원본 종류", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await connectedResources.locator("li").filter({ hasText: "원본 종류" }).getByText("3", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
+      evidence("projects:open-related-source-link"),
       evidence("projects:open-decision-log"),
+      evidence("projects:verify-webdav-folder-evidence"),
       evidence("projects:reopen-project-detail"),
       evidence("projects:verify-source-boundary"),
+      evidence("projects:verify-thread-source-attachment"),
+      evidence("projects:verify-document-source-attachment"),
+      evidence("projects:verify-source-type-count"),
     ];
   }
 

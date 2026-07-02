@@ -20,14 +20,14 @@ Current branch:
 sellable-pilot-hardening-2026-07-02
 ```
 
-Latest commits:
+Recent local hardening commits before this report update:
 
 ```text
-a970b78 Test pilot smoke localhost guard
-8ad4499 Harden Naruon enterprise sale readiness
-80b613a Document Naruon pilot PR handoff
-439beb4 Prepare Naruon commercial pilot frontend
-00e9c15 Merge pull request #888 from ContextualWisdomLab/codex/visual-gap-round2
+6b454e4 Cover security permission evidence in full smoke
+0373797 Cover search graph evidence in full smoke
+d20e5a6 Prove settings startup persistence in full smoke
+a62995f Cover provider completion states in full smoke
+9b5d87d Expand workflow-state full product smoke
 ```
 
 Working tree:
@@ -47,13 +47,14 @@ PR:
 - Title: `Naruon 상용 파일럿 프론트엔드 준비`
 - Base: `develop`
 - Head branch: `sellable-pilot-hardening-2026-07-02`
-- Head SHA: `a970b78c5eb6664e844b48ce15689feb0c27bda2`
+- Head SHA: refreshed from live GitHub after each push; do not rely on this static report for the current SHA.
 - Mergeable: `MERGEABLE`
 - Merge state: `BLOCKED`
 - Review decision: `CHANGES_REQUESTED`
 
 Current check interpretation:
 
+- PR #893 live status must be refreshed after every push with `gh pr view`, GraphQL review-thread state, and current check rollup before any merge or completion claim.
 - Product-relevant checks that were observed successful include frontend, backend, Bandit, Trivy, CodeQL, dependency review, image validation, Strix, scorecard, metadata-only governance, queue scan, and coverage evidence.
 - `opencode-review` was observed `IN_PROGRESS`.
 - The stale review decision and review wait are not blockers under the current user instruction.
@@ -219,7 +220,7 @@ Acceptable later extraction:
 P0 for 20B final sale readiness:
 
 - Figma required pages were repaired through `use_figma`, but full screen coverage and durable QA screenshots for every buyer flow are not complete.
-- Full ten-area Product Design route audit now has desktop/mobile evidence, expanded selected desktop/mobile workflow-state evidence across nine IA routes, mocked provider completion result-state evidence, search graph summary/canvas-label evidence, security source-governance evidence, startup-view reload persistence evidence, and basic automated accessibility evidence, but live provider completion, full result variants, broader settings persistence, and assistive-technology audit are not complete.
+- Full ten-area Product Design route audit now has desktop/mobile evidence, expanded selected desktop/mobile workflow-state evidence across nine IA routes, mocked provider completion result-state evidence, search graph summary/canvas-label evidence, project WebDAV/thread/document source-attachment evidence, security source-governance evidence, startup-view reload persistence evidence, and basic automated accessibility evidence, but live provider completion, full result variants, project evidence edit/save variants, broader settings persistence, and assistive-technology audit are not complete.
 - Production deployment and rollback evidence is not packaged.
 - Live provider-send and provider-write execution evidence is incomplete.
 - Issue #634 has a branch-level fix, but remains open as a governance risk until merged and proven on the trusted base branch.
@@ -228,11 +229,11 @@ P0 for 20B final sale readiness:
 
 P1 for buyer technical review:
 
-- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts expanded selected desktop/mobile buyer workflow states for mail, search, calendar, tasks, projects, data, AI Hub, security, and settings, including mocked provider-send/provider-write completion states, search graph summary/canvas-label states, knowledge WebDAV provider completion/no-retry states, project source boundary, data WebDAV materialization completion and WebDAV/unique-thread intents, AI Hub workflow/evaluation/run-history navigation, security source-governance/write-boundary/policy-decision states, security deny samples, settings save actions, startup-view reload persistence, and connector token rotation, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
+- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts expanded selected desktop/mobile buyer workflow states for mail, search, calendar, tasks, projects, data, AI Hub, security, and settings, including mocked provider-send/provider-write completion states, search graph summary/canvas-label states, knowledge WebDAV provider completion/no-retry states, project related-source link, source boundary, WebDAV folder evidence, thread/document source attachments, and source-type count, data WebDAV materialization completion and WebDAV/unique-thread intents, AI Hub workflow/evaluation/run-history navigation, security source-governance/write-boundary/policy-decision states, security deny samples, settings save actions, startup-view reload persistence, and connector token rotation, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
 - Mobile Settings startup-view cards were fixed from a 3-column mobile grid to `grid-cols-1 sm:grid-cols-3` after responsive QA found awkward Korean label wrapping.
 - Product events do not yet cover full-product funnels beyond mail/search.
 - External analytics destination, retention, and consent are not approved.
-- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile contact sheet with expanded selected desktop/mobile workflow-state, mocked provider completion result-state, search graph summary/canvas-label proof, security source-governance proof, startup-view reload persistence, and basic accessibility evidence; live provider completion and assistive-technology evidence remain incomplete.
+- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile contact sheet with expanded selected desktop/mobile workflow-state, mocked provider completion result-state, search graph summary/canvas-label proof, project WebDAV/thread/document source-attachment proof, security source-governance proof, startup-view reload persistence, and basic accessibility evidence; live provider completion and assistive-technology evidence remain incomplete.
 
 Non-blockers:
 
