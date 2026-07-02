@@ -74,6 +74,7 @@ QualityStatus = Literal["pass", "needs_attention", "pending"]
 AcquisitionReadinessState = Literal["ready", "needs_attention", "pending"]
 EvidencePacketChecklistState = Literal["ready", "needs_attention", "pending"]
 DataRoomManifestState = Literal["ready", "needs_attention", "pending"]
+DataRoomReleaseStatus = Literal["release_ready", "release_blocked"]
 DataRoomArtifactType = Literal[
     "snapshot_json",
     "verifier_script",
@@ -467,6 +468,27 @@ class DataRoomPackageManifestEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataRoomReleaseSummary(BaseModel):
+    release_key: str
+    release_status: DataRoomReleaseStatus
+    total_artifact_count: int
+    ready_artifact_count: int
+    needs_attention_artifact_count: int
+    required_for_close_count: int
+    blocked_artifact_files: list[str]
+    privacy_exposure_count: int
+    raw_content_exposure_count: int
+    stable_identifier_exposure_count: int
+    provider_credential_exposure_count: int
+    snapshot_verification_required: bool
+    verification_command: str
+    acceptance_blocker_count: int
+    acceptance_blocker_keys: list[str]
+    buyer_summary_text: str
+    next_action_text: str
+    provider_write_executed: bool
+
+
 class DataDiligenceExceptionRegisterEntry(BaseModel):
     exception_key: str
     blocking_check_key: str
@@ -638,6 +660,29 @@ def _default_diligence_close_decision_summary() -> DataDiligenceCloseDecisionSum
     )
 
 
+def _default_data_room_release_summary() -> DataRoomReleaseSummary:
+    return DataRoomReleaseSummary(
+        release_key="buyer_data_room_release",
+        release_status="release_blocked",
+        total_artifact_count=0,
+        ready_artifact_count=0,
+        needs_attention_artifact_count=0,
+        required_for_close_count=0,
+        blocked_artifact_files=[],
+        privacy_exposure_count=0,
+        raw_content_exposure_count=0,
+        stable_identifier_exposure_count=0,
+        provider_credential_exposure_count=0,
+        snapshot_verification_required=False,
+        verification_command="",
+        acceptance_blocker_count=0,
+        acceptance_blocker_keys=[],
+        buyer_summary_text="No buyer data-room release artifacts are present.",
+        next_action_text="Generate the evidence snapshot before release review.",
+        provider_write_executed=False,
+    )
+
+
 def _default_diligence_close_acceptance_summary() -> (
     DataDiligenceCloseAcceptanceSummary
 ):
@@ -699,6 +744,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     )
     data_room_package_manifest: list[DataRoomPackageManifestEntry] = Field(
         default_factory=list
+    )
+    data_room_release_summary: DataRoomReleaseSummary = Field(
+        default_factory=_default_data_room_release_summary
     )
     diligence_exception_register: list[DataDiligenceExceptionRegisterEntry] = Field(
         default_factory=list
@@ -2150,6 +2198,78 @@ def _diligence_close_acceptance_summary(
     )
 
 
+def _data_room_release_summary(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> DataRoomReleaseSummary:
+    manifest = snapshot.data_room_package_manifest
+    ready_artifact_count = sum(1 for item in manifest if item.state_code == "ready")
+    blocked_artifact_files = sorted(
+        item.file_name for item in manifest if item.state_code != "ready"
+    )
+    required_for_close_count = sum(1 for item in manifest if item.required_for_close)
+    raw_content_exposure_count = sum(
+        1 for item in manifest if item.contains_raw_content
+    ) + int(snapshot.privacy_redaction_policy.raw_content_exposed)
+    stable_identifier_exposure_count = sum(
+        1 for item in manifest if item.contains_stable_identifiers
+    ) + int(snapshot.privacy_redaction_policy.stable_identifiers_exposed)
+    provider_credential_exposure_count = int(
+        snapshot.privacy_redaction_policy.provider_credentials_exposed
+    )
+    privacy_exposure_count = (
+        raw_content_exposure_count
+        + stable_identifier_exposure_count
+        + provider_credential_exposure_count
+    )
+    acceptance_summary = snapshot.diligence_close_acceptance_summary
+    release_blocked = bool(
+        blocked_artifact_files
+        or privacy_exposure_count
+        or acceptance_summary.blocker_count
+    )
+
+    if release_blocked:
+        buyer_summary_text = (
+            f"Data-room release remains blocked by {len(blocked_artifact_files)} "
+            f"artifact(s), {acceptance_summary.blocker_count} blocker key(s), and "
+            f"{privacy_exposure_count} privacy exposure(s)."
+        )
+        next_action_text = (
+            "Resolve blocked artifact states, clear acceptance blockers, run the "
+            "offline verifier, and reissue the release bundle."
+        )
+    else:
+        buyer_summary_text = (
+            f"Data-room release is ready with {len(manifest)} verified artifact(s)."
+        )
+        next_action_text = (
+            "Share the verified release bundle with buyer diligence reviewers."
+        )
+
+    return DataRoomReleaseSummary(
+        release_key="buyer_data_room_release",
+        release_status="release_blocked" if release_blocked else "release_ready",
+        total_artifact_count=len(manifest),
+        ready_artifact_count=ready_artifact_count,
+        needs_attention_artifact_count=len(blocked_artifact_files),
+        required_for_close_count=required_for_close_count,
+        blocked_artifact_files=blocked_artifact_files,
+        privacy_exposure_count=privacy_exposure_count,
+        raw_content_exposure_count=raw_content_exposure_count,
+        stable_identifier_exposure_count=stable_identifier_exposure_count,
+        provider_credential_exposure_count=provider_credential_exposure_count,
+        snapshot_verification_required=(
+            acceptance_summary.snapshot_verification_required
+        ),
+        verification_command=snapshot.verification_handoff.verifier_command,
+        acceptance_blocker_count=acceptance_summary.blocker_count,
+        acceptance_blocker_keys=acceptance_summary.blocker_keys,
+        buyer_summary_text=buyer_summary_text,
+        next_action_text=next_action_text,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -2454,6 +2574,9 @@ def _evidence_snapshot_from_surface(
                 _diligence_close_acceptance_summary(snapshot)
             )
         }
+    )
+    snapshot = snapshot.model_copy(
+        update={"data_room_release_summary": _data_room_release_summary(snapshot)}
     )
     digest_payload = _snapshot_digest_payload(snapshot)
     return snapshot.model_copy(

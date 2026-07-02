@@ -1070,6 +1070,31 @@ const diligenceCloseAcceptanceSummary = {
   provider_write_executed: false,
 };
 
+const dataRoomReleaseSummary = {
+  release_key: "buyer_data_room_release",
+  release_status: "release_blocked",
+  total_artifact_count: dataRoomPackageManifest.length,
+  ready_artifact_count: dataRoomPackageManifest.filter((item) => item.state_code === "ready").length,
+  needs_attention_artifact_count: dataRoomPackageManifest.filter((item) => item.state_code !== "ready").length,
+  required_for_close_count: dataRoomPackageManifest.filter((item) => item.required_for_close).length,
+  blocked_artifact_files: [
+    "acquisition-readiness-summary.json",
+    "buyer-evidence-packet-checklist.json",
+    "remediation-actions.json",
+  ],
+  privacy_exposure_count: 0,
+  raw_content_exposure_count: 0,
+  stable_identifier_exposure_count: 0,
+  provider_credential_exposure_count: 0,
+  snapshot_verification_required: true,
+  verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+  acceptance_blocker_count: diligenceCloseAcceptanceSummary.blocker_count,
+  acceptance_blocker_keys: diligenceCloseAcceptanceSummary.blocker_keys,
+  buyer_summary_text: "Data-room release remains blocked by 3 artifact(s), 9 blocker key(s), and 0 privacy exposure(s).",
+  next_action_text: "Resolve blocked artifact states, clear acceptance blockers, run the offline verifier, and reissue the release bundle.",
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1436,6 +1461,7 @@ const dataEvidenceSnapshot = {
     "content_graph_evidence_samples",
     "content_graph_topology_counts",
     "data_room_package_manifest",
+    "data_room_release_summary",
     "diligence_close_acceptance_checklist",
     "diligence_close_acceptance_summary",
     "diligence_exception_register",
@@ -1531,6 +1557,7 @@ const dataEvidenceSnapshot = {
   verification_handoff: snapshotVerificationHandoff,
   evidence_packet_checklist: evidencePacketChecklist,
   data_room_package_manifest: dataRoomPackageManifest,
+  data_room_release_summary: dataRoomReleaseSummary,
   diligence_exception_register: diligenceExceptionRegister,
   diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
   diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
@@ -2156,6 +2183,13 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Offline snapshot verification");
     expect(container.textContent).toContain("redacted_snapshot_policy");
     expect(container.textContent).toContain("buyer_evidence_readiness_gate");
+    expect(container.textContent).toContain("Data room release summary");
+    expect(container.textContent).toContain("release_blocked");
+    expect(container.textContent).toContain("Data-room release remains blocked");
+    expect(container.textContent).toContain("blocked 3");
+    expect(container.textContent).toContain("privacy exposures 0");
+    expect(container.textContent).toContain("buyer-evidence-packet-checklist.json");
+    expect(container.textContent).toContain("exception_attach_kg_evidence_endpoints");
     expect(container.textContent).toContain("Data room package manifest");
     expect(container.textContent).toContain("naruon-evidence-snapshot.json");
     expect(container.textContent).toContain("verify-evidence-snapshot.py");
@@ -2303,6 +2337,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_artifact_review_queue");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_owner_handoff_queue");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_traceability_map");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("data_room_release_summary");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -2312,6 +2347,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.data_room_package_manifest[0].file_name).toBe("naruon-evidence-snapshot.json");
     expect(copiedSnapshot.data_room_package_manifest[8].state_code).toBe("needs_attention");
     expect(copiedSnapshot.data_room_package_manifest.every((item: { contains_raw_content: boolean }) => !item.contains_raw_content)).toBe(true);
+    expect(copiedSnapshot.data_room_release_summary).toEqual(dataRoomReleaseSummary);
     expect(copiedSnapshot.diligence_exception_register).toHaveLength(9);
     expect(copiedSnapshot.diligence_exception_register[0]).toEqual({
       exception_key: "exception_repair_thread_id_integrity",

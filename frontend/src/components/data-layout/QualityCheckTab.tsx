@@ -40,6 +40,7 @@ export function QualityCheckTab({
   const acquisitionReadinessGate = dataQualitySurface?.acquisition_readiness_gate;
   const evidenceSnapshot = dataEvidenceSnapshot;
   const closeDecisionSummary = evidenceSnapshot?.diligence_close_decision_summary;
+  const releaseSummary = evidenceSnapshot?.data_room_release_summary;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
@@ -162,6 +163,75 @@ export function QualityCheckTab({
                             </dl>
                           </article>
                         ))}
+                      </div>
+                    </div>
+                  )}
+                  {releaseSummary && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Data room release summary</p>
+                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(releaseSummary.release_status)}</h3>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(releaseSummary.buyer_summary_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(releaseSummary.next_action_text)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {toSafeReactText(releaseSummary.release_key)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Artifacts</dt>
+                            <dd className="mt-1 text-sm font-bold">
+                              total {formatCount(releaseSummary.total_artifact_count)} · ready {formatCount(releaseSummary.ready_artifact_count)} · blocked {formatCount(releaseSummary.needs_attention_artifact_count)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Required for close</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(releaseSummary.required_for_close_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Privacy exposures</dt>
+                            <dd className="mt-1 text-sm font-bold">privacy exposures {formatCount(releaseSummary.privacy_exposure_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Raw / stable / credential</dt>
+                            <dd className="mt-1 text-sm font-bold">
+                              {formatCount(releaseSummary.raw_content_exposure_count)} / {formatCount(releaseSummary.stable_identifier_exposure_count)} / {formatCount(releaseSummary.provider_credential_exposure_count)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Acceptance blockers</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(releaseSummary.acceptance_blocker_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Snapshot verification</dt>
+                            <dd className="mt-1 text-sm font-bold">{releaseSummary.snapshot_verification_required ? 'required' : 'not required'}</dd>
+                          </div>
+                          <div className="lg:col-span-2">
+                            <dt className="font-black text-muted-foreground">Verification command</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(releaseSummary.verification_command)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(releaseSummary.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {releaseSummary.blocked_artifact_files.map((fileName) => (
+                            <span key={fileName} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(fileName)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {releaseSummary.acceptance_blocker_keys.map((blockerKey) => (
+                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(blockerKey)}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}

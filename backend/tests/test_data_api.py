@@ -1476,6 +1476,46 @@ def _expected_diligence_close_acceptance_summary():
     }
 
 
+def _expected_data_room_release_summary():
+    manifest = _expected_data_room_package_manifest()
+    acceptance_summary = _expected_diligence_close_acceptance_summary()
+    blocked_artifact_files = sorted(
+        item["file_name"] for item in manifest if item["state_code"] != "ready"
+    )
+    return {
+        "release_key": "buyer_data_room_release",
+        "release_status": "release_blocked",
+        "total_artifact_count": len(manifest),
+        "ready_artifact_count": sum(
+            1 for item in manifest if item["state_code"] == "ready"
+        ),
+        "needs_attention_artifact_count": len(blocked_artifact_files),
+        "required_for_close_count": sum(
+            1 for item in manifest if item["required_for_close"]
+        ),
+        "blocked_artifact_files": blocked_artifact_files,
+        "privacy_exposure_count": 0,
+        "raw_content_exposure_count": 0,
+        "stable_identifier_exposure_count": 0,
+        "provider_credential_exposure_count": 0,
+        "snapshot_verification_required": True,
+        "verification_command": (
+            "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+        ),
+        "acceptance_blocker_count": acceptance_summary["blocker_count"],
+        "acceptance_blocker_keys": acceptance_summary["blocker_keys"],
+        "buyer_summary_text": (
+            "Data-room release remains blocked by 3 artifact(s), 9 blocker key(s), "
+            "and 0 privacy exposure(s)."
+        ),
+        "next_action_text": (
+            "Resolve blocked artifact states, clear acceptance blockers, run the "
+            "offline verifier, and reissue the release bundle."
+        ),
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -2034,6 +2074,8 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert snapshot["evidence_packet_checklist"] == _expected_evidence_packet_checklist()
     assert "data_room_package_manifest" in snapshot["canonical_payload_fields"]
     assert snapshot["data_room_package_manifest"] == _expected_data_room_package_manifest()
+    assert "data_room_release_summary" in snapshot["canonical_payload_fields"]
+    assert snapshot["data_room_release_summary"] == _expected_data_room_release_summary()
     assert "diligence_exception_register" in snapshot["canonical_payload_fields"]
     assert (
         snapshot["diligence_exception_register"]
@@ -2513,6 +2555,49 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "next_action_text": (
             "Resolve blocker keys, regenerate the evidence snapshot, run the "
             "offline verifier, and reissue the acceptance checklist."
+        ),
+        "provider_write_executed": False,
+    }
+    release_summary = snapshot["data_room_release_summary"]
+    assert release_summary == {
+        "release_key": "buyer_data_room_release",
+        "release_status": "release_blocked",
+        "total_artifact_count": 10,
+        "ready_artifact_count": 7,
+        "needs_attention_artifact_count": 3,
+        "required_for_close_count": 10,
+        "blocked_artifact_files": [
+            "acquisition-readiness-summary.json",
+            "buyer-evidence-packet-checklist.json",
+            "remediation-actions.json",
+        ],
+        "privacy_exposure_count": 0,
+        "raw_content_exposure_count": 0,
+        "stable_identifier_exposure_count": 0,
+        "provider_credential_exposure_count": 0,
+        "snapshot_verification_required": True,
+        "verification_command": (
+            "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+        ),
+        "acceptance_blocker_count": 9,
+        "acceptance_blocker_keys": [
+            "exception_attach_kg_evidence_endpoints",
+            "exception_backfill_content_graph_coverage",
+            "exception_backfill_dedupe_fingerprints",
+            "exception_backfill_knowledge_graph_coverage",
+            "exception_backfill_semantic_relation_sources",
+            "exception_expand_attachment_parse_coverage",
+            "exception_recover_attachment_content",
+            "exception_repair_segment_text_readiness",
+            "exception_repair_thread_id_integrity",
+        ],
+        "buyer_summary_text": (
+            "Data-room release remains blocked by 3 artifact(s), 9 blocker key(s), "
+            "and 0 privacy exposure(s)."
+        ),
+        "next_action_text": (
+            "Resolve blocked artifact states, clear acceptance blockers, run the "
+            "offline verifier, and reissue the release bundle."
         ),
         "provider_write_executed": False,
     }

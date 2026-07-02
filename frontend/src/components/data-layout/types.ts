@@ -50,6 +50,7 @@ export type SurfaceStatusCode = 'ready' | 'running' | 'needs_attention' | 'pendi
 export type QualityStatusCode = 'pass' | 'needs_attention' | 'pending';
 export type AcquisitionReadinessState = 'ready' | 'needs_attention' | 'pending';
 export type RemediationPriority = 'critical' | 'high' | 'medium';
+export type DataRoomReleaseStatus = 'release_ready' | 'release_blocked';
 export type CloseGateStatus = 'blocked' | 'ready';
 export type DiligenceCloseDecision = 'ready_to_close' | 'close_blocked';
 export type DiligenceCloseSeverity = RemediationPriority | 'none';
@@ -296,6 +297,26 @@ export type DataEvidenceSnapshotResponse = {
     detail_text: string;
     provider_write_executed: boolean;
   }>;
+  data_room_release_summary: {
+    release_key: string;
+    release_status: DataRoomReleaseStatus;
+    total_artifact_count: number;
+    ready_artifact_count: number;
+    needs_attention_artifact_count: number;
+    required_for_close_count: number;
+    blocked_artifact_files: string[];
+    privacy_exposure_count: number;
+    raw_content_exposure_count: number;
+    stable_identifier_exposure_count: number;
+    provider_credential_exposure_count: number;
+    snapshot_verification_required: boolean;
+    verification_command: string;
+    acceptance_blocker_count: number;
+    acceptance_blocker_keys: string[];
+    buyer_summary_text: string;
+    next_action_text: string;
+    provider_write_executed: boolean;
+  };
   diligence_exception_register: Array<{
     exception_key: string;
     blocking_check_key: string;
