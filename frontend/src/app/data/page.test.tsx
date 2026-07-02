@@ -546,6 +546,44 @@ const dataRoomPackageManifest = [
   },
 ];
 
+const diligenceExceptionSourceFields: Record<string, string> = {
+  thread_id_integrity: "quality_checks.thread_id_integrity",
+  dedupe_fingerprint: "quality_checks.dedupe_fingerprint",
+  attachment_content: "quality_checks.attachment_content",
+  content_graph_coverage: "quality_checks.content_graph_coverage",
+  knowledge_graph_coverage: "quality_checks.knowledge_graph_coverage",
+  content_segment_text_readiness: "quality_checks.content_segment_text_readiness",
+  knowledge_graph_evidence_endpoint_readiness: "quality_checks.knowledge_graph_evidence_endpoint_readiness",
+  semantic_relation_source_backing: "quality_checks.semantic_relation_source_backing",
+  attachment_parse_coverage: "quality_checks.attachment_parse_coverage",
+};
+
+const diligenceExceptionArtifacts: Record<string, string> = {
+  thread_id_integrity: "acquisition-readiness-summary.json",
+  dedupe_fingerprint: "acquisition-readiness-summary.json",
+  attachment_content: "remediation-actions.json",
+  content_graph_coverage: "dom-paragraph-evidence-samples.json",
+  knowledge_graph_coverage: "knowledge-graph-evidence-samples.json",
+  content_segment_text_readiness: "dom-paragraph-evidence-samples.json",
+  knowledge_graph_evidence_endpoint_readiness: "knowledge-graph-evidence-samples.json",
+  semantic_relation_source_backing: "semantic-relation-evidence-samples.json",
+  attachment_parse_coverage: "remediation-actions.json",
+};
+
+const diligenceExceptionRegister = acquisitionRemediationActions.map((action) => ({
+  exception_key: `exception_${action.action_key}`,
+  blocking_check_key: action.blocking_check_key,
+  display_name: action.display_name,
+  severity_code: action.priority_code,
+  owner_area: action.owner_area,
+  source_field: diligenceExceptionSourceFields[action.blocking_check_key],
+  related_artifact: diligenceExceptionArtifacts[action.blocking_check_key],
+  blocks_close: true,
+  detail_text: action.impact_text,
+  next_action: action.recommended_next_step,
+  provider_write_executed: action.provider_write_executed,
+}));
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -912,6 +950,7 @@ const dataEvidenceSnapshot = {
     "content_graph_evidence_samples",
     "content_graph_topology_counts",
     "data_room_package_manifest",
+    "diligence_exception_register",
     "evidence_packet_checklist",
     "generated_at",
     "knowledge_graph_evidence_samples",
@@ -998,6 +1037,7 @@ const dataEvidenceSnapshot = {
   verification_handoff: snapshotVerificationHandoff,
   evidence_packet_checklist: evidencePacketChecklist,
   data_room_package_manifest: dataRoomPackageManifest,
+  diligence_exception_register: diligenceExceptionRegister,
   parser_manifest_summary: [
     {
       parser_key: "plain_text",
@@ -1621,6 +1661,12 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("acquisition-readiness-summary.json");
     expect(container.textContent).toContain("raw content: no");
     expect(container.textContent).toContain("stable IDs: no");
+    expect(container.textContent).toContain("Diligence exception register");
+    expect(container.textContent).toContain("critical");
+    expect(container.textContent).toContain("quality_checks.thread_id_integrity");
+    expect(container.textContent).toContain("blocks close: yes");
+    expect(container.textContent).toContain("Semantic relation source backing");
+    expect(container.textContent).toContain("semantic-relation-evidence-samples.json");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
     expect(container.textContent).toContain("text/markdown");
@@ -1696,6 +1742,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.generated_at).toBe("2026-07-02T00:00:00Z");
     expect(copiedSnapshot.snapshot_digest).toBe("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
     expect(copiedSnapshot.digest_algorithm).toBe("sha256");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_exception_register");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -1705,6 +1752,22 @@ describe("DataPage", () => {
     expect(copiedSnapshot.data_room_package_manifest[0].file_name).toBe("naruon-evidence-snapshot.json");
     expect(copiedSnapshot.data_room_package_manifest[8].state_code).toBe("needs_attention");
     expect(copiedSnapshot.data_room_package_manifest.every((item: { contains_raw_content: boolean }) => !item.contains_raw_content)).toBe(true);
+    expect(copiedSnapshot.diligence_exception_register).toHaveLength(9);
+    expect(copiedSnapshot.diligence_exception_register[0]).toEqual({
+      exception_key: "exception_repair_thread_id_integrity",
+      blocking_check_key: "thread_id_integrity",
+      display_name: "Canonical thread repair",
+      severity_code: "critical",
+      owner_area: "email_ingestion",
+      source_field: "quality_checks.thread_id_integrity",
+      related_artifact: "acquisition-readiness-summary.json",
+      blocks_close: true,
+      detail_text: "Thread provenance must be stable before buyer review.",
+      next_action: "Run canonical threading repair for affected scoped emails.",
+      provider_write_executed: false,
+    });
+    expect(copiedSnapshot.diligence_exception_register[8].severity_code).toBe("medium");
+    expect(copiedSnapshot.diligence_exception_register[8].related_artifact).toBe("remediation-actions.json");
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

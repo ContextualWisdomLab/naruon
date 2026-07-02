@@ -53,6 +53,7 @@ export type RemediationPriority = 'critical' | 'high' | 'medium';
 export type DiligenceRecommendation = 'ready_for_diligence' | 'remediate_before_close' | 'insufficient_evidence';
 export type DiligenceRiskLevel = 'low' | 'medium' | 'high';
 export type RepositoryAssetState = 'ready' | 'needs_attention';
+export type DiligenceExceptionSeverity = 'critical' | 'high' | 'medium';
 
 export type AcquisitionRemediationAction = {
   action_key: string;
@@ -288,6 +289,19 @@ export type DataEvidenceSnapshotResponse = {
     contains_raw_content: boolean;
     contains_stable_identifiers: boolean;
     detail_text: string;
+    provider_write_executed: boolean;
+  }>;
+  diligence_exception_register: Array<{
+    exception_key: string;
+    blocking_check_key: string;
+    display_name: string;
+    severity_code: DiligenceExceptionSeverity;
+    owner_area: string;
+    source_field: string;
+    related_artifact: string;
+    blocks_close: boolean;
+    detail_text: string;
+    next_action: string;
     provider_write_executed: boolean;
   }>;
   parser_manifest_summary: Array<{
