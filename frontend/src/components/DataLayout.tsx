@@ -87,10 +87,7 @@ export function DataLayout() {
     }
   }, []);
 
-  const loadDataQualitySurface = useCallback(async (options?: { markLoading?: boolean }) => {
-    if (options?.markLoading) {
-      setDataSurfaceStatus('loading');
-    }
+  const loadDataQualitySurface = useCallback(async () => {
     try {
       const [data] = await Promise.all([
         apiClient.get<DataQualitySurfaceResponse>('/api/data/quality-surface'),
@@ -110,7 +107,9 @@ export function DataLayout() {
   }, [loadDataEvidenceSnapshot]);
 
   useEffect(() => {
-    void loadDataQualitySurface();
+    const dataQualitySurfaceTimer = window.setTimeout(() => {
+      void loadDataQualitySurface();
+    }, 0);
 
     apiClient.get<WebdavAccount[]>('/api/webdav/accounts')
       .then((data) => {
@@ -129,6 +128,8 @@ export function DataLayout() {
     apiClient.get<ProjectFolder[]>('/api/webdav/folders')
       .then(data => Array.isArray(data) && setProjectFolders(data))
       .catch((error: unknown) => console.error('WebDAV folders fetch error', getSafeErrorSummary(error)));
+
+    return () => window.clearTimeout(dataQualitySurfaceTimer);
   }, [loadDataQualitySurface]);
 
   const requestWebdavWritebackIntent = useCallback(async () => {
@@ -246,7 +247,8 @@ export function DataLayout() {
       );
       setDocumentActionResult(result);
       setDocumentActionStatus('success');
-      await loadDataQualitySurface({ markLoading: true });
+      setDataSurfaceStatus('loading');
+      await loadDataQualitySurface();
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
@@ -282,7 +284,8 @@ export function DataLayout() {
       );
       setDocumentActionResult(result);
       setDocumentActionStatus('success');
-      await loadDataQualitySurface({ markLoading: true });
+      setDataSurfaceStatus('loading');
+      await loadDataQualitySurface();
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
