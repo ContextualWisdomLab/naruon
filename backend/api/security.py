@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,13 @@ router = APIRouter(prefix="/api/security", tags=["security"])
 
 SourceType = Literal["caldav_source", "carddav_source", "webdav_repository"]
 ScopeKind = Literal["organization", "personal"]
+PermissionDraftDecision = Literal["allow_writeback", "deny_external_write"]
+PermissionResourceType = Literal[
+    "caldav_source",
+    "carddav_source",
+    "webdav_repository",
+    "provider_secret",
+]
 DecisionReason = Literal[
     "allowed",
     "organization_denied",
@@ -96,6 +103,28 @@ class SecurityAccessSurfaceResponse(BaseModel):
     policy_decisions: list[PolicyDecisionSummary]
     external_share_reviews: list[ExternalShareReview]
     policy_order: list[PolicyOrderStep]
+
+
+class PermissionChangeIntentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: PermissionDraftDecision
+    resource_type: PermissionResourceType
+
+
+class PermissionChangeIntentResponse(BaseModel):
+    decision: PermissionDraftDecision
+    resource_type: PermissionResourceType
+    allowed: bool
+    reason: DecisionReason
+    evidence_label: str
+    audit_event: Literal["security.permission_change_intent"]
+    provider_write_executed: Literal[False]
+    denial_result: Literal[
+        "approval_required_before_external_write",
+        "provider_denied_by_policy",
+    ]
+    observed_at: str
 
 
 def _datetime_to_utc_iso(value: datetime) -> str:
@@ -428,6 +457,36 @@ def _require_authoritative_workspace_scope(auth_context: AuthContext) -> None:
         )
 
 
+def _permission_change_resource(
+    request: PermissionChangeIntentRequest,
+    auth_context: AuthContext,
+) -> ResourcePolicy:
+    denied_cross_org = request.decision == "deny_external_write"
+    return ResourcePolicy(
+        owner_id=auth_context.user_id,
+        organization_id=(
+            "org-outside-scope" if denied_cross_org else auth_context.organization_id
+        ),
+        permitted_roles=("tenant_admin", "organization_admin"),
+        permitted_group_ids=auth_context.group_ids,
+        data_region=settings.DATA_REGION,
+        required_consent_scopes=(),
+        workspace_id=auth_context.workspace_id,
+    )
+
+
+def _permission_detail_text(
+    request: PermissionChangeIntentRequest,
+    reason: str,
+) -> str:
+    return (
+        f"permission_intent={request.decision}; "
+        f"resource_type={request.resource_type}; "
+        f"policy_reason={reason}; "
+        "provider_write_executed=false"
+    )
+
+
 @router.get("/access-surface", response_model=SecurityAccessSurfaceResponse)
 async def get_access_surface(
     auth_context: AuthContext = Depends(get_auth_context),
@@ -470,4 +529,57 @@ async def get_access_surface(
         policy_decisions=policy_decisions,
         external_share_reviews=_share_reviews(sources),
         policy_order=_policy_order(),
+    )
+
+
+@router.post(
+    "/permission-change-intent",
+    response_model=PermissionChangeIntentResponse,
+)
+async def create_permission_change_intent(
+    request: PermissionChangeIntentRequest,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> PermissionChangeIntentResponse:
+    _require_authoritative_workspace_scope(auth_context)
+    if not is_admin_role(auth_context.role):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin role is required for security permission changes",
+        )
+
+    decision = evaluate_access(
+        _access_request(auth_context),
+        _permission_change_resource(request, auth_context),
+    )
+    observed_at = datetime.now(timezone.utc)
+    audit_event = SecurityAuditEvent(
+        actor_user_id=auth_context.user_id,
+        actor_role=auth_context.role,
+        organization_id=auth_context.organization_id,
+        workspace_id=auth_context.workspace_id,
+        event_action="permission_change_intent",
+        resource_type=request.resource_type,
+        resource_uid=None,
+        evidence_source="api.security.permission_change_intent",
+        detail_text=_permission_detail_text(request, decision.reason),
+        observed_at=observed_at,
+    )
+    db.add(audit_event)
+    await db.commit()
+
+    return PermissionChangeIntentResponse(
+        decision=request.decision,
+        resource_type=request.resource_type,
+        allowed=decision.allowed,
+        reason=decision.reason,
+        evidence_label="policy_engine_evidence",
+        audit_event="security.permission_change_intent",
+        provider_write_executed=False,
+        denial_result=(
+            "approval_required_before_external_write"
+            if decision.allowed
+            else "provider_denied_by_policy"
+        ),
+        observed_at=_datetime_to_utc_iso(observed_at),
     )

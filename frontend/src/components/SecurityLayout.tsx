@@ -18,6 +18,7 @@ import { apiClient } from '@/lib/api-client';
 type SecurityTab = '보안 대시보드' | '접근 권한' | '감사 로그' | '외부 공유' | '정책';
 type ScopeKind = 'organization' | 'personal';
 type PermissionDraftDecision = 'allow_writeback' | 'deny_external_write';
+type PermissionResourceType = 'caldav_source' | 'carddav_source' | 'webdav_repository' | 'provider_secret';
 
 type PolicyDecisionSummary = {
   resource_label: string;
@@ -78,6 +79,18 @@ type SecurityAccessSurface = {
   policy_order: PolicyOrderStep[];
 };
 
+type PermissionChangeIntentResponse = {
+  decision: PermissionDraftDecision;
+  resource_type: PermissionResourceType;
+  allowed: boolean;
+  reason: string;
+  evidence_label: string;
+  audit_event: 'security.permission_change_intent';
+  provider_write_executed: false;
+  denial_result: 'approval_required_before_external_write' | 'provider_denied_by_policy';
+  observed_at: string;
+};
+
 const tabs: SecurityTab[] = ['보안 대시보드', '접근 권한', '감사 로그', '외부 공유', '정책'];
 
 const permissionDraftOptions = [
@@ -86,23 +99,27 @@ const permissionDraftOptions = [
     label: '쓰기 허용 검토',
     description: '고객 소유 원본에 대한 쓰기 의도를 승인 검토 상태로 둡니다.',
     result: '허용 - 승인 전 외부 쓰기 실행 안 함',
+    resourceType: 'webdav_repository',
   },
   {
     value: 'deny_external_write',
     label: '외부 쓰기 차단',
     description: '교차 조직 또는 승인되지 않은 원본 쓰기를 deny 결과로 저장합니다.',
     result: '조직 차단 - 외부 쓰기 실행 안 함',
+    resourceType: 'provider_secret',
   },
 ] satisfies {
   value: PermissionDraftDecision;
   label: string;
   description: string;
   result: string;
+  resourceType: PermissionResourceType;
 }[];
 
 const reasonLabels: Record<string, string> = {
   allowed: '허용',
   organization_denied: '조직 차단',
+  workspace_denied: '워크스페이스 차단',
   data_region_denied: '리전 차단',
   consent_denied: '동의 차단',
   ownership_denied: '소유권 차단',
@@ -380,7 +397,29 @@ function DashboardTab({ data }: { data: SecurityAccessSurface }) {
 function AccessTab({ data }: { data: SecurityAccessSurface }) {
   const [permissionDraft, setPermissionDraft] = useState<PermissionDraftDecision>('allow_writeback');
   const [permissionSaveStatus, setPermissionSaveStatus] = useState<string | null>(null);
+  const [permissionSaveError, setPermissionSaveError] = useState<string | null>(null);
+  const [permissionSaving, setPermissionSaving] = useState(false);
+  const [permissionIntentResult, setPermissionIntentResult] = useState<PermissionChangeIntentResponse | null>(null);
   const selectedPermissionDraft = permissionDraftOptions.find((option) => option.value === permissionDraft) ?? permissionDraftOptions[0];
+
+  const handlePermissionSave = async () => {
+    setPermissionSaving(true);
+    setPermissionSaveStatus(null);
+    setPermissionSaveError(null);
+    setPermissionIntentResult(null);
+    try {
+      const result = await apiClient.post<PermissionChangeIntentResponse>('/api/security/permission-change-intent', {
+        decision: permissionDraft,
+        resource_type: selectedPermissionDraft.resourceType,
+      });
+      setPermissionIntentResult(result);
+      setPermissionSaveStatus(`권한 변경이 저장되었습니다: ${selectedPermissionDraft.label}`);
+    } catch {
+      setPermissionSaveError('권한 변경 저장 실패: 서버 감사 이벤트가 기록되지 않았습니다.');
+    } finally {
+      setPermissionSaving(false);
+    }
+  };
 
   return (
     <section aria-label="접근 권한 소스 거버넌스" className="space-y-5">
@@ -498,6 +537,8 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
             onChange={(event) => {
               setPermissionDraft(event.target.value as PermissionDraftDecision);
               setPermissionSaveStatus(null);
+              setPermissionSaveError(null);
+              setPermissionIntentResult(null);
             }}
             className="min-h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
@@ -513,14 +554,35 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
         </div>
         <button
           type="button"
-          onClick={() => setPermissionSaveStatus(`권한 변경이 저장되었습니다: ${selectedPermissionDraft.label}`)}
+          onClick={() => { void handlePermissionSave(); }}
+          disabled={permissionSaving}
+          aria-busy={permissionSaving}
           className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           {permissionDraft === 'deny_external_write' ? <XCircle className="size-4" /> : <CheckCircle2 className="size-4" />}
-          권한 저장
+          {permissionSaving ? '권한 저장 중' : '권한 저장'}
         </button>
         {permissionSaveStatus ? (
           <p role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{permissionSaveStatus}</p>
+        ) : null}
+        {permissionSaveError ? (
+          <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{permissionSaveError}</p>
+        ) : null}
+        {permissionIntentResult ? (
+          <div aria-label="권한 저장 서버 근거" className="mt-3 grid gap-2 rounded-lg border border-border bg-background p-3 text-xs">
+            <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
+              <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">서버 감사 이벤트</span>
+              <span className="break-all font-mono font-semibold sm:text-right">{permissionIntentResult.audit_event}</span>
+            </div>
+            <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
+              <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">정책 결과</span>
+              <span className="font-semibold sm:text-right">{reasonLabel(permissionIntentResult.reason)}</span>
+            </div>
+            <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
+              <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">제공자 쓰기</span>
+              <span className="font-semibold sm:text-right">실행 안 함</span>
+            </div>
+          </div>
         ) : null}
       </section>
     </section>

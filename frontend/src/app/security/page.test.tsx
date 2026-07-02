@@ -108,9 +108,22 @@ const securitySurface = {
 
 function mockSecurityFetch(surface: typeof securitySurface = securitySurface) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    void init;
     if (String(input) === "/api/security/access-surface") {
       return jsonResponse(surface);
+    }
+    if (String(input) === "/api/security/permission-change-intent") {
+      const requestBody = JSON.parse(String(init?.body ?? "{}")) as { decision?: string; resource_type?: string };
+      return jsonResponse({
+        decision: requestBody.decision,
+        resource_type: requestBody.resource_type,
+        allowed: false,
+        reason: "organization_denied",
+        evidence_label: "policy_engine_evidence",
+        audit_event: "security.permission_change_intent",
+        provider_write_executed: false,
+        denial_result: "provider_denied_by_policy",
+        observed_at: "2026-05-28T04:05:00Z",
+      });
     }
     throw new Error(`Unhandled fetch: ${String(input)}`);
   });
@@ -178,8 +191,14 @@ describe("SecurityPage", () => {
 
     await act(async () => {
       saveButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
     });
     expect(container.textContent).toContain("권한 변경이 저장되었습니다: 외부 쓰기 차단");
+    expect(container.textContent).toContain("서버 감사 이벤트");
+    expect(container.textContent).toContain("security.permission_change_intent");
+    expect(container.textContent).toContain("제공자 쓰기");
+    expect(container.textContent).toContain("실행 안 함");
 
     const accessCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/security/access-surface");
     expect(accessCall).toBeDefined();
@@ -203,6 +222,15 @@ describe("SecurityPage", () => {
     ]) {
       expect(requestHeaders[publicHeader]).toBeUndefined();
     }
+
+    const permissionIntentCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/security/permission-change-intent");
+    expect(permissionIntentCall).toBeDefined();
+    const [, permissionIntentInit] = permissionIntentCall ?? [];
+    expect(permissionIntentInit?.credentials).toBe("same-origin");
+    expect(JSON.parse(String(permissionIntentInit?.body))).toEqual({
+      decision: "deny_external_write",
+      resource_type: "provider_secret",
+    });
   });
 
   it("renders audit sharing and policy tabs without inert placeholders", async () => {

@@ -782,6 +782,25 @@ async function installRoutes(page) {
     }
     if (endpoint === "/api/ai-hub/surface") return routeJson(route, aiHubSurface);
     if (endpoint === "/api/security/access-surface") return routeJson(route, securitySurface);
+    if (endpoint === "/api/security/permission-change-intent") {
+      let requestBody = {};
+      try {
+        requestBody = request.postDataJSON();
+      } catch {
+        requestBody = {};
+      }
+      return routeJson(route, {
+        decision: requestBody.decision ?? "deny_external_write",
+        resource_type: requestBody.resource_type ?? "provider_secret",
+        allowed: false,
+        reason: "organization_denied",
+        evidence_label: "policy_engine_evidence",
+        audit_event: "security.permission_change_intent",
+        provider_write_executed: false,
+        denial_result: "provider_denied_by_policy",
+        observed_at: "2026-05-28T04:05:00Z",
+      });
+    }
     if (endpoint === "/api/accounts/config") {
       if (request.method() === "PUT") {
         let requestBody = {};
@@ -1125,6 +1144,8 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await permissionEditor.getByText("조직 차단 - 외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await permissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
     await permissionEditor.getByText("권한 변경이 저장되었습니다: 외부 쓰기 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByText("security.permission_change_intent", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByText("실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "감사 로그", exact: true }).click();
     const auditRegion = page.getByRole("region", { name: "보안 감사 로그", exact: true });
     await auditRegion.getByText("지속 감사 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1146,6 +1167,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await finalPermissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
     await finalPermissionEditor.scrollIntoViewIfNeeded();
     await finalPermissionEditor.getByText("권한 변경이 저장되었습니다: 외부 쓰기 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await finalPermissionEditor.getByText("security.permission_change_intent", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("security:verify-access-source-governance"),
       evidence("security:verify-write-capability-boundary"),
@@ -1153,6 +1175,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
       evidence("security:edit-permission-decision"),
       evidence("security:save-permission-decision"),
       evidence("security:verify-denial-result-state"),
+      evidence("security:verify-permission-save-server-evidence"),
       evidence("security:return-permission-editor-evidence"),
       evidence("security:open-audit-log"),
       evidence("security:verify-durable-audit-event"),
