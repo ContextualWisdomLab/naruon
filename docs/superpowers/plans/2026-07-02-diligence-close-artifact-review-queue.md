@@ -14,14 +14,14 @@ Add a deterministic buyer-close artifact review queue to the redacted evidence s
 
 ## Implementation Plan
 
-- [ ] Add `diligence_close_artifact_review_queue` to the evidence snapshot response.
-- [ ] Derive queue entries from `diligence_close_proof_plan`, grouped by `required_proof_artifact`.
-- [ ] Include owner areas, proof counts, blocked/ready counts, highest severity, buyer reviewer role, review status, acceptance summary, next action, snapshot verification requirement, and write boundary.
-- [ ] Include the field in the canonical digest payload and backend fixture assertions.
-- [ ] Add a UI section between close decision summary and close proof plan.
-- [ ] Add frontend fixture, copied JSON, and visible rendering coverage.
-- [ ] Generate a FigJam diagram for the proof-plan-to-artifact-review flow without Code Connect.
-- [ ] Run backend tests, ruff, frontend tests, diff review, and Ponytail review.
+- [x] Add `diligence_close_artifact_review_queue` to the evidence snapshot response.
+- [x] Derive queue entries from `diligence_close_proof_plan`, grouped by `required_proof_artifact`.
+- [x] Include owner areas, proof counts, blocked/ready counts, highest severity, buyer reviewer role, review status, acceptance summary, next action, snapshot verification requirement, and write boundary.
+- [x] Include the field in the canonical digest payload and backend fixture assertions.
+- [x] Add a UI section between close decision summary and close proof plan.
+- [x] Add frontend fixture, copied JSON, and visible rendering coverage.
+- [x] Generate a FigJam diagram for the proof-plan-to-artifact-review flow without Code Connect.
+- [x] Run backend tests, ruff, frontend tests, diff review, and Ponytail review.
 - [ ] Push the PR branch and update PR #895 with Phase 27 evidence.
 
 ## Acceptance Criteria
@@ -36,4 +36,9 @@ Add a deterministic buyer-close artifact review queue to the redacted evidence s
 
 ## Evidence
 
-- Pending.
+- Backend: `python3 -m pytest backend/tests/test_data_api.py -q` passed with 9 passed and 1 skipped.
+- Backend style: `ruff check backend/api/data.py backend/tests/test_data_api.py` passed.
+- Frontend: `npm test -- src/app/data/page.test.tsx` passed with 12 tests.
+- Frontend style: `npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` passed.
+- Figma/FigJam: https://www.figma.com/board/mjH0tpDIvz5kj44kL6354R?utm_source=codex&utm_content=edit_in_figjam&oai_id=&request_id=13a088da-bb84-46fa-b47e-9a2de963735a
+- Ponytail review: Lean already. Ship.
