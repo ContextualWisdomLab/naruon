@@ -303,6 +303,19 @@ export type DataEvidenceSnapshotResponse = {
     next_action: string;
     provider_write_executed: boolean;
   }>;
+  diligence_risk_matrix: Array<{
+    matrix_key: string;
+    severity_code: RemediationPriority;
+    owner_area: string;
+    related_artifact: string;
+    exception_count: number;
+    representative_exception_keys: string[];
+    risk_label: string;
+    buyer_implication: string;
+    recommended_next_action: string;
+    blocks_close: boolean;
+    provider_write_executed: boolean;
+  }>;
   parser_manifest_summary: Array<{
     parser_key: string;
     display_name: string;

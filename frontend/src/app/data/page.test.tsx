@@ -584,6 +584,102 @@ const diligenceExceptionRegister = acquisitionRemediationActions.map((action) =>
   provider_write_executed: action.provider_write_executed,
 }));
 
+const diligenceRiskMatrix = [
+  {
+    matrix_key: "risk_critical_email_ingestion_acquisition_readiness_summary_json",
+    severity_code: "critical",
+    owner_area: "email_ingestion",
+    related_artifact: "acquisition-readiness-summary.json",
+    exception_count: 2,
+    representative_exception_keys: [
+      "exception_repair_thread_id_integrity",
+      "exception_backfill_dedupe_fingerprints",
+    ],
+    risk_label: "Critical close blocker concentration",
+    buyer_implication: "2 critical exception(s) in email_ingestion affect acquisition-readiness-summary.json and block buyer close.",
+    recommended_next_action: "Resolve exception_repair_thread_id_integrity, exception_backfill_dedupe_fingerprints, then regenerate the evidence snapshot.",
+    blocks_close: true,
+    provider_write_executed: false,
+  },
+  {
+    matrix_key: "risk_high_attachment_parsing_remediation_actions_json",
+    severity_code: "high",
+    owner_area: "attachment_parsing",
+    related_artifact: "remediation-actions.json",
+    exception_count: 1,
+    representative_exception_keys: [
+      "exception_recover_attachment_content",
+    ],
+    risk_label: "High diligence evidence gap",
+    buyer_implication: "1 high exception(s) in attachment_parsing affect remediation-actions.json and block buyer close.",
+    recommended_next_action: "Resolve exception_recover_attachment_content, then regenerate the evidence snapshot.",
+    blocks_close: true,
+    provider_write_executed: false,
+  },
+  {
+    matrix_key: "risk_high_content_graph_dom_paragraph_evidence_samples_json",
+    severity_code: "high",
+    owner_area: "content_graph",
+    related_artifact: "dom-paragraph-evidence-samples.json",
+    exception_count: 2,
+    representative_exception_keys: [
+      "exception_backfill_content_graph_coverage",
+      "exception_repair_segment_text_readiness",
+    ],
+    risk_label: "High diligence evidence gap",
+    buyer_implication: "2 high exception(s) in content_graph affect dom-paragraph-evidence-samples.json and block buyer close.",
+    recommended_next_action: "Resolve exception_backfill_content_graph_coverage, exception_repair_segment_text_readiness, then regenerate the evidence snapshot.",
+    blocks_close: true,
+    provider_write_executed: false,
+  },
+  {
+    matrix_key: "risk_high_knowledge_graph_knowledge_graph_evidence_samples_json",
+    severity_code: "high",
+    owner_area: "knowledge_graph",
+    related_artifact: "knowledge-graph-evidence-samples.json",
+    exception_count: 2,
+    representative_exception_keys: [
+      "exception_backfill_knowledge_graph_coverage",
+      "exception_attach_kg_evidence_endpoints",
+    ],
+    risk_label: "High diligence evidence gap",
+    buyer_implication: "2 high exception(s) in knowledge_graph affect knowledge-graph-evidence-samples.json and block buyer close.",
+    recommended_next_action: "Resolve exception_backfill_knowledge_graph_coverage, exception_attach_kg_evidence_endpoints, then regenerate the evidence snapshot.",
+    blocks_close: true,
+    provider_write_executed: false,
+  },
+  {
+    matrix_key: "risk_high_semantic_kg_semantic_relation_evidence_samples_json",
+    severity_code: "high",
+    owner_area: "semantic_kg",
+    related_artifact: "semantic-relation-evidence-samples.json",
+    exception_count: 1,
+    representative_exception_keys: [
+      "exception_backfill_semantic_relation_sources",
+    ],
+    risk_label: "High diligence evidence gap",
+    buyer_implication: "1 high exception(s) in semantic_kg affect semantic-relation-evidence-samples.json and block buyer close.",
+    recommended_next_action: "Resolve exception_backfill_semantic_relation_sources, then regenerate the evidence snapshot.",
+    blocks_close: true,
+    provider_write_executed: false,
+  },
+  {
+    matrix_key: "risk_medium_attachment_parsing_remediation_actions_json",
+    severity_code: "medium",
+    owner_area: "attachment_parsing",
+    related_artifact: "remediation-actions.json",
+    exception_count: 1,
+    representative_exception_keys: [
+      "exception_expand_attachment_parse_coverage",
+    ],
+    risk_label: "Medium diligence coverage gap",
+    buyer_implication: "1 medium exception(s) in attachment_parsing affect remediation-actions.json and block buyer close.",
+    recommended_next_action: "Resolve exception_expand_attachment_parse_coverage, then regenerate the evidence snapshot.",
+    blocks_close: true,
+    provider_write_executed: false,
+  },
+];
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -951,6 +1047,7 @@ const dataEvidenceSnapshot = {
     "content_graph_topology_counts",
     "data_room_package_manifest",
     "diligence_exception_register",
+    "diligence_risk_matrix",
     "evidence_packet_checklist",
     "generated_at",
     "knowledge_graph_evidence_samples",
@@ -1038,6 +1135,7 @@ const dataEvidenceSnapshot = {
   evidence_packet_checklist: evidencePacketChecklist,
   data_room_package_manifest: dataRoomPackageManifest,
   diligence_exception_register: diligenceExceptionRegister,
+  diligence_risk_matrix: diligenceRiskMatrix,
   parser_manifest_summary: [
     {
       parser_key: "plain_text",
@@ -1667,6 +1765,10 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("blocks close: yes");
     expect(container.textContent).toContain("Semantic relation source backing");
     expect(container.textContent).toContain("semantic-relation-evidence-samples.json");
+    expect(container.textContent).toContain("Diligence risk matrix");
+    expect(container.textContent).toContain("Critical close blocker concentration");
+    expect(container.textContent).toContain("2 critical exception(s)");
+    expect(container.textContent).toContain("exception_repair_thread_id_integrity");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
     expect(container.textContent).toContain("text/markdown");
@@ -1743,6 +1845,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.snapshot_digest).toBe("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
     expect(copiedSnapshot.digest_algorithm).toBe("sha256");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_exception_register");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_risk_matrix");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -1768,6 +1871,26 @@ describe("DataPage", () => {
     });
     expect(copiedSnapshot.diligence_exception_register[8].severity_code).toBe("medium");
     expect(copiedSnapshot.diligence_exception_register[8].related_artifact).toBe("remediation-actions.json");
+    expect(copiedSnapshot.diligence_risk_matrix).toHaveLength(6);
+    expect(copiedSnapshot.diligence_risk_matrix[0]).toEqual({
+      matrix_key: "risk_critical_email_ingestion_acquisition_readiness_summary_json",
+      severity_code: "critical",
+      owner_area: "email_ingestion",
+      related_artifact: "acquisition-readiness-summary.json",
+      exception_count: 2,
+      representative_exception_keys: [
+        "exception_repair_thread_id_integrity",
+        "exception_backfill_dedupe_fingerprints",
+      ],
+      risk_label: "Critical close blocker concentration",
+      buyer_implication: "2 critical exception(s) in email_ingestion affect acquisition-readiness-summary.json and block buyer close.",
+      recommended_next_action: "Resolve exception_repair_thread_id_integrity, exception_backfill_dedupe_fingerprints, then regenerate the evidence snapshot.",
+      blocks_close: true,
+      provider_write_executed: false,
+    });
+    expect(copiedSnapshot.diligence_risk_matrix[5].matrix_key).toBe("risk_medium_attachment_parsing_remediation_actions_json");
+    expect(copiedSnapshot.diligence_risk_matrix[5].severity_code).toBe("medium");
+    expect(copiedSnapshot.diligence_risk_matrix[5].exception_count).toBe(1);
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",
