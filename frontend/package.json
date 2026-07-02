@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "pilot:smoke": "node scripts/pilot-ui-smoke.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
