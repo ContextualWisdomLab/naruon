@@ -9,6 +9,7 @@ const moveToMock = vi.fn();
 const offMock = vi.fn();
 const onMock = vi.fn();
 const selectEdgesMock = vi.fn();
+const selectNodesMock = vi.fn();
 
 vi.mock("vis-network", () => ({
   Network: vi.fn(function MockNetwork() {
@@ -19,6 +20,7 @@ vi.mock("vis-network", () => ({
       off: offMock,
       on: onMock,
       selectEdges: selectEdgesMock,
+      selectNodes: selectNodesMock,
     };
   }),
 }));
@@ -208,8 +210,12 @@ describe("NetworkGraph", () => {
           nodes: [
             { id: "sender-1", label: "김지현", title: "PM" },
             { id: "recipient-1", label: "사용자", title: "Owner" },
+            { id: "calendar-1", label: "일정", title: "Schedule" },
           ],
-          edges: [{ source: "sender-1", target: "recipient-1", title: "메일 2건" }],
+          edges: [
+            { source: "sender-1", target: "recipient-1", title: "메일 2건" },
+            { source: "recipient-1", target: "calendar-1", title: "일정 후보 1건" },
+          ],
         }),
       ),
     );
@@ -239,6 +245,35 @@ describe("NetworkGraph", () => {
     });
     expect(mountedContainer.textContent).toContain("선택된 관계: 김지현 -> 사용자 (메일 2건)");
     expect(mountedContainer.textContent).toContain("첫 관계를 선택했습니다.");
+
+    const relationshipSelect = mountedContainer.querySelector('select[aria-label="관계 선택"]');
+    expect(relationshipSelect).toBeInstanceOf(HTMLSelectElement);
+
+    await act(async () => {
+      if (relationshipSelect instanceof HTMLSelectElement) {
+        relationshipSelect.value = "relationship-1-recipient-1-calendar-1";
+        relationshipSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect(selectEdgesMock).toHaveBeenCalledWith(["relationship-1-recipient-1-calendar-1"]);
+    expect(mountedContainer.textContent).toContain("선택된 관계: 사용자 -> 일정 (일정 후보 1건)");
+    expect(mountedContainer.textContent).toContain("선택한 관계를 열었습니다.");
+
+    const nodeSelect = mountedContainer.querySelector('select[aria-label="노드 선택"]');
+    expect(nodeSelect).toBeInstanceOf(HTMLSelectElement);
+
+    await act(async () => {
+      if (nodeSelect instanceof HTMLSelectElement) {
+        nodeSelect.value = "calendar-1";
+        nodeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect(selectNodesMock).toHaveBeenCalledWith(["calendar-1"]);
+    expect(fitMock).toHaveBeenLastCalledWith({ nodes: ["calendar-1"], animation: false });
+    expect(mountedContainer.textContent).toContain("선택된 노드: 일정");
+    expect(mountedContainer.textContent).toContain("선택한 노드를 열었습니다.");
 
     await act(async () => {
       zoomButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

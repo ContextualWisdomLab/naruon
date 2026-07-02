@@ -151,6 +151,8 @@ export default function NetworkGraph() {
   const [error, setError] = useState<string | null>(null);
   const [selectedGraphDetail, setSelectedGraphDetail] = useState<string | null>(null);
   const [graphActionStatus, setGraphActionStatus] = useState('그래프 준비 완료');
+  const [relationshipOptionId, setRelationshipOptionId] = useState('');
+  const [nodeOptionId, setNodeOptionId] = useState('');
 
   useEffect(() => {
     apiClient.get<NetworkData>('/api/network/graph')
@@ -180,17 +182,21 @@ export default function NetworkGraph() {
       networkRef.current = network;
 
       const fitGraph = () => {
-        network.fit({ animation: false });
+        network.fit?.({ animation: false });
       };
 
       const selectEdge = (edgeId: number | string) => {
         const edge = edges.find((candidate) => graphIdEquals(candidate.id, edgeId));
         if (!edge) return;
+        setRelationshipOptionId(String(edge.id));
+        setNodeOptionId('');
         setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes)}`);
         setGraphActionStatus('그래프에서 관계를 선택했습니다.');
       };
 
       const selectNode = (nodeId: number | string) => {
+        setRelationshipOptionId('');
+        setNodeOptionId(String(nodeId));
         setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, nodeId)}`);
         setGraphActionStatus('그래프에서 노드를 선택했습니다.');
       };
@@ -205,8 +211,13 @@ export default function NetworkGraph() {
         if (isGraphId(nodeId)) selectNode(nodeId);
       };
 
-      network.on('selectEdge', handleEdgeSelection);
-      network.on('selectNode', handleNodeSelection);
+      const canListenForSelection =
+        typeof network.on === 'function' && typeof network.off === 'function';
+
+      if (canListenForSelection) {
+        network.on('selectEdge', handleEdgeSelection);
+        network.on('selectNode', handleNodeSelection);
+      }
 
       let resizeTimer: ReturnType<typeof setTimeout> | null = null;
       const resizeObserver = typeof ResizeObserver === 'undefined'
@@ -225,8 +236,10 @@ export default function NetworkGraph() {
           clearTimeout(resizeTimer);
         }
         resizeObserver?.disconnect();
-        network.off('selectEdge', handleEdgeSelection);
-        network.off('selectNode', handleNodeSelection);
+        if (canListenForSelection) {
+          network.off('selectEdge', handleEdgeSelection);
+          network.off('selectNode', handleNodeSelection);
+        }
         if (networkRef.current === network) {
           networkRef.current = null;
         }
@@ -243,24 +256,67 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
+  const relationshipOptions = useMemo(() => {
+    return edges.slice(0, 5).map((edge, index) => ({
+      edge,
+      id: String(edge.id),
+      label: `관계 ${index + 1}: ${describeEdge(edge, nodes)}`,
+    }));
+  }, [edges, nodes]);
+
+  const nodeOptions = useMemo(() => {
+    return nodes.slice(0, 8).map((node) => ({
+      id: String(node.id),
+      label: `노드: ${String(node.label ?? node.id)}`,
+      node,
+    }));
+  }, [nodes]);
+
+  const selectRelationship = (edge: Edge, status: string) => {
+    setRelationshipOptionId(String(edge.id));
+    setNodeOptionId('');
+    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes)}`);
+    setGraphActionStatus(status);
+    if (isGraphId(edge.id)) {
+      networkRef.current?.selectEdges?.([edge.id]);
+    }
+    networkRef.current?.fit?.({ nodes: [edge.from, edge.to], animation: false });
+  };
+
+  const selectGraphNode = (node: Node, status: string) => {
+    if (!isGraphId(node.id)) return;
+    setRelationshipOptionId('');
+    setNodeOptionId(String(node.id));
+    setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, node.id)}`);
+    setGraphActionStatus(status);
+    networkRef.current?.selectNodes?.([node.id]);
+    networkRef.current?.fit?.({ nodes: [node.id], animation: false });
+  };
 
   const handleSelectFirstRelationship = () => {
     if (!firstEdge) return;
-    setSelectedGraphDetail(`선택된 관계: ${describeEdge(firstEdge, nodes)}`);
-    setGraphActionStatus('첫 관계를 선택했습니다.');
-    if (isGraphId(firstEdge.id)) {
-      networkRef.current?.selectEdges([firstEdge.id]);
-    }
-    networkRef.current?.fit({ nodes: [firstEdge.from, firstEdge.to], animation: false });
+    selectRelationship(firstEdge, '첫 관계를 선택했습니다.');
+  };
+
+  const handleRelationshipOptionChange = (value: string) => {
+    const edge = edges.find((candidate) => String(candidate.id) === value);
+    if (!edge) return;
+    selectRelationship(edge, '선택한 관계를 열었습니다.');
+  };
+
+  const handleNodeOptionChange = (value: string) => {
+    const node = nodes.find((candidate) => String(candidate.id) === value);
+    if (!node) return;
+    selectGraphNode(node, '선택한 노드를 열었습니다.');
   };
 
   const handleZoomGraph = () => {
-    networkRef.current?.moveTo({ scale: 1.15, animation: false });
+    networkRef.current?.moveTo?.({ scale: 1.15, animation: false });
     setGraphActionStatus('그래프 확대 완료');
   };
 
   const handleFitGraph = () => {
-    networkRef.current?.fit({ animation: false });
+    networkRef.current?.fit?.({ animation: false });
     setGraphActionStatus('그래프 맞춤 완료');
   };
 
@@ -327,6 +383,40 @@ export default function NetworkGraph() {
           >
             전체 그래프 맞춤
           </button>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="text-xs font-bold text-foreground">
+            관계 선택
+            <select
+              aria-label="관계 선택"
+              value={relationshipOptionId}
+              onChange={(event) => handleRelationshipOptionChange(event.target.value)}
+              className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">관계 선택</option>
+              {relationshipOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-bold text-foreground">
+            노드 선택
+            <select
+              aria-label="노드 선택"
+              value={nodeOptionId}
+              onChange={(event) => handleNodeOptionChange(event.target.value)}
+              className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">노드 선택</option>
+              {nodeOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div aria-live="polite" className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
           <p className="font-semibold text-foreground">관계 상세</p>

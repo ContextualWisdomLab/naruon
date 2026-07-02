@@ -956,6 +956,13 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("그래프 확대 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "전체 그래프 맞춤", exact: true }).click();
     await page.getByText("그래프 맞춤 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByLabel("관계 선택", { exact: true }).selectOption({ label: "관계 2: 20B readiness thread -> 이사회 일정 (일정 후보 1건)" });
+    await page.getByText("선택된 관계: 20B readiness thread -> 이사회 일정 (일정 후보 1건)", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("선택한 관계를 열었습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByLabel("노드 선택", { exact: true }).selectOption({ label: "노드: 이사회 일정" });
+    await page.getByText("선택된 노드: 이사회 일정", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("선택한 노드를 열었습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("선택된 노드: 이사회 일정", { exact: true }).scrollIntoViewIfNeeded();
     return [
       evidence("search:select-result"),
       evidence("search:open-source-evidence-tab"),
@@ -969,6 +976,8 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
       evidence("search:verify-network-relationship-detail"),
       evidence("search:zoom-network-graph"),
       evidence("search:fit-network-graph"),
+      evidence("search:select-network-second-relationship"),
+      evidence("search:verify-network-node-detail"),
     ];
   }
 
