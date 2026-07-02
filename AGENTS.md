@@ -535,3 +535,128 @@
 - **Goal**: Actively manage tasks to ensure open PR counts converge to 0.
 
 - When the gate exhausts fallbacks after the primary model produces a finding at or above threshold and then fails with a retryable error (like `NOT_FOUND`), ensure the final output explicitly reports `Strix quick scan failed with a non-recoverable error.` to prevent downgrading the finding to pass or misleadingly reporting an unavailability error.
+
+## Figma design system naming and quality criteria
+
+Figma 작업물이 **디자인 시스템**이라는 명칭을 사용하려면 아래 10가지 요건을 모두 충족해야 한다. 미충족 상태에서는 "UI Kit", "Figma Library", "화면 템플릿", "컴포넌트 초안" 등으로 명칭을 낮춰야 한다.
+
+### 1. 목적·범위·적용 대상 정의
+
+- 파일 첫 화면 또는 README 페이지에 적용 범위, 대상 플랫폼, 적용 원칙을 명시한다.
+- "필수 사용", "권장 사용", "확장 가능", "사용 금지" 항목을 구분한다.
+- 기관/브랜드별 변형이 허용되는 항목과 허용되지 않는 항목을 분리한다.
+
+### 2. Foundation(디자인 스타일) 체계화
+
+색상, 타이포그래피, 형태, 레이아웃, 아이콘, 엘리베이션 각 항목이 정의되어 있어야 한다.
+
+| 구분 | 있어야 하는 내용 |
+| --- | --- |
+| 색상 | 색상 팔레트, 주요 색상, 시스템 색상, 강조 색상, 상태 색상, 대비 기준, 사용 가이드 |
+| 타이포그래피 | 서체, 굵기, 크기, 줄 간격, 글자 스케일, 계층 구조, 접근성 기준 |
+| 형태 | radius 값, 형태 원칙, 적용 기준 |
+| 레이아웃 | 그리드, 브레이크포인트, 콘텐츠 영역, 간격 체계, 반응형 기준 |
+| 아이콘 | 시스템 아이콘, 크기, 키라인, 두께, 색상, 사용 기준 |
+| 엘리베이션 | 그림자, 경계선, 딤드 처리, 레이어 위계, 적용 기준 |
+
+- 임의 색상, 임의 폰트 크기, 임의 간격을 직접 입력하지 않는다.
+- 색상, 간격, radius, typography는 Variables 또는 Styles로 관리한다.
+- 반응형 레이아웃과 화면 크기별 기준을 별도 페이지로 정리한다.
+- 접근성 검토가 필요한 색상 대비, 글자 크기, 줄 간격을 명시한다.
+
+### 3. 디자인 토큰 체계
+
+토큰은 세 단계로 구분한다.
+
+1. **Primitive Token** — 원시값. 예: `primary-50`, `gray-10`, `space-8`, `radius-4`
+2. **Semantic Token** — 의미 기반. 예: `color-background-primary`, `color-text-disabled`, `space-card-padding`
+3. **Component Token** — 특정 컴포넌트 직접 적용. 예: `button-primary-background-color`, `input-border-radius`
+
+- 컴포넌트에 원시 색상값을 직접 적용하지 않는다.
+- Figma에서는 가능한 한 semantic token을 사용한다.
+- 디자인 툴과 코드의 역할을 분리할 경우, Figma에서는 semantic token까지만 관리하고 component token은 코드에서 관리하는 기준을 명확히 둔다.
+- Figma Variables의 mode를 활용하여 기본 모드, 고대비/선명한 화면 모드, 디바이스 크기별 반응형 모드를 관리한다.
+
+### 4. 컴포넌트 라이브러리
+
+각 컴포넌트에는 최소한 다음이 있어야 한다.
+
+- 컴포넌트명, 용도, 사용해야 하는 경우, 사용하지 말아야 하는 경우
+- 구조/anatomy, variant, state(default, hover, focus, active, pressed, disabled, error 등)
+- size, responsive behavior, interaction
+- keyboard/focus 기준, 접근성 기준
+- 연결되는 개발 컴포넌트명, 관련 token, 변경 이력
+
+### 5. Variant·State·Property 체계
+
+- `Button / Type=Primary / Size=Large / State=Default / Icon=True`처럼 구조화한다.
+- 불필요하게 모든 조합을 별도 컴포넌트로 만들지 않는다.
+- Boolean, instance swap, text, variant, slot property를 적절히 사용한다.
+- hover, pressed, selected, expanded 같은 상호작용 상태는 interactive component로 정의한다.
+
+### 6. 기본 패턴
+
+- 컴포넌트와 패턴을 같은 수준에서 섞지 않는다(예: "텍스트 입력 필드"는 컴포넌트, "회원정보 입력폼"은 패턴).
+- 패턴 페이지에는 실제 조합 예시, 사용 흐름, 접근성 주의사항, 금지 사례를 포함한다.
+- 기본 패턴 예시: 개인 식별 정보 입력, 도움, 동의, 목록 탐색, 사용자 피드백, 상세 정보 확인, 오류, 입력폼, 첨부파일, 필터링·정렬, 확인
+
+### 7. 서비스 패턴 또는 사용자 여정 기반 템플릿
+
+- 주요 사용자 여정별 flow를 제공한다.
+- 단일 화면 템플릿만이 아니라 시작점, 중간 상태, 오류 상태, 완료 상태까지 포함한다.
+- 핵심 flow는 prototype으로 연결한다.
+- "Do / Better / Best" 또는 "필수 / 권장 / 우수" 수준을 구분한다.
+- 서비스 패턴 예시: 방문, 검색, 로그인, 신청, 정책 정보 확인
+
+### 8. 접근성 및 디지털 포용 기준
+
+- 색상 대비 기준을 token 또는 style 설명에 포함한다.
+- focus 상태를 누락하지 않는다.
+- 키보드 탐색 순서, 스크린리더 레이블, 숨김 텍스트 필요 여부를 명시한다.
+- 텍스트 확대, 고대비 모드, 모바일 환경을 고려한다.
+- 접근성은 "개발 후 검수 항목"이 아니라 컴포넌트 설계 단계에서 포함해야 한다.
+
+### 9. 문서화와 사용 가이드
+
+- 컴포넌트에 description을 작성한다.
+- 외부 문서, Storybook, GitHub, 개발 컴포넌트 링크를 연결한다.
+- 라이브러리 업데이트 시 변경 설명을 남긴다.
+- deprecated 컴포넌트와 대체 컴포넌트를 명시한다.
+- "어떻게 생겼는가"뿐 아니라 "언제, 왜, 어떻게 써야 하는가"를 문서화한다.
+
+### 10. 코드 구현체 또는 개발 연계 기준
+
+- Figma 컴포넌트명과 개발 컴포넌트명을 매핑한다.
+- token 이름이 코드 변수명과 연결되어야 한다.
+- 디자인에서 사용하는 값과 코드에서 사용하는 값이 다르면 안 된다.
+- CSS variable, JSON token, Storybook, 패키지 버전 등을 함께 관리한다.
+- "Figma에는 있는데 개발에는 없음", "개발에는 있는데 Figma에는 없음" 상태를 지속적으로 정리한다.
+
+### 디자인 시스템 명칭 사용 금지 상태
+
+다음 상태에서는 **디자인 시스템**이라고 부르지 않는다.
+
+- 색상과 폰트가 임의 값으로 적용되어 있다.
+- token/variable 없이 컴포넌트마다 직접 스타일을 지정한다.
+- variant와 state가 정의되어 있지 않다.
+- hover, focus, disabled, error 상태가 누락되어 있다.
+- 접근성 기준이 없다.
+- 컴포넌트 사용 기준이 없다.
+- 패턴과 사용자 여정이 없다.
+- 개발 컴포넌트와 매핑되지 않는다.
+- 변경 이력과 버전 관리가 없다.
+- 문서화 없이 화면 예시만 존재한다.
+
+### 디자인 시스템 완료 기준 (Definition of Done)
+
+- 목적, 범위, 적용 대상, 적용 수준이 문서화되어 있다.
+- 색상, 타이포그래피, 형태, 레이아웃, 아이콘, 엘리베이션 기준이 있다.
+- primitive / semantic / component token 체계가 있다.
+- Figma Variables 또는 Styles로 주요 foundation이 관리된다.
+- 주요 컴포넌트가 variant, state, property 구조로 정리되어 있다.
+- 각 컴포넌트에 사용 기준, 접근성 기준, 상호작용 기준이 있다.
+- 반복 과업을 위한 기본 패턴이 있다.
+- 핵심 사용자 여정 기반의 서비스 패턴 또는 prototype이 있다.
+- Figma 컴포넌트와 개발 컴포넌트가 매핑되어 있다.
+- 문서, 변경 이력, 버전 관리, deprecated 정책이 있다.
+- 접근성 검토 기준이 설계 단계에 포함되어 있다.
