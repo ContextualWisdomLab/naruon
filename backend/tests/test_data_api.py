@@ -589,6 +589,131 @@ def _expected_snapshot_verification_handoff():
     }
 
 
+def _expected_evidence_packet_checklist():
+    return [
+        {
+            "checklist_key": "privacy_redaction_policy",
+            "display_name": "Privacy redaction policy",
+            "state_code": "ready",
+            "source_field": "privacy_redaction_policy",
+            "required_artifact": "redacted_snapshot_policy",
+            "detail_text": (
+                "Snapshot excludes raw content, stable identifiers, credentials, "
+                "and database evidence strings."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "parser_manifest",
+            "display_name": "Attachment parser manifest",
+            "state_code": "ready",
+            "source_field": "parser_manifest_summary",
+            "required_artifact": "attachment_parser_registry",
+            "detail_text": (
+                "Parser family, supported content types, extensions, and unsupported "
+                "binary fallback are included."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "content_graph_topology",
+            "display_name": "DOM paragraph topology",
+            "state_code": "ready",
+            "source_field": "content_graph_topology_counts",
+            "required_artifact": "source_kind_segment_kind_counts",
+            "detail_text": (
+                "Email body and attachment segments are summarized by source and "
+                "paragraph or heading kind."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "content_graph_samples",
+            "display_name": "Paragraph evidence samples",
+            "state_code": "ready",
+            "source_field": "content_graph_evidence_samples",
+            "required_artifact": "redacted_segment_samples",
+            "detail_text": (
+                "Redacted paragraph samples include source kind, segment kind, path, "
+                "and word count."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "knowledge_graph_topology",
+            "display_name": "Knowledge graph topology",
+            "state_code": "ready",
+            "source_field": "knowledge_graph_topology_counts",
+            "required_artifact": "source_kind_edge_kind_counts",
+            "detail_text": (
+                "Stored KG edges are summarized by source and edge kind for "
+                "acquisition review."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "knowledge_graph_samples",
+            "display_name": "KG evidence samples",
+            "state_code": "ready",
+            "source_field": "knowledge_graph_evidence_samples",
+            "required_artifact": "redacted_edge_samples",
+            "detail_text": (
+                "Redacted KG samples include edge path and endpoint readiness "
+                "without exposing raw IDs."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "semantic_relation_samples",
+            "display_name": "Semantic relation evidence",
+            "state_code": "ready",
+            "source_field": "semantic_relation_evidence_samples",
+            "required_artifact": "source_backed_relation_samples",
+            "detail_text": (
+                "Semantic relationship samples include confidence, source scope, "
+                "and next action."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "semantic_extraction_manifest",
+            "display_name": "Semantic extraction manifest",
+            "state_code": "ready",
+            "source_field": "semantic_extraction_manifest",
+            "required_artifact": "extractor_provenance_manifest",
+            "detail_text": (
+                "Entity/relation extraction readiness and required provenance "
+                "evidence are included."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "acquisition_readiness_gate",
+            "display_name": "Acquisition readiness gate",
+            "state_code": "needs_attention",
+            "source_field": "acquisition_readiness_gate",
+            "required_artifact": "buyer_evidence_readiness_gate",
+            "detail_text": (
+                "Buyer readiness score, blocking checks, KPIs, decision summary, "
+                "and remediation actions are included."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "offline_snapshot_verification",
+            "display_name": "Offline snapshot verification",
+            "state_code": "ready",
+            "source_field": "verification_handoff",
+            "required_artifact": "offline_digest_verifier_handoff",
+            "detail_text": (
+                "Offline verifier command, accepted input, digest algorithm, "
+                "excluded fields, and exit codes are included."
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1143,6 +1268,8 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert snapshot["canonical_payload_fields"] == sorted(digest_payload)
     assert "verification_handoff" in snapshot["canonical_payload_fields"]
     assert snapshot["verification_handoff"] == _expected_snapshot_verification_handoff()
+    assert "evidence_packet_checklist" in snapshot["canonical_payload_fields"]
+    assert snapshot["evidence_packet_checklist"] == _expected_evidence_packet_checklist()
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -1233,6 +1360,11 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert actions[0]["action_key"] == "repair_thread_id_integrity"
     assert actions[0]["provider_write_executed"] is False
     assert actions[-1]["action_key"] == "expand_attachment_parse_coverage"
+    checklist = snapshot["evidence_packet_checklist"]
+    assert len(checklist) == 10
+    assert checklist[0]["checklist_key"] == "privacy_redaction_policy"
+    assert checklist[8]["state_code"] == "needs_attention"
+    assert checklist[-1]["source_field"] == "verification_handoff"
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {
