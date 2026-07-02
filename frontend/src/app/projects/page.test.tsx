@@ -165,7 +165,7 @@ describe("ProjectsPage", () => {
       title: "Project: Alpha Checkout",
       status_code: "needs_review",
       score: 0.87,
-      object_count: 6,
+      object_count: 10,
       requirement_count: 1,
       issue_count: 1,
       milestone_count: 1,
@@ -216,6 +216,94 @@ describe("ProjectsPage", () => {
               summary: "PG 응답 지연 시 결제 재시도 UX가 필요합니다.",
               status_code: "open",
               confidence: 0.81,
+              source_segment_uids: ["segment-alpha-1"],
+              citation_bundle: [citation],
+              attributes: {},
+            },
+            {
+              object_uid: "milestone:alpha-beta-freeze",
+              object_type: "milestone",
+              title: "7월 결제 UX 베타 동결",
+              summary: "결제 재시도 안내는 베타 동결 전에 검증되어야 합니다.",
+              status_code: "open",
+              confidence: 0.84,
+              source_segment_uids: ["segment-alpha-1"],
+              citation_bundle: [citation],
+              attributes: {},
+            },
+            {
+              object_uid: "wbs:alpha-retry-work-package",
+              object_type: "wbs_item",
+              title: "결제 재시도 UX 작업 패키지",
+              summary: "프론트엔드 상태, PG timeout 처리, QA 검증을 하나의 WBS 항목으로 묶습니다.",
+              status_code: "open",
+              confidence: 0.8,
+              source_segment_uids: ["segment-alpha-1"],
+              citation_bundle: [citation],
+              attributes: {},
+            },
+            {
+              object_uid: "deliverable:alpha-qa-report",
+              object_type: "deliverable",
+              title: "결제 재시도 QA 산출물",
+              summary: "카드 승인 실패 재시도 안내의 검증 결과가 산출물로 관리됩니다.",
+              status_code: "open",
+              confidence: 0.79,
+              source_segment_uids: ["segment-alpha-1"],
+              citation_bundle: [citation],
+              attributes: {},
+            },
+            {
+              object_uid: "report:alpha-weekly",
+              object_type: "report_delta",
+              title: "주간 보고: 결제 재시도 리스크",
+              summary: "승인 실패 UX와 PG timeout 리스크가 이번 주 보고 항목입니다.",
+              status_code: "open",
+              confidence: 0.78,
+              source_segment_uids: ["segment-alpha-1"],
+              citation_bundle: [citation],
+              attributes: {},
+            },
+            {
+              object_uid: "wiki:alpha-checkout",
+              object_type: "wiki_projection",
+              title: "Alpha Checkout 위키 초안",
+              summary: "결제 재시도 요구사항과 근거 문단을 위키 페이지로 투영합니다.",
+              status_code: "open",
+              confidence: 0.76,
+              source_segment_uids: ["segment-alpha-1"],
+              citation_bundle: [citation],
+              attributes: {},
+            },
+            {
+              object_uid: "data:alpha-failure-reason",
+              object_type: "data_requirement",
+              title: "결제 실패 사유 데이터 요건",
+              summary: "승인 실패와 재시도 안내를 연결할 실패 사유 필드가 필요합니다.",
+              status_code: "open",
+              confidence: 0.75,
+              source_segment_uids: ["segment-alpha-1"],
+              citation_bundle: [citation],
+              attributes: {},
+            },
+            {
+              object_uid: "erd:alpha-payment-attempt",
+              object_type: "erd_candidate",
+              title: "PaymentAttempt ERD 후보",
+              summary: "결제 시도, 승인 실패, 재시도 안내 상태를 ERD 후보로 관리합니다.",
+              status_code: "open",
+              confidence: 0.74,
+              source_segment_uids: ["segment-alpha-1"],
+              citation_bundle: [citation],
+              attributes: {},
+            },
+            {
+              object_uid: "infra:alpha-pg-timeout-observability",
+              object_type: "infra_requirement",
+              title: "PG timeout 관측 인프라",
+              summary: "PG 응답 지연을 감지해 재시도 UX 품질을 추적합니다.",
+              status_code: "open",
+              confidence: 0.73,
               source_segment_uids: ["segment-alpha-1"],
               citation_bundle: [citation],
               attributes: {},
@@ -299,6 +387,18 @@ describe("ProjectsPage", () => {
     expect(container.textContent).toContain("1 citations");
     expect(container.textContent).toContain("Full evidence 확인됨");
     expect(container.textContent).toContain("Source coverage: 1 문단");
+    expect(container.textContent).toContain("자동화 브리프");
+    expect(container.textContent).toContain("Automation coverage");
+    expect(container.textContent).toContain("5 / 5 domains ready");
+    expect(container.textContent).toContain("Buyer KPI: source-backed delivery automation");
+    expect(container.textContent).toContain("WBS / 일정");
+    expect(container.textContent).toContain("보고 자동 생성");
+    expect(container.textContent).toContain("프로젝트 위키");
+    expect(container.textContent).toContain("데이터·ERD·인프라");
+    expect(container.textContent).toContain("산출물 준비도");
+    expect(container.textContent).toContain("주간 보고: 결제 재시도 리스크");
+    expect(container.textContent).toContain("Alpha Checkout 위키 초안");
+    expect(container.textContent).toContain("PaymentAttempt ERD 후보");
 
     const reviewButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("문단 근거 검토 저장"));
     expect(reviewButton).toBeDefined();
