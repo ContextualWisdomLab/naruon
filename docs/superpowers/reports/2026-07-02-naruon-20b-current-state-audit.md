@@ -1,0 +1,244 @@
+# Naruon 20B Current State Audit
+
+Audit date: 2026-07-02 KST
+
+## Decision Being Supported
+
+Question: can the current Naruon repository be treated as a 2,000,000,000 KRW sale-ready program?
+
+Decision: no. The current state supports a controlled buyer technical review for the implemented frontend pilot slice, but not a full enterprise procurement package. The gap is not only code. The missing work includes full product coverage, Figma structure repair, production deployment proof, live provider integration, security/compliance packaging, operations, analytics/ROI evidence, and buyer handoff material.
+
+## Current Goal Registration
+
+The active Goal is to move `ContextualWisdomLab/naruon` toward a 20B KRW enterprise-sale submission package using Figma, Product Design, Superpowers, Ponytail, and Data Analytics, without Figma Code Connect and without waiting for review-process delays.
+
+## Repository State
+
+Current branch:
+
+```text
+sellable-pilot-hardening-2026-07-02
+```
+
+Latest commits:
+
+```text
+a970b78 Test pilot smoke localhost guard
+8ad4499 Harden Naruon enterprise sale readiness
+80b613a Document Naruon pilot PR handoff
+439beb4 Prepare Naruon commercial pilot frontend
+00e9c15 Merge pull request #888 from ContextualWisdomLab/codex/visual-gap-round2
+```
+
+Working tree:
+
+```text
+ M .Jules/palette.md
+ M .Jules/sentinel.md
+```
+
+Interpretation: `.Jules/*` changes are preserved user changes and are not part of this sale-readiness package.
+
+## PR #893 State
+
+PR:
+
+- URL: `https://github.com/ContextualWisdomLab/naruon/pull/893`
+- Title: `Naruon 상용 파일럿 프론트엔드 준비`
+- Base: `develop`
+- Head branch: `sellable-pilot-hardening-2026-07-02`
+- Head SHA: `a970b78c5eb6664e844b48ce15689feb0c27bda2`
+- Mergeable: `MERGEABLE`
+- Merge state: `BLOCKED`
+- Review decision: `CHANGES_REQUESTED`
+
+Current check interpretation:
+
+- Product-relevant checks that were observed successful include frontend, backend, Bandit, Trivy, CodeQL, dependency review, image validation, Strix, scorecard, metadata-only governance, queue scan, and coverage evidence.
+- `opencode-review` was observed `IN_PROGRESS`.
+- The stale review decision and review wait are not blockers under the current user instruction.
+- A failing check with concrete product, security, or build evidence would be a blocker.
+
+## Open GitHub Issue
+
+Open issue:
+
+- `#634 Track post-merge security gate failure on PR #631`
+- URL: `https://github.com/ContextualWisdomLab/naruon/issues/634`
+- Status: open
+- Meaning: governance/security gate hardening remains an enterprise-readiness risk.
+- Current interpretation: this is not a current PR #893 code failure, but it must be resolved or explicitly disclosed before treating the program as final procurement-ready.
+
+## Product Design Context
+
+Product Design saved context preflight:
+
+```json
+{
+  "exists": false,
+  "status": "missing",
+  "entries": []
+}
+```
+
+Interpretation: use repository sources as the authoritative design context. The durable source set is:
+
+- `docs/ui-ux/naruon-ui-ux-mapping.md`
+- `docs/ui-ux/mockups/mockup_01.png` through `mockup_41.png`
+- `docs/ui-ux/reference-set-2026-06-18/images/`
+- `docs/ui-ux/individual-assets-2026-06-22/manifest.tsv`
+
+## Figma State
+
+Current Figma file:
+
+- `https://www.figma.com/design/68b5XB58w8nwT2LYOOnikK`
+- File key: `68b5XB58w8nwT2LYOOnikK`
+
+Observed through Figma metadata:
+
+```text
+Top-level pages:
+- 0:1: Source Map
+```
+
+Observed through `search_design_system` with `disableCodeConnect=true`:
+
+```json
+{
+  "components": [],
+  "variables": [],
+  "styles": []
+}
+```
+
+Interpretation:
+
+- Figma Code Connect was not used.
+- The initial top-level metadata response did not show all pages claimed by older local reports.
+- `use_figma` was used to repair missing required pages without Code Connect.
+- The repair call reported that `Foundations`, `Components`, `Desktop Screens`, `Mobile Screens`, and `QA Notes` already existed and created `Interaction States` (`15:2`) plus `Sales Demo` (`15:3`).
+- Direct metadata for `Sales Demo` (`15:3`) confirmed the new page and frame.
+- The first buyer-demo frame now exists as `Sales Demo / 20B Enterprise Review Flow` (`16:2`).
+- A final screenshot was downloaded to `/tmp/naruon-20b-sales-demo-final.png`; it is a 1080 x 608 PNG and visual inspection found no text overlap, clipped bottom copy, or placeholder shimmer.
+- Because design system search is empty, the first pass should use local Naruon tokens/components derived from repo mockups, not a pretend external library.
+
+## Existing Product Coverage
+
+Frontend app routes currently exist for:
+
+```text
+/
+/mail
+/search
+/calendar
+/tasks
+/projects
+/data
+/ai-hub
+/security
+/settings
+/tools
+/prompt-studio
+```
+
+Important frontend anchors:
+
+- `frontend/src/components/EmailDetail.tsx`
+- `frontend/src/components/SearchLayout.tsx`
+- `frontend/src/components/SourceDrawer.tsx`
+- `frontend/src/lib/product-events.ts`
+- `frontend/scripts/pilot-ui-smoke.mjs`
+- `frontend/scripts/pilot-ui-smoke.test.mjs`
+
+Backend APIs and services exist for:
+
+- auth/session
+- accounts
+- email
+- calendar
+- tasks
+- search
+- ontology/network
+- data
+- AI Hub
+- LLM providers
+- security
+- runtime/tenant config
+- WebDAV/DAV
+- provider writeback retry
+- RBAC and URL validation
+
+Interpretation: the repository has broad product scaffolding. The remaining sale-readiness problem is not route existence. It is buyer-visible completeness, production-path proof, provider-write evidence, security/compliance packaging, and repeatable end-to-end validation.
+
+## Analytics State
+
+Existing local implementation:
+
+- `frontend/src/lib/product-events.ts`
+- `frontend/src/lib/product-events.test.ts`
+- call sites in `EmailDetail.tsx` and `SearchLayout.tsx`
+- event dictionary in `docs/superpowers/reports/2026-07-02-naruon-event-dictionary.md`
+
+Current limitation:
+
+- No live analytics warehouse or destination is confirmed.
+- No live KPI value can be claimed.
+- Product-event dispatch is browser-local and memory-bounded.
+
+Interpretation: analytics is good enough for privacy-safe pilot instrumentation, not final ROI proof.
+
+## Library And Submodule Decision
+
+Decision for current phase:
+
+- No submodule.
+- No separately versioned library.
+- No new dependency for product-event, UI, or smoke-test work unless existing platform tools cannot cover the need.
+
+Reasoning:
+
+- The repo already has `frontend`, `backend`, and `connector` boundaries.
+- `frontend/package.json` is private and already includes the needed UI/test primitives.
+- There is no current independent consumer requiring separate versioning.
+- A submodule would add operational drag without improving buyer evidence.
+
+Acceptable later extraction:
+
+- Internal workspace package under `frontend/packages/` if product events, design tokens, or UI primitives are consumed by at least three internal surfaces.
+- Git submodule only when ownership and release cadence are independent from `ContextualWisdomLab/naruon`.
+
+## Gap Summary
+
+P0 for 20B final sale readiness:
+
+- Figma required pages were repaired through `use_figma`, but full screen coverage and durable QA screenshots for every buyer flow are not complete.
+- Full ten-area Product Design audit is not complete.
+- Production deployment and rollback evidence is not packaged.
+- Live provider-send and provider-write execution evidence is incomplete.
+- Issue #634 remains open as a governance risk.
+- Security questionnaire, data-processing terms, SLA/support, and incident runbook are not packaged for buyer handoff.
+- ROI model is not backed by live measured data.
+
+P1 for buyer technical review:
+
+- Full-product smoke does not yet cover all ten IA routes.
+- Product events do not yet cover full-product funnels beyond mail/search.
+- External analytics destination, retention, and consent are not approved.
+- Figma `Sales Demo` and `QA Notes` pages need current evidence.
+
+Non-blockers:
+
+- Review process delay.
+- `opencode-review` in progress.
+- Stale `CHANGES_REQUESTED` when all current review threads are resolved and product checks are passing.
+
+## Next Actions
+
+1. Repair Figma page structure without Code Connect.
+2. Add a full-product smoke script that stays localhost-only.
+3. Capture Product Design screenshots for all ten IA routes.
+4. Extend analytics and ROI reports without claiming live KPI values.
+5. Triage issue #634 and patch governance centrally if the failure mode still exists.
+6. Create buyer package, demo script, security questionnaire, and SLA/support draft.
+7. Run local and remote verification before any completion claim.
