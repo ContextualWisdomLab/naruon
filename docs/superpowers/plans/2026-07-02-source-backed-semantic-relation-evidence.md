@@ -1,6 +1,6 @@
 # Source-Backed Semantic Relation Evidence Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Connect existing source-backed sender relationship records to the data quality surface and evidence snapshot so buyers can verify semantic relation evidence without raw email, attachment content, stable IDs, or provider credentials.
 
@@ -29,7 +29,7 @@
 - Expects `DataSemanticExtractionManifest.source_backed_relation_count`
 - Expects quality check `semantic_relation_source_backing`
 
-- [ ] **Step 1: Extend mock query fixtures**
+- [x] **Step 1: Extend mock query fixtures**
 
 Add a semantic relation stats tuple immediately after the knowledge graph evidence samples mock result:
 
@@ -58,7 +58,7 @@ Add safe semantic relation sample rows immediately after it:
 ],  # semantic relation evidence samples
 ```
 
-- [ ] **Step 2: Extend quality-surface assertions**
+- [x] **Step 2: Extend quality-surface assertions**
 
 In `test_data_quality_surface_returns_source_backed_counts_without_secrets`, assert:
 
@@ -92,7 +92,7 @@ Update `semantic_extraction_manifest` to expect:
 
 Assert `data["semantic_relation_evidence_samples"]` contains two hashed safe samples with `sample_key`, `relationship_type`, `confidence_bucket`, `source_scope`, and `next_action`.
 
-- [ ] **Step 3: Extend snapshot assertions**
+- [x] **Step 3: Extend snapshot assertions**
 
 In `test_data_quality_evidence_snapshot_returns_shareable_redacted_surface`, assert:
 
@@ -100,7 +100,7 @@ In `test_data_quality_evidence_snapshot_returns_shareable_redacted_surface`, ass
 assert snapshot["validation_status"] == {
     "status_code": "needs_attention",
     "checks_passed": 3,
-    "checks_with_issues": 8,
+    "checks_with_issues": 9,
     "total_checks": 12,
 }
 assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
@@ -108,7 +108,7 @@ assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_field
 
 Add the safe semantic sample fields to `allowed_sample_fields`, and assert forbidden raw sender/source values are absent from both surface and snapshot serialized text.
 
-- [ ] **Step 4: Verify initial failure**
+- [x] **Step 4: Verify initial failure**
 
 Run:
 
@@ -130,7 +130,7 @@ Expected: FAIL because the API contract does not expose semantic relation eviden
 - Produces `_get_semantic_relation_evidence_samples(db, auth_context) -> list[DataSemanticRelationEvidenceSample]`
 - Produces `_check_semantic_relation_source_backing(total_count, issue_count) -> DataQualityCheck`
 
-- [ ] **Step 1: Import model and add constants**
+- [x] **Step 1: Import model and add constants**
 
 Import `SenderRelationship` from `db.models`, add:
 
@@ -141,7 +141,7 @@ SEMANTIC_RELATION_SOURCE_BACKING_EVIDENCE_SOURCE = (
 )
 ```
 
-- [ ] **Step 2: Add data models and snapshot allowlist fields**
+- [x] **Step 2: Add data models and snapshot allowlist fields**
 
 Add:
 
@@ -165,7 +165,7 @@ Add `semantic_relation_evidence_samples` to both response models and snapshot co
 
 Add `relationship_type`, `confidence_bucket`, `source_scope`, `next_action`, and `source_backed_relation_count` to `SNAPSHOT_ALLOWED_SAMPLE_FIELDS`.
 
-- [ ] **Step 3: Add safe row helpers**
+- [x] **Step 3: Add safe row helpers**
 
 Implement:
 
@@ -195,7 +195,7 @@ def _semantic_relation_source_scope(
 
 Generate sample keys from a SHA-256 digest over `sender_email`, `source_message_id`, `source_thread_id`, and `relationship_type`, exposing only a `relation_<16 hex>` value.
 
-- [ ] **Step 4: Add scoped aggregate queries**
+- [x] **Step 4: Add scoped aggregate queries**
 
 Use the same owner/org scoping style as the ontology API:
 
@@ -209,7 +209,7 @@ organization_filter = (
 
 Count all scoped relations and source-backed relations where either `source_message_id` or `source_thread_id` is not null. Fetch up to 8 samples ordered by `confidence_score.desc()`, `updated_at.desc()`, `relationship_type.asc()`.
 
-- [ ] **Step 5: Wire quality checks, manifest, and snapshot**
+- [x] **Step 5: Wire quality checks, manifest, and snapshot**
 
 Compute:
 
@@ -226,7 +226,7 @@ Pass counts into `_quality_checks` and `_semantic_extraction_manifest`.
 
 The manifest is `ready` when `source_backed_relation_count > 0`; otherwise keep `provenance_gate_pending`.
 
-- [ ] **Step 6: Verify backend pass**
+- [x] **Step 6: Verify backend pass**
 
 Run:
 
@@ -246,15 +246,15 @@ Expected: PASS.
 **Interfaces:**
 - Reuses `sender_relationships` table created by existing metadata bootstrap.
 
-- [ ] **Step 1: Seed source-backed and rival semantic relations**
+- [x] **Step 1: Seed source-backed and rival semantic relations**
 
 In `_seed_smoke_test_data`, insert one scoped relation with `source_message_id` and `source_thread_id`, plus one rival relation. Use realistic but test-only sender addresses.
 
-- [ ] **Step 2: Teardown semantic relations**
+- [x] **Step 2: Teardown semantic relations**
 
 In `_teardown_smoke_test_data`, delete scoped and rival `sender_relationships` rows before deleting emails.
 
-- [ ] **Step 3: Assert smoke scope**
+- [x] **Step 3: Assert smoke scope**
 
 In `test_data_quality_surface_real_postgres_smoke_uses_signed_scope`, assert:
 
@@ -276,13 +276,13 @@ assert "rival-semantic@example.com" not in response.text
 - Consumes `semantic_relation_evidence_samples` from surface and snapshot.
 - Consumes `source_backed_relation_count` from `semantic_extraction_manifest`.
 
-- [ ] **Step 1: Update TypeScript types and fixtures**
+- [x] **Step 1: Update TypeScript types and fixtures**
 
 Add the semantic relation sample array type to `DataQualitySurfaceResponse` and `DataEvidenceSnapshotResponse`. Add `source_backed_relation_count` to both manifest types.
 
 Update the page test fixtures with two semantic relation samples and the updated snapshot canonical/allowlist fields.
 
-- [ ] **Step 2: Render semantic relation evidence**
+- [x] **Step 2: Render semantic relation evidence**
 
 In `QualityCheckTab`, derive:
 
@@ -292,7 +292,7 @@ const semanticRelationEvidenceSamples = dataQualitySurface?.semantic_relation_ev
 
 Render a section titled `Semantic relation evidence` after `Semantic KG readiness`, showing relationship type, confidence bucket, source scope, next action, and write boundary. Do not show raw sender/source identifiers or backend evidence-source strings.
 
-- [ ] **Step 3: Verify frontend assertions**
+- [x] **Step 3: Verify frontend assertions**
 
 In `renders API-backed pipeline embedding and quality tabs`, assert the UI contains:
 
@@ -305,7 +305,7 @@ expect(container.textContent).toContain("prepare_response_draft");
 
 Assert it does not contain raw sample IDs, sender emails, message IDs, or `sender_relationships.source_message_id`.
 
-- [ ] **Step 4: Verify frontend pass**
+- [x] **Step 4: Verify frontend pass**
 
 Run:
 
@@ -321,7 +321,7 @@ Expected: PASS.
 **Files:**
 - No repo file unless screenshot is intentionally stored outside the repo.
 
-- [ ] **Step 1: Add Phase 15 diagram**
+- [x] **Step 1: Add Phase 15 diagram**
 
 Use `generate_diagram` on FigJam board `zXkcwT2E2aBtNhMVznLT4l` with a flowchart showing:
 
@@ -332,9 +332,16 @@ Use `generate_diagram` on FigJam board `zXkcwT2E2aBtNhMVznLT4l` with a flowchart
 - evidence snapshot copy path
 - buyer due-diligence review without raw content or IDs
 
-- [ ] **Step 2: Group and screenshot**
+- [x] **Step 2: Group and screenshot**
 
 Group generated nodes as `Phase 15 Source-Backed Semantic Relation Evidence Group` and download a screenshot for local visual inspection.
+
+Evidence captured:
+
+```text
+FigJam group: 37:683
+Screenshot: /Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase15-semantic-relation-evidence.png
+```
 
 ### Task 6: Ship
 
@@ -342,7 +349,7 @@ Group generated nodes as `Phase 15 Source-Backed Semantic Relation Evidence Grou
 - Modify: `docs/superpowers/plans/2026-07-02-source-backed-semantic-relation-evidence.md`
 - Modify: PR body via `gh pr edit`
 
-- [ ] **Step 1: Run final focused validation**
+- [x] **Step 1: Run final focused validation**
 
 Run:
 
@@ -356,7 +363,7 @@ cd ..
 git diff --check
 ```
 
-- [ ] **Step 2: Commit implementation**
+- [x] **Step 2: Commit implementation**
 
 Stage only Phase 15 backend/frontend files:
 
@@ -365,7 +372,7 @@ git add backend/api/data.py backend/tests/test_data_api.py frontend/src/componen
 git commit -m "feat: add source-backed semantic relation evidence"
 ```
 
-- [ ] **Step 3: Mark plan complete and commit docs**
+- [x] **Step 3: Mark plan complete and commit docs**
 
 Change all checkboxes in this plan to `[x]`, then:
 
@@ -374,11 +381,11 @@ git add docs/superpowers/plans/2026-07-02-source-backed-semantic-relation-eviden
 git commit -m "docs: mark phase 15 plan complete"
 ```
 
-- [ ] **Step 4: Push and update PR**
+- [x] **Step 4: Push and update PR**
 
 Push to `plan/email-dom-paragraph-kg-2026-07-02`, update PR #895 with Phase 15 summary, validation, FigJam evidence, final HEAD, and the no-new-library/submodule decision.
 
-- [ ] **Step 5: Live status check**
+- [x] **Step 5: Live status check**
 
 Check:
 
