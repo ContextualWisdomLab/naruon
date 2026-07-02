@@ -177,11 +177,11 @@ Group the generated nodes as `Phase 11 Server-Authored Evidence Snapshot Group` 
 - Modify: `docs/superpowers/plans/2026-07-02-server-authored-evidence-snapshot-ui.md`
 - Modify: PR body via `gh pr edit`
 
-- [ ] **Step 1: Mark completed plan steps**
+- [x] **Step 1: Mark completed plan steps**
 
 Check off all completed steps.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 Stage only Phase 11 files and commit:
 
@@ -189,14 +189,14 @@ Stage only Phase 11 files and commit:
 git commit -m "feat: use server-authored evidence snapshot"
 ```
 
-- [ ] **Step 3: Push**
+- [x] **Step 3: Push**
 
 Push to `plan/email-dom-paragraph-kg-2026-07-02`.
 
-- [ ] **Step 4: Update PR body**
+- [x] **Step 4: Update PR body**
 
 Add Phase 11 scope, validation results, FigJam screenshot path, and current head SHA to PR #895.
 
-- [ ] **Step 5: Live PR check**
+- [x] **Step 5: Live PR check**
 
 Re-check PR #895 head, mergeability, checks, and body. Treat queued/pending/review status as non-blocking and failed checks as actionable.
