@@ -1003,6 +1003,14 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     if (!calendarStartupClass?.includes("border-primary")) {
       throw new Error("Settings startup view selector did not mark the calendar option as active");
     }
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: "워크스페이스 설정", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    const persistedCalendarStartupButton = page.locator("button").filter({ hasText: "일정 관리" }).last();
+    await persistedCalendarStartupButton.waitFor({ state: "visible", timeout: 10_000 });
+    const persistedCalendarStartupClass = await persistedCalendarStartupButton.getAttribute("class");
+    if (!persistedCalendarStartupClass?.includes("border-primary")) {
+      throw new Error("Settings startup view selector did not persist the calendar option after reload");
+    }
     await page.getByRole("button", { name: "개발자", exact: true }).click();
     await page.getByRole("button", { name: "등록 토큰 회전", exact: true }).click();
     await page.getByText("등록 토큰이 생성되었습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1011,6 +1019,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
       evidence("settings:save-embedding-model"),
       evidence("settings:save-account-config"),
       evidence("settings:select-calendar-startup-view"),
+      evidence("settings:verify-startup-view-persistence"),
       evidence("settings:rotate-connector-token"),
     ];
   }
