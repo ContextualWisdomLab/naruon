@@ -81,6 +81,7 @@ DataRoomArtifactType = Literal[
     "evidence_samples_json",
     "readiness_summary_json",
 ]
+DiligenceExceptionSeverity = Literal["critical", "high", "medium"]
 RemediationPriority = Literal["critical", "high", "medium"]
 DiligenceRecommendation = Literal[
     "ready_for_diligence",
@@ -460,6 +461,20 @@ class DataRoomPackageManifestEntry(BaseModel):
     provider_write_executed: bool
 
 
+class DataDiligenceExceptionRegisterEntry(BaseModel):
+    exception_key: str
+    blocking_check_key: str
+    display_name: str
+    severity_code: DiligenceExceptionSeverity
+    owner_area: str
+    source_field: str
+    related_artifact: str
+    blocks_close: bool
+    detail_text: str
+    next_action: str
+    provider_write_executed: bool
+
+
 class DataEvidenceSnapshotQualityCheck(BaseModel):
     check_key: str
     display_name: str
@@ -497,6 +512,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
         default_factory=list
     )
     data_room_package_manifest: list[DataRoomPackageManifestEntry] = Field(
+        default_factory=list
+    )
+    diligence_exception_register: list[DataDiligenceExceptionRegisterEntry] = Field(
         default_factory=list
     )
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
@@ -714,6 +732,34 @@ _REMEDIATION_ACTIONS_BY_CHECK_KEY = {
             "readiness."
         ),
     },
+}
+_EXCEPTION_SOURCE_FIELD_BY_CHECK_KEY = {
+    "thread_id_integrity": "quality_checks.thread_id_integrity",
+    "dedupe_fingerprint": "quality_checks.dedupe_fingerprint",
+    "attachment_content": "quality_checks.attachment_content",
+    "content_graph_coverage": "quality_checks.content_graph_coverage",
+    "knowledge_graph_coverage": "quality_checks.knowledge_graph_coverage",
+    "content_segment_text_readiness": "quality_checks.content_segment_text_readiness",
+    "knowledge_graph_evidence_endpoint_readiness": (
+        "quality_checks.knowledge_graph_evidence_endpoint_readiness"
+    ),
+    "semantic_relation_source_backing": (
+        "quality_checks.semantic_relation_source_backing"
+    ),
+    "attachment_parse_coverage": "quality_checks.attachment_parse_coverage",
+}
+_EXCEPTION_ARTIFACT_BY_CHECK_KEY = {
+    "thread_id_integrity": "acquisition-readiness-summary.json",
+    "dedupe_fingerprint": "acquisition-readiness-summary.json",
+    "attachment_content": "remediation-actions.json",
+    "content_graph_coverage": "dom-paragraph-evidence-samples.json",
+    "knowledge_graph_coverage": "knowledge-graph-evidence-samples.json",
+    "content_segment_text_readiness": "dom-paragraph-evidence-samples.json",
+    "knowledge_graph_evidence_endpoint_readiness": (
+        "knowledge-graph-evidence-samples.json"
+    ),
+    "semantic_relation_source_backing": "semantic-relation-evidence-samples.json",
+    "attachment_parse_coverage": "remediation-actions.json",
 }
 _ACQUISITION_KPI_TARGETS_BY_CHECK_KEY = {
     "thread_id_integrity": {
@@ -1442,6 +1488,33 @@ def _data_room_package_manifest(
     ]
 
 
+def _diligence_exception_register(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> list[DataDiligenceExceptionRegisterEntry]:
+    return [
+        DataDiligenceExceptionRegisterEntry(
+            exception_key=f"exception_{action.action_key}",
+            blocking_check_key=action.blocking_check_key,
+            display_name=action.display_name,
+            severity_code=action.priority_code,
+            owner_area=action.owner_area,
+            source_field=_EXCEPTION_SOURCE_FIELD_BY_CHECK_KEY.get(
+                action.blocking_check_key,
+                "quality_checks",
+            ),
+            related_artifact=_EXCEPTION_ARTIFACT_BY_CHECK_KEY.get(
+                action.blocking_check_key,
+                "remediation-actions.json",
+            ),
+            blocks_close=True,
+            detail_text=action.impact_text,
+            next_action=action.recommended_next_step,
+            provider_write_executed=False,
+        )
+        for action in snapshot.acquisition_readiness_gate.remediation_actions
+    ]
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -1691,6 +1764,11 @@ def _evidence_snapshot_from_surface(
     )
     snapshot = snapshot.model_copy(
         update={"data_room_package_manifest": _data_room_package_manifest(snapshot)}
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "diligence_exception_register": _diligence_exception_register(snapshot)
+        }
     )
     digest_payload = _snapshot_digest_payload(snapshot)
     return snapshot.model_copy(

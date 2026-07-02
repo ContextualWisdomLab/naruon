@@ -859,6 +859,40 @@ def _expected_data_room_package_manifest():
     ]
 
 
+def _expected_diligence_exception_register():
+    related_artifact_by_check_key = {
+        "thread_id_integrity": "acquisition-readiness-summary.json",
+        "dedupe_fingerprint": "acquisition-readiness-summary.json",
+        "attachment_content": "remediation-actions.json",
+        "content_graph_coverage": "dom-paragraph-evidence-samples.json",
+        "knowledge_graph_coverage": "knowledge-graph-evidence-samples.json",
+        "content_segment_text_readiness": "dom-paragraph-evidence-samples.json",
+        "knowledge_graph_evidence_endpoint_readiness": (
+            "knowledge-graph-evidence-samples.json"
+        ),
+        "semantic_relation_source_backing": "semantic-relation-evidence-samples.json",
+        "attachment_parse_coverage": "remediation-actions.json",
+    }
+    return [
+        {
+            "exception_key": f"exception_{action['action_key']}",
+            "blocking_check_key": action["blocking_check_key"],
+            "display_name": action["display_name"],
+            "severity_code": action["priority_code"],
+            "owner_area": action["owner_area"],
+            "source_field": f"quality_checks.{action['blocking_check_key']}",
+            "related_artifact": related_artifact_by_check_key[
+                action["blocking_check_key"]
+            ],
+            "blocks_close": True,
+            "detail_text": action["impact_text"],
+            "next_action": action["recommended_next_step"],
+            "provider_write_executed": False,
+        }
+        for action in _expected_acquisition_remediation_actions()
+    ]
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1417,6 +1451,11 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert snapshot["evidence_packet_checklist"] == _expected_evidence_packet_checklist()
     assert "data_room_package_manifest" in snapshot["canonical_payload_fields"]
     assert snapshot["data_room_package_manifest"] == _expected_data_room_package_manifest()
+    assert "diligence_exception_register" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["diligence_exception_register"]
+        == _expected_diligence_exception_register()
+    )
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -1522,6 +1561,27 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         assert item["contains_raw_content"] is False
         assert item["contains_stable_identifiers"] is False
         assert item["provider_write_executed"] is False
+    exception_register = snapshot["diligence_exception_register"]
+    assert len(exception_register) == 9
+    assert exception_register[0] == {
+        "exception_key": "exception_repair_thread_id_integrity",
+        "blocking_check_key": "thread_id_integrity",
+        "display_name": "Canonical thread repair",
+        "severity_code": "critical",
+        "owner_area": "email_ingestion",
+        "source_field": "quality_checks.thread_id_integrity",
+        "related_artifact": "acquisition-readiness-summary.json",
+        "blocks_close": True,
+        "detail_text": "Thread provenance must be stable before buyer review.",
+        "next_action": "Run canonical threading repair for affected scoped emails.",
+        "provider_write_executed": False,
+    }
+    assert exception_register[-1]["exception_key"] == (
+        "exception_expand_attachment_parse_coverage"
+    )
+    assert exception_register[-1]["severity_code"] == "medium"
+    assert exception_register[-1]["related_artifact"] == "remediation-actions.json"
+    assert all(item["blocks_close"] is True for item in exception_register)
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {
