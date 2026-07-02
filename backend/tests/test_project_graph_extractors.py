@@ -79,6 +79,40 @@ def test_milestone_extraction_records_date_evidence():
     assert any("date" in item.attributes["matched_terms"] for item in milestones)
 
 
+def test_short_ascii_keywords_require_token_boundary():
+    embedded_pm_result = extract_project_semantics([
+        ProjectSourceSegment(
+            content_segment_uid="seg-npm-package",
+            source_kind="email_body",
+            source_record_uid="<npm@example.com>",
+            safe_text_content=(
+                "The npm package requirement should keep retry behavior stable."
+            ),
+            heading_path="Requirements",
+            segment_path="/document[1]/paragraph[1]",
+            ordinal_index=1,
+        )
+    ])
+    standalone_pm_result = extract_project_semantics([
+        ProjectSourceSegment(
+            content_segment_uid="seg-pm-owner",
+            source_kind="email_body",
+            source_record_uid="<pm@example.com>",
+            safe_text_content="PM owner must confirm the requirement by Friday.",
+            heading_path="Participants",
+            segment_path="/document[1]/paragraph[2]",
+            ordinal_index=2,
+        )
+    ])
+
+    assert ProjectObjectType.PARTICIPANT not in {
+        semantic_object.object_type for semantic_object in embedded_pm_result.objects
+    }
+    assert ProjectObjectType.PARTICIPANT in {
+        semantic_object.object_type for semantic_object in standalone_pm_result.objects
+    }
+
+
 def test_project_semantic_object_rejects_uncited_output():
     with pytest.raises(ValueError, match="source segment citation"):
         ProjectSemanticObject(

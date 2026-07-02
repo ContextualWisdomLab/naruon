@@ -21,6 +21,7 @@ _DATE_RE = re.compile(
     r"|20\d{2}년\s*\d{1,2}월\s*\d{1,2}일"
 )
 _SPACE_RE = re.compile(r"\s+")
+_ASCII_TOKEN_RE_CACHE: dict[str, re.Pattern[str]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,7 +307,28 @@ def _source_edge(
 
 def _matched_terms(text: str, rule: _ObjectRule) -> tuple[str, ...]:
     lowered = text.casefold()
-    return tuple(keyword for keyword in rule.keywords if keyword.casefold() in lowered)
+    return tuple(
+        keyword for keyword in rule.keywords if _keyword_matches(lowered, keyword)
+    )
+
+
+def _keyword_matches(lowered_text: str, keyword: str) -> bool:
+    normalized = keyword.casefold()
+    if _requires_ascii_token_boundary(normalized):
+        pattern = _ASCII_TOKEN_RE_CACHE.get(normalized)
+        if pattern is None:
+            pattern = re.compile(
+                rf"(?<![A-Za-z0-9_]){re.escape(normalized)}(?![A-Za-z0-9_])"
+            )
+            _ASCII_TOKEN_RE_CACHE[normalized] = pattern
+        return pattern.search(lowered_text) is not None
+    return normalized in lowered_text
+
+
+def _requires_ascii_token_boundary(keyword: str) -> bool:
+    if not keyword.isascii() or any(character.isspace() for character in keyword):
+        return False
+    return any(character.isalnum() for character in keyword)
 
 
 def _confidence(
