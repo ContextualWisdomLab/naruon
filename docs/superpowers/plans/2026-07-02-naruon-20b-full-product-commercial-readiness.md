@@ -533,15 +533,16 @@ cd backend && python3 -m pytest tests/test_release_governance.py -q
 ## Task 9: Build Commercial Handoff Package
 
 **Files:**
-- Create later: `docs/superpowers/reports/2026-07-02-naruon-20b-buyer-package.md`
-- Create later: `docs/superpowers/reports/2026-07-02-naruon-20b-demo-script.md`
-- Create later: `docs/superpowers/reports/2026-07-02-naruon-20b-security-questionnaire.md`
+- Create: `docs/superpowers/reports/2026-07-02-naruon-20b-buyer-package.md`
+- Create: `docs/superpowers/reports/2026-07-02-naruon-20b-demo-script.md`
+- Create: `docs/superpowers/reports/2026-07-02-naruon-20b-security-questionnaire.md`
+- Create: `docs/superpowers/reports/2026-07-02-naruon-20b-sla-support-draft.md`
 
 **Interfaces:**
 - Consumes: verified product flows, security reports, analytics model, Figma screenshots.
 - Produces: buyer-facing artifacts.
 
-- [ ] **Step 1: Write buyer package index**
+- [x] **Step 1: Write buyer package index**
 
 Sections:
 
@@ -563,6 +564,13 @@ Expected:
 
 ```text
 Every claim links to a repo file, PR, test, screenshot, Figma node, or report.
+```
+
+Actual implementation:
+
+```text
+Created buyer package index, buyer demo script, security questionnaire draft, and SLA/support draft.
+The documents explicitly reject public-launch, guaranteed 20B ROI, complete provider-write proof, and issue #634 closure claims.
 ```
 
 ## Task 10: Final Verification And Completion Decision

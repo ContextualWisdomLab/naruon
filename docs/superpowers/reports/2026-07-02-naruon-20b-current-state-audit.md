@@ -220,7 +220,7 @@ P0 for 20B final sale readiness:
 - Production deployment and rollback evidence is not packaged.
 - Live provider-send and provider-write execution evidence is incomplete.
 - Issue #634 has a branch-level fix, but remains open as a governance risk until merged and proven on the trusted base branch.
-- Security questionnaire, data-processing terms, SLA/support, and incident runbook are not packaged for buyer handoff.
+- Buyer package, security questionnaire, and SLA/support drafts now exist, but data-processing terms, buyer approval, and production incident evidence remain incomplete.
 - ROI model is not backed by live measured data.
 
 P1 for buyer technical review:
@@ -243,5 +243,5 @@ Non-blockers:
 3. Capture Product Design screenshots for all ten IA routes across desktop and mobile.
 4. Extend analytics and ROI reports without claiming live KPI values.
 5. Merge the issue #634 governance patch and close the issue only after trusted-base remote evidence proves blocker comments fail the governance check.
-6. Create buyer package, demo script, security questionnaire, and SLA/support draft.
+6. Review buyer package, demo script, security questionnaire, and SLA/support drafts with buyer/legal/security owners.
 7. Run local and remote verification before any completion claim.
