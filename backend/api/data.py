@@ -88,6 +88,14 @@ CommercialCloseKpiOperatingStatus = Literal["operating_ready", "operating_blocke
 CommercialCloseBuyerBriefStatus = Literal["brief_ready", "brief_blocked"]
 CommercialCloseSignoffStatus = Literal["signed_off", "blocked"]
 CommercialCloseSignoffMatrixStatus = Literal["signoff_ready", "signoff_blocked"]
+CommercialCloseReleaseArtifactStatus = Literal["ready", "blocked"]
+CommercialCloseReleasePackageStatus = Literal["release_ready", "release_blocked"]
+CommercialCloseReleaseArtifactGroup = Literal[
+    "core_evidence",
+    "commercial_close",
+    "buyer_diligence",
+    "guardrail",
+]
 DataRoomArtifactType = Literal[
     "snapshot_json",
     "verifier_script",
@@ -665,6 +673,45 @@ class DataCommercialCloseSignoffMatrix(BaseModel):
     provider_write_executed: bool
 
 
+class DataCommercialCloseReleaseArtifact(BaseModel):
+    artifact_key: str
+    release_order: int
+    file_name: str
+    display_name: str
+    artifact_group: CommercialCloseReleaseArtifactGroup
+    status_code: CommercialCloseReleaseArtifactStatus
+    source_field: str
+    required_artifact: str
+    reviewer_role: str
+    blocker_keys: list[str]
+    release_instruction_text: str
+    contains_raw_content: bool
+    contains_stable_identifiers: bool
+    contains_provider_credentials: bool
+    provider_write_executed: bool
+
+
+class DataCommercialCloseReleasePackage(BaseModel):
+    package_key: str
+    target_contract_value_krw: int
+    target_contract_label: str
+    status_code: CommercialCloseReleasePackageStatus
+    total_artifact_count: int
+    ready_artifact_count: int
+    blocked_artifact_count: int
+    signed_off_count: int
+    blocked_signoff_count: int
+    blocker_key_count: int
+    blocked_artifact_files: list[str]
+    blocker_keys: list[str]
+    first_release_file_name: str
+    verification_command: str
+    buyer_handoff_text: str
+    next_action_text: str
+    artifacts: list[DataCommercialCloseReleaseArtifact]
+    provider_write_executed: bool
+
+
 class DataDiligenceExceptionRegisterEntry(BaseModel):
     exception_key: str
     blocking_check_key: str
@@ -973,6 +1020,31 @@ def _default_commercial_close_signoff_matrix() -> (
     )
 
 
+def _default_commercial_close_release_package() -> (
+    DataCommercialCloseReleasePackage
+):
+    return DataCommercialCloseReleasePackage(
+        package_key="commercial_close_release_package",
+        target_contract_value_krw=2_000_000_000,
+        target_contract_label="2,000,000,000 KRW",
+        status_code="release_blocked",
+        total_artifact_count=0,
+        ready_artifact_count=0,
+        blocked_artifact_count=0,
+        signed_off_count=0,
+        blocked_signoff_count=0,
+        blocker_key_count=0,
+        blocked_artifact_files=[],
+        blocker_keys=[],
+        first_release_file_name="",
+        verification_command="",
+        buyer_handoff_text="No commercial close release package is present.",
+        next_action_text="Generate the evidence snapshot before release package review.",
+        artifacts=[],
+        provider_write_executed=False,
+    )
+
+
 def _default_diligence_close_acceptance_summary() -> (
     DataDiligenceCloseAcceptanceSummary
 ):
@@ -1052,6 +1124,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     )
     commercial_close_signoff_matrix: DataCommercialCloseSignoffMatrix = Field(
         default_factory=_default_commercial_close_signoff_matrix
+    )
+    commercial_close_release_package: DataCommercialCloseReleasePackage = Field(
+        default_factory=_default_commercial_close_release_package
     )
     diligence_exception_register: list[DataDiligenceExceptionRegisterEntry] = Field(
         default_factory=list
@@ -3617,6 +3692,295 @@ def _commercial_close_signoff_matrix(
     )
 
 
+def _commercial_close_release_package(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> DataCommercialCloseReleasePackage:
+    release_summary = snapshot.data_room_release_summary
+    acceptance_summary = snapshot.diligence_close_acceptance_summary
+    scorecard = snapshot.commercial_close_readiness_scorecard
+    execution_plan = snapshot.commercial_close_execution_plan
+    kpi_model = snapshot.commercial_close_kpi_operating_model
+    buyer_brief = snapshot.commercial_close_buyer_brief
+    signoff_matrix = snapshot.commercial_close_signoff_matrix
+    privacy_policy = snapshot.privacy_redaction_policy
+    verification_handoff = snapshot.verification_handoff
+    target_label = buyer_brief.target_contract_label
+    privacy_ready = (
+        not privacy_policy.raw_content_exposed
+        and not privacy_policy.stable_identifiers_exposed
+        and not privacy_policy.provider_credentials_exposed
+        and release_summary.privacy_exposure_count == 0
+    )
+    verifier_ready = (
+        scorecard.verifier_ready
+        and bool(verification_handoff.verifier_command)
+        and verification_handoff.success_exit_code == 0
+    )
+
+    def artifact(
+        *,
+        artifact_key: str,
+        release_order: int,
+        file_name: str,
+        display_name: str,
+        artifact_group: CommercialCloseReleaseArtifactGroup,
+        ready: bool,
+        source_field: str,
+        required_artifact: str,
+        reviewer_role: str,
+        blocker_keys: list[str],
+        release_instruction_text: str,
+    ) -> DataCommercialCloseReleaseArtifact:
+        return DataCommercialCloseReleaseArtifact(
+            artifact_key=artifact_key,
+            release_order=release_order,
+            file_name=file_name,
+            display_name=display_name,
+            artifact_group=artifact_group,
+            status_code="ready" if ready else "blocked",
+            source_field=source_field,
+            required_artifact=required_artifact,
+            reviewer_role=reviewer_role,
+            blocker_keys=[] if ready else blocker_keys,
+            release_instruction_text=release_instruction_text,
+            contains_raw_content=False,
+            contains_stable_identifiers=False,
+            contains_provider_credentials=False,
+            provider_write_executed=False,
+        )
+
+    artifacts = [
+        artifact(
+            artifact_key="release_evidence_snapshot",
+            release_order=1,
+            file_name="naruon-evidence-snapshot.json",
+            display_name="Canonical evidence snapshot",
+            artifact_group="core_evidence",
+            ready=(
+                snapshot.snapshot_version == SNAPSHOT_VERSION
+                and snapshot.digest_algorithm == "sha256"
+            ),
+            source_field="snapshot_version,snapshot_digest,canonical_payload_fields",
+            required_artifact="naruon-evidence-snapshot.json",
+            reviewer_role="buyer diligence reviewer",
+            blocker_keys=[],
+            release_instruction_text=(
+                "Start buyer review from the canonical redacted snapshot JSON."
+            ),
+        ),
+        artifact(
+            artifact_key="release_privacy_policy",
+            release_order=2,
+            file_name="privacy-redaction-policy.json",
+            display_name="Privacy redaction policy",
+            artifact_group="guardrail",
+            ready=privacy_ready,
+            source_field="privacy_redaction_policy",
+            required_artifact="privacy-redaction-policy.json",
+            reviewer_role="privacy/security reviewer",
+            blocker_keys=[
+                key
+                for key, blocked in (
+                    ("raw_content_exposed", privacy_policy.raw_content_exposed),
+                    (
+                        "stable_identifiers_exposed",
+                        privacy_policy.stable_identifiers_exposed,
+                    ),
+                    (
+                        "provider_credentials_exposed",
+                        privacy_policy.provider_credentials_exposed,
+                    ),
+                    (
+                        "data_room_privacy_exposure",
+                        release_summary.privacy_exposure_count > 0,
+                    ),
+                )
+                if blocked
+            ],
+            release_instruction_text=(
+                "Confirm raw content, stable identifiers, and credentials are absent."
+            ),
+        ),
+        artifact(
+            artifact_key="release_offline_verifier",
+            release_order=3,
+            file_name="verify-evidence-snapshot.py",
+            display_name="Offline evidence verifier",
+            artifact_group="guardrail",
+            ready=verifier_ready,
+            source_field="verification_handoff.verifier_command",
+            required_artifact="verify-evidence-snapshot.py",
+            reviewer_role="verification reviewer",
+            blocker_keys=[] if verifier_ready else ["offline_verifier_contract"],
+            release_instruction_text=(
+                "Run the verifier against copied snapshot JSON before sharing."
+            ),
+        ),
+        artifact(
+            artifact_key="release_data_room_summary",
+            release_order=4,
+            file_name="buyer-data-room-release.json",
+            display_name="Buyer data-room release summary",
+            artifact_group="buyer_diligence",
+            ready=release_summary.release_status == "release_ready",
+            source_field="data_room_release_summary.release_status",
+            required_artifact="buyer-data-room-release.json",
+            reviewer_role="data-room operations reviewer",
+            blocker_keys=release_summary.blocked_artifact_files[:5],
+            release_instruction_text=(
+                "Confirm all buyer data-room artifacts are ready for close."
+            ),
+        ),
+        artifact(
+            artifact_key="release_acceptance_checklist",
+            release_order=5,
+            file_name="buyer-acceptance-checklist.json",
+            display_name="Buyer acceptance checklist",
+            artifact_group="buyer_diligence",
+            ready=acceptance_summary.decision_code == "ready_to_close",
+            source_field="diligence_close_acceptance_summary.decision_code",
+            required_artifact="buyer-acceptance-checklist.json",
+            reviewer_role="buyer diligence reviewer",
+            blocker_keys=acceptance_summary.blocker_keys[:5],
+            release_instruction_text=(
+                "Resolve acceptance blockers before buyer close acceptance."
+            ),
+        ),
+        artifact(
+            artifact_key="release_readiness_scorecard",
+            release_order=6,
+            file_name="commercial-close-readiness-scorecard.json",
+            display_name="Commercial close readiness scorecard",
+            artifact_group="commercial_close",
+            ready=scorecard.status_code == "commercially_ready",
+            source_field="commercial_close_readiness_scorecard.status_code",
+            required_artifact="commercial-close-readiness-scorecard.json",
+            reviewer_role="commercial diligence reviewer",
+            blocker_keys=(
+                scorecard.kpi_gap_keys
+                + scorecard.acceptance_blocker_keys
+                + scorecard.blocked_artifact_files
+            )[:5],
+            release_instruction_text=(
+                "Review readiness score and blocker clearance for target review."
+            ),
+        ),
+        artifact(
+            artifact_key="release_execution_plan",
+            release_order=7,
+            file_name="commercial-close-execution-plan.json",
+            display_name="Commercial close execution plan",
+            artifact_group="commercial_close",
+            ready=execution_plan.status_code == "execution_ready",
+            source_field="commercial_close_execution_plan.status_code",
+            required_artifact="commercial-close-execution-plan.json",
+            reviewer_role="program manager",
+            blocker_keys=[
+                lane.lane_key
+                for lane in execution_plan.lanes
+                if lane.status_code != "ready"
+            ][:5],
+            release_instruction_text=(
+                "Execute blocked lanes before reissuing the commercial package."
+            ),
+        ),
+        artifact(
+            artifact_key="release_kpi_operating_model",
+            release_order=8,
+            file_name="commercial-close-kpi-operating-model.json",
+            display_name="Commercial close KPI operating model",
+            artifact_group="commercial_close",
+            ready=kpi_model.status_code == "operating_ready",
+            source_field="commercial_close_kpi_operating_model.status_code",
+            required_artifact="commercial-close-kpi-operating-model.json",
+            reviewer_role="commercial diligence reviewer",
+            blocker_keys=kpi_model.blocked_metric_keys[:5],
+            release_instruction_text=(
+                "Verify all operating KPIs hit target before buyer package release."
+            ),
+        ),
+        artifact(
+            artifact_key="release_buyer_brief",
+            release_order=9,
+            file_name="commercial-close-buyer-brief.json",
+            display_name="Commercial close buyer brief",
+            artifact_group="commercial_close",
+            ready=buyer_brief.status_code == "brief_ready",
+            source_field="commercial_close_buyer_brief.status_code",
+            required_artifact="commercial-close-buyer-brief.json",
+            reviewer_role="commercial diligence reviewer",
+            blocker_keys=[
+                bullet.bullet_key for bullet in buyer_brief.blocker_bullets[:5]
+            ],
+            release_instruction_text=(
+                "Use the buyer brief as the narrative index for close reviewers."
+            ),
+        ),
+        artifact(
+            artifact_key="release_signoff_matrix",
+            release_order=10,
+            file_name="commercial-close-signoff-matrix.json",
+            display_name="Commercial close signoff matrix",
+            artifact_group="commercial_close",
+            ready=signoff_matrix.status_code == "signoff_ready",
+            source_field="commercial_close_signoff_matrix.status_code",
+            required_artifact="commercial-close-signoff-matrix.json",
+            reviewer_role="commercial diligence reviewer",
+            blocker_keys=signoff_matrix.blocker_keys[:5],
+            release_instruction_text=(
+                "Confirm role signoffs before issuing the buyer release package."
+            ),
+        ),
+    ]
+    blocked_artifacts = [item for item in artifacts if item.status_code == "blocked"]
+    blocker_keys = list(
+        dict.fromkeys(
+            key for artifact_item in blocked_artifacts for key in artifact_item.blocker_keys
+        )
+    )
+    status_code: CommercialCloseReleasePackageStatus = (
+        "release_ready" if not blocked_artifacts else "release_blocked"
+    )
+    if blocked_artifacts:
+        buyer_handoff_text = (
+            f"Commercial close release package remains blocked for {target_label} "
+            f"target review: {len(blocked_artifacts)} artifact(s) need remediation."
+        )
+        next_action_text = (
+            "Resolve blocked release artifacts, regenerate the evidence snapshot, "
+            "rerun the offline verifier, and reissue the release package."
+        )
+    else:
+        buyer_handoff_text = (
+            f"Commercial close release package is ready for {target_label} buyer "
+            "handoff."
+        )
+        next_action_text = (
+            "Share the verified release package with buyer diligence reviewers."
+        )
+
+    return DataCommercialCloseReleasePackage(
+        package_key="commercial_close_release_package",
+        target_contract_value_krw=buyer_brief.target_contract_value_krw,
+        target_contract_label=target_label,
+        status_code=status_code,
+        total_artifact_count=len(artifacts),
+        ready_artifact_count=len(artifacts) - len(blocked_artifacts),
+        blocked_artifact_count=len(blocked_artifacts),
+        signed_off_count=signoff_matrix.signed_off_count,
+        blocked_signoff_count=signoff_matrix.blocked_signoff_count,
+        blocker_key_count=len(blocker_keys),
+        blocked_artifact_files=[item.file_name for item in blocked_artifacts],
+        blocker_keys=blocker_keys[:10],
+        first_release_file_name=artifacts[0].file_name,
+        verification_command=verification_handoff.verifier_command,
+        buyer_handoff_text=buyer_handoff_text,
+        next_action_text=next_action_text,
+        artifacts=artifacts,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -3955,6 +4319,13 @@ def _evidence_snapshot_from_surface(
         update={
             "commercial_close_signoff_matrix": (
                 _commercial_close_signoff_matrix(snapshot)
+            )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "commercial_close_release_package": (
+                _commercial_close_release_package(snapshot)
             )
         }
     )

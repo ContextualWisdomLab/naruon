@@ -1727,6 +1727,215 @@ const commercialCloseSignoffMatrix = {
   provider_write_executed: false,
 };
 
+const commercialCloseReleaseArtifacts = [
+  {
+    artifact_key: "release_evidence_snapshot",
+    release_order: 1,
+    file_name: "naruon-evidence-snapshot.json",
+    display_name: "Canonical evidence snapshot",
+    artifact_group: "core_evidence",
+    status_code: "ready",
+    source_field: "snapshot_version,snapshot_digest,canonical_payload_fields",
+    required_artifact: "naruon-evidence-snapshot.json",
+    reviewer_role: "buyer diligence reviewer",
+    blocker_keys: [],
+    release_instruction_text: "Start buyer review from the canonical redacted snapshot JSON.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_privacy_policy",
+    release_order: 2,
+    file_name: "privacy-redaction-policy.json",
+    display_name: "Privacy redaction policy",
+    artifact_group: "guardrail",
+    status_code: "ready",
+    source_field: "privacy_redaction_policy",
+    required_artifact: "privacy-redaction-policy.json",
+    reviewer_role: "privacy/security reviewer",
+    blocker_keys: [],
+    release_instruction_text: "Confirm raw content, stable identifiers, and credentials are absent.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_offline_verifier",
+    release_order: 3,
+    file_name: "verify-evidence-snapshot.py",
+    display_name: "Offline evidence verifier",
+    artifact_group: "guardrail",
+    status_code: "ready",
+    source_field: "verification_handoff.verifier_command",
+    required_artifact: "verify-evidence-snapshot.py",
+    reviewer_role: "verification reviewer",
+    blocker_keys: [],
+    release_instruction_text: "Run the verifier against copied snapshot JSON before sharing.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_data_room_summary",
+    release_order: 4,
+    file_name: "buyer-data-room-release.json",
+    display_name: "Buyer data-room release summary",
+    artifact_group: "buyer_diligence",
+    status_code: "blocked",
+    source_field: "data_room_release_summary.release_status",
+    required_artifact: "buyer-data-room-release.json",
+    reviewer_role: "data-room operations reviewer",
+    blocker_keys: dataRoomReleaseSummary.blocked_artifact_files.slice(0, 5),
+    release_instruction_text: "Confirm all buyer data-room artifacts are ready for close.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_acceptance_checklist",
+    release_order: 5,
+    file_name: "buyer-acceptance-checklist.json",
+    display_name: "Buyer acceptance checklist",
+    artifact_group: "buyer_diligence",
+    status_code: "blocked",
+    source_field: "diligence_close_acceptance_summary.decision_code",
+    required_artifact: "buyer-acceptance-checklist.json",
+    reviewer_role: "buyer diligence reviewer",
+    blocker_keys: diligenceCloseAcceptanceSummary.blocker_keys.slice(0, 5),
+    release_instruction_text: "Resolve acceptance blockers before buyer close acceptance.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_readiness_scorecard",
+    release_order: 6,
+    file_name: "commercial-close-readiness-scorecard.json",
+    display_name: "Commercial close readiness scorecard",
+    artifact_group: "commercial_close",
+    status_code: "blocked",
+    source_field: "commercial_close_readiness_scorecard.status_code",
+    required_artifact: "commercial-close-readiness-scorecard.json",
+    reviewer_role: "commercial diligence reviewer",
+    blocker_keys: [
+      ...commercialCloseReadinessScorecard.kpi_gap_keys,
+      ...commercialCloseReadinessScorecard.acceptance_blocker_keys,
+      ...commercialCloseReadinessScorecard.blocked_artifact_files,
+    ].slice(0, 5),
+    release_instruction_text: "Review readiness score and blocker clearance for target review.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_execution_plan",
+    release_order: 7,
+    file_name: "commercial-close-execution-plan.json",
+    display_name: "Commercial close execution plan",
+    artifact_group: "commercial_close",
+    status_code: "blocked",
+    source_field: "commercial_close_execution_plan.status_code",
+    required_artifact: "commercial-close-execution-plan.json",
+    reviewer_role: "program manager",
+    blocker_keys: commercialCloseExecutionPlan.lanes
+      .filter((lane) => lane.status_code !== "ready")
+      .slice(0, 5)
+      .map((lane) => lane.lane_key),
+    release_instruction_text: "Execute blocked lanes before reissuing the commercial package.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_kpi_operating_model",
+    release_order: 8,
+    file_name: "commercial-close-kpi-operating-model.json",
+    display_name: "Commercial close KPI operating model",
+    artifact_group: "commercial_close",
+    status_code: "blocked",
+    source_field: "commercial_close_kpi_operating_model.status_code",
+    required_artifact: "commercial-close-kpi-operating-model.json",
+    reviewer_role: "commercial diligence reviewer",
+    blocker_keys: commercialCloseKpiOperatingModel.blocked_metric_keys.slice(0, 5),
+    release_instruction_text: "Verify all operating KPIs hit target before buyer package release.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_buyer_brief",
+    release_order: 9,
+    file_name: "commercial-close-buyer-brief.json",
+    display_name: "Commercial close buyer brief",
+    artifact_group: "commercial_close",
+    status_code: "blocked",
+    source_field: "commercial_close_buyer_brief.status_code",
+    required_artifact: "commercial-close-buyer-brief.json",
+    reviewer_role: "commercial diligence reviewer",
+    blocker_keys: commercialCloseBuyerBrief.blocker_bullets.map((bullet) => bullet.bullet_key),
+    release_instruction_text: "Use the buyer brief as the narrative index for close reviewers.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  {
+    artifact_key: "release_signoff_matrix",
+    release_order: 10,
+    file_name: "commercial-close-signoff-matrix.json",
+    display_name: "Commercial close signoff matrix",
+    artifact_group: "commercial_close",
+    status_code: "blocked",
+    source_field: "commercial_close_signoff_matrix.status_code",
+    required_artifact: "commercial-close-signoff-matrix.json",
+    reviewer_role: "commercial diligence reviewer",
+    blocker_keys: commercialCloseSignoffMatrix.blocker_keys.slice(0, 5),
+    release_instruction_text: "Confirm role signoffs before issuing the buyer release package.",
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+];
+
+const commercialCloseReleaseBlockedArtifacts = commercialCloseReleaseArtifacts.filter(
+  (artifact) => artifact.status_code === "blocked",
+);
+
+const commercialCloseReleaseBlockerKeys = Array.from(
+  new Set(commercialCloseReleaseBlockedArtifacts.flatMap((artifact) => artifact.blocker_keys)),
+);
+
+const commercialCloseReleasePackage = {
+  package_key: "commercial_close_release_package",
+  target_contract_value_krw: 2_000_000_000,
+  target_contract_label: "2,000,000,000 KRW",
+  status_code: "release_blocked",
+  total_artifact_count: commercialCloseReleaseArtifacts.length,
+  ready_artifact_count: commercialCloseReleaseArtifacts.length - commercialCloseReleaseBlockedArtifacts.length,
+  blocked_artifact_count: commercialCloseReleaseBlockedArtifacts.length,
+  signed_off_count: commercialCloseSignoffMatrix.signed_off_count,
+  blocked_signoff_count: commercialCloseSignoffMatrix.blocked_signoff_count,
+  blocker_key_count: commercialCloseReleaseBlockerKeys.length,
+  blocked_artifact_files: commercialCloseReleaseBlockedArtifacts.map((artifact) => artifact.file_name),
+  blocker_keys: commercialCloseReleaseBlockerKeys.slice(0, 10),
+  first_release_file_name: "naruon-evidence-snapshot.json",
+  verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+  buyer_handoff_text: "Commercial close release package remains blocked for 2,000,000,000 KRW target review: 7 artifact(s) need remediation.",
+  next_action_text: "Resolve blocked release artifacts, regenerate the evidence snapshot, rerun the offline verifier, and reissue the release package.",
+  artifacts: commercialCloseReleaseArtifacts,
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -2096,6 +2305,7 @@ const dataEvidenceSnapshot = {
     "commercial_close_execution_plan",
     "commercial_close_kpi_operating_model",
     "commercial_close_readiness_scorecard",
+    "commercial_close_release_package",
     "commercial_close_signoff_matrix",
     "data_room_package_manifest",
     "data_room_release_summary",
@@ -2200,6 +2410,7 @@ const dataEvidenceSnapshot = {
   commercial_close_kpi_operating_model: commercialCloseKpiOperatingModel,
   commercial_close_buyer_brief: commercialCloseBuyerBrief,
   commercial_close_signoff_matrix: commercialCloseSignoffMatrix,
+  commercial_close_release_package: commercialCloseReleasePackage,
   diligence_exception_register: diligenceExceptionRegister,
   diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
   diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
@@ -2861,6 +3072,15 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("signoff_verification");
     expect(container.textContent).toContain("signoff_security_governance");
     expect(container.textContent).toContain("read-only-evidence-boundary");
+    expect(container.textContent).toContain("Commercial close release package");
+    expect(container.textContent).toContain("commercial_close_release_package");
+    expect(container.textContent).toContain("release_blocked");
+    expect(container.textContent).toContain("blocked artifacts 7");
+    expect(container.textContent).toContain("commercial-close-buyer-brief.json");
+    expect(container.textContent).toContain("commercial-close-signoff-matrix.json");
+    expect(container.textContent).toContain("buyer-data-room-release.json");
+    expect(container.textContent).toContain("naruon-evidence-snapshot.json");
+    expect(container.textContent).toContain("credentials: no");
     expect(container.textContent).toContain("Data room release summary");
     expect(container.textContent).toContain("release_blocked");
     expect(container.textContent).toContain("Data-room release remains blocked");
@@ -3021,6 +3241,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_kpi_operating_model");
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_buyer_brief");
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_signoff_matrix");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_release_package");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -3036,6 +3257,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.commercial_close_kpi_operating_model).toEqual(commercialCloseKpiOperatingModel);
     expect(copiedSnapshot.commercial_close_buyer_brief).toEqual(commercialCloseBuyerBrief);
     expect(copiedSnapshot.commercial_close_signoff_matrix).toEqual(commercialCloseSignoffMatrix);
+    expect(copiedSnapshot.commercial_close_release_package).toEqual(commercialCloseReleasePackage);
     expect(copiedSnapshot.diligence_exception_register).toHaveLength(9);
     expect(copiedSnapshot.diligence_exception_register[0]).toEqual({
       exception_key: "exception_repair_thread_id_integrity",

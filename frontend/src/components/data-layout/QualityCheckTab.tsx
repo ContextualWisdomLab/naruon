@@ -46,6 +46,7 @@ export function QualityCheckTab({
   const commercialCloseKpiOperatingModel = evidenceSnapshot?.commercial_close_kpi_operating_model;
   const commercialCloseBuyerBrief = evidenceSnapshot?.commercial_close_buyer_brief;
   const commercialCloseSignoffMatrix = evidenceSnapshot?.commercial_close_signoff_matrix;
+  const commercialCloseReleasePackage = evidenceSnapshot?.commercial_close_release_package;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
@@ -663,6 +664,142 @@ export function QualityCheckTab({
                               </dl>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {signoff.blocker_keys.map((blockerKey) => (
+                                  <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                    {toSafeReactText(blockerKey)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {commercialCloseReleasePackage && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Commercial close release package</p>
+                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseReleasePackage.status_code)}</h3>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseReleasePackage.buyer_handoff_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseReleasePackage.next_action_text)}</p>
+                          </div>
+                          <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(commercialCloseReleasePackage.status_code === 'release_ready' ? 'ready' : 'needs_attention')}`}>
+                            {toSafeReactText(commercialCloseReleasePackage.package_key)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Target review value</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseReleasePackage.target_contract_label)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Release artifacts</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.total_artifact_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Ready artifacts</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.ready_artifact_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Blocked artifacts</dt>
+                            <dd className="mt-1 text-sm font-bold">blocked artifacts {formatCount(commercialCloseReleasePackage.blocked_artifact_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Signed off</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.signed_off_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Blocked signoffs</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.blocked_signoff_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Blocker keys</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.blocker_key_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">First release file</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseReleasePackage.first_release_file_name)}</dd>
+                          </div>
+                          <div className="sm:col-span-2 lg:col-span-3">
+                            <dt className="font-black text-muted-foreground">Verifier command</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseReleasePackage.verification_command)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseReleasePackage.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseReleasePackage.blocked_artifact_files.map((fileName) => (
+                            <span key={fileName} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(fileName)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseReleasePackage.blocker_keys.map((blockerKey) => (
+                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(blockerKey)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-4 divide-y divide-border">
+                          {commercialCloseReleasePackage.artifacts.map((artifact) => (
+                            <div key={artifact.artifact_key} className="py-4 first:pt-0 last:pb-0">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <h4 className="break-all text-sm font-black">
+                                    {formatCount(artifact.release_order)}. {toSafeReactText(artifact.file_name)}
+                                  </h4>
+                                  <p className="mt-1 text-sm font-semibold text-muted-foreground">{toSafeReactText(artifact.display_name)}</p>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(artifact.release_instruction_text)}</p>
+                                </div>
+                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(artifact.status_code === 'ready' ? 'ready' : 'needs_attention')}`}>
+                                  {toSafeReactText(artifact.status_code)}
+                                </span>
+                              </div>
+                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Artifact key</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.artifact_key)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Group</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.artifact_group)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Reviewer role</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.reviewer_role)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Required artifact</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.required_artifact)}</dd>
+                                </div>
+                                <div className="sm:col-span-2 lg:col-span-4">
+                                  <dt className="font-black text-muted-foreground">Source field</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.source_field)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Raw content</dt>
+                                  <dd className="mt-1 text-sm font-bold">raw content: {artifact.contains_raw_content ? 'yes' : 'no'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Stable IDs</dt>
+                                  <dd className="mt-1 text-sm font-bold">stable IDs: {artifact.contains_stable_identifiers ? 'yes' : 'no'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Credentials</dt>
+                                  <dd className="mt-1 text-sm font-bold">credentials: {artifact.contains_provider_credentials ? 'yes' : 'no'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(artifact.provider_write_executed)}</dd>
+                                </div>
+                              </dl>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {artifact.blocker_keys.map((blockerKey) => (
                                   <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
                                     {toSafeReactText(blockerKey)}
                                   </span>
