@@ -209,7 +209,7 @@ Group the generated nodes as `Phase 12 Tamper-Evident Snapshot Digest Group` and
 - Modify: `docs/superpowers/plans/2026-07-02-tamper-evident-evidence-snapshot.md`
 - Modify: PR body via `gh pr edit`
 
-- [ ] **Step 1: Run final diff hygiene**
+- [x] **Step 1: Run final diff hygiene**
 
 Run:
 
@@ -219,7 +219,7 @@ git diff --check
 
 Expected: no output.
 
-- [ ] **Step 2: Commit implementation**
+- [x] **Step 2: Commit implementation**
 
 Stage only Phase 12 files and commit:
 
@@ -227,11 +227,11 @@ Stage only Phase 12 files and commit:
 git commit -m "feat: add evidence snapshot digest"
 ```
 
-- [ ] **Step 3: Push**
+- [x] **Step 3: Push**
 
 Push to `plan/email-dom-paragraph-kg-2026-07-02`.
 
-- [ ] **Step 4: Mark plan complete and commit docs**
+- [x] **Step 4: Mark plan complete and commit docs**
 
 Check off completed ship steps, commit:
 
@@ -239,10 +239,10 @@ Check off completed ship steps, commit:
 git commit -m "docs: mark phase 12 plan complete"
 ```
 
-- [ ] **Step 5: Update PR body**
+- [x] **Step 5: Update PR body**
 
 Add Phase 12 scope, validation results, FigJam screenshot path, and current head SHA to PR #895.
 
-- [ ] **Step 6: Live PR check**
+- [x] **Step 6: Live PR check**
 
 Re-check PR #895 head, mergeability, checks, and body. Treat queued/pending/review status as non-blocking and failed checks as actionable.
