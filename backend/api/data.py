@@ -60,6 +60,7 @@ SurfaceStatus = Literal[
     "no_source",
 ]
 QualityStatus = Literal["pass", "needs_attention", "pending"]
+EndpointStatus = Literal["segment_backed", "node_only", "missing_endpoint"]
 RepositoryAssetState = Literal["ready", "needs_attention"]
 RepositoryType = Literal[
     "webdav_account",
@@ -194,6 +195,22 @@ class DataKnowledgeGraphBreakdown(BaseModel):
     provider_write_executed: bool
 
 
+class DataContentGraphEvidenceSample(BaseModel):
+    sample_key: str
+    source_kind: str
+    segment_kind: str
+    segment_path: str
+    word_count: int
+
+
+class DataKnowledgeGraphEvidenceSample(BaseModel):
+    sample_key: str
+    source_kind: str
+    edge_kind: str
+    edge_path: str
+    endpoint_status: EndpointStatus
+
+
 class DataConnectorEvent(BaseModel):
     event_uid: str
     signal_key: str
@@ -263,6 +280,8 @@ class DataQualitySurfaceResponse(BaseModel):
     attachment_parse_breakdown: list[DataAttachmentParseBreakdown]
     content_graph_breakdown: list[DataContentGraphBreakdown]
     knowledge_graph_breakdown: list[DataKnowledgeGraphBreakdown]
+    content_graph_evidence_samples: list[DataContentGraphEvidenceSample]
+    knowledge_graph_evidence_samples: list[DataKnowledgeGraphEvidenceSample]
     connector_events: list[DataConnectorEvent]
 
 
@@ -354,6 +373,70 @@ def _knowledge_graph_breakdown_row(
         object_count=int(object_count or 0),
         evidence_source=KNOWLEDGE_GRAPH_BREAKDOWN_EVIDENCE_SOURCE,
         provider_write_executed=False,
+    )
+
+
+def _opaque_graph_sample_key(prefix: str, value: str | None) -> str:
+    digest = hashlib.sha256((value or prefix).encode("utf-8")).hexdigest()
+    return f"{prefix}_{digest[:16]}"
+
+
+def _safe_graph_path(value: str | None, fallback: str) -> str:
+    cleaned = (value or fallback).replace("\x00", "")
+    cleaned = cleaned.replace("<", "").replace(">", "").strip()
+    return " ".join(cleaned.split())[:240] or fallback
+
+
+def _content_graph_evidence_sample_row(
+    content_segment_uid: str | None,
+    source_kind: str | None,
+    segment_kind: str | None,
+    segment_path: str | None,
+    word_count: int | None,
+) -> DataContentGraphEvidenceSample:
+    return DataContentGraphEvidenceSample(
+        sample_key=_opaque_graph_sample_key("segment", content_segment_uid),
+        source_kind=_safe_display_text(source_kind, "unknown")[:64],
+        segment_kind=_safe_display_text(segment_kind, "unknown")[:64],
+        segment_path=_safe_graph_path(segment_path, "/document[1]"),
+        word_count=int(word_count or 0),
+    )
+
+
+def _edge_endpoint_status(
+    source_segment_id: int | None,
+    target_segment_id: int | None,
+    source_node_id: int | None,
+    target_node_id: int | None,
+) -> EndpointStatus:
+    if source_segment_id is not None or target_segment_id is not None:
+        return "segment_backed"
+    if source_node_id is not None or target_node_id is not None:
+        return "node_only"
+    return "missing_endpoint"
+
+
+def _knowledge_graph_evidence_sample_row(
+    edge_uid: str | None,
+    source_kind: str | None,
+    edge_kind: str | None,
+    edge_path: str | None,
+    source_segment_id: int | None,
+    target_segment_id: int | None,
+    source_node_id: int | None,
+    target_node_id: int | None,
+) -> DataKnowledgeGraphEvidenceSample:
+    return DataKnowledgeGraphEvidenceSample(
+        sample_key=_opaque_graph_sample_key("edge", edge_uid),
+        source_kind=_safe_display_text(source_kind, "unknown")[:64],
+        edge_kind=_safe_display_text(edge_kind, "unknown")[:64],
+        edge_path=_safe_graph_path(edge_path, "/document[1]"),
+        endpoint_status=_edge_endpoint_status(
+            source_segment_id,
+            target_segment_id,
+            source_node_id,
+            target_node_id,
+        ),
     )
 
 
@@ -1501,6 +1584,95 @@ async def _get_knowledge_graph_breakdown(
     ]
 
 
+async def _get_content_graph_evidence_samples(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> list[DataContentGraphEvidenceSample]:
+    result = await db.execute(
+        select(
+            ContentSegmentRecord.content_segment_uid,
+            ContentSegmentRecord.source_kind,
+            ContentSegmentRecord.segment_kind,
+            ContentSegmentRecord.segment_path,
+            ContentSegmentRecord.word_count,
+        )
+        .join(Email, ContentSegmentRecord.email_id == Email.id)
+        .where(*email_scope)
+        .order_by(
+            ContentSegmentRecord.source_kind.asc(),
+            ContentSegmentRecord.source_record_uid.asc(),
+            ContentSegmentRecord.ordinal_index.asc(),
+            ContentSegmentRecord.segment_path.asc(),
+        )
+        .limit(8)
+    )
+    return [
+        _content_graph_evidence_sample_row(
+            content_segment_uid=content_segment_uid,
+            source_kind=source_kind,
+            segment_kind=segment_kind,
+            segment_path=segment_path,
+            word_count=word_count,
+        )
+        for (
+            content_segment_uid,
+            source_kind,
+            segment_kind,
+            segment_path,
+            word_count,
+        ) in result.all()
+    ]
+
+
+async def _get_knowledge_graph_evidence_samples(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> list[DataKnowledgeGraphEvidenceSample]:
+    result = await db.execute(
+        select(
+            KnowledgeGraphEdgeRecord.edge_uid,
+            KnowledgeGraphEdgeRecord.source_kind,
+            KnowledgeGraphEdgeRecord.edge_kind,
+            KnowledgeGraphEdgeRecord.edge_path,
+            KnowledgeGraphEdgeRecord.source_segment_id,
+            KnowledgeGraphEdgeRecord.target_segment_id,
+            KnowledgeGraphEdgeRecord.source_node_id,
+            KnowledgeGraphEdgeRecord.target_node_id,
+        )
+        .join(Email, KnowledgeGraphEdgeRecord.email_id == Email.id)
+        .where(*email_scope)
+        .order_by(
+            KnowledgeGraphEdgeRecord.source_kind.asc(),
+            KnowledgeGraphEdgeRecord.source_record_uid.asc(),
+            KnowledgeGraphEdgeRecord.ordinal_index.asc(),
+            KnowledgeGraphEdgeRecord.edge_path.asc(),
+        )
+        .limit(8)
+    )
+    return [
+        _knowledge_graph_evidence_sample_row(
+            edge_uid=edge_uid,
+            source_kind=source_kind,
+            edge_kind=edge_kind,
+            edge_path=edge_path,
+            source_segment_id=source_segment_id,
+            target_segment_id=target_segment_id,
+            source_node_id=source_node_id,
+            target_node_id=target_node_id,
+        )
+        for (
+            edge_uid,
+            source_kind,
+            edge_kind,
+            edge_path,
+            source_segment_id,
+            target_segment_id,
+            source_node_id,
+            target_node_id,
+        ) in result.all()
+    ]
+
+
 async def _get_attachment_parse_stats(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
@@ -1644,6 +1816,14 @@ async def get_data_quality_surface(
     )
     content_graph_breakdown = await _get_content_graph_breakdown(db, email_scope)
     knowledge_graph_breakdown = await _get_knowledge_graph_breakdown(db, email_scope)
+    content_graph_evidence_samples = await _get_content_graph_evidence_samples(
+        db,
+        email_scope,
+    )
+    knowledge_graph_evidence_samples = await _get_knowledge_graph_evidence_samples(
+        db,
+        email_scope,
+    )
     attachment_parse_stats = await _get_attachment_parse_stats(db, email_scope)
     email_count = email_stats.count
     missing_thread_count = email_stats.missing_thread_count
@@ -1733,6 +1913,8 @@ async def get_data_quality_surface(
         attachment_parse_breakdown=attachment_parse_breakdown,
         content_graph_breakdown=content_graph_breakdown,
         knowledge_graph_breakdown=knowledge_graph_breakdown,
+        content_graph_evidence_samples=content_graph_evidence_samples,
+        knowledge_graph_evidence_samples=knowledge_graph_evidence_samples,
         connector_events=[
             DataConnectorEvent(
                 event_uid=event.event_uid,

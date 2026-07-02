@@ -255,6 +255,44 @@ def mock_db():
                 ("email_body", "node_has_segment", 8),
                 ("attachment", "heading_contains_segment", 2),
             ],  # knowledge graph breakdown
+            [
+                (
+                    "cseg_email_paragraph_1",
+                    "email_body",
+                    "paragraph",
+                    "/document[1]/paragraph[1]",
+                    12,
+                ),
+                (
+                    "cseg_attachment_heading_1",
+                    "attachment",
+                    "heading",
+                    "/document[1]/h1[1]",
+                    3,
+                ),
+            ],  # content graph evidence samples
+            [
+                (
+                    "kgedge_email_node_segment_1",
+                    "email_body",
+                    "node_has_segment",
+                    "/document[1]/paragraph[1]/has/segment[1]",
+                    None,
+                    12,
+                    44,
+                    None,
+                ),
+                (
+                    "kgedge_attachment_node_only_1",
+                    "attachment",
+                    "node_contains_node",
+                    "/document[1]/contains/h1[1]",
+                    None,
+                    None,
+                    55,
+                    56,
+                ),
+            ],  # knowledge graph evidence samples
             (2, 1),  # attachment parse stats
             [
                 (
@@ -299,6 +337,11 @@ def _restore_overrides(previous_secret, original_overrides):
     settings.AUTH_SESSION_HMAC_SECRET = previous_secret
     app.dependency_overrides.clear()
     app.dependency_overrides.update(original_overrides)
+
+
+def _expected_sample_key(prefix: str, value: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return f"{prefix}_{digest[:16]}"
 
 
 def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_db):
@@ -467,6 +510,50 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
             "provider_write_executed": False,
         },
     ]
+    assert data["content_graph_evidence_samples"] == [
+        {
+            "sample_key": _expected_sample_key(
+                "segment",
+                "cseg_email_paragraph_1",
+            ),
+            "source_kind": "email_body",
+            "segment_kind": "paragraph",
+            "segment_path": "/document[1]/paragraph[1]",
+            "word_count": 12,
+        },
+        {
+            "sample_key": _expected_sample_key(
+                "segment",
+                "cseg_attachment_heading_1",
+            ),
+            "source_kind": "attachment",
+            "segment_kind": "heading",
+            "segment_path": "/document[1]/h1[1]",
+            "word_count": 3,
+        },
+    ]
+    assert data["knowledge_graph_evidence_samples"] == [
+        {
+            "sample_key": _expected_sample_key(
+                "edge",
+                "kgedge_email_node_segment_1",
+            ),
+            "source_kind": "email_body",
+            "edge_kind": "node_has_segment",
+            "edge_path": "/document[1]/paragraph[1]/has/segment[1]",
+            "endpoint_status": "segment_backed",
+        },
+        {
+            "sample_key": _expected_sample_key(
+                "edge",
+                "kgedge_attachment_node_only_1",
+            ),
+            "source_kind": "attachment",
+            "edge_kind": "node_contains_node",
+            "edge_path": "/document[1]/contains/h1[1]",
+            "endpoint_status": "node_only",
+        },
+    ]
     assert data["attachment_parse_breakdown"] == [
         {
             "content_type": "application/octet-stream",
@@ -531,6 +618,8 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "webdav_path",
         "/Projects/Naruon_Roadmap_2026",
         "segmented body text",
+        "cseg_email_paragraph_1",
+        "kgedge_email_node_segment_1",
         "<asset-ready@example.com>",
         "thread-ready",
     ):

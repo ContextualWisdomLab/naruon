@@ -716,6 +716,24 @@ const dataQualitySurface = {
       provider_write_executed: false,
     },
   ],
+  content_graph_evidence_samples: [
+    {
+      sample_key: 'segment_hidden_1',
+      source_kind: 'email_body',
+      segment_kind: 'paragraph',
+      segment_path: '/document[1]/paragraph[1]',
+      word_count: 12,
+    },
+  ],
+  knowledge_graph_evidence_samples: [
+    {
+      sample_key: 'edge_hidden_1',
+      source_kind: 'email_body',
+      edge_kind: 'node_has_segment',
+      edge_path: '/document[1]/paragraph[1]/has/segment[1]',
+      endpoint_status: 'segment_backed',
+    },
+  ],
   connector_events: [
     {
       event_uid: 'connector_evt_data_quality',

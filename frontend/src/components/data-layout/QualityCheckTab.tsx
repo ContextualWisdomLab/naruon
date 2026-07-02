@@ -16,6 +16,12 @@ interface QualityCheckTabProps {
   dataQualitySurface: DataQualitySurfaceResponse | null;
 }
 
+function getEndpointStatusLabel(status: string): string {
+  if (status === 'segment_backed') return '문단 근거 연결됨';
+  if (status === 'node_only') return '노드 근거만 있음';
+  return '근거 endpoint 없음';
+}
+
 export function QualityCheckTab({
   dataSurfaceStatus,
   dataQualitySurface,
@@ -23,6 +29,8 @@ export function QualityCheckTab({
   const attachmentParseBreakdown = dataQualitySurface?.attachment_parse_breakdown ?? [];
   const contentGraphBreakdown = dataQualitySurface?.content_graph_breakdown ?? [];
   const knowledgeGraphBreakdown = dataQualitySurface?.knowledge_graph_breakdown ?? [];
+  const contentEvidenceSamples = dataQualitySurface?.content_graph_evidence_samples ?? [];
+  const knowledgeGraphEvidenceSamples = dataQualitySurface?.knowledge_graph_evidence_samples ?? [];
 
   return (
 <div className="space-y-6">
@@ -149,6 +157,64 @@ export function QualityCheckTab({
                           <div>
                             <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {contentEvidenceSamples.length > 0 && (
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-border bg-secondary/30">
+                    <h2 className="font-bold text-lg">문단 근거 샘플</h2>
+                  </div>
+                  <div className="grid gap-3 p-5">
+                    {contentEvidenceSamples.map((item) => (
+                      <article key={item.sample_key} className="rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(item.segment_kind)}</h3>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">source {toSafeReactText(item.source_kind)}</p>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">{toSafeReactText(item.segment_path)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            sample
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs">
+                          <div>
+                            <dt className="font-black text-muted-foreground">단어 수</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(item.word_count)}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {knowledgeGraphEvidenceSamples.length > 0 && (
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-border bg-secondary/30">
+                    <h2 className="font-bold text-lg">KG 근거 샘플</h2>
+                  </div>
+                  <div className="grid gap-3 p-5">
+                    {knowledgeGraphEvidenceSamples.map((item) => (
+                      <article key={item.sample_key} className="rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(item.edge_kind)}</h3>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">source {toSafeReactText(item.source_kind)}</p>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">{toSafeReactText(item.edge_path)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {getEndpointStatusLabel(item.endpoint_status)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Endpoint</dt>
+                            <dd className="mt-1 text-sm font-bold">{getEndpointStatusLabel(item.endpoint_status)}</dd>
                           </div>
                         </dl>
                       </article>

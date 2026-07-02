@@ -268,6 +268,24 @@ const dataQualitySurface = {
       provider_write_executed: false,
     },
   ],
+  content_graph_evidence_samples: [
+    {
+      sample_key: "segment_hidden_1",
+      source_kind: "email_body",
+      segment_kind: "paragraph",
+      segment_path: "/document[1]/paragraph[1]",
+      word_count: 12,
+    },
+  ],
+  knowledge_graph_evidence_samples: [
+    {
+      sample_key: "edge_hidden_1",
+      source_kind: "email_body",
+      edge_kind: "node_has_segment",
+      edge_path: "/document[1]/paragraph[1]/has/segment[1]",
+      endpoint_status: "segment_backed",
+    },
+  ],
   connector_events: [
     {
       event_uid: "connector_evt_data_quality",
@@ -749,16 +767,25 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("unsupported_content_type");
     expect(container.textContent).toContain("DOM/문단 구조별 현황");
     expect(container.textContent).toContain("KG edge 형식별 현황");
+    expect(container.textContent).toContain("문단 근거 샘플");
+    expect(container.textContent).toContain("KG 근거 샘플");
     expect(container.textContent).toContain("email_body");
     expect(container.textContent).toContain("paragraph");
     expect(container.textContent).toContain("node_has_segment");
+    expect(container.textContent).toContain("/document[1]/paragraph[1]");
+    expect(container.textContent).toContain("/document[1]/paragraph[1]/has/segment[1]");
+    expect(container.textContent).toContain("문단 근거 연결됨");
     expect(container.textContent).toContain("의도만 기록");
     expect(container.textContent).not.toContain("provider_write_executed=false");
     expect(container.textContent).not.toContain("email_attachments.content_type");
     expect(container.textContent).not.toContain("content_segments.source_kind");
     expect(container.textContent).not.toContain("content_segments.safe_text_content");
+    expect(container.textContent).not.toContain("content_segments.segment_path");
     expect(container.textContent).not.toContain("knowledge_graph_edges.source_kind");
     expect(container.textContent).not.toContain("knowledge_graph_edges.source_segment_id");
+    expect(container.textContent).not.toContain("knowledge_graph_edges.edge_path");
+    expect(container.textContent).not.toContain("segment_hidden_1");
+    expect(container.textContent).not.toContain("edge_hidden_1");
     expect(container.textContent).not.toContain("발견된 심각한 데이터 품질 문제가 없습니다.");
   });
 

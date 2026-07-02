@@ -131,6 +131,20 @@ export type DataQualitySurfaceResponse = {
     evidence_source: string;
     provider_write_executed: boolean;
   }>;
+  content_graph_evidence_samples?: Array<{
+    sample_key: string;
+    source_kind: string;
+    segment_kind: string;
+    segment_path: string;
+    word_count: number;
+  }>;
+  knowledge_graph_evidence_samples?: Array<{
+    sample_key: string;
+    source_kind: string;
+    edge_kind: string;
+    edge_path: string;
+    endpoint_status: 'segment_backed' | 'node_only' | 'missing_endpoint';
+  }>;
   connector_events: Array<{
     event_uid: string;
     signal_key: string;
