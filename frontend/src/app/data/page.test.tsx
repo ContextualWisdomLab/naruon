@@ -680,6 +680,27 @@ const diligenceRiskMatrix = [
   },
 ];
 
+const closeDependencyBySeverity: Record<string, string> = {
+  critical: "critical evidence gate",
+  high: "high priority evidence gate",
+  medium: "coverage exception gate",
+};
+
+const diligenceCloseProofPlan = diligenceRiskMatrix.map((risk) => ({
+  proof_key: `proof_${risk.matrix_key}`,
+  severity_code: risk.severity_code,
+  owner_area: risk.owner_area,
+  related_artifact: risk.related_artifact,
+  exception_count: risk.exception_count,
+  required_proof_artifact: risk.related_artifact,
+  acceptance_criteria: `All ${risk.exception_count} exception(s) for ${risk.owner_area} are resolved and ${risk.related_artifact} is regenerated without raw content or stable IDs.`,
+  verification_method: "Regenerate the evidence snapshot and run python scripts/verify_evidence_snapshot.py <snapshot.json>.",
+  buyer_close_dependency: closeDependencyBySeverity[risk.severity_code],
+  close_gate_status: "blocked",
+  next_action: risk.recommended_next_action,
+  provider_write_executed: false,
+}));
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1047,6 +1068,7 @@ const dataEvidenceSnapshot = {
     "content_graph_topology_counts",
     "data_room_package_manifest",
     "diligence_exception_register",
+    "diligence_close_proof_plan",
     "diligence_risk_matrix",
     "evidence_packet_checklist",
     "generated_at",
@@ -1135,6 +1157,7 @@ const dataEvidenceSnapshot = {
   evidence_packet_checklist: evidencePacketChecklist,
   data_room_package_manifest: dataRoomPackageManifest,
   diligence_exception_register: diligenceExceptionRegister,
+  diligence_close_proof_plan: diligenceCloseProofPlan,
   diligence_risk_matrix: diligenceRiskMatrix,
   parser_manifest_summary: [
     {
@@ -1769,6 +1792,13 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Critical close blocker concentration");
     expect(container.textContent).toContain("2 critical exception(s)");
     expect(container.textContent).toContain("exception_repair_thread_id_integrity");
+    expect(container.textContent).toContain("Diligence close proof plan");
+    expect(container.textContent).toContain("critical evidence gate");
+    expect(container.textContent).toContain("blocked");
+    expect(container.textContent).toContain("All 2 exception(s)");
+    expect(container.textContent).toContain("Regenerate the evidence snapshot");
+    expect(container.textContent).toContain("verify_evidence_snapshot.py");
+    expect(container.textContent).toContain("Proof artifact");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
     expect(container.textContent).toContain("text/markdown");
@@ -1846,6 +1876,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.digest_algorithm).toBe("sha256");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_exception_register");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_risk_matrix");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_proof_plan");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -1891,6 +1922,23 @@ describe("DataPage", () => {
     expect(copiedSnapshot.diligence_risk_matrix[5].matrix_key).toBe("risk_medium_attachment_parsing_remediation_actions_json");
     expect(copiedSnapshot.diligence_risk_matrix[5].severity_code).toBe("medium");
     expect(copiedSnapshot.diligence_risk_matrix[5].exception_count).toBe(1);
+    expect(copiedSnapshot.diligence_close_proof_plan).toHaveLength(6);
+    expect(copiedSnapshot.diligence_close_proof_plan[0]).toEqual({
+      proof_key: "proof_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+      severity_code: "critical",
+      owner_area: "email_ingestion",
+      related_artifact: "acquisition-readiness-summary.json",
+      exception_count: 2,
+      required_proof_artifact: "acquisition-readiness-summary.json",
+      acceptance_criteria: "All 2 exception(s) for email_ingestion are resolved and acquisition-readiness-summary.json is regenerated without raw content or stable IDs.",
+      verification_method: "Regenerate the evidence snapshot and run python scripts/verify_evidence_snapshot.py <snapshot.json>.",
+      buyer_close_dependency: "critical evidence gate",
+      close_gate_status: "blocked",
+      next_action: "Resolve exception_repair_thread_id_integrity, exception_backfill_dedupe_fingerprints, then regenerate the evidence snapshot.",
+      provider_write_executed: false,
+    });
+    expect(copiedSnapshot.diligence_close_proof_plan[5].proof_key).toBe("proof_risk_medium_attachment_parsing_remediation_actions_json");
+    expect(copiedSnapshot.diligence_close_proof_plan[5].close_gate_status).toBe("blocked");
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

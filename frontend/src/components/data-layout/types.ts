@@ -50,6 +50,7 @@ export type SurfaceStatusCode = 'ready' | 'running' | 'needs_attention' | 'pendi
 export type QualityStatusCode = 'pass' | 'needs_attention' | 'pending';
 export type AcquisitionReadinessState = 'ready' | 'needs_attention' | 'pending';
 export type RemediationPriority = 'critical' | 'high' | 'medium';
+export type CloseGateStatus = 'blocked' | 'ready';
 export type DiligenceRecommendation = 'ready_for_diligence' | 'remediate_before_close' | 'insufficient_evidence';
 export type DiligenceRiskLevel = 'low' | 'medium' | 'high';
 export type RepositoryAssetState = 'ready' | 'needs_attention';
@@ -314,6 +315,20 @@ export type DataEvidenceSnapshotResponse = {
     buyer_implication: string;
     recommended_next_action: string;
     blocks_close: boolean;
+    provider_write_executed: boolean;
+  }>;
+  diligence_close_proof_plan: Array<{
+    proof_key: string;
+    severity_code: RemediationPriority;
+    owner_area: string;
+    related_artifact: string;
+    exception_count: number;
+    required_proof_artifact: string;
+    acceptance_criteria: string;
+    verification_method: string;
+    buyer_close_dependency: string;
+    close_gate_status: CloseGateStatus;
+    next_action: string;
     provider_write_executed: boolean;
   }>;
   parser_manifest_summary: Array<{
