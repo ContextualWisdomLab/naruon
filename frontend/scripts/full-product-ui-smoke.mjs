@@ -893,10 +893,22 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
 
   if (routeSpec.name === "mail") {
     await page.getByText("20B smoke source", { exact: true }).first().click();
-    await page.getByRole("button", { name: "근거 원본 보기", exact: true }).click();
-    await page.getByRole("dialog", { name: "맥락 종합 근거", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "근거 원본 닫기", exact: true }).click();
-    await page.getByRole("dialog", { name: "맥락 종합 근거", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
+    const sourceDrawerTrigger = page.getByRole("button", { name: "근거 원본 보기", exact: true });
+    await sourceDrawerTrigger.click();
+    const sourceDrawer = page.getByRole("dialog", { name: "맥락 종합 근거", exact: true });
+    await sourceDrawer.waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "근거 원본 닫기");
+    const closeSourceDrawerButton = sourceDrawer.getByRole("button", { name: "근거 원본 닫기", exact: true });
+    const openOriginalButton = sourceDrawer.getByRole("button", { name: "스레드 원문으로 이동", exact: true });
+    await openOriginalButton.focus();
+    await page.keyboard.press("Tab");
+    await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "근거 원본 닫기");
+    await closeSourceDrawerButton.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.waitForFunction(() => document.activeElement?.textContent?.replace(/\s+/g, " ").trim() === "스레드 원문으로 이동");
+    await page.keyboard.press("Escape");
+    await sourceDrawer.waitFor({ state: "hidden", timeout: 10_000 });
+    await page.waitForFunction(() => document.activeElement?.textContent?.replace(/\s+/g, " ").trim() === "근거 원본 보기");
     await page.getByRole("button", { name: "답장 초안 생성", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("#reply-draft")?.value.includes("검토 가능한 답장 초안입니다."));
     await page.getByRole("button", { name: "답장 보내기", exact: true }).click();
@@ -912,6 +924,10 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     return [
       evidence("mail:select-message"),
       evidence("mail:open-source-drawer"),
+      evidence("mail:verify-source-drawer-initial-focus"),
+      evidence("mail:verify-source-drawer-tab-trap"),
+      evidence("mail:verify-source-drawer-escape-close"),
+      evidence("mail:verify-source-drawer-focus-restore"),
       evidence("mail:generate-reply-draft"),
       evidence("mail:send-simulated-reply"),
       evidence("mail:send-provider-reply"),
