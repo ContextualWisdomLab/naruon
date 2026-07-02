@@ -320,6 +320,99 @@ const snapshotVerificationHandoff = {
   provider_write_executed: false,
 };
 
+const evidencePacketChecklist = [
+  {
+    checklist_key: "privacy_redaction_policy",
+    display_name: "Privacy redaction policy",
+    state_code: "ready",
+    source_field: "privacy_redaction_policy",
+    required_artifact: "redacted_snapshot_policy",
+    detail_text: "Snapshot excludes raw content, stable identifiers, credentials, and database evidence strings.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "parser_manifest",
+    display_name: "Attachment parser manifest",
+    state_code: "ready",
+    source_field: "parser_manifest_summary",
+    required_artifact: "attachment_parser_registry",
+    detail_text: "Parser family, supported content types, extensions, and unsupported binary fallback are included.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "content_graph_topology",
+    display_name: "DOM paragraph topology",
+    state_code: "ready",
+    source_field: "content_graph_topology_counts",
+    required_artifact: "source_kind_segment_kind_counts",
+    detail_text: "Email body and attachment segments are summarized by source and paragraph or heading kind.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "content_graph_samples",
+    display_name: "Paragraph evidence samples",
+    state_code: "ready",
+    source_field: "content_graph_evidence_samples",
+    required_artifact: "redacted_segment_samples",
+    detail_text: "Redacted paragraph samples include source kind, segment kind, path, and word count.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "knowledge_graph_topology",
+    display_name: "Knowledge graph topology",
+    state_code: "ready",
+    source_field: "knowledge_graph_topology_counts",
+    required_artifact: "source_kind_edge_kind_counts",
+    detail_text: "Stored KG edges are summarized by source and edge kind for acquisition review.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "knowledge_graph_samples",
+    display_name: "KG evidence samples",
+    state_code: "ready",
+    source_field: "knowledge_graph_evidence_samples",
+    required_artifact: "redacted_edge_samples",
+    detail_text: "Redacted KG samples include edge path and endpoint readiness without exposing raw IDs.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "semantic_relation_samples",
+    display_name: "Semantic relation evidence",
+    state_code: "ready",
+    source_field: "semantic_relation_evidence_samples",
+    required_artifact: "source_backed_relation_samples",
+    detail_text: "Semantic relationship samples include confidence, source scope, and next action.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "semantic_extraction_manifest",
+    display_name: "Semantic extraction manifest",
+    state_code: "ready",
+    source_field: "semantic_extraction_manifest",
+    required_artifact: "extractor_provenance_manifest",
+    detail_text: "Entity/relation extraction readiness and required provenance evidence are included.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "acquisition_readiness_gate",
+    display_name: "Acquisition readiness gate",
+    state_code: "needs_attention",
+    source_field: "acquisition_readiness_gate",
+    required_artifact: "buyer_evidence_readiness_gate",
+    detail_text: "Buyer readiness score, blocking checks, KPIs, decision summary, and remediation actions are included.",
+    provider_write_executed: false,
+  },
+  {
+    checklist_key: "offline_snapshot_verification",
+    display_name: "Offline snapshot verification",
+    state_code: "ready",
+    source_field: "verification_handoff",
+    required_artifact: "offline_digest_verifier_handoff",
+    detail_text: "Offline verifier command, accepted input, digest algorithm, excluded fields, and exit codes are included.",
+    provider_write_executed: false,
+  },
+];
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -685,6 +778,7 @@ const dataEvidenceSnapshot = {
     "audit_event",
     "content_graph_evidence_samples",
     "content_graph_topology_counts",
+    "evidence_packet_checklist",
     "generated_at",
     "knowledge_graph_evidence_samples",
     "knowledge_graph_topology_counts",
@@ -768,6 +862,7 @@ const dataEvidenceSnapshot = {
     total_checks: 12,
   },
   verification_handoff: snapshotVerificationHandoff,
+  evidence_packet_checklist: evidencePacketChecklist,
   parser_manifest_summary: [
     {
       parser_key: "plain_text",
@@ -1377,6 +1472,13 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("file_path_or_stdin");
     expect(container.textContent).toContain("digest_mismatch");
     expect(container.textContent).toContain("4");
+    expect(container.textContent).toContain("Buyer diligence packet checklist");
+    expect(container.textContent).toContain("Privacy redaction policy");
+    expect(container.textContent).toContain("Attachment parser manifest");
+    expect(container.textContent).toContain("DOM paragraph topology");
+    expect(container.textContent).toContain("Offline snapshot verification");
+    expect(container.textContent).toContain("redacted_snapshot_policy");
+    expect(container.textContent).toContain("buyer_evidence_readiness_gate");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
     expect(container.textContent).toContain("text/markdown");
@@ -1454,6 +1556,9 @@ describe("DataPage", () => {
     expect(copiedSnapshot.digest_algorithm).toBe("sha256");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
+    expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
+    expect(copiedSnapshot.evidence_packet_checklist[0].checklist_key).toBe("privacy_redaction_policy");
+    expect(copiedSnapshot.evidence_packet_checklist[8].state_code).toBe("needs_attention");
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

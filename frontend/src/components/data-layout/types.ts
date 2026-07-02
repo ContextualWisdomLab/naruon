@@ -268,6 +268,15 @@ export type DataEvidenceSnapshotResponse = {
     handoff_text: string;
     provider_write_executed: boolean;
   };
+  evidence_packet_checklist: Array<{
+    checklist_key: string;
+    display_name: string;
+    state_code: AcquisitionReadinessState;
+    source_field: string;
+    required_artifact: string;
+    detail_text: string;
+    provider_write_executed: boolean;
+  }>;
   parser_manifest_summary: Array<{
     parser_key: string;
     display_name: string;
