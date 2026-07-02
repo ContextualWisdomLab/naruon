@@ -130,7 +130,7 @@ export function QualityCheckTab({
                         </dd>
                       </div>
                       <div>
-                        <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                        <dt className="font-black text-muted-foreground">Write boundary</dt>
                         <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(evidenceSnapshot.verification_handoff.provider_write_executed)}</dd>
                       </div>
                     </dl>
@@ -160,7 +160,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.source_field)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -213,7 +213,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{commercialCloseScorecard.verifier_ready ? 'ready' : 'needs attention'}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseScorecard.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -314,7 +314,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseExecutionPlan.verification_command)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseExecutionPlan.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -396,7 +396,7 @@ export function QualityCheckTab({
                                   <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(lane.verification_command)}</dd>
                                 </div>
                                 <div>
-                                  <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
                                   <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(lane.provider_write_executed)}</dd>
                                 </div>
                               </dl>
@@ -454,7 +454,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.guardrail_breach_count)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseKpiOperatingModel.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -500,7 +500,7 @@ export function QualityCheckTab({
                                   <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(metric.source_field)}</dd>
                                 </div>
                                 <div>
-                                  <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
                                   <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(metric.provider_write_executed)}</dd>
                                 </div>
                               </dl>
@@ -558,7 +558,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(releaseSummary.verification_command)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(releaseSummary.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -617,7 +617,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">stable IDs: {item.contains_stable_identifiers ? 'yes' : 'no'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -664,7 +664,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">blocks close: {item.blocks_close ? 'yes' : 'no'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -707,7 +707,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">blocks close: {item.blocks_close ? 'yes' : 'no'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -775,7 +775,7 @@ export function QualityCheckTab({
                             </dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">
                               {getWriteBoundaryLabel(closeDecisionSummary.provider_write_executed)}
                             </dd>
@@ -832,7 +832,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{item.snapshot_verification_required ? 'required' : 'not required'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -889,7 +889,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{item.snapshot_verification_required ? 'required' : 'not required'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -964,7 +964,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.severity_code)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1019,7 +1019,7 @@ export function QualityCheckTab({
                               <dd className="mt-1 text-sm font-bold">{acceptanceSummary.snapshot_verification_required ? 'required' : 'not required'}</dd>
                             </div>
                             <div>
-                              <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                              <dt className="font-black text-muted-foreground">Write boundary</dt>
                               <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acceptanceSummary.provider_write_executed)}</dd>
                             </div>
                           </dl>
@@ -1090,7 +1090,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{item.snapshot_verification_required ? 'required' : 'not required'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1147,7 +1147,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.severity_code)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1196,7 +1196,7 @@ export function QualityCheckTab({
                       <dd className="mt-1 text-sm font-bold">{acquisitionReadinessGate.snapshot_verification_ready ? 'Snapshot verification ready' : 'Snapshot verification pending'}</dd>
                     </div>
                     <div>
-                      <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                      <dt className="font-black text-muted-foreground">Write boundary</dt>
                       <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acquisitionReadinessGate.provider_write_executed)}</dd>
                     </div>
                   </dl>
@@ -1228,7 +1228,7 @@ export function QualityCheckTab({
                           <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(acquisitionReadinessGate.decision_summary.summary_key)}</dd>
                         </div>
                         <div>
-                          <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                          <dt className="font-black text-muted-foreground">Write boundary</dt>
                           <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acquisitionReadinessGate.decision_summary.provider_write_executed)}</dd>
                         </div>
                       </dl>
@@ -1271,7 +1271,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(kpi.owner_area)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(kpi.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1309,7 +1309,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(action.blocking_check_key)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dt className="font-black text-muted-foreground">Write boundary</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(action.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1378,7 +1378,7 @@ export function QualityCheckTab({
                           <dd className="mt-1 text-sm font-bold">{formatCount(check.total_count)}</dd>
                         </div>
                         <div>
-                          <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                          <dt className="font-black text-muted-foreground">Write boundary</dt>
                           <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(check.provider_write_executed)}</dd>
                         </div>
                       </dl>
@@ -1409,7 +1409,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{formatCount(item.object_count)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -1441,7 +1441,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{formatCount(item.object_count)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -1542,7 +1542,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{formatCount(item.source_backed_relation_count)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -1580,7 +1580,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.source_scope)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(false)}</dd>
                           </div>
                         </dl>
@@ -1619,7 +1619,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.parser_key)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                           </div>
                         </dl>
