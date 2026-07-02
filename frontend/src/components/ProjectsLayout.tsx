@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, Clock, FolderOpen, ListChecks, Search, User } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Clock, FileText, FolderOpen, GitBranch, ListChecks, Network, Search, User } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
 import { toSafeReactText } from '@/lib/safe-text';
@@ -28,6 +28,67 @@ interface TicketTask {
   related_thread_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface ProjectCitation {
+  content_segment_uid: string;
+  source_kind: string;
+  source_record_uid: string;
+  heading_path: string | null;
+  segment_path: string | null;
+  ordinal_index: number;
+  safe_text_excerpt: string;
+}
+
+interface ProjectCandidate {
+  candidate_uid: string;
+  project_uid: string;
+  title: string;
+  status_code: string;
+  score: number;
+  object_count: number;
+  requirement_count: number;
+  issue_count: number;
+  milestone_count: number;
+  deliverable_count: number;
+  participant_count: number;
+  source_segment_count: number;
+  representative_object_uids: string[];
+  citation_bundle: ProjectCitation[];
+  updated_at: string | null;
+}
+
+interface ProjectCandidateListResponse {
+  candidates: ProjectCandidate[];
+}
+
+interface ProjectTraceObject {
+  object_uid: string;
+  object_type: string;
+  title: string;
+  summary: string;
+  status_code: string;
+  confidence: number;
+  source_segment_uids: string[];
+  citation_bundle: ProjectCitation[];
+  attributes: Record<string, unknown>;
+}
+
+interface ProjectTraceEdge {
+  edge_uid: string;
+  source_uid: string;
+  target_uid: string;
+  edge_type: string;
+  confidence: number;
+  source_segment_uids: string[];
+  citation_bundle: ProjectCitation[];
+}
+
+interface ProjectTraceability {
+  project_uid: string;
+  candidate: ProjectCandidate;
+  objects: ProjectTraceObject[];
+  edges: ProjectTraceEdge[];
 }
 
 interface ProjectSummary {
@@ -96,12 +157,14 @@ function buildProjectStatus(tasks: TicketTask[]): ProjectSummary['status'] {
 }
 
 function getProjectEvidenceLabel(evidence: string) {
+  if (evidence === 'project_graph') return '문단 KG 근거';
   if (evidence === 'project_folders') return 'WebDAV 폴더 근거';
   if (evidence === 'ticket_tasks') return '작업 근거';
   return '원본 근거';
 }
 
 function getProjectBoundaryLabel(project: ProjectSummary) {
+  if (project.evidence === 'project_graph') return '문단 citation 경계 확인됨';
   return project.sourcePath ? '저장소 경계 확인됨' : '작업 대기열 기준';
 }
 
@@ -168,9 +231,74 @@ function countByStatus(tasks: TicketTask[], status: TaskStatus) {
   return tasks.filter((task) => task.status === status).length;
 }
 
+function semanticStatusToProjectStatus(statusCode: string): ProjectSummary['status'] {
+  if (statusCode === 'approved' || statusCode === 'confirmed') return '진행 중';
+  if (statusCode === 'needs_review') return '검토 중';
+  return '대기 중';
+}
+
+function semanticProgress(candidate: ProjectCandidate) {
+  return Math.max(0, Math.min(99, Math.round(candidate.score * 100)));
+}
+
+function buildSemanticProjects(candidates: ProjectCandidate[]): ProjectSummary[] {
+  return candidates.map((candidate) => ({
+    id: candidate.project_uid,
+    title: safeText(candidate.title, '이름 없는 프로젝트 후보'),
+    status: semanticStatusToProjectStatus(candidate.status_code),
+    progress: semanticProgress(candidate),
+    category: 'Semantic KG 프로젝트',
+    evidence: 'project_graph',
+    sourcePath: null,
+  }));
+}
+
+function objectTypeLabel(objectType: string) {
+  switch (objectType) {
+    case 'project_candidate':
+      return '프로젝트 후보';
+    case 'requirement':
+      return '요구사항';
+    case 'feature':
+      return '기능정의';
+    case 'issue':
+      return '이슈';
+    case 'milestone':
+      return '일정';
+    case 'wbs_item':
+      return 'WBS';
+    case 'deliverable':
+      return '산출물';
+    case 'participant':
+      return '인물';
+    case 'data_requirement':
+      return '데이터 요건';
+    case 'erd_candidate':
+      return 'ERD 후보';
+    case 'infra_requirement':
+      return '인프라 요건';
+    case 'report_delta':
+      return '보고 변화';
+    case 'wiki_projection':
+      return '위키 투영';
+    default:
+      return '프로젝트 객체';
+  }
+}
+
+function citationSourceLabel(citation: ProjectCitation) {
+  if (citation.segment_path) return citation.segment_path;
+  if (citation.heading_path) return citation.heading_path;
+  return citation.source_kind;
+}
+
 export function ProjectsLayout() {
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [tasks, setTasks] = useState<TicketTask[]>([]);
+  const [semanticCandidates, setSemanticCandidates] = useState<ProjectCandidate[]>([]);
+  const [traceability, setTraceability] = useState<ProjectTraceability | null>(null);
+  const [traceFailureProjectUid, setTraceFailureProjectUid] = useState<string | null>(null);
+  const [selectedObjectUid, setSelectedObjectUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -186,12 +314,14 @@ export function ProjectsLayout() {
     void Promise.all([
       apiClient.get<ProjectFolder[]>('/api/webdav/folders'),
       apiClient.get<TicketTask[]>('/api/tasks'),
+      apiClient.get<ProjectCandidateListResponse>('/api/projects/candidates'),
       apiClient.getServerSessionClaims(),
     ])
-      .then(([folderRows, taskRows, claims]) => {
+      .then(([folderRows, taskRows, candidateRows, claims]) => {
         if (cancelled) return;
         setFolders(Array.isArray(folderRows) ? folderRows : []);
         setTasks(Array.isArray(taskRows) ? taskRows : []);
+        setSemanticCandidates(candidateRows && Array.isArray(candidateRows.candidates) ? candidateRows.candidates : []);
         setProjectScope({
           userId: claims.userId,
           organizationId: claims.organizationId,
@@ -202,6 +332,7 @@ export function ProjectsLayout() {
         if (cancelled) return;
         setFolders([]);
         setTasks([]);
+        setSemanticCandidates([]);
         setError(fetchError.message ? '프로젝트 근거를 불러오지 못했습니다. 데이터 연결 상태를 확인해 주세요.' : '프로젝트 근거를 불러오지 못했습니다.');
       })
       .finally(() => {
@@ -217,8 +348,12 @@ export function ProjectsLayout() {
     () => folders.filter((folder) => isAuthorizedToViewProject(folder, projectScope)),
     [folders, projectScope],
   );
-  const projects = useMemo(() => buildProjects(authorizedFolders, tasks), [authorizedFolders, tasks]);
+  const projects = useMemo(() => {
+    const semanticProjects = buildSemanticProjects(semanticCandidates);
+    return semanticProjects.length > 0 ? semanticProjects : buildProjects(authorizedFolders, tasks);
+  }, [authorizedFolders, semanticCandidates, tasks]);
   const activeProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
+  const activeSemanticCandidate = semanticCandidates.find((candidate) => candidate.project_uid === activeProject.id) ?? null;
   const projectTasks = tasks;
   const openCount = countByStatus(projectTasks, 'open');
   const inProgressCount = countByStatus(projectTasks, 'in_progress');
@@ -228,6 +363,34 @@ export function ProjectsLayout() {
   const projectEvidenceLabel = getProjectEvidenceLabel(activeProject.evidence);
   const projectBoundaryLabel = getProjectBoundaryLabel(activeProject);
   const workspaceScopeLabel = getWorkspaceScopeLabel(projectScope);
+  const currentTraceability = traceability?.project_uid === activeSemanticCandidate?.project_uid ? traceability : null;
+  const traceLoading = Boolean(activeSemanticCandidate && !currentTraceability && traceFailureProjectUid !== activeSemanticCandidate.project_uid);
+  const selectedTraceObject = currentTraceability?.objects.find((item) => item.object_uid === selectedObjectUid) ?? currentTraceability?.objects[0] ?? null;
+  const graphHealthPercent = activeSemanticCandidate ? semanticProgress(activeSemanticCandidate) : 0;
+
+  useEffect(() => {
+    if (!activeSemanticCandidate) {
+      return;
+    }
+    let cancelled = false;
+    const projectUid = activeSemanticCandidate.project_uid;
+    void apiClient.get<ProjectTraceability>(`/api/projects/${encodeURIComponent(activeSemanticCandidate.project_uid)}/traceability`)
+      .then((response) => {
+        if (cancelled) return;
+        setTraceability(response);
+        setTraceFailureProjectUid(null);
+        setSelectedObjectUid(response.objects[0]?.object_uid ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTraceability(null);
+        setTraceFailureProjectUid(projectUid);
+        setSelectedObjectUid(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSemanticCandidate]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-x-hidden bg-background text-foreground">
@@ -320,6 +483,116 @@ export function ProjectsLayout() {
               <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
                 {error}
               </div>
+            ) : null}
+
+            {activeSemanticCandidate ? (
+              <section aria-label="프로젝트 지식그래프 상태" className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="flex items-center gap-2 font-bold text-lg"><Network className="size-5 text-primary" /> 프로젝트 지식그래프</h2>
+                    <p className="mt-1 text-sm font-semibold text-muted-foreground">모든 항목은 문단 citation bundle을 기준으로 표시됩니다.</p>
+                  </div>
+                  <div className="grid min-w-44 grid-cols-2 gap-2 text-center">
+                    <div className="rounded-lg border border-border bg-background px-3 py-2">
+                      <p className="text-xs font-bold text-muted-foreground">근거 문단</p>
+                      <p className="font-mono text-lg font-black">{activeSemanticCandidate.source_segment_count}</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background px-3 py-2">
+                      <p className="text-xs font-bold text-muted-foreground">그래프 객체</p>
+                      <p className="font-mono text-lg font-black">{activeSemanticCandidate.object_count}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid gap-4 p-5 md:grid-cols-5">
+                  {[
+                    { label: '요구사항', value: activeSemanticCandidate.requirement_count },
+                    { label: '이슈', value: activeSemanticCandidate.issue_count },
+                    { label: '일정', value: activeSemanticCandidate.milestone_count },
+                    { label: '산출물', value: activeSemanticCandidate.deliverable_count },
+                    { label: '인물', value: activeSemanticCandidate.participant_count },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-lg border border-border bg-background p-3">
+                      <p className="text-xs font-bold text-muted-foreground">{item.label}</p>
+                      <p className="mt-2 font-mono text-xl font-black">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-border">
+                      <div className="h-full bg-primary" style={{ width: `${graphHealthPercent}%` }} />
+                    </div>
+                    <span className="font-mono text-xs font-black">{graphHealthPercent}%</span>
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
+            {activeSemanticCandidate ? (
+              <section aria-label="프로젝트 추적성 맵" className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                <div className="flex items-center justify-between border-b border-border p-5">
+                  <h2 className="flex items-center gap-2 font-bold text-lg"><GitBranch className="size-5 text-primary" /> Traceability Map</h2>
+                  <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-muted-foreground">
+                    {traceLoading ? '동기화 중' : `${currentTraceability?.edges.length ?? 0} edges`}
+                  </span>
+                </div>
+                {currentTraceability ? (
+                  <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                    <div className="min-w-0 divide-y divide-border">
+                      {currentTraceability.objects.slice(0, 10).map((projectObject) => (
+                        <button
+                          key={projectObject.object_uid}
+                          type="button"
+                          onClick={() => setSelectedObjectUid(projectObject.object_uid)}
+                          className={`grid w-full gap-2 px-5 py-4 text-left transition-colors hover:bg-secondary/50 ${selectedTraceObject?.object_uid === projectObject.object_uid ? 'bg-primary/5' : 'bg-card'}`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">{objectTypeLabel(projectObject.object_type)}</span>
+                            <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-muted-foreground">{projectObject.citation_bundle.length} citations</span>
+                            <span className="font-mono text-xs font-bold text-muted-foreground">{Math.round(projectObject.confidence * 100)}%</span>
+                          </div>
+                          <h3 className="line-clamp-2 break-keep text-sm font-bold">{safeText(projectObject.title, '제목 없는 그래프 객체')}</h3>
+                          <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{safeText(projectObject.summary, '요약 대기')}</p>
+                        </button>
+                      ))}
+                    </div>
+                    <aside aria-label="Evidence Inspector" className="min-w-0 border-t border-border bg-background p-5 lg:border-l lg:border-t-0">
+                      <h3 className="flex items-center gap-2 text-sm font-black"><FileText className="size-4 text-primary" /> Evidence Inspector</h3>
+                      {selectedTraceObject ? (
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <p className="text-xs font-bold text-muted-foreground">선택 객체</p>
+                            <p className="mt-1 break-keep text-sm font-bold">{safeText(selectedTraceObject.title, '선택된 객체')}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-muted-foreground">상태</p>
+                            <p className="mt-1 inline-flex rounded bg-secondary px-2 py-1 text-xs font-bold">{selectedTraceObject.status_code}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-muted-foreground">문단 근거</p>
+                            <ol className="mt-2 space-y-2">
+                              {selectedTraceObject.citation_bundle.slice(0, 3).map((citation) => (
+                                <li key={citation.content_segment_uid} className="rounded-lg border border-border bg-card p-3">
+                                  <p className="font-mono text-[11px] font-bold text-primary">{citationSourceLabel(citation)}</p>
+                                  <p className="mt-2 line-clamp-4 text-xs leading-5 text-foreground">{safeText(citation.safe_text_excerpt, '근거 문단 없음')}</p>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-4 rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">선택 가능한 지식그래프 객체가 없습니다.</p>
+                      )}
+                    </aside>
+                  </div>
+                ) : (
+                  <div className="p-5">
+                    <p className="rounded-xl border border-dashed border-border p-4 text-sm font-semibold text-muted-foreground">
+                      {traceLoading ? '추적성 맵을 불러오는 중입니다.' : '추적성 맵을 불러오지 못했습니다.'}
+                    </p>
+                  </div>
+                )}
+              </section>
             ) : null}
 
             {(viewMode === '프로젝트 상세' || viewMode === '마일스톤') && (
