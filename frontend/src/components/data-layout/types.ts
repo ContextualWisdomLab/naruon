@@ -59,6 +59,8 @@ export type CommercialCloseKpiMetricKind = 'primary' | 'driver' | 'guardrail';
 export type CommercialCloseKpiMetricStatus = 'target_met' | 'needs_attention';
 export type CommercialCloseKpiOperatingStatus = 'operating_ready' | 'operating_blocked';
 export type CommercialCloseBuyerBriefStatus = 'brief_ready' | 'brief_blocked';
+export type CommercialCloseSignoffStatus = 'signed_off' | 'blocked';
+export type CommercialCloseSignoffMatrixStatus = 'signoff_ready' | 'signoff_blocked';
 export type CloseGateStatus = 'blocked' | 'ready';
 export type DiligenceCloseDecision = 'ready_to_close' | 'close_blocked';
 export type DiligenceCloseSeverity = RemediationPriority | 'none';
@@ -456,6 +458,33 @@ export type DataEvidenceSnapshotResponse = {
     }>;
     reviewer_handoff_text: string;
     next_action_text: string;
+    provider_write_executed: boolean;
+  };
+  commercial_close_signoff_matrix: {
+    matrix_key: string;
+    target_contract_value_krw: number;
+    target_contract_label: string;
+    status_code: CommercialCloseSignoffMatrixStatus;
+    required_signoff_count: number;
+    signed_off_count: number;
+    blocked_signoff_count: number;
+    blocker_key_count: number;
+    blocker_keys: string[];
+    guardrail_summary_text: string;
+    reviewer_handoff_text: string;
+    next_action_text: string;
+    signoffs: Array<{
+      signoff_key: string;
+      reviewer_role: string;
+      owner_area: string;
+      status_code: CommercialCloseSignoffStatus;
+      source_field: string;
+      required_artifact: string;
+      blocker_keys: string[];
+      acceptance_text: string;
+      next_action_text: string;
+      provider_write_executed: boolean;
+    }>;
     provider_write_executed: boolean;
   };
   diligence_exception_register: Array<{

@@ -45,6 +45,7 @@ export function QualityCheckTab({
   const commercialCloseExecutionPlan = evidenceSnapshot?.commercial_close_execution_plan;
   const commercialCloseKpiOperatingModel = evidenceSnapshot?.commercial_close_kpi_operating_model;
   const commercialCloseBuyerBrief = evidenceSnapshot?.commercial_close_buyer_brief;
+  const commercialCloseSignoffMatrix = evidenceSnapshot?.commercial_close_signoff_matrix;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
@@ -573,6 +574,102 @@ export function QualityCheckTab({
                         <div className="mt-4 border-t border-border pt-4">
                           <p className="text-sm font-semibold leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.reviewer_handoff_text)}</p>
                           <p className="mt-1 text-sm font-semibold leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.next_action_text)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {commercialCloseSignoffMatrix && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Commercial close signoff matrix</p>
+                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseSignoffMatrix.status_code)}</h3>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseSignoffMatrix.guardrail_summary_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseSignoffMatrix.reviewer_handoff_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseSignoffMatrix.next_action_text)}</p>
+                          </div>
+                          <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(commercialCloseSignoffMatrix.status_code === 'signoff_ready' ? 'ready' : 'needs_attention')}`}>
+                            {toSafeReactText(commercialCloseSignoffMatrix.matrix_key)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Target review value</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseSignoffMatrix.target_contract_label)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Required signoffs</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseSignoffMatrix.required_signoff_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Signed off</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseSignoffMatrix.signed_off_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Blocked signoffs</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseSignoffMatrix.blocked_signoff_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Blocker keys</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseSignoffMatrix.blocker_key_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseSignoffMatrix.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseSignoffMatrix.blocker_keys.map((blockerKey) => (
+                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(blockerKey)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-4 divide-y divide-border">
+                          {commercialCloseSignoffMatrix.signoffs.map((signoff) => (
+                            <div key={signoff.signoff_key} className="py-4 first:pt-0 last:pb-0">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-black">{toSafeReactText(signoff.reviewer_role)}</h4>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(signoff.acceptance_text)}</p>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(signoff.next_action_text)}</p>
+                                </div>
+                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(signoff.status_code === 'signed_off' ? 'ready' : 'needs_attention')}`}>
+                                  {toSafeReactText(signoff.status_code)}
+                                </span>
+                              </div>
+                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Signoff key</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(signoff.signoff_key)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Owner</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(signoff.owner_area)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Required artifact</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(signoff.required_artifact)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(signoff.provider_write_executed)}</dd>
+                                </div>
+                                <div className="sm:col-span-2 lg:col-span-4">
+                                  <dt className="font-black text-muted-foreground">Source field</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(signoff.source_field)}</dd>
+                                </div>
+                              </dl>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {signoff.blocker_keys.map((blockerKey) => (
+                                  <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                    {toSafeReactText(blockerKey)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>

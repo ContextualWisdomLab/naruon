@@ -2242,6 +2242,162 @@ def _expected_commercial_close_buyer_brief():
     }
 
 
+def _expected_commercial_close_signoff_matrix():
+    buyer_brief = _expected_commercial_close_buyer_brief()
+    scorecard = _expected_commercial_close_readiness_scorecard()
+    execution_plan = _expected_commercial_close_execution_plan()
+    release_summary = _expected_data_room_release_summary()
+    acceptance_summary = _expected_diligence_close_acceptance_summary()
+    verifier_command = "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+    signoffs = [
+        {
+            "signoff_key": "signoff_commercial_diligence",
+            "reviewer_role": "commercial diligence reviewer",
+            "owner_area": "commercial_diligence",
+            "status_code": "blocked",
+            "source_field": "commercial_close_buyer_brief.status_code",
+            "required_artifact": "commercial-close-buyer-brief.json",
+            "blocker_keys": [
+                bullet["bullet_key"] for bullet in buyer_brief["blocker_bullets"][:5]
+            ],
+            "acceptance_text": (
+                "Buyer brief is accepted when status is brief_ready and top "
+                "blocker bullets are cleared."
+            ),
+            "next_action_text": buyer_brief["next_action_text"],
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_program_management",
+            "reviewer_role": "program manager",
+            "owner_area": "program_management",
+            "status_code": "blocked",
+            "source_field": "commercial_close_execution_plan.status_code",
+            "required_artifact": "commercial-close-execution-plan.json",
+            "blocker_keys": [
+                lane["lane_key"]
+                for lane in execution_plan["lanes"]
+                if lane["status_code"] != "ready"
+            ][:5],
+            "acceptance_text": (
+                "Execution plan is accepted when every lane is ready and the "
+                "plan status is execution_ready."
+            ),
+            "next_action_text": execution_plan["next_action_text"],
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_data_room_ops",
+            "reviewer_role": "data-room operations reviewer",
+            "owner_area": "data_room_ops",
+            "status_code": "blocked",
+            "source_field": "data_room_release_summary.release_status",
+            "required_artifact": "buyer-data-room-release.json",
+            "blocker_keys": release_summary["blocked_artifact_files"][:5],
+            "acceptance_text": (
+                "Data-room release is accepted when release_status is "
+                "release_ready and all required artifacts are ready."
+            ),
+            "next_action_text": release_summary["next_action_text"],
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_buyer_diligence",
+            "reviewer_role": "buyer diligence reviewer",
+            "owner_area": "buyer_diligence",
+            "status_code": "blocked",
+            "source_field": "diligence_close_acceptance_summary.decision_code",
+            "required_artifact": "buyer-acceptance-checklist.json",
+            "blocker_keys": acceptance_summary["blocker_keys"][:5],
+            "acceptance_text": (
+                "Buyer diligence is accepted when decision_code is ready_to_close "
+                "and no acceptance blocker keys remain."
+            ),
+            "next_action_text": acceptance_summary["next_action_text"],
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_privacy_security",
+            "reviewer_role": "privacy/security reviewer",
+            "owner_area": "privacy_security",
+            "status_code": "signed_off",
+            "source_field": "privacy_redaction_policy",
+            "required_artifact": "redacted-snapshot-policy.json",
+            "blocker_keys": [],
+            "acceptance_text": (
+                "Privacy guardrail is accepted when raw content, stable IDs, "
+                "credentials, and data-room privacy exposures are zero."
+            ),
+            "next_action_text": (
+                "Keep redaction guardrails enforced before buyer release."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_verification",
+            "reviewer_role": "verification reviewer",
+            "owner_area": "verification",
+            "status_code": "signed_off",
+            "source_field": "verification_handoff.verifier_command",
+            "required_artifact": "verify-evidence-snapshot.py",
+            "blocker_keys": [],
+            "acceptance_text": (
+                "Verification is accepted when the offline verifier command and "
+                "snapshot verification requirement are present."
+            ),
+            "next_action_text": f"Save copied snapshot JSON and run {verifier_command}.",
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_security_governance",
+            "reviewer_role": "security governance reviewer",
+            "owner_area": "security_governance",
+            "status_code": "signed_off",
+            "source_field": "provider_write_executed",
+            "required_artifact": "read-only-evidence-boundary",
+            "blocker_keys": [],
+            "acceptance_text": (
+                "Security governance is accepted when provider_write_executed is "
+                "false across the buyer evidence snapshot."
+            ),
+            "next_action_text": (
+                "Keep provider write execution disabled until explicit approval."
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+    blocked = [item for item in signoffs if item["status_code"] == "blocked"]
+    blocker_keys = list(
+        dict.fromkeys(key for item in blocked for key in item["blocker_keys"])
+    )
+    return {
+        "matrix_key": "commercial_close_signoff_matrix",
+        "target_contract_value_krw": scorecard["target_contract_value_krw"],
+        "target_contract_label": scorecard["target_contract_label"],
+        "status_code": "signoff_blocked",
+        "required_signoff_count": 7,
+        "signed_off_count": 3,
+        "blocked_signoff_count": 4,
+        "blocker_key_count": len(blocker_keys),
+        "blocker_keys": blocker_keys[:8],
+        "guardrail_summary_text": (
+            "Privacy, offline verification, and provider write guardrails are "
+            "signed off; 4 role signoff(s) remain blocked."
+        ),
+        "reviewer_handoff_text": (
+            "Route blocked signoffs to commercial diligence reviewer, program "
+            "manager, data-room operations reviewer, buyer diligence reviewer "
+            "before buyer release."
+        ),
+        "next_action_text": (
+            "Resolve blocked signoff rows, regenerate the evidence snapshot, rerun "
+            "the offline verifier, and reissue the signoff matrix."
+        ),
+        "signoffs": signoffs,
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -2823,6 +2979,11 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert (
         snapshot["commercial_close_buyer_brief"]
         == _expected_commercial_close_buyer_brief()
+    )
+    assert "commercial_close_signoff_matrix" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["commercial_close_signoff_matrix"]
+        == _expected_commercial_close_signoff_matrix()
     )
     assert "diligence_exception_register" in snapshot["canonical_payload_fields"]
     assert (
