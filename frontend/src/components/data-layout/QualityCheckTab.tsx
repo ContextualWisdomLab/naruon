@@ -149,6 +149,41 @@ export function QualityCheckTab({
                       </div>
                     </div>
                   )}
+                  {acquisitionReadinessGate.remediation_actions.length > 0 && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Remediation actions</p>
+                      <div className="mt-3 grid gap-3">
+                        {acquisitionReadinessGate.remediation_actions.map((action) => (
+                          <article key={action.action_key} className="rounded-xl border border-border bg-background p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <h3 className="text-sm font-black">{toSafeReactText(action.display_name)}</h3>
+                                <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(action.recommended_next_step)}</p>
+                                <p className="mt-1 text-xs font-semibold text-muted-foreground">{toSafeReactText(action.impact_text)}</p>
+                              </div>
+                              <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                P{formatCount(action.priority_rank)} · {toSafeReactText(action.priority_code)}
+                              </span>
+                            </div>
+                            <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+                              <div>
+                                <dt className="font-black text-muted-foreground">Owner area</dt>
+                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(action.owner_area)}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Check key</dt>
+                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(action.blocking_check_key)}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(action.provider_write_executed)}</dd>
+                              </div>
+                            </dl>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

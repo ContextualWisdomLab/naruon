@@ -361,6 +361,141 @@ def _expected_sample_key(prefix: str, value: str) -> str:
     return f"{prefix}_{digest[:16]}"
 
 
+def _expected_acquisition_remediation_actions():
+    return [
+        {
+            "action_key": "repair_thread_id_integrity",
+            "blocking_check_key": "thread_id_integrity",
+            "display_name": "Canonical thread repair",
+            "owner_area": "email_ingestion",
+            "priority_rank": 1,
+            "priority_code": "critical",
+            "impact_text": "Thread provenance must be stable before buyer review.",
+            "recommended_next_step": (
+                "Run canonical threading repair for affected scoped emails."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "backfill_dedupe_fingerprints",
+            "blocking_check_key": "dedupe_fingerprint",
+            "display_name": "Duplicate fingerprint backfill",
+            "owner_area": "email_ingestion",
+            "priority_rank": 2,
+            "priority_code": "critical",
+            "impact_text": "Duplicate detection must be reliable before corpus valuation.",
+            "recommended_next_step": (
+                "Backfill duplicate-detection fingerprints for scoped email records."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "recover_attachment_content",
+            "blocking_check_key": "attachment_content",
+            "display_name": "Attachment content extraction",
+            "owner_area": "attachment_parsing",
+            "priority_rank": 3,
+            "priority_code": "high",
+            "impact_text": "Attachment text gaps reduce searchable diligence coverage.",
+            "recommended_next_step": (
+                "Re-run attachment extraction for scoped attachments with blank safe "
+                "content."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "backfill_content_graph_coverage",
+            "blocking_check_key": "content_graph_coverage",
+            "display_name": "DOM paragraph segmentation backfill",
+            "owner_area": "content_graph",
+            "priority_rank": 4,
+            "priority_code": "high",
+            "impact_text": (
+                "Every scoped email needs paragraph segments before graph evidence is "
+                "complete."
+            ),
+            "recommended_next_step": (
+                "Backfill DOM paragraph segmentation for unsegmented scoped emails."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "backfill_knowledge_graph_coverage",
+            "blocking_check_key": "knowledge_graph_coverage",
+            "display_name": "Knowledge graph edge persistence",
+            "owner_area": "knowledge_graph",
+            "priority_rank": 5,
+            "priority_code": "high",
+            "impact_text": "Stored edges are required to prove graph extraction coverage.",
+            "recommended_next_step": (
+                "Persist deterministic knowledge graph edges for emails missing graph "
+                "coverage."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "repair_segment_text_readiness",
+            "blocking_check_key": "content_segment_text_readiness",
+            "display_name": "Segment safe text repair",
+            "owner_area": "content_graph",
+            "priority_rank": 6,
+            "priority_code": "high",
+            "impact_text": (
+                "Paragraph evidence needs non-empty safe text and word counts."
+            ),
+            "recommended_next_step": (
+                "Rebuild affected content segments with safe text and word-count "
+                "evidence."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "attach_kg_evidence_endpoints",
+            "blocking_check_key": "knowledge_graph_evidence_endpoint_readiness",
+            "display_name": "KG evidence endpoint repair",
+            "owner_area": "knowledge_graph",
+            "priority_rank": 7,
+            "priority_code": "high",
+            "impact_text": "KG edges need paragraph endpoints to be auditable.",
+            "recommended_next_step": (
+                "Attach source or target paragraph segment endpoints to affected KG "
+                "edges."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "backfill_semantic_relation_sources",
+            "blocking_check_key": "semantic_relation_source_backing",
+            "display_name": "Semantic relation source backing",
+            "owner_area": "semantic_kg",
+            "priority_rank": 8,
+            "priority_code": "high",
+            "impact_text": (
+                "Semantic relations need source message or thread evidence."
+            ),
+            "recommended_next_step": (
+                "Backfill source message or thread links for semantic relation "
+                "records."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "expand_attachment_parse_coverage",
+            "blocking_check_key": "attachment_parse_coverage",
+            "display_name": "Attachment parser coverage",
+            "owner_area": "attachment_parsing",
+            "priority_rank": 9,
+            "priority_code": "medium",
+            "impact_text": "Unsupported attachments leave buyer-visible corpus gaps.",
+            "recommended_next_step": (
+                "Add parser coverage or metadata-only exception evidence for "
+                "unsupported attachment types."
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+
+
 def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_db):
     token = _signed_session_token(_valid_session_payload())
     client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
@@ -397,6 +532,7 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "evidence_packet_ready": True,
         "snapshot_verification_ready": True,
         "provider_write_executed": False,
+        "remediation_actions": _expected_acquisition_remediation_actions(),
         "detail_text": (
             "Buyer evidence packet is generated, but blocking quality checks remain."
         ),
@@ -843,10 +979,16 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "evidence_packet_ready": True,
         "snapshot_verification_ready": True,
         "provider_write_executed": False,
+        "remediation_actions": _expected_acquisition_remediation_actions(),
         "detail_text": (
             "Buyer evidence packet is generated, but blocking quality checks remain."
         ),
     }
+    actions = snapshot["acquisition_readiness_gate"]["remediation_actions"]
+    assert len(actions) == 9
+    assert actions[0]["action_key"] == "repair_thread_id_integrity"
+    assert actions[0]["provider_write_executed"] is False
+    assert actions[-1]["action_key"] == "expand_attachment_parse_coverage"
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {

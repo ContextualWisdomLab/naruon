@@ -25,6 +25,108 @@ vi.mock("lucide-react", () => ({
 
 import DataPage from "./page";
 
+const acquisitionRemediationActions = [
+  {
+    action_key: "repair_thread_id_integrity",
+    blocking_check_key: "thread_id_integrity",
+    display_name: "Canonical thread repair",
+    owner_area: "email_ingestion",
+    priority_rank: 1,
+    priority_code: "critical",
+    impact_text: "Thread provenance must be stable before buyer review.",
+    recommended_next_step: "Run canonical threading repair for affected scoped emails.",
+    provider_write_executed: false,
+  },
+  {
+    action_key: "backfill_dedupe_fingerprints",
+    blocking_check_key: "dedupe_fingerprint",
+    display_name: "Duplicate fingerprint backfill",
+    owner_area: "email_ingestion",
+    priority_rank: 2,
+    priority_code: "critical",
+    impact_text: "Duplicate detection must be reliable before corpus valuation.",
+    recommended_next_step: "Backfill duplicate-detection fingerprints for scoped email records.",
+    provider_write_executed: false,
+  },
+  {
+    action_key: "recover_attachment_content",
+    blocking_check_key: "attachment_content",
+    display_name: "Attachment content extraction",
+    owner_area: "attachment_parsing",
+    priority_rank: 3,
+    priority_code: "high",
+    impact_text: "Attachment text gaps reduce searchable diligence coverage.",
+    recommended_next_step: "Re-run attachment extraction for scoped attachments with blank safe content.",
+    provider_write_executed: false,
+  },
+  {
+    action_key: "backfill_content_graph_coverage",
+    blocking_check_key: "content_graph_coverage",
+    display_name: "DOM paragraph segmentation backfill",
+    owner_area: "content_graph",
+    priority_rank: 4,
+    priority_code: "high",
+    impact_text: "Every scoped email needs paragraph segments before graph evidence is complete.",
+    recommended_next_step: "Backfill DOM paragraph segmentation for unsegmented scoped emails.",
+    provider_write_executed: false,
+  },
+  {
+    action_key: "backfill_knowledge_graph_coverage",
+    blocking_check_key: "knowledge_graph_coverage",
+    display_name: "Knowledge graph edge persistence",
+    owner_area: "knowledge_graph",
+    priority_rank: 5,
+    priority_code: "high",
+    impact_text: "Stored edges are required to prove graph extraction coverage.",
+    recommended_next_step: "Persist deterministic knowledge graph edges for emails missing graph coverage.",
+    provider_write_executed: false,
+  },
+  {
+    action_key: "repair_segment_text_readiness",
+    blocking_check_key: "content_segment_text_readiness",
+    display_name: "Segment safe text repair",
+    owner_area: "content_graph",
+    priority_rank: 6,
+    priority_code: "high",
+    impact_text: "Paragraph evidence needs non-empty safe text and word counts.",
+    recommended_next_step: "Rebuild affected content segments with safe text and word-count evidence.",
+    provider_write_executed: false,
+  },
+  {
+    action_key: "attach_kg_evidence_endpoints",
+    blocking_check_key: "knowledge_graph_evidence_endpoint_readiness",
+    display_name: "KG evidence endpoint repair",
+    owner_area: "knowledge_graph",
+    priority_rank: 7,
+    priority_code: "high",
+    impact_text: "KG edges need paragraph endpoints to be auditable.",
+    recommended_next_step: "Attach source or target paragraph segment endpoints to affected KG edges.",
+    provider_write_executed: false,
+  },
+  {
+    action_key: "backfill_semantic_relation_sources",
+    blocking_check_key: "semantic_relation_source_backing",
+    display_name: "Semantic relation source backing",
+    owner_area: "semantic_kg",
+    priority_rank: 8,
+    priority_code: "high",
+    impact_text: "Semantic relations need source message or thread evidence.",
+    recommended_next_step: "Backfill source message or thread links for semantic relation records.",
+    provider_write_executed: false,
+  },
+  {
+    action_key: "expand_attachment_parse_coverage",
+    blocking_check_key: "attachment_parse_coverage",
+    display_name: "Attachment parser coverage",
+    owner_area: "attachment_parsing",
+    priority_rank: 9,
+    priority_code: "medium",
+    impact_text: "Unsupported attachments leave buyer-visible corpus gaps.",
+    recommended_next_step: "Add parser coverage or metadata-only exception evidence for unsupported attachment types.",
+    provider_write_executed: false,
+  },
+];
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -52,6 +154,7 @@ const dataQualitySurface = {
     evidence_packet_ready: true,
     snapshot_verification_ready: true,
     provider_write_executed: false,
+    remediation_actions: acquisitionRemediationActions,
     detail_text: "Buyer evidence packet is generated, but blocking quality checks remain.",
   },
   repositories: [
@@ -457,6 +560,7 @@ const dataEvidenceSnapshot = {
     evidence_packet_ready: true,
     snapshot_verification_ready: true,
     provider_write_executed: false,
+    remediation_actions: acquisitionRemediationActions,
     detail_text: "Buyer evidence packet is generated, but blocking quality checks remain.",
   },
   validation_status: {
@@ -1092,6 +1196,11 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("증거 패킷 생성됨");
     expect(container.textContent).toContain("Snapshot verification ready");
     expect(container.textContent).toContain("thread_id_integrity");
+    expect(container.textContent).toContain("Remediation actions");
+    expect(container.textContent).toContain("Canonical thread repair");
+    expect(container.textContent).toContain("email_ingestion");
+    expect(container.textContent).toContain("Run canonical threading repair");
+    expect(container.textContent).toContain("Attachment parser coverage");
     expect(container.textContent).toContain("email_body");
     expect(container.textContent).toContain("paragraph");
     expect(container.textContent).toContain("node_has_segment");
@@ -1157,6 +1266,8 @@ describe("DataPage", () => {
     expect(copiedSnapshot.semantic_relation_evidence_samples[0].source_scope).toBe("message_thread");
     expect(copiedSnapshot.acquisition_readiness_gate.gate_key).toBe("buyer_evidence_readiness");
     expect(copiedSnapshot.acquisition_readiness_gate.readiness_score).toBe(25);
+    expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions).toHaveLength(9);
+    expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions[0].action_key).toBe("repair_thread_id_integrity");
   });
 
   it("keeps quality checks usable when evidence snapshot fetch fails", async () => {

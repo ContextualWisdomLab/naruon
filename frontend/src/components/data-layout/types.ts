@@ -49,7 +49,20 @@ export type DataSurfaceStatus = 'loading' | 'ready' | 'error';
 export type SurfaceStatusCode = 'ready' | 'running' | 'needs_attention' | 'pending' | 'no_source';
 export type QualityStatusCode = 'pass' | 'needs_attention' | 'pending';
 export type AcquisitionReadinessState = 'ready' | 'needs_attention' | 'pending';
+export type RemediationPriority = 'critical' | 'high' | 'medium';
 export type RepositoryAssetState = 'ready' | 'needs_attention';
+
+export type AcquisitionRemediationAction = {
+  action_key: string;
+  blocking_check_key: string;
+  display_name: string;
+  owner_area: string;
+  priority_rank: number;
+  priority_code: RemediationPriority;
+  impact_text: string;
+  recommended_next_step: string;
+  provider_write_executed: boolean;
+};
 
 export type AcquisitionReadinessGate = {
   gate_key: string;
@@ -64,6 +77,7 @@ export type AcquisitionReadinessGate = {
   evidence_packet_ready: boolean;
   snapshot_verification_ready: boolean;
   provider_write_executed: boolean;
+  remediation_actions: AcquisitionRemediationAction[];
   detail_text: string;
 };
 

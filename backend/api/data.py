@@ -71,6 +71,7 @@ SurfaceStatus = Literal[
 ]
 QualityStatus = Literal["pass", "needs_attention", "pending"]
 AcquisitionReadinessState = Literal["ready", "needs_attention", "pending"]
+RemediationPriority = Literal["critical", "high", "medium"]
 EndpointStatus = Literal["segment_backed", "node_only", "missing_endpoint"]
 ConfidenceBucket = Literal["high", "medium", "low", "unknown"]
 RelationSourceScope = Literal["message_thread", "message", "thread", "unknown"]
@@ -186,6 +187,18 @@ class DataQualityCheck(BaseModel):
     provider_write_executed: bool
 
 
+class DataAcquisitionRemediationAction(BaseModel):
+    action_key: str
+    blocking_check_key: str
+    display_name: str
+    owner_area: str
+    priority_rank: int
+    priority_code: RemediationPriority
+    impact_text: str
+    recommended_next_step: str
+    provider_write_executed: bool
+
+
 class DataAcquisitionReadinessGate(BaseModel):
     gate_key: str
     display_name: str
@@ -199,6 +212,7 @@ class DataAcquisitionReadinessGate(BaseModel):
     evidence_packet_ready: bool
     snapshot_verification_ready: bool
     provider_write_executed: bool
+    remediation_actions: list[DataAcquisitionRemediationAction]
     detail_text: str
 
 
@@ -470,6 +484,149 @@ SNAPSHOT_DIGEST_EXCLUDED_FIELDS = {
     "digest_algorithm",
     "canonical_payload_fields",
 }
+_REMEDIATION_ACTIONS_BY_CHECK_KEY = {
+    "thread_id_integrity": {
+        "action_key": "repair_thread_id_integrity",
+        "display_name": "Canonical thread repair",
+        "owner_area": "email_ingestion",
+        "priority_rank": 1,
+        "priority_code": "critical",
+        "impact_text": "Thread provenance must be stable before buyer review.",
+        "recommended_next_step": (
+            "Run canonical threading repair for affected scoped emails."
+        ),
+    },
+    "dedupe_fingerprint": {
+        "action_key": "backfill_dedupe_fingerprints",
+        "display_name": "Duplicate fingerprint backfill",
+        "owner_area": "email_ingestion",
+        "priority_rank": 2,
+        "priority_code": "critical",
+        "impact_text": "Duplicate detection must be reliable before corpus valuation.",
+        "recommended_next_step": (
+            "Backfill duplicate-detection fingerprints for scoped email records."
+        ),
+    },
+    "attachment_content": {
+        "action_key": "recover_attachment_content",
+        "display_name": "Attachment content extraction",
+        "owner_area": "attachment_parsing",
+        "priority_rank": 3,
+        "priority_code": "high",
+        "impact_text": "Attachment text gaps reduce searchable diligence coverage.",
+        "recommended_next_step": (
+            "Re-run attachment extraction for scoped attachments with blank safe "
+            "content."
+        ),
+    },
+    "content_graph_coverage": {
+        "action_key": "backfill_content_graph_coverage",
+        "display_name": "DOM paragraph segmentation backfill",
+        "owner_area": "content_graph",
+        "priority_rank": 4,
+        "priority_code": "high",
+        "impact_text": (
+            "Every scoped email needs paragraph segments before graph evidence is "
+            "complete."
+        ),
+        "recommended_next_step": (
+            "Backfill DOM paragraph segmentation for unsegmented scoped emails."
+        ),
+    },
+    "knowledge_graph_coverage": {
+        "action_key": "backfill_knowledge_graph_coverage",
+        "display_name": "Knowledge graph edge persistence",
+        "owner_area": "knowledge_graph",
+        "priority_rank": 5,
+        "priority_code": "high",
+        "impact_text": "Stored edges are required to prove graph extraction coverage.",
+        "recommended_next_step": (
+            "Persist deterministic knowledge graph edges for emails missing graph "
+            "coverage."
+        ),
+    },
+    "content_segment_text_readiness": {
+        "action_key": "repair_segment_text_readiness",
+        "display_name": "Segment safe text repair",
+        "owner_area": "content_graph",
+        "priority_rank": 6,
+        "priority_code": "high",
+        "impact_text": "Paragraph evidence needs non-empty safe text and word counts.",
+        "recommended_next_step": (
+            "Rebuild affected content segments with safe text and word-count "
+            "evidence."
+        ),
+    },
+    "knowledge_graph_evidence_endpoint_readiness": {
+        "action_key": "attach_kg_evidence_endpoints",
+        "display_name": "KG evidence endpoint repair",
+        "owner_area": "knowledge_graph",
+        "priority_rank": 7,
+        "priority_code": "high",
+        "impact_text": "KG edges need paragraph endpoints to be auditable.",
+        "recommended_next_step": (
+            "Attach source or target paragraph segment endpoints to affected KG "
+            "edges."
+        ),
+    },
+    "semantic_relation_source_backing": {
+        "action_key": "backfill_semantic_relation_sources",
+        "display_name": "Semantic relation source backing",
+        "owner_area": "semantic_kg",
+        "priority_rank": 8,
+        "priority_code": "high",
+        "impact_text": "Semantic relations need source message or thread evidence.",
+        "recommended_next_step": (
+            "Backfill source message or thread links for semantic relation records."
+        ),
+    },
+    "attachment_parse_coverage": {
+        "action_key": "expand_attachment_parse_coverage",
+        "display_name": "Attachment parser coverage",
+        "owner_area": "attachment_parsing",
+        "priority_rank": 9,
+        "priority_code": "medium",
+        "impact_text": "Unsupported attachments leave buyer-visible corpus gaps.",
+        "recommended_next_step": (
+            "Add parser coverage or metadata-only exception evidence for unsupported "
+            "attachment types."
+        ),
+    },
+    "source_registry": {
+        "action_key": "register_customer_sources",
+        "display_name": "Customer source registration",
+        "owner_area": "connector_registry",
+        "priority_rank": 10,
+        "priority_code": "critical",
+        "impact_text": "Customer-owned source visibility anchors diligence scope.",
+        "recommended_next_step": (
+            "Connect or verify customer-owned repositories for this workspace."
+        ),
+    },
+    "connector_signal": {
+        "action_key": "restore_connector_observability",
+        "display_name": "Connector observability repair",
+        "owner_area": "connector_observability",
+        "priority_rank": 11,
+        "priority_code": "medium",
+        "impact_text": "Connector evidence proves jobs are observable after handoff.",
+        "recommended_next_step": (
+            "Restore connector heartbeat or job evidence for the workspace."
+        ),
+    },
+    "semantic_kg_readiness": {
+        "action_key": "approve_semantic_extraction_evidence",
+        "display_name": "Semantic extraction approval",
+        "owner_area": "semantic_kg",
+        "priority_rank": 12,
+        "priority_code": "medium",
+        "impact_text": "Semantic KG claims need provenance and correction evidence.",
+        "recommended_next_step": (
+            "Approve semantic extraction evidence before claiming semantic KG "
+            "readiness."
+        ),
+    },
+}
 
 
 def _normalize_attachment_content_type(value: str | None) -> str:
@@ -729,6 +886,26 @@ def _snapshot_validation_status(
     )
 
 
+def _acquisition_remediation_actions(
+    quality_checks: list[DataQualityCheck],
+) -> list[DataAcquisitionRemediationAction]:
+    actions: list[DataAcquisitionRemediationAction] = []
+    for check in quality_checks:
+        if check.status_code == "pass" and check.issue_count <= 0:
+            continue
+        action = _REMEDIATION_ACTIONS_BY_CHECK_KEY.get(check.check_key)
+        if action is None:
+            continue
+        actions.append(
+            DataAcquisitionRemediationAction(
+                blocking_check_key=check.check_key,
+                provider_write_executed=False,
+                **action,
+            )
+        )
+    return sorted(actions, key=lambda action: action.priority_rank)
+
+
 def _acquisition_readiness_gate(
     *,
     quality_checks: list[DataQualityCheck],
@@ -779,6 +956,7 @@ def _acquisition_readiness_gate(
         evidence_packet_ready=evidence_packet_ready,
         snapshot_verification_ready=True,
         provider_write_executed=False,
+        remediation_actions=_acquisition_remediation_actions(quality_checks),
         detail_text=detail_text,
     )
 
