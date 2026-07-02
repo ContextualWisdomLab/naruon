@@ -22,10 +22,12 @@ from db.models import (
     Email,
     KnowledgeGraphEdgeRecord,
     ProjectFolder,
+    SenderRelationship,
     WebdavAccount,
 )
 from db.session import get_db
 from services.attachment_parser import get_attachment_parser_manifest
+from services.ontology_service import ontology_service
 from services.webdav_service import webdav_service
 
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -52,6 +54,10 @@ KNOWLEDGE_GRAPH_EVIDENCE_ENDPOINT_READINESS_EVIDENCE_SOURCE = (
 SEMANTIC_KG_READINESS_EVIDENCE_SOURCE = (
     "knowledge_graph_edges.edge_kind, content_segments.segment_path"
 )
+SEMANTIC_RELATION_SOURCE_BACKING_EVIDENCE_SOURCE = (
+    "sender_relationships.source_message_id, "
+    "sender_relationships.source_thread_id"
+)
 WEB_DAV_ERROR_STATUS_CODES = {
     "no_webdav_account": 422,
     "webdav_account_not_found": 422,
@@ -65,6 +71,8 @@ SurfaceStatus = Literal[
 ]
 QualityStatus = Literal["pass", "needs_attention", "pending"]
 EndpointStatus = Literal["segment_backed", "node_only", "missing_endpoint"]
+ConfidenceBucket = Literal["high", "medium", "low", "unknown"]
+RelationSourceScope = Literal["message_thread", "message", "thread", "unknown"]
 RepositoryAssetState = Literal["ready", "needs_attention"]
 RepositoryType = Literal[
     "webdav_account",
@@ -113,6 +121,11 @@ class ContentSegmentTextReadinessStats(NamedTuple):
 class KnowledgeGraphEvidenceEndpointStats(NamedTuple):
     total_count: int
     issue_count: int
+
+
+class SemanticRelationEvidenceStats(NamedTuple):
+    total_count: int
+    source_backed_count: int
 
 
 class DataRepositorySummary(BaseModel):
@@ -215,12 +228,21 @@ class DataKnowledgeGraphEvidenceSample(BaseModel):
     endpoint_status: EndpointStatus
 
 
+class DataSemanticRelationEvidenceSample(BaseModel):
+    sample_key: str
+    relationship_type: str
+    confidence_bucket: ConfidenceBucket
+    source_scope: RelationSourceScope
+    next_action: str
+
+
 class DataSemanticExtractionManifest(BaseModel):
     manifest_key: str
     display_name: str
     state_code: Literal["provenance_gate_pending", "ready"]
     structural_edge_count: int
     semantic_relation_count: int
+    source_backed_relation_count: int
     required_evidence: list[str]
     detail_text: str
     provider_write_executed: bool
@@ -297,6 +319,7 @@ class DataQualitySurfaceResponse(BaseModel):
     knowledge_graph_breakdown: list[DataKnowledgeGraphBreakdown]
     content_graph_evidence_samples: list[DataContentGraphEvidenceSample]
     knowledge_graph_evidence_samples: list[DataKnowledgeGraphEvidenceSample]
+    semantic_relation_evidence_samples: list[DataSemanticRelationEvidenceSample]
     semantic_extraction_manifest: list[DataSemanticExtractionManifest]
     connector_events: list[DataConnectorEvent]
 
@@ -361,6 +384,7 @@ class DataEvidenceSnapshotResponse(BaseModel):
     knowledge_graph_topology_counts: list[DataEvidenceSnapshotKnowledgeTopologyCount]
     content_graph_evidence_samples: list[DataContentGraphEvidenceSample]
     knowledge_graph_evidence_samples: list[DataKnowledgeGraphEvidenceSample]
+    semantic_relation_evidence_samples: list[DataSemanticRelationEvidenceSample]
     semantic_extraction_manifest: list[DataSemanticExtractionManifest]
 
 
@@ -415,6 +439,11 @@ SNAPSHOT_ALLOWED_SAMPLE_FIELDS = [
     "state_code",
     "structural_edge_count",
     "semantic_relation_count",
+    "source_backed_relation_count",
+    "relationship_type",
+    "confidence_bucket",
+    "source_scope",
+    "next_action",
     "required_evidence",
 ]
 SNAPSHOT_DIGEST_EXCLUDED_FIELDS = {
@@ -551,26 +580,89 @@ def _knowledge_graph_evidence_sample_row(
     )
 
 
+def _confidence_bucket(value: float | None) -> ConfidenceBucket:
+    if value is None:
+        return "unknown"
+    if value >= 0.8:
+        return "high"
+    if value >= 0.5:
+        return "medium"
+    return "low"
+
+
+def _semantic_relation_source_scope(
+    source_message_id: str | None,
+    source_thread_id: str | None,
+) -> RelationSourceScope:
+    if source_message_id and source_thread_id:
+        return "message_thread"
+    if source_message_id:
+        return "message"
+    if source_thread_id:
+        return "thread"
+    return "unknown"
+
+
+def _semantic_relation_evidence_sample_row(
+    sender_email: str | None,
+    source_message_id: str | None,
+    source_thread_id: str | None,
+    relationship_type: str | None,
+    confidence_score: float | None,
+) -> DataSemanticRelationEvidenceSample:
+    safe_relationship_type = _safe_display_text(relationship_type, "Unknown")[:64]
+    return DataSemanticRelationEvidenceSample(
+        sample_key=_opaque_graph_sample_key(
+            "relation",
+            (
+                f"{sender_email or ''}|{source_message_id or ''}|"
+                f"{source_thread_id or ''}|{safe_relationship_type}"
+            ),
+        ),
+        relationship_type=safe_relationship_type,
+        confidence_bucket=_confidence_bucket(confidence_score),
+        source_scope=_semantic_relation_source_scope(
+            source_message_id,
+            source_thread_id,
+        ),
+        next_action=ontology_service.next_action_for_relationship(
+            safe_relationship_type
+        )["next_action"],
+    )
+
+
 def _semantic_extraction_manifest(
     knowledge_graph_edge_count: int,
+    semantic_relation_count: int,
+    source_backed_relation_count: int,
 ) -> list[DataSemanticExtractionManifest]:
+    state_code: Literal["provenance_gate_pending", "ready"] = (
+        "ready" if source_backed_relation_count > 0 else "provenance_gate_pending"
+    )
+    detail_text = (
+        "Semantic relation evidence is available from source-backed ontology "
+        "relationship records."
+        if state_code == "ready"
+        else (
+            "Structural DOM/paragraph edges are stored; semantic entity/relation "
+            "extraction has not been enabled for buyer-visible evidence."
+        )
+    )
     return [
         DataSemanticExtractionManifest(
             manifest_key="entity_relation_extraction",
             display_name="Entity/relation extraction",
-            state_code="provenance_gate_pending",
+            state_code=state_code,
             structural_edge_count=knowledge_graph_edge_count,
-            semantic_relation_count=0,
+            semantic_relation_count=semantic_relation_count,
+            source_backed_relation_count=source_backed_relation_count,
             required_evidence=[
                 "segment_citation",
                 "extractor_version",
                 "confidence_score",
                 "human_correction_path",
             ],
-            detail_text=(
-                "Structural DOM/paragraph edges are stored; semantic entity/relation "
-                "extraction has not been enabled for buyer-visible evidence."
-            ),
+            detail_text=detail_text,
             provider_write_executed=False,
         )
     ]
@@ -680,6 +772,9 @@ def _evidence_snapshot_from_surface(
         ],
         content_graph_evidence_samples=surface.content_graph_evidence_samples,
         knowledge_graph_evidence_samples=surface.knowledge_graph_evidence_samples,
+        semantic_relation_evidence_samples=(
+            surface.semantic_relation_evidence_samples
+        ),
         semantic_extraction_manifest=surface.semantic_extraction_manifest,
     )
     digest_payload = _snapshot_digest_payload(snapshot)
@@ -1379,7 +1474,23 @@ def _check_knowledge_graph_evidence_endpoint_readiness(
     )
 
 
-def _check_semantic_kg_readiness() -> DataQualityCheck:
+def _check_semantic_kg_readiness(
+    semantic_relation_count: int,
+    source_backed_relation_count: int,
+) -> DataQualityCheck:
+    if source_backed_relation_count > 0:
+        return DataQualityCheck(
+            check_key="semantic_kg_readiness",
+            display_name="Semantic KG readiness",
+            status_code="pass",
+            issue_count=0,
+            total_count=max(1, semantic_relation_count),
+            evidence_source=SEMANTIC_KG_READINESS_EVIDENCE_SOURCE,
+            detail_text=(
+                "Semantic entity/relation evidence is available for this workspace."
+            ),
+            provider_write_executed=False,
+        )
     return DataQualityCheck(
         check_key="semantic_kg_readiness",
         display_name="Semantic KG readiness",
@@ -1390,6 +1501,33 @@ def _check_semantic_kg_readiness() -> DataQualityCheck:
         detail_text=(
             "Semantic entity/relation extraction is gated until provenance, "
             "confidence, and correction-path evidence are configured."
+        ),
+        provider_write_executed=False,
+    )
+
+
+def _check_semantic_relation_source_backing(
+    total_count: int,
+    source_backed_count: int,
+) -> DataQualityCheck:
+    issue_count = max(0, total_count - source_backed_count)
+    return DataQualityCheck(
+        check_key="semantic_relation_source_backing",
+        display_name="Semantic relation source backing",
+        status_code=_quality_status(total_count, issue_count),
+        issue_count=issue_count,
+        total_count=total_count,
+        evidence_source=SEMANTIC_RELATION_SOURCE_BACKING_EVIDENCE_SOURCE,
+        detail_text=_quality_detail(
+            total_count=total_count,
+            issue_count=issue_count,
+            ready_text=(
+                "All semantic relations include source message or thread evidence."
+            ),
+            empty_text="No semantic relations are available yet.",
+            issue_text=(
+                "Some semantic relations need source message or thread evidence."
+            ),
         ),
         provider_write_executed=False,
     )
@@ -1448,6 +1586,8 @@ def _quality_checks(
     content_segment_text_total_count: int,
     knowledge_graph_evidence_endpoint_issue_count: int,
     knowledge_graph_evidence_endpoint_total_count: int,
+    semantic_relation_count: int,
+    semantic_relation_source_backed_count: int,
     unparsed_attachment_count: int,
     connector_event_count: int,
 ) -> list[DataQualityCheck]:
@@ -1480,7 +1620,14 @@ def _quality_checks(
             total_count=knowledge_graph_evidence_endpoint_total_count,
             issue_count=knowledge_graph_evidence_endpoint_issue_count,
         ),
-        _check_semantic_kg_readiness(),
+        _check_semantic_kg_readiness(
+            semantic_relation_count=semantic_relation_count,
+            source_backed_relation_count=semantic_relation_source_backed_count,
+        ),
+        _check_semantic_relation_source_backing(
+            total_count=semantic_relation_count,
+            source_backed_count=semantic_relation_source_backed_count,
+        ),
         _check_attachment_parse_coverage(
             attachment_count=attachment_count,
             unparsed_attachment_count=unparsed_attachment_count,
@@ -1942,6 +2089,87 @@ async def _get_knowledge_graph_evidence_samples(
     ]
 
 
+def _sender_relationship_scope_filter(
+    auth_context: AuthContext,
+) -> tuple[ColumnElement[bool], ColumnElement[bool]]:
+    organization_filter = (
+        SenderRelationship.organization_id == auth_context.organization_id
+        if auth_context.organization_id is not None
+        else SenderRelationship.organization_id.is_(None)
+    )
+    return (
+        SenderRelationship.user_id == auth_context.user_id,
+        organization_filter,
+    )
+
+
+def _sender_relationship_has_source() -> ColumnElement[bool]:
+    return or_(
+        SenderRelationship.source_message_id.is_not(None),
+        SenderRelationship.source_thread_id.is_not(None),
+    )
+
+
+async def _get_semantic_relation_evidence_stats(
+    db: AsyncSession,
+    auth_context: AuthContext,
+) -> SemanticRelationEvidenceStats:
+    result = await db.execute(
+        select(
+            func.count(SenderRelationship.id),
+            func.count(case((_sender_relationship_has_source(), 1))),
+        ).where(*_sender_relationship_scope_filter(auth_context))
+    )
+    stats = result.one_or_none()
+    total_count = stats[0] if stats else 0
+    source_backed_count = stats[1] if stats else 0
+    return SemanticRelationEvidenceStats(
+        total_count=int(total_count or 0),
+        source_backed_count=int(source_backed_count or 0),
+    )
+
+
+async def _get_semantic_relation_evidence_samples(
+    db: AsyncSession,
+    auth_context: AuthContext,
+) -> list[DataSemanticRelationEvidenceSample]:
+    result = await db.execute(
+        select(
+            SenderRelationship.sender_email,
+            SenderRelationship.source_message_id,
+            SenderRelationship.source_thread_id,
+            SenderRelationship.relationship_type,
+            SenderRelationship.confidence_score,
+        )
+        .where(
+            *_sender_relationship_scope_filter(auth_context),
+            _sender_relationship_has_source(),
+        )
+        .order_by(
+            SenderRelationship.confidence_score.desc(),
+            SenderRelationship.updated_at.desc(),
+            SenderRelationship.relationship_type.asc(),
+        )
+        .limit(8)
+    )
+    return [
+        _semantic_relation_evidence_sample_row(
+            sender_email=sender_email,
+            source_message_id=source_message_id,
+            source_thread_id=source_thread_id,
+            relationship_type=relationship_type,
+            confidence_score=confidence_score,
+        )
+        for (
+            sender_email,
+            source_message_id,
+            source_thread_id,
+            relationship_type,
+            confidence_score,
+        ) in result.all()
+    ]
+
+
 async def _get_attachment_parse_stats(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
@@ -2093,6 +2321,13 @@ async def get_data_quality_surface(
         db,
         email_scope,
     )
+    semantic_relation_stats = await _get_semantic_relation_evidence_stats(
+        db,
+        auth_context,
+    )
+    semantic_relation_evidence_samples = (
+        await _get_semantic_relation_evidence_samples(db, auth_context)
+    )
     attachment_parse_stats = await _get_attachment_parse_stats(db, email_scope)
     email_count = email_stats.count
     missing_thread_count = email_stats.missing_thread_count
@@ -2105,6 +2340,10 @@ async def get_data_quality_surface(
     content_segment_count = content_graph_stats.segment_count
     edged_email_count = knowledge_graph_stats.edged_email_count
     knowledge_graph_edge_count = knowledge_graph_stats.edge_count
+    semantic_relation_count = semantic_relation_stats.total_count
+    semantic_relation_source_backed_count = (
+        semantic_relation_stats.source_backed_count
+    )
     parsed_attachment_count = attachment_parse_stats.parsed_count
     unparsed_attachment_count = attachment_parse_stats.unparsed_count
 
@@ -2176,6 +2415,10 @@ async def get_data_quality_surface(
             knowledge_graph_evidence_endpoint_issue_count=(
                 knowledge_graph_evidence_endpoint_stats.issue_count
             ),
+            semantic_relation_count=semantic_relation_count,
+            semantic_relation_source_backed_count=(
+                semantic_relation_source_backed_count
+            ),
             unparsed_attachment_count=unparsed_attachment_count,
             connector_event_count=len(connector_events),
         ),
@@ -2184,8 +2427,11 @@ async def get_data_quality_surface(
         knowledge_graph_breakdown=knowledge_graph_breakdown,
         content_graph_evidence_samples=content_graph_evidence_samples,
         knowledge_graph_evidence_samples=knowledge_graph_evidence_samples,
+        semantic_relation_evidence_samples=semantic_relation_evidence_samples,
         semantic_extraction_manifest=_semantic_extraction_manifest(
             knowledge_graph_edge_count,
+            semantic_relation_count,
+            semantic_relation_source_backed_count,
         ),
         connector_events=[
             DataConnectorEvent(

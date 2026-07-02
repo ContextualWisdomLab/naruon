@@ -145,12 +145,20 @@ export type DataQualitySurfaceResponse = {
     edge_path: string;
     endpoint_status: 'segment_backed' | 'node_only' | 'missing_endpoint';
   }>;
+  semantic_relation_evidence_samples?: Array<{
+    sample_key: string;
+    relationship_type: string;
+    confidence_bucket: 'high' | 'medium' | 'low' | 'unknown';
+    source_scope: 'message_thread' | 'message' | 'thread' | 'unknown';
+    next_action: string;
+  }>;
   semantic_extraction_manifest?: Array<{
     manifest_key: string;
     display_name: string;
     state_code: 'provenance_gate_pending' | 'ready';
     structural_edge_count: number;
     semantic_relation_count: number;
+    source_backed_relation_count: number;
     required_evidence: string[];
     detail_text: string;
     provider_write_executed: boolean;
@@ -224,12 +232,20 @@ export type DataEvidenceSnapshotResponse = {
     edge_path: string;
     endpoint_status: 'segment_backed' | 'node_only' | 'missing_endpoint';
   }>;
+  semantic_relation_evidence_samples: Array<{
+    sample_key: string;
+    relationship_type: string;
+    confidence_bucket: 'high' | 'medium' | 'low' | 'unknown';
+    source_scope: 'message_thread' | 'message' | 'thread' | 'unknown';
+    next_action: string;
+  }>;
   semantic_extraction_manifest: Array<{
     manifest_key: string;
     display_name: string;
     state_code: 'provenance_gate_pending' | 'ready';
     structural_edge_count: number;
     semantic_relation_count: number;
+    source_backed_relation_count: number;
     required_evidence: string[];
     detail_text: string;
     provider_write_executed: boolean;

@@ -216,11 +216,21 @@ const dataQualitySurface = {
     {
       check_key: "semantic_kg_readiness",
       display_name: "Semantic KG readiness",
-      status_code: "pending",
+      status_code: "pass",
       issue_count: 0,
-      total_count: 1,
+      total_count: 3,
       evidence_source: "knowledge_graph_edges.edge_kind, content_segments.segment_path",
-      detail_text: "Semantic entity/relation extraction is gated until provenance, confidence, and correction-path evidence are configured.",
+      detail_text: "Semantic entity/relation evidence is available for this workspace.",
+      provider_write_executed: false,
+    },
+    {
+      check_key: "semantic_relation_source_backing",
+      display_name: "Semantic relation source backing",
+      status_code: "needs_attention",
+      issue_count: 1,
+      total_count: 3,
+      evidence_source: "sender_relationships.source_message_id, sender_relationships.source_thread_id",
+      detail_text: "Some semantic relations need source message or thread evidence.",
       provider_write_executed: false,
     },
   ],
@@ -296,20 +306,37 @@ const dataQualitySurface = {
       endpoint_status: "segment_backed",
     },
   ],
+  semantic_relation_evidence_samples: [
+    {
+      sample_key: "relation_hidden_1",
+      relationship_type: "Vendor",
+      confidence_bucket: "high",
+      source_scope: "message_thread",
+      next_action: "prepare_response_draft",
+    },
+    {
+      sample_key: "relation_hidden_2",
+      relationship_type: "Newsletter",
+      confidence_bucket: "high",
+      source_scope: "message",
+      next_action: "summarize_then_archive",
+    },
+  ],
   semantic_extraction_manifest: [
     {
       manifest_key: "entity_relation_extraction",
       display_name: "Entity/relation extraction",
-      state_code: "provenance_gate_pending",
+      state_code: "ready",
       structural_edge_count: 10,
-      semantic_relation_count: 0,
+      semantic_relation_count: 3,
+      source_backed_relation_count: 2,
       required_evidence: [
         "segment_citation",
         "extractor_version",
         "confidence_score",
         "human_correction_path",
       ],
-      detail_text: "Structural DOM/paragraph edges are stored; semantic entity/relation extraction has not been enabled for buyer-visible evidence.",
+      detail_text: "Semantic relation evidence is available from source-backed ontology relationship records.",
       provider_write_executed: false,
     },
   ],
@@ -342,6 +369,7 @@ const dataEvidenceSnapshot = {
     "privacy_redaction_policy",
     "quality_checks",
     "semantic_extraction_manifest",
+    "semantic_relation_evidence_samples",
     "scope_label",
     "snapshot_version",
     "validation_status",
@@ -374,14 +402,19 @@ const dataEvidenceSnapshot = {
       "state_code",
       "structural_edge_count",
       "semantic_relation_count",
+      "source_backed_relation_count",
+      "relationship_type",
+      "confidence_bucket",
+      "source_scope",
+      "next_action",
       "required_evidence",
     ],
   },
   validation_status: {
     status_code: "needs_attention",
-    checks_passed: 2,
-    checks_with_issues: 8,
-    total_checks: 10,
+    checks_passed: 3,
+    checks_with_issues: 9,
+    total_checks: 12,
   },
   parser_manifest_summary: [
     {
@@ -449,20 +482,37 @@ const dataEvidenceSnapshot = {
       endpoint_status: "segment_backed",
     },
   ],
+  semantic_relation_evidence_samples: [
+    {
+      sample_key: "snapshot_relation_hidden_1",
+      relationship_type: "Vendor",
+      confidence_bucket: "high",
+      source_scope: "message_thread",
+      next_action: "prepare_response_draft",
+    },
+    {
+      sample_key: "snapshot_relation_hidden_2",
+      relationship_type: "Newsletter",
+      confidence_bucket: "high",
+      source_scope: "message",
+      next_action: "summarize_then_archive",
+    },
+  ],
   semantic_extraction_manifest: [
     {
       manifest_key: "entity_relation_extraction",
       display_name: "Entity/relation extraction",
-      state_code: "provenance_gate_pending",
+      state_code: "ready",
       structural_edge_count: 10,
-      semantic_relation_count: 0,
+      semantic_relation_count: 3,
+      source_backed_relation_count: 2,
       required_evidence: [
         "segment_citation",
         "extractor_version",
         "confidence_score",
         "human_correction_path",
       ],
-      detail_text: "Structural DOM/paragraph edges are stored; semantic entity/relation extraction has not been enabled for buyer-visible evidence.",
+      detail_text: "Semantic relation evidence is available from source-backed ontology relationship records.",
       provider_write_executed: false,
     },
   ],
@@ -982,8 +1032,12 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("KG 근거 샘플");
     expect(container.textContent).toContain("Semantic KG readiness");
     expect(container.textContent).toContain("Entity/relation extraction");
-    expect(container.textContent).toContain("provenance_gate_pending");
+    expect(container.textContent).toContain("ready");
     expect(container.textContent).toContain("segment_citation");
+    expect(container.textContent).toContain("Semantic relation evidence");
+    expect(container.textContent).toContain("Vendor");
+    expect(container.textContent).toContain("message_thread");
+    expect(container.textContent).toContain("prepare_response_draft");
     expect(container.textContent).toContain("email_body");
     expect(container.textContent).toContain("paragraph");
     expect(container.textContent).toContain("node_has_segment");
@@ -1000,10 +1054,13 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("knowledge_graph_edges.edge_kind");
     expect(container.textContent).not.toContain("knowledge_graph_edges.source_segment_id");
     expect(container.textContent).not.toContain("knowledge_graph_edges.edge_path");
+    expect(container.textContent).not.toContain("sender_relationships.source_message_id");
     expect(container.textContent).not.toContain("segment_hidden_1");
     expect(container.textContent).not.toContain("edge_hidden_1");
+    expect(container.textContent).not.toContain("relation_hidden_1");
     expect(container.textContent).not.toContain("snapshot_segment_hidden_1");
     expect(container.textContent).not.toContain("snapshot_edge_hidden_1");
+    expect(container.textContent).not.toContain("snapshot_relation_hidden_1");
     expect(container.textContent).not.toContain("발견된 심각한 데이터 품질 문제가 없습니다.");
 
     const snapshotButton = Array.from(container.querySelectorAll("button")).find((candidate) =>
@@ -1033,10 +1090,17 @@ describe("DataPage", () => {
       "state_code",
       "structural_edge_count",
       "semantic_relation_count",
+      "source_backed_relation_count",
+      "relationship_type",
+      "confidence_bucket",
+      "source_scope",
+      "next_action",
       "required_evidence",
     ]);
     expect(copiedSnapshot.semantic_extraction_manifest[0].manifest_key).toBe("entity_relation_extraction");
-    expect(copiedSnapshot.semantic_extraction_manifest[0].state_code).toBe("provenance_gate_pending");
+    expect(copiedSnapshot.semantic_extraction_manifest[0].state_code).toBe("ready");
+    expect(copiedSnapshot.semantic_relation_evidence_samples[0].relationship_type).toBe("Vendor");
+    expect(copiedSnapshot.semantic_relation_evidence_samples[0].source_scope).toBe("message_thread");
   });
 
   it("keeps quality checks usable when evidence snapshot fetch fails", async () => {
@@ -1072,6 +1136,7 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("실사 스냅샷 JSON 복사");
     expect(container.textContent).not.toContain("snapshot_segment_hidden_1");
     expect(container.textContent).not.toContain("segment_hidden_1");
+    expect(container.textContent).not.toContain("relation_hidden_1");
     expect(JSON.stringify(consoleError.mock.calls)).toContain("Data evidence snapshot fetch error");
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain("raw email");
   });

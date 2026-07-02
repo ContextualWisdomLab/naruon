@@ -293,6 +293,23 @@ def mock_db():
                     56,
                 ),
             ],  # knowledge graph evidence samples
+            (3, 2),  # semantic relation evidence stats
+            [
+                (
+                    "partner@example.com",
+                    "<asset-ready@example.com>",
+                    "thread-ready",
+                    "Vendor",
+                    0.92,
+                ),
+                (
+                    "updates@example.com",
+                    "<newsletter@example.com>",
+                    None,
+                    "Newsletter",
+                    0.86,
+                ),
+            ],  # semantic relation evidence samples
             (2, 1),  # attachment parse stats
             [
                 (
@@ -463,16 +480,28 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
     assert quality_by_key["semantic_kg_readiness"] == {
         "check_key": "semantic_kg_readiness",
         "display_name": "Semantic KG readiness",
-        "status_code": "pending",
+        "status_code": "pass",
         "issue_count": 0,
-        "total_count": 1,
+        "total_count": 3,
         "evidence_source": (
             "knowledge_graph_edges.edge_kind, content_segments.segment_path"
         ),
         "detail_text": (
-            "Semantic entity/relation extraction is gated until provenance, "
-            "confidence, and correction-path evidence are configured."
+            "Semantic entity/relation evidence is available for this workspace."
         ),
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["semantic_relation_source_backing"] == {
+        "check_key": "semantic_relation_source_backing",
+        "display_name": "Semantic relation source backing",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 3,
+        "evidence_source": (
+            "sender_relationships.source_message_id, "
+            "sender_relationships.source_thread_id"
+        ),
+        "detail_text": "Some semantic relations need source message or thread evidence.",
         "provider_write_executed": False,
     }
     assert quality_by_key["attachment_parse_coverage"] == {
@@ -573,9 +602,10 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         {
             "manifest_key": "entity_relation_extraction",
             "display_name": "Entity/relation extraction",
-            "state_code": "provenance_gate_pending",
+            "state_code": "ready",
             "structural_edge_count": 10,
-            "semantic_relation_count": 0,
+            "semantic_relation_count": 3,
+            "source_backed_relation_count": 2,
             "required_evidence": [
                 "segment_citation",
                 "extractor_version",
@@ -583,11 +613,33 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
                 "human_correction_path",
             ],
             "detail_text": (
-                "Structural DOM/paragraph edges are stored; semantic entity/relation "
-                "extraction has not been enabled for buyer-visible evidence."
+                "Semantic relation evidence is available from source-backed ontology "
+                "relationship records."
             ),
             "provider_write_executed": False,
         }
+    ]
+    assert data["semantic_relation_evidence_samples"] == [
+        {
+            "sample_key": _expected_sample_key(
+                "relation",
+                "partner@example.com|<asset-ready@example.com>|thread-ready|Vendor",
+            ),
+            "relationship_type": "Vendor",
+            "confidence_bucket": "high",
+            "source_scope": "message_thread",
+            "next_action": "prepare_response_draft",
+        },
+        {
+            "sample_key": _expected_sample_key(
+                "relation",
+                "updates@example.com|<newsletter@example.com>||Newsletter",
+            ),
+            "relationship_type": "Newsletter",
+            "confidence_bucket": "high",
+            "source_scope": "message",
+            "next_action": "summarize_then_archive",
+        },
     ]
     assert data["attachment_parse_breakdown"] == [
         {
@@ -656,6 +708,9 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "cseg_email_paragraph_1",
         "kgedge_email_node_segment_1",
         "<asset-ready@example.com>",
+        "<newsletter@example.com>",
+        "partner@example.com",
+        "updates@example.com",
         "thread-ready",
     ):
         assert forbidden not in serialized
@@ -726,15 +781,21 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "state_code",
         "structural_edge_count",
         "semantic_relation_count",
+        "source_backed_relation_count",
+        "relationship_type",
+        "confidence_bucket",
+        "source_scope",
+        "next_action",
         "required_evidence",
     ]
     assert snapshot["validation_status"] == {
         "status_code": "needs_attention",
-        "checks_passed": 2,
-        "checks_with_issues": 8,
-        "total_checks": 11,
+        "checks_passed": 3,
+        "checks_with_issues": 9,
+        "total_checks": 12,
     }
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
+    assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {
         "parser_key": "plain_text",
         "display_name": "Plain text attachments",
@@ -782,9 +843,10 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         {
             "manifest_key": "entity_relation_extraction",
             "display_name": "Entity/relation extraction",
-            "state_code": "provenance_gate_pending",
+            "state_code": "ready",
             "structural_edge_count": 10,
-            "semantic_relation_count": 0,
+            "semantic_relation_count": 3,
+            "source_backed_relation_count": 2,
             "required_evidence": [
                 "segment_citation",
                 "extractor_version",
@@ -792,11 +854,33 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
                 "human_correction_path",
             ],
             "detail_text": (
-                "Structural DOM/paragraph edges are stored; semantic entity/relation "
-                "extraction has not been enabled for buyer-visible evidence."
+                "Semantic relation evidence is available from source-backed ontology "
+                "relationship records."
             ),
             "provider_write_executed": False,
         }
+    ]
+    assert snapshot["semantic_relation_evidence_samples"] == [
+        {
+            "sample_key": _expected_sample_key(
+                "relation",
+                "partner@example.com|<asset-ready@example.com>|thread-ready|Vendor",
+            ),
+            "relationship_type": "Vendor",
+            "confidence_bucket": "high",
+            "source_scope": "message_thread",
+            "next_action": "prepare_response_draft",
+        },
+        {
+            "sample_key": _expected_sample_key(
+                "relation",
+                "updates@example.com|<newsletter@example.com>||Newsletter",
+            ),
+            "relationship_type": "Newsletter",
+            "confidence_bucket": "high",
+            "source_scope": "message",
+            "next_action": "summarize_then_archive",
+        },
     ]
 
     serialized = response.text
@@ -809,6 +893,9 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "cseg_email_paragraph_1",
         "kgedge_email_node_segment_1",
         "<asset-ready@example.com>",
+        "<newsletter@example.com>",
+        "partner@example.com",
+        "updates@example.com",
         "thread-ready",
         "credentials_encrypted",
     ):
@@ -862,6 +949,7 @@ def test_member_data_quality_queries_are_owner_scoped(mock_db):
     assert "webdav_accounts.workspace_id = :workspace_id_1" in rendered_queries
     assert "project_folders.user_id = :user_id_1" in rendered_queries
     assert "email_records.user_id = :user_id_1" in rendered_queries
+    assert "sender_relationships.user_id = :user_id_1" in rendered_queries
 
 
 def test_data_quality_surface_includes_workspace_document_assets(mock_db):
@@ -1159,6 +1247,9 @@ async def _seed_smoke_test_data(conn, ids: dict):
     await conn.execute(text("SELECT 1"))
     await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     await conn.run_sync(Base.metadata.create_all)
+    first_message_id = f"<data-smoke-{uuid.uuid4().hex}@example.com>"
+    second_message_id = f"<data-smoke-missing-{uuid.uuid4().hex}@example.com>"
+    rival_message_id = f"<data-rival-{uuid.uuid4().hex}@example.com>"
     first_email = await conn.execute(
         text(
             """
@@ -1176,7 +1267,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
         {
             "user_id": ids["user_id"],
             "organization_id": ids["organization_id"],
-            "message_id": f"<data-smoke-{uuid.uuid4().hex}@example.com>",
+            "message_id": first_message_id,
             "thread_id": "thread-data-smoke",
             "fingerprint": "sha256:data-smoke",
             "sender": "partner@example.com",
@@ -1202,7 +1293,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
         {
             "user_id": ids["user_id"],
             "organization_id": ids["organization_id"],
-            "message_id": f"<data-smoke-missing-{uuid.uuid4().hex}@example.com>",
+            "message_id": second_message_id,
             "sender": "partner@example.com",
             "recipients": "owner@example.com",
             "subject": "Data smoke missing",
@@ -1226,7 +1317,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
         {
             "user_id": ids["rival_user_id"],
             "organization_id": ids["rival_organization_id"],
-            "message_id": f"<data-rival-{uuid.uuid4().hex}@example.com>",
+            "message_id": rival_message_id,
             "thread_id": "thread-rival",
             "fingerprint": "sha256:rival",
             "sender": "rival@example.com",
@@ -1369,6 +1460,36 @@ async def _seed_smoke_test_data(conn, ids: dict):
     await conn.execute(
         text(
             """
+            INSERT INTO sender_relationships (
+                user_id, organization_id, sender_email, source_message_id,
+                source_thread_id, relationship_type, confidence_score,
+                created_at, updated_at
+            )
+            VALUES
+            (
+                :user_id, :organization_id, 'semantic-vendor@example.com',
+                :first_message_id, 'thread-data-smoke', 'Vendor', 0.91,
+                now(), now()
+            ),
+            (
+                :rival_user_id, :rival_organization_id,
+                'rival-semantic@example.com', :rival_message_id,
+                'thread-rival', 'Vendor', 0.99, now(), now()
+            )
+            """
+        ),
+        {
+            "user_id": ids["user_id"],
+            "organization_id": ids["organization_id"],
+            "first_message_id": first_message_id,
+            "rival_user_id": ids["rival_user_id"],
+            "rival_organization_id": ids["rival_organization_id"],
+            "rival_message_id": rival_message_id,
+        },
+    )
+    await conn.execute(
+        text(
+            """
             INSERT INTO email_attachments (
                 email_id, filename, content,
                 content_type, parse_status, parse_error_code
@@ -1479,6 +1600,13 @@ async def _seed_smoke_test_data(conn, ids: dict):
 
 
 async def _teardown_smoke_test_data(conn, ids: dict):
+    await conn.execute(
+        text(
+            "DELETE FROM sender_relationships "
+            "WHERE user_id IN (:user_id, :rival_user_id)"
+        ),
+        {"user_id": ids["user_id"], "rival_user_id": ids["rival_user_id"]},
+    )
     await conn.execute(
         text(
             """
@@ -1656,7 +1784,11 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     assert quality_by_key["attachment_content"]["issue_count"] == 1
     assert quality_by_key["content_graph_coverage"]["issue_count"] == 1
     assert quality_by_key["knowledge_graph_coverage"]["issue_count"] == 1
+    assert quality_by_key["semantic_relation_source_backing"]["issue_count"] == 0
     assert quality_by_key["attachment_parse_coverage"]["issue_count"] == 1
+    assert data["semantic_extraction_manifest"][0]["semantic_relation_count"] == 1
+    assert data["semantic_extraction_manifest"][0]["source_backed_relation_count"] == 1
+    assert data["semantic_relation_evidence_samples"][0]["relationship_type"] == "Vendor"
     assert event_uid in {event["event_uid"] for event in data["connector_events"]}
     asset_names = {asset["display_name"] for asset in data["repository_assets"]}
     assert {"ready.txt", "blank.txt"} <= asset_names
@@ -1669,6 +1801,8 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     assert assets_by_name["ready.txt"]["asset_key"].startswith("asset_")
     assert assets_by_name["ready.txt"]["thread_key"].startswith("thread_")
     assert other_workspace_event_uid not in response.text
+    assert "rival-semantic@example.com" not in response.text
+    assert "semantic-vendor@example.com" not in response.text
     assert "account_id" not in response.text
     assert "encrypted-data-secret" not in response.text
     assert "data@example.com" not in response.text

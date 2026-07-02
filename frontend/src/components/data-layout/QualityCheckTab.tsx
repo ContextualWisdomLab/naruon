@@ -36,6 +36,7 @@ export function QualityCheckTab({
   const contentEvidenceSamples = dataQualitySurface?.content_graph_evidence_samples ?? [];
   const knowledgeGraphEvidenceSamples = dataQualitySurface?.knowledge_graph_evidence_samples ?? [];
   const semanticExtractionManifest = dataQualitySurface?.semantic_extraction_manifest ?? [];
+  const semanticRelationEvidenceSamples = dataQualitySurface?.semantic_relation_evidence_samples ?? [];
   const evidenceSnapshot = dataEvidenceSnapshot;
   const copyEvidenceSnapshot = React.useCallback(async () => {
     if (!evidenceSnapshot) return;
@@ -306,7 +307,7 @@ export function QualityCheckTab({
                             {toSafeReactText(item.state_code)}
                           </span>
                         </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-4">
                           <div>
                             <dt className="font-black text-muted-foreground">Structural edges</dt>
                             <dd className="mt-1 text-sm font-bold">{formatCount(item.structural_edge_count)}</dd>
@@ -316,8 +317,50 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{formatCount(item.semantic_relation_count)}</dd>
                           </div>
                           <div>
+                            <dt className="font-black text-muted-foreground">Source-backed</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(item.source_backed_relation_count)}</dd>
+                          </div>
+                          <div>
                             <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {semanticRelationEvidenceSamples.length > 0 && (
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-border bg-secondary/30">
+                    <h2 className="font-bold text-lg">Semantic relation evidence</h2>
+                  </div>
+                  <div className="grid gap-3 p-5">
+                    {semanticRelationEvidenceSamples.map((item) => (
+                      <article key={item.sample_key} className="rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(item.relationship_type)}</h3>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">
+                              action {toSafeReactText(item.next_action)}
+                            </p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {toSafeReactText(item.source_scope)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Confidence</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.confidence_bucket)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Source scope</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.source_scope)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(false)}</dd>
                           </div>
                         </dl>
                       </article>
