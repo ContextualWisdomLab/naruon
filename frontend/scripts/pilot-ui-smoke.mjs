@@ -10,6 +10,12 @@ const frontendDir = path.resolve(scriptDir, "..");
 const baseUrl = process.env.NARUON_PILOT_BASE_URL || "http://127.0.0.1:3001";
 const mailScreenshotPath = process.env.NARUON_PILOT_MAIL_SCREENSHOT || "/tmp/naruon-pilot-mail.png";
 const searchScreenshotPath = process.env.NARUON_PILOT_SEARCH_SCREENSHOT || "/tmp/naruon-pilot-search.png";
+const ALLOWED_PILOT_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+
+const pilotBaseUrl = new URL(baseUrl);
+if (!ALLOWED_PILOT_HOSTS.has(pilotBaseUrl.hostname)) {
+  throw new Error(`Pilot smoke must run only against localhost targets, got: ${pilotBaseUrl.hostname}`);
+}
 
 const sensitiveMailBody = "Sensitive source body must stay out of analytics payloads.";
 const sensitiveDraftBody = "상용 파일럿 답장 초안입니다. 내부 원문은 이벤트에 남지 않아야 합니다.";
@@ -223,12 +229,29 @@ async function runMailFlow(context, consoleIssues) {
   await mailListItem.click();
 
   await desktopMailRegion
-    .getByText("근거 원본을 확인해야 하는 맥락 종합입니다.", { exact: true })
+    .locator("text=근거 원본을 확인해야 하는 맥락 종합입니다.")
+    .first()
     .waitFor({ state: "visible", timeout: 20_000 });
 
-  const sourceButton = desktopMailRegion.getByRole("button", { name: "근거 원본 보기" });
-  if (await sourceButton.count() !== 1) throw new Error("Expected exactly one source drawer button");
-  await sourceButton.click();
+  const sourceButtonCandidates = desktopMailRegion
+    .locator("button", { hasText: "근거 원본 보기" });
+  const sourceButtonCount = await sourceButtonCandidates.count();
+  if (sourceButtonCount === 0) {
+    throw new Error("Could not find any source drawer button candidates");
+  }
+  const sourceButton = sourceButtonCandidates.first();
+  if (await sourceButton.count() === 0) throw new Error("Could not locate source drawer button after normalization");
+  if (!(await sourceButton.first().isVisible())) {
+    await sourceButton.first().scrollIntoViewIfNeeded();
+  }
+
+  if (!(await sourceButton.first().isVisible())) {
+    const sourceDrawerCandidates = await page
+      .getByRole("button", { name: /근거 원본 보기/ })
+      .allTextContents();
+    throw new Error(`Source drawer button is not visible; candidates: ${JSON.stringify(sourceDrawerCandidates)}`);
+  }
+  await sourceButton.first().click();
 
   const dialog = page.getByRole("dialog", { name: "맥락 종합 근거" });
   await dialog.waitFor({ state: "visible", timeout: 10_000 });

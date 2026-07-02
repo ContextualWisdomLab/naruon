@@ -90,6 +90,27 @@ describe("product event contracts", () => {
     expect(getRecordedProductEvents()).toEqual([event]);
   });
 
+  it("caps local event history to prevent unbounded in-memory growth", () => {
+    clearRecordedProductEvents();
+
+    for (let index = 0; index < 260; index += 1) {
+      recordProductEvent("source_chip_opened", {
+        workspace_id: "workspace-1",
+        actor_user_id: "user-1",
+        surface: "mail_detail",
+        source_chip_id: `chip-${index}`,
+        ai_output_id: "synthesis-1",
+        source_id: "message-1",
+        source_type: "mail",
+        opened_from: "synthesis_card",
+      });
+    }
+
+    const events = getRecordedProductEvents();
+    expect(events).toHaveLength(200);
+    expect(events.at(0)?.payload.source_chip_id).toBe("chip-60");
+  });
+
   it("dispatches a browser-local event for UI integration hooks", () => {
     clearRecordedProductEvents();
     const received: unknown[] = [];

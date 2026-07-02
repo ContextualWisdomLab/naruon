@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import { ExternalLink, FileText, X } from "lucide-react";
 
 export interface SourceDrawerProps {
@@ -38,6 +38,7 @@ export function SourceDrawer({
   const drawerRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const sourceDrawerId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -94,8 +95,8 @@ export function SourceDrawer({
 
   if (!open) return null;
 
-  const titleId = "source-drawer-title";
-  const descriptionId = "source-drawer-description";
+  const titleId = `source-drawer-title-${sourceDrawerId}`;
+  const descriptionId = `source-drawer-description-${sourceDrawerId}`;
 
   return (
     <div className="fixed inset-0 z-50">

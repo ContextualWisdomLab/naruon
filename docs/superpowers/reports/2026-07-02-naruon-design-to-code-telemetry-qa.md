@@ -12,6 +12,12 @@ PR handoff: https://github.com/ContextualWisdomLab/naruon/pull/893
 
 This package is suitable for a controlled paid-pilot demonstration after the release gates pass. It is not a public-launch readiness claim: hosted deployment, real tenant authorization review, provider-send email, live private-mailbox integration, external analytics governance, billing/legal review, SLA, and support operations remain outside this slice.
 
+## 20B KRW Enterprise Sale Readiness
+
+This package can support a 2,000,000,000 KRW enterprise buyer technical review for the implemented frontend slice after the release gates pass. The basis is repeatable UI proof for `/mail` and `/search`, privacy-safe local product-event contracts, localhost-only smoke execution, accessible source evidence review, bounded local event history, and explicit public-launch caveats.
+
+This is not a claim that Naruon is ready for public SaaS launch or final enterprise procurement. A final 20B KRW sale package still needs production hosting, tenant isolation and authorization evidence, provider-send verification, live mailbox integration, external analytics governance, billing/legal/procurement artifacts, SLA, support, incident response, and data-processing terms.
+
 ## Evidence
 
 - Product-event contract: `frontend/src/lib/product-events.ts`
@@ -22,6 +28,7 @@ This package is suitable for a controlled paid-pilot demonstration after the rel
 - Context-search instrumentation: `frontend/src/components/SearchLayout.tsx`
 - Context-search product event tests: `frontend/src/components/SearchLayout.test.tsx`
 - Follow-up plan: `docs/superpowers/plans/2026-07-02-naruon-design-to-code-and-telemetry.md`
+- Enterprise sale readiness plan: `docs/superpowers/plans/2026-07-02-naruon-20b-enterprise-sale-readiness.md`
 - Design-to-code backlog: `docs/superpowers/reports/2026-07-02-naruon-design-to-code-backlog.md`
 - Event dictionary: `docs/superpowers/reports/2026-07-02-naruon-event-dictionary.md`
 - Figma file: https://www.figma.com/design/68b5XB58w8nwT2LYOOnikK
@@ -47,6 +54,9 @@ This package is suitable for a controlled paid-pilot demonstration after the rel
 - `EmailDetail.tsx` emits local events for synthesis view, source opening, task creation, calendar reflection, draft generation, draft insertion, draft send, latency, and low-confidence model-quality guardrails.
 - `SearchLayout.tsx` emits local events for search submit, result open, result action creation, and latency guardrails.
 - `SourceDrawer.tsx` provides `role="dialog"`, `aria-modal`, labelled/described content, focus on open, Escape close, mouse close, body scroll lock, and focus restore.
+- `SourceDrawer.tsx` uses per-instance React IDs for `aria-labelledby` and `aria-describedby`, avoiding duplicate ARIA targets when multiple drawers are rendered.
+- `product-events.ts` caps browser-local product-event history to the most recent 200 events and keeps fallback event IDs single-prefixed.
+- `pilot-ui-smoke.mjs` rejects non-localhost `NARUON_PILOT_BASE_URL` values so the smoke flow cannot accidentally execute against staging or production.
 - Browser QA on `http://127.0.0.1:3001/mail` with mocked local APIs opened `근거 원본 보기`, verified the source drawer, focus on `근거 원본 닫기`, close button, Escape close, and local `source_chip_opened`/`context_synthesis_viewed` events without raw email body in event payloads.
 - Browser QA on `http://127.0.0.1:3001/search` with mocked local APIs verified search submit, result open, relation capture, `context_search_result_action_created`, and no raw query text in event payloads.
 - Browser QA completed with no console errors or warnings after the local `/api/network/graph` mock returned the expected `{ nodes, edges }` shape.
@@ -54,7 +64,7 @@ This package is suitable for a controlled paid-pilot demonstration after the rel
 - `pnpm --dir frontend pilot:smoke` passed and saved `/tmp/naruon-pilot-mail.png` plus `/tmp/naruon-pilot-search.png` with no console errors or warnings.
 - Commercial pilot screenshots are non-empty 1440 x 1024 PNGs.
 - `pnpm --dir frontend test src/components/EmailDetail.test.tsx src/components/SearchLayout.test.tsx src/lib/product-events.test.ts` passed: 3 test files, 33 tests.
-- `pnpm --dir frontend test` passed: 43 test files, 319 tests.
+- `pnpm --dir frontend test` passed: 43 test files, 320 tests.
 - `pnpm --dir frontend typecheck` passed.
 - `pnpm --dir frontend build` passed with an optimized Next 16 production build.
 - `git diff --check` passed.

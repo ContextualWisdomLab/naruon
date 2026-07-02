@@ -348,9 +348,10 @@ const BLOCKED_PAYLOAD_FIELD_NAMES = new Set([
 ]);
 
 const localProductEventBuffer: RecordedProductEvent[] = [];
+const LOCAL_PRODUCT_EVENT_BUFFER_LIMIT = 200;
 
 function createFallbackEventId() {
-  return `product_evt_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`;
+  return `${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`;
 }
 
 export function createProductEventId(prefix = "product_evt"): string {
@@ -416,6 +417,9 @@ export function recordProductEvent(name: ProductEventName, payload: ProductEvent
   };
 
   localProductEventBuffer.push(event);
+  if (localProductEventBuffer.length > LOCAL_PRODUCT_EVENT_BUFFER_LIMIT) {
+    localProductEventBuffer.shift();
+  }
 
   if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
     window.dispatchEvent(new CustomEvent("naruon:product-event", { detail: event }));

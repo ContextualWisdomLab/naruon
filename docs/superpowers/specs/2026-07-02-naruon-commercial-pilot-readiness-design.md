@@ -6,6 +6,8 @@ This spec defines the minimum standard for presenting Naruon as a paid pilot pro
 
 The target state is **commercial pilot ready**: the core buyer-facing mail and context-search workflows can be demonstrated repeatedly, privacy-sensitive analytics remain local-only, production frontend build passes, and the remaining public-launch gaps are explicit.
 
+For high-value enterprise sales, including a 2,000,000,000 KRW review target, this spec only covers the technical slice that a buyer can inspect. Contract close still requires production deployment, tenant security evidence, legal/procurement artifacts, SLA, and support operations outside this frontend slice.
+
 ## Non-Goals
 
 - Do not claim public SaaS launch readiness.
@@ -30,6 +32,8 @@ Naruon is commercial-pilot ready when these are true:
 The current frontend remains the product anchor. `EmailDetail.tsx` owns mail-detail actions and source evidence interactions. `SearchLayout.tsx` owns context-search actions and lineage. `product-events.ts` owns local event validation, sanitization, in-memory recording, and browser-local `naruon:product-event` dispatch.
 
 Commercial QA is exercised through a local Playwright smoke script that runs against a live Next dev or preview server and intercepts `/api/*` calls with deterministic pilot-safe data. This proves UI behavior without requiring a private mailbox, live backend, or external analytics destination.
+
+The smoke script must reject non-localhost base URLs. It must not navigate to or click through shared staging or production environments.
 
 ## Surfaces
 
@@ -86,6 +90,12 @@ Forbidden payload content:
 - raw search query
 - arbitrary non-contract payload fields
 
+Runtime safety requirements:
+
+- local product-event history must be bounded
+- fallback event IDs must not double-prefix caller-provided event prefixes
+- event recording must remain browser-local unless a separately approved analytics destination, consent, retention, and warehouse contract exist
+
 Allowed payload content:
 
 - stable IDs
@@ -123,6 +133,8 @@ These are not blockers for a paid pilot demo, but they are blockers for public l
 - External analytics destination, consent, retention, and dashboard governance.
 - Billing and legal/compliance review.
 - SLA, support, incident response, and data processing terms.
+- Procurement/security questionnaire package for enterprise buyers.
+- Commercial terms and acceptance criteria for any 2,000,000,000 KRW transaction.
 
 ## Completion Rule
 

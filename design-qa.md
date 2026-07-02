@@ -79,5 +79,7 @@ patches made since the previous QA pass:
 - Added Vitest coverage for product-event validation, mail-detail source drawer behavior, mail-detail action events, and context-search events.
 - Added a controlled paid-pilot readiness spec and repeatable `pnpm --dir frontend pilot:smoke` browser gate for `/mail` and `/search`.
 - Verified the pilot smoke path with no console errors or warnings and 1440 x 1024 screenshots at `/tmp/naruon-pilot-mail.png` and `/tmp/naruon-pilot-search.png`.
+- Added a 20B KRW enterprise sale readiness plan for the implemented frontend slice, with explicit separation between buyer-reviewable product evidence and unresolved public-launch/procurement requirements.
+- Hardened the pilot smoke gate to localhost-only targets, bounded browser-local product-event history, normalized fallback event IDs, and generated unique `SourceDrawer` ARIA IDs.
 
-final result: passed for the scoped design-to-code and controlled paid-pilot demo slice
+final result: passed for the scoped design-to-code and controlled paid-pilot demo slice; buyer-reviewable for the implemented frontend slice after release gates pass, but not a public-launch or final procurement-complete claim
