@@ -289,7 +289,7 @@ git status --short
 
 Expected: only intended Phase 9 files plus unrelated `.Jules/*` modifications in status.
 
-- [ ] **Step 2: Commit, push, and update PR**
+- [x] **Step 2: Commit, push, and update PR**
 
 Commit with:
 
