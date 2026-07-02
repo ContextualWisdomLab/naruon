@@ -29,7 +29,9 @@ export const FULL_PRODUCT_VIEWPORTS = [
   { name: "mobile", width: 390, height: 844, isMobile: true },
 ];
 
-export const FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES = ["mail", "search", "tasks", "settings"];
+export const FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES = ["mail", "search", "tasks", "settings"];
+export const FULL_PRODUCT_CRITICAL_INTERACTION_VIEWPORT_NAMES = ["desktop", "mobile"];
+export const FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES = FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES;
 export const FULL_PRODUCT_ACCESSIBILITY_CHECK_NAMES = [
   "visible-duplicate-id",
   "visible-interactive-accessible-name",
@@ -583,8 +585,9 @@ async function installRoutes(page) {
   });
 }
 
-async function runDesktopInteractionSmoke(page, routeSpec, viewportSpec) {
-  if (viewportSpec.name !== "desktop") return [];
+async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
+  if (!FULL_PRODUCT_CRITICAL_INTERACTION_ROUTE_NAMES.includes(routeSpec.name)) return [];
+  const evidence = (name) => `${viewportSpec.name}:${name}`;
 
   if (routeSpec.name === "mail") {
     await page.getByText("20B smoke source", { exact: true }).first().click();
@@ -592,33 +595,33 @@ async function runDesktopInteractionSmoke(page, routeSpec, viewportSpec) {
     await createTaskButton.waitFor({ state: "visible", timeout: 10_000 });
     await createTaskButton.click();
     await page.getByText("1개 실행 항목을 티켓형 실행 항목으로 추적합니다.").waitFor({ state: "visible", timeout: 10_000 });
-    return ["mail:select-message", "mail:create-source-linked-task"];
+    return [evidence("mail:select-message"), evidence("mail:create-source-linked-task")];
   }
 
   if (routeSpec.name === "search") {
     await page.getByText("20B readiness result", { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "관계 캡처", exact: true }).click();
     await page.getByText("계약 검토 담당자를 확인합니다.").waitFor({ state: "visible", timeout: 10_000 });
-    return ["search:select-result", "search:capture-sender-relationship"];
+    return [evidence("search:select-result"), evidence("search:capture-sender-relationship")];
   }
 
   if (routeSpec.name === "tasks") {
     await page.getByRole("button", { name: "보낸 메일 미답변 팔로업 작업 생성" }).click();
     await page.getByText("미답변 팔로업 결과가 보드에 반영되었습니다.").waitFor({ state: "visible", timeout: 10_000 });
-    return ["tasks:create-reply-sla-followup"];
+    return [evidence("tasks:create-reply-sla-followup")];
   }
 
   if (routeSpec.name === "settings") {
-    await page.getByRole("button", { name: "AI 모델" }).click();
+    await page.getByRole("button", { name: "AI 모델", exact: true }).click();
     await page.getByText("/api/llm-providers", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "워크스페이스" }).click();
+    await page.getByRole("button", { name: "워크스페이스", exact: true }).click();
     const calendarStartupButton = page.locator("button").filter({ hasText: "일정 관리" }).last();
     await calendarStartupButton.click();
     const calendarStartupClass = await calendarStartupButton.getAttribute("class");
     if (!calendarStartupClass?.includes("border-primary")) {
       throw new Error("Settings startup view selector did not mark the calendar option as active");
     }
-    return ["settings:switch-ai-model-tab", "settings:select-calendar-startup-view"];
+    return [evidence("settings:switch-ai-model-tab"), evidence("settings:select-calendar-startup-view")];
   }
 
   return [];
@@ -766,7 +769,7 @@ async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
   if (consoleErrors.length > 0) {
     throw new Error(`Route ${routeSpec.path} emitted console errors:\n${consoleErrors.join("\n")}`);
   }
-  const interactionEvidence = await runDesktopInteractionSmoke(page, routeSpec, viewportSpec);
+  const interactionEvidence = await runCriticalInteractionSmoke(page, routeSpec, viewportSpec);
   const accessibilityEvidence = await runAccessibilitySmoke(page, routeSpec);
   const screenshotPath = path.join(screenshotDir, fullProductScreenshotName(routeSpec, viewportSpec, viewportCount));
   await page.screenshot({ path: screenshotPath, fullPage: false });
@@ -802,7 +805,7 @@ async function main() {
     log(`Routes: ${FULL_PRODUCT_ROUTES.map((route) => route.path).join(", ")}`);
     log(`Viewports: ${viewportSpecs.map((viewport) => `${viewport.name}(${viewport.width}x${viewport.height})`).join(", ")}`);
     if (interactions.length > 0) {
-      log(`Desktop interactions: ${interactions.join(", ")}`);
+      log(`Critical interactions: ${interactions.join(", ")}`);
     }
     log(`Accessibility checks: ${accessibility.join(", ")}`);
     log(`Screenshots: ${screenshots.join(", ")}`);

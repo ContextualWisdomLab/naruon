@@ -41,7 +41,7 @@ Result:
 Naruon full-product route smoke passed.
 Routes: /, /mail, /search, /calendar, /tasks, /projects, /data, /ai-hub, /security, /settings
 Viewports: desktop(1440x1024), mobile(390x844)
-Desktop interactions: mail:select-message, mail:create-source-linked-task, search:select-result, search:capture-sender-relationship, tasks:create-reply-sla-followup, settings:switch-ai-model-tab, settings:select-calendar-startup-view
+Critical interactions: desktop:mail:select-message, desktop:mail:create-source-linked-task, desktop:search:select-result, desktop:search:capture-sender-relationship, desktop:tasks:create-reply-sla-followup, desktop:settings:switch-ai-model-tab, desktop:settings:select-calendar-startup-view, mobile:mail:select-message, mobile:mail:create-source-linked-task, mobile:search:select-result, mobile:search:capture-sender-relationship, mobile:tasks:create-reply-sla-followup, mobile:settings:switch-ai-model-tab, mobile:settings:select-calendar-startup-view
 Accessibility checks: home:a11y-basics, mail:a11y-basics, search:a11y-basics, calendar:a11y-basics, tasks:a11y-basics, projects:a11y-basics, data:a11y-basics, ai-hub:a11y-basics, security:a11y-basics, settings:a11y-basics, home:a11y-basics, mail:a11y-basics, search:a11y-basics, calendar:a11y-basics, tasks:a11y-basics, projects:a11y-basics, data:a11y-basics, ai-hub:a11y-basics, security:a11y-basics, settings:a11y-basics
 ```
 
@@ -49,8 +49,8 @@ Figma placement result:
 
 ```text
 QA Notes board created and verified.
-Contact-sheet upload accepted with response imageHash bd92459336bc9e6f738a501435f38f40962807d1.
-Figma node 18:7 verified with image fill hash 9a0afeec7bb84c24f4369154c88d1e9c5a775a1f and FIT scale mode.
+Contact-sheet upload accepted with response imageHash cd7f5034a2651ad47d6154f9053f2a43fd9c4522.
+Figma node 18:7 verified with image fill hash cd7f5034a2651ad47d6154f9053f2a43fd9c4522 and FIT scale mode.
 Verification screenshot confirmed the contact sheet and notes are visible inside board node 18:3.
 ```
 
@@ -90,9 +90,10 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
    - Interaction evidence: mail selection and source-linked task creation, search result relationship capture, task reply-SLA escalation, and settings tab/startup selection all passed.
    - Health: pass for route-level and selected interaction smoke.
 
-2. Mobile route coverage is now stable enough for buyer technical review.
+2. Mobile route and selected interaction coverage is now stable enough for buyer technical review.
    - Evidence: all ten IA routes render expected buyer-visible text and produce mobile screenshots.
-   - Health: pass for route-level smoke.
+   - Interaction evidence: mail selection and source-linked task creation, search result relationship capture, task reply-SLA escalation, and settings tab/startup selection all passed on the mobile viewport.
+   - Health: pass for route-level and selected interaction smoke.
 
 3. Desktop and mobile accessibility basics now have repeatable smoke evidence.
    - Evidence: all ten IA routes passed visible duplicate-ID, visible interactive accessible-name, and keyboard Tab focus-entry checks on desktop and mobile.
@@ -104,8 +105,8 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
    - Health: fixed and re-captured.
 
 5. The smoke gate still does not prove full workflow completion.
-   - Evidence: the command now checks expected route text, console errors, not-found states, screenshot creation, selected desktop interactions, and basic automated accessibility checks.
-   - Remaining gap: send, writeback confirmation, graph expansion, permission edits, connector rotation, settings save persistence, and mobile interaction-state need workflow-specific assertions before final procurement readiness.
+   - Evidence: the command now checks expected route text, console errors, not-found states, screenshot creation, selected desktop/mobile interactions, and basic automated accessibility checks.
+   - Remaining gap: send, writeback confirmation, graph expansion, permission edits, connector rotation, settings save persistence, and route-specific drawer/modal states need workflow-specific assertions before final procurement readiness.
 
 ## Accessibility Risks
 
@@ -115,11 +116,11 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
 
 ## Product Design Assessment
 
-The current branch now has repeatable desktop and mobile visual evidence for the ten buyer-review IA routes, selected desktop critical-interaction smoke evidence, and basic automated accessibility evidence across desktop and mobile. This moves the package from route-existence evidence to responsive route-level evidence with partial workflow and accessibility proof, but it does not prove full sale readiness.
+The current branch now has repeatable desktop and mobile visual evidence for the ten buyer-review IA routes, selected desktop/mobile critical-interaction smoke evidence, and basic automated accessibility evidence across desktop and mobile. This moves the package from route-existence evidence to responsive route-level evidence with partial workflow and accessibility proof, but it does not prove full sale readiness.
 
 The remaining Product Design P0/P1 work is:
 
-1. Add interaction-state coverage for the most important buyer flows:
+1. Expand interaction-state coverage to the remaining important buyer flows:
    - mail reply draft and source drawer
    - search result source drawer and graph expansion
    - calendar writeback intent
