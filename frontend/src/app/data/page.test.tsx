@@ -127,6 +127,165 @@ const acquisitionRemediationActions = [
   },
 ];
 
+const acquisitionReadinessKpis = [
+  {
+    kpi_key: "thread_id_integrity_target",
+    source_check_key: "thread_id_integrity",
+    display_name: "Thread id integrity target",
+    owner_area: "email_ingestion",
+    priority_rank: 1,
+    current_percent: 75,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "Thread provenance must reach target before acquisition close.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "dedupe_fingerprint_target",
+    source_check_key: "dedupe_fingerprint",
+    display_name: "Duplicate fingerprint target",
+    owner_area: "email_ingestion",
+    priority_rank: 2,
+    current_percent: 50,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "Duplicate fingerprints must reach target before corpus valuation.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "attachment_content_target",
+    source_check_key: "attachment_content",
+    display_name: "Attachment content target",
+    owner_area: "attachment_parsing",
+    priority_rank: 3,
+    current_percent: 67,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "Attachment text extraction must reach target before buyer review.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "content_graph_coverage_target",
+    source_check_key: "content_graph_coverage",
+    display_name: "DOM paragraph coverage target",
+    owner_area: "content_graph",
+    priority_rank: 4,
+    current_percent: 75,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "DOM paragraph segmentation must reach target before graph claims.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "knowledge_graph_coverage_target",
+    source_check_key: "knowledge_graph_coverage",
+    display_name: "Knowledge graph coverage target",
+    owner_area: "knowledge_graph",
+    priority_rank: 5,
+    current_percent: 50,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "Knowledge graph edge persistence must reach target before diligence.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "content_segment_text_readiness_target",
+    source_check_key: "content_segment_text_readiness",
+    display_name: "Segment text readiness target",
+    owner_area: "content_graph",
+    priority_rank: 6,
+    current_percent: 88,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "Safe paragraph text and word counts must reach target.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "kg_evidence_endpoint_target",
+    source_check_key: "knowledge_graph_evidence_endpoint_readiness",
+    display_name: "KG evidence endpoint target",
+    owner_area: "knowledge_graph",
+    priority_rank: 7,
+    current_percent: 80,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "KG evidence endpoints must reach target before buyer audit.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "semantic_relation_source_backing_target",
+    source_check_key: "semantic_relation_source_backing",
+    display_name: "Semantic relation source target",
+    owner_area: "semantic_kg",
+    priority_rank: 8,
+    current_percent: 67,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "Semantic relation source backing must reach target.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "attachment_parse_coverage_target",
+    source_check_key: "attachment_parse_coverage",
+    display_name: "Attachment parser coverage target",
+    owner_area: "attachment_parsing",
+    priority_rank: 9,
+    current_percent: 67,
+    target_percent: 100,
+    target_met: false,
+    status_code: "needs_attention",
+    guardrail_text: "Attachment parser coverage must reach target or have safe exceptions.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "source_registry_target",
+    source_check_key: "source_registry",
+    display_name: "Source registry target",
+    owner_area: "connector_registry",
+    priority_rank: 10,
+    current_percent: 100,
+    target_percent: 100,
+    target_met: true,
+    status_code: "pass",
+    guardrail_text: "Customer-owned source registration must stay complete.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "connector_signal_target",
+    source_check_key: "connector_signal",
+    display_name: "Connector observability target",
+    owner_area: "connector_observability",
+    priority_rank: 11,
+    current_percent: 100,
+    target_percent: 100,
+    target_met: true,
+    status_code: "pass",
+    guardrail_text: "Connector observability must stay complete.",
+    provider_write_executed: false,
+  },
+  {
+    kpi_key: "semantic_kg_readiness_target",
+    source_check_key: "semantic_kg_readiness",
+    display_name: "Semantic KG evidence target",
+    owner_area: "semantic_kg",
+    priority_rank: 12,
+    current_percent: 100,
+    target_percent: 100,
+    target_met: true,
+    status_code: "pass",
+    guardrail_text: "Semantic KG evidence must remain provenance-approved.",
+    provider_write_executed: false,
+  },
+];
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -154,6 +313,7 @@ const dataQualitySurface = {
     evidence_packet_ready: true,
     snapshot_verification_ready: true,
     provider_write_executed: false,
+    kpis: acquisitionReadinessKpis,
     remediation_actions: acquisitionRemediationActions,
     detail_text: "Buyer evidence packet is generated, but blocking quality checks remain.",
   },
@@ -560,6 +720,7 @@ const dataEvidenceSnapshot = {
     evidence_packet_ready: true,
     snapshot_verification_ready: true,
     provider_write_executed: false,
+    kpis: acquisitionReadinessKpis,
     remediation_actions: acquisitionRemediationActions,
     detail_text: "Buyer evidence packet is generated, but blocking quality checks remain.",
   },
@@ -1196,6 +1357,11 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("증거 패킷 생성됨");
     expect(container.textContent).toContain("Snapshot verification ready");
     expect(container.textContent).toContain("thread_id_integrity");
+    expect(container.textContent).toContain("Acquisition KPI targets");
+    expect(container.textContent).toContain("Thread id integrity target");
+    expect(container.textContent).toContain("75% / 100%");
+    expect(container.textContent).toContain("Semantic KG evidence target");
+    expect(container.textContent).toContain("Semantic KG evidence must remain provenance-approved");
     expect(container.textContent).toContain("Remediation actions");
     expect(container.textContent).toContain("Canonical thread repair");
     expect(container.textContent).toContain("email_ingestion");
@@ -1266,6 +1432,8 @@ describe("DataPage", () => {
     expect(copiedSnapshot.semantic_relation_evidence_samples[0].source_scope).toBe("message_thread");
     expect(copiedSnapshot.acquisition_readiness_gate.gate_key).toBe("buyer_evidence_readiness");
     expect(copiedSnapshot.acquisition_readiness_gate.readiness_score).toBe(25);
+    expect(copiedSnapshot.acquisition_readiness_gate.kpis).toHaveLength(12);
+    expect(copiedSnapshot.acquisition_readiness_gate.kpis[0].kpi_key).toBe("thread_id_integrity_target");
     expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions).toHaveLength(9);
     expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions[0].action_key).toBe("repair_thread_id_integrity");
   });

@@ -64,6 +64,20 @@ export type AcquisitionRemediationAction = {
   provider_write_executed: boolean;
 };
 
+export type AcquisitionReadinessKpi = {
+  kpi_key: string;
+  source_check_key: string;
+  display_name: string;
+  owner_area: string;
+  priority_rank: number;
+  current_percent: number;
+  target_percent: number;
+  target_met: boolean;
+  status_code: QualityStatusCode;
+  guardrail_text: string;
+  provider_write_executed: boolean;
+};
+
 export type AcquisitionReadinessGate = {
   gate_key: string;
   display_name: string;
@@ -77,6 +91,7 @@ export type AcquisitionReadinessGate = {
   evidence_packet_ready: boolean;
   snapshot_verification_ready: boolean;
   provider_write_executed: boolean;
+  kpis: AcquisitionReadinessKpi[];
   remediation_actions: AcquisitionRemediationAction[];
   detail_text: string;
 };

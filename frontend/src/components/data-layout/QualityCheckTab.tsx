@@ -149,6 +149,43 @@ export function QualityCheckTab({
                       </div>
                     </div>
                   )}
+                  {acquisitionReadinessGate.kpis.length > 0 && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Acquisition KPI targets</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {acquisitionReadinessGate.kpis.map((kpi) => (
+                          <article key={kpi.kpi_key} className="rounded-xl border border-border bg-background p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <h3 className="text-sm font-black">{toSafeReactText(kpi.display_name)}</h3>
+                                <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(kpi.guardrail_text)}</p>
+                              </div>
+                              <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(kpi.status_code)}`}>
+                                {getSurfaceStatusLabel(kpi.status_code)}
+                              </span>
+                            </div>
+                            <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+                              <div>
+                                <dt className="font-black text-muted-foreground">Current / target</dt>
+                                <dd className="mt-1 text-sm font-bold">{formatCount(kpi.current_percent)}% / {formatCount(kpi.target_percent)}%</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">Owner area</dt>
+                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(kpi.owner_area)}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(kpi.provider_write_executed)}</dd>
+                              </div>
+                            </dl>
+                            <p className="mt-3 text-xs font-bold text-muted-foreground">
+                              {kpi.target_met ? 'Target met' : 'Target gap'} · {toSafeReactText(kpi.source_check_key)}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {acquisitionReadinessGate.remediation_actions.length > 0 && (
                     <div className="border-t border-border p-5">
                       <p className="text-xs font-black text-muted-foreground">Remediation actions</p>

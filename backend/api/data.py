@@ -199,6 +199,20 @@ class DataAcquisitionRemediationAction(BaseModel):
     provider_write_executed: bool
 
 
+class DataAcquisitionReadinessKpi(BaseModel):
+    kpi_key: str
+    source_check_key: str
+    display_name: str
+    owner_area: str
+    priority_rank: int
+    current_percent: int
+    target_percent: int
+    target_met: bool
+    status_code: QualityStatus
+    guardrail_text: str
+    provider_write_executed: bool
+
+
 class DataAcquisitionReadinessGate(BaseModel):
     gate_key: str
     display_name: str
@@ -212,6 +226,7 @@ class DataAcquisitionReadinessGate(BaseModel):
     evidence_packet_ready: bool
     snapshot_verification_ready: bool
     provider_write_executed: bool
+    kpis: list[DataAcquisitionReadinessKpi]
     remediation_actions: list[DataAcquisitionRemediationAction]
     detail_text: str
 
@@ -627,6 +642,118 @@ _REMEDIATION_ACTIONS_BY_CHECK_KEY = {
         ),
     },
 }
+_ACQUISITION_KPI_TARGETS_BY_CHECK_KEY = {
+    "thread_id_integrity": {
+        "kpi_key": "thread_id_integrity_target",
+        "display_name": "Thread id integrity target",
+        "owner_area": "email_ingestion",
+        "priority_rank": 1,
+        "target_percent": 100,
+        "guardrail_text": (
+            "Thread provenance must reach target before acquisition close."
+        ),
+    },
+    "dedupe_fingerprint": {
+        "kpi_key": "dedupe_fingerprint_target",
+        "display_name": "Duplicate fingerprint target",
+        "owner_area": "email_ingestion",
+        "priority_rank": 2,
+        "target_percent": 100,
+        "guardrail_text": (
+            "Duplicate fingerprints must reach target before corpus valuation."
+        ),
+    },
+    "attachment_content": {
+        "kpi_key": "attachment_content_target",
+        "display_name": "Attachment content target",
+        "owner_area": "attachment_parsing",
+        "priority_rank": 3,
+        "target_percent": 100,
+        "guardrail_text": (
+            "Attachment text extraction must reach target before buyer review."
+        ),
+    },
+    "content_graph_coverage": {
+        "kpi_key": "content_graph_coverage_target",
+        "display_name": "DOM paragraph coverage target",
+        "owner_area": "content_graph",
+        "priority_rank": 4,
+        "target_percent": 100,
+        "guardrail_text": (
+            "DOM paragraph segmentation must reach target before graph claims."
+        ),
+    },
+    "knowledge_graph_coverage": {
+        "kpi_key": "knowledge_graph_coverage_target",
+        "display_name": "Knowledge graph coverage target",
+        "owner_area": "knowledge_graph",
+        "priority_rank": 5,
+        "target_percent": 100,
+        "guardrail_text": (
+            "Knowledge graph edge persistence must reach target before diligence."
+        ),
+    },
+    "content_segment_text_readiness": {
+        "kpi_key": "content_segment_text_readiness_target",
+        "display_name": "Segment text readiness target",
+        "owner_area": "content_graph",
+        "priority_rank": 6,
+        "target_percent": 100,
+        "guardrail_text": "Safe paragraph text and word counts must reach target.",
+    },
+    "knowledge_graph_evidence_endpoint_readiness": {
+        "kpi_key": "kg_evidence_endpoint_target",
+        "display_name": "KG evidence endpoint target",
+        "owner_area": "knowledge_graph",
+        "priority_rank": 7,
+        "target_percent": 100,
+        "guardrail_text": (
+            "KG evidence endpoints must reach target before buyer audit."
+        ),
+    },
+    "semantic_relation_source_backing": {
+        "kpi_key": "semantic_relation_source_backing_target",
+        "display_name": "Semantic relation source target",
+        "owner_area": "semantic_kg",
+        "priority_rank": 8,
+        "target_percent": 100,
+        "guardrail_text": "Semantic relation source backing must reach target.",
+    },
+    "attachment_parse_coverage": {
+        "kpi_key": "attachment_parse_coverage_target",
+        "display_name": "Attachment parser coverage target",
+        "owner_area": "attachment_parsing",
+        "priority_rank": 9,
+        "target_percent": 100,
+        "guardrail_text": (
+            "Attachment parser coverage must reach target or have safe exceptions."
+        ),
+    },
+    "source_registry": {
+        "kpi_key": "source_registry_target",
+        "display_name": "Source registry target",
+        "owner_area": "connector_registry",
+        "priority_rank": 10,
+        "target_percent": 100,
+        "guardrail_text": "Customer-owned source registration must stay complete.",
+    },
+    "connector_signal": {
+        "kpi_key": "connector_signal_target",
+        "display_name": "Connector observability target",
+        "owner_area": "connector_observability",
+        "priority_rank": 11,
+        "target_percent": 100,
+        "guardrail_text": "Connector observability must stay complete.",
+    },
+    "semantic_kg_readiness": {
+        "kpi_key": "semantic_kg_readiness_target",
+        "display_name": "Semantic KG evidence target",
+        "owner_area": "semantic_kg",
+        "priority_rank": 12,
+        "target_percent": 100,
+        "guardrail_text": "Semantic KG evidence must remain provenance-approved.",
+    },
+}
 
 
 def _normalize_attachment_content_type(value: str | None) -> str:
@@ -906,6 +1033,38 @@ def _acquisition_remediation_actions(
     return sorted(actions, key=lambda action: action.priority_rank)
 
 
+def _quality_check_completion_percent(check: DataQualityCheck) -> int:
+    if check.total_count <= 0:
+        return 0
+    passed_count = max(check.total_count - check.issue_count, 0)
+    return round((passed_count / check.total_count) * 100)
+
+
+def _acquisition_readiness_kpis(
+    quality_checks: list[DataQualityCheck],
+) -> list[DataAcquisitionReadinessKpi]:
+    kpis: list[DataAcquisitionReadinessKpi] = []
+    for check in quality_checks:
+        target = _ACQUISITION_KPI_TARGETS_BY_CHECK_KEY.get(check.check_key)
+        if target is None:
+            continue
+        current_percent = _quality_check_completion_percent(check)
+        target_percent = int(target["target_percent"])
+        kpis.append(
+            DataAcquisitionReadinessKpi(
+                source_check_key=check.check_key,
+                current_percent=current_percent,
+                target_met=(
+                    check.status_code == "pass" and current_percent >= target_percent
+                ),
+                status_code=check.status_code,
+                provider_write_executed=False,
+                **target,
+            )
+        )
+    return sorted(kpis, key=lambda kpi: kpi.priority_rank)
+
+
 def _acquisition_readiness_gate(
     *,
     quality_checks: list[DataQualityCheck],
@@ -956,6 +1115,7 @@ def _acquisition_readiness_gate(
         evidence_packet_ready=evidence_packet_ready,
         snapshot_verification_ready=True,
         provider_write_executed=False,
+        kpis=_acquisition_readiness_kpis(quality_checks),
         remediation_actions=_acquisition_remediation_actions(quality_checks),
         detail_text=detail_text,
     )
