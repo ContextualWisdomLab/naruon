@@ -642,6 +642,26 @@ const dataQualitySurface = {
       provider_write_executed: false,
     },
   ],
+  attachment_parse_breakdown: [
+    {
+      content_type: 'text/markdown',
+      parse_status: 'parsed',
+      parser_key: 'markdown',
+      display_name: 'Markdown attachments',
+      object_count: 2,
+      evidence_source: 'email_attachments.content_type, email_attachments.parse_status',
+      provider_write_executed: false,
+    },
+    {
+      content_type: 'application/pdf',
+      parse_status: 'unsupported_content_type',
+      parser_key: 'unsupported_binary',
+      display_name: 'Unsupported binary attachments',
+      object_count: 1,
+      evidence_source: 'email_attachments.content_type, email_attachments.parse_status',
+      provider_write_executed: false,
+    },
+  ],
   connector_events: [
     {
       event_uid: 'connector_evt_data_quality',

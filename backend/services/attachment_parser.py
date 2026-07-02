@@ -10,20 +10,59 @@ _GENERIC_CONTENT_TYPES = {
     "binary/octet-stream",
     "application/x-binary",
 }
+MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
+
+
+@dataclass(frozen=True)
+class AttachmentParserDescriptor:
+    parser_key: str
+    display_name: str
+    content_types: tuple[str, ...]
+    extensions: tuple[str, ...]
+    parse_status: str
+
+
+_PARSER_MANIFEST = (
+    AttachmentParserDescriptor(
+        parser_key="plain_text",
+        display_name="Plain text attachments",
+        content_types=("text/plain",),
+        extensions=(".txt", ".text"),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="html",
+        display_name="HTML attachments",
+        content_types=("text/html",),
+        extensions=(".html", ".htm"),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="markdown",
+        display_name="Markdown attachments",
+        content_types=("text/markdown", "text/x-markdown", "application/markdown"),
+        extensions=(".md", ".markdown"),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="unsupported_binary",
+        display_name="Unsupported binary attachments",
+        content_types=("application/octet-stream",),
+        extensions=(),
+        parse_status="unsupported_content_type",
+    ),
+)
 _SUPPORTED_CONTENT_TYPES = {
-    "text/plain",
-    "text/html",
-    "text/markdown",
-    "text/x-markdown",
-    "application/markdown",
+    content_type
+    for descriptor in _PARSER_MANIFEST
+    if descriptor.parse_status == "parsed"
+    for content_type in descriptor.content_types
 }
 _EXTENSION_CONTENT_TYPES = {
-    ".txt": "text/plain",
-    ".text": "text/plain",
-    ".html": "text/html",
-    ".htm": "text/html",
-    ".md": "text/markdown",
-    ".markdown": "text/markdown",
+    extension: descriptor.content_types[0]
+    for descriptor in _PARSER_MANIFEST
+    if descriptor.parse_status == "parsed"
+    for extension in descriptor.extensions
 }
 
 
@@ -36,6 +75,10 @@ class AttachmentParseResult:
     parse_content_type: str
     parse_status: str
     parse_error_code: str | None
+
+
+def get_attachment_parser_manifest() -> list[AttachmentParserDescriptor]:
+    return list(_PARSER_MANIFEST)
 
 
 def parse_email_attachment(
@@ -63,6 +106,17 @@ def parse_email_attachment(
         )
 
     parse_content = _coerce_text(raw_content).strip()
+    if len(parse_content) > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content="",
+            content_type=normalized_content_type,
+            parse_content="",
+            parse_content_type=parse_content_type,
+            parse_status="parse_size_limit_exceeded",
+            parse_error_code="parse_size_limit_exceeded",
+        )
+
     return AttachmentParseResult(
         filename=safe_filename,
         content=_display_text(parse_content),

@@ -246,6 +246,10 @@ def mock_db():
             (3, 8),  # content graph stats
             (2, 10),  # knowledge graph stats
             (2, 1),  # attachment parse stats
+            [
+                ("text/markdown", "parsed", 2),
+                ("application/pdf", "unsupported_content_type", 1),
+            ],  # attachment parse breakdown
             [_connector_event("connector_evt_data_quality")],
             [
                 (_attachment("roadmap.pdf", "extracted attachment text"), ready_email),
@@ -372,6 +376,30 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "detail_text": "Some scoped attachments need parser coverage.",
         "provider_write_executed": False,
     }
+    assert data["attachment_parse_breakdown"] == [
+        {
+            "content_type": "text/markdown",
+            "parse_status": "parsed",
+            "parser_key": "markdown",
+            "display_name": "Markdown attachments",
+            "object_count": 2,
+            "evidence_source": (
+                "email_attachments.content_type, email_attachments.parse_status"
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "content_type": "application/pdf",
+            "parse_status": "unsupported_content_type",
+            "parser_key": "unsupported_binary",
+            "display_name": "Unsupported binary attachments",
+            "object_count": 1,
+            "evidence_source": (
+                "email_attachments.content_type, email_attachments.parse_status"
+            ),
+            "provider_write_executed": False,
+        },
+    ]
     assert data["connector_events"][0]["event_uid"] == "connector_evt_data_quality"
     assert data["repository_assets"][0] == {
         "asset_key": data["repository_assets"][0]["asset_key"],

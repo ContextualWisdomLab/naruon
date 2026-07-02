@@ -24,11 +24,15 @@ from db.models import (
     WebdavAccount,
 )
 from db.session import get_db
+from services.attachment_parser import get_attachment_parser_manifest
 from services.webdav_service import webdav_service
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 DATA_VECTOR_DIMENSIONS = 1536
+ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
+    "email_attachments.content_type, email_attachments.parse_status"
+)
 WEB_DAV_ERROR_STATUS_CODES = {
     "no_webdav_account": 422,
     "webdav_account_not_found": 422,
@@ -138,6 +142,16 @@ class DataQualityCheck(BaseModel):
     provider_write_executed: bool
 
 
+class DataAttachmentParseBreakdown(BaseModel):
+    content_type: str
+    parse_status: str
+    parser_key: str
+    display_name: str
+    object_count: int
+    evidence_source: str
+    provider_write_executed: bool
+
+
 class DataConnectorEvent(BaseModel):
     event_uid: str
     signal_key: str
@@ -204,6 +218,7 @@ class DataQualitySurfaceResponse(BaseModel):
     pipeline_stages: list[DataPipelineStage]
     embedding_collections: list[DataEmbeddingCollection]
     quality_checks: list[DataQualityCheck]
+    attachment_parse_breakdown: list[DataAttachmentParseBreakdown]
     connector_events: list[DataConnectorEvent]
 
 
@@ -220,6 +235,53 @@ def _safe_display_text(value: str | None, fallback: str) -> str:
 
 def _safe_document_type(value: str) -> str:
     return _safe_display_text(value, "application/octet-stream")[:120]
+
+
+_ATTACHMENT_PARSER_BY_CONTENT_TYPE = {
+    content_type: descriptor
+    for descriptor in get_attachment_parser_manifest()
+    for content_type in descriptor.content_types
+}
+_UNSUPPORTED_ATTACHMENT_PARSER = _ATTACHMENT_PARSER_BY_CONTENT_TYPE[
+    "application/octet-stream"
+]
+
+
+def _normalize_attachment_content_type(value: str | None) -> str:
+    normalized = (value or "application/octet-stream").split(";", 1)[0]
+    normalized = normalized.strip().lower()
+    return normalized or "application/octet-stream"
+
+
+def _attachment_parser_descriptor_for(content_type: str, parse_status: str):
+    if parse_status == "unsupported_content_type":
+        return _UNSUPPORTED_ATTACHMENT_PARSER
+    return _ATTACHMENT_PARSER_BY_CONTENT_TYPE.get(
+        content_type,
+        _UNSUPPORTED_ATTACHMENT_PARSER,
+    )
+
+
+def _attachment_parse_breakdown_row(
+    content_type: str | None,
+    parse_status: str | None,
+    object_count: int,
+) -> DataAttachmentParseBreakdown:
+    normalized_content_type = _normalize_attachment_content_type(content_type)
+    safe_parse_status = _safe_display_text(parse_status, "unknown")[:64]
+    descriptor = _attachment_parser_descriptor_for(
+        normalized_content_type,
+        safe_parse_status,
+    )
+    return DataAttachmentParseBreakdown(
+        content_type=normalized_content_type,
+        parse_status=safe_parse_status,
+        parser_key=descriptor.parser_key,
+        display_name=descriptor.display_name,
+        object_count=int(object_count or 0),
+        evidence_source=ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE,
+        provider_write_executed=False,
+    )
 
 
 def _safe_path_segment(value: str | None, fallback: str) -> str:
@@ -1204,6 +1266,37 @@ async def _get_attachment_parse_stats(
     )
 
 
+async def _get_attachment_parse_breakdown(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> list[DataAttachmentParseBreakdown]:
+    object_count = func.count(Attachment.id).label("object_count")
+    attachment_parse_breakdown_result = await db.execute(
+        select(
+            Attachment.content_type,
+            Attachment.parse_status,
+            object_count,
+        )
+        .join(Email)
+        .where(*email_scope)
+        .group_by(Attachment.content_type, Attachment.parse_status)
+        .order_by(
+            object_count.desc(),
+            Attachment.content_type.asc(),
+            Attachment.parse_status.asc(),
+        )
+        .limit(12)
+    )
+    return [
+        _attachment_parse_breakdown_row(
+            content_type=content_type,
+            parse_status=parse_status,
+            object_count=count,
+        )
+        for content_type, parse_status, count in attachment_parse_breakdown_result.all()
+    ]
+
+
 async def _get_attachment_assets(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
@@ -1275,6 +1368,10 @@ async def get_data_quality_surface(
     parsed_attachment_count = attachment_parse_stats.parsed_count
     unparsed_attachment_count = attachment_parse_stats.unparsed_count
 
+    attachment_parse_breakdown = await _get_attachment_parse_breakdown(
+        db,
+        email_scope,
+    )
     connector_events = await _get_connector_events(db, auth_context)
     attachment_asset_rows = await _get_attachment_assets(db, email_scope)
 
@@ -1330,6 +1427,7 @@ async def get_data_quality_surface(
             unparsed_attachment_count=unparsed_attachment_count,
             connector_event_count=len(connector_events),
         ),
+        attachment_parse_breakdown=attachment_parse_breakdown,
         connector_events=[
             DataConnectorEvent(
                 event_uid=event.event_uid,

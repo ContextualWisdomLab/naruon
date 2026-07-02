@@ -107,6 +107,15 @@ export type DataQualitySurfaceResponse = {
     detail_text: string;
     provider_write_executed: boolean;
   }>;
+  attachment_parse_breakdown?: Array<{
+    content_type: string;
+    parse_status: string;
+    parser_key: string;
+    display_name: string;
+    object_count: number;
+    evidence_source: string;
+    provider_write_executed: boolean;
+  }>;
   connector_events: Array<{
     event_uid: string;
     signal_key: string;

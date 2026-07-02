@@ -20,6 +20,8 @@ export function QualityCheckTab({
   dataSurfaceStatus,
   dataQualitySurface,
 }: QualityCheckTabProps) {
+  const attachmentParseBreakdown = dataQualitySurface?.attachment_parse_breakdown ?? [];
+
   return (
 <div className="space-y-6">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -88,6 +90,42 @@ export function QualityCheckTab({
                   ))}
                 </div>
               </div>
+              {attachmentParseBreakdown.length > 0 && (
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-border bg-secondary/30">
+                    <h2 className="font-bold text-lg">첨부 parser 형식별 현황</h2>
+                  </div>
+                  <div className="grid gap-3 p-5">
+                    {attachmentParseBreakdown.map((item) => (
+                      <article key={`${item.content_type}:${item.parse_status}`} className="rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(item.display_name)}</h3>
+                            <p className="mt-1 break-all text-sm leading-6 text-muted-foreground">{toSafeReactText(item.content_type)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {toSafeReactText(item.parse_status)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+                          <div>
+                            <dt className="font-black text-muted-foreground">건수</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(item.object_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">parser</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.parser_key)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
   );
 }
