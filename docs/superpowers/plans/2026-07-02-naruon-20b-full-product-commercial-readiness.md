@@ -600,7 +600,7 @@ The documents explicitly reject public-launch, guaranteed 20B ROI, complete prov
 - Consumes: all implementation and evidence artifacts.
 - Produces: final completion or explicit not-complete decision.
 
-- [ ] **Step 1: Run local gates**
+- [x] **Step 1: Run local gates**
 
 Run:
 
@@ -618,7 +618,32 @@ Expected:
 Every command exits 0 before claiming local frontend readiness.
 ```
 
-- [ ] **Step 2: Run backend gates**
+Actual local frontend evidence captured on 2026-07-02 KST:
+
+```text
+pnpm --dir frontend test
+Test Files  45 passed (45)
+Tests       325 passed (325)
+
+pnpm --dir frontend typecheck
+tsc --noEmit
+
+pnpm --dir frontend build
+Compiled successfully
+
+pnpm --dir frontend lint
+eslint
+
+pnpm --dir frontend pilot:smoke
+Naruon pilot smoke passed.
+
+pnpm --dir frontend full:smoke
+Naruon full-product route smoke passed.
+
+git diff --check
+```
+
+- [x] **Step 2: Run backend gates**
 
 Run:
 
@@ -633,7 +658,17 @@ Expected:
 Backend tests pass before claiming production-path readiness.
 ```
 
-- [ ] **Step 3: Run evidence scans**
+Actual backend evidence captured on 2026-07-02 KST:
+
+```text
+cd backend && python3 -m ruff check .
+All checks passed!
+
+cd backend && python3 -m pytest -q
+1107 passed, 15 skipped in 11.29s
+```
+
+- [x] **Step 3: Run evidence scans**
 
 Run:
 
@@ -646,6 +681,13 @@ Expected:
 
 ```text
 Matches are either explicit exclusions or guarded caveats, not unsupported success claims.
+```
+
+Actual scan interpretation on 2026-07-02 KST:
+
+```text
+Figma Code Connect matches are exclusion statements or evidence that Code Connect was not used.
+Public-launch/live-KPI/20B-ROI matches are caveats, rejected-language examples, or explicit no-claim statements.
 ```
 
 - [ ] **Step 4: Decide completion**
