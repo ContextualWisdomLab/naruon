@@ -29,6 +29,8 @@ export const FULL_PRODUCT_VIEWPORTS = [
   { name: "mobile", width: 390, height: 844, isMobile: true },
 ];
 
+export const FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES = ["mail", "search", "tasks", "settings"];
+
 export function resolveFullProductBaseUrl(rawBaseUrl) {
   const fullProductBaseUrl = new URL(rawBaseUrl);
   if (!ALLOWED_FULL_PRODUCT_HOSTS.has(fullProductBaseUrl.hostname)) {
@@ -528,7 +530,6 @@ async function installRoutes(page) {
     if (endpoint === "/api/emails/send") return routeJson(route, { simulated: true });
     if (endpoint === "/api/tasks") return routeJson(route, [task]);
     if (endpoint === "/api/tasks/from-email") return routeJson(route, { created: 1 });
-    if (endpoint.startsWith("/api/tasks/")) return routeJson(route, { ...task, status: "done" });
     if (endpoint === "/api/tasks/reply-sla-escalations") {
       return routeJson(route, {
         evaluated: 1,
@@ -537,6 +538,7 @@ async function installRoutes(page) {
         tasks: [task],
       });
     }
+    if (endpoint.startsWith("/api/tasks/")) return routeJson(route, { ...task, status: "done" });
     if (endpoint === "/api/calendar/writeback-sources") return routeJson(route, []);
     if (endpoint === "/api/calendar/writeback-intent") return routeJson(route, { intent_id: "calendar-intent-1", provider_write_executed: false });
     if (endpoint === "/api/webdav/folders") return routeJson(route, [projectFolder]);
@@ -576,6 +578,47 @@ async function installRoutes(page) {
   });
 }
 
+async function runDesktopInteractionSmoke(page, routeSpec, viewportSpec) {
+  if (viewportSpec.name !== "desktop") return [];
+
+  if (routeSpec.name === "mail") {
+    await page.getByText("20B smoke source", { exact: true }).first().click();
+    const createTaskButton = page.getByRole("button", { name: "실행 항목 생성" }).first();
+    await createTaskButton.waitFor({ state: "visible", timeout: 10_000 });
+    await createTaskButton.click();
+    await page.getByText("1개 실행 항목을 티켓형 실행 항목으로 추적합니다.").waitFor({ state: "visible", timeout: 10_000 });
+    return ["mail:select-message", "mail:create-source-linked-task"];
+  }
+
+  if (routeSpec.name === "search") {
+    await page.getByText("20B readiness result", { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "관계 캡처", exact: true }).click();
+    await page.getByText("계약 검토 담당자를 확인합니다.").waitFor({ state: "visible", timeout: 10_000 });
+    return ["search:select-result", "search:capture-sender-relationship"];
+  }
+
+  if (routeSpec.name === "tasks") {
+    await page.getByRole("button", { name: "보낸 메일 미답변 팔로업 작업 생성" }).click();
+    await page.getByText("미답변 팔로업 결과가 보드에 반영되었습니다.").waitFor({ state: "visible", timeout: 10_000 });
+    return ["tasks:create-reply-sla-followup"];
+  }
+
+  if (routeSpec.name === "settings") {
+    await page.getByRole("button", { name: "AI 모델" }).click();
+    await page.getByText("/api/llm-providers", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "워크스페이스" }).click();
+    const calendarStartupButton = page.locator("button").filter({ hasText: "일정 관리" }).last();
+    await calendarStartupButton.click();
+    const calendarStartupClass = await calendarStartupButton.getAttribute("class");
+    if (!calendarStartupClass?.includes("border-primary")) {
+      throw new Error("Settings startup view selector did not mark the calendar option as active");
+    }
+    return ["settings:switch-ai-model-tab", "settings:select-calendar-startup-view"];
+  }
+
+  return [];
+}
+
 async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
   const page = await context.newPage();
   const consoleErrors = [];
@@ -603,10 +646,11 @@ async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
   if (consoleErrors.length > 0) {
     throw new Error(`Route ${routeSpec.path} emitted console errors:\n${consoleErrors.join("\n")}`);
   }
+  const interactionEvidence = await runDesktopInteractionSmoke(page, routeSpec, viewportSpec);
   const screenshotPath = path.join(screenshotDir, fullProductScreenshotName(routeSpec, viewportSpec, viewportCount));
   await page.screenshot({ path: screenshotPath, fullPage: false });
   await page.close();
-  return screenshotPath;
+  return { screenshotPath, interactionEvidence };
 }
 
 async function main() {
@@ -617,6 +661,7 @@ async function main() {
     serverProcess = await startServerIfNeeded();
     browser = await launchBrowser();
     const screenshots = [];
+    const interactions = [];
     const viewportSpecs = resolveFullProductViewportSpecs(process.env.NARUON_FULL_PRODUCT_VIEWPORTS || "desktop");
     for (const viewportSpec of viewportSpecs) {
       const context = await browser.newContext({
@@ -624,13 +669,18 @@ async function main() {
         isMobile: Boolean(viewportSpec.isMobile),
       });
       for (const routeSpec of FULL_PRODUCT_ROUTES) {
-        screenshots.push(await runRouteSmoke(context, routeSpec, viewportSpec, viewportSpecs.length));
+        const result = await runRouteSmoke(context, routeSpec, viewportSpec, viewportSpecs.length);
+        screenshots.push(result.screenshotPath);
+        interactions.push(...result.interactionEvidence);
       }
       await context.close();
     }
     log("Naruon full-product route smoke passed.");
     log(`Routes: ${FULL_PRODUCT_ROUTES.map((route) => route.path).join(", ")}`);
     log(`Viewports: ${viewportSpecs.map((viewport) => `${viewport.name}(${viewport.width}x${viewport.height})`).join(", ")}`);
+    if (interactions.length > 0) {
+      log(`Desktop interactions: ${interactions.join(", ")}`);
+    }
     log(`Screenshots: ${screenshots.join(", ")}`);
   } finally {
     if (browser) await browser.close().catch(() => {});

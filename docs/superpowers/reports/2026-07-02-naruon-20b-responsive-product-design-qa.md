@@ -41,13 +41,14 @@ Result:
 Naruon full-product route smoke passed.
 Routes: /, /mail, /search, /calendar, /tasks, /projects, /data, /ai-hub, /security, /settings
 Viewports: desktop(1440x1024), mobile(390x844)
+Desktop interactions: mail:select-message, mail:create-source-linked-task, search:select-result, search:capture-sender-relationship, tasks:create-reply-sla-followup, settings:switch-ai-model-tab, settings:select-calendar-startup-view
 ```
 
 Figma placement result:
 
 ```text
 QA Notes board created and verified.
-Contact-sheet image uploaded with imageHash 9a0afeec7bb84c24f4369154c88d1e9c5a775a1f.
+Contact-sheet image uploaded with imageHash e24db3022236c27033c8689526ab8d83845b7192.
 Verification screenshot confirmed the contact sheet and notes are visible inside board node 18:3.
 ```
 
@@ -82,9 +83,10 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
 
 ## Findings
 
-1. Desktop route coverage is now stable enough for buyer technical review.
+1. Desktop route and selected interaction coverage is now stable enough for buyer technical review.
    - Evidence: all ten IA routes render expected buyer-visible text and produce non-empty screenshots.
-   - Health: pass for route-level smoke.
+   - Interaction evidence: mail selection and source-linked task creation, search result relationship capture, task reply-SLA escalation, and settings tab/startup selection all passed.
+   - Health: pass for route-level and selected interaction smoke.
 
 2. Mobile route coverage is now stable enough for buyer technical review.
    - Evidence: all ten IA routes render expected buyer-visible text and produce mobile screenshots.
@@ -95,9 +97,9 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
    - Fix: `frontend/src/components/SettingsLayout.tsx` now switches the startup view selector from `grid-cols-3` to `grid-cols-1 sm:grid-cols-3`.
    - Health: fixed and re-captured.
 
-4. The smoke gate still verifies route rendering, not full workflow completion.
-   - Evidence: the command checks expected route text, console errors, not-found states, and screenshot creation.
-   - Remaining gap: critical interactions such as send, writeback confirmation, graph expansion, permission edits, connector rotation, and settings save need workflow-specific assertions before final procurement readiness.
+4. The smoke gate still does not prove full workflow completion.
+   - Evidence: the command now checks expected route text, console errors, not-found states, screenshot creation, and selected desktop interactions.
+   - Remaining gap: send, writeback confirmation, graph expansion, permission edits, connector rotation, settings save persistence, and mobile interaction-state need workflow-specific assertions before final procurement readiness.
 
 ## Accessibility Risks
 
@@ -107,20 +109,20 @@ All desktop screenshots were verified at `1440 x 1024`. All mobile screenshots w
 
 ## Product Design Assessment
 
-The current branch now has repeatable desktop and mobile visual evidence for the ten buyer-review IA routes. This moves the package from route-existence evidence to responsive route-level evidence, but it does not prove full sale readiness.
+The current branch now has repeatable desktop and mobile visual evidence for the ten buyer-review IA routes plus selected desktop critical-interaction smoke evidence. This moves the package from route-existence evidence to responsive route-level evidence with partial workflow proof, but it does not prove full sale readiness.
 
 The remaining Product Design P0/P1 work is:
 
 1. Add interaction-state coverage for the most important buyer flows:
-   - mail selection and reply draft
-   - search result detail and source drawer
+   - mail reply draft and source drawer
+   - search result source drawer and graph expansion
    - calendar writeback intent
    - task completion
    - project evidence opening
    - data quality action
    - AI Hub run/log detail
    - security permission review
-   - settings save and connector rotation
+   - settings save persistence and connector rotation
 2. Capture keyboard/focus evidence for mobile and desktop.
 3. Keep placing final screenshot evidence in Figma `QA Notes` after each accepted run.
 4. Avoid claiming public launch or final procurement readiness until live provider, production deployment, rollback, support, security, and measured ROI evidence exist.

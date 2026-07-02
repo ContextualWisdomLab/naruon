@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES,
   FULL_PRODUCT_ROUTES,
   fullProductScreenshotName,
   resolveFullProductBaseUrl,
@@ -51,5 +52,11 @@ describe("full product UI smoke base URL guard", () => {
     expect(fullProductScreenshotName(homeRoute, desktopViewport, 1)).toBe("home.png");
     expect(fullProductScreenshotName(homeRoute, desktopViewport, 2)).toBe("desktop-home.png");
     expect(fullProductScreenshotName(homeRoute, mobileViewport, 2)).toBe("mobile-home.png");
+  });
+
+  it("tracks only buyer-critical desktop interaction routes with existing smoke route names", () => {
+    const routeNames = new Set(FULL_PRODUCT_ROUTES.map((route) => route.name));
+    expect(FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES).toEqual(["mail", "search", "tasks", "settings"]);
+    expect(FULL_PRODUCT_DESKTOP_INTERACTION_ROUTE_NAMES.every((routeName) => routeNames.has(routeName))).toBe(true);
   });
 });
