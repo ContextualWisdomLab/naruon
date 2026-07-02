@@ -14,14 +14,14 @@ Add a deterministic buyer-close traceability map to the redacted evidence snapsh
 
 ## Implementation Plan
 
-- [ ] Add `diligence_close_traceability_map` to the evidence snapshot response.
-- [ ] Derive trace entries from `diligence_close_proof_plan`, joined to `diligence_risk_matrix`, `data_room_package_manifest`, `diligence_close_artifact_review_queue`, and `diligence_close_owner_handoff_queue`.
-- [ ] Include source field, data-room artifact, manifest key, exception keys, risk key, proof key, artifact review key, owner handoff key, owner area, severity, exception count, close gate status, reviewer roles, trace summary, next action, snapshot verification requirement, and write boundary.
-- [ ] Include the field in the canonical digest payload and backend fixture assertions.
-- [ ] Add a UI section after the owner handoff queue and before the detailed proof plan.
-- [ ] Add frontend fixture, copied JSON, and visible rendering coverage.
-- [ ] Generate a FigJam diagram for the traceability-map flow without Code Connect.
-- [ ] Run backend tests, ruff, frontend tests, frontend lint, diff review, and Ponytail review.
+- [x] Add `diligence_close_traceability_map` to the evidence snapshot response.
+- [x] Derive trace entries from `diligence_close_proof_plan`, joined to `diligence_risk_matrix`, `data_room_package_manifest`, `diligence_close_artifact_review_queue`, and `diligence_close_owner_handoff_queue`.
+- [x] Include source field, data-room artifact, manifest key, exception keys, risk key, proof key, artifact review key, owner handoff key, owner area, severity, exception count, close gate status, reviewer roles, trace summary, next action, snapshot verification requirement, and write boundary.
+- [x] Include the field in the canonical digest payload and backend fixture assertions.
+- [x] Add a UI section after the owner handoff queue and before the detailed proof plan.
+- [x] Add frontend fixture, copied JSON, and visible rendering coverage.
+- [x] Generate a FigJam diagram for the traceability-map flow without Code Connect.
+- [x] Run backend tests, ruff, frontend tests, frontend lint, diff review, and Ponytail review.
 - [ ] Push the PR branch and update PR #895 with Phase 29 evidence.
 
 ## Acceptance Criteria
@@ -38,4 +38,10 @@ Add a deterministic buyer-close traceability map to the redacted evidence snapsh
 
 ## Evidence
 
-- Pending.
+- Backend model/API: `diligence_close_traceability_map` is derived deterministically from existing snapshot sections before canonical digest generation.
+- Backend coverage: `python3 -m pytest backend/tests/test_data_api.py -q` passed with 9 passed and 1 skipped.
+- Backend lint: `ruff check backend/api/data.py backend/tests/test_data_api.py` passed.
+- Frontend coverage: `npm test -- src/app/data/page.test.tsx` passed with 12 tests.
+- Frontend lint: `npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` passed.
+- FigJam: https://www.figma.com/board/mjH0tpDIvz5kj44kL6354R
+- Ponytail review: removed speculative missing-join fallbacks and kept the trace map inside the existing evidence snapshot and Data Quality UI contract; no separate library, package, or submodule is warranted for this phase.
