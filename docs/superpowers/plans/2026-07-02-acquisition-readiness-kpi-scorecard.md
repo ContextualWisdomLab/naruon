@@ -27,7 +27,7 @@
 - Expects `DataAcquisitionReadinessGate.kpis`
 - Expects `DataAcquisitionReadinessKpi`
 
-- [ ] **Step 1: Add expected KPI helper**
+- [x] **Step 1: Add expected KPI helper**
 
 Add `_expected_acquisition_readiness_kpis()` near `_expected_acquisition_remediation_actions()`. The helper returns twelve rows sorted by `priority_rank`. Expected first row:
 
@@ -84,7 +84,7 @@ Include rows for these check keys and current percentages:
 ]
 ```
 
-- [ ] **Step 2: Extend quality-surface gate assertion**
+- [x] **Step 2: Extend quality-surface gate assertion**
 
 In `test_data_quality_surface_returns_source_backed_counts_without_secrets`, add:
 
@@ -94,7 +94,7 @@ In `test_data_quality_surface_returns_source_backed_counts_without_secrets`, add
 
 inside `data["acquisition_readiness_gate"]`.
 
-- [ ] **Step 3: Extend snapshot assertion**
+- [x] **Step 3: Extend snapshot assertion**
 
 In `test_data_quality_evidence_snapshot_returns_shareable_redacted_surface`, add the same `kpis` field to the expected snapshot gate and assert:
 
@@ -106,7 +106,7 @@ assert kpis[0]["current_percent"] == 75
 assert kpis[-1]["target_met"] is True
 ```
 
-- [ ] **Step 4: Run focused backend tests to verify failure**
+- [x] **Step 4: Run focused backend tests to verify failure**
 
 Run:
 
@@ -126,7 +126,7 @@ Expected: FAIL because `kpis` is not implemented yet.
 - Produces `DataAcquisitionReadinessKpi`
 - Produces `_acquisition_readiness_kpis(quality_checks: list[DataQualityCheck]) -> list[DataAcquisitionReadinessKpi]`
 
-- [ ] **Step 1: Add KPI type**
+- [x] **Step 1: Add KPI type**
 
 Add:
 
@@ -147,11 +147,11 @@ class DataAcquisitionReadinessKpi(BaseModel):
 
 Add `kpis: list[DataAcquisitionReadinessKpi]` to `DataAcquisitionReadinessGate`.
 
-- [ ] **Step 2: Add deterministic KPI target mapping**
+- [x] **Step 2: Add deterministic KPI target mapping**
 
 Add `_ACQUISITION_KPI_TARGETS_BY_CHECK_KEY` keyed by quality check. Every target uses `target_percent=100`. Include the same twelve check keys listed in Task 1, with owner area, priority rank, display name, and generic guardrail text.
 
-- [ ] **Step 3: Add completion helper**
+- [x] **Step 3: Add completion helper**
 
 Implement:
 
@@ -163,7 +163,7 @@ def _quality_check_completion_percent(check: DataQualityCheck) -> int:
     return round((passed_count / check.total_count) * 100)
 ```
 
-- [ ] **Step 4: Add KPI builder**
+- [x] **Step 4: Add KPI builder**
 
 Implement:
 
@@ -192,7 +192,7 @@ def _acquisition_readiness_kpis(
     return sorted(kpis, key=lambda kpi: kpi.priority_rank)
 ```
 
-- [ ] **Step 5: Wire gate helper and run backend validation**
+- [x] **Step 5: Wire gate helper and run backend validation**
 
 In `_acquisition_readiness_gate`, add:
 
@@ -220,13 +220,13 @@ Expected: PASS.
 **Interfaces:**
 - Consumes `acquisition_readiness_gate.kpis`
 
-- [ ] **Step 1: Add TypeScript type fields and fixtures**
+- [x] **Step 1: Add TypeScript type fields and fixtures**
 
 Add `AcquisitionReadinessKpi` and include `kpis` in `AcquisitionReadinessGate`.
 
 Update the `dataQualitySurface` and `dataEvidenceSnapshot` fixtures with the twelve KPI rows. Include first and final rows exactly as in Task 1.
 
-- [ ] **Step 2: Render KPI scorecard**
+- [x] **Step 2: Render KPI scorecard**
 
 Inside the Buyer evidence readiness card, above remediation actions, render:
 
@@ -238,7 +238,7 @@ Inside the Buyer evidence readiness card, above remediation actions, render:
 - guardrail text
 - provider write boundary
 
-- [ ] **Step 3: Add UI and clipboard assertions**
+- [x] **Step 3: Add UI and clipboard assertions**
 
 In `renders API-backed pipeline embedding and quality tabs`, assert:
 
@@ -257,7 +257,7 @@ expect(copiedSnapshot.acquisition_readiness_gate.kpis).toHaveLength(12);
 expect(copiedSnapshot.acquisition_readiness_gate.kpis[0].kpi_key).toBe("thread_id_integrity_target");
 ```
 
-- [ ] **Step 4: Run frontend validation**
+- [x] **Step 4: Run frontend validation**
 
 Run:
 
@@ -276,7 +276,7 @@ Expected: PASS.
 **Interfaces:**
 - Produces a Phase 18 FigJam diagram, screenshot evidence, commits, and PR update
 
-- [ ] **Step 1: Generate FigJam diagram**
+- [x] **Step 1: Generate FigJam diagram**
 
 Use Figma/FigJam, not Figma Code Connect, to add this flow to board `zXkcwT2E2aBtNhMVznLT4l`:
 
@@ -297,7 +297,7 @@ Expected local screenshot path:
 /Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase18-acquisition-readiness-kpi-scorecard.png
 ```
 
-- [ ] **Step 2: Run final validation**
+- [x] **Step 2: Run final validation**
 
 Run:
 
@@ -313,11 +313,11 @@ git diff --check
 
 Expected: PASS.
 
-- [ ] **Step 3: Mark this plan complete**
+- [x] **Step 3: Mark this plan complete**
 
 Replace implementation task checkboxes with `[x]` and add completion evidence.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Use separate commits:
 
@@ -332,3 +332,15 @@ git push origin HEAD:plan/email-dom-paragraph-kg-2026-07-02
 ```
 
 Expected: PR #895 head updates, unrelated `.Jules/*` files remain unstaged.
+
+## Completion Evidence
+
+- Backend contract and implementation added deterministic `acquisition_readiness_gate.kpis` to `/api/data/quality-surface` and `/api/data/quality-surface/evidence-snapshot`.
+- KPI rows are derived only from existing `DataQualityCheck.issue_count` and `DataQualityCheck.total_count`; no new query, migration, dependency, package, or submodule was added.
+- Frontend Data Quality UI renders `Acquisition KPI targets` with current/target percent, owner area, status, guardrail copy, source check key, and provider-write boundary.
+- FigJam board: `https://www.figma.com/board/zXkcwT2E2aBtNhMVznLT4l`
+- FigJam group: `43:788` (`Phase 18 Acquisition Readiness KPI Scorecard Group`)
+- Screenshot evidence: `/Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase18-acquisition-readiness-kpi-scorecard.png`
+- Validation: backend focused tests plus owner-scope test `3 passed`; ruff passed; frontend Vitest `12 passed`; `git diff --check` passed.
+- Library/submodule decision: no split. The KPI scorecard is a thin deterministic projection over the existing quality-check contract and should stay in the Data API until a reusable parser/runtime boundary exists.
+- Safety boundary: no Figma Code Connect, raw email content export, attachment bytes, provider write, LLM call, source-path leak, credential exposure, or public identity header added.
