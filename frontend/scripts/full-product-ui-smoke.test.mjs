@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { FULL_PRODUCT_ROUTES, resolveFullProductBaseUrl } from "./full-product-ui-smoke.mjs";
+import {
+  FULL_PRODUCT_ROUTES,
+  fullProductScreenshotName,
+  resolveFullProductBaseUrl,
+  resolveFullProductViewportSpecs,
+} from "./full-product-ui-smoke.mjs";
 
 describe("full product UI smoke base URL guard", () => {
   it("allows localhost full-product smoke targets", () => {
@@ -28,5 +33,23 @@ describe("full product UI smoke base URL guard", () => {
       "/security",
       "/settings",
     ]);
+  });
+
+  it("resolves desktop and mobile responsive capture viewports", () => {
+    expect(resolveFullProductViewportSpecs("desktop,mobile").map((viewport) => viewport.name)).toEqual([
+      "desktop",
+      "mobile",
+    ]);
+    expect(resolveFullProductViewportSpecs("all").map((viewport) => viewport.name)).toEqual(["desktop", "mobile"]);
+    expect(() => resolveFullProductViewportSpecs("tablet")).toThrow("Unknown full-product viewport");
+    expect(() => resolveFullProductViewportSpecs("desktop,desktop")).toThrow("Duplicate full-product viewport");
+  });
+
+  it("keeps the legacy desktop screenshot names unless multiple viewports are captured", () => {
+    const [homeRoute] = FULL_PRODUCT_ROUTES;
+    const [desktopViewport, mobileViewport] = resolveFullProductViewportSpecs("desktop,mobile");
+    expect(fullProductScreenshotName(homeRoute, desktopViewport, 1)).toBe("home.png");
+    expect(fullProductScreenshotName(homeRoute, desktopViewport, 2)).toBe("desktop-home.png");
+    expect(fullProductScreenshotName(homeRoute, mobileViewport, 2)).toBe("mobile-home.png");
   });
 });

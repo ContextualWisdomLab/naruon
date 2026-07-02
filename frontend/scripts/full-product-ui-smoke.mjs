@@ -24,6 +24,11 @@ export const FULL_PRODUCT_ROUTES = [
   { path: "/settings", name: "settings", expectedText: "설정" },
 ];
 
+export const FULL_PRODUCT_VIEWPORTS = [
+  { name: "desktop", width: 1440, height: 1024 },
+  { name: "mobile", width: 390, height: 844, isMobile: true },
+];
+
 export function resolveFullProductBaseUrl(rawBaseUrl) {
   const fullProductBaseUrl = new URL(rawBaseUrl);
   if (!ALLOWED_FULL_PRODUCT_HOSTS.has(fullProductBaseUrl.hostname)) {
@@ -33,6 +38,39 @@ export function resolveFullProductBaseUrl(rawBaseUrl) {
 }
 
 resolveFullProductBaseUrl(baseUrl);
+
+export function resolveFullProductViewportSpecs(rawViewports = "desktop") {
+  const viewportByName = new Map(FULL_PRODUCT_VIEWPORTS.map((viewport) => [viewport.name, viewport]));
+  const requestedNames = rawViewports
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  const expandedNames = requestedNames.flatMap((name) => {
+    if (name === "all") return FULL_PRODUCT_VIEWPORTS.map((viewport) => viewport.name);
+    return [name];
+  });
+  if (expandedNames.length === 0) {
+    throw new Error("At least one full-product viewport is required");
+  }
+
+  const seen = new Set();
+  return expandedNames.map((name) => {
+    const viewport = viewportByName.get(name);
+    if (!viewport) {
+      throw new Error(`Unknown full-product viewport '${name}'. Expected one of: ${FULL_PRODUCT_VIEWPORTS.map((item) => item.name).join(", ")}`);
+    }
+    if (seen.has(name)) {
+      throw new Error(`Duplicate full-product viewport '${name}'`);
+    }
+    seen.add(name);
+    return viewport;
+  });
+}
+
+export function fullProductScreenshotName(routeSpec, viewportSpec, viewportCount = 1) {
+  if (viewportCount === 1 && viewportSpec.name === "desktop") return `${routeSpec.name}.png`;
+  return `${viewportSpec.name}-${routeSpec.name}.png`;
+}
 
 function log(message) {
   process.stdout.write(`${message}\n`);
@@ -538,7 +576,7 @@ async function installRoutes(page) {
   });
 }
 
-async function runRouteSmoke(context, routeSpec) {
+async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
   const page = await context.newPage();
   const consoleErrors = [];
   page.on("console", (message) => {
@@ -565,7 +603,7 @@ async function runRouteSmoke(context, routeSpec) {
   if (consoleErrors.length > 0) {
     throw new Error(`Route ${routeSpec.path} emitted console errors:\n${consoleErrors.join("\n")}`);
   }
-  const screenshotPath = path.join(screenshotDir, `${routeSpec.name}.png`);
+  const screenshotPath = path.join(screenshotDir, fullProductScreenshotName(routeSpec, viewportSpec, viewportCount));
   await page.screenshot({ path: screenshotPath, fullPage: false });
   await page.close();
   return screenshotPath;
@@ -578,14 +616,21 @@ async function main() {
     await mkdir(screenshotDir, { recursive: true });
     serverProcess = await startServerIfNeeded();
     browser = await launchBrowser();
-    const context = await browser.newContext({ viewport: { width: 1440, height: 1024 } });
     const screenshots = [];
-    for (const routeSpec of FULL_PRODUCT_ROUTES) {
-      screenshots.push(await runRouteSmoke(context, routeSpec));
+    const viewportSpecs = resolveFullProductViewportSpecs(process.env.NARUON_FULL_PRODUCT_VIEWPORTS || "desktop");
+    for (const viewportSpec of viewportSpecs) {
+      const context = await browser.newContext({
+        viewport: { width: viewportSpec.width, height: viewportSpec.height },
+        isMobile: Boolean(viewportSpec.isMobile),
+      });
+      for (const routeSpec of FULL_PRODUCT_ROUTES) {
+        screenshots.push(await runRouteSmoke(context, routeSpec, viewportSpec, viewportSpecs.length));
+      }
+      await context.close();
     }
-    await context.close();
     log("Naruon full-product route smoke passed.");
     log(`Routes: ${FULL_PRODUCT_ROUTES.map((route) => route.path).join(", ")}`);
+    log(`Viewports: ${viewportSpecs.map((viewport) => `${viewport.name}(${viewport.width}x${viewport.height})`).join(", ")}`);
     log(`Screenshots: ${screenshots.join(", ")}`);
   } finally {
     if (browser) await browser.close().catch(() => {});

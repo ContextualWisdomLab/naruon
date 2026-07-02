@@ -122,6 +122,7 @@ Interpretation:
 - Direct metadata for `Sales Demo` (`15:3`) confirmed the new page and frame.
 - The first buyer-demo frame now exists as `Sales Demo / 20B Enterprise Review Flow` (`16:2`).
 - A final screenshot was downloaded to `/tmp/naruon-20b-sales-demo-final.png`; it is a 1080 x 608 PNG and visual inspection found no text overlap, clipped bottom copy, or placeholder shimmer.
+- Responsive Product Design QA evidence now exists in `QA Notes / Naruon 20B Responsive QA Evidence` (`18:3`) with the uploaded contact-sheet image target (`18:7`).
 - Because design system search is empty, the first pass should use local Naruon tokens/components derived from repo mockups, not a pretend external library.
 
 ## Existing Product Coverage
@@ -153,6 +154,8 @@ Important frontend anchors:
 - `frontend/scripts/pilot-ui-smoke.test.mjs`
 - `frontend/scripts/full-product-ui-smoke.mjs`
 - `frontend/scripts/full-product-ui-smoke.test.mjs`
+- `docs/superpowers/reports/2026-07-02-naruon-20b-responsive-product-design-qa.md`
+- `docs/superpowers/reports/assets/2026-07-02-naruon-responsive-qa-contact-sheet.png`
 
 Backend APIs and services exist for:
 
@@ -216,7 +219,7 @@ Acceptable later extraction:
 P0 for 20B final sale readiness:
 
 - Figma required pages were repaired through `use_figma`, but full screen coverage and durable QA screenshots for every buyer flow are not complete.
-- Full ten-area Product Design audit is not complete.
+- Full ten-area Product Design route audit now has desktop/mobile evidence, but critical interaction-state audit is not complete.
 - Production deployment and rollback evidence is not packaged.
 - Live provider-send and provider-write execution evidence is incomplete.
 - Issue #634 has a branch-level fix, but remains open as a governance risk until merged and proven on the trusted base branch.
@@ -225,10 +228,11 @@ P0 for 20B final sale readiness:
 
 P1 for buyer technical review:
 
-- Full-product smoke covers all ten IA routes on localhost and is wired into the branch CI workflow; remote CI evidence is still pending and the smoke does not yet assert every critical interaction inside each route.
+- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default; the smoke does not yet assert every critical interaction inside each route.
+- Mobile Settings startup-view cards were fixed from a 3-column mobile grid to `grid-cols-1 sm:grid-cols-3` after responsive QA found awkward Korean label wrapping.
 - Product events do not yet cover full-product funnels beyond mail/search.
 - External analytics destination, retention, and consent are not approved.
-- Figma `Sales Demo` has current evidence; `QA Notes` and full responsive review evidence remain incomplete.
+- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile route-level contact sheet; detailed interaction-state screenshot placement remains incomplete.
 
 Non-blockers:
 
@@ -240,7 +244,7 @@ Non-blockers:
 
 1. Repair Figma page structure without Code Connect.
 2. Confirm the branch CI full-product smoke result and tune runtime or browser install cost if needed.
-3. Capture Product Design screenshots for all ten IA routes across desktop and mobile.
+3. Add critical interaction-state smoke assertions for the top buyer flows.
 4. Extend analytics and ROI reports without claiming live KPI values.
 5. Merge the issue #634 governance patch and close the issue only after trusted-base remote evidence proves blocker comments fail the governance check.
 6. Review buyer package, demo script, security questionnaire, and SLA/support drafts with buyer/legal/security owners.
