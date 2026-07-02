@@ -82,6 +82,9 @@ CommercialCloseReadinessStatus = Literal[
 CommercialCloseReadinessCategoryStatus = Literal["ready", "needs_attention"]
 CommercialCloseExecutionStatus = Literal["execution_ready", "execution_blocked"]
 CommercialCloseExecutionLaneStatus = Literal["ready", "blocked"]
+CommercialCloseKpiMetricKind = Literal["primary", "driver", "guardrail"]
+CommercialCloseKpiMetricStatus = Literal["target_met", "needs_attention"]
+CommercialCloseKpiOperatingStatus = Literal["operating_ready", "operating_blocked"]
 DataRoomArtifactType = Literal[
     "snapshot_json",
     "verifier_script",
@@ -571,6 +574,41 @@ class DataCommercialCloseExecutionPlan(BaseModel):
     provider_write_executed: bool
 
 
+class DataCommercialCloseKpiOperatingMetric(BaseModel):
+    metric_key: str
+    display_name: str
+    metric_kind: CommercialCloseKpiMetricKind
+    status_code: CommercialCloseKpiMetricStatus
+    current_value: int
+    target_value: int
+    unit_label: str
+    source_field: str
+    owner_area: str
+    buyer_implication: str
+    next_action_text: str
+    provider_write_executed: bool
+
+
+class DataCommercialCloseKpiOperatingModel(BaseModel):
+    model_key: str
+    target_contract_value_krw: int
+    target_contract_label: str
+    status_code: CommercialCloseKpiOperatingStatus
+    primary_metric_key: str
+    total_metric_count: int
+    target_met_metric_count: int
+    needs_attention_metric_count: int
+    primary_metric_count: int
+    driver_metric_count: int
+    guardrail_metric_count: int
+    blocked_metric_keys: list[str]
+    guardrail_breach_count: int
+    buyer_summary_text: str
+    next_action_text: str
+    metrics: list[DataCommercialCloseKpiOperatingMetric]
+    provider_write_executed: bool
+
+
 class DataDiligenceExceptionRegisterEntry(BaseModel):
     exception_key: str
     blocking_check_key: str
@@ -817,6 +855,30 @@ def _default_commercial_close_execution_plan() -> DataCommercialCloseExecutionPl
     )
 
 
+def _default_commercial_close_kpi_operating_model() -> (
+    DataCommercialCloseKpiOperatingModel
+):
+    return DataCommercialCloseKpiOperatingModel(
+        model_key="commercial_close_kpi_operating_model",
+        target_contract_value_krw=2_000_000_000,
+        target_contract_label="2,000,000,000 KRW",
+        status_code="operating_blocked",
+        primary_metric_key="commercial_close_readiness_score",
+        total_metric_count=0,
+        target_met_metric_count=0,
+        needs_attention_metric_count=0,
+        primary_metric_count=0,
+        driver_metric_count=0,
+        guardrail_metric_count=0,
+        blocked_metric_keys=[],
+        guardrail_breach_count=0,
+        buyer_summary_text="No commercial close KPI operating model is present.",
+        next_action_text="Generate the evidence snapshot before KPI operating review.",
+        metrics=[],
+        provider_write_executed=False,
+    )
+
+
 def _default_diligence_close_acceptance_summary() -> (
     DataDiligenceCloseAcceptanceSummary
 ):
@@ -888,6 +950,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     commercial_close_execution_plan: DataCommercialCloseExecutionPlan = Field(
         default_factory=_default_commercial_close_execution_plan
     )
+    commercial_close_kpi_operating_model: (
+        DataCommercialCloseKpiOperatingModel
+    ) = Field(default_factory=_default_commercial_close_kpi_operating_model)
     diligence_exception_register: list[DataDiligenceExceptionRegisterEntry] = Field(
         default_factory=list
     )
@@ -2753,6 +2818,249 @@ def _commercial_close_execution_plan(
     )
 
 
+def _commercial_close_kpi_operating_model(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> DataCommercialCloseKpiOperatingModel:
+    scorecard = snapshot.commercial_close_readiness_scorecard
+    execution_plan = snapshot.commercial_close_execution_plan
+    release_summary = snapshot.data_room_release_summary
+    acceptance_summary = snapshot.diligence_close_acceptance_summary
+    acquisition_gate = snapshot.acquisition_readiness_gate
+    target_label = scorecard.target_contract_label
+    provider_write_count = sum(
+        int(write_executed)
+        for write_executed in (
+            scorecard.provider_write_executed,
+            execution_plan.provider_write_executed,
+            release_summary.provider_write_executed,
+            acceptance_summary.provider_write_executed,
+            snapshot.verification_handoff.provider_write_executed,
+        )
+    )
+
+    def status_for(
+        current_value: int,
+        target_value: int,
+        *,
+        maximum_guardrail: bool = False,
+    ) -> CommercialCloseKpiMetricStatus:
+        if maximum_guardrail:
+            return "target_met" if current_value <= target_value else "needs_attention"
+        return "target_met" if current_value >= target_value else "needs_attention"
+
+    def metric(
+        *,
+        metric_key: str,
+        display_name: str,
+        metric_kind: CommercialCloseKpiMetricKind,
+        current_value: int,
+        target_value: int,
+        unit_label: str,
+        source_field: str,
+        owner_area: str,
+        buyer_implication: str,
+        next_action_text: str,
+        maximum_guardrail: bool = False,
+    ) -> DataCommercialCloseKpiOperatingMetric:
+        return DataCommercialCloseKpiOperatingMetric(
+            metric_key=metric_key,
+            display_name=display_name,
+            metric_kind=metric_kind,
+            status_code=status_for(
+                current_value,
+                target_value,
+                maximum_guardrail=maximum_guardrail,
+            ),
+            current_value=current_value,
+            target_value=target_value,
+            unit_label=unit_label,
+            source_field=source_field,
+            owner_area=owner_area,
+            buyer_implication=buyer_implication,
+            next_action_text=next_action_text,
+            provider_write_executed=False,
+        )
+
+    metrics = [
+        metric(
+            metric_key="commercial_close_readiness_score",
+            display_name="Commercial close readiness score",
+            metric_kind="primary",
+            current_value=scorecard.total_score,
+            target_value=scorecard.max_score,
+            unit_label="score",
+            source_field="commercial_close_readiness_scorecard.total_score",
+            owner_area="commercial_diligence",
+            buyer_implication=(
+                f"{target_label} review remains blocked until the readiness "
+                "score reaches 100 and blockers clear."
+            ),
+            next_action_text=scorecard.next_action_text,
+        ),
+        metric(
+            metric_key="execution_lane_clearance",
+            display_name="Execution lane clearance",
+            metric_kind="driver",
+            current_value=execution_plan.ready_lane_count,
+            target_value=execution_plan.total_lane_count,
+            unit_label="lane",
+            source_field="commercial_close_execution_plan.ready_lane_count",
+            owner_area="program_management",
+            buyer_implication=(
+                "Buyer review needs every commercial close execution lane cleared."
+            ),
+            next_action_text=execution_plan.next_action_text,
+        ),
+        metric(
+            metric_key="data_room_artifact_readiness",
+            display_name="Data-room artifact readiness",
+            metric_kind="driver",
+            current_value=release_summary.ready_artifact_count,
+            target_value=release_summary.total_artifact_count,
+            unit_label="artifact",
+            source_field="data_room_release_summary.ready_artifact_count",
+            owner_area="data_room_ops",
+            buyer_implication=(
+                "All required data-room artifacts must be ready before buyer release."
+            ),
+            next_action_text=release_summary.next_action_text,
+        ),
+        metric(
+            metric_key="buyer_acceptance_clearance",
+            display_name="Buyer acceptance clearance",
+            metric_kind="driver",
+            current_value=acceptance_summary.ready_acceptance_count,
+            target_value=acceptance_summary.total_acceptance_count,
+            unit_label="acceptance",
+            source_field="diligence_close_acceptance_summary.ready_acceptance_count",
+            owner_area="buyer_diligence",
+            buyer_implication=(
+                "Buyer acceptance cannot close while acceptance items remain blocked."
+            ),
+            next_action_text=acceptance_summary.next_action_text,
+        ),
+        metric(
+            metric_key="product_kpi_attainment",
+            display_name="Product KPI attainment",
+            metric_kind="driver",
+            current_value=sum(1 for kpi in acquisition_gate.kpis if kpi.target_met),
+            target_value=len(acquisition_gate.kpis),
+            unit_label="kpi",
+            source_field="acquisition_readiness_gate.kpis",
+            owner_area="data_quality",
+            buyer_implication=(
+                "Product evidence KPIs must meet target before close readiness "
+                "can be claimed."
+            ),
+            next_action_text=acquisition_gate.decision_summary.next_step_text,
+        ),
+        metric(
+            metric_key="privacy_exposure_control",
+            display_name="Privacy exposure control",
+            metric_kind="guardrail",
+            current_value=release_summary.privacy_exposure_count,
+            target_value=0,
+            unit_label="exposure",
+            source_field="data_room_release_summary.privacy_exposure_count",
+            owner_area="privacy_security",
+            buyer_implication=(
+                "Buyer package must keep raw content, stable IDs, and credentials out."
+            ),
+            next_action_text="Keep the redaction policy enforced for every snapshot.",
+            maximum_guardrail=True,
+        ),
+        metric(
+            metric_key="offline_verifier_contract",
+            display_name="Offline verifier contract",
+            metric_kind="guardrail",
+            current_value=1 if scorecard.verifier_ready else 0,
+            target_value=1,
+            unit_label="contract",
+            source_field="verification_handoff.verifier_command",
+            owner_area="verification",
+            buyer_implication=(
+                "Buyer reviewers need a repeatable offline verifier for copied JSON."
+            ),
+            next_action_text=snapshot.verification_handoff.handoff_text,
+        ),
+        metric(
+            metric_key="provider_write_boundary",
+            display_name="Provider write boundary",
+            metric_kind="guardrail",
+            current_value=provider_write_count,
+            target_value=0,
+            unit_label="write",
+            source_field="provider_write_executed",
+            owner_area="security_governance",
+            buyer_implication=(
+                "Diligence evidence must remain read-only until explicit provider "
+                "write approval."
+            ),
+            next_action_text="Keep buyer evidence generation read-only.",
+            maximum_guardrail=True,
+        ),
+    ]
+    target_met_metric_count = sum(
+        1 for item in metrics if item.status_code == "target_met"
+    )
+    needs_attention_metric_count = len(metrics) - target_met_metric_count
+    blocked_metric_keys = [
+        item.metric_key for item in metrics if item.status_code != "target_met"
+    ]
+    guardrail_breach_count = sum(
+        1
+        for item in metrics
+        if item.metric_kind == "guardrail" and item.status_code != "target_met"
+    )
+    status_code: CommercialCloseKpiOperatingStatus = (
+        "operating_ready"
+        if needs_attention_metric_count == 0 and guardrail_breach_count == 0
+        else "operating_blocked"
+    )
+    if status_code == "operating_ready":
+        buyer_summary_text = (
+            f"Commercial close KPI operating model is ready for {target_label} "
+            "target review."
+        )
+        next_action_text = (
+            "Share the KPI operating model with buyer reviewers alongside the "
+            "verified data-room bundle."
+        )
+    else:
+        buyer_summary_text = (
+            "Commercial close KPI operating model remains blocked for "
+            f"{target_label} target review: {needs_attention_metric_count} of "
+            f"{len(metrics)} metric(s) need attention and {guardrail_breach_count} "
+            "guardrail breach(es) remain."
+        )
+        next_action_text = (
+            "Use the blocked KPI list to sequence execution lanes, regenerate "
+            "artifacts, rerun verification, and reissue the buyer scorecard."
+        )
+
+    return DataCommercialCloseKpiOperatingModel(
+        model_key="commercial_close_kpi_operating_model",
+        target_contract_value_krw=scorecard.target_contract_value_krw,
+        target_contract_label=target_label,
+        status_code=status_code,
+        primary_metric_key="commercial_close_readiness_score",
+        total_metric_count=len(metrics),
+        target_met_metric_count=target_met_metric_count,
+        needs_attention_metric_count=needs_attention_metric_count,
+        primary_metric_count=sum(1 for item in metrics if item.metric_kind == "primary"),
+        driver_metric_count=sum(1 for item in metrics if item.metric_kind == "driver"),
+        guardrail_metric_count=sum(
+            1 for item in metrics if item.metric_kind == "guardrail"
+        ),
+        blocked_metric_keys=blocked_metric_keys,
+        guardrail_breach_count=guardrail_breach_count,
+        buyer_summary_text=buyer_summary_text,
+        next_action_text=next_action_text,
+        metrics=metrics,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -3072,6 +3380,13 @@ def _evidence_snapshot_from_surface(
         update={
             "commercial_close_execution_plan": _commercial_close_execution_plan(
                 snapshot
+            )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "commercial_close_kpi_operating_model": (
+                _commercial_close_kpi_operating_model(snapshot)
             )
         }
     )

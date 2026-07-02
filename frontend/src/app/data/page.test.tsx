@@ -1357,6 +1357,145 @@ const commercialCloseExecutionPlan = {
   provider_write_executed: false,
 };
 
+const commercialCloseKpiOperatingModel = {
+  model_key: "commercial_close_kpi_operating_model",
+  target_contract_value_krw: 2_000_000_000,
+  target_contract_label: "2,000,000,000 KRW",
+  status_code: "operating_blocked",
+  primary_metric_key: "commercial_close_readiness_score",
+  total_metric_count: 8,
+  target_met_metric_count: 3,
+  needs_attention_metric_count: 5,
+  primary_metric_count: 1,
+  driver_metric_count: 4,
+  guardrail_metric_count: 3,
+  blocked_metric_keys: [
+    "commercial_close_readiness_score",
+    "execution_lane_clearance",
+    "data_room_artifact_readiness",
+    "buyer_acceptance_clearance",
+    "product_kpi_attainment",
+  ],
+  guardrail_breach_count: 0,
+  buyer_summary_text: "Commercial close KPI operating model remains blocked for 2,000,000,000 KRW target review: 5 of 8 metric(s) need attention and 0 guardrail breach(es) remain.",
+  next_action_text: "Use the blocked KPI list to sequence execution lanes, regenerate artifacts, rerun verification, and reissue the buyer scorecard.",
+  metrics: [
+    {
+      metric_key: "commercial_close_readiness_score",
+      display_name: "Commercial close readiness score",
+      metric_kind: "primary",
+      status_code: "needs_attention",
+      current_value: 62,
+      target_value: 100,
+      unit_label: "score",
+      source_field: "commercial_close_readiness_scorecard.total_score",
+      owner_area: "commercial_diligence",
+      buyer_implication: "2,000,000,000 KRW review remains blocked until the readiness score reaches 100 and blockers clear.",
+      next_action_text: "Resolve KPI gaps and acceptance blockers, regenerate the data-room bundle, run the offline verifier, and reissue the buyer scorecard.",
+      provider_write_executed: false,
+    },
+    {
+      metric_key: "execution_lane_clearance",
+      display_name: "Execution lane clearance",
+      metric_kind: "driver",
+      status_code: "needs_attention",
+      current_value: 0,
+      target_value: 6,
+      unit_label: "lane",
+      source_field: "commercial_close_execution_plan.ready_lane_count",
+      owner_area: "program_management",
+      buyer_implication: "Buyer review needs every commercial close execution lane cleared.",
+      next_action_text: "Execute lanes in priority order, regenerate affected artifacts, run the offline verifier, and reissue the buyer scorecard.",
+      provider_write_executed: false,
+    },
+    {
+      metric_key: "data_room_artifact_readiness",
+      display_name: "Data-room artifact readiness",
+      metric_kind: "driver",
+      status_code: "needs_attention",
+      current_value: 7,
+      target_value: 10,
+      unit_label: "artifact",
+      source_field: "data_room_release_summary.ready_artifact_count",
+      owner_area: "data_room_ops",
+      buyer_implication: "All required data-room artifacts must be ready before buyer release.",
+      next_action_text: "Resolve blocked artifact states, clear acceptance blockers, run the offline verifier, and reissue the release bundle.",
+      provider_write_executed: false,
+    },
+    {
+      metric_key: "buyer_acceptance_clearance",
+      display_name: "Buyer acceptance clearance",
+      metric_kind: "driver",
+      status_code: "needs_attention",
+      current_value: 0,
+      target_value: 6,
+      unit_label: "acceptance",
+      source_field: "diligence_close_acceptance_summary.ready_acceptance_count",
+      owner_area: "buyer_diligence",
+      buyer_implication: "Buyer acceptance cannot close while acceptance items remain blocked.",
+      next_action_text: "Resolve blocker keys, regenerate the evidence snapshot, run the offline verifier, and reissue the acceptance checklist.",
+      provider_write_executed: false,
+    },
+    {
+      metric_key: "product_kpi_attainment",
+      display_name: "Product KPI attainment",
+      metric_kind: "driver",
+      status_code: "needs_attention",
+      current_value: 3,
+      target_value: 12,
+      unit_label: "kpi",
+      source_field: "acquisition_readiness_gate.kpis",
+      owner_area: "data_quality",
+      buyer_implication: "Product evidence KPIs must meet target before close readiness can be claimed.",
+      next_action_text: "Resolve critical and high remediation actions, then regenerate the diligence evidence snapshot.",
+      provider_write_executed: false,
+    },
+    {
+      metric_key: "privacy_exposure_control",
+      display_name: "Privacy exposure control",
+      metric_kind: "guardrail",
+      status_code: "target_met",
+      current_value: 0,
+      target_value: 0,
+      unit_label: "exposure",
+      source_field: "data_room_release_summary.privacy_exposure_count",
+      owner_area: "privacy_security",
+      buyer_implication: "Buyer package must keep raw content, stable IDs, and credentials out.",
+      next_action_text: "Keep the redaction policy enforced for every snapshot.",
+      provider_write_executed: false,
+    },
+    {
+      metric_key: "offline_verifier_contract",
+      display_name: "Offline verifier contract",
+      metric_kind: "guardrail",
+      status_code: "target_met",
+      current_value: 1,
+      target_value: 1,
+      unit_label: "contract",
+      source_field: "verification_handoff.verifier_command",
+      owner_area: "verification",
+      buyer_implication: "Buyer reviewers need a repeatable offline verifier for copied JSON.",
+      next_action_text: "Save the copied evidence snapshot JSON and verify it with the offline verifier before sharing diligence materials.",
+      provider_write_executed: false,
+    },
+    {
+      metric_key: "provider_write_boundary",
+      display_name: "Provider write boundary",
+      metric_kind: "guardrail",
+      status_code: "target_met",
+      current_value: 0,
+      target_value: 0,
+      unit_label: "write",
+      source_field: "provider_write_executed",
+      owner_area: "security_governance",
+      buyer_implication: "Diligence evidence must remain read-only until explicit provider write approval.",
+      next_action_text: "Keep buyer evidence generation read-only.",
+      provider_write_executed: false,
+    },
+  ],
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1723,6 +1862,7 @@ const dataEvidenceSnapshot = {
     "content_graph_evidence_samples",
     "content_graph_topology_counts",
     "commercial_close_execution_plan",
+    "commercial_close_kpi_operating_model",
     "commercial_close_readiness_scorecard",
     "data_room_package_manifest",
     "data_room_release_summary",
@@ -1824,6 +1964,7 @@ const dataEvidenceSnapshot = {
   data_room_release_summary: dataRoomReleaseSummary,
   commercial_close_readiness_scorecard: commercialCloseReadinessScorecard,
   commercial_close_execution_plan: commercialCloseExecutionPlan,
+  commercial_close_kpi_operating_model: commercialCloseKpiOperatingModel,
   diligence_exception_register: diligenceExceptionRegister,
   diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
   diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
@@ -2463,6 +2604,12 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("thread_id_integrity");
     expect(container.textContent).toContain("exception_repair_thread_id_integrity");
     expect(container.textContent).toContain("Artifact ready");
+    expect(container.textContent).toContain("Commercial close KPI operating model");
+    expect(container.textContent).toContain("operating_blocked");
+    expect(container.textContent).toContain("commercial_close_readiness_score");
+    expect(container.textContent).toContain("execution_lane_clearance");
+    expect(container.textContent).toContain("privacy_exposure_control");
+    expect(container.textContent).toContain("provider_write_boundary");
     expect(container.textContent).toContain("Data room release summary");
     expect(container.textContent).toContain("release_blocked");
     expect(container.textContent).toContain("Data-room release remains blocked");
@@ -2620,6 +2767,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("data_room_release_summary");
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_readiness_scorecard");
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_execution_plan");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_kpi_operating_model");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -2632,6 +2780,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.data_room_release_summary).toEqual(dataRoomReleaseSummary);
     expect(copiedSnapshot.commercial_close_readiness_scorecard).toEqual(commercialCloseReadinessScorecard);
     expect(copiedSnapshot.commercial_close_execution_plan).toEqual(commercialCloseExecutionPlan);
+    expect(copiedSnapshot.commercial_close_kpi_operating_model).toEqual(commercialCloseKpiOperatingModel);
     expect(copiedSnapshot.diligence_exception_register).toHaveLength(9);
     expect(copiedSnapshot.diligence_exception_register[0]).toEqual({
       exception_key: "exception_repair_thread_id_integrity",

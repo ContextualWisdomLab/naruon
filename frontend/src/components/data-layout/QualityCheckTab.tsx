@@ -43,6 +43,7 @@ export function QualityCheckTab({
   const releaseSummary = evidenceSnapshot?.data_room_release_summary;
   const commercialCloseScorecard = evidenceSnapshot?.commercial_close_readiness_scorecard;
   const commercialCloseExecutionPlan = evidenceSnapshot?.commercial_close_execution_plan;
+  const commercialCloseKpiOperatingModel = evidenceSnapshot?.commercial_close_kpi_operating_model;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
@@ -397,6 +398,110 @@ export function QualityCheckTab({
                                 <div>
                                   <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                   <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(lane.provider_write_executed)}</dd>
+                                </div>
+                              </dl>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {commercialCloseKpiOperatingModel && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Commercial close KPI operating model</p>
+                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseKpiOperatingModel.status_code)}</h3>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseKpiOperatingModel.buyer_summary_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseKpiOperatingModel.next_action_text)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {toSafeReactText(commercialCloseKpiOperatingModel.model_key)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Target review value</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseKpiOperatingModel.target_contract_label)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Primary KPI</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseKpiOperatingModel.primary_metric_key)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Metrics</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.total_metric_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Target met</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.target_met_metric_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Needs attention</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.needs_attention_metric_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Driver metrics</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.driver_metric_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Guardrails</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.guardrail_metric_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Guardrail breaches</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.guardrail_breach_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseKpiOperatingModel.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseKpiOperatingModel.blocked_metric_keys.map((metricKey) => (
+                            <span key={metricKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(metricKey)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-4 divide-y divide-border">
+                          {commercialCloseKpiOperatingModel.metrics.map((metric) => (
+                            <div key={metric.metric_key} className="py-4 first:pt-0 last:pb-0">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-black">{toSafeReactText(metric.display_name)}</h4>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(metric.buyer_implication)}</p>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(metric.next_action_text)}</p>
+                                </div>
+                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(metric.status_code === 'target_met' ? 'ready' : 'needs_attention')}`}>
+                                  {toSafeReactText(metric.status_code)}
+                                </span>
+                              </div>
+                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Metric key</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(metric.metric_key)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Kind</dt>
+                                  <dd className="mt-1 text-sm font-bold">{toSafeReactText(metric.metric_kind)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Owner</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(metric.owner_area)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Value</dt>
+                                  <dd className="mt-1 text-sm font-bold">{formatCount(metric.current_value)} / {formatCount(metric.target_value)} {toSafeReactText(metric.unit_label)}</dd>
+                                </div>
+                                <div className="sm:col-span-2 lg:col-span-4">
+                                  <dt className="font-black text-muted-foreground">Source field</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(metric.source_field)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(metric.provider_write_executed)}</dd>
                                 </div>
                               </dl>
                             </div>

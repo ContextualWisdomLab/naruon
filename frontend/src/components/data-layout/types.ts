@@ -55,6 +55,9 @@ export type CommercialCloseReadinessStatus = 'commercially_ready' | 'commerciall
 export type CommercialCloseReadinessCategoryStatus = 'ready' | 'needs_attention';
 export type CommercialCloseExecutionStatus = 'execution_ready' | 'execution_blocked';
 export type CommercialCloseExecutionLaneStatus = 'ready' | 'blocked';
+export type CommercialCloseKpiMetricKind = 'primary' | 'driver' | 'guardrail';
+export type CommercialCloseKpiMetricStatus = 'target_met' | 'needs_attention';
+export type CommercialCloseKpiOperatingStatus = 'operating_ready' | 'operating_blocked';
 export type CloseGateStatus = 'blocked' | 'ready';
 export type DiligenceCloseDecision = 'ready_to_close' | 'close_blocked';
 export type DiligenceCloseSeverity = RemediationPriority | 'none';
@@ -385,6 +388,38 @@ export type DataEvidenceSnapshotResponse = {
       kpi_gap_keys: string[];
       acceptance_criteria: string;
       verification_command: string;
+      next_action_text: string;
+      provider_write_executed: boolean;
+    }>;
+    provider_write_executed: boolean;
+  };
+  commercial_close_kpi_operating_model: {
+    model_key: string;
+    target_contract_value_krw: number;
+    target_contract_label: string;
+    status_code: CommercialCloseKpiOperatingStatus;
+    primary_metric_key: string;
+    total_metric_count: number;
+    target_met_metric_count: number;
+    needs_attention_metric_count: number;
+    primary_metric_count: number;
+    driver_metric_count: number;
+    guardrail_metric_count: number;
+    blocked_metric_keys: string[];
+    guardrail_breach_count: number;
+    buyer_summary_text: string;
+    next_action_text: string;
+    metrics: Array<{
+      metric_key: string;
+      display_name: string;
+      metric_kind: CommercialCloseKpiMetricKind;
+      status_code: CommercialCloseKpiMetricStatus;
+      current_value: number;
+      target_value: number;
+      unit_label: string;
+      source_field: string;
+      owner_area: string;
+      buyer_implication: string;
       next_action_text: string;
       provider_write_executed: boolean;
     }>;
