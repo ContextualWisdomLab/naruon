@@ -75,6 +75,11 @@ AcquisitionReadinessState = Literal["ready", "needs_attention", "pending"]
 EvidencePacketChecklistState = Literal["ready", "needs_attention", "pending"]
 DataRoomManifestState = Literal["ready", "needs_attention", "pending"]
 DataRoomReleaseStatus = Literal["release_ready", "release_blocked"]
+CommercialCloseReadinessStatus = Literal[
+    "commercially_ready",
+    "commercially_blocked",
+]
+CommercialCloseReadinessCategoryStatus = Literal["ready", "needs_attention"]
 DataRoomArtifactType = Literal[
     "snapshot_json",
     "verifier_script",
@@ -489,6 +494,38 @@ class DataRoomReleaseSummary(BaseModel):
     provider_write_executed: bool
 
 
+class DataCommercialCloseReadinessCategoryScore(BaseModel):
+    category_key: str
+    display_name: str
+    status_code: CommercialCloseReadinessCategoryStatus
+    score: int
+    max_score: int
+    detail_text: str
+
+
+class DataCommercialCloseReadinessScorecard(BaseModel):
+    scorecard_key: str
+    target_contract_value_krw: int
+    target_contract_label: str
+    status_code: CommercialCloseReadinessStatus
+    total_score: int
+    max_score: int
+    category_scores: list[DataCommercialCloseReadinessCategoryScore]
+    blocked_artifact_count: int
+    blocked_artifact_files: list[str]
+    acceptance_blocker_count: int
+    acceptance_blocker_keys: list[str]
+    kpi_gap_count: int
+    kpi_gap_keys: list[str]
+    privacy_exposure_count: int
+    verifier_ready: bool
+    release_status: DataRoomReleaseStatus
+    close_gate_status: CloseGateStatus
+    buyer_summary_text: str
+    next_action_text: str
+    provider_write_executed: bool
+
+
 class DataDiligenceExceptionRegisterEntry(BaseModel):
     exception_key: str
     blocking_check_key: str
@@ -683,6 +720,33 @@ def _default_data_room_release_summary() -> DataRoomReleaseSummary:
     )
 
 
+def _default_commercial_close_readiness_scorecard() -> (
+    DataCommercialCloseReadinessScorecard
+):
+    return DataCommercialCloseReadinessScorecard(
+        scorecard_key="commercial_close_readiness",
+        target_contract_value_krw=2_000_000_000,
+        target_contract_label="2,000,000,000 KRW",
+        status_code="commercially_blocked",
+        total_score=0,
+        max_score=100,
+        category_scores=[],
+        blocked_artifact_count=0,
+        blocked_artifact_files=[],
+        acceptance_blocker_count=0,
+        acceptance_blocker_keys=[],
+        kpi_gap_count=0,
+        kpi_gap_keys=[],
+        privacy_exposure_count=0,
+        verifier_ready=False,
+        release_status="release_blocked",
+        close_gate_status="blocked",
+        buyer_summary_text="No commercial close readiness evidence is present.",
+        next_action_text="Generate the evidence snapshot before commercial review.",
+        provider_write_executed=False,
+    )
+
+
 def _default_diligence_close_acceptance_summary() -> (
     DataDiligenceCloseAcceptanceSummary
 ):
@@ -748,6 +812,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     data_room_release_summary: DataRoomReleaseSummary = Field(
         default_factory=_default_data_room_release_summary
     )
+    commercial_close_readiness_scorecard: (
+        DataCommercialCloseReadinessScorecard
+    ) = Field(default_factory=_default_commercial_close_readiness_scorecard)
     diligence_exception_register: list[DataDiligenceExceptionRegisterEntry] = Field(
         default_factory=list
     )
@@ -2270,6 +2337,198 @@ def _data_room_release_summary(
     )
 
 
+def _weighted_readiness_score(
+    ready_count: int,
+    total_count: int,
+    max_score: int,
+) -> int:
+    if total_count <= 0:
+        return 0
+    return round((ready_count / total_count) * max_score)
+
+
+def _commercial_category_score(
+    *,
+    category_key: str,
+    display_name: str,
+    score: int,
+    max_score: int,
+    detail_text: str,
+) -> DataCommercialCloseReadinessCategoryScore:
+    return DataCommercialCloseReadinessCategoryScore(
+        category_key=category_key,
+        display_name=display_name,
+        status_code="ready" if score == max_score else "needs_attention",
+        score=score,
+        max_score=max_score,
+        detail_text=detail_text,
+    )
+
+
+def _commercial_close_readiness_scorecard(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> DataCommercialCloseReadinessScorecard:
+    release_summary = snapshot.data_room_release_summary
+    acceptance_summary = snapshot.diligence_close_acceptance_summary
+    acquisition_gate = snapshot.acquisition_readiness_gate
+    evidence_checklist = snapshot.evidence_packet_checklist
+    ready_packet_count = sum(
+        1 for item in evidence_checklist if item.state_code == "ready"
+    )
+    evidence_packet_score = _weighted_readiness_score(
+        ready_packet_count,
+        len(evidence_checklist),
+        15,
+    )
+    data_room_score = _weighted_readiness_score(
+        release_summary.ready_artifact_count,
+        release_summary.total_artifact_count,
+        20,
+    )
+    acceptance_score = (
+        20
+        if (
+            acceptance_summary.close_gate_status == "ready"
+            and acceptance_summary.blocker_count == 0
+        )
+        else 0
+    )
+    privacy_exposure_count = release_summary.privacy_exposure_count
+    privacy_score = 20 if privacy_exposure_count == 0 else 0
+    verifier_ready = (
+        snapshot.verification_handoff.digest_algorithm == "sha256"
+        and snapshot.verification_handoff.success_exit_code == 0
+        and bool(snapshot.verification_handoff.verifier_command)
+        and "digest_mismatch" in snapshot.verification_handoff.failure_exit_codes
+    )
+    verifier_score = 10 if verifier_ready else 0
+    kpi_gap_keys = sorted(
+        kpi.source_check_key for kpi in acquisition_gate.kpis if not kpi.target_met
+    )
+    kpi_score = _weighted_readiness_score(
+        sum(1 for kpi in acquisition_gate.kpis if kpi.target_met),
+        len(acquisition_gate.kpis),
+        15,
+    )
+    category_scores = [
+        _commercial_category_score(
+            category_key="evidence_packet_integrity",
+            display_name="Evidence packet integrity",
+            score=evidence_packet_score,
+            max_score=15,
+            detail_text=(
+                f"{ready_packet_count} of {len(evidence_checklist)} evidence "
+                "packet checks are ready."
+            ),
+        ),
+        _commercial_category_score(
+            category_key="data_room_release_integrity",
+            display_name="Data room release integrity",
+            score=data_room_score,
+            max_score=20,
+            detail_text=(
+                f"{release_summary.ready_artifact_count} of "
+                f"{release_summary.total_artifact_count} data-room artifacts "
+                "are ready."
+            ),
+        ),
+        _commercial_category_score(
+            category_key="buyer_acceptance_clearance",
+            display_name="Buyer acceptance clearance",
+            score=acceptance_score,
+            max_score=20,
+            detail_text=(
+                f"{acceptance_summary.blocker_count} acceptance blocker key(s) "
+                "remain."
+            ),
+        ),
+        _commercial_category_score(
+            category_key="privacy_boundary",
+            display_name="Privacy boundary",
+            score=privacy_score,
+            max_score=20,
+            detail_text=f"{privacy_exposure_count} privacy exposure(s) remain.",
+        ),
+        _commercial_category_score(
+            category_key="offline_verification",
+            display_name="Offline verification",
+            score=verifier_score,
+            max_score=10,
+            detail_text=(
+                "Offline verifier contract is ready."
+                if verifier_ready
+                else "Offline verifier contract needs attention."
+            ),
+        ),
+        _commercial_category_score(
+            category_key="product_kpi_attainment",
+            display_name="Product KPI attainment",
+            score=kpi_score,
+            max_score=15,
+            detail_text=(
+                f"{len(kpi_gap_keys)} KPI target gap(s) remain for buyer review."
+            ),
+        ),
+    ]
+    total_score = sum(category.score for category in category_scores)
+    commercially_blocked = bool(
+        release_summary.release_status != "release_ready"
+        or acceptance_summary.close_gate_status != "ready"
+        or kpi_gap_keys
+        or privacy_exposure_count
+        or not verifier_ready
+    )
+    target_contract_label = "2,000,000,000 KRW"
+
+    if commercially_blocked:
+        buyer_summary_text = (
+            "Commercial close remains blocked for "
+            f"{target_contract_label} target review: score "
+            f"{total_score}/100 with {len(kpi_gap_keys)} KPI gap(s), "
+            f"{acceptance_summary.blocker_count} acceptance blocker key(s), and "
+            f"{release_summary.needs_attention_artifact_count} blocked "
+            "data-room artifact(s)."
+        )
+        next_action_text = (
+            "Resolve KPI gaps and acceptance blockers, regenerate the data-room "
+            "bundle, run the offline verifier, and reissue the buyer scorecard."
+        )
+    else:
+        buyer_summary_text = (
+            "Commercial close readiness is ready for "
+            f"{target_contract_label} target review with score {total_score}/100."
+        )
+        next_action_text = (
+            "Share the verified data-room bundle and buyer scorecard with "
+            "commercial diligence reviewers."
+        )
+
+    return DataCommercialCloseReadinessScorecard(
+        scorecard_key="commercial_close_readiness",
+        target_contract_value_krw=2_000_000_000,
+        target_contract_label=target_contract_label,
+        status_code=(
+            "commercially_blocked" if commercially_blocked else "commercially_ready"
+        ),
+        total_score=total_score,
+        max_score=100,
+        category_scores=category_scores,
+        blocked_artifact_count=release_summary.needs_attention_artifact_count,
+        blocked_artifact_files=release_summary.blocked_artifact_files,
+        acceptance_blocker_count=acceptance_summary.blocker_count,
+        acceptance_blocker_keys=acceptance_summary.blocker_keys,
+        kpi_gap_count=len(kpi_gap_keys),
+        kpi_gap_keys=kpi_gap_keys,
+        privacy_exposure_count=privacy_exposure_count,
+        verifier_ready=verifier_ready,
+        release_status=release_summary.release_status,
+        close_gate_status=acceptance_summary.close_gate_status,
+        buyer_summary_text=buyer_summary_text,
+        next_action_text=next_action_text,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -2577,6 +2836,13 @@ def _evidence_snapshot_from_surface(
     )
     snapshot = snapshot.model_copy(
         update={"data_room_release_summary": _data_room_release_summary(snapshot)}
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "commercial_close_readiness_scorecard": (
+                _commercial_close_readiness_scorecard(snapshot)
+            )
+        }
     )
     digest_payload = _snapshot_digest_payload(snapshot)
     return snapshot.model_copy(

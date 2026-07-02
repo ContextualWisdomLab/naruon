@@ -1516,6 +1516,95 @@ def _expected_data_room_release_summary():
     }
 
 
+def _expected_commercial_close_readiness_scorecard():
+    release_summary = _expected_data_room_release_summary()
+    acceptance_summary = _expected_diligence_close_acceptance_summary()
+    kpi_gap_keys = sorted(
+        kpi["source_check_key"]
+        for kpi in _expected_acquisition_readiness_kpis()
+        if not kpi["target_met"]
+    )
+    category_scores = [
+        {
+            "category_key": "evidence_packet_integrity",
+            "display_name": "Evidence packet integrity",
+            "status_code": "needs_attention",
+            "score": 14,
+            "max_score": 15,
+            "detail_text": "9 of 10 evidence packet checks are ready.",
+        },
+        {
+            "category_key": "data_room_release_integrity",
+            "display_name": "Data room release integrity",
+            "status_code": "needs_attention",
+            "score": 14,
+            "max_score": 20,
+            "detail_text": "7 of 10 data-room artifacts are ready.",
+        },
+        {
+            "category_key": "buyer_acceptance_clearance",
+            "display_name": "Buyer acceptance clearance",
+            "status_code": "needs_attention",
+            "score": 0,
+            "max_score": 20,
+            "detail_text": "9 acceptance blocker key(s) remain.",
+        },
+        {
+            "category_key": "privacy_boundary",
+            "display_name": "Privacy boundary",
+            "status_code": "ready",
+            "score": 20,
+            "max_score": 20,
+            "detail_text": "0 privacy exposure(s) remain.",
+        },
+        {
+            "category_key": "offline_verification",
+            "display_name": "Offline verification",
+            "status_code": "ready",
+            "score": 10,
+            "max_score": 10,
+            "detail_text": "Offline verifier contract is ready.",
+        },
+        {
+            "category_key": "product_kpi_attainment",
+            "display_name": "Product KPI attainment",
+            "status_code": "needs_attention",
+            "score": 4,
+            "max_score": 15,
+            "detail_text": "9 KPI target gap(s) remain for buyer review.",
+        },
+    ]
+    return {
+        "scorecard_key": "commercial_close_readiness",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "commercially_blocked",
+        "total_score": 62,
+        "max_score": 100,
+        "category_scores": category_scores,
+        "blocked_artifact_count": release_summary["needs_attention_artifact_count"],
+        "blocked_artifact_files": release_summary["blocked_artifact_files"],
+        "acceptance_blocker_count": acceptance_summary["blocker_count"],
+        "acceptance_blocker_keys": acceptance_summary["blocker_keys"],
+        "kpi_gap_count": len(kpi_gap_keys),
+        "kpi_gap_keys": kpi_gap_keys,
+        "privacy_exposure_count": 0,
+        "verifier_ready": True,
+        "release_status": "release_blocked",
+        "close_gate_status": "blocked",
+        "buyer_summary_text": (
+            "Commercial close remains blocked for 2,000,000,000 KRW target "
+            "review: score 62/100 with 9 KPI gap(s), 9 acceptance blocker "
+            "key(s), and 3 blocked data-room artifact(s)."
+        ),
+        "next_action_text": (
+            "Resolve KPI gaps and acceptance blockers, regenerate the data-room "
+            "bundle, run the offline verifier, and reissue the buyer scorecard."
+        ),
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -2076,6 +2165,13 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert snapshot["data_room_package_manifest"] == _expected_data_room_package_manifest()
     assert "data_room_release_summary" in snapshot["canonical_payload_fields"]
     assert snapshot["data_room_release_summary"] == _expected_data_room_release_summary()
+    assert "commercial_close_readiness_scorecard" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["commercial_close_readiness_scorecard"]
+        == _expected_commercial_close_readiness_scorecard()
+    )
     assert "diligence_exception_register" in snapshot["canonical_payload_fields"]
     assert (
         snapshot["diligence_exception_register"]

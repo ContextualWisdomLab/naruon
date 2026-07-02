@@ -41,6 +41,7 @@ export function QualityCheckTab({
   const evidenceSnapshot = dataEvidenceSnapshot;
   const closeDecisionSummary = evidenceSnapshot?.diligence_close_decision_summary;
   const releaseSummary = evidenceSnapshot?.data_room_release_summary;
+  const commercialCloseScorecard = evidenceSnapshot?.commercial_close_readiness_scorecard;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
@@ -163,6 +164,93 @@ export function QualityCheckTab({
                             </dl>
                           </article>
                         ))}
+                      </div>
+                    </div>
+                  )}
+                  {commercialCloseScorecard && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Commercial close readiness</p>
+                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseScorecard.status_code)}</h3>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseScorecard.buyer_summary_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseScorecard.next_action_text)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {toSafeReactText(commercialCloseScorecard.scorecard_key)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Target review value</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseScorecard.target_contract_label)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Score</dt>
+                            <dd className="mt-1 text-sm font-bold">score {formatCount(commercialCloseScorecard.total_score)} / {formatCount(commercialCloseScorecard.max_score)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">KPI gaps</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseScorecard.kpi_gap_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Acceptance blockers</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseScorecard.acceptance_blocker_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Data-room blockers</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseScorecard.blocked_artifact_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Privacy exposures</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseScorecard.privacy_exposure_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Offline verifier</dt>
+                            <dd className="mt-1 text-sm font-bold">{commercialCloseScorecard.verifier_ready ? 'ready' : 'needs attention'}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseScorecard.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                          {commercialCloseScorecard.category_scores.map((category) => (
+                            <div key={category.category_key} className="border-t border-border pt-3">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-black">{toSafeReactText(category.display_name)}</h4>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(category.detail_text)}</p>
+                                </div>
+                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(category.status_code)}`}>
+                                  {formatCount(category.score)} / {formatCount(category.max_score)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseScorecard.blocked_artifact_files.map((fileName) => (
+                            <span key={fileName} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(fileName)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseScorecard.acceptance_blocker_keys.map((blockerKey) => (
+                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(blockerKey)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseScorecard.kpi_gap_keys.map((gapKey) => (
+                            <span key={gapKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(gapKey)}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}

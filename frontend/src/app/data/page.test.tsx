@@ -1095,6 +1095,88 @@ const dataRoomReleaseSummary = {
   provider_write_executed: false,
 };
 
+const commercialCloseReadinessScorecard = {
+  scorecard_key: "commercial_close_readiness",
+  target_contract_value_krw: 2_000_000_000,
+  target_contract_label: "2,000,000,000 KRW",
+  status_code: "commercially_blocked",
+  total_score: 62,
+  max_score: 100,
+  category_scores: [
+    {
+      category_key: "evidence_packet_integrity",
+      display_name: "Evidence packet integrity",
+      status_code: "needs_attention",
+      score: 14,
+      max_score: 15,
+      detail_text: "9 of 10 evidence packet checks are ready.",
+    },
+    {
+      category_key: "data_room_release_integrity",
+      display_name: "Data room release integrity",
+      status_code: "needs_attention",
+      score: 14,
+      max_score: 20,
+      detail_text: "7 of 10 data-room artifacts are ready.",
+    },
+    {
+      category_key: "buyer_acceptance_clearance",
+      display_name: "Buyer acceptance clearance",
+      status_code: "needs_attention",
+      score: 0,
+      max_score: 20,
+      detail_text: "9 acceptance blocker key(s) remain.",
+    },
+    {
+      category_key: "privacy_boundary",
+      display_name: "Privacy boundary",
+      status_code: "ready",
+      score: 20,
+      max_score: 20,
+      detail_text: "0 privacy exposure(s) remain.",
+    },
+    {
+      category_key: "offline_verification",
+      display_name: "Offline verification",
+      status_code: "ready",
+      score: 10,
+      max_score: 10,
+      detail_text: "Offline verifier contract is ready.",
+    },
+    {
+      category_key: "product_kpi_attainment",
+      display_name: "Product KPI attainment",
+      status_code: "needs_attention",
+      score: 4,
+      max_score: 15,
+      detail_text: "9 KPI target gap(s) remain for buyer review.",
+    },
+  ],
+  blocked_artifact_count: dataRoomReleaseSummary.needs_attention_artifact_count,
+  blocked_artifact_files: dataRoomReleaseSummary.blocked_artifact_files,
+  acceptance_blocker_count: diligenceCloseAcceptanceSummary.blocker_count,
+  acceptance_blocker_keys: diligenceCloseAcceptanceSummary.blocker_keys,
+  kpi_gap_count: 9,
+  kpi_gap_keys: [
+    "attachment_content",
+    "attachment_parse_coverage",
+    "content_graph_coverage",
+    "content_segment_text_readiness",
+    "dedupe_fingerprint",
+    "knowledge_graph_coverage",
+    "knowledge_graph_evidence_endpoint_readiness",
+    "semantic_relation_source_backing",
+    "thread_id_integrity",
+  ],
+  privacy_exposure_count: 0,
+  verifier_ready: true,
+  release_status: "release_blocked",
+  close_gate_status: "blocked",
+  buyer_summary_text: "Commercial close remains blocked for 2,000,000,000 KRW target review: score 62/100 with 9 KPI gap(s), 9 acceptance blocker key(s), and 3 blocked data-room artifact(s).",
+  next_action_text: "Resolve KPI gaps and acceptance blockers, regenerate the data-room bundle, run the offline verifier, and reissue the buyer scorecard.",
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1460,6 +1542,7 @@ const dataEvidenceSnapshot = {
     "audit_event",
     "content_graph_evidence_samples",
     "content_graph_topology_counts",
+    "commercial_close_readiness_scorecard",
     "data_room_package_manifest",
     "data_room_release_summary",
     "diligence_close_acceptance_checklist",
@@ -1558,6 +1641,7 @@ const dataEvidenceSnapshot = {
   evidence_packet_checklist: evidencePacketChecklist,
   data_room_package_manifest: dataRoomPackageManifest,
   data_room_release_summary: dataRoomReleaseSummary,
+  commercial_close_readiness_scorecard: commercialCloseReadinessScorecard,
   diligence_exception_register: diligenceExceptionRegister,
   diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
   diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
@@ -2183,6 +2267,12 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Offline snapshot verification");
     expect(container.textContent).toContain("redacted_snapshot_policy");
     expect(container.textContent).toContain("buyer_evidence_readiness_gate");
+    expect(container.textContent).toContain("Commercial close readiness");
+    expect(container.textContent).toContain("commercially_blocked");
+    expect(container.textContent).toContain("2,000,000,000 KRW");
+    expect(container.textContent).toContain("score 62 / 100");
+    expect(container.textContent).toContain("Product KPI attainment");
+    expect(container.textContent).toContain("knowledge_graph_coverage");
     expect(container.textContent).toContain("Data room release summary");
     expect(container.textContent).toContain("release_blocked");
     expect(container.textContent).toContain("Data-room release remains blocked");
@@ -2338,6 +2428,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_owner_handoff_queue");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_traceability_map");
     expect(copiedSnapshot.canonical_payload_fields).toContain("data_room_release_summary");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_readiness_scorecard");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -2348,6 +2439,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.data_room_package_manifest[8].state_code).toBe("needs_attention");
     expect(copiedSnapshot.data_room_package_manifest.every((item: { contains_raw_content: boolean }) => !item.contains_raw_content)).toBe(true);
     expect(copiedSnapshot.data_room_release_summary).toEqual(dataRoomReleaseSummary);
+    expect(copiedSnapshot.commercial_close_readiness_scorecard).toEqual(commercialCloseReadinessScorecard);
     expect(copiedSnapshot.diligence_exception_register).toHaveLength(9);
     expect(copiedSnapshot.diligence_exception_register[0]).toEqual({
       exception_key: "exception_repair_thread_id_integrity",
