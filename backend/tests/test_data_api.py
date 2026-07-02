@@ -714,6 +714,151 @@ def _expected_evidence_packet_checklist():
     ]
 
 
+def _expected_data_room_package_manifest():
+    def entry(
+        *,
+        manifest_key: str,
+        file_name: str,
+        artifact_type: str,
+        display_name: str,
+        state_code: str,
+        source_field: str,
+        detail_text: str,
+    ):
+        return {
+            "manifest_key": manifest_key,
+            "file_name": file_name,
+            "artifact_type": artifact_type,
+            "display_name": display_name,
+            "state_code": state_code,
+            "source_field": source_field,
+            "required_for_close": True,
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "detail_text": detail_text,
+            "provider_write_executed": False,
+        }
+
+    return [
+        entry(
+            manifest_key="evidence_snapshot_json",
+            file_name="naruon-evidence-snapshot.json",
+            artifact_type="snapshot_json",
+            display_name="Evidence snapshot JSON",
+            state_code="ready",
+            source_field="snapshot_version,snapshot_digest,canonical_payload_fields",
+            detail_text=(
+                "Canonical redacted evidence snapshot for buyer diligence and "
+                "offline digest verification."
+            ),
+        ),
+        entry(
+            manifest_key="offline_verifier",
+            file_name="verify-evidence-snapshot.py",
+            artifact_type="verifier_script",
+            display_name="Offline digest verifier",
+            state_code="ready",
+            source_field="verification_handoff",
+            detail_text=(
+                "Offline verifier script and expected exit-code contract for "
+                "snapshot tamper checks."
+            ),
+        ),
+        entry(
+            manifest_key="privacy_policy",
+            file_name="privacy-redaction-policy.json",
+            artifact_type="policy_json",
+            display_name="Privacy redaction policy",
+            state_code="ready",
+            source_field="privacy_redaction_policy",
+            detail_text=(
+                "Redaction policy proving raw content, credentials, and stable IDs "
+                "are excluded."
+            ),
+        ),
+        entry(
+            manifest_key="attachment_parser_manifest",
+            file_name="attachment-parser-manifest.json",
+            artifact_type="manifest_json",
+            display_name="Attachment parser manifest",
+            state_code="ready",
+            source_field="parser_manifest_summary",
+            detail_text=(
+                "Supported attachment parser families, content types, extensions, "
+                "and unsupported fallback."
+            ),
+        ),
+        entry(
+            manifest_key="dom_paragraph_samples",
+            file_name="dom-paragraph-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="DOM paragraph evidence samples",
+            state_code="ready",
+            source_field="content_graph_evidence_samples",
+            detail_text=(
+                "Redacted DOM and paragraph samples for email and attachment "
+                "content segmentation."
+            ),
+        ),
+        entry(
+            manifest_key="knowledge_graph_samples",
+            file_name="knowledge-graph-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="Knowledge graph evidence samples",
+            state_code="ready",
+            source_field="knowledge_graph_evidence_samples",
+            detail_text="Redacted KG edge samples with safe paths and endpoint readiness.",
+        ),
+        entry(
+            manifest_key="semantic_relation_samples",
+            file_name="semantic-relation-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="Semantic relation evidence samples",
+            state_code="ready",
+            source_field="semantic_relation_evidence_samples",
+            detail_text=(
+                "Source-backed semantic relation samples with confidence and next "
+                "action."
+            ),
+        ),
+        entry(
+            manifest_key="evidence_packet_checklist",
+            file_name="buyer-evidence-packet-checklist.json",
+            artifact_type="manifest_json",
+            display_name="Buyer evidence packet checklist",
+            state_code="needs_attention",
+            source_field="evidence_packet_checklist",
+            detail_text=(
+                "Checklist mapping buyer-required packet artifacts to safe snapshot "
+                "fields."
+            ),
+        ),
+        entry(
+            manifest_key="acquisition_readiness_summary",
+            file_name="acquisition-readiness-summary.json",
+            artifact_type="readiness_summary_json",
+            display_name="Acquisition readiness summary",
+            state_code="needs_attention",
+            source_field="acquisition_readiness_gate",
+            detail_text=(
+                "Buyer readiness score, close recommendation, KPI gaps, and "
+                "blocking checks."
+            ),
+        ),
+        entry(
+            manifest_key="remediation_actions",
+            file_name="remediation-actions.json",
+            artifact_type="readiness_summary_json",
+            display_name="Remediation actions",
+            state_code="needs_attention",
+            source_field="acquisition_readiness_gate.remediation_actions",
+            detail_text=(
+                "Required remediation actions to close remaining diligence gaps."
+            ),
+        ),
+    ]
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -1270,6 +1415,8 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert snapshot["verification_handoff"] == _expected_snapshot_verification_handoff()
     assert "evidence_packet_checklist" in snapshot["canonical_payload_fields"]
     assert snapshot["evidence_packet_checklist"] == _expected_evidence_packet_checklist()
+    assert "data_room_package_manifest" in snapshot["canonical_payload_fields"]
+    assert snapshot["data_room_package_manifest"] == _expected_data_room_package_manifest()
     for forbidden_field in (
         "snapshot_digest",
         "digest_algorithm",
@@ -1365,6 +1512,16 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert checklist[0]["checklist_key"] == "privacy_redaction_policy"
     assert checklist[8]["state_code"] == "needs_attention"
     assert checklist[-1]["source_field"] == "verification_handoff"
+    data_room_manifest = snapshot["data_room_package_manifest"]
+    assert len(data_room_manifest) == 10
+    assert data_room_manifest[0]["file_name"] == "naruon-evidence-snapshot.json"
+    assert data_room_manifest[5]["file_name"] == "knowledge-graph-evidence-samples.json"
+    assert data_room_manifest[8]["state_code"] == "needs_attention"
+    for item in data_room_manifest:
+        assert item["required_for_close"] is True
+        assert item["contains_raw_content"] is False
+        assert item["contains_stable_identifiers"] is False
+        assert item["provider_write_executed"] is False
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {

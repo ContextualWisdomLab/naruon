@@ -72,6 +72,15 @@ SurfaceStatus = Literal[
 QualityStatus = Literal["pass", "needs_attention", "pending"]
 AcquisitionReadinessState = Literal["ready", "needs_attention", "pending"]
 EvidencePacketChecklistState = Literal["ready", "needs_attention", "pending"]
+DataRoomManifestState = Literal["ready", "needs_attention", "pending"]
+DataRoomArtifactType = Literal[
+    "snapshot_json",
+    "verifier_script",
+    "policy_json",
+    "manifest_json",
+    "evidence_samples_json",
+    "readiness_summary_json",
+]
 RemediationPriority = Literal["critical", "high", "medium"]
 DiligenceRecommendation = Literal[
     "ready_for_diligence",
@@ -437,6 +446,20 @@ class DataEvidencePacketChecklistItem(BaseModel):
     provider_write_executed: bool
 
 
+class DataRoomPackageManifestEntry(BaseModel):
+    manifest_key: str
+    file_name: str
+    artifact_type: DataRoomArtifactType
+    display_name: str
+    state_code: DataRoomManifestState
+    source_field: str
+    required_for_close: bool
+    contains_raw_content: bool
+    contains_stable_identifiers: bool
+    detail_text: str
+    provider_write_executed: bool
+
+
 class DataEvidenceSnapshotQualityCheck(BaseModel):
     check_key: str
     display_name: str
@@ -471,6 +494,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     validation_status: DataEvidenceSnapshotValidationStatus
     verification_handoff: DataEvidenceSnapshotVerificationHandoff
     evidence_packet_checklist: list[DataEvidencePacketChecklistItem] = Field(
+        default_factory=list
+    )
+    data_room_package_manifest: list[DataRoomPackageManifestEntry] = Field(
         default_factory=list
     )
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
@@ -1238,6 +1264,184 @@ def _evidence_packet_checklist(
     ]
 
 
+def _data_room_state(
+    is_ready: bool,
+    fallback: DataRoomManifestState = "needs_attention",
+) -> DataRoomManifestState:
+    return "ready" if is_ready else fallback
+
+
+def _data_room_package_manifest(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> list[DataRoomPackageManifestEntry]:
+    privacy_policy = snapshot.privacy_redaction_policy
+    privacy_ready = (
+        not privacy_policy.raw_content_exposed
+        and not privacy_policy.stable_identifiers_exposed
+        and not privacy_policy.provider_credentials_exposed
+    )
+    checklist_ready = bool(snapshot.evidence_packet_checklist) and all(
+        item.state_code == "ready" for item in snapshot.evidence_packet_checklist
+    )
+    readiness_gate = snapshot.acquisition_readiness_gate
+    remediation_ready = len(readiness_gate.remediation_actions) == 0
+
+    def entry(
+        *,
+        manifest_key: str,
+        file_name: str,
+        artifact_type: DataRoomArtifactType,
+        display_name: str,
+        state_code: DataRoomManifestState,
+        source_field: str,
+        detail_text: str,
+    ) -> DataRoomPackageManifestEntry:
+        return DataRoomPackageManifestEntry(
+            manifest_key=manifest_key,
+            file_name=file_name,
+            artifact_type=artifact_type,
+            display_name=display_name,
+            state_code=state_code,
+            source_field=source_field,
+            required_for_close=True,
+            contains_raw_content=False,
+            contains_stable_identifiers=False,
+            detail_text=detail_text,
+            provider_write_executed=False,
+        )
+
+    return [
+        entry(
+            manifest_key="evidence_snapshot_json",
+            file_name="naruon-evidence-snapshot.json",
+            artifact_type="snapshot_json",
+            display_name="Evidence snapshot JSON",
+            state_code=_data_room_state(
+                snapshot.snapshot_version == SNAPSHOT_VERSION
+                and snapshot.digest_algorithm == "sha256"
+            ),
+            source_field="snapshot_version,snapshot_digest,canonical_payload_fields",
+            detail_text=(
+                "Canonical redacted evidence snapshot for buyer diligence and "
+                "offline digest verification."
+            ),
+        ),
+        entry(
+            manifest_key="offline_verifier",
+            file_name="verify-evidence-snapshot.py",
+            artifact_type="verifier_script",
+            display_name="Offline digest verifier",
+            state_code=_data_room_state(
+                snapshot.verification_handoff.digest_algorithm == "sha256"
+                and snapshot.verification_handoff.success_exit_code == 0
+            ),
+            source_field="verification_handoff",
+            detail_text=(
+                "Offline verifier script and expected exit-code contract for "
+                "snapshot tamper checks."
+            ),
+        ),
+        entry(
+            manifest_key="privacy_policy",
+            file_name="privacy-redaction-policy.json",
+            artifact_type="policy_json",
+            display_name="Privacy redaction policy",
+            state_code=_data_room_state(privacy_ready),
+            source_field="privacy_redaction_policy",
+            detail_text=(
+                "Redaction policy proving raw content, credentials, and stable IDs "
+                "are excluded."
+            ),
+        ),
+        entry(
+            manifest_key="attachment_parser_manifest",
+            file_name="attachment-parser-manifest.json",
+            artifact_type="manifest_json",
+            display_name="Attachment parser manifest",
+            state_code=_data_room_state(bool(snapshot.parser_manifest_summary)),
+            source_field="parser_manifest_summary",
+            detail_text=(
+                "Supported attachment parser families, content types, extensions, "
+                "and unsupported fallback."
+            ),
+        ),
+        entry(
+            manifest_key="dom_paragraph_samples",
+            file_name="dom-paragraph-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="DOM paragraph evidence samples",
+            state_code=_data_room_state(bool(snapshot.content_graph_evidence_samples)),
+            source_field="content_graph_evidence_samples",
+            detail_text=(
+                "Redacted DOM and paragraph samples for email and attachment "
+                "content segmentation."
+            ),
+        ),
+        entry(
+            manifest_key="knowledge_graph_samples",
+            file_name="knowledge-graph-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="Knowledge graph evidence samples",
+            state_code=_data_room_state(
+                bool(snapshot.knowledge_graph_evidence_samples)
+            ),
+            source_field="knowledge_graph_evidence_samples",
+            detail_text=(
+                "Redacted KG edge samples with safe paths and endpoint readiness."
+            ),
+        ),
+        entry(
+            manifest_key="semantic_relation_samples",
+            file_name="semantic-relation-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="Semantic relation evidence samples",
+            state_code=_data_room_state(
+                bool(snapshot.semantic_relation_evidence_samples)
+            ),
+            source_field="semantic_relation_evidence_samples",
+            detail_text=(
+                "Source-backed semantic relation samples with confidence and next "
+                "action."
+            ),
+        ),
+        entry(
+            manifest_key="evidence_packet_checklist",
+            file_name="buyer-evidence-packet-checklist.json",
+            artifact_type="manifest_json",
+            display_name="Buyer evidence packet checklist",
+            state_code=_data_room_state(checklist_ready),
+            source_field="evidence_packet_checklist",
+            detail_text=(
+                "Checklist mapping buyer-required packet artifacts to safe snapshot "
+                "fields."
+            ),
+        ),
+        entry(
+            manifest_key="acquisition_readiness_summary",
+            file_name="acquisition-readiness-summary.json",
+            artifact_type="readiness_summary_json",
+            display_name="Acquisition readiness summary",
+            state_code=readiness_gate.state_code,
+            source_field="acquisition_readiness_gate",
+            detail_text=(
+                "Buyer readiness score, close recommendation, KPI gaps, and "
+                "blocking checks."
+            ),
+        ),
+        entry(
+            manifest_key="remediation_actions",
+            file_name="remediation-actions.json",
+            artifact_type="readiness_summary_json",
+            display_name="Remediation actions",
+            state_code=_data_room_state(remediation_ready),
+            source_field="acquisition_readiness_gate.remediation_actions",
+            detail_text=(
+                "Required remediation actions to close remaining diligence gaps."
+            ),
+        ),
+    ]
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -1484,6 +1688,9 @@ def _evidence_snapshot_from_surface(
                 snapshot=snapshot,
             )
         }
+    )
+    snapshot = snapshot.model_copy(
+        update={"data_room_package_manifest": _data_room_package_manifest(snapshot)}
     )
     digest_payload = _snapshot_digest_payload(snapshot)
     return snapshot.model_copy(
