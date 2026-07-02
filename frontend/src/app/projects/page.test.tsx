@@ -176,7 +176,7 @@ describe("ProjectsPage", () => {
       citation_bundle: [citation],
       updated_at: "2026-07-02T00:00:00Z",
     };
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (path === "/auth/session") {
         return jsonResponse({
@@ -234,6 +234,42 @@ describe("ProjectsPage", () => {
           ],
         });
       }
+      if (path === "/api/projects/project_candidate%3Aalpha/evidence/requirement%3Aalpha-payment-retry") {
+        return jsonResponse({
+          project_uid: "project_candidate:alpha",
+          object_uid: "requirement:alpha-payment-retry",
+          object_type: "requirement",
+          title: "카드 승인 실패 재시도 안내",
+          summary: "결제 화면은 승인 실패 사용자가 다시 시도할 수 있는 안내를 제공해야 합니다.",
+          status_code: "needs_review",
+          confidence: 0.93,
+          citation_bundle: [citation],
+        });
+      }
+      if (path === "/api/projects/project_candidate%3Aalpha/corrections") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        expect(init?.method).toBe("POST");
+        expect(body).toMatchObject({
+          object_uid: "requirement:alpha-payment-retry",
+          correction_action: "mark_evidence_reviewed",
+          source_segment_uids: ["segment-alpha-1"],
+        });
+        return jsonResponse({
+          correction_uid: "correction-alpha-1",
+          object_uid: "requirement:alpha-payment-retry",
+          correction_action: "mark_evidence_reviewed",
+          before_json: { status_code: "needs_review" },
+          after_json: { status_code: "approved", title: "카드 승인 실패 재시도 안내" },
+          rationale: "Reviewed from the Project Command Center Evidence Inspector.",
+          actor_user_id: "alice",
+          source_segment_uids: ["segment-alpha-1"],
+          created_at: "2026-07-03T00:00:00Z",
+        });
+      }
+      if (path === "/api/projects/candidates/project_candidate%3Aalpha/confirm") {
+        expect(init?.method).toBe("POST");
+        return jsonResponse({ ...candidate, status_code: "confirmed" });
+      }
       return jsonResponse({}, false, 404);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -247,9 +283,11 @@ describe("ProjectsPage", () => {
     });
     await flushAsyncWork();
     await flushAsyncWork();
+    await flushAsyncWork();
 
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/candidates", expect.objectContaining({ headers: expect.any(Object) }));
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_candidate%3Aalpha/traceability", expect.objectContaining({ headers: expect.any(Object) }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_candidate%3Aalpha/evidence/requirement%3Aalpha-payment-retry", expect.objectContaining({ headers: expect.any(Object) }));
     expect(container.textContent).toContain("Project: Alpha Checkout");
     expect(container.textContent).toContain("프로젝트 지식그래프");
     expect(container.textContent).toContain("Traceability Map");
@@ -259,8 +297,29 @@ describe("ProjectsPage", () => {
     expect(container.textContent).toContain("카드 승인 실패 재시도 안내");
     expect(container.textContent).toContain("결제 화면은 카드 승인 실패");
     expect(container.textContent).toContain("1 citations");
+    expect(container.textContent).toContain("Full evidence 확인됨");
+    expect(container.textContent).toContain("Source coverage: 1 문단");
+
+    const reviewButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("문단 근거 검토 저장"));
+    expect(reviewButton).toBeDefined();
+    await act(async () => {
+      reviewButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+    expect(container.textContent).toContain("Correction trail 저장됨");
+    expect(container.textContent).toContain("approved");
+
+    const confirmButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("프로젝트 후보 확정"));
+    expect(confirmButton).toBeDefined();
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+    expect(container.textContent).toContain("프로젝트 후보 확정됨");
+
     expect(container.textContent).not.toContain("segment-alpha-1");
     expect(container.textContent).not.toContain("<alpha@example.com>");
+    expect(container.textContent).not.toContain("correction-alpha-1");
   });
 
   it("renders an actionable fallback when project evidence fails", async () => {
