@@ -53,7 +53,6 @@ export type RemediationPriority = 'critical' | 'high' | 'medium';
 export type DiligenceRecommendation = 'ready_for_diligence' | 'remediate_before_close' | 'insufficient_evidence';
 export type DiligenceRiskLevel = 'low' | 'medium' | 'high';
 export type RepositoryAssetState = 'ready' | 'needs_attention';
-export type DiligenceExceptionSeverity = 'critical' | 'high' | 'medium';
 
 export type AcquisitionRemediationAction = {
   action_key: string;
@@ -295,7 +294,7 @@ export type DataEvidenceSnapshotResponse = {
     exception_key: string;
     blocking_check_key: string;
     display_name: string;
-    severity_code: DiligenceExceptionSeverity;
+    severity_code: RemediationPriority;
     owner_area: string;
     source_field: string;
     related_artifact: string;

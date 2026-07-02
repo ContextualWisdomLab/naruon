@@ -81,7 +81,6 @@ DataRoomArtifactType = Literal[
     "evidence_samples_json",
     "readiness_summary_json",
 ]
-DiligenceExceptionSeverity = Literal["critical", "high", "medium"]
 RemediationPriority = Literal["critical", "high", "medium"]
 DiligenceRecommendation = Literal[
     "ready_for_diligence",
@@ -465,7 +464,7 @@ class DataDiligenceExceptionRegisterEntry(BaseModel):
     exception_key: str
     blocking_check_key: str
     display_name: str
-    severity_code: DiligenceExceptionSeverity
+    severity_code: RemediationPriority
     owner_area: str
     source_field: str
     related_artifact: str
