@@ -701,6 +701,30 @@ const diligenceCloseProofPlan = diligenceRiskMatrix.map((risk) => ({
   provider_write_executed: false,
 }));
 
+const diligenceCloseDecisionSummary = {
+  summary_key: "buyer_close_decision",
+  decision_code: "close_blocked",
+  total_proof_count: 6,
+  blocked_proof_count: 6,
+  ready_proof_count: 0,
+  critical_blocker_count: 1,
+  high_blocker_count: 4,
+  medium_blocker_count: 1,
+  required_artifact_count: 5,
+  required_artifacts: [
+    "acquisition-readiness-summary.json",
+    "dom-paragraph-evidence-samples.json",
+    "knowledge-graph-evidence-samples.json",
+    "remediation-actions.json",
+    "semantic-relation-evidence-samples.json",
+  ],
+  highest_severity: "critical",
+  snapshot_verification_required: true,
+  buyer_summary_text: "Close remains blocked by 6 proof requirement(s) across 5 required artifact(s).",
+  next_action_text: "Resolve critical and high proof blockers, regenerate the evidence snapshot, and verify the copied JSON with the offline snapshot verifier.",
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1068,6 +1092,7 @@ const dataEvidenceSnapshot = {
     "content_graph_topology_counts",
     "data_room_package_manifest",
     "diligence_exception_register",
+    "diligence_close_decision_summary",
     "diligence_close_proof_plan",
     "diligence_risk_matrix",
     "evidence_packet_checklist",
@@ -1157,6 +1182,7 @@ const dataEvidenceSnapshot = {
   evidence_packet_checklist: evidencePacketChecklist,
   data_room_package_manifest: dataRoomPackageManifest,
   diligence_exception_register: diligenceExceptionRegister,
+  diligence_close_decision_summary: diligenceCloseDecisionSummary,
   diligence_close_proof_plan: diligenceCloseProofPlan,
   diligence_risk_matrix: diligenceRiskMatrix,
   parser_manifest_summary: [
@@ -1792,6 +1818,14 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Critical close blocker concentration");
     expect(container.textContent).toContain("2 critical exception(s)");
     expect(container.textContent).toContain("exception_repair_thread_id_integrity");
+    expect(container.textContent).toContain("Diligence close decision summary");
+    expect(container.textContent).toContain("close_blocked");
+    expect(container.textContent).toContain("Close remains blocked");
+    expect(container.textContent).toContain("6 proof requirement(s)");
+    expect(container.textContent).toContain("5 required artifact(s)");
+    expect(container.textContent).toContain("offline snapshot verifier");
+    expect(container.textContent).toContain("Snapshot verification");
+    expect(container.textContent).toContain("required");
     expect(container.textContent).toContain("Diligence close proof plan");
     expect(container.textContent).toContain("critical evidence gate");
     expect(container.textContent).toContain("blocked");
@@ -1877,6 +1911,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_exception_register");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_risk_matrix");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_proof_plan");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_decision_summary");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -1939,6 +1974,29 @@ describe("DataPage", () => {
     });
     expect(copiedSnapshot.diligence_close_proof_plan[5].proof_key).toBe("proof_risk_medium_attachment_parsing_remediation_actions_json");
     expect(copiedSnapshot.diligence_close_proof_plan[5].close_gate_status).toBe("blocked");
+    expect(copiedSnapshot.diligence_close_decision_summary).toEqual({
+      summary_key: "buyer_close_decision",
+      decision_code: "close_blocked",
+      total_proof_count: 6,
+      blocked_proof_count: 6,
+      ready_proof_count: 0,
+      critical_blocker_count: 1,
+      high_blocker_count: 4,
+      medium_blocker_count: 1,
+      required_artifact_count: 5,
+      required_artifacts: [
+        "acquisition-readiness-summary.json",
+        "dom-paragraph-evidence-samples.json",
+        "knowledge-graph-evidence-samples.json",
+        "remediation-actions.json",
+        "semantic-relation-evidence-samples.json",
+      ],
+      highest_severity: "critical",
+      snapshot_verification_required: true,
+      buyer_summary_text: "Close remains blocked by 6 proof requirement(s) across 5 required artifact(s).",
+      next_action_text: "Resolve critical and high proof blockers, regenerate the evidence snapshot, and verify the copied JSON with the offline snapshot verifier.",
+      provider_write_executed: false,
+    });
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",
