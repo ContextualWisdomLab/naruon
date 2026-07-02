@@ -245,6 +245,8 @@ def mock_db():
             (3, 1, 1),  # attachment stats
             (3, 8),  # content graph stats
             (2, 10),  # knowledge graph stats
+            (8, 1),  # content segment text readiness stats
+            (10, 2),  # knowledge graph evidence endpoint readiness stats
             [
                 ("email_body", "paragraph", 6),
                 ("attachment", "heading", 2),
@@ -384,6 +386,35 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "total_count": 4,
         "evidence_source": "knowledge_graph_edges",
         "detail_text": "Some scoped emails need persisted knowledge graph edges.",
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["content_segment_text_readiness"] == {
+        "check_key": "content_segment_text_readiness",
+        "display_name": "Content segment text readiness",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 8,
+        "evidence_source": (
+            "content_segments.word_count, content_segments.safe_text_content"
+        ),
+        "detail_text": (
+            "Some DOM paragraph segments need non-empty safe text and word counts."
+        ),
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["knowledge_graph_evidence_endpoint_readiness"] == {
+        "check_key": "knowledge_graph_evidence_endpoint_readiness",
+        "display_name": "Knowledge graph evidence endpoints",
+        "status_code": "needs_attention",
+        "issue_count": 2,
+        "total_count": 10,
+        "evidence_source": (
+            "knowledge_graph_edges.source_segment_id, "
+            "knowledge_graph_edges.target_segment_id"
+        ),
+        "detail_text": (
+            "Some knowledge graph edges need paragraph segment evidence endpoints."
+        ),
         "provider_write_executed": False,
     }
     assert quality_by_key["attachment_parse_coverage"] == {

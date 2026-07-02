@@ -4,7 +4,7 @@ from typing import Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -40,6 +40,13 @@ CONTENT_GRAPH_BREAKDOWN_EVIDENCE_SOURCE = (
 )
 KNOWLEDGE_GRAPH_BREAKDOWN_EVIDENCE_SOURCE = (
     "knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind"
+)
+CONTENT_SEGMENT_TEXT_READINESS_EVIDENCE_SOURCE = (
+    "content_segments.word_count, content_segments.safe_text_content"
+)
+KNOWLEDGE_GRAPH_EVIDENCE_ENDPOINT_READINESS_EVIDENCE_SOURCE = (
+    "knowledge_graph_edges.source_segment_id, "
+    "knowledge_graph_edges.target_segment_id"
 )
 WEB_DAV_ERROR_STATUS_CODES = {
     "no_webdav_account": 422,
@@ -91,6 +98,16 @@ class ContentGraphQualityStats(NamedTuple):
 class KnowledgeGraphQualityStats(NamedTuple):
     edged_email_count: int
     edge_count: int
+
+
+class ContentSegmentTextReadinessStats(NamedTuple):
+    total_count: int
+    issue_count: int
+
+
+class KnowledgeGraphEvidenceEndpointStats(NamedTuple):
+    total_count: int
+    issue_count: int
 
 
 class DataRepositorySummary(BaseModel):
@@ -975,6 +992,58 @@ def _check_knowledge_graph_coverage(
     )
 
 
+def _check_content_segment_text_readiness(
+    total_count: int,
+    issue_count: int,
+) -> DataQualityCheck:
+    return DataQualityCheck(
+        check_key="content_segment_text_readiness",
+        display_name="Content segment text readiness",
+        status_code=_quality_status(total_count, issue_count),
+        issue_count=issue_count,
+        total_count=total_count,
+        evidence_source=CONTENT_SEGMENT_TEXT_READINESS_EVIDENCE_SOURCE,
+        detail_text=_quality_detail(
+            total_count=total_count,
+            issue_count=issue_count,
+            ready_text=(
+                "All DOM paragraph segments have non-empty safe text and word counts."
+            ),
+            empty_text="No DOM paragraph segments are available yet.",
+            issue_text=(
+                "Some DOM paragraph segments need non-empty safe text and word counts."
+            ),
+        ),
+        provider_write_executed=False,
+    )
+
+
+def _check_knowledge_graph_evidence_endpoint_readiness(
+    total_count: int,
+    issue_count: int,
+) -> DataQualityCheck:
+    return DataQualityCheck(
+        check_key="knowledge_graph_evidence_endpoint_readiness",
+        display_name="Knowledge graph evidence endpoints",
+        status_code=_quality_status(total_count, issue_count),
+        issue_count=issue_count,
+        total_count=total_count,
+        evidence_source=KNOWLEDGE_GRAPH_EVIDENCE_ENDPOINT_READINESS_EVIDENCE_SOURCE,
+        detail_text=_quality_detail(
+            total_count=total_count,
+            issue_count=issue_count,
+            ready_text=(
+                "All knowledge graph edges include paragraph segment evidence endpoints."
+            ),
+            empty_text="No knowledge graph edges are available yet.",
+            issue_text=(
+                "Some knowledge graph edges need paragraph segment evidence endpoints."
+            ),
+        ),
+        provider_write_executed=False,
+    )
+
+
 def _check_attachment_parse_coverage(
     attachment_count: int,
     unparsed_attachment_count: int,
@@ -1024,6 +1093,10 @@ def _quality_checks(
     source_count: int,
     segmented_email_count: int,
     edged_email_count: int,
+    content_segment_text_issue_count: int,
+    content_segment_text_total_count: int,
+    knowledge_graph_evidence_endpoint_issue_count: int,
+    knowledge_graph_evidence_endpoint_total_count: int,
     unparsed_attachment_count: int,
     connector_event_count: int,
 ) -> list[DataQualityCheck]:
@@ -1047,6 +1120,14 @@ def _quality_checks(
         _check_knowledge_graph_coverage(
             email_count=email_count,
             edged_email_count=edged_email_count,
+        ),
+        _check_content_segment_text_readiness(
+            total_count=content_segment_text_total_count,
+            issue_count=content_segment_text_issue_count,
+        ),
+        _check_knowledge_graph_evidence_endpoint_readiness(
+            total_count=knowledge_graph_evidence_endpoint_total_count,
+            issue_count=knowledge_graph_evidence_endpoint_issue_count,
         ),
         _check_attachment_parse_coverage(
             attachment_count=attachment_count,
@@ -1291,6 +1372,66 @@ async def _get_knowledge_graph_stats(
     )
 
 
+async def _get_content_segment_text_readiness_stats(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> ContentSegmentTextReadinessStats:
+    issue_case = case(
+        (
+            or_(
+                ContentSegmentRecord.word_count <= 0,
+                func.length(func.trim(ContentSegmentRecord.safe_text_content)) == 0,
+            ),
+            1,
+        )
+    )
+    result = await db.execute(
+        select(
+            func.count(ContentSegmentRecord.content_segment_id),
+            func.count(issue_case),
+        )
+        .join(Email, ContentSegmentRecord.email_id == Email.id)
+        .where(*email_scope)
+    )
+    stats = result.one_or_none()
+    total_count = stats[0] if stats else 0
+    issue_count = stats[1] if stats else 0
+    return ContentSegmentTextReadinessStats(
+        total_count=int(total_count or 0),
+        issue_count=int(issue_count or 0),
+    )
+
+
+async def _get_knowledge_graph_evidence_endpoint_stats(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> KnowledgeGraphEvidenceEndpointStats:
+    issue_case = case(
+        (
+            and_(
+                KnowledgeGraphEdgeRecord.source_segment_id.is_(None),
+                KnowledgeGraphEdgeRecord.target_segment_id.is_(None),
+            ),
+            1,
+        )
+    )
+    result = await db.execute(
+        select(
+            func.count(KnowledgeGraphEdgeRecord.knowledge_graph_edge_id),
+            func.count(issue_case),
+        )
+        .join(Email, KnowledgeGraphEdgeRecord.email_id == Email.id)
+        .where(*email_scope)
+    )
+    stats = result.one_or_none()
+    total_count = stats[0] if stats else 0
+    issue_count = stats[1] if stats else 0
+    return KnowledgeGraphEvidenceEndpointStats(
+        total_count=int(total_count or 0),
+        issue_count=int(issue_count or 0),
+    )
+
+
 async def _get_content_graph_breakdown(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
@@ -1495,6 +1636,12 @@ async def get_data_quality_surface(
     attachment_stats = await _get_attachment_stats(db, email_scope)
     content_graph_stats = await _get_content_graph_stats(db, email_scope)
     knowledge_graph_stats = await _get_knowledge_graph_stats(db, email_scope)
+    content_segment_text_readiness_stats = (
+        await _get_content_segment_text_readiness_stats(db, email_scope)
+    )
+    knowledge_graph_evidence_endpoint_stats = (
+        await _get_knowledge_graph_evidence_endpoint_stats(db, email_scope)
+    )
     content_graph_breakdown = await _get_content_graph_breakdown(db, email_scope)
     knowledge_graph_breakdown = await _get_knowledge_graph_breakdown(db, email_scope)
     attachment_parse_stats = await _get_attachment_parse_stats(db, email_scope)
@@ -1568,6 +1715,18 @@ async def get_data_quality_surface(
             source_count=source_count,
             segmented_email_count=segmented_email_count,
             edged_email_count=edged_email_count,
+            content_segment_text_total_count=(
+                content_segment_text_readiness_stats.total_count
+            ),
+            content_segment_text_issue_count=(
+                content_segment_text_readiness_stats.issue_count
+            ),
+            knowledge_graph_evidence_endpoint_total_count=(
+                knowledge_graph_evidence_endpoint_stats.total_count
+            ),
+            knowledge_graph_evidence_endpoint_issue_count=(
+                knowledge_graph_evidence_endpoint_stats.issue_count
+            ),
             unparsed_attachment_count=unparsed_attachment_count,
             connector_event_count=len(connector_events),
         ),

@@ -193,6 +193,26 @@ const dataQualitySurface = {
       detail_text: "Some scoped attachments need extracted content.",
       provider_write_executed: false,
     },
+    {
+      check_key: "content_segment_text_readiness",
+      display_name: "Content segment text readiness",
+      status_code: "needs_attention",
+      issue_count: 1,
+      total_count: 8,
+      evidence_source: "content_segments.word_count, content_segments.safe_text_content",
+      detail_text: "Some DOM paragraph segments need non-empty safe text and word counts.",
+      provider_write_executed: false,
+    },
+    {
+      check_key: "knowledge_graph_evidence_endpoint_readiness",
+      display_name: "Knowledge graph evidence endpoints",
+      status_code: "needs_attention",
+      issue_count: 2,
+      total_count: 10,
+      evidence_source: "knowledge_graph_edges.source_segment_id, knowledge_graph_edges.target_segment_id",
+      detail_text: "Some knowledge graph edges need paragraph segment evidence endpoints.",
+      provider_write_executed: false,
+    },
   ],
   attachment_parse_breakdown: [
     {
@@ -719,6 +739,9 @@ describe("DataPage", () => {
     });
     expect(container.textContent).toContain("Thread id integrity");
     expect(container.textContent).toContain("Some scoped emails need canonical thread ids.");
+    expect(container.textContent).toContain("Content segment text readiness");
+    expect(container.textContent).toContain("Knowledge graph evidence endpoints");
+    expect(container.textContent).toContain("paragraph segment evidence endpoints");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
     expect(container.textContent).toContain("text/markdown");
@@ -733,7 +756,9 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("provider_write_executed=false");
     expect(container.textContent).not.toContain("email_attachments.content_type");
     expect(container.textContent).not.toContain("content_segments.source_kind");
+    expect(container.textContent).not.toContain("content_segments.safe_text_content");
     expect(container.textContent).not.toContain("knowledge_graph_edges.source_kind");
+    expect(container.textContent).not.toContain("knowledge_graph_edges.source_segment_id");
     expect(container.textContent).not.toContain("발견된 심각한 데이터 품질 문제가 없습니다.");
   });
 
