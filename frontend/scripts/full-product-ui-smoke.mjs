@@ -1070,10 +1070,18 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await sourceGovernance.getByText("조직 스코프", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await sourceGovernance.getByText("쓰기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     if (viewportSpec.name !== "mobile") {
-      await sourceGovernance.getByText("쓰기 의도 가능", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await sourceGovernance.getByText("쓰기 의도 가능", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     }
     await sourceGovernance.getByText("충돌 검사", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await sourceGovernance.getByText("허용", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "감사 로그", exact: true }).click();
+    const auditRegion = page.getByRole("region", { name: "보안 감사 로그", exact: true });
+    await auditRegion.getByText("지속 감사 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await auditRegion.getByText("설정 변경 / LLM 제공자", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await auditRegion.getByText("서버 감사 로그", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await auditRegion.getByText("서버 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await auditRegion.getByText("하트비트 수신", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await auditRegion.getByText("connector 관측 근거", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "외부 공유", exact: true }).click();
     await page.getByText("외부 공유 / 쓰기 경계", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1085,6 +1093,9 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
       evidence("security:verify-access-source-governance"),
       evidence("security:verify-write-capability-boundary"),
       evidence("security:verify-policy-allow-decision"),
+      evidence("security:open-audit-log"),
+      evidence("security:verify-durable-audit-event"),
+      evidence("security:verify-connector-observation"),
       evidence("security:open-sharing-review"),
       evidence("security:verify-external-write-block"),
       evidence("security:open-policy-order"),
