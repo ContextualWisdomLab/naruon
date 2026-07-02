@@ -139,7 +139,82 @@ Content-Disposition: attachment; filename="<img src=x onerror=alert(1)>.txt"
                 "filename": ".txt",
                 "content": "report",
                 "content_type": "text/plain",
+                "parse_content": "<script>alert(1)</script>report",
+                "parse_content_type": "text/plain",
+                "parse_status": "parsed",
+                "parse_error_code": None,
             }
+        ]
+    finally:
+        os.unlink(temp_path)
+
+
+def test_parse_eml_extracts_supported_and_unsupported_attachment_metadata():
+    eml_content = b"""Message-ID: <attachment-types@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Attachment types
+Date: Mon, 27 Apr 2026 10:00:00 +0000
+Content-Type: multipart/mixed; boundary="mixed-boundary"
+
+--mixed-boundary
+Content-Type: text/plain; charset="utf-8"
+
+See attached.
+--mixed-boundary
+Content-Type: text/html; charset="utf-8"
+Content-Disposition: attachment; filename="page.html"
+
+<h1>Launch</h1><p>Ship</p>
+--mixed-boundary
+Content-Type: text/markdown; charset="utf-8"
+Content-Disposition: attachment; filename="plan.md"
+
+# Plan
+
+Ship graph
+--mixed-boundary
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="contract.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjcK
+--mixed-boundary--"""
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
+        f.write(eml_content)
+        temp_path = f.name
+
+    try:
+        parsed = parse_eml(temp_path)
+        assert parsed["attachments"] == [
+            {
+                "filename": "page.html",
+                "content": "Launch Ship",
+                "content_type": "text/html",
+                "parse_content": "<h1>Launch</h1><p>Ship</p>",
+                "parse_content_type": "text/html",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "plan.md",
+                "content": "# Plan Ship graph",
+                "content_type": "text/markdown",
+                "parse_content": "# Plan\n\nShip graph",
+                "parse_content_type": "text/markdown",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "contract.pdf",
+                "content": "",
+                "content_type": "application/pdf",
+                "parse_content": "",
+                "parse_content_type": "application/pdf",
+                "parse_status": "unsupported_content_type",
+                "parse_error_code": "unsupported_content_type",
+            },
         ]
     finally:
         os.unlink(temp_path)

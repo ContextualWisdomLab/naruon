@@ -592,6 +592,15 @@ class Attachment(Base):
     email_id: Mapped[int] = mapped_column(ForeignKey("email_records.id"))
     filename: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)
+    content_type: Mapped[str] = mapped_column(
+        String(120), default="text/plain", nullable=False
+    )
+    parse_status: Mapped[str] = mapped_column(
+        String(64), default="parsed", nullable=False
+    )
+    parse_error_code: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
 

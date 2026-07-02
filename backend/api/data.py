@@ -66,6 +66,11 @@ class AttachmentQualityStats(NamedTuple):
     embedded_count: int
 
 
+class AttachmentParseQualityStats(NamedTuple):
+    parsed_count: int
+    unparsed_count: int
+
+
 class ContentGraphQualityStats(NamedTuple):
     segmented_email_count: int
     segment_count: int
@@ -592,6 +597,8 @@ def _pipeline_stages(
     content_segment_count: int,
     edged_email_count: int,
     knowledge_graph_edge_count: int,
+    parsed_attachment_count: int,
+    unparsed_attachment_count: int,
     connector_event_count: int,
 ) -> list[DataPipelineStage]:
     thread_ready = max(0, email_count - missing_thread_count)
@@ -656,6 +663,22 @@ def _pipeline_stages(
             detail_text=(
                 f"{edged_email_count} of {email_count} emails have graph edges; "
                 f"{knowledge_graph_edge_count} edges are stored."
+            ),
+            provider_write_executed=False,
+        ),
+        DataPipelineStage(
+            stage_key="attachment_parse_inventory",
+            display_name="Attachment parse inventory",
+            status_code=_status_from_ratio(attachment_count, parsed_attachment_count),
+            progress_percent=_progress_percent(
+                attachment_count,
+                parsed_attachment_count,
+            ),
+            evidence_source="email_attachments.parse_status",
+            detail_text=(
+                f"{parsed_attachment_count} of {attachment_count} attachments "
+                "are parseable; "
+                f"{unparsed_attachment_count} attachments need parser coverage."
             ),
             provider_write_executed=False,
         ),
@@ -834,6 +857,28 @@ def _check_knowledge_graph_coverage(
     )
 
 
+def _check_attachment_parse_coverage(
+    attachment_count: int,
+    unparsed_attachment_count: int,
+) -> DataQualityCheck:
+    return DataQualityCheck(
+        check_key="attachment_parse_coverage",
+        display_name="Attachment parse coverage",
+        status_code=_quality_status(attachment_count, unparsed_attachment_count),
+        issue_count=unparsed_attachment_count,
+        total_count=attachment_count,
+        evidence_source="email_attachments.parse_status",
+        detail_text=_quality_detail(
+            total_count=attachment_count,
+            issue_count=unparsed_attachment_count,
+            ready_text="All scoped attachments have parser coverage.",
+            empty_text="No scoped attachments are available yet.",
+            issue_text="Some scoped attachments need parser coverage.",
+        ),
+        provider_write_executed=False,
+    )
+
+
 def _check_connector_signal_coverage(connector_event_count: int) -> DataQualityCheck:
     return DataQualityCheck(
         check_key="connector_signal",
@@ -861,6 +906,7 @@ def _quality_checks(
     source_count: int,
     segmented_email_count: int,
     edged_email_count: int,
+    unparsed_attachment_count: int,
     connector_event_count: int,
 ) -> list[DataQualityCheck]:
     return [
@@ -883,6 +929,10 @@ def _quality_checks(
         _check_knowledge_graph_coverage(
             email_count=email_count,
             edged_email_count=edged_email_count,
+        ),
+        _check_attachment_parse_coverage(
+            attachment_count=attachment_count,
+            unparsed_attachment_count=unparsed_attachment_count,
         ),
         _check_source_registry_coverage(source_count),
         _check_connector_signal_coverage(connector_event_count),
@@ -1123,6 +1173,37 @@ async def _get_knowledge_graph_stats(
     )
 
 
+async def _get_attachment_parse_stats(
+    db: AsyncSession,
+    email_scope: EmailScopeFilter,
+) -> AttachmentParseQualityStats:
+    attachment_parse_result = await db.execute(
+        select(
+            func.count(case((Attachment.parse_status == "parsed", 1))),
+            func.count(
+                case(
+                    (
+                        or_(
+                            Attachment.parse_status.is_(None),
+                            Attachment.parse_status != "parsed",
+                        ),
+                        1,
+                    )
+                )
+            ),
+        )
+        .join(Email)
+        .where(*email_scope)
+    )
+    attachment_parse_stats = attachment_parse_result.one_or_none()
+    parsed_count = attachment_parse_stats[0] if attachment_parse_stats else 0
+    unparsed_count = attachment_parse_stats[1] if attachment_parse_stats else 0
+    return AttachmentParseQualityStats(
+        parsed_count=int(parsed_count or 0),
+        unparsed_count=int(unparsed_count or 0),
+    )
+
+
 async def _get_attachment_assets(
     db: AsyncSession,
     email_scope: EmailScopeFilter,
@@ -1179,6 +1260,7 @@ async def get_data_quality_surface(
     attachment_stats = await _get_attachment_stats(db, email_scope)
     content_graph_stats = await _get_content_graph_stats(db, email_scope)
     knowledge_graph_stats = await _get_knowledge_graph_stats(db, email_scope)
+    attachment_parse_stats = await _get_attachment_parse_stats(db, email_scope)
     email_count = email_stats.count
     missing_thread_count = email_stats.missing_thread_count
     missing_fingerprint_count = email_stats.missing_fingerprint_count
@@ -1190,6 +1272,8 @@ async def get_data_quality_surface(
     content_segment_count = content_graph_stats.segment_count
     edged_email_count = knowledge_graph_stats.edged_email_count
     knowledge_graph_edge_count = knowledge_graph_stats.edge_count
+    parsed_attachment_count = attachment_parse_stats.parsed_count
+    unparsed_attachment_count = attachment_parse_stats.unparsed_count
 
     connector_events = await _get_connector_events(db, auth_context)
     attachment_asset_rows = await _get_attachment_assets(db, email_scope)
@@ -1224,6 +1308,8 @@ async def get_data_quality_surface(
             content_segment_count=content_segment_count,
             edged_email_count=edged_email_count,
             knowledge_graph_edge_count=knowledge_graph_edge_count,
+            parsed_attachment_count=parsed_attachment_count,
+            unparsed_attachment_count=unparsed_attachment_count,
             connector_event_count=len(connector_events),
         ),
         embedding_collections=_embedding_collections(
@@ -1241,6 +1327,7 @@ async def get_data_quality_surface(
             source_count=source_count,
             segmented_email_count=segmented_email_count,
             edged_email_count=edged_email_count,
+            unparsed_attachment_count=unparsed_attachment_count,
             connector_event_count=len(connector_events),
         ),
         connector_events=[

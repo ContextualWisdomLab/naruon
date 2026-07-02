@@ -245,6 +245,7 @@ def mock_db():
             (3, 1, 1),  # attachment stats
             (3, 8),  # content graph stats
             (2, 10),  # knowledge graph stats
+            (2, 1),  # attachment parse stats
             [_connector_event("connector_evt_data_quality")],
             [
                 (_attachment("roadmap.pdf", "extracted attachment text"), ready_email),
@@ -317,6 +318,15 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "detail_text": "2 of 4 emails have graph edges; 10 edges are stored.",
         "provider_write_executed": False,
     }
+    assert stage_by_key["attachment_parse_inventory"] == {
+        "stage_key": "attachment_parse_inventory",
+        "display_name": "Attachment parse inventory",
+        "status_code": "running",
+        "progress_percent": 67,
+        "evidence_source": "email_attachments.parse_status",
+        "detail_text": "2 of 3 attachments are parseable; 1 attachments need parser coverage.",
+        "provider_write_executed": False,
+    }
     assert data["embedding_collections"][0] == {
         "collection_key": "emails_embedding",
         "display_name": "Email vectors",
@@ -350,6 +360,16 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "total_count": 4,
         "evidence_source": "knowledge_graph_edges",
         "detail_text": "Some scoped emails need persisted knowledge graph edges.",
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["attachment_parse_coverage"] == {
+        "check_key": "attachment_parse_coverage",
+        "display_name": "Attachment parse coverage",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 3,
+        "evidence_source": "email_attachments.parse_status",
+        "detail_text": "Some scoped attachments need parser coverage.",
         "provider_write_executed": False,
     }
     assert data["connector_events"][0]["event_uid"] == "connector_evt_data_quality"
@@ -946,11 +966,24 @@ async def _seed_smoke_test_data(conn, ids: dict):
     await conn.execute(
         text(
             """
-            INSERT INTO email_attachments (email_id, filename, content)
+            INSERT INTO email_attachments (
+                email_id, filename, content,
+                content_type, parse_status, parse_error_code
+            )
             VALUES
-            (:first_email_id, 'ready.txt', 'ready attachment'),
-            (:second_email_id, 'blank.txt', ''),
-            (:rival_email_id, 'rival.txt', 'rival attachment')
+            (
+                :first_email_id, 'ready.txt', 'ready attachment',
+                'text/plain', 'parsed', NULL
+            ),
+            (
+                :second_email_id, 'blank.txt', '',
+                'application/pdf', 'unsupported_content_type',
+                'unsupported_content_type'
+            ),
+            (
+                :rival_email_id, 'rival.txt', 'rival attachment',
+                'text/plain', 'parsed', NULL
+            )
             """
         ),
         {
@@ -1220,6 +1253,7 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     assert quality_by_key["attachment_content"]["issue_count"] == 1
     assert quality_by_key["content_graph_coverage"]["issue_count"] == 1
     assert quality_by_key["knowledge_graph_coverage"]["issue_count"] == 1
+    assert quality_by_key["attachment_parse_coverage"]["issue_count"] == 1
     assert event_uid in {event["event_uid"] for event in data["connector_events"]}
     asset_names = {asset["display_name"] for asset in data["repository_assets"]}
     assert {"ready.txt", "blank.txt"} <= asset_names

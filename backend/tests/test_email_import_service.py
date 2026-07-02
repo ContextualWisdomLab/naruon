@@ -187,6 +187,72 @@ def test_build_email_object_attaches_knowledge_graph_edges():
     assert ("Plan", "Ship graph") in next_pairs
 
 
+def test_build_email_object_persists_attachment_parse_metadata():
+    parsed = {
+        "message_id": "<attachments@example.com>",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": "owner@example.com",
+        "subject": "Attachments",
+        "in_reply_to": None,
+        "references": None,
+        "body": "See attached",
+        "body_content_type": "text/plain",
+        "body_parse_content": "See attached",
+        "attachments": [
+            {
+                "filename": "page.html",
+                "content": "Launch Ship",
+                "content_type": "text/html",
+                "parse_content": "<h1>Launch</h1><p>Ship</p>",
+                "parse_content_type": "text/html",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "contract.pdf",
+                "content": "",
+                "content_type": "application/pdf",
+                "parse_content": "",
+                "parse_content_type": "application/pdf",
+                "parse_status": "unsupported_content_type",
+                "parse_error_code": "unsupported_content_type",
+            },
+        ],
+    }
+
+    email_obj, attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<attachments@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-1",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=list(parsed["attachments"]),
+        fitted_embeddings=[
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+        ],
+    )
+
+    assert attachment_count == 2
+    assert [
+        (attachment.filename, attachment.content_type, attachment.parse_status)
+        for attachment in email_obj.attachments
+    ] == [
+        ("page.html", "text/html", "parsed"),
+        ("contract.pdf", "application/pdf", "unsupported_content_type"),
+    ]
+    assert email_obj.attachments[1].parse_error_code == "unsupported_content_type"
+    assert [
+        segment.safe_text_content
+        for segment in email_obj.attachments[0].content_segments
+    ] == ["Launch", "Ship"]
+    assert email_obj.attachments[1].content_segments == []
+
+
 @pytest.mark.asyncio
 async def test_import_single_eml_offloads_read_and_parse(monkeypatch, tmp_path):
     eml_path = tmp_path / "message.eml"

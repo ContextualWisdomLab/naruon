@@ -272,6 +272,15 @@ def _build_email_object(
             Attachment(
                 filename=str(attachment.get("filename") or "attachment.txt"),
                 content=str(attachment.get("content") or ""),
+                content_type=str(
+                    attachment.get("content_type") or "application/octet-stream"
+                ),
+                parse_status=str(attachment.get("parse_status") or "parsed"),
+                parse_error_code=(
+                    str(attachment.get("parse_error_code"))
+                    if attachment.get("parse_error_code") is not None
+                    else None
+                ),
                 embedding=(
                     fitted_embeddings[attachment_index]
                     if attachment_index < len(fitted_embeddings)
@@ -316,6 +325,15 @@ def _append_email_content_graph(
         zip(email_obj.attachments, attachment_payloads),
         start=1,
     ):
+        if attachment_payload.get("parse_status", "parsed") != "parsed":
+            continue
+        parse_source_content = str(
+            attachment_payload.get("parse_content")
+            if attachment_payload.get("parse_content") is not None
+            else attachment_payload.get("content") or ""
+        )
+        if not parse_source_content.strip():
+            continue
         attachment_parse_result = parse_content(
             source_kind="attachment",
             source_record_uid=_content_graph_source_record_uid(
@@ -324,8 +342,12 @@ def _append_email_content_graph(
                 str(attachment_index),
                 attachment_obj.filename,
             ),
-            content=str(attachment_payload.get("content") or ""),
-            content_type=str(attachment_payload.get("content_type") or "text/plain"),
+            content=parse_source_content,
+            content_type=str(
+                attachment_payload.get("parse_content_type")
+                or attachment_payload.get("content_type")
+                or "text/plain"
+            ),
             display_name=attachment_obj.filename,
         )
         _append_parse_result_records(

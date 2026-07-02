@@ -169,6 +169,23 @@ def test_knowledge_graph_edges_have_incremental_revision():
     assert "if_exists=True" in revision_text
 
 
+def test_attachment_parse_metadata_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0007_attachment_parse_metadata.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0007_attachment_parse_metadata"' in revision_text
+    assert 'down_revision = "0006_knowledge_graph_edges"' in revision_text
+    assert '"email_attachments"' in revision_text
+    assert '"content_type"' in revision_text
+    assert '"parse_status"' in revision_text
+    assert '"parse_error_code"' in revision_text
+    assert "has_column" in revision_text
+    assert "op.add_column(" in revision_text
+    assert "op.drop_column(" in revision_text
+
+
 def test_migration_runner_uses_alembic_upgrade_head_not_bootstrap_create_all():
     migration_runner = BACKEND_ROOT / "scripts" / "migrate_db.py"
 

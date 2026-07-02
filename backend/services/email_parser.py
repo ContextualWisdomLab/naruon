@@ -5,6 +5,7 @@ import datetime
 from email.utils import formataddr, getaddresses
 from email.utils import parsedate_to_datetime
 from typing import NotRequired, TypedDict
+from .attachment_parser import parse_email_attachment
 from .exceptions import EmailParseError
 from .text_safety import strip_html_markup
 
@@ -62,16 +63,22 @@ def _process_multipart_body(msg: Message) -> tuple[str, str, list[dict]]:
         filename = part.get_filename()
         # Skip attachments
         if filename:
-            if content_type == "text/plain":
-                part_content = part.get_content()
-                if isinstance(part_content, str):
-                    attachments.append(
-                        {
-                            "filename": _sanitize_display_text(filename),
-                            "content": _sanitize_display_text(part_content),
-                            "content_type": content_type,
-                        }
-                    )
+            parsed_attachment = parse_email_attachment(
+                filename=filename,
+                content_type=content_type,
+                raw_content=_attachment_part_content(part),
+            )
+            attachments.append(
+                {
+                    "filename": parsed_attachment.filename,
+                    "content": parsed_attachment.content,
+                    "content_type": parsed_attachment.content_type,
+                    "parse_content": parsed_attachment.parse_content,
+                    "parse_content_type": parsed_attachment.parse_content_type,
+                    "parse_status": parsed_attachment.parse_status,
+                    "parse_error_code": parsed_attachment.parse_error_code,
+                }
+            )
             continue
 
         if content_type == "text/plain":
@@ -83,6 +90,14 @@ def _process_multipart_body(msg: Message) -> tuple[str, str, list[dict]]:
             if isinstance(part_content, str):
                 html_body += part_content
     return plain_body, html_body, attachments
+
+
+def _attachment_part_content(part: Message) -> object:
+    try:
+        return part.get_content()
+    except (LookupError, TypeError, ValueError):
+        payload = part.get_payload(decode=True)
+        return payload if payload is not None else ""
 
 
 def _process_singlepart_body(msg: Message) -> tuple[str, str, list[dict]]:
