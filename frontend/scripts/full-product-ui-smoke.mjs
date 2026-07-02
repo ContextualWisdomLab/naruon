@@ -991,6 +991,19 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
   }
 
   if (routeSpec.name === "security") {
+    const accessRegion = page.getByRole("region", { name: "접근 권한 소스 거버넌스", exact: true });
+    await accessRegion.getByRole("heading", { name: "원본 연결 RBAC / ABAC", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    const sourceGovernance = viewportSpec.name === "mobile"
+      ? accessRegion.locator("article").filter({ hasText: "WebDAV 저장소 1" }).first()
+      : accessRegion.locator("tbody tr").filter({ hasText: "WebDAV 저장소 1" }).first();
+    await sourceGovernance.getByText("WebDAV 저장소 1", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await sourceGovernance.getByText("조직 스코프", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await sourceGovernance.getByText("쓰기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    if (viewportSpec.name !== "mobile") {
+      await sourceGovernance.getByText("쓰기 의도 가능", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    }
+    await sourceGovernance.getByText("충돌 검사", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await sourceGovernance.getByText("허용", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "외부 공유", exact: true }).click();
     await page.getByText("외부 공유 / 쓰기 경계", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -999,6 +1012,9 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("교차 조직 제공자 secret", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("조직 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
+      evidence("security:verify-access-source-governance"),
+      evidence("security:verify-write-capability-boundary"),
+      evidence("security:verify-policy-allow-decision"),
       evidence("security:open-sharing-review"),
       evidence("security:verify-external-write-block"),
       evidence("security:open-policy-order"),
