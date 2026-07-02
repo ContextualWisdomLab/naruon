@@ -725,6 +725,84 @@ const diligenceCloseDecisionSummary = {
   provider_write_executed: false,
 };
 
+const diligenceCloseArtifactReviewQueue = [
+  {
+    queue_key: "review_acquisition_readiness_summary_json",
+    required_proof_artifact: "acquisition-readiness-summary.json",
+    owner_areas: ["email_ingestion"],
+    proof_count: 1,
+    blocked_proof_count: 1,
+    ready_proof_count: 0,
+    highest_severity: "critical",
+    buyer_review_role: "executive diligence reviewer",
+    review_status: "blocked",
+    acceptance_summary: "1 proof requirement(s) for acquisition-readiness-summary.json need executive diligence reviewer review before close.",
+    next_action: "Resolve exception_repair_thread_id_integrity, exception_backfill_dedupe_fingerprints, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    queue_key: "review_dom_paragraph_evidence_samples_json",
+    required_proof_artifact: "dom-paragraph-evidence-samples.json",
+    owner_areas: ["content_graph"],
+    proof_count: 1,
+    blocked_proof_count: 1,
+    ready_proof_count: 0,
+    highest_severity: "high",
+    buyer_review_role: "data quality reviewer",
+    review_status: "blocked",
+    acceptance_summary: "1 proof requirement(s) for dom-paragraph-evidence-samples.json need data quality reviewer review before close.",
+    next_action: "Resolve exception_backfill_content_graph_coverage, exception_repair_segment_text_readiness, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    queue_key: "review_knowledge_graph_evidence_samples_json",
+    required_proof_artifact: "knowledge-graph-evidence-samples.json",
+    owner_areas: ["knowledge_graph"],
+    proof_count: 1,
+    blocked_proof_count: 1,
+    ready_proof_count: 0,
+    highest_severity: "high",
+    buyer_review_role: "data quality reviewer",
+    review_status: "blocked",
+    acceptance_summary: "1 proof requirement(s) for knowledge-graph-evidence-samples.json need data quality reviewer review before close.",
+    next_action: "Resolve exception_backfill_knowledge_graph_coverage, exception_attach_kg_evidence_endpoints, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    queue_key: "review_remediation_actions_json",
+    required_proof_artifact: "remediation-actions.json",
+    owner_areas: ["attachment_parsing"],
+    proof_count: 2,
+    blocked_proof_count: 2,
+    ready_proof_count: 0,
+    highest_severity: "high",
+    buyer_review_role: "data quality reviewer",
+    review_status: "blocked",
+    acceptance_summary: "2 proof requirement(s) for remediation-actions.json need data quality reviewer review before close.",
+    next_action: "Resolve exception_recover_attachment_content, then regenerate the evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+  {
+    queue_key: "review_semantic_relation_evidence_samples_json",
+    required_proof_artifact: "semantic-relation-evidence-samples.json",
+    owner_areas: ["semantic_kg"],
+    proof_count: 1,
+    blocked_proof_count: 1,
+    ready_proof_count: 0,
+    highest_severity: "high",
+    buyer_review_role: "data quality reviewer",
+    review_status: "blocked",
+    acceptance_summary: "1 proof requirement(s) for semantic-relation-evidence-samples.json need data quality reviewer review before close.",
+    next_action: "Resolve exception_backfill_semantic_relation_sources, then regenerate the evidence snapshot.",
+    snapshot_verification_required: true,
+    provider_write_executed: false,
+  },
+];
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1092,6 +1170,7 @@ const dataEvidenceSnapshot = {
     "content_graph_topology_counts",
     "data_room_package_manifest",
     "diligence_exception_register",
+    "diligence_close_artifact_review_queue",
     "diligence_close_decision_summary",
     "diligence_close_proof_plan",
     "diligence_risk_matrix",
@@ -1182,6 +1261,7 @@ const dataEvidenceSnapshot = {
   evidence_packet_checklist: evidencePacketChecklist,
   data_room_package_manifest: dataRoomPackageManifest,
   diligence_exception_register: diligenceExceptionRegister,
+  diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
   diligence_close_decision_summary: diligenceCloseDecisionSummary,
   diligence_close_proof_plan: diligenceCloseProofPlan,
   diligence_risk_matrix: diligenceRiskMatrix,
@@ -1738,7 +1818,7 @@ describe("DataPage", () => {
   });
 
   it("renders API-backed pipeline embedding and quality tabs", async () => {
-    const writeText = vi.fn(async (_snapshotJson: string) => undefined);
+    const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
@@ -1826,6 +1906,13 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("offline snapshot verifier");
     expect(container.textContent).toContain("Snapshot verification");
     expect(container.textContent).toContain("required");
+    expect(container.textContent).toContain("Diligence close artifact review queue");
+    expect(container.textContent).toContain("executive diligence reviewer");
+    expect(container.textContent).toContain("data quality reviewer");
+    expect(container.textContent).toContain("Proof counts");
+    expect(container.textContent).toContain("total 2");
+    expect(container.textContent).toContain("blocked 2");
+    expect(container.textContent).toContain("attachment_parsing");
     expect(container.textContent).toContain("Diligence close proof plan");
     expect(container.textContent).toContain("critical evidence gate");
     expect(container.textContent).toContain("blocked");
@@ -1912,6 +1999,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_risk_matrix");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_proof_plan");
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_decision_summary");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_artifact_review_queue");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -1997,6 +2085,25 @@ describe("DataPage", () => {
       next_action_text: "Resolve critical and high proof blockers, regenerate the evidence snapshot, and verify the copied JSON with the offline snapshot verifier.",
       provider_write_executed: false,
     });
+    expect(copiedSnapshot.diligence_close_artifact_review_queue).toHaveLength(5);
+    expect(copiedSnapshot.diligence_close_artifact_review_queue[0]).toEqual({
+      queue_key: "review_acquisition_readiness_summary_json",
+      required_proof_artifact: "acquisition-readiness-summary.json",
+      owner_areas: ["email_ingestion"],
+      proof_count: 1,
+      blocked_proof_count: 1,
+      ready_proof_count: 0,
+      highest_severity: "critical",
+      buyer_review_role: "executive diligence reviewer",
+      review_status: "blocked",
+      acceptance_summary: "1 proof requirement(s) for acquisition-readiness-summary.json need executive diligence reviewer review before close.",
+      next_action: "Resolve exception_repair_thread_id_integrity, exception_backfill_dedupe_fingerprints, then regenerate the evidence snapshot.",
+      snapshot_verification_required: true,
+      provider_write_executed: false,
+    });
+    expect(copiedSnapshot.diligence_close_artifact_review_queue[3].required_proof_artifact).toBe("remediation-actions.json");
+    expect(copiedSnapshot.diligence_close_artifact_review_queue[3].proof_count).toBe(2);
+    expect(copiedSnapshot.diligence_close_artifact_review_queue[3].buyer_review_role).toBe("data quality reviewer");
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

@@ -53,6 +53,7 @@ export type RemediationPriority = 'critical' | 'high' | 'medium';
 export type CloseGateStatus = 'blocked' | 'ready';
 export type DiligenceCloseDecision = 'ready_to_close' | 'close_blocked';
 export type DiligenceCloseSeverity = RemediationPriority | 'none';
+export type DiligenceArtifactReviewStatus = 'blocked' | 'ready_for_review';
 export type DiligenceRecommendation = 'ready_for_diligence' | 'remediate_before_close' | 'insufficient_evidence';
 export type DiligenceRiskLevel = 'low' | 'medium' | 'high';
 export type RepositoryAssetState = 'ready' | 'needs_attention';
@@ -350,6 +351,21 @@ export type DataEvidenceSnapshotResponse = {
     next_action_text: string;
     provider_write_executed: boolean;
   };
+  diligence_close_artifact_review_queue: Array<{
+    queue_key: string;
+    required_proof_artifact: string;
+    owner_areas: string[];
+    proof_count: number;
+    blocked_proof_count: number;
+    ready_proof_count: number;
+    highest_severity: DiligenceCloseSeverity;
+    buyer_review_role: string;
+    review_status: DiligenceArtifactReviewStatus;
+    acceptance_summary: string;
+    next_action: string;
+    snapshot_verification_required: boolean;
+    provider_write_executed: boolean;
+  }>;
   parser_manifest_summary: Array<{
     parser_key: string;
     display_name: string;
