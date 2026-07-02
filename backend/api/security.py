@@ -26,10 +26,17 @@ router = APIRouter(prefix="/api/security", tags=["security"])
 
 SourceType = Literal["caldav_source", "carddav_source", "webdav_repository"]
 ScopeKind = Literal["organization", "personal"]
-PermissionDraftDecision = Literal["allow_writeback", "deny_external_write"]
+PermissionDraftDecision = Literal[
+    "allow_writeback",
+    "deny_external_write",
+    "deny_workspace_write",
+    "deny_region_export",
+    "deny_missing_consent",
+]
 PermissionResourceType = Literal[
     "caldav_source",
     "carddav_source",
+    "data_export",
     "webdav_repository",
     "provider_secret",
 ]
@@ -461,17 +468,28 @@ def _permission_change_resource(
     request: PermissionChangeIntentRequest,
     auth_context: AuthContext,
 ) -> ResourcePolicy:
-    denied_cross_org = request.decision == "deny_external_write"
+    organization_id = auth_context.organization_id
+    workspace_id = auth_context.workspace_id
+    data_region = settings.DATA_REGION
+    required_consent_scopes: tuple[str, ...] = ()
+
+    if request.decision == "deny_external_write":
+        organization_id = "org-outside-scope"
+    elif request.decision == "deny_workspace_write":
+        workspace_id = "workspace-outside-scope"
+    elif request.decision == "deny_region_export":
+        data_region = settings.SECONDARY_DATA_REGION
+    elif request.decision == "deny_missing_consent":
+        required_consent_scopes = ("provider.write",)
+
     return ResourcePolicy(
         owner_id=auth_context.user_id,
-        organization_id=(
-            "org-outside-scope" if denied_cross_org else auth_context.organization_id
-        ),
+        organization_id=organization_id,
         permitted_roles=("tenant_admin", "organization_admin"),
         permitted_group_ids=auth_context.group_ids,
-        data_region=settings.DATA_REGION,
-        required_consent_scopes=(),
-        workspace_id=auth_context.workspace_id,
+        data_region=data_region,
+        required_consent_scopes=required_consent_scopes,
+        workspace_id=workspace_id,
     )
 
 

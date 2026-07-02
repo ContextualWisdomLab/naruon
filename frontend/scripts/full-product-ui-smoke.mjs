@@ -789,15 +789,23 @@ async function installRoutes(page) {
       } catch {
         requestBody = {};
       }
+      const reasonByDecision = {
+        allow_writeback: "allowed",
+        deny_external_write: "organization_denied",
+        deny_workspace_write: "workspace_denied",
+        deny_region_export: "data_region_denied",
+        deny_missing_consent: "consent_denied",
+      };
+      const allowed = requestBody.decision === "allow_writeback";
       return routeJson(route, {
         decision: requestBody.decision ?? "deny_external_write",
         resource_type: requestBody.resource_type ?? "provider_secret",
-        allowed: false,
-        reason: "organization_denied",
+        allowed,
+        reason: reasonByDecision[requestBody.decision] ?? "organization_denied",
         evidence_label: "policy_engine_evidence",
         audit_event: "security.permission_change_intent",
         provider_write_executed: false,
-        denial_result: "provider_denied_by_policy",
+        denial_result: allowed ? "approval_required_before_external_write" : "provider_denied_by_policy",
         observed_at: "2026-05-28T04:05:00Z",
       });
     }
@@ -1146,6 +1154,19 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await permissionEditor.getByText("권한 변경이 저장되었습니다: 외부 쓰기 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await permissionEditor.getByText("security.permission_change_intent", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await permissionEditor.getByText("실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByLabel("권한 판정 변경", { exact: true }).selectOption({ label: "워크스페이스 밖 쓰기 차단" });
+    await permissionEditor.getByText("워크스페이스 차단 - 외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
+    await permissionEditor.getByText("워크스페이스 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByLabel("권한 판정 변경", { exact: true }).selectOption({ label: "리전 외부 내보내기 차단" });
+    await permissionEditor.getByText("리전 차단 - 외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
+    await permissionEditor.getByText("리전 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByText("데이터 내보내기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByLabel("권한 판정 변경", { exact: true }).selectOption({ label: "동의 없는 CalDAV 쓰기 차단" });
+    await permissionEditor.getByText("동의 차단 - 외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await permissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
+    await permissionEditor.getByText("동의 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "감사 로그", exact: true }).click();
     const auditRegion = page.getByRole("region", { name: "보안 감사 로그", exact: true });
     await auditRegion.getByText("지속 감사 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1176,6 +1197,9 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
       evidence("security:save-permission-decision"),
       evidence("security:verify-denial-result-state"),
       evidence("security:verify-permission-save-server-evidence"),
+      evidence("security:verify-permission-workspace-denial"),
+      evidence("security:verify-permission-region-denial"),
+      evidence("security:verify-permission-consent-denial"),
       evidence("security:return-permission-editor-evidence"),
       evidence("security:open-audit-log"),
       evidence("security:verify-durable-audit-event"),

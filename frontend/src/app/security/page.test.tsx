@@ -113,15 +113,24 @@ function mockSecurityFetch(surface: typeof securitySurface = securitySurface) {
     }
     if (String(input) === "/api/security/permission-change-intent") {
       const requestBody = JSON.parse(String(init?.body ?? "{}")) as { decision?: string; resource_type?: string };
+      const reasonByDecision: Record<string, string> = {
+        allow_writeback: "allowed",
+        deny_external_write: "organization_denied",
+        deny_workspace_write: "workspace_denied",
+        deny_region_export: "data_region_denied",
+        deny_missing_consent: "consent_denied",
+      };
+      const reason = reasonByDecision[requestBody.decision ?? ""] ?? "organization_denied";
+      const allowed = requestBody.decision === "allow_writeback";
       return jsonResponse({
         decision: requestBody.decision,
         resource_type: requestBody.resource_type,
-        allowed: false,
-        reason: "organization_denied",
+        allowed,
+        reason,
         evidence_label: "policy_engine_evidence",
         audit_event: "security.permission_change_intent",
         provider_write_executed: false,
-        denial_result: "provider_denied_by_policy",
+        denial_result: allowed ? "approval_required_before_external_write" : "provider_denied_by_policy",
         observed_at: "2026-05-28T04:05:00Z",
       });
     }
@@ -230,6 +239,29 @@ describe("SecurityPage", () => {
     expect(JSON.parse(String(permissionIntentInit?.body))).toEqual({
       decision: "deny_external_write",
       resource_type: "provider_secret",
+    });
+
+    await act(async () => {
+      setNativeValue(permissionDecision!, "deny_region_export");
+      permissionDecision!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("리전 차단 - 외부 쓰기 실행 안 함");
+
+    await act(async () => {
+      saveButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("정책 결과");
+    expect(container.textContent).toContain("리전 차단");
+    expect(container.textContent).toContain("데이터 내보내기");
+
+    const permissionIntentCalls = fetchMock.mock.calls.filter(
+      ([input]) => String(input) === "/api/security/permission-change-intent",
+    );
+    expect(JSON.parse(String(permissionIntentCalls.at(-1)?.[1]?.body))).toEqual({
+      decision: "deny_region_export",
+      resource_type: "data_export",
     });
   });
 

@@ -17,8 +17,13 @@ import { apiClient } from '@/lib/api-client';
 
 type SecurityTab = '보안 대시보드' | '접근 권한' | '감사 로그' | '외부 공유' | '정책';
 type ScopeKind = 'organization' | 'personal';
-type PermissionDraftDecision = 'allow_writeback' | 'deny_external_write';
-type PermissionResourceType = 'caldav_source' | 'carddav_source' | 'webdav_repository' | 'provider_secret';
+type PermissionDraftDecision =
+  | 'allow_writeback'
+  | 'deny_external_write'
+  | 'deny_workspace_write'
+  | 'deny_region_export'
+  | 'deny_missing_consent';
+type PermissionResourceType = 'caldav_source' | 'carddav_source' | 'data_export' | 'webdav_repository' | 'provider_secret';
 
 type PolicyDecisionSummary = {
   resource_label: string;
@@ -108,6 +113,27 @@ const permissionDraftOptions = [
     result: '조직 차단 - 외부 쓰기 실행 안 함',
     resourceType: 'provider_secret',
   },
+  {
+    value: 'deny_workspace_write',
+    label: '워크스페이스 밖 쓰기 차단',
+    description: '서명 세션의 워크스페이스 밖 리소스 쓰기를 deny 결과로 저장합니다.',
+    result: '워크스페이스 차단 - 외부 쓰기 실행 안 함',
+    resourceType: 'webdav_repository',
+  },
+  {
+    value: 'deny_region_export',
+    label: '리전 외부 내보내기 차단',
+    description: '허용 리전을 벗어난 데이터 export 쓰기를 deny 결과로 저장합니다.',
+    result: '리전 차단 - 외부 쓰기 실행 안 함',
+    resourceType: 'data_export',
+  },
+  {
+    value: 'deny_missing_consent',
+    label: '동의 없는 CalDAV 쓰기 차단',
+    description: '필수 provider write consent가 없는 CalDAV 쓰기를 deny 결과로 저장합니다.',
+    result: '동의 차단 - 외부 쓰기 실행 안 함',
+    resourceType: 'caldav_source',
+  },
 ] satisfies {
   value: PermissionDraftDecision;
   label: string;
@@ -136,6 +162,8 @@ function sourceTypeLabel(sourceType: GovernanceSource['source_type'] | string) {
       return 'CalDAV 일정 원본';
     case 'carddav_source':
       return 'CardDAV 연락처 원본';
+    case 'data_export':
+      return '데이터 내보내기';
     case 'webdav_repository':
       return 'WebDAV 저장소';
     case 'provider_secret':
@@ -559,7 +587,7 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
           aria-busy={permissionSaving}
           className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
-          {permissionDraft === 'deny_external_write' ? <XCircle className="size-4" /> : <CheckCircle2 className="size-4" />}
+          {permissionDraft === 'allow_writeback' ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}
           {permissionSaving ? '권한 저장 중' : '권한 저장'}
         </button>
         {permissionSaveStatus ? (
@@ -577,6 +605,10 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
             <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
               <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">정책 결과</span>
               <span className="font-semibold sm:text-right">{reasonLabel(permissionIntentResult.reason)}</span>
+            </div>
+            <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
+              <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">리소스</span>
+              <span className="font-semibold sm:text-right">{sourceTypeLabel(permissionIntentResult.resource_type)}</span>
             </div>
             <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
               <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">제공자 쓰기</span>
