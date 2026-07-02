@@ -1,6 +1,6 @@
 # Buyer Diligence Evidence Packet Checklist Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a buyer-facing evidence packet checklist to the redacted evidence snapshot so acquisition reviewers can see which email DOM, attachment parsing, paragraph, KG, semantic, privacy, and offline-verification artifacts are ready.
 
@@ -30,7 +30,7 @@
 - Produces: `evidence_packet_checklist: list[DataEvidencePacketChecklistItem]` on `DataEvidenceSnapshotResponse`.
 - Consumes: existing `DataQualitySurfaceResponse` and `DataEvidenceSnapshotResponse` fields.
 
-- [ ] **Step 1: Write the expected backend checklist fixture**
+- [x] **Step 1: Write the expected backend checklist fixture**
 
 Add `_expected_evidence_packet_checklist()` in `backend/tests/test_data_api.py` with these exact records:
 
@@ -130,7 +130,7 @@ def _expected_evidence_packet_checklist():
     ]
 ```
 
-- [ ] **Step 2: Run the focused backend test and confirm it fails**
+- [x] **Step 2: Run the focused backend test and confirm it fails**
 
 Run:
 
@@ -140,15 +140,15 @@ cd backend && python -m pytest -q tests/test_data_api.py::test_data_quality_evid
 
 Expected: FAIL because `evidence_packet_checklist` is not yet present.
 
-- [ ] **Step 3: Add the Pydantic model and derived checklist helper**
+- [x] **Step 3: Add the Pydantic model and derived checklist helper**
 
 In `backend/api/data.py`, add `EvidencePacketChecklistState = Literal["ready", "needs_attention", "pending"]`, the `DataEvidencePacketChecklistItem` model, and `_evidence_packet_checklist(surface, snapshot)` that returns the ten records above. Compute readiness from presence of snapshot arrays and `surface.acquisition_readiness_gate.state_code`.
 
-- [ ] **Step 4: Add the field to the snapshot response and digest**
+- [x] **Step 4: Add the field to the snapshot response and digest**
 
 Add `evidence_packet_checklist` to `DataEvidenceSnapshotResponse`, populate it in `_evidence_snapshot_from_surface()` after initial snapshot creation, and ensure digest calculation includes it automatically. The field must appear in `canonical_payload_fields`.
 
-- [ ] **Step 5: Run backend validation**
+- [x] **Step 5: Run backend validation**
 
 Run:
 
@@ -159,7 +159,7 @@ cd backend && python -m ruff check api/data.py tests/test_data_api.py scripts/ve
 
 Expected: all selected tests pass and ruff reports no issues.
 
-- [ ] **Step 6: Commit backend implementation**
+- [x] **Step 6: Commit backend implementation**
 
 Run:
 
@@ -179,11 +179,11 @@ git commit -m "feat: add evidence packet checklist"
 - Consumes: `dataEvidenceSnapshot.evidence_packet_checklist`.
 - Produces: an existing-style section titled `Buyer diligence packet checklist` in the `실사 스냅샷` card.
 
-- [ ] **Step 1: Add the TypeScript contract and test fixture**
+- [x] **Step 1: Add the TypeScript contract and test fixture**
 
 Add the `evidence_packet_checklist` field to `DataEvidenceSnapshotResponse` and update `dataEvidenceSnapshot` in `frontend/src/app/data/page.test.tsx` with the same ten records from Task 1.
 
-- [ ] **Step 2: Add failing UI assertions**
+- [x] **Step 2: Add failing UI assertions**
 
 In the quality-tab render test, assert the screen contains:
 
@@ -205,11 +205,11 @@ expect(copiedSnapshot.evidence_packet_checklist[0].checklist_key).toBe("privacy_
 expect(copiedSnapshot.evidence_packet_checklist[8].state_code).toBe("needs_attention");
 ```
 
-- [ ] **Step 3: Render the checklist in the snapshot card**
+- [x] **Step 3: Render the checklist in the snapshot card**
 
 Add a bordered section after `Snapshot verification handoff` that maps `evidenceSnapshot.evidence_packet_checklist`. Use existing `rounded-xl border border-border bg-background p-4`, `getSurfaceStatusClass`, `getSurfaceStatusLabel`, `toSafeReactText`, and `getWriteBoundaryLabel` patterns.
 
-- [ ] **Step 4: Run frontend validation**
+- [x] **Step 4: Run frontend validation**
 
 Run:
 
@@ -220,7 +220,7 @@ git diff --check
 
 Expected: Vitest passes and diff hygiene passes.
 
-- [ ] **Step 5: Commit frontend implementation**
+- [x] **Step 5: Commit frontend implementation**
 
 Run:
 
@@ -238,7 +238,7 @@ git commit -m "feat: show buyer evidence packet checklist"
 - Produces: FigJam diagram link or screenshot artifact documenting how Phase 21 closes buyer diligence packet gaps.
 - Produces: PR #895 body update with Phase 21 evidence.
 
-- [ ] **Step 1: Generate FigJam diagram**
+- [x] **Step 1: Generate FigJam diagram**
 
 Create a FigJam flowchart with the path:
 
@@ -256,7 +256,7 @@ flowchart LR
     decision -->|"Yes"| share["Verified diligence packet"]
 ```
 
-- [ ] **Step 2: Mark this plan complete**
+- [x] **Step 2: Mark this plan complete**
 
 Update each checkbox in this plan to `[x]` after execution and commit:
 
@@ -265,7 +265,7 @@ git add docs/superpowers/plans/2026-07-02-buyer-diligence-evidence-packet-checkl
 git commit -m "docs: mark phase 21 plan complete"
 ```
 
-- [ ] **Step 3: Push and update PR**
+- [x] **Step 3: Push and update PR**
 
 Run:
 
@@ -276,7 +276,7 @@ gh pr edit 895 --repo ContextualWisdomLab/naruon --body-file /tmp/naruon-pr-895-
 
 The PR body update must include Phase 21 commits, validation commands, FigJam link or local screenshot path, and the no-library/submodule decision.
 
-- [ ] **Step 4: Verify live PR state**
+- [x] **Step 4: Verify live PR state**
 
 Run:
 
@@ -286,3 +286,11 @@ gh api graphql -f owner=ContextualWisdomLab -f name=naruon -F number=895 -f quer
 ```
 
 Expected: new head SHA is pushed; unresolved review thread count is 0 or any unresolved thread is reported with the exact reason; queued checks are not treated as blockers.
+
+## Execution Evidence
+
+- Backend tests: `cd backend && python -m pytest -q tests/test_data_api.py::test_data_quality_evidence_snapshot_returns_shareable_redacted_surface tests/test_evidence_snapshot_verifier.py` -> `6 passed`.
+- Backend lint: `cd backend && python -m ruff check api/data.py tests/test_data_api.py scripts/verify_evidence_snapshot.py tests/test_evidence_snapshot_verifier.py` -> passed.
+- Frontend tests: `cd frontend && npx vitest run src/app/data/page.test.tsx` -> `12 passed`.
+- Diff hygiene: `git diff --check` -> passed.
+- FigJam: https://www.figma.com/board/q2dQE9jJQvGYpS41A30NLK
