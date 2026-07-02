@@ -1,6 +1,7 @@
 import React from 'react';
 import { toSafeReactText } from '@/lib/safe-text';
 import {
+  DataEvidenceSnapshotResponse,
   DataQualitySurfaceResponse,
   DataSurfaceStatus
 } from './types';
@@ -22,18 +23,155 @@ function getEndpointStatusLabel(status: string): string {
   return '근거 endpoint 없음';
 }
 
+function buildEvidenceSnapshot(surface: DataQualitySurfaceResponse): DataEvidenceSnapshotResponse {
+  const parserFamilies = new Map<string, DataEvidenceSnapshotResponse['parser_manifest_summary'][number]>();
+  for (const item of surface.attachment_parse_breakdown ?? []) {
+    if (!parserFamilies.has(item.parser_key)) {
+      parserFamilies.set(item.parser_key, {
+        parser_key: item.parser_key,
+        display_name: item.display_name,
+        parse_status: item.parse_status,
+        content_types: [item.parse_content_type ?? item.content_type],
+        extensions: [],
+      });
+    }
+  }
+  const checksPassed = surface.quality_checks.filter((check) => check.status_code === 'pass').length;
+  const checksWithIssues = surface.quality_checks.filter((check) => check.issue_count > 0).length;
+  const statusCode = surface.quality_checks.some((check) => check.status_code === 'needs_attention')
+    ? 'needs_attention'
+    : surface.quality_checks.some((check) => check.status_code === 'pending')
+      ? 'pending'
+      : 'pass';
+
+  return {
+    snapshot_version: 'data_quality_evidence_snapshot.v1',
+    generated_at: new Date().toISOString(),
+    audit_event: 'data.quality_surface.evidence_snapshot.viewed',
+    scope_label: 'signed_workspace_scope',
+    privacy_redaction_policy: {
+      raw_content_exposed: false,
+      stable_identifiers_exposed: false,
+      provider_credentials_exposed: false,
+      redacted_fields: [
+        'raw_email_body',
+        'raw_html',
+        'attachment_bytes',
+        'message_id',
+        'attachment_id',
+        'source_record_id',
+        'stable_database_id',
+        'provider_credentials',
+        'db_evidence_column_strings',
+      ],
+      allowed_sample_fields: [
+        'sample_key',
+        'source_kind',
+        'segment_kind',
+        'edge_kind',
+        'segment_path',
+        'edge_path',
+        'word_count',
+        'endpoint_status',
+      ],
+    },
+    validation_status: {
+      status_code: statusCode,
+      checks_passed: checksPassed,
+      checks_with_issues: checksWithIssues,
+      total_checks: surface.quality_checks.length,
+    },
+    parser_manifest_summary: Array.from(parserFamilies.values()),
+    quality_checks: surface.quality_checks.map((check) => ({
+      check_key: check.check_key,
+      display_name: check.display_name,
+      status_code: check.status_code,
+      issue_count: check.issue_count,
+      total_count: check.total_count,
+      detail_text: check.detail_text,
+    })),
+    content_graph_topology_counts: (surface.content_graph_breakdown ?? []).map((item) => ({
+      source_kind: item.source_kind,
+      segment_kind: item.segment_kind,
+      object_count: item.object_count,
+    })),
+    knowledge_graph_topology_counts: (surface.knowledge_graph_breakdown ?? []).map((item) => ({
+      source_kind: item.source_kind,
+      edge_kind: item.edge_kind,
+      object_count: item.object_count,
+    })),
+    content_graph_evidence_samples: surface.content_graph_evidence_samples ?? [],
+    knowledge_graph_evidence_samples: surface.knowledge_graph_evidence_samples ?? [],
+  };
+}
+
 export function QualityCheckTab({
   dataSurfaceStatus,
   dataQualitySurface,
 }: QualityCheckTabProps) {
+  const [snapshotCopyStatus, setSnapshotCopyStatus] = React.useState<'idle' | 'copied' | 'unavailable'>('idle');
   const attachmentParseBreakdown = dataQualitySurface?.attachment_parse_breakdown ?? [];
   const contentGraphBreakdown = dataQualitySurface?.content_graph_breakdown ?? [];
   const knowledgeGraphBreakdown = dataQualitySurface?.knowledge_graph_breakdown ?? [];
   const contentEvidenceSamples = dataQualitySurface?.content_graph_evidence_samples ?? [];
   const knowledgeGraphEvidenceSamples = dataQualitySurface?.knowledge_graph_evidence_samples ?? [];
+  const evidenceSnapshot = React.useMemo(
+    () => dataQualitySurface ? buildEvidenceSnapshot(dataQualitySurface) : null,
+    [dataQualitySurface],
+  );
+  const copyEvidenceSnapshot = React.useCallback(async () => {
+    if (!evidenceSnapshot) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(JSON.stringify(evidenceSnapshot, null, 2));
+      setSnapshotCopyStatus('copied');
+    } catch {
+      setSnapshotCopyStatus('unavailable');
+    }
+  }, [evidenceSnapshot]);
 
   return (
 <div className="space-y-6">
+              {evidenceSnapshot && (
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="flex flex-col gap-3 border-b border-border bg-secondary/30 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="font-bold text-lg">실사 스냅샷</h2>
+                      <p className="mt-1 text-sm font-semibold text-muted-foreground">raw 본문/첨부 원문 제외 · 안정 ID 비노출</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyEvidenceSnapshot}
+                      className="w-fit rounded bg-secondary px-3 py-1.5 text-xs font-bold text-secondary-foreground hover:bg-secondary/80"
+                    >
+                      실사 스냅샷 JSON 복사
+                    </button>
+                  </div>
+                  <dl className="grid gap-3 p-5 text-xs sm:grid-cols-4">
+                    <div>
+                      <dt className="font-black text-muted-foreground">검증 상태</dt>
+                      <dd className="mt-1 text-sm font-bold">{getSurfaceStatusLabel(evidenceSnapshot.validation_status.status_code)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">parser family</dt>
+                      <dd className="mt-1 text-sm font-bold">{formatCount(evidenceSnapshot.parser_manifest_summary.length)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">문단 샘플</dt>
+                      <dd className="mt-1 text-sm font-bold">{formatCount(evidenceSnapshot.content_graph_evidence_samples.length)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">KG 샘플</dt>
+                      <dd className="mt-1 text-sm font-bold">{formatCount(evidenceSnapshot.knowledge_graph_evidence_samples.length)}</dd>
+                    </div>
+                  </dl>
+                  {snapshotCopyStatus !== 'idle' && (
+                    <p className="border-t border-border px-5 py-3 text-xs font-bold text-muted-foreground">
+                      {snapshotCopyStatus === 'copied' ? '스냅샷 JSON을 복사했습니다.' : '클립보드 복사를 사용할 수 없습니다.'}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {(dataQualitySurface?.quality_checks.slice(0, 3) ?? []).map((check) => (
                   <div key={check.check_key} className="rounded-2xl border border-border bg-card p-5 shadow-sm">

@@ -154,6 +154,65 @@ export type DataQualitySurfaceResponse = {
   }>;
 };
 
+export type DataEvidenceSnapshotResponse = {
+  snapshot_version: string;
+  generated_at: string;
+  audit_event: 'data.quality_surface.evidence_snapshot.viewed';
+  scope_label: string;
+  privacy_redaction_policy: {
+    raw_content_exposed: boolean;
+    stable_identifiers_exposed: boolean;
+    provider_credentials_exposed: boolean;
+    redacted_fields: string[];
+    allowed_sample_fields: string[];
+  };
+  validation_status: {
+    status_code: QualityStatusCode;
+    checks_passed: number;
+    checks_with_issues: number;
+    total_checks: number;
+  };
+  parser_manifest_summary: Array<{
+    parser_key: string;
+    display_name: string;
+    parse_status: string;
+    content_types: string[];
+    extensions: string[];
+  }>;
+  quality_checks: Array<{
+    check_key: string;
+    display_name: string;
+    status_code: QualityStatusCode;
+    issue_count: number;
+    total_count: number;
+    detail_text: string;
+  }>;
+  content_graph_topology_counts: Array<{
+    source_kind: string;
+    segment_kind: string;
+    object_count: number;
+  }>;
+  knowledge_graph_topology_counts: Array<{
+    source_kind: string;
+    edge_kind: string;
+    object_count: number;
+  }>;
+  content_graph_evidence_samples: Array<{
+    sample_key: string;
+    source_kind: string;
+    segment_kind: string;
+    segment_path: string;
+    word_count: number;
+  }>;
+  knowledge_graph_evidence_samples: Array<{
+    sample_key: string;
+    source_kind: string;
+    edge_kind: string;
+    edge_path: string;
+    endpoint_status: 'segment_backed' | 'node_only' | 'missing_endpoint';
+  }>;
+};
+
 export type EmailFileImportResponse = {
   status: 'completed';
   imported_count: number;

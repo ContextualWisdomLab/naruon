@@ -285,6 +285,65 @@ class DataQualitySurfaceResponse(BaseModel):
     connector_events: list[DataConnectorEvent]
 
 
+class DataEvidenceSnapshotParserSummary(BaseModel):
+    parser_key: str
+    display_name: str
+    parse_status: str
+    content_types: list[str]
+    extensions: list[str]
+
+
+class DataEvidenceSnapshotPrivacyPolicy(BaseModel):
+    raw_content_exposed: bool
+    stable_identifiers_exposed: bool
+    provider_credentials_exposed: bool
+    redacted_fields: list[str]
+    allowed_sample_fields: list[str]
+
+
+class DataEvidenceSnapshotValidationStatus(BaseModel):
+    status_code: QualityStatus
+    checks_passed: int
+    checks_with_issues: int
+    total_checks: int
+
+
+class DataEvidenceSnapshotQualityCheck(BaseModel):
+    check_key: str
+    display_name: str
+    status_code: QualityStatus
+    issue_count: int
+    total_count: int
+    detail_text: str
+
+
+class DataEvidenceSnapshotContentTopologyCount(BaseModel):
+    source_kind: str
+    segment_kind: str
+    object_count: int
+
+
+class DataEvidenceSnapshotKnowledgeTopologyCount(BaseModel):
+    source_kind: str
+    edge_kind: str
+    object_count: int
+
+
+class DataEvidenceSnapshotResponse(BaseModel):
+    snapshot_version: str
+    generated_at: str
+    audit_event: Literal["data.quality_surface.evidence_snapshot.viewed"]
+    scope_label: str
+    privacy_redaction_policy: DataEvidenceSnapshotPrivacyPolicy
+    validation_status: DataEvidenceSnapshotValidationStatus
+    parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
+    quality_checks: list[DataEvidenceSnapshotQualityCheck]
+    content_graph_topology_counts: list[DataEvidenceSnapshotContentTopologyCount]
+    knowledge_graph_topology_counts: list[DataEvidenceSnapshotKnowledgeTopologyCount]
+    content_graph_evidence_samples: list[DataContentGraphEvidenceSample]
+    knowledge_graph_evidence_samples: list[DataKnowledgeGraphEvidenceSample]
+
+
 def _datetime_to_utc_iso(value: datetime) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
@@ -310,6 +369,28 @@ _ATTACHMENT_PARSER_BY_KEY = {
 }
 _UNSUPPORTED_ATTACHMENT_PARSER = _ATTACHMENT_PARSER_BY_CONTENT_TYPE[
     "application/octet-stream"
+]
+SNAPSHOT_VERSION = "data_quality_evidence_snapshot.v1"
+SNAPSHOT_REDACTED_FIELDS = [
+    "raw_email_body",
+    "raw_html",
+    "attachment_bytes",
+    "message_id",
+    "attachment_id",
+    "source_record_id",
+    "stable_database_id",
+    "provider_credentials",
+    "db_evidence_column_strings",
+]
+SNAPSHOT_ALLOWED_SAMPLE_FIELDS = [
+    "sample_key",
+    "source_kind",
+    "segment_kind",
+    "edge_kind",
+    "segment_path",
+    "edge_path",
+    "word_count",
+    "endpoint_status",
 ]
 
 
@@ -437,6 +518,91 @@ def _knowledge_graph_evidence_sample_row(
             source_node_id,
             target_node_id,
         ),
+    )
+
+
+def _snapshot_parser_manifest_summary() -> list[DataEvidenceSnapshotParserSummary]:
+    return [
+        DataEvidenceSnapshotParserSummary(
+            parser_key=descriptor.parser_key,
+            display_name=descriptor.display_name,
+            parse_status=descriptor.parse_status,
+            content_types=list(descriptor.content_types),
+            extensions=list(descriptor.extensions),
+        )
+        for descriptor in get_attachment_parser_manifest()
+    ]
+
+
+def _snapshot_privacy_policy() -> DataEvidenceSnapshotPrivacyPolicy:
+    return DataEvidenceSnapshotPrivacyPolicy(
+        raw_content_exposed=False,
+        stable_identifiers_exposed=False,
+        provider_credentials_exposed=False,
+        redacted_fields=SNAPSHOT_REDACTED_FIELDS,
+        allowed_sample_fields=SNAPSHOT_ALLOWED_SAMPLE_FIELDS,
+    )
+
+
+def _snapshot_validation_status(
+    quality_checks: list[DataQualityCheck],
+) -> DataEvidenceSnapshotValidationStatus:
+    checks_passed = sum(1 for check in quality_checks if check.status_code == "pass")
+    checks_with_issues = sum(1 for check in quality_checks if check.issue_count > 0)
+    if any(check.status_code == "needs_attention" for check in quality_checks):
+        status_code: QualityStatus = "needs_attention"
+    elif any(check.status_code == "pending" for check in quality_checks):
+        status_code = "pending"
+    else:
+        status_code = "pass"
+    return DataEvidenceSnapshotValidationStatus(
+        status_code=status_code,
+        checks_passed=checks_passed,
+        checks_with_issues=checks_with_issues,
+        total_checks=len(quality_checks),
+    )
+
+
+def _evidence_snapshot_from_surface(
+    surface: DataQualitySurfaceResponse,
+) -> DataEvidenceSnapshotResponse:
+    return DataEvidenceSnapshotResponse(
+        snapshot_version=SNAPSHOT_VERSION,
+        generated_at=_datetime_to_utc_iso(datetime.now(timezone.utc)),
+        audit_event="data.quality_surface.evidence_snapshot.viewed",
+        scope_label="signed_workspace_scope",
+        privacy_redaction_policy=_snapshot_privacy_policy(),
+        validation_status=_snapshot_validation_status(surface.quality_checks),
+        parser_manifest_summary=_snapshot_parser_manifest_summary(),
+        quality_checks=[
+            DataEvidenceSnapshotQualityCheck(
+                check_key=check.check_key,
+                display_name=check.display_name,
+                status_code=check.status_code,
+                issue_count=check.issue_count,
+                total_count=check.total_count,
+                detail_text=check.detail_text,
+            )
+            for check in surface.quality_checks
+        ],
+        content_graph_topology_counts=[
+            DataEvidenceSnapshotContentTopologyCount(
+                source_kind=item.source_kind,
+                segment_kind=item.segment_kind,
+                object_count=item.object_count,
+            )
+            for item in surface.content_graph_breakdown
+        ],
+        knowledge_graph_topology_counts=[
+            DataEvidenceSnapshotKnowledgeTopologyCount(
+                source_kind=item.source_kind,
+                edge_kind=item.edge_kind,
+                object_count=item.object_count,
+            )
+            for item in surface.knowledge_graph_breakdown
+        ],
+        content_graph_evidence_samples=surface.content_graph_evidence_samples,
+        knowledge_graph_evidence_samples=surface.knowledge_graph_evidence_samples,
     )
 
 
@@ -1926,3 +2092,15 @@ async def get_data_quality_surface(
             for event in connector_events
         ],
     )
+
+
+@router.get(
+    "/quality-surface/evidence-snapshot",
+    response_model=DataEvidenceSnapshotResponse,
+)
+async def get_data_quality_evidence_snapshot(
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataEvidenceSnapshotResponse:
+    surface = await get_data_quality_surface(auth_context=auth_context, db=db)
+    return _evidence_snapshot_from_surface(surface)

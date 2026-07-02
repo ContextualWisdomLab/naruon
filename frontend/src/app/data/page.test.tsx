@@ -760,6 +760,9 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Content segment text readiness");
     expect(container.textContent).toContain("Knowledge graph evidence endpoints");
     expect(container.textContent).toContain("paragraph segment evidence endpoints");
+    expect(container.textContent).toContain("실사 스냅샷");
+    expect(container.textContent).toContain("실사 스냅샷 JSON 복사");
+    expect(container.textContent).toContain("raw 본문/첨부 원문 제외");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
     expect(container.textContent).toContain("text/markdown");

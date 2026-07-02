@@ -626,6 +626,101 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         assert forbidden not in serialized
 
 
+def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_db):
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.get("/api/data/quality-surface/evidence-snapshot")
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 200, response.text
+    snapshot = response.json()
+    assert snapshot["snapshot_version"] == "data_quality_evidence_snapshot.v1"
+    assert snapshot["audit_event"] == "data.quality_surface.evidence_snapshot.viewed"
+    assert snapshot["scope_label"] == "signed_workspace_scope"
+    assert snapshot["generated_at"].endswith("Z")
+    assert snapshot["privacy_redaction_policy"]["raw_content_exposed"] is False
+    assert snapshot["privacy_redaction_policy"]["stable_identifiers_exposed"] is False
+    assert snapshot["privacy_redaction_policy"]["provider_credentials_exposed"] is False
+    assert "raw_email_body" in snapshot["privacy_redaction_policy"]["redacted_fields"]
+    assert snapshot["privacy_redaction_policy"]["allowed_sample_fields"] == [
+        "sample_key",
+        "source_kind",
+        "segment_kind",
+        "edge_kind",
+        "segment_path",
+        "edge_path",
+        "word_count",
+        "endpoint_status",
+    ]
+    assert snapshot["validation_status"] == {
+        "status_code": "needs_attention",
+        "checks_passed": 2,
+        "checks_with_issues": 8,
+        "total_checks": 10,
+    }
+    assert snapshot["parser_manifest_summary"][0] == {
+        "parser_key": "plain_text",
+        "display_name": "Plain text attachments",
+        "parse_status": "parsed",
+        "content_types": ["text/plain"],
+        "extensions": [".txt", ".text"],
+    }
+    assert snapshot["content_graph_topology_counts"] == [
+        {"source_kind": "email_body", "segment_kind": "paragraph", "object_count": 6},
+        {"source_kind": "attachment", "segment_kind": "heading", "object_count": 2},
+    ]
+    assert snapshot["knowledge_graph_topology_counts"] == [
+        {"source_kind": "email_body", "edge_kind": "node_has_segment", "object_count": 8},
+        {
+            "source_kind": "attachment",
+            "edge_kind": "heading_contains_segment",
+            "object_count": 2,
+        },
+    ]
+    assert snapshot["quality_checks"][0] == {
+        "check_key": "thread_id_integrity",
+        "display_name": "Thread id integrity",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 4,
+        "detail_text": "Some scoped emails need canonical thread ids.",
+    }
+    assert "evidence_source" not in snapshot["quality_checks"][0]
+    assert "provider_write_executed" not in snapshot["quality_checks"][0]
+    assert snapshot["content_graph_evidence_samples"][0] == {
+        "sample_key": _expected_sample_key("segment", "cseg_email_paragraph_1"),
+        "source_kind": "email_body",
+        "segment_kind": "paragraph",
+        "segment_path": "/document[1]/paragraph[1]",
+        "word_count": 12,
+    }
+    assert snapshot["knowledge_graph_evidence_samples"][0] == {
+        "sample_key": _expected_sample_key("edge", "kgedge_email_node_segment_1"),
+        "source_kind": "email_body",
+        "edge_kind": "node_has_segment",
+        "edge_path": "/document[1]/paragraph[1]/has/segment[1]",
+        "endpoint_status": "segment_backed",
+    }
+
+    serialized = response.text
+    for forbidden in (
+        "source email body",
+        "extracted attachment text",
+        "content_segments.source_kind",
+        "knowledge_graph_edges.source_kind",
+        "email_attachments.content_type",
+        "cseg_email_paragraph_1",
+        "kgedge_email_node_segment_1",
+        "<asset-ready@example.com>",
+        "thread-ready",
+        "credentials_encrypted",
+    ):
+        assert forbidden not in serialized
+
+
 def test_data_quality_surface_rejects_public_identity_headers_without_signed_session(
     mock_db,
 ):
