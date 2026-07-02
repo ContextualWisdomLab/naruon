@@ -96,9 +96,9 @@ Expected current fixture:
 - [x] Run `PATH=/opt/homebrew/opt/node@24/bin:$PATH /opt/homebrew/opt/node@24/bin/npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` from `frontend/`.
 - [x] Run `git diff --check`.
 - [x] Run Ponytail review on the diff and record complexity verdict.
-- [ ] Commit only intended files.
-- [ ] Push to `origin HEAD:refs/heads/plan/email-dom-paragraph-kg-2026-07-02`.
-- [ ] Re-verify live PR #901 `headRefOid`, merge state, unresolved review thread count, and check state.
+- [x] Commit only intended files.
+- [x] Push to `origin HEAD:refs/heads/plan/email-dom-paragraph-kg-2026-07-02`.
+- [x] Re-verify live PR #901 `headRefOid`, merge state, unresolved review thread count, and check state.
 
 ## Evidence
 
@@ -109,4 +109,4 @@ Expected current fixture:
 - Frontend lint: `PATH=/opt/homebrew/opt/node@24/bin:$PATH /opt/homebrew/opt/node@24/bin/npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` -> clean.
 - Diff check: `git diff --check` -> clean.
 - Ponytail: `Lean already. Ship.`
-- PR #901 live state: pending.
+- PR #901 live state after push: open, `MERGEABLE`, `BLOCKED` by queued/pending checks; current unresolved review threads 0, outdated unresolved review threads 4. Queued GitHub checks are not treated as blockers per user instruction.
