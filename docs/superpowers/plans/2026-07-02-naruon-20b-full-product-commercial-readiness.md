@@ -407,6 +407,7 @@ The report labels all unmeasured values as assumptions and does not claim live p
 ## Task 7: Extend Full Product Smoke Gates
 
 **Files:**
+- Modify: `.github/workflows/app-ci.yml`
 - Modify later: `frontend/scripts/pilot-ui-smoke.mjs`
 - Create: `frontend/scripts/full-product-ui-smoke.mjs`
 - Create: `frontend/scripts/full-product-ui-smoke.test.mjs`
@@ -462,6 +463,23 @@ Added frontend/scripts/full-product-ui-smoke.mjs.
 Added frontend/scripts/full-product-ui-smoke.test.mjs.
 Added pnpm --dir frontend full:smoke.
 The route smoke covers /, /mail, /search, /calendar, /tasks, /projects, /data, /ai-hub, /security, /settings.
+```
+
+- [x] **Step 3: Wire full-product smoke into CI**
+
+Add the deterministic full-product smoke to the frontend job after production build. Install Chromium explicitly before the smoke run so CI does not rely on an implicit browser cache.
+
+Expected:
+
+```text
+Application CI frontend runs pnpm run full:smoke after build.
+The full-product smoke remains localhost-only.
+```
+
+Actual implementation:
+
+```text
+.github/workflows/app-ci.yml installs Playwright Chromium and runs pnpm run full:smoke with NARUON_FULL_PRODUCT_BASE_URL=http://127.0.0.1:3001.
 ```
 
 Validation evidence captured on 2026-07-02 KST:

@@ -225,7 +225,7 @@ P0 for 20B final sale readiness:
 
 P1 for buyer technical review:
 
-- Full-product smoke covers all ten IA routes on localhost, but it is not yet wired into remote CI and does not yet assert every critical interaction inside each route.
+- Full-product smoke covers all ten IA routes on localhost and is wired into the branch CI workflow; remote CI evidence is still pending and the smoke does not yet assert every critical interaction inside each route.
 - Product events do not yet cover full-product funnels beyond mail/search.
 - External analytics destination, retention, and consent are not approved.
 - Figma `Sales Demo` has current evidence; `QA Notes` and full responsive review evidence remain incomplete.
@@ -239,7 +239,7 @@ Non-blockers:
 ## Next Actions
 
 1. Repair Figma page structure without Code Connect.
-2. Wire the localhost-only full-product smoke into CI after runtime cost and flake risk are bounded.
+2. Confirm the branch CI full-product smoke result and tune runtime or browser install cost if needed.
 3. Capture Product Design screenshots for all ten IA routes across desktop and mobile.
 4. Extend analytics and ROI reports without claiming live KPI values.
 5. Merge the issue #634 governance patch and close the issue only after trusted-base remote evidence proves blocker comments fail the governance check.
