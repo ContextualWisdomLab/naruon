@@ -375,8 +375,8 @@ Minimum verification before merge:
 
 - CodeGraph initialization is allowed by AGENTS.md and should be done locally before structural changes; generated index/rule artifacts remain uncommitted.
 - PDF/DOCX/HWP parser dependencies should wait for a pilot corpus requirement and security review.
-- The exact UI mockup generation step should wait until the user approves this design brief; Figma Code Connect remains excluded.
+- UI mockup generation can proceed autonomously after this backend evidence slice is stable; Figma Code Connect remains excluded.
 
-## Approval Gate
+## Autonomous Execution Gate
 
-This document is the current implementation guide for PR #895. The user authorized autonomous execution, so Phase 1 and Phase 2 work can proceed on the focused branch while review feedback is handled as ordinary implementation input.
+This document is the current implementation guide for PR #895. The user authorized autonomous execution without a separate review gate, so implementation, Figma/FigJam planning, verification, PR updates, and follow-up planning can continue on the focused branch while review feedback is handled as ordinary implementation input.

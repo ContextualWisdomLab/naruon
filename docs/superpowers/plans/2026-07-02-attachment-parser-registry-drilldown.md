@@ -171,7 +171,7 @@ ruff check .
 
 Run: `git diff --check`
 
-- [ ] **Step 5: Commit, push, and update PR**
+- [x] **Step 5: Commit, push, and update PR**
 
 Run:
 
