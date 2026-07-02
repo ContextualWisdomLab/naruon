@@ -28,7 +28,7 @@
 - Produces `DataEvidenceSnapshotVerificationHandoff`
 - Produces `DataEvidenceSnapshotResponse.verification_handoff`
 
-- [ ] **Step 1: Add expected handoff helper**
+- [x] **Step 1: Add expected handoff helper**
 
 Add `_expected_snapshot_verification_handoff()` to `backend/tests/test_data_api.py`:
 
@@ -59,7 +59,7 @@ def _expected_snapshot_verification_handoff():
     }
 ```
 
-- [ ] **Step 2: Extend snapshot assertions**
+- [x] **Step 2: Extend snapshot assertions**
 
 In `test_data_quality_evidence_snapshot_returns_shareable_redacted_surface`, assert:
 
@@ -70,7 +70,7 @@ assert "verification_handoff" in snapshot["canonical_payload_fields"]
 
 Keep existing forbidden-field assertions unchanged.
 
-- [ ] **Step 3: Run backend test to verify failure**
+- [x] **Step 3: Run backend test to verify failure**
 
 Run:
 
@@ -81,7 +81,7 @@ python -m pytest -q tests/test_data_api.py::test_data_quality_evidence_snapshot_
 
 Expected: FAIL because `verification_handoff` is not implemented yet.
 
-- [ ] **Step 4: Add backend model and helper**
+- [x] **Step 4: Add backend model and helper**
 
 In `backend/api/data.py`, add:
 
@@ -127,7 +127,7 @@ def _snapshot_verification_handoff() -> DataEvidenceSnapshotVerificationHandoff:
 
 Pass `verification_handoff=_snapshot_verification_handoff()` when building `DataEvidenceSnapshotResponse`.
 
-- [ ] **Step 5: Run backend validation**
+- [x] **Step 5: Run backend validation**
 
 Run:
 
@@ -150,11 +150,11 @@ Expected: PASS.
 - Consumes `DataEvidenceSnapshotResponse.verification_handoff`
 - Produces visible verification handoff block in the evidence snapshot card
 
-- [ ] **Step 1: Add TypeScript type and fixture**
+- [x] **Step 1: Add TypeScript type and fixture**
 
 Add `verification_handoff` to `DataEvidenceSnapshotResponse` with the same field names as the backend model. Add the expected fixture object to `dataEvidenceSnapshot`.
 
-- [ ] **Step 2: Render verifier handoff**
+- [x] **Step 2: Render verifier handoff**
 
 In `QualityCheckTab.tsx`, render a bordered block under the snapshot summary `<dl>`:
 
@@ -170,7 +170,7 @@ In `QualityCheckTab.tsx`, render a bordered block under the snapshot summary `<d
 
 Show verifier command, accepted input, excluded digest fields, success exit code, failure exit codes, and provider-write boundary.
 
-- [ ] **Step 3: Extend frontend tests**
+- [x] **Step 3: Extend frontend tests**
 
 In `frontend/src/app/data/page.test.tsx`, assert visible text:
 
@@ -188,7 +188,7 @@ expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_
 expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
 ```
 
-- [ ] **Step 4: Run frontend validation**
+- [x] **Step 4: Run frontend validation**
 
 Run:
 
@@ -207,7 +207,7 @@ Expected: PASS.
 **Interfaces:**
 - Produces FigJam group named `Phase 20 Evidence Snapshot Verification Handoff Group`
 
-- [ ] **Step 1: Generate Phase 20 diagram**
+- [x] **Step 1: Generate Phase 20 diagram**
 
 Use the Figma plugin, not Figma Code Connect. Generate a FigJam flowchart in board `zXkcwT2E2aBtNhMVznLT4l`:
 
@@ -220,7 +220,7 @@ flowchart LR
   result --> buyer["20B KRW buyer reviewers"]
 ```
 
-- [ ] **Step 2: Group and screenshot**
+- [x] **Step 2: Group and screenshot**
 
 Group generated nodes as `Phase 20 Evidence Snapshot Verification Handoff Group` and save:
 
@@ -234,7 +234,7 @@ Group generated nodes as `Phase 20 Evidence Snapshot Verification Handoff Group`
 - Modify: `docs/superpowers/plans/2026-07-02-evidence-snapshot-verification-handoff.md`
 - Modify: PR body via `gh pr edit`
 
-- [ ] **Step 1: Run final validation**
+- [x] **Step 1: Run final validation**
 
 Run:
 
@@ -250,7 +250,7 @@ git diff --check
 
 Expected: PASS/no output.
 
-- [ ] **Step 2: Commit implementation and completed plan**
+- [x] **Step 2: Commit implementation and completed plan**
 
 Stage only Phase 20 files and commit:
 
@@ -260,7 +260,7 @@ git commit -m "feat: add evidence snapshot verification handoff"
 git commit -m "docs: mark phase 20 plan complete"
 ```
 
-- [ ] **Step 3: Push and update PR #895**
+- [x] **Step 3: Push and update PR #895**
 
 Run:
 
@@ -271,3 +271,15 @@ gh pr view 895 --repo ContextualWisdomLab/naruon --json url,headRefOid,mergeable
 ```
 
 Expected: branch pushed, PR body includes Phase 20 validation and screenshot evidence, unresolved review threads remain zero unless a new reviewer comment appears.
+
+## Completion Evidence
+
+- Backend evidence snapshot response now includes `verification_handoff` with the existing offline verifier command, accepted input shape, digest algorithm, excluded digest metadata fields, success/failure exit codes, handoff copy, and `provider_write_executed=false`.
+- Data Quality UI renders `Snapshot verification handoff` inside the `실사 스냅샷` card and copied snapshot JSON includes the same handoff manifest.
+- FigJam evidence: `Phase 20 Evidence Snapshot Verification Handoff Group` (`47:855`) in `zXkcwT2E2aBtNhMVznLT4l`.
+- Screenshot evidence: `/Users/seonghobae/Documents/Codex/2026-07-02/https-github-com-contextualwisdomlab-noema-figma-2/work/figjam-phase20-evidence-snapshot-verification-handoff.png`.
+- Validation passed:
+  - `python -m pytest -q tests/test_data_api.py::test_data_quality_evidence_snapshot_returns_shareable_redacted_surface tests/test_evidence_snapshot_verifier.py`
+  - `python -m ruff check api/data.py tests/test_data_api.py scripts/verify_evidence_snapshot.py tests/test_evidence_snapshot_verifier.py`
+  - `npx vitest run src/app/data/page.test.tsx`
+  - `git diff --check`
