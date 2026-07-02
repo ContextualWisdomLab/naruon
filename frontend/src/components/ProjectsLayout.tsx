@@ -91,6 +91,29 @@ interface ProjectTraceability {
   edges: ProjectTraceEdge[];
 }
 
+interface ProjectEvidence {
+  project_uid: string;
+  object_uid: string;
+  object_type: string;
+  title: string;
+  summary: string;
+  status_code: string;
+  confidence: number;
+  citation_bundle: ProjectCitation[];
+}
+
+interface ProjectCorrectionResponse {
+  correction_uid: string;
+  object_uid: string;
+  correction_action: string;
+  before_json: Record<string, unknown>;
+  after_json: Record<string, unknown>;
+  rationale: string | null;
+  actor_user_id: string;
+  source_segment_uids: string[];
+  created_at: string;
+}
+
 interface ProjectSummary {
   id: string;
   title: string;
@@ -299,6 +322,14 @@ export function ProjectsLayout() {
   const [traceability, setTraceability] = useState<ProjectTraceability | null>(null);
   const [traceFailureProjectUid, setTraceFailureProjectUid] = useState<string | null>(null);
   const [selectedObjectUid, setSelectedObjectUid] = useState<string | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<ProjectEvidence | null>(null);
+  const [evidenceFailureKey, setEvidenceFailureKey] = useState<string | null>(null);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [lastConfirmedCandidateUid, setLastConfirmedCandidateUid] = useState<string | null>(null);
+  const [correctionSubmitting, setCorrectionSubmitting] = useState(false);
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
+  const [lastCorrection, setLastCorrection] = useState<ProjectCorrectionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -366,6 +397,14 @@ export function ProjectsLayout() {
   const currentTraceability = traceability?.project_uid === activeSemanticCandidate?.project_uid ? traceability : null;
   const traceLoading = Boolean(activeSemanticCandidate && !currentTraceability && traceFailureProjectUid !== activeSemanticCandidate.project_uid);
   const selectedTraceObject = currentTraceability?.objects.find((item) => item.object_uid === selectedObjectUid) ?? currentTraceability?.objects[0] ?? null;
+  const selectedEvidenceProjectUid = activeSemanticCandidate?.project_uid ?? null;
+  const selectedEvidenceObjectUid = selectedTraceObject?.object_uid ?? null;
+  const selectedEvidenceKey = selectedEvidenceProjectUid && selectedEvidenceObjectUid ? `${selectedEvidenceProjectUid}:${selectedEvidenceObjectUid}` : null;
+  const currentEvidence = selectedEvidenceKey && selectedEvidence && `${selectedEvidence.project_uid}:${selectedEvidence.object_uid}` === selectedEvidenceKey ? selectedEvidence : null;
+  const evidenceLoading = Boolean(selectedEvidenceKey && !currentEvidence && evidenceFailureKey !== selectedEvidenceKey);
+  const evidenceCitations = currentEvidence?.citation_bundle ?? selectedTraceObject?.citation_bundle ?? [];
+  const currentCorrection = selectedTraceObject && lastCorrection?.object_uid === selectedTraceObject.object_uid ? lastCorrection : null;
+  const candidateConfirmed = activeSemanticCandidate ? activeSemanticCandidate.status_code === 'confirmed' || lastConfirmedCandidateUid === activeSemanticCandidate.candidate_uid : false;
   const graphHealthPercent = activeSemanticCandidate ? semanticProgress(activeSemanticCandidate) : 0;
 
   useEffect(() => {
@@ -391,6 +430,112 @@ export function ProjectsLayout() {
       cancelled = true;
     };
   }, [activeSemanticCandidate]);
+
+  useEffect(() => {
+    if (!selectedEvidenceProjectUid || !selectedEvidenceObjectUid || !selectedEvidenceKey) {
+      return;
+    }
+    let cancelled = false;
+    const projectUid = selectedEvidenceProjectUid;
+    const objectUid = selectedEvidenceObjectUid;
+    const evidenceKey = selectedEvidenceKey;
+    void apiClient.get<ProjectEvidence>(
+      `/api/projects/${encodeURIComponent(projectUid)}/evidence/${encodeURIComponent(objectUid)}`,
+    )
+      .then((response) => {
+        if (cancelled) return;
+        setSelectedEvidence(response);
+        setEvidenceFailureKey((current) => (current === evidenceKey ? null : current));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEvidenceFailureKey(evidenceKey);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvidenceKey, selectedEvidenceObjectUid, selectedEvidenceProjectUid]);
+
+  async function handleConfirmCandidate() {
+    if (!activeSemanticCandidate || confirmSubmitting) return;
+    setConfirmSubmitting(true);
+    setConfirmError(null);
+    try {
+      const confirmedCandidate = await apiClient.post<ProjectCandidate>(
+        `/api/projects/candidates/${encodeURIComponent(activeSemanticCandidate.candidate_uid)}/confirm`,
+        {},
+      );
+      setSemanticCandidates((candidates) => candidates.map((candidate) => (
+        candidate.candidate_uid === confirmedCandidate.candidate_uid ? confirmedCandidate : candidate
+      )));
+      setTraceability((current) => (
+        current?.project_uid === confirmedCandidate.project_uid ? { ...current, candidate: confirmedCandidate } : current
+      ));
+      setLastConfirmedCandidateUid(confirmedCandidate.candidate_uid);
+    } catch {
+      setConfirmError('프로젝트 후보 확정을 저장하지 못했습니다.');
+    } finally {
+      setConfirmSubmitting(false);
+    }
+  }
+
+  async function handleMarkEvidenceReviewed() {
+    if (!activeSemanticCandidate || !selectedTraceObject || correctionSubmitting) return;
+    setCorrectionSubmitting(true);
+    setCorrectionError(null);
+    const projectUid = activeSemanticCandidate.project_uid;
+    const objectUid = selectedTraceObject.object_uid;
+    const sourceSegmentUids = evidenceCitations.length > 0
+      ? evidenceCitations.map((citation) => citation.content_segment_uid)
+      : selectedTraceObject.source_segment_uids;
+    try {
+      const correction = await apiClient.post<ProjectCorrectionResponse>(
+        `/api/projects/${encodeURIComponent(projectUid)}/corrections`,
+        {
+          object_uid: objectUid,
+          correction_action: 'mark_evidence_reviewed',
+          after_json: {
+            status_code: 'approved',
+            title: selectedTraceObject.title,
+            evidence_review_state: 'reviewed',
+            reviewed_at: new Date().toISOString(),
+          },
+          rationale: 'Reviewed from the Project Command Center Evidence Inspector.',
+          source_segment_uids: sourceSegmentUids,
+        },
+      );
+      const nextStatus = typeof correction.after_json.status_code === 'string' ? correction.after_json.status_code : null;
+      const nextTitle = typeof correction.after_json.title === 'string' ? correction.after_json.title : null;
+      setLastCorrection(correction);
+      setTraceability((current) => {
+        if (!current || current.project_uid !== projectUid) return current;
+        return {
+          ...current,
+          objects: current.objects.map((projectObject) => (
+            projectObject.object_uid === objectUid
+              ? {
+                  ...projectObject,
+                  status_code: nextStatus ?? projectObject.status_code,
+                  title: nextTitle ?? projectObject.title,
+                }
+              : projectObject
+          )),
+        };
+      });
+      setSelectedEvidence((current) => {
+        if (!current || current.project_uid !== projectUid || current.object_uid !== objectUid) return current;
+        return {
+          ...current,
+          status_code: nextStatus ?? current.status_code,
+          title: nextTitle ?? current.title,
+        };
+      });
+    } catch {
+      setCorrectionError('문단 근거 검토 결과를 저장하지 못했습니다.');
+    } finally {
+      setCorrectionSubmitting(false);
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-x-hidden bg-background text-foreground">
@@ -492,15 +637,29 @@ export function ProjectsLayout() {
                     <h2 className="flex items-center gap-2 font-bold text-lg"><Network className="size-5 text-primary" /> 프로젝트 지식그래프</h2>
                     <p className="mt-1 text-sm font-semibold text-muted-foreground">모든 항목은 문단 citation bundle을 기준으로 표시됩니다.</p>
                   </div>
-                  <div className="grid min-w-44 grid-cols-2 gap-2 text-center">
-                    <div className="rounded-lg border border-border bg-background px-3 py-2">
-                      <p className="text-xs font-bold text-muted-foreground">근거 문단</p>
-                      <p className="font-mono text-lg font-black">{activeSemanticCandidate.source_segment_count}</p>
+                  <div className="flex min-w-0 flex-col gap-2 md:items-end">
+                    <div className="grid min-w-44 grid-cols-2 gap-2 text-center">
+                      <div className="rounded-lg border border-border bg-background px-3 py-2">
+                        <p className="text-xs font-bold text-muted-foreground">근거 문단</p>
+                        <p className="font-mono text-lg font-black">{activeSemanticCandidate.source_segment_count}</p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-background px-3 py-2">
+                        <p className="text-xs font-bold text-muted-foreground">그래프 객체</p>
+                        <p className="font-mono text-lg font-black">{activeSemanticCandidate.object_count}</p>
+                      </div>
                     </div>
-                    <div className="rounded-lg border border-border bg-background px-3 py-2">
-                      <p className="text-xs font-bold text-muted-foreground">그래프 객체</p>
-                      <p className="font-mono text-lg font-black">{activeSemanticCandidate.object_count}</p>
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                      <span className="rounded-full bg-secondary px-2.5 py-1 text-muted-foreground">Sales KPI: evidence-ready</span>
+                      <button
+                        type="button"
+                        onClick={handleConfirmCandidate}
+                        disabled={confirmSubmitting || candidateConfirmed}
+                        className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+                      >
+                        {candidateConfirmed ? '프로젝트 후보 확정됨' : confirmSubmitting ? '확정 저장 중' : '프로젝트 후보 확정'}
+                      </button>
                     </div>
+                    {confirmError ? <p role="alert" className="text-xs font-semibold text-destructive">{confirmError}</p> : null}
                   </div>
                 </div>
                 <div className="grid gap-4 p-5 md:grid-cols-5">
@@ -564,14 +723,46 @@ export function ProjectsLayout() {
                             <p className="text-xs font-bold text-muted-foreground">선택 객체</p>
                             <p className="mt-1 break-keep text-sm font-bold">{safeText(selectedTraceObject.title, '선택된 객체')}</p>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold text-muted-foreground">상태</p>
-                            <p className="mt-1 inline-flex rounded bg-secondary px-2 py-1 text-xs font-bold">{selectedTraceObject.status_code}</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-lg border border-border bg-card p-3">
+                              <p className="text-xs font-bold text-muted-foreground">상태</p>
+                              <p className="mt-1 inline-flex rounded bg-secondary px-2 py-1 text-xs font-bold">{currentEvidence?.status_code ?? selectedTraceObject.status_code}</p>
+                            </div>
+                            <div className="rounded-lg border border-border bg-card p-3">
+                              <p className="text-xs font-bold text-muted-foreground">근거 신뢰도</p>
+                              <p className="mt-1 font-mono text-sm font-black">{Math.round((currentEvidence?.confidence ?? selectedTraceObject.confidence) * 100)}%</p>
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border bg-card p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-bold text-muted-foreground">검토 루프</p>
+                              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                                {currentEvidence ? 'Full evidence 확인됨' : evidenceLoading ? 'Full evidence 확인 중' : 'Trace citation 사용'}
+                              </span>
+                            </div>
+                            <div className="mt-3 grid gap-2 text-xs font-semibold text-muted-foreground">
+                              <p>Source coverage: {evidenceCitations.length} 문단</p>
+                              <p>Review readiness: {currentCorrection ? 'correction trail 저장됨' : '검토 대기'}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleMarkEvidenceReviewed}
+                              disabled={correctionSubmitting || evidenceLoading}
+                              className="mt-3 min-h-9 w-full rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+                            >
+                              {correctionSubmitting ? '검토 저장 중' : '문단 근거 검토 저장'}
+                            </button>
+                            {currentCorrection ? (
+                              <p className="mt-2 text-xs font-semibold text-emerald-700">
+                                Correction trail 저장됨 / {typeof currentCorrection.after_json.status_code === 'string' ? currentCorrection.after_json.status_code : 'status updated'} / {formatDate(currentCorrection.created_at)}
+                              </p>
+                            ) : null}
+                            {correctionError ? <p role="alert" className="mt-2 text-xs font-semibold text-destructive">{correctionError}</p> : null}
                           </div>
                           <div>
                             <p className="text-xs font-bold text-muted-foreground">문단 근거</p>
                             <ol className="mt-2 space-y-2">
-                              {selectedTraceObject.citation_bundle.slice(0, 3).map((citation) => (
+                              {evidenceCitations.slice(0, 3).map((citation) => (
                                 <li key={citation.content_segment_uid} className="rounded-lg border border-border bg-card p-3">
                                   <p className="font-mono text-[11px] font-bold text-primary">{citationSourceLabel(citation)}</p>
                                   <p className="mt-2 line-clamp-4 text-xs leading-5 text-foreground">{safeText(citation.safe_text_excerpt, '근거 문단 없음')}</p>
