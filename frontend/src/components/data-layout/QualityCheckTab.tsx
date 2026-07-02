@@ -42,6 +42,7 @@ export function QualityCheckTab({
   const closeDecisionSummary = evidenceSnapshot?.diligence_close_decision_summary;
   const releaseSummary = evidenceSnapshot?.data_room_release_summary;
   const commercialCloseScorecard = evidenceSnapshot?.commercial_close_readiness_scorecard;
+  const commercialCloseExecutionPlan = evidenceSnapshot?.commercial_close_execution_plan;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
@@ -249,6 +250,156 @@ export function QualityCheckTab({
                             <span key={gapKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
                               {toSafeReactText(gapKey)}
                             </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {commercialCloseExecutionPlan && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Commercial close execution plan</p>
+                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseExecutionPlan.status_code)}</h3>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseExecutionPlan.buyer_summary_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseExecutionPlan.next_action_text)}</p>
+                          </div>
+                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {toSafeReactText(commercialCloseExecutionPlan.plan_key)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Target review value</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseExecutionPlan.target_contract_label)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Execution lanes</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.total_lane_count)} lane(s)</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Blocked lanes</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.blocked_lane_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Ready lanes</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.ready_lane_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Priority lanes</dt>
+                            <dd className="mt-1 text-sm font-bold">
+                              critical {formatCount(commercialCloseExecutionPlan.critical_lane_count)} · high {formatCount(commercialCloseExecutionPlan.high_lane_count)} · medium {formatCount(commercialCloseExecutionPlan.medium_lane_count)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Actions</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.total_action_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Artifacts</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.related_artifact_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">KPI gaps</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.kpi_gap_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Acceptance blockers</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.acceptance_blocker_count)}</dd>
+                          </div>
+                          <div className="sm:col-span-2 lg:col-span-3">
+                            <dt className="font-black text-muted-foreground">Verifier command</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseExecutionPlan.verification_command)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseExecutionPlan.provider_write_executed)}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseExecutionPlan.related_artifacts.map((artifact) => (
+                            <span key={artifact} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(artifact)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-4 divide-y divide-border">
+                          {commercialCloseExecutionPlan.lanes.map((lane) => (
+                            <div key={lane.lane_key} className="py-4 first:pt-0 last:pb-0">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-black">
+                                    {formatCount(lane.execution_order)}. {toSafeReactText(lane.display_name)}
+                                  </h4>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(lane.acceptance_criteria)}</p>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(lane.next_action_text)}</p>
+                                </div>
+                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(lane.status_code === 'ready' ? 'ready' : 'needs_attention')}`}>
+                                  {toSafeReactText(lane.status_code)}
+                                </span>
+                              </div>
+                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Owner</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(lane.owner_area)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Priority</dt>
+                                  <dd className="mt-1 text-sm font-bold">{toSafeReactText(lane.priority_code)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Artifact ready</dt>
+                                  <dd className="mt-1 text-sm font-bold">{lane.artifact_ready ? 'yes' : 'no'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Action count</dt>
+                                  <dd className="mt-1 text-sm font-bold">{formatCount(lane.action_count)}</dd>
+                                </div>
+                                <div className="sm:col-span-2 lg:col-span-4">
+                                  <dt className="font-black text-muted-foreground">Related artifact</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(lane.related_artifact)}</dd>
+                                </div>
+                              </dl>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {lane.action_keys.map((actionKey) => (
+                                  <span key={actionKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                    {toSafeReactText(actionKey)}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {lane.blocking_check_keys.map((checkKey) => (
+                                  <span key={checkKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                    {toSafeReactText(checkKey)}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {lane.acceptance_blocker_keys.map((blockerKey) => (
+                                  <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                    {toSafeReactText(blockerKey)}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {lane.kpi_gap_keys.map((gapKey) => (
+                                  <span key={gapKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                    {toSafeReactText(gapKey)}
+                                  </span>
+                                ))}
+                              </div>
+                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Lane verifier</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(lane.verification_command)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(lane.provider_write_executed)}</dd>
+                                </div>
+                              </dl>
+                            </div>
                           ))}
                         </div>
                       </div>

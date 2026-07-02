@@ -80,6 +80,8 @@ CommercialCloseReadinessStatus = Literal[
     "commercially_blocked",
 ]
 CommercialCloseReadinessCategoryStatus = Literal["ready", "needs_attention"]
+CommercialCloseExecutionStatus = Literal["execution_ready", "execution_blocked"]
+CommercialCloseExecutionLaneStatus = Literal["ready", "blocked"]
 DataRoomArtifactType = Literal[
     "snapshot_json",
     "verifier_script",
@@ -526,6 +528,49 @@ class DataCommercialCloseReadinessScorecard(BaseModel):
     provider_write_executed: bool
 
 
+class DataCommercialCloseExecutionLane(BaseModel):
+    lane_key: str
+    execution_order: int
+    display_name: str
+    owner_area: str
+    priority_code: RemediationPriority
+    status_code: CommercialCloseExecutionLaneStatus
+    related_artifact: str
+    artifact_ready: bool
+    action_count: int
+    action_keys: list[str]
+    blocking_check_keys: list[str]
+    acceptance_blocker_keys: list[str]
+    kpi_gap_keys: list[str]
+    acceptance_criteria: str
+    verification_command: str
+    next_action_text: str
+    provider_write_executed: bool
+
+
+class DataCommercialCloseExecutionPlan(BaseModel):
+    plan_key: str
+    target_contract_value_krw: int
+    target_contract_label: str
+    status_code: CommercialCloseExecutionStatus
+    total_lane_count: int
+    blocked_lane_count: int
+    ready_lane_count: int
+    critical_lane_count: int
+    high_lane_count: int
+    medium_lane_count: int
+    related_artifact_count: int
+    related_artifacts: list[str]
+    total_action_count: int
+    kpi_gap_count: int
+    acceptance_blocker_count: int
+    verification_command: str
+    buyer_summary_text: str
+    next_action_text: str
+    lanes: list[DataCommercialCloseExecutionLane]
+    provider_write_executed: bool
+
+
 class DataDiligenceExceptionRegisterEntry(BaseModel):
     exception_key: str
     blocking_check_key: str
@@ -747,6 +792,31 @@ def _default_commercial_close_readiness_scorecard() -> (
     )
 
 
+def _default_commercial_close_execution_plan() -> DataCommercialCloseExecutionPlan:
+    return DataCommercialCloseExecutionPlan(
+        plan_key="commercial_close_execution_plan",
+        target_contract_value_krw=2_000_000_000,
+        target_contract_label="2,000,000,000 KRW",
+        status_code="execution_blocked",
+        total_lane_count=0,
+        blocked_lane_count=0,
+        ready_lane_count=0,
+        critical_lane_count=0,
+        high_lane_count=0,
+        medium_lane_count=0,
+        related_artifact_count=0,
+        related_artifacts=[],
+        total_action_count=0,
+        kpi_gap_count=0,
+        acceptance_blocker_count=0,
+        verification_command="",
+        buyer_summary_text="No commercial close execution plan is present.",
+        next_action_text="Generate the evidence snapshot before execution review.",
+        lanes=[],
+        provider_write_executed=False,
+    )
+
+
 def _default_diligence_close_acceptance_summary() -> (
     DataDiligenceCloseAcceptanceSummary
 ):
@@ -815,6 +885,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     commercial_close_readiness_scorecard: (
         DataCommercialCloseReadinessScorecard
     ) = Field(default_factory=_default_commercial_close_readiness_scorecard)
+    commercial_close_execution_plan: DataCommercialCloseExecutionPlan = Field(
+        default_factory=_default_commercial_close_execution_plan
+    )
     diligence_exception_register: list[DataDiligenceExceptionRegisterEntry] = Field(
         default_factory=list
     )
@@ -2529,6 +2602,157 @@ def _commercial_close_readiness_scorecard(
     )
 
 
+def _commercial_close_execution_plan(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> DataCommercialCloseExecutionPlan:
+    scorecard = snapshot.commercial_close_readiness_scorecard
+    manifest_ready_by_file = {
+        entry.file_name: entry.state_code == "ready"
+        for entry in snapshot.data_room_package_manifest
+    }
+    acceptance_blocker_set = set(scorecard.acceptance_blocker_keys)
+    kpi_gap_set = set(scorecard.kpi_gap_keys)
+    grouped_actions: dict[
+        tuple[RemediationPriority, str, str],
+        list[DataAcquisitionRemediationAction],
+    ] = {}
+    for action in snapshot.acquisition_readiness_gate.remediation_actions:
+        related_artifact = _EXCEPTION_ARTIFACT_BY_CHECK_KEY.get(
+            action.blocking_check_key,
+            "remediation-actions.json",
+        )
+        key = (action.priority_code, action.owner_area, related_artifact)
+        grouped_actions.setdefault(key, []).append(action)
+
+    sorted_groups = sorted(
+        grouped_actions.items(),
+        key=lambda group: (
+            min(action.priority_rank for action in group[1]),
+            _RISK_SEVERITY_RANK[group[0][0]],
+            group[0][1],
+            group[0][2],
+        ),
+    )
+    lanes: list[DataCommercialCloseExecutionLane] = []
+    verification_command = snapshot.verification_handoff.verifier_command
+    for execution_order, ((priority_code, owner_area, artifact), actions) in enumerate(
+        sorted_groups,
+        start=1,
+    ):
+        action_keys = [action.action_key for action in actions]
+        blocking_check_keys = [action.blocking_check_key for action in actions]
+        acceptance_blocker_keys = [
+            f"exception_{action.action_key}"
+            for action in actions
+            if f"exception_{action.action_key}" in acceptance_blocker_set
+        ]
+        kpi_gap_keys = [
+            action.blocking_check_key
+            for action in actions
+            if action.blocking_check_key in kpi_gap_set
+        ]
+        artifact_ready = manifest_ready_by_file.get(artifact, False)
+        status_code: CommercialCloseExecutionLaneStatus = (
+            "blocked"
+            if (
+                action_keys
+                or acceptance_blocker_keys
+                or kpi_gap_keys
+                or not artifact_ready
+            )
+            else "ready"
+        )
+        lanes.append(
+            DataCommercialCloseExecutionLane(
+                lane_key=(
+                    f"lane_{priority_code}_{owner_area}_"
+                    f"{_risk_matrix_key_part(artifact)}"
+                ),
+                execution_order=execution_order,
+                display_name=(
+                    f"{priority_code.title()} {owner_area} execution for {artifact}"
+                ),
+                owner_area=owner_area,
+                priority_code=priority_code,
+                status_code=status_code,
+                related_artifact=artifact,
+                artifact_ready=artifact_ready,
+                action_count=len(action_keys),
+                action_keys=action_keys,
+                blocking_check_keys=blocking_check_keys,
+                acceptance_blocker_keys=acceptance_blocker_keys,
+                kpi_gap_keys=kpi_gap_keys,
+                acceptance_criteria=(
+                    f"Resolve {len(action_keys)} action(s), regenerate {artifact}, "
+                    f"run {verification_command}, and reissue the buyer scorecard."
+                ),
+                verification_command=verification_command,
+                next_action_text=" ".join(
+                    action.recommended_next_step for action in actions
+                ),
+                provider_write_executed=False,
+            )
+        )
+
+    blocked_lane_count = sum(1 for lane in lanes if lane.status_code == "blocked")
+    total_action_count = sum(lane.action_count for lane in lanes)
+    related_artifacts = sorted({lane.related_artifact for lane in lanes})
+    status_code: CommercialCloseExecutionStatus = (
+        "execution_ready"
+        if (
+            scorecard.status_code == "commercially_ready"
+            and blocked_lane_count == 0
+            and scorecard.kpi_gap_count == 0
+            and scorecard.acceptance_blocker_count == 0
+        )
+        else "execution_blocked"
+    )
+    if status_code == "execution_ready":
+        buyer_summary_text = (
+            "Commercial close execution is ready for "
+            f"{scorecard.target_contract_label} target review with "
+            f"{len(lanes)} lane(s) cleared."
+        )
+        next_action_text = (
+            "Share the verified data-room bundle and execution plan with buyer "
+            "reviewers."
+        )
+    else:
+        buyer_summary_text = (
+            "Commercial close execution remains blocked for "
+            f"{scorecard.target_contract_label} target review: {len(lanes)} lane(s), "
+            f"{total_action_count} action(s), and {len(related_artifacts)} "
+            "artifact(s) require remediation."
+        )
+        next_action_text = (
+            "Execute lanes in priority order, regenerate affected artifacts, run "
+            "the offline verifier, and reissue the buyer scorecard."
+        )
+
+    return DataCommercialCloseExecutionPlan(
+        plan_key="commercial_close_execution_plan",
+        target_contract_value_krw=scorecard.target_contract_value_krw,
+        target_contract_label=scorecard.target_contract_label,
+        status_code=status_code,
+        total_lane_count=len(lanes),
+        blocked_lane_count=blocked_lane_count,
+        ready_lane_count=len(lanes) - blocked_lane_count,
+        critical_lane_count=sum(1 for lane in lanes if lane.priority_code == "critical"),
+        high_lane_count=sum(1 for lane in lanes if lane.priority_code == "high"),
+        medium_lane_count=sum(1 for lane in lanes if lane.priority_code == "medium"),
+        related_artifact_count=len(related_artifacts),
+        related_artifacts=related_artifacts,
+        total_action_count=total_action_count,
+        kpi_gap_count=scorecard.kpi_gap_count,
+        acceptance_blocker_count=scorecard.acceptance_blocker_count,
+        verification_command=verification_command,
+        buyer_summary_text=buyer_summary_text,
+        next_action_text=next_action_text,
+        lanes=lanes,
+        provider_write_executed=False,
+    )
+
+
 def _acquisition_remediation_actions(
     quality_checks: list[DataQualityCheck],
 ) -> list[DataAcquisitionRemediationAction]:
@@ -2841,6 +3065,13 @@ def _evidence_snapshot_from_surface(
         update={
             "commercial_close_readiness_scorecard": (
                 _commercial_close_readiness_scorecard(snapshot)
+            )
+        }
+    )
+    snapshot = snapshot.model_copy(
+        update={
+            "commercial_close_execution_plan": _commercial_close_execution_plan(
+                snapshot
             )
         }
     )

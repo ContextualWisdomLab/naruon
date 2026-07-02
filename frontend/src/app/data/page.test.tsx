@@ -1177,6 +1177,186 @@ const commercialCloseReadinessScorecard = {
   provider_write_executed: false,
 };
 
+const commercialCloseExecutionPlan = {
+  plan_key: "commercial_close_execution_plan",
+  target_contract_value_krw: 2_000_000_000,
+  target_contract_label: "2,000,000,000 KRW",
+  status_code: "execution_blocked",
+  total_lane_count: 6,
+  blocked_lane_count: 6,
+  ready_lane_count: 0,
+  critical_lane_count: 1,
+  high_lane_count: 4,
+  medium_lane_count: 1,
+  related_artifact_count: 5,
+  related_artifacts: [
+    "acquisition-readiness-summary.json",
+    "dom-paragraph-evidence-samples.json",
+    "knowledge-graph-evidence-samples.json",
+    "remediation-actions.json",
+    "semantic-relation-evidence-samples.json",
+  ],
+  total_action_count: 9,
+  kpi_gap_count: 9,
+  acceptance_blocker_count: 9,
+  verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+  buyer_summary_text: "Commercial close execution remains blocked for 2,000,000,000 KRW target review: 6 lane(s), 9 action(s), and 5 artifact(s) require remediation.",
+  next_action_text: "Execute lanes in priority order, regenerate affected artifacts, run the offline verifier, and reissue the buyer scorecard.",
+  lanes: [
+    {
+      lane_key: "lane_critical_email_ingestion_acquisition_readiness_summary_json",
+      execution_order: 1,
+      display_name: "Critical email_ingestion execution for acquisition-readiness-summary.json",
+      owner_area: "email_ingestion",
+      priority_code: "critical",
+      status_code: "blocked",
+      related_artifact: "acquisition-readiness-summary.json",
+      artifact_ready: false,
+      action_count: 2,
+      action_keys: [
+        "repair_thread_id_integrity",
+        "backfill_dedupe_fingerprints",
+      ],
+      blocking_check_keys: [
+        "thread_id_integrity",
+        "dedupe_fingerprint",
+      ],
+      acceptance_blocker_keys: [
+        "exception_repair_thread_id_integrity",
+        "exception_backfill_dedupe_fingerprints",
+      ],
+      kpi_gap_keys: [
+        "thread_id_integrity",
+        "dedupe_fingerprint",
+      ],
+      acceptance_criteria: "Resolve 2 action(s), regenerate acquisition-readiness-summary.json, run python scripts/verify_evidence_snapshot.py <snapshot.json>, and reissue the buyer scorecard.",
+      verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+      next_action_text: "Run canonical threading repair for affected scoped emails. Backfill duplicate-detection fingerprints for scoped email records.",
+      provider_write_executed: false,
+    },
+    {
+      lane_key: "lane_high_attachment_parsing_remediation_actions_json",
+      execution_order: 2,
+      display_name: "High attachment_parsing execution for remediation-actions.json",
+      owner_area: "attachment_parsing",
+      priority_code: "high",
+      status_code: "blocked",
+      related_artifact: "remediation-actions.json",
+      artifact_ready: false,
+      action_count: 1,
+      action_keys: ["recover_attachment_content"],
+      blocking_check_keys: ["attachment_content"],
+      acceptance_blocker_keys: ["exception_recover_attachment_content"],
+      kpi_gap_keys: ["attachment_content"],
+      acceptance_criteria: "Resolve 1 action(s), regenerate remediation-actions.json, run python scripts/verify_evidence_snapshot.py <snapshot.json>, and reissue the buyer scorecard.",
+      verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+      next_action_text: "Re-run attachment extraction for scoped attachments with blank safe content.",
+      provider_write_executed: false,
+    },
+    {
+      lane_key: "lane_high_content_graph_dom_paragraph_evidence_samples_json",
+      execution_order: 3,
+      display_name: "High content_graph execution for dom-paragraph-evidence-samples.json",
+      owner_area: "content_graph",
+      priority_code: "high",
+      status_code: "blocked",
+      related_artifact: "dom-paragraph-evidence-samples.json",
+      artifact_ready: true,
+      action_count: 2,
+      action_keys: [
+        "backfill_content_graph_coverage",
+        "repair_segment_text_readiness",
+      ],
+      blocking_check_keys: [
+        "content_graph_coverage",
+        "content_segment_text_readiness",
+      ],
+      acceptance_blocker_keys: [
+        "exception_backfill_content_graph_coverage",
+        "exception_repair_segment_text_readiness",
+      ],
+      kpi_gap_keys: [
+        "content_graph_coverage",
+        "content_segment_text_readiness",
+      ],
+      acceptance_criteria: "Resolve 2 action(s), regenerate dom-paragraph-evidence-samples.json, run python scripts/verify_evidence_snapshot.py <snapshot.json>, and reissue the buyer scorecard.",
+      verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+      next_action_text: "Backfill DOM paragraph segmentation for unsegmented scoped emails. Rebuild affected content segments with safe text and word-count evidence.",
+      provider_write_executed: false,
+    },
+    {
+      lane_key: "lane_high_knowledge_graph_knowledge_graph_evidence_samples_json",
+      execution_order: 4,
+      display_name: "High knowledge_graph execution for knowledge-graph-evidence-samples.json",
+      owner_area: "knowledge_graph",
+      priority_code: "high",
+      status_code: "blocked",
+      related_artifact: "knowledge-graph-evidence-samples.json",
+      artifact_ready: true,
+      action_count: 2,
+      action_keys: [
+        "backfill_knowledge_graph_coverage",
+        "attach_kg_evidence_endpoints",
+      ],
+      blocking_check_keys: [
+        "knowledge_graph_coverage",
+        "knowledge_graph_evidence_endpoint_readiness",
+      ],
+      acceptance_blocker_keys: [
+        "exception_backfill_knowledge_graph_coverage",
+        "exception_attach_kg_evidence_endpoints",
+      ],
+      kpi_gap_keys: [
+        "knowledge_graph_coverage",
+        "knowledge_graph_evidence_endpoint_readiness",
+      ],
+      acceptance_criteria: "Resolve 2 action(s), regenerate knowledge-graph-evidence-samples.json, run python scripts/verify_evidence_snapshot.py <snapshot.json>, and reissue the buyer scorecard.",
+      verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+      next_action_text: "Persist deterministic knowledge graph edges for emails missing graph coverage. Attach source or target paragraph segment endpoints to affected KG edges.",
+      provider_write_executed: false,
+    },
+    {
+      lane_key: "lane_high_semantic_kg_semantic_relation_evidence_samples_json",
+      execution_order: 5,
+      display_name: "High semantic_kg execution for semantic-relation-evidence-samples.json",
+      owner_area: "semantic_kg",
+      priority_code: "high",
+      status_code: "blocked",
+      related_artifact: "semantic-relation-evidence-samples.json",
+      artifact_ready: true,
+      action_count: 1,
+      action_keys: ["backfill_semantic_relation_sources"],
+      blocking_check_keys: ["semantic_relation_source_backing"],
+      acceptance_blocker_keys: ["exception_backfill_semantic_relation_sources"],
+      kpi_gap_keys: ["semantic_relation_source_backing"],
+      acceptance_criteria: "Resolve 1 action(s), regenerate semantic-relation-evidence-samples.json, run python scripts/verify_evidence_snapshot.py <snapshot.json>, and reissue the buyer scorecard.",
+      verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+      next_action_text: "Backfill source message or thread links for semantic relation records.",
+      provider_write_executed: false,
+    },
+    {
+      lane_key: "lane_medium_attachment_parsing_remediation_actions_json",
+      execution_order: 6,
+      display_name: "Medium attachment_parsing execution for remediation-actions.json",
+      owner_area: "attachment_parsing",
+      priority_code: "medium",
+      status_code: "blocked",
+      related_artifact: "remediation-actions.json",
+      artifact_ready: false,
+      action_count: 1,
+      action_keys: ["expand_attachment_parse_coverage"],
+      blocking_check_keys: ["attachment_parse_coverage"],
+      acceptance_blocker_keys: ["exception_expand_attachment_parse_coverage"],
+      kpi_gap_keys: ["attachment_parse_coverage"],
+      acceptance_criteria: "Resolve 1 action(s), regenerate remediation-actions.json, run python scripts/verify_evidence_snapshot.py <snapshot.json>, and reissue the buyer scorecard.",
+      verification_command: "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+      next_action_text: "Add parser coverage or metadata-only exception evidence for unsupported attachment types.",
+      provider_write_executed: false,
+    },
+  ],
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -1542,6 +1722,7 @@ const dataEvidenceSnapshot = {
     "audit_event",
     "content_graph_evidence_samples",
     "content_graph_topology_counts",
+    "commercial_close_execution_plan",
     "commercial_close_readiness_scorecard",
     "data_room_package_manifest",
     "data_room_release_summary",
@@ -1642,6 +1823,7 @@ const dataEvidenceSnapshot = {
   data_room_package_manifest: dataRoomPackageManifest,
   data_room_release_summary: dataRoomReleaseSummary,
   commercial_close_readiness_scorecard: commercialCloseReadinessScorecard,
+  commercial_close_execution_plan: commercialCloseExecutionPlan,
   diligence_exception_register: diligenceExceptionRegister,
   diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
   diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
@@ -2273,6 +2455,14 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("score 62 / 100");
     expect(container.textContent).toContain("Product KPI attainment");
     expect(container.textContent).toContain("knowledge_graph_coverage");
+    expect(container.textContent).toContain("Commercial close execution plan");
+    expect(container.textContent).toContain("execution_blocked");
+    expect(container.textContent).toContain("6 lane(s)");
+    expect(container.textContent).toContain("email_ingestion");
+    expect(container.textContent).toContain("acquisition-readiness-summary.json");
+    expect(container.textContent).toContain("thread_id_integrity");
+    expect(container.textContent).toContain("exception_repair_thread_id_integrity");
+    expect(container.textContent).toContain("Artifact ready");
     expect(container.textContent).toContain("Data room release summary");
     expect(container.textContent).toContain("release_blocked");
     expect(container.textContent).toContain("Data-room release remains blocked");
@@ -2429,6 +2619,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("diligence_close_traceability_map");
     expect(copiedSnapshot.canonical_payload_fields).toContain("data_room_release_summary");
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_readiness_scorecard");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_execution_plan");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -2440,6 +2631,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.data_room_package_manifest.every((item: { contains_raw_content: boolean }) => !item.contains_raw_content)).toBe(true);
     expect(copiedSnapshot.data_room_release_summary).toEqual(dataRoomReleaseSummary);
     expect(copiedSnapshot.commercial_close_readiness_scorecard).toEqual(commercialCloseReadinessScorecard);
+    expect(copiedSnapshot.commercial_close_execution_plan).toEqual(commercialCloseExecutionPlan);
     expect(copiedSnapshot.diligence_exception_register).toHaveLength(9);
     expect(copiedSnapshot.diligence_exception_register[0]).toEqual({
       exception_key: "exception_repair_thread_id_integrity",
