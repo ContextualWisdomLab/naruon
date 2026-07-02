@@ -30,6 +30,30 @@ const dataQualitySurface = {
   organization_id: "org-acme",
   audit_event: "data.quality_surface.viewed",
   provider_write_executed: false,
+  acquisition_readiness_gate: {
+    gate_key: "buyer_evidence_readiness",
+    display_name: "Buyer evidence readiness",
+    state_code: "needs_attention",
+    readiness_score: 25,
+    passed_checks: 3,
+    issue_checks: 9,
+    pending_checks: 0,
+    total_checks: 12,
+    blocking_check_keys: [
+      "thread_id_integrity",
+      "dedupe_fingerprint",
+      "attachment_content",
+      "content_graph_coverage",
+      "knowledge_graph_coverage",
+      "content_segment_text_readiness",
+      "knowledge_graph_evidence_endpoint_readiness",
+      "semantic_relation_source_backing",
+    ],
+    evidence_packet_ready: true,
+    snapshot_verification_ready: true,
+    provider_write_executed: false,
+    detail_text: "Buyer evidence packet is generated, but blocking quality checks remain.",
+  },
   repositories: [
     {
       source_id: "email_repository",
@@ -359,6 +383,7 @@ const dataEvidenceSnapshot = {
   snapshot_digest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   digest_algorithm: "sha256",
   canonical_payload_fields: [
+    "acquisition_readiness_gate",
     "audit_event",
     "content_graph_evidence_samples",
     "content_graph_topology_counts",
@@ -409,6 +434,30 @@ const dataEvidenceSnapshot = {
       "next_action",
       "required_evidence",
     ],
+  },
+  acquisition_readiness_gate: {
+    gate_key: "buyer_evidence_readiness",
+    display_name: "Buyer evidence readiness",
+    state_code: "needs_attention",
+    readiness_score: 25,
+    passed_checks: 3,
+    issue_checks: 9,
+    pending_checks: 0,
+    total_checks: 12,
+    blocking_check_keys: [
+      "thread_id_integrity",
+      "dedupe_fingerprint",
+      "attachment_content",
+      "content_graph_coverage",
+      "knowledge_graph_coverage",
+      "content_segment_text_readiness",
+      "knowledge_graph_evidence_endpoint_readiness",
+      "semantic_relation_source_backing",
+    ],
+    evidence_packet_ready: true,
+    snapshot_verification_ready: true,
+    provider_write_executed: false,
+    detail_text: "Buyer evidence packet is generated, but blocking quality checks remain.",
   },
   validation_status: {
     status_code: "needs_attention",
@@ -1038,6 +1087,11 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Vendor");
     expect(container.textContent).toContain("message_thread");
     expect(container.textContent).toContain("prepare_response_draft");
+    expect(container.textContent).toContain("Buyer evidence readiness");
+    expect(container.textContent).toContain("25%");
+    expect(container.textContent).toContain("증거 패킷 생성됨");
+    expect(container.textContent).toContain("Snapshot verification ready");
+    expect(container.textContent).toContain("thread_id_integrity");
     expect(container.textContent).toContain("email_body");
     expect(container.textContent).toContain("paragraph");
     expect(container.textContent).toContain("node_has_segment");
@@ -1101,6 +1155,8 @@ describe("DataPage", () => {
     expect(copiedSnapshot.semantic_extraction_manifest[0].state_code).toBe("ready");
     expect(copiedSnapshot.semantic_relation_evidence_samples[0].relationship_type).toBe("Vendor");
     expect(copiedSnapshot.semantic_relation_evidence_samples[0].source_scope).toBe("message_thread");
+    expect(copiedSnapshot.acquisition_readiness_gate.gate_key).toBe("buyer_evidence_readiness");
+    expect(copiedSnapshot.acquisition_readiness_gate.readiness_score).toBe(25);
   });
 
   it("keeps quality checks usable when evidence snapshot fetch fails", async () => {

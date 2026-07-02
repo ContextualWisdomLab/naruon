@@ -37,6 +37,7 @@ export function QualityCheckTab({
   const knowledgeGraphEvidenceSamples = dataQualitySurface?.knowledge_graph_evidence_samples ?? [];
   const semanticExtractionManifest = dataQualitySurface?.semantic_extraction_manifest ?? [];
   const semanticRelationEvidenceSamples = dataQualitySurface?.semantic_relation_evidence_samples ?? [];
+  const acquisitionReadinessGate = dataQualitySurface?.acquisition_readiness_gate;
   const evidenceSnapshot = dataEvidenceSnapshot;
   const copyEvidenceSnapshot = React.useCallback(async () => {
     if (!evidenceSnapshot) return;
@@ -96,6 +97,57 @@ export function QualityCheckTab({
                     <p className="border-t border-border px-5 py-3 text-xs font-bold text-muted-foreground">
                       {snapshotCopyStatus === 'copied' ? '스냅샷 JSON을 복사했습니다.' : '클립보드 복사를 사용할 수 없습니다.'}
                     </p>
+                  )}
+                </div>
+              )}
+              {acquisitionReadinessGate && (
+                <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="flex flex-col gap-3 border-b border-border bg-secondary/30 p-5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h2 className="font-bold text-lg">{toSafeReactText(acquisitionReadinessGate.display_name)}</h2>
+                      <p className="mt-1 text-sm font-semibold text-muted-foreground">{toSafeReactText(acquisitionReadinessGate.detail_text)}</p>
+                    </div>
+                    <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(acquisitionReadinessGate.state_code)}`}>
+                      {getSurfaceStatusLabel(acquisitionReadinessGate.state_code)}
+                    </span>
+                  </div>
+                  <dl className="grid gap-3 p-5 text-xs sm:grid-cols-2 lg:grid-cols-6">
+                    <div>
+                      <dt className="font-black text-muted-foreground">Readiness</dt>
+                      <dd className="mt-1 text-xl font-black">{formatCount(acquisitionReadinessGate.readiness_score)}%</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">통과</dt>
+                      <dd className="mt-1 text-sm font-bold">{formatCount(acquisitionReadinessGate.passed_checks)} / {formatCount(acquisitionReadinessGate.total_checks)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">Blocking</dt>
+                      <dd className="mt-1 text-sm font-bold">{formatCount(acquisitionReadinessGate.issue_checks)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">Evidence packet</dt>
+                      <dd className="mt-1 text-sm font-bold">{acquisitionReadinessGate.evidence_packet_ready ? '증거 패킷 생성됨' : '증거 패킷 대기'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">Snapshot verification</dt>
+                      <dd className="mt-1 text-sm font-bold">{acquisitionReadinessGate.snapshot_verification_ready ? 'Snapshot verification ready' : 'Snapshot verification pending'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                      <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acquisitionReadinessGate.provider_write_executed)}</dd>
+                    </div>
+                  </dl>
+                  {acquisitionReadinessGate.blocking_check_keys.length > 0 && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Blocking check keys</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {acquisitionReadinessGate.blocking_check_keys.map((checkKey) => (
+                          <span key={checkKey} className="rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                            {toSafeReactText(checkKey)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

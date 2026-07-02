@@ -375,6 +375,32 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
     assert data["audit_event"] == "data.quality_surface.viewed"
     assert data["workspace_id"] == "workspace-org-acme"
     assert data["provider_write_executed"] is False
+    assert data["acquisition_readiness_gate"] == {
+        "gate_key": "buyer_evidence_readiness",
+        "display_name": "Buyer evidence readiness",
+        "state_code": "needs_attention",
+        "readiness_score": 25,
+        "passed_checks": 3,
+        "issue_checks": 9,
+        "pending_checks": 0,
+        "total_checks": 12,
+        "blocking_check_keys": [
+            "thread_id_integrity",
+            "dedupe_fingerprint",
+            "attachment_content",
+            "content_graph_coverage",
+            "knowledge_graph_coverage",
+            "content_segment_text_readiness",
+            "knowledge_graph_evidence_endpoint_readiness",
+            "semantic_relation_source_backing",
+        ],
+        "evidence_packet_ready": True,
+        "snapshot_verification_ready": True,
+        "provider_write_executed": False,
+        "detail_text": (
+            "Buyer evidence packet is generated, but blocking quality checks remain."
+        ),
+    }
     assert {source["source_id"] for source in data["repositories"]} == {
         "email_repository",
         "attachment_repository",
@@ -793,6 +819,33 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "checks_passed": 3,
         "checks_with_issues": 9,
         "total_checks": 12,
+    }
+    assert "acquisition_readiness_gate" in snapshot["canonical_payload_fields"]
+    assert snapshot["acquisition_readiness_gate"] == {
+        "gate_key": "buyer_evidence_readiness",
+        "display_name": "Buyer evidence readiness",
+        "state_code": "needs_attention",
+        "readiness_score": 25,
+        "passed_checks": 3,
+        "issue_checks": 9,
+        "pending_checks": 0,
+        "total_checks": 12,
+        "blocking_check_keys": [
+            "thread_id_integrity",
+            "dedupe_fingerprint",
+            "attachment_content",
+            "content_graph_coverage",
+            "knowledge_graph_coverage",
+            "content_segment_text_readiness",
+            "knowledge_graph_evidence_endpoint_readiness",
+            "semantic_relation_source_backing",
+        ],
+        "evidence_packet_ready": True,
+        "snapshot_verification_ready": True,
+        "provider_write_executed": False,
+        "detail_text": (
+            "Buyer evidence packet is generated, but blocking quality checks remain."
+        ),
     }
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]

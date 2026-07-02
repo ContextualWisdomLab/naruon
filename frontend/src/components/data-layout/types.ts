@@ -48,13 +48,31 @@ export type DataSurfaceStatus = 'loading' | 'ready' | 'error';
 
 export type SurfaceStatusCode = 'ready' | 'running' | 'needs_attention' | 'pending' | 'no_source';
 export type QualityStatusCode = 'pass' | 'needs_attention' | 'pending';
+export type AcquisitionReadinessState = 'ready' | 'needs_attention' | 'pending';
 export type RepositoryAssetState = 'ready' | 'needs_attention';
+
+export type AcquisitionReadinessGate = {
+  gate_key: string;
+  display_name: string;
+  state_code: AcquisitionReadinessState;
+  readiness_score: number;
+  passed_checks: number;
+  issue_checks: number;
+  pending_checks: number;
+  total_checks: number;
+  blocking_check_keys: string[];
+  evidence_packet_ready: boolean;
+  snapshot_verification_ready: boolean;
+  provider_write_executed: boolean;
+  detail_text: string;
+};
 
 export type DataQualitySurfaceResponse = {
   workspace_id: string;
   organization_id: string | null;
   audit_event: string;
   provider_write_executed: boolean;
+  acquisition_readiness_gate: AcquisitionReadinessGate;
   repositories: Array<{
     source_id: string;
     repository_type: 'webdav_account' | 'project_folder' | 'email_repository' | 'attachment_repository' | 'document_repository';
@@ -187,6 +205,7 @@ export type DataEvidenceSnapshotResponse = {
     redacted_fields: string[];
     allowed_sample_fields: string[];
   };
+  acquisition_readiness_gate: AcquisitionReadinessGate;
   validation_status: {
     status_code: QualityStatusCode;
     checks_passed: number;

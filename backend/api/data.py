@@ -70,6 +70,7 @@ SurfaceStatus = Literal[
     "no_source",
 ]
 QualityStatus = Literal["pass", "needs_attention", "pending"]
+AcquisitionReadinessState = Literal["ready", "needs_attention", "pending"]
 EndpointStatus = Literal["segment_backed", "node_only", "missing_endpoint"]
 ConfidenceBucket = Literal["high", "medium", "low", "unknown"]
 RelationSourceScope = Literal["message_thread", "message", "thread", "unknown"]
@@ -183,6 +184,22 @@ class DataQualityCheck(BaseModel):
     evidence_source: str
     detail_text: str
     provider_write_executed: bool
+
+
+class DataAcquisitionReadinessGate(BaseModel):
+    gate_key: str
+    display_name: str
+    state_code: AcquisitionReadinessState
+    readiness_score: int
+    passed_checks: int
+    issue_checks: int
+    pending_checks: int
+    total_checks: int
+    blocking_check_keys: list[str]
+    evidence_packet_ready: bool
+    snapshot_verification_ready: bool
+    provider_write_executed: bool
+    detail_text: str
 
 
 class DataAttachmentParseBreakdown(BaseModel):
@@ -309,6 +326,7 @@ class DataQualitySurfaceResponse(BaseModel):
     organization_id: str | None
     audit_event: Literal["data.quality_surface.viewed"]
     provider_write_executed: bool
+    acquisition_readiness_gate: DataAcquisitionReadinessGate
     repositories: list[DataRepositorySummary]
     repository_assets: list[DataRepositoryAsset]
     pipeline_stages: list[DataPipelineStage]
@@ -377,6 +395,7 @@ class DataEvidenceSnapshotResponse(BaseModel):
     digest_algorithm: Literal["sha256"]
     canonical_payload_fields: list[str]
     privacy_redaction_policy: DataEvidenceSnapshotPrivacyPolicy
+    acquisition_readiness_gate: DataAcquisitionReadinessGate
     validation_status: DataEvidenceSnapshotValidationStatus
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
@@ -710,6 +729,60 @@ def _snapshot_validation_status(
     )
 
 
+def _acquisition_readiness_gate(
+    *,
+    quality_checks: list[DataQualityCheck],
+    content_graph_evidence_samples: list[DataContentGraphEvidenceSample],
+    knowledge_graph_evidence_samples: list[DataKnowledgeGraphEvidenceSample],
+    semantic_relation_evidence_samples: list[DataSemanticRelationEvidenceSample],
+) -> DataAcquisitionReadinessGate:
+    passed_checks = sum(1 for check in quality_checks if check.status_code == "pass")
+    pending_checks = sum(
+        1 for check in quality_checks if check.status_code == "pending"
+    )
+    issue_check_keys = [
+        check.check_key
+        for check in quality_checks
+        if check.status_code == "needs_attention" or check.issue_count > 0
+    ]
+    total_checks = len(quality_checks)
+    readiness_score = round((passed_checks / total_checks) * 100) if total_checks else 0
+    evidence_packet_ready = bool(
+        content_graph_evidence_samples
+        and knowledge_graph_evidence_samples
+        and semantic_relation_evidence_samples
+    )
+    if issue_check_keys:
+        state_code: AcquisitionReadinessState = "needs_attention"
+        detail_text = (
+            "Buyer evidence packet is generated, but blocking quality checks remain."
+        )
+    elif pending_checks > 0 or not evidence_packet_ready:
+        state_code = "pending"
+        detail_text = "Buyer evidence packet is waiting for pending quality evidence."
+    else:
+        state_code = "ready"
+        detail_text = (
+            "Buyer evidence packet has complete quality, graph, semantic, and "
+            "snapshot verification evidence."
+        )
+    return DataAcquisitionReadinessGate(
+        gate_key="buyer_evidence_readiness",
+        display_name="Buyer evidence readiness",
+        state_code=state_code,
+        readiness_score=readiness_score,
+        passed_checks=passed_checks,
+        issue_checks=len(issue_check_keys),
+        pending_checks=pending_checks,
+        total_checks=total_checks,
+        blocking_check_keys=issue_check_keys[:8],
+        evidence_packet_ready=evidence_packet_ready,
+        snapshot_verification_ready=True,
+        provider_write_executed=False,
+        detail_text=detail_text,
+    )
+
+
 def _snapshot_digest_payload(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> dict[str, object]:
@@ -741,6 +814,7 @@ def _evidence_snapshot_from_surface(
         digest_algorithm="sha256",
         canonical_payload_fields=[],
         privacy_redaction_policy=_snapshot_privacy_policy(),
+        acquisition_readiness_gate=surface.acquisition_readiness_gate,
         validation_status=_snapshot_validation_status(surface.quality_checks),
         parser_manifest_summary=_snapshot_parser_manifest_summary(),
         quality_checks=[
@@ -2357,11 +2431,43 @@ async def get_data_quality_surface(
     source_count = len(webdav_accounts) + len(project_folders)
     embedded_total = embedded_email_count + embedded_attachment_count
     object_total = email_count + attachment_count + len(documents)
+    quality_checks = _quality_checks(
+        email_count=email_count,
+        attachment_count=attachment_count,
+        missing_thread_count=missing_thread_count,
+        missing_fingerprint_count=missing_fingerprint_count,
+        blank_attachment_count=blank_attachment_count,
+        source_count=source_count,
+        segmented_email_count=segmented_email_count,
+        edged_email_count=edged_email_count,
+        content_segment_text_total_count=(
+            content_segment_text_readiness_stats.total_count
+        ),
+        content_segment_text_issue_count=(
+            content_segment_text_readiness_stats.issue_count
+        ),
+        knowledge_graph_evidence_endpoint_total_count=(
+            knowledge_graph_evidence_endpoint_stats.total_count
+        ),
+        knowledge_graph_evidence_endpoint_issue_count=(
+            knowledge_graph_evidence_endpoint_stats.issue_count
+        ),
+        semantic_relation_count=semantic_relation_count,
+        semantic_relation_source_backed_count=semantic_relation_source_backed_count,
+        unparsed_attachment_count=unparsed_attachment_count,
+        connector_event_count=len(connector_events),
+    )
     return DataQualitySurfaceResponse(
         workspace_id=auth_context.workspace_id,
         organization_id=auth_context.organization_id,
         audit_event="data.quality_surface.viewed",
         provider_write_executed=False,
+        acquisition_readiness_gate=_acquisition_readiness_gate(
+            quality_checks=quality_checks,
+            content_graph_evidence_samples=content_graph_evidence_samples,
+            knowledge_graph_evidence_samples=knowledge_graph_evidence_samples,
+            semantic_relation_evidence_samples=semantic_relation_evidence_samples,
+        ),
         repositories=_repository_summaries(
             webdav_accounts,
             project_folders,
@@ -2394,34 +2500,7 @@ async def get_data_quality_surface(
             attachment_count=attachment_count,
             embedded_attachment_count=embedded_attachment_count,
         ),
-        quality_checks=_quality_checks(
-            email_count=email_count,
-            attachment_count=attachment_count,
-            missing_thread_count=missing_thread_count,
-            missing_fingerprint_count=missing_fingerprint_count,
-            blank_attachment_count=blank_attachment_count,
-            source_count=source_count,
-            segmented_email_count=segmented_email_count,
-            edged_email_count=edged_email_count,
-            content_segment_text_total_count=(
-                content_segment_text_readiness_stats.total_count
-            ),
-            content_segment_text_issue_count=(
-                content_segment_text_readiness_stats.issue_count
-            ),
-            knowledge_graph_evidence_endpoint_total_count=(
-                knowledge_graph_evidence_endpoint_stats.total_count
-            ),
-            knowledge_graph_evidence_endpoint_issue_count=(
-                knowledge_graph_evidence_endpoint_stats.issue_count
-            ),
-            semantic_relation_count=semantic_relation_count,
-            semantic_relation_source_backed_count=(
-                semantic_relation_source_backed_count
-            ),
-            unparsed_attachment_count=unparsed_attachment_count,
-            connector_event_count=len(connector_events),
-        ),
+        quality_checks=quality_checks,
         attachment_parse_breakdown=attachment_parse_breakdown,
         content_graph_breakdown=content_graph_breakdown,
         knowledge_graph_breakdown=knowledge_graph_breakdown,
