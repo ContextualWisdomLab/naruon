@@ -302,6 +302,22 @@ const dataEvidenceSnapshot = {
   generated_at: "2026-07-02T00:00:00Z",
   audit_event: "data.quality_surface.evidence_snapshot.viewed",
   scope_label: "signed_workspace_scope",
+  snapshot_digest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  digest_algorithm: "sha256",
+  canonical_payload_fields: [
+    "audit_event",
+    "content_graph_evidence_samples",
+    "content_graph_topology_counts",
+    "generated_at",
+    "knowledge_graph_evidence_samples",
+    "knowledge_graph_topology_counts",
+    "parser_manifest_summary",
+    "privacy_redaction_policy",
+    "quality_checks",
+    "scope_label",
+    "snapshot_version",
+    "validation_status",
+  ],
   privacy_redaction_policy: {
     raw_content_exposed: false,
     stable_identifiers_exposed: false,
@@ -902,6 +918,8 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("실사 스냅샷");
     expect(container.textContent).toContain("실사 스냅샷 JSON 복사");
     expect(container.textContent).toContain("raw 본문/첨부 원문 제외");
+    expect(container.textContent).toContain("0123456789ab");
+    expect(container.textContent).toContain("sha256");
     expect(container.textContent).toContain("4");
     expect(container.textContent).toContain("첨부 parser 형식별 현황");
     expect(container.textContent).toContain("application/octet-stream");
@@ -944,6 +962,8 @@ describe("DataPage", () => {
     expect(writeText).toHaveBeenCalledTimes(1);
     const copiedSnapshot = JSON.parse(writeText.mock.calls[0][0]);
     expect(copiedSnapshot.generated_at).toBe("2026-07-02T00:00:00Z");
+    expect(copiedSnapshot.snapshot_digest).toBe("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+    expect(copiedSnapshot.digest_algorithm).toBe("sha256");
     expect(copiedSnapshot.parser_manifest_summary[0].parser_key).toBe("plain_text");
     expect(copiedSnapshot.privacy_redaction_policy.allowed_sample_fields).toEqual([
       "sample_key",

@@ -64,10 +64,18 @@ export function QualityCheckTab({
                       실사 스냅샷 JSON 복사
                     </button>
                   </div>
-                  <dl className="grid gap-3 p-5 text-xs sm:grid-cols-4">
+                  <dl className="grid gap-3 p-5 text-xs sm:grid-cols-3 lg:grid-cols-6">
                     <div>
                       <dt className="font-black text-muted-foreground">검증 상태</dt>
                       <dd className="mt-1 text-sm font-bold">{getSurfaceStatusLabel(evidenceSnapshot.validation_status.status_code)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">Digest</dt>
+                      <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(evidenceSnapshot.snapshot_digest.slice(0, 12))}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-black text-muted-foreground">Algorithm</dt>
+                      <dd className="mt-1 text-sm font-bold">{toSafeReactText(evidenceSnapshot.digest_algorithm)}</dd>
                     </div>
                     <div>
                       <dt className="font-black text-muted-foreground">parser family</dt>

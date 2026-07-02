@@ -641,6 +641,39 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert snapshot["audit_event"] == "data.quality_surface.evidence_snapshot.viewed"
     assert snapshot["scope_label"] == "signed_workspace_scope"
     assert snapshot["generated_at"].endswith("Z")
+    assert snapshot["digest_algorithm"] == "sha256"
+    assert len(snapshot["snapshot_digest"]) == 64
+    assert set(snapshot["snapshot_digest"]) <= set("0123456789abcdef")
+    digest_payload = dict(snapshot)
+    for field_name in (
+        "snapshot_digest",
+        "digest_algorithm",
+        "canonical_payload_fields",
+    ):
+        digest_payload.pop(field_name)
+    canonical_payload = json.dumps(
+        digest_payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    assert snapshot["snapshot_digest"] == hashlib.sha256(canonical_payload).hexdigest()
+    assert snapshot["canonical_payload_fields"] == sorted(digest_payload)
+    for forbidden_field in (
+        "snapshot_digest",
+        "digest_algorithm",
+        "canonical_payload_fields",
+        "raw_email_body",
+        "raw_html",
+        "attachment_bytes",
+        "message_id",
+        "attachment_id",
+        "source_record_id",
+        "stable_database_id",
+        "provider_credentials",
+        "db_evidence_column_strings",
+    ):
+        assert forbidden_field not in snapshot["canonical_payload_fields"]
     assert snapshot["privacy_redaction_policy"]["raw_content_exposed"] is False
     assert snapshot["privacy_redaction_policy"]["stable_identifiers_exposed"] is False
     assert snapshot["privacy_redaction_policy"]["provider_credentials_exposed"] is False

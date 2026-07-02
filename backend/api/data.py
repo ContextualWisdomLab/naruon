@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import hashlib
+import json
 from typing import Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -334,6 +335,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     generated_at: str
     audit_event: Literal["data.quality_surface.evidence_snapshot.viewed"]
     scope_label: str
+    snapshot_digest: str
+    digest_algorithm: Literal["sha256"]
+    canonical_payload_fields: list[str]
     privacy_redaction_policy: DataEvidenceSnapshotPrivacyPolicy
     validation_status: DataEvidenceSnapshotValidationStatus
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
@@ -392,6 +396,11 @@ SNAPSHOT_ALLOWED_SAMPLE_FIELDS = [
     "word_count",
     "endpoint_status",
 ]
+SNAPSHOT_DIGEST_EXCLUDED_FIELDS = {
+    "snapshot_digest",
+    "digest_algorithm",
+    "canonical_payload_fields",
+}
 
 
 def _normalize_attachment_content_type(value: str | None) -> str:
@@ -563,14 +572,36 @@ def _snapshot_validation_status(
     )
 
 
+def _snapshot_digest_payload(
+    snapshot: DataEvidenceSnapshotResponse,
+) -> dict[str, object]:
+    payload = snapshot.model_dump(mode="json")
+    for field_name in SNAPSHOT_DIGEST_EXCLUDED_FIELDS:
+        payload.pop(field_name, None)
+    return payload
+
+
+def _snapshot_digest_for(payload: dict[str, object]) -> str:
+    canonical_payload = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical_payload).hexdigest()
+
+
 def _evidence_snapshot_from_surface(
     surface: DataQualitySurfaceResponse,
 ) -> DataEvidenceSnapshotResponse:
-    return DataEvidenceSnapshotResponse(
+    snapshot = DataEvidenceSnapshotResponse(
         snapshot_version=SNAPSHOT_VERSION,
         generated_at=_datetime_to_utc_iso(datetime.now(timezone.utc)),
         audit_event="data.quality_surface.evidence_snapshot.viewed",
         scope_label="signed_workspace_scope",
+        snapshot_digest="",
+        digest_algorithm="sha256",
+        canonical_payload_fields=[],
         privacy_redaction_policy=_snapshot_privacy_policy(),
         validation_status=_snapshot_validation_status(surface.quality_checks),
         parser_manifest_summary=_snapshot_parser_manifest_summary(),
@@ -603,6 +634,14 @@ def _evidence_snapshot_from_surface(
         ],
         content_graph_evidence_samples=surface.content_graph_evidence_samples,
         knowledge_graph_evidence_samples=surface.knowledge_graph_evidence_samples,
+    )
+    digest_payload = _snapshot_digest_payload(snapshot)
+    return snapshot.model_copy(
+        update={
+            "snapshot_digest": _snapshot_digest_for(digest_payload),
+            "digest_algorithm": "sha256",
+            "canonical_payload_fields": sorted(digest_payload),
+        }
     )
 
 

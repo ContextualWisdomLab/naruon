@@ -159,6 +159,9 @@ export type DataEvidenceSnapshotResponse = {
   generated_at: string;
   audit_event: 'data.quality_surface.evidence_snapshot.viewed';
   scope_label: string;
+  snapshot_digest: string;
+  digest_algorithm: 'sha256';
+  canonical_payload_fields: string[];
   privacy_redaction_policy: {
     raw_content_exposed: boolean;
     stable_identifiers_exposed: boolean;
