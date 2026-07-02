@@ -213,6 +213,16 @@ const dataQualitySurface = {
       detail_text: "Some knowledge graph edges need paragraph segment evidence endpoints.",
       provider_write_executed: false,
     },
+    {
+      check_key: "semantic_kg_readiness",
+      display_name: "Semantic KG readiness",
+      status_code: "pending",
+      issue_count: 0,
+      total_count: 1,
+      evidence_source: "knowledge_graph_edges.edge_kind, content_segments.segment_path",
+      detail_text: "Semantic entity/relation extraction is gated until provenance, confidence, and correction-path evidence are configured.",
+      provider_write_executed: false,
+    },
   ],
   attachment_parse_breakdown: [
     {
@@ -286,6 +296,23 @@ const dataQualitySurface = {
       endpoint_status: "segment_backed",
     },
   ],
+  semantic_extraction_manifest: [
+    {
+      manifest_key: "entity_relation_extraction",
+      display_name: "Entity/relation extraction",
+      state_code: "provenance_gate_pending",
+      structural_edge_count: 10,
+      semantic_relation_count: 0,
+      required_evidence: [
+        "segment_citation",
+        "extractor_version",
+        "confidence_score",
+        "human_correction_path",
+      ],
+      detail_text: "Structural DOM/paragraph edges are stored; semantic entity/relation extraction has not been enabled for buyer-visible evidence.",
+      provider_write_executed: false,
+    },
+  ],
   connector_events: [
     {
       event_uid: "connector_evt_data_quality",
@@ -314,6 +341,7 @@ const dataEvidenceSnapshot = {
     "parser_manifest_summary",
     "privacy_redaction_policy",
     "quality_checks",
+    "semantic_extraction_manifest",
     "scope_label",
     "snapshot_version",
     "validation_status",
@@ -342,6 +370,11 @@ const dataEvidenceSnapshot = {
       "edge_path",
       "word_count",
       "endpoint_status",
+      "manifest_key",
+      "state_code",
+      "structural_edge_count",
+      "semantic_relation_count",
+      "required_evidence",
     ],
   },
   validation_status: {
@@ -414,6 +447,23 @@ const dataEvidenceSnapshot = {
       edge_kind: "node_has_segment",
       edge_path: "/document[1]/paragraph[1]/has/segment[1]",
       endpoint_status: "segment_backed",
+    },
+  ],
+  semantic_extraction_manifest: [
+    {
+      manifest_key: "entity_relation_extraction",
+      display_name: "Entity/relation extraction",
+      state_code: "provenance_gate_pending",
+      structural_edge_count: 10,
+      semantic_relation_count: 0,
+      required_evidence: [
+        "segment_citation",
+        "extractor_version",
+        "confidence_score",
+        "human_correction_path",
+      ],
+      detail_text: "Structural DOM/paragraph edges are stored; semantic entity/relation extraction has not been enabled for buyer-visible evidence.",
+      provider_write_executed: false,
     },
   ],
 };
@@ -930,6 +980,10 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("KG edge 형식별 현황");
     expect(container.textContent).toContain("문단 근거 샘플");
     expect(container.textContent).toContain("KG 근거 샘플");
+    expect(container.textContent).toContain("Semantic KG readiness");
+    expect(container.textContent).toContain("Entity/relation extraction");
+    expect(container.textContent).toContain("provenance_gate_pending");
+    expect(container.textContent).toContain("segment_citation");
     expect(container.textContent).toContain("email_body");
     expect(container.textContent).toContain("paragraph");
     expect(container.textContent).toContain("node_has_segment");
@@ -943,6 +997,7 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("content_segments.safe_text_content");
     expect(container.textContent).not.toContain("content_segments.segment_path");
     expect(container.textContent).not.toContain("knowledge_graph_edges.source_kind");
+    expect(container.textContent).not.toContain("knowledge_graph_edges.edge_kind");
     expect(container.textContent).not.toContain("knowledge_graph_edges.source_segment_id");
     expect(container.textContent).not.toContain("knowledge_graph_edges.edge_path");
     expect(container.textContent).not.toContain("segment_hidden_1");
@@ -974,7 +1029,14 @@ describe("DataPage", () => {
       "edge_path",
       "word_count",
       "endpoint_status",
+      "manifest_key",
+      "state_code",
+      "structural_edge_count",
+      "semantic_relation_count",
+      "required_evidence",
     ]);
+    expect(copiedSnapshot.semantic_extraction_manifest[0].manifest_key).toBe("entity_relation_extraction");
+    expect(copiedSnapshot.semantic_extraction_manifest[0].state_code).toBe("provenance_gate_pending");
   });
 
   it("keeps quality checks usable when evidence snapshot fetch fails", async () => {

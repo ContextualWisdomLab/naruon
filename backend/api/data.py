@@ -49,6 +49,9 @@ KNOWLEDGE_GRAPH_EVIDENCE_ENDPOINT_READINESS_EVIDENCE_SOURCE = (
     "knowledge_graph_edges.source_segment_id, "
     "knowledge_graph_edges.target_segment_id"
 )
+SEMANTIC_KG_READINESS_EVIDENCE_SOURCE = (
+    "knowledge_graph_edges.edge_kind, content_segments.segment_path"
+)
 WEB_DAV_ERROR_STATUS_CODES = {
     "no_webdav_account": 422,
     "webdav_account_not_found": 422,
@@ -212,6 +215,17 @@ class DataKnowledgeGraphEvidenceSample(BaseModel):
     endpoint_status: EndpointStatus
 
 
+class DataSemanticExtractionManifest(BaseModel):
+    manifest_key: str
+    display_name: str
+    state_code: Literal["provenance_gate_pending", "ready"]
+    structural_edge_count: int
+    semantic_relation_count: int
+    required_evidence: list[str]
+    detail_text: str
+    provider_write_executed: bool
+
+
 class DataConnectorEvent(BaseModel):
     event_uid: str
     signal_key: str
@@ -283,6 +297,7 @@ class DataQualitySurfaceResponse(BaseModel):
     knowledge_graph_breakdown: list[DataKnowledgeGraphBreakdown]
     content_graph_evidence_samples: list[DataContentGraphEvidenceSample]
     knowledge_graph_evidence_samples: list[DataKnowledgeGraphEvidenceSample]
+    semantic_extraction_manifest: list[DataSemanticExtractionManifest]
     connector_events: list[DataConnectorEvent]
 
 
@@ -346,6 +361,7 @@ class DataEvidenceSnapshotResponse(BaseModel):
     knowledge_graph_topology_counts: list[DataEvidenceSnapshotKnowledgeTopologyCount]
     content_graph_evidence_samples: list[DataContentGraphEvidenceSample]
     knowledge_graph_evidence_samples: list[DataKnowledgeGraphEvidenceSample]
+    semantic_extraction_manifest: list[DataSemanticExtractionManifest]
 
 
 def _datetime_to_utc_iso(value: datetime) -> str:
@@ -395,6 +411,11 @@ SNAPSHOT_ALLOWED_SAMPLE_FIELDS = [
     "edge_path",
     "word_count",
     "endpoint_status",
+    "manifest_key",
+    "state_code",
+    "structural_edge_count",
+    "semantic_relation_count",
+    "required_evidence",
 ]
 SNAPSHOT_DIGEST_EXCLUDED_FIELDS = {
     "snapshot_digest",
@@ -530,6 +551,31 @@ def _knowledge_graph_evidence_sample_row(
     )
 
 
+def _semantic_extraction_manifest(
+    knowledge_graph_edge_count: int,
+) -> list[DataSemanticExtractionManifest]:
+    return [
+        DataSemanticExtractionManifest(
+            manifest_key="entity_relation_extraction",
+            display_name="Entity/relation extraction",
+            state_code="provenance_gate_pending",
+            structural_edge_count=knowledge_graph_edge_count,
+            semantic_relation_count=0,
+            required_evidence=[
+                "segment_citation",
+                "extractor_version",
+                "confidence_score",
+                "human_correction_path",
+            ],
+            detail_text=(
+                "Structural DOM/paragraph edges are stored; semantic entity/relation "
+                "extraction has not been enabled for buyer-visible evidence."
+            ),
+            provider_write_executed=False,
+        )
+    ]
+
+
 def _snapshot_parser_manifest_summary() -> list[DataEvidenceSnapshotParserSummary]:
     return [
         DataEvidenceSnapshotParserSummary(
@@ -634,6 +680,7 @@ def _evidence_snapshot_from_surface(
         ],
         content_graph_evidence_samples=surface.content_graph_evidence_samples,
         knowledge_graph_evidence_samples=surface.knowledge_graph_evidence_samples,
+        semantic_extraction_manifest=surface.semantic_extraction_manifest,
     )
     digest_payload = _snapshot_digest_payload(snapshot)
     return snapshot.model_copy(
@@ -1332,6 +1379,22 @@ def _check_knowledge_graph_evidence_endpoint_readiness(
     )
 
 
+def _check_semantic_kg_readiness() -> DataQualityCheck:
+    return DataQualityCheck(
+        check_key="semantic_kg_readiness",
+        display_name="Semantic KG readiness",
+        status_code="pending",
+        issue_count=0,
+        total_count=1,
+        evidence_source=SEMANTIC_KG_READINESS_EVIDENCE_SOURCE,
+        detail_text=(
+            "Semantic entity/relation extraction is gated until provenance, "
+            "confidence, and correction-path evidence are configured."
+        ),
+        provider_write_executed=False,
+    )
+
+
 def _check_attachment_parse_coverage(
     attachment_count: int,
     unparsed_attachment_count: int,
@@ -1417,6 +1480,7 @@ def _quality_checks(
             total_count=knowledge_graph_evidence_endpoint_total_count,
             issue_count=knowledge_graph_evidence_endpoint_issue_count,
         ),
+        _check_semantic_kg_readiness(),
         _check_attachment_parse_coverage(
             attachment_count=attachment_count,
             unparsed_attachment_count=unparsed_attachment_count,
@@ -2120,6 +2184,9 @@ async def get_data_quality_surface(
         knowledge_graph_breakdown=knowledge_graph_breakdown,
         content_graph_evidence_samples=content_graph_evidence_samples,
         knowledge_graph_evidence_samples=knowledge_graph_evidence_samples,
+        semantic_extraction_manifest=_semantic_extraction_manifest(
+            knowledge_graph_edge_count,
+        ),
         connector_events=[
             DataConnectorEvent(
                 event_uid=event.event_uid,

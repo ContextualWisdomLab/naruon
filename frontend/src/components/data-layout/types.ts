@@ -145,6 +145,16 @@ export type DataQualitySurfaceResponse = {
     edge_path: string;
     endpoint_status: 'segment_backed' | 'node_only' | 'missing_endpoint';
   }>;
+  semantic_extraction_manifest?: Array<{
+    manifest_key: string;
+    display_name: string;
+    state_code: 'provenance_gate_pending' | 'ready';
+    structural_edge_count: number;
+    semantic_relation_count: number;
+    required_evidence: string[];
+    detail_text: string;
+    provider_write_executed: boolean;
+  }>;
   connector_events: Array<{
     event_uid: string;
     signal_key: string;
@@ -213,6 +223,16 @@ export type DataEvidenceSnapshotResponse = {
     edge_kind: string;
     edge_path: string;
     endpoint_status: 'segment_backed' | 'node_only' | 'missing_endpoint';
+  }>;
+  semantic_extraction_manifest: Array<{
+    manifest_key: string;
+    display_name: string;
+    state_code: 'provenance_gate_pending' | 'ready';
+    structural_edge_count: number;
+    semantic_relation_count: number;
+    required_evidence: string[];
+    detail_text: string;
+    provider_write_executed: boolean;
   }>;
 };
 

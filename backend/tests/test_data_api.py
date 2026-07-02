@@ -460,6 +460,21 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         ),
         "provider_write_executed": False,
     }
+    assert quality_by_key["semantic_kg_readiness"] == {
+        "check_key": "semantic_kg_readiness",
+        "display_name": "Semantic KG readiness",
+        "status_code": "pending",
+        "issue_count": 0,
+        "total_count": 1,
+        "evidence_source": (
+            "knowledge_graph_edges.edge_kind, content_segments.segment_path"
+        ),
+        "detail_text": (
+            "Semantic entity/relation extraction is gated until provenance, "
+            "confidence, and correction-path evidence are configured."
+        ),
+        "provider_write_executed": False,
+    }
     assert quality_by_key["attachment_parse_coverage"] == {
         "check_key": "attachment_parse_coverage",
         "display_name": "Attachment parse coverage",
@@ -553,6 +568,26 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
             "edge_path": "/document[1]/contains/h1[1]",
             "endpoint_status": "node_only",
         },
+    ]
+    assert data["semantic_extraction_manifest"] == [
+        {
+            "manifest_key": "entity_relation_extraction",
+            "display_name": "Entity/relation extraction",
+            "state_code": "provenance_gate_pending",
+            "structural_edge_count": 10,
+            "semantic_relation_count": 0,
+            "required_evidence": [
+                "segment_citation",
+                "extractor_version",
+                "confidence_score",
+                "human_correction_path",
+            ],
+            "detail_text": (
+                "Structural DOM/paragraph edges are stored; semantic entity/relation "
+                "extraction has not been enabled for buyer-visible evidence."
+            ),
+            "provider_write_executed": False,
+        }
     ]
     assert data["attachment_parse_breakdown"] == [
         {
@@ -687,13 +722,19 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "edge_path",
         "word_count",
         "endpoint_status",
+        "manifest_key",
+        "state_code",
+        "structural_edge_count",
+        "semantic_relation_count",
+        "required_evidence",
     ]
     assert snapshot["validation_status"] == {
         "status_code": "needs_attention",
         "checks_passed": 2,
         "checks_with_issues": 8,
-        "total_checks": 10,
+        "total_checks": 11,
     }
+    assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {
         "parser_key": "plain_text",
         "display_name": "Plain text attachments",
@@ -737,6 +778,26 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "edge_path": "/document[1]/paragraph[1]/has/segment[1]",
         "endpoint_status": "segment_backed",
     }
+    assert snapshot["semantic_extraction_manifest"] == [
+        {
+            "manifest_key": "entity_relation_extraction",
+            "display_name": "Entity/relation extraction",
+            "state_code": "provenance_gate_pending",
+            "structural_edge_count": 10,
+            "semantic_relation_count": 0,
+            "required_evidence": [
+                "segment_citation",
+                "extractor_version",
+                "confidence_score",
+                "human_correction_path",
+            ],
+            "detail_text": (
+                "Structural DOM/paragraph edges are stored; semantic entity/relation "
+                "extraction has not been enabled for buyer-visible evidence."
+            ),
+            "provider_write_executed": False,
+        }
+    ]
 
     serialized = response.text
     for forbidden in (
