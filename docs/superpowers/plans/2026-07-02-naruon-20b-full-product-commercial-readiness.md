@@ -408,15 +408,15 @@ The report labels all unmeasured values as assumptions and does not claim live p
 
 **Files:**
 - Modify later: `frontend/scripts/pilot-ui-smoke.mjs`
-- Create later: `frontend/scripts/full-product-ui-smoke.mjs`
-- Create later: `frontend/scripts/full-product-ui-smoke.test.mjs`
-- Modify later: `frontend/package.json`
+- Create: `frontend/scripts/full-product-ui-smoke.mjs`
+- Create: `frontend/scripts/full-product-ui-smoke.test.mjs`
+- Modify: `frontend/package.json`
 
 **Interfaces:**
 - Consumes: existing localhost-only pilot smoke.
 - Produces: full-product browser smoke that stays localhost-only.
 
-- [ ] **Step 1: Add localhost-only resolver test**
+- [x] **Step 1: Add localhost-only resolver test**
 
 Use the existing `resolvePilotBaseUrl()` pattern. The full-product smoke must reject:
 
@@ -432,7 +432,7 @@ Expected:
 The smoke script can only target localhost, 127.0.0.1, ::1, or [::1].
 ```
 
-- [ ] **Step 2: Exercise all ten routes**
+- [x] **Step 2: Exercise all ten routes**
 
 The script must visit:
 
@@ -453,6 +453,28 @@ Expected:
 
 ```text
 Every route renders without console errors and saves a screenshot.
+```
+
+Actual implementation:
+
+```text
+Added frontend/scripts/full-product-ui-smoke.mjs.
+Added frontend/scripts/full-product-ui-smoke.test.mjs.
+Added pnpm --dir frontend full:smoke.
+The route smoke covers /, /mail, /search, /calendar, /tasks, /projects, /data, /ai-hub, /security, /settings.
+```
+
+Validation evidence captured on 2026-07-02 KST:
+
+```text
+pnpm --dir frontend test scripts/full-product-ui-smoke.test.mjs
+Test Files  1 passed (1)
+Tests       3 passed (3)
+
+pnpm --dir frontend full:smoke
+Naruon full-product route smoke passed.
+Routes: /, /mail, /search, /calendar, /tasks, /projects, /data, /ai-hub, /security, /settings
+Screenshots: /tmp/naruon-full-product-smoke/home.png, /tmp/naruon-full-product-smoke/mail.png, /tmp/naruon-full-product-smoke/search.png, /tmp/naruon-full-product-smoke/calendar.png, /tmp/naruon-full-product-smoke/tasks.png, /tmp/naruon-full-product-smoke/projects.png, /tmp/naruon-full-product-smoke/data.png, /tmp/naruon-full-product-smoke/ai-hub.png, /tmp/naruon-full-product-smoke/security.png, /tmp/naruon-full-product-smoke/settings.png
 ```
 
 ## Task 8: Close Security Governance Gaps

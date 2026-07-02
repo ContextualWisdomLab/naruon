@@ -6,7 +6,7 @@ Audit date: 2026-07-02 KST
 
 Question: can the current Naruon repository be treated as a 2,000,000,000 KRW sale-ready program?
 
-Decision: no. The current state supports a controlled buyer technical review for the implemented frontend pilot slice, but not a full enterprise procurement package. The gap is not only code. The missing work includes full product coverage, Figma structure repair, production deployment proof, live provider integration, security/compliance packaging, operations, analytics/ROI evidence, and buyer handoff material.
+Decision: no. The current state supports a controlled buyer technical review for the implemented frontend pilot slice and now has a localhost-only full-product route smoke gate, but it is still not a full enterprise procurement package. The gap is not only code. The missing work includes full interaction coverage, production deployment proof, live provider integration, security/compliance packaging, operations, analytics/ROI evidence, and buyer handoff material.
 
 ## Current Goal Registration
 
@@ -150,6 +150,8 @@ Important frontend anchors:
 - `frontend/src/lib/product-events.ts`
 - `frontend/scripts/pilot-ui-smoke.mjs`
 - `frontend/scripts/pilot-ui-smoke.test.mjs`
+- `frontend/scripts/full-product-ui-smoke.mjs`
+- `frontend/scripts/full-product-ui-smoke.test.mjs`
 
 Backend APIs and services exist for:
 
@@ -222,10 +224,10 @@ P0 for 20B final sale readiness:
 
 P1 for buyer technical review:
 
-- Full-product smoke does not yet cover all ten IA routes.
+- Full-product smoke covers all ten IA routes on localhost, but it is not yet wired into remote CI and does not yet assert every critical interaction inside each route.
 - Product events do not yet cover full-product funnels beyond mail/search.
 - External analytics destination, retention, and consent are not approved.
-- Figma `Sales Demo` and `QA Notes` pages need current evidence.
+- Figma `Sales Demo` has current evidence; `QA Notes` and full responsive review evidence remain incomplete.
 
 Non-blockers:
 
@@ -236,8 +238,8 @@ Non-blockers:
 ## Next Actions
 
 1. Repair Figma page structure without Code Connect.
-2. Add a full-product smoke script that stays localhost-only.
-3. Capture Product Design screenshots for all ten IA routes.
+2. Wire the localhost-only full-product smoke into CI after runtime cost and flake risk are bounded.
+3. Capture Product Design screenshots for all ten IA routes across desktop and mobile.
 4. Extend analytics and ROI reports without claiming live KPI values.
 5. Triage issue #634 and patch governance centrally if the failure mode still exists.
 6. Create buyer package, demo script, security questionnaire, and SLA/support draft.
