@@ -1042,12 +1042,21 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByRole("tabpanel", { name: "평가", exact: true }).getByText("연동 준비도", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "평가 근거 보기", exact: true }).first().click();
     await page.getByRole("tab", { name: "실행 이력", exact: true }).click();
-    await page.getByRole("tabpanel", { name: "실행 이력", exact: true }).getByText("agent_run_records", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    const runHistoryPanel = page.getByRole("tabpanel", { name: "실행 이력", exact: true });
+    const runEvent = runHistoryPanel.locator("article").filter({ hasText: "워크플로우 실행" }).first();
+    await runEvent.getByText("워크플로우 실행", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await runEvent.getByText("완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await runEvent.getByText("3개 판단 포인트를 추출했습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await runEvent.getByText("agent_run_records", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("ai-hub:open-workflow-tab"),
       evidence("ai-hub:open-evaluation-tab"),
       evidence("ai-hub:open-run-history-from-evidence"),
       evidence("ai-hub:open-run-history"),
+      evidence("ai-hub:verify-run-event-title"),
+      evidence("ai-hub:verify-run-event-completion-state"),
+      evidence("ai-hub:verify-run-event-detail"),
+      evidence("ai-hub:verify-run-event-evidence-source"),
     ];
   }
 
