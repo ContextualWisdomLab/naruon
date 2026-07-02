@@ -219,7 +219,7 @@ Acceptable later extraction:
 P0 for 20B final sale readiness:
 
 - Figma required pages were repaired through `use_figma`, but full screen coverage and durable QA screenshots for every buyer flow are not complete.
-- Full ten-area Product Design route audit now has desktop/mobile evidence, expanded selected desktop/mobile workflow-state evidence across nine IA routes, mocked provider completion result-state evidence, startup-view reload persistence evidence, and basic automated accessibility evidence, but live provider completion, full result variants, broader settings persistence, and assistive-technology audit are not complete.
+- Full ten-area Product Design route audit now has desktop/mobile evidence, expanded selected desktop/mobile workflow-state evidence across nine IA routes, mocked provider completion result-state evidence, search graph summary/canvas-label evidence, startup-view reload persistence evidence, and basic automated accessibility evidence, but live provider completion, full result variants, broader settings persistence, and assistive-technology audit are not complete.
 - Production deployment and rollback evidence is not packaged.
 - Live provider-send and provider-write execution evidence is incomplete.
 - Issue #634 has a branch-level fix, but remains open as a governance risk until merged and proven on the trusted base branch.
@@ -228,11 +228,11 @@ P0 for 20B final sale readiness:
 
 P1 for buyer technical review:
 
-- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts expanded selected desktop/mobile buyer workflow states for mail, search, calendar, tasks, projects, data, AI Hub, security, and settings, including mocked provider-send/provider-write completion states, knowledge WebDAV provider completion/no-retry states, project source boundary, data WebDAV materialization completion and WebDAV/unique-thread intents, AI Hub workflow/evaluation/run-history navigation, security deny samples, settings save actions, startup-view reload persistence, and connector token rotation, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
+- Full-product smoke covers all ten IA routes on localhost, supports desktop/mobile capture through `NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile`, and is wired into the branch CI workflow with desktop default. It now asserts expanded selected desktop/mobile buyer workflow states for mail, search, calendar, tasks, projects, data, AI Hub, security, and settings, including mocked provider-send/provider-write completion states, search graph summary/canvas-label states, knowledge WebDAV provider completion/no-retry states, project source boundary, data WebDAV materialization completion and WebDAV/unique-thread intents, AI Hub workflow/evaluation/run-history navigation, security deny samples, settings save actions, startup-view reload persistence, and connector token rotation, plus basic accessibility checks for visible duplicate IDs, visible interactive accessible names, and keyboard Tab focus entry.
 - Mobile Settings startup-view cards were fixed from a 3-column mobile grid to `grid-cols-1 sm:grid-cols-3` after responsive QA found awkward Korean label wrapping.
 - Product events do not yet cover full-product funnels beyond mail/search.
 - External analytics destination, retention, and consent are not approved.
-- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile contact sheet with expanded selected desktop/mobile workflow-state, mocked provider completion result-state, startup-view reload persistence, and basic accessibility evidence; live provider completion and assistive-technology evidence remain incomplete.
+- Figma `Sales Demo` has current evidence and `QA Notes` now contains the desktop/mobile contact sheet with expanded selected desktop/mobile workflow-state, mocked provider completion result-state, search graph summary/canvas-label proof, startup-view reload persistence, and basic accessibility evidence; live provider completion and assistive-technology evidence remain incomplete.
 
 Non-blockers:
 

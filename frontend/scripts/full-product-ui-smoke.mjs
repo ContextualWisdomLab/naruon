@@ -806,7 +806,19 @@ async function installRoutes(page) {
     if (endpoint === "/api/runner-config") return routeJson(route, runnerConfig);
     if (endpoint === "/api/runner-config/rotate") return routeJson(route, runnerConfig);
     if (endpoint === "/api/observability/operational-signals") return routeJson(route, operationalSignals);
-    if (endpoint === "/api/network/graph") return routeJson(route, { nodes: [{ id: "mail", label: "mail" }], edges: [] });
+    if (endpoint === "/api/network/graph") {
+      return routeJson(route, {
+        nodes: [
+          { id: "sender-pm", label: "PM 김지현", title: "계약 검토 담당자" },
+          { id: "thread-20b", label: "20B readiness thread", title: "구매 검토 메일 스레드" },
+          { id: "calendar-review", label: "이사회 일정", title: "CalDAV writeback 후보" },
+        ],
+        edges: [
+          { source: "sender-pm", target: "thread-20b", weight: 2, title: "메일 2건" },
+          { source: "thread-20b", target: "calendar-review", weight: 1, title: "일정 후보 1건" },
+        ],
+      });
+    }
     if (endpoint === "/api/ontology/relationships") return routeJson(route, []);
     if (endpoint === "/api/ontology/relationships/capture-source") {
       return routeJson(route, {
@@ -870,12 +882,19 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("계약 검토 담당자를 확인합니다.").waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "관계 원본", exact: true }).click();
     await page.getByText("1개 관계 연결", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("heading", { name: "관계 그래프와 타임라인", exact: true }).scrollIntoViewIfNeeded();
+    await page.getByText("3개 노드와 2개 관계가 이 스레드 맥락에 연결되어 있습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("관련 노드: PM 김지현, 20B readiness thread, 이사회 일정", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.locator('[aria-label="3개 노드와 2개 관계가 있는 관계 맥락"]').waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("search:select-result"),
       evidence("search:open-source-evidence-tab"),
       evidence("search:open-decision-assist-tab"),
       evidence("search:capture-sender-relationship"),
       evidence("search:verify-captured-relationship-state"),
+      evidence("search:open-network-graph"),
+      evidence("search:verify-network-graph-summary"),
+      evidence("search:verify-network-graph-canvas-label"),
     ];
   }
 
