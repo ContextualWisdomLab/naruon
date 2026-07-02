@@ -399,6 +399,17 @@ describe("ProjectsPage", () => {
     expect(container.textContent).toContain("주간 보고: 결제 재시도 리스크");
     expect(container.textContent).toContain("Alpha Checkout 위키 초안");
     expect(container.textContent).toContain("PaymentAttempt ERD 후보");
+    expect(container.textContent).toContain("보고 초안");
+    expect(container.textContent).toContain("Report readiness");
+    expect(container.textContent).toContain("Risk action coverage");
+    expect(container.textContent).toContain("Status update ready");
+    expect(container.textContent).toContain("2 / 2 drafts ready");
+    expect(container.textContent).toContain("Reviewer KPI: report-ready status update");
+    expect(container.textContent).toContain("주간 보고 초안");
+    expect(container.textContent).toContain("일일 보고 초안");
+    expect(container.textContent).toContain("상태 자동 업데이트: PG timeout risk 검토 필요");
+    expect(container.textContent).toContain("다음 액션: PG timeout risk 확인");
+    expect(container.textContent).toContain("검토자 액션: 2개 보고 초안 근거 확인");
 
     const reviewButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("문단 근거 검토 저장"));
     expect(reviewButton).toBeDefined();
