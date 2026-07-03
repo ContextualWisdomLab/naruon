@@ -50,8 +50,10 @@ def extract_reference_ids(value: str | None) -> list[str]:
         refs = str(value).split()
 
     # ⚡ Bolt Optimization: Use dict.fromkeys() for faster C-level ordered deduplication
+    # Note: dict.fromkeys() has a slightly higher memory footprint than set() for large lists,
+    # but for typical email headers (dozens of references), the CPU gain outweighs the memory tradeoff.
     return list(
-        dict.fromkeys(n for n in (normalize_message_id(ref) for ref in refs) if n)
+        dict.fromkeys(normalized_id for normalized_id in (normalize_message_id(ref) for ref in refs) if normalized_id)
     )
 
 
@@ -66,6 +68,8 @@ async def _find_existing_thread_ids(
         return {}
 
     # ⚡ Bolt Optimization: Use dict.fromkeys() for faster C-level ordered deduplication
+    # Note: dict.fromkeys() has a slightly higher memory footprint than set() for large lists,
+    # but for typical email headers (dozens of references), the CPU gain outweighs the memory tradeoff.
     target_ids = list(
         dict.fromkeys(
             target_id
@@ -108,6 +112,8 @@ async def assign_thread_id(
     references = extract_reference_ids(email_data.get("references"))
 
     # ⚡ Bolt Optimization: Use dict.fromkeys() for faster C-level ordered deduplication
+    # Note: dict.fromkeys() has a slightly higher memory footprint than set() for large lists,
+    # but for typical email headers (dozens of references), the CPU gain outweighs the memory tradeoff.
     candidates = ([in_reply_to] if in_reply_to else []) + references
     existing_candidates = list(dict.fromkeys(candidates))
 
