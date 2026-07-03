@@ -53,7 +53,7 @@ def extract_reference_ids(value: str | None) -> list[str]:
     # Note: dict.fromkeys() has a slightly higher memory footprint than set() for large lists,
     # but for typical email headers (dozens of references), the CPU gain outweighs the memory tradeoff.
     return list(
-        dict.fromkeys(normalized_id for normalized_id in (normalize_message_id(ref) for ref in refs) if normalized_id)
+        dict.fromkeys(filter(None, (normalize_message_id(ref) for ref in refs)))
     )
 
 
