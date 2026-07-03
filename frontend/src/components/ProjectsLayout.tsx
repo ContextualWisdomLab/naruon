@@ -547,7 +547,7 @@ function buildProjectControlReadinessLayer(objects: ProjectTraceObject[]): Proje
     readyItemCount,
     totalItemCount: items.length,
     missingEvidenceCount,
-    summary: `실행 준비 요약: ${readyItemCount}개 컨트롤이 문단 근거로 준비됨`,
+    summary: `실행 준비 종합: ${readyItemCount}개 컨트롤이 문단 근거로 준비됨`,
     reviewerAction: missingEvidenceCount > 0
       ? `검토자 액션: ${missingEvidenceCount}개 컨트롤 근거 보강`
       : '검토자 액션: 누락 근거 없음, 인수 검토 가능',
@@ -1152,7 +1152,7 @@ export function ProjectsLayout() {
                             <span className="font-mono text-xs font-bold text-muted-foreground">{Math.round(projectObject.confidence * 100)}%</span>
                           </div>
                           <h3 className="line-clamp-2 break-keep text-sm font-bold">{safeText(projectObject.title, '제목 없는 그래프 객체')}</h3>
-                          <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{safeText(projectObject.summary, '요약 대기')}</p>
+                          <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{safeText(projectObject.summary, '종합 대기')}</p>
                         </button>
                       ))}
                     </div>

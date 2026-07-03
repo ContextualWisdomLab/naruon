@@ -422,7 +422,7 @@ describe("ProjectsPage", () => {
     expect(container.textContent).toContain("Scope clarity");
     expect(container.textContent).toContain("Data/infra readiness");
     expect(container.textContent).toContain("Owner/action readiness");
-    expect(container.textContent).toContain("실행 준비 요약: 5개 컨트롤이 문단 근거로 준비됨");
+    expect(container.textContent).toContain("실행 준비 종합: 5개 컨트롤이 문단 근거로 준비됨");
     expect(container.textContent).toContain("검토자 액션: 누락 근거 없음, 인수 검토 가능");
 
     const reviewButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("문단 근거 검토 저장"));
