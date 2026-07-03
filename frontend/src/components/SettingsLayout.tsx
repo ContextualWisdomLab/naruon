@@ -836,6 +836,7 @@ export function SettingsLayout() {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
+              aria-current={activeTab === tab.id ? 'page' : undefined}
               className={`min-h-10 shrink-0 rounded-xl px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
                 activeTab === tab.id
                   ? 'bg-primary text-primary-foreground shadow-sm'
@@ -856,6 +857,7 @@ export function SettingsLayout() {
               <button type="button"
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
+                aria-current={activeTab === tab.id ? 'page' : undefined}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${activeTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
               >
                 <tab.icon className="size-4" /> {tab.id}
