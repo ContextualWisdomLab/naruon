@@ -2641,6 +2641,282 @@ def _expected_commercial_close_release_package():
     }
 
 
+def _expected_commercial_close_buyer_review_runbook():
+    release_package = _expected_commercial_close_release_package()
+    artifact_by_key = {
+        artifact["artifact_key"]: artifact for artifact in release_package["artifacts"]
+    }
+
+    def artifact_step(
+        *,
+        step_key,
+        review_order,
+        lane,
+        artifact_key,
+        source_field,
+        reviewer_role,
+        owner_area,
+        sla_hours,
+        review_day,
+        entry_criteria_text,
+        exit_criteria_text,
+    ):
+        artifact = artifact_by_key.get(artifact_key)
+        ready = artifact is not None and artifact["status_code"] == "ready"
+        if artifact is None:
+            evidence_file_name = ""
+            blocker_keys = [f"{artifact_key}_missing"]
+        else:
+            evidence_file_name = artifact["file_name"]
+            blocker_keys = artifact["blocker_keys"]
+        return {
+            "step_key": step_key,
+            "review_order": review_order,
+            "lane": lane,
+            "status_code": "ready" if ready else "blocked",
+            "evidence_file_name": evidence_file_name,
+            "source_field": source_field,
+            "reviewer_role": reviewer_role,
+            "owner_area": owner_area,
+            "sla_hours": sla_hours,
+            "review_day": review_day,
+            "entry_criteria_text": entry_criteria_text,
+            "exit_criteria_text": exit_criteria_text,
+            "blocker_keys": [] if ready else blocker_keys,
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        }
+
+    intake_ready = (
+        release_package["total_artifact_count"] > 0
+        and bool(release_package["first_release_file_name"])
+    )
+    steps = [
+        {
+            "step_key": "buyer_review_intake",
+            "review_order": 1,
+            "lane": "intake",
+            "status_code": "ready" if intake_ready else "blocked",
+            "evidence_file_name": release_package["first_release_file_name"],
+            "source_field": "commercial_close_release_package.first_release_file_name",
+            "reviewer_role": "buyer diligence lead",
+            "owner_area": "data_room_ops",
+            "sla_hours": 4,
+            "review_day": 1,
+            "entry_criteria_text": (
+                "Open the verified release package and confirm buyer review scope."
+            ),
+            "exit_criteria_text": (
+                "Buyer review starts from the canonical evidence snapshot file."
+            ),
+            "blocker_keys": [] if intake_ready else ["release_package_missing"],
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        artifact_step(
+            step_key="buyer_review_snapshot_verification",
+            review_order=2,
+            lane="verification",
+            artifact_key="release_offline_verifier",
+            source_field=(
+                "commercial_close_release_package.artifacts.release_offline_verifier"
+            ),
+            reviewer_role="verification reviewer",
+            owner_area="verification",
+            sla_hours=4,
+            review_day=1,
+            entry_criteria_text=(
+                "Run the offline verifier against copied snapshot JSON."
+            ),
+            exit_criteria_text=(
+                "Verifier exits successfully before evidence review starts."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_privacy_redaction",
+            review_order=3,
+            lane="privacy",
+            artifact_key="release_privacy_policy",
+            source_field=(
+                "commercial_close_release_package.artifacts.release_privacy_policy"
+            ),
+            reviewer_role="privacy/security reviewer",
+            owner_area="security_governance",
+            sla_hours=8,
+            review_day=1,
+            entry_criteria_text=(
+                "Inspect redaction policy before opening data-room files."
+            ),
+            exit_criteria_text=(
+                "Raw content, stable identifiers, and credentials are absent."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_data_room_release",
+            review_order=4,
+            lane="data_room",
+            artifact_key="release_data_room_summary",
+            source_field="data_room_release_summary.release_status",
+            reviewer_role="data-room operations reviewer",
+            owner_area="data_room_ops",
+            sla_hours=8,
+            review_day=1,
+            entry_criteria_text="Confirm buyer data-room artifact readiness.",
+            exit_criteria_text=(
+                "All data-room artifacts required for close are ready."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_acceptance_checklist",
+            review_order=5,
+            lane="data_room",
+            artifact_key="release_acceptance_checklist",
+            source_field="diligence_close_acceptance_summary.decision_code",
+            reviewer_role="buyer diligence reviewer",
+            owner_area="buyer_diligence",
+            sla_hours=8,
+            review_day=2,
+            entry_criteria_text="Review acceptance checklist against traceability map.",
+            exit_criteria_text=(
+                "All close acceptance rows are ready for buyer signoff."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_readiness_scorecard",
+            review_order=6,
+            lane="commercial",
+            artifact_key="release_readiness_scorecard",
+            source_field="commercial_close_readiness_scorecard.status_code",
+            reviewer_role="commercial diligence reviewer",
+            owner_area="commercial_diligence",
+            sla_hours=8,
+            review_day=2,
+            entry_criteria_text=(
+                "Review commercial readiness score and component blockers."
+            ),
+            exit_criteria_text=(
+                "Commercial readiness scorecard is commercially ready."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_execution_plan",
+            review_order=7,
+            lane="commercial",
+            artifact_key="release_execution_plan",
+            source_field="commercial_close_execution_plan.status_code",
+            reviewer_role="program manager",
+            owner_area="program_management",
+            sla_hours=8,
+            review_day=2,
+            entry_criteria_text="Review blocked execution lanes and owner actions.",
+            exit_criteria_text="Execution plan lanes required for close are ready.",
+        ),
+        artifact_step(
+            step_key="buyer_review_kpi_operating_model",
+            review_order=8,
+            lane="commercial",
+            artifact_key="release_kpi_operating_model",
+            source_field="commercial_close_kpi_operating_model.status_code",
+            reviewer_role="commercial diligence reviewer",
+            owner_area="commercial_diligence",
+            sla_hours=8,
+            review_day=2,
+            entry_criteria_text="Review KPI target coverage and guardrail breaches.",
+            exit_criteria_text="Operating KPIs meet target review thresholds.",
+        ),
+        artifact_step(
+            step_key="buyer_review_buyer_brief",
+            review_order=9,
+            lane="commercial",
+            artifact_key="release_buyer_brief",
+            source_field="commercial_close_buyer_brief.status_code",
+            reviewer_role="commercial diligence reviewer",
+            owner_area="commercial_diligence",
+            sla_hours=4,
+            review_day=3,
+            entry_criteria_text=(
+                "Review buyer narrative against evidence basis bullets."
+            ),
+            exit_criteria_text=(
+                "Buyer brief is ready as the narrative review index."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_signoff_matrix",
+            review_order=10,
+            lane="signoff",
+            artifact_key="release_signoff_matrix",
+            source_field="commercial_close_signoff_matrix.status_code",
+            reviewer_role="commercial diligence reviewer",
+            owner_area="commercial_diligence",
+            sla_hours=4,
+            review_day=3,
+            entry_criteria_text="Confirm every required role signoff is ready.",
+            exit_criteria_text="Commercial close signoff matrix is ready.",
+        ),
+    ]
+    previous_blockers = list(
+        dict.fromkeys(key for step in steps for key in step["blocker_keys"])
+    )
+    release_ready = (
+        release_package["status_code"] == "release_ready" and not previous_blockers
+    )
+    steps.append(
+        {
+            "step_key": "buyer_review_release_decision",
+            "review_order": 11,
+            "lane": "release",
+            "status_code": "ready" if release_ready else "blocked",
+            "evidence_file_name": "commercial-close-release-package.json",
+            "source_field": "commercial_close_release_package.status_code",
+            "reviewer_role": "buyer diligence lead",
+            "owner_area": "buyer_diligence",
+            "sla_hours": 4,
+            "review_day": 3,
+            "entry_criteria_text": "Confirm every buyer review step is ready.",
+            "exit_criteria_text": "Approve the release package for buyer handoff.",
+            "blocker_keys": [] if release_ready else previous_blockers[:10],
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        }
+    )
+    blocked = [item for item in steps if item["status_code"] == "blocked"]
+    blocker_keys = list(
+        dict.fromkeys(key for item in blocked for key in item["blocker_keys"])
+    )
+    return {
+        "runbook_key": "commercial_close_buyer_review_runbook",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "review_blocked",
+        "total_step_count": 11,
+        "ready_step_count": 3,
+        "blocked_step_count": 8,
+        "blocker_key_count": len(blocker_keys),
+        "blocked_step_keys": [item["step_key"] for item in blocked],
+        "blocker_keys": blocker_keys[:10],
+        "first_step_key": "buyer_review_intake",
+        "final_decision_step_key": "buyer_review_release_decision",
+        "verification_command": release_package["verification_command"],
+        "buyer_handoff_text": (
+            "Buyer review runbook remains blocked for 2,000,000,000 KRW target "
+            "review: 8 step(s) need remediation."
+        ),
+        "next_action_text": (
+            "Resolve blocked buyer review steps, regenerate the evidence snapshot, "
+            "rerun the offline verifier, and reissue the runbook."
+        ),
+        "steps": steps,
+        "provider_write_executed": False,
+    }
+
+
 def _expected_acquisition_remediation_actions():
     return [
         {
@@ -3232,6 +3508,14 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert (
         snapshot["commercial_close_release_package"]
         == _expected_commercial_close_release_package()
+    )
+    assert (
+        "commercial_close_buyer_review_runbook"
+        in snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["commercial_close_buyer_review_runbook"]
+        == _expected_commercial_close_buyer_review_runbook()
     )
     assert "diligence_exception_register" in snapshot["canonical_payload_fields"]
     assert (

@@ -1936,6 +1936,258 @@ const commercialCloseReleasePackage = {
   provider_write_executed: false,
 };
 
+const commercialCloseReleaseArtifactByKey = Object.fromEntries(
+  commercialCloseReleaseArtifacts.map((artifact) => [artifact.artifact_key, artifact]),
+);
+
+const makeCommercialCloseBuyerReviewStep = ({
+  step_key,
+  review_order,
+  lane,
+  artifact_key,
+  source_field,
+  reviewer_role,
+  owner_area,
+  sla_hours,
+  review_day,
+  entry_criteria_text,
+  exit_criteria_text,
+}: {
+  step_key: string;
+  review_order: number;
+  lane: string;
+  artifact_key: string;
+  source_field: string;
+  reviewer_role: string;
+  owner_area: string;
+  sla_hours: number;
+  review_day: number;
+  entry_criteria_text: string;
+  exit_criteria_text: string;
+}) => {
+  const artifact = commercialCloseReleaseArtifactByKey[artifact_key];
+  const ready = artifact?.status_code === "ready";
+  return {
+    step_key,
+    review_order,
+    lane,
+    status_code: ready ? "ready" : "blocked",
+    evidence_file_name: artifact?.file_name ?? "",
+    source_field,
+    reviewer_role,
+    owner_area,
+    sla_hours,
+    review_day,
+    entry_criteria_text,
+    exit_criteria_text,
+    blocker_keys: ready ? [] : (artifact?.blocker_keys ?? [`${artifact_key}_missing`]),
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  };
+};
+
+const commercialCloseBuyerReviewBaseSteps = [
+  {
+    step_key: "buyer_review_intake",
+    review_order: 1,
+    lane: "intake",
+    status_code: "ready",
+    evidence_file_name: commercialCloseReleasePackage.first_release_file_name,
+    source_field: "commercial_close_release_package.first_release_file_name",
+    reviewer_role: "buyer diligence lead",
+    owner_area: "data_room_ops",
+    sla_hours: 4,
+    review_day: 1,
+    entry_criteria_text: "Open the verified release package and confirm buyer review scope.",
+    exit_criteria_text: "Buyer review starts from the canonical evidence snapshot file.",
+    blocker_keys: [],
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_snapshot_verification",
+    review_order: 2,
+    lane: "verification",
+    artifact_key: "release_offline_verifier",
+    source_field: "commercial_close_release_package.artifacts.release_offline_verifier",
+    reviewer_role: "verification reviewer",
+    owner_area: "verification",
+    sla_hours: 4,
+    review_day: 1,
+    entry_criteria_text: "Run the offline verifier against copied snapshot JSON.",
+    exit_criteria_text: "Verifier exits successfully before evidence review starts.",
+  }),
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_privacy_redaction",
+    review_order: 3,
+    lane: "privacy",
+    artifact_key: "release_privacy_policy",
+    source_field: "commercial_close_release_package.artifacts.release_privacy_policy",
+    reviewer_role: "privacy/security reviewer",
+    owner_area: "security_governance",
+    sla_hours: 8,
+    review_day: 1,
+    entry_criteria_text: "Inspect redaction policy before opening data-room files.",
+    exit_criteria_text: "Raw content, stable identifiers, and credentials are absent.",
+  }),
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_data_room_release",
+    review_order: 4,
+    lane: "data_room",
+    artifact_key: "release_data_room_summary",
+    source_field: "data_room_release_summary.release_status",
+    reviewer_role: "data-room operations reviewer",
+    owner_area: "data_room_ops",
+    sla_hours: 8,
+    review_day: 1,
+    entry_criteria_text: "Confirm buyer data-room artifact readiness.",
+    exit_criteria_text: "All data-room artifacts required for close are ready.",
+  }),
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_acceptance_checklist",
+    review_order: 5,
+    lane: "data_room",
+    artifact_key: "release_acceptance_checklist",
+    source_field: "diligence_close_acceptance_summary.decision_code",
+    reviewer_role: "buyer diligence reviewer",
+    owner_area: "buyer_diligence",
+    sla_hours: 8,
+    review_day: 2,
+    entry_criteria_text: "Review acceptance checklist against traceability map.",
+    exit_criteria_text: "All close acceptance rows are ready for buyer signoff.",
+  }),
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_readiness_scorecard",
+    review_order: 6,
+    lane: "commercial",
+    artifact_key: "release_readiness_scorecard",
+    source_field: "commercial_close_readiness_scorecard.status_code",
+    reviewer_role: "commercial diligence reviewer",
+    owner_area: "commercial_diligence",
+    sla_hours: 8,
+    review_day: 2,
+    entry_criteria_text: "Review commercial readiness score and component blockers.",
+    exit_criteria_text: "Commercial readiness scorecard is commercially ready.",
+  }),
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_execution_plan",
+    review_order: 7,
+    lane: "commercial",
+    artifact_key: "release_execution_plan",
+    source_field: "commercial_close_execution_plan.status_code",
+    reviewer_role: "program manager",
+    owner_area: "program_management",
+    sla_hours: 8,
+    review_day: 2,
+    entry_criteria_text: "Review blocked execution lanes and owner actions.",
+    exit_criteria_text: "Execution plan lanes required for close are ready.",
+  }),
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_kpi_operating_model",
+    review_order: 8,
+    lane: "commercial",
+    artifact_key: "release_kpi_operating_model",
+    source_field: "commercial_close_kpi_operating_model.status_code",
+    reviewer_role: "commercial diligence reviewer",
+    owner_area: "commercial_diligence",
+    sla_hours: 8,
+    review_day: 2,
+    entry_criteria_text: "Review KPI target coverage and guardrail breaches.",
+    exit_criteria_text: "Operating KPIs meet target review thresholds.",
+  }),
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_buyer_brief",
+    review_order: 9,
+    lane: "commercial",
+    artifact_key: "release_buyer_brief",
+    source_field: "commercial_close_buyer_brief.status_code",
+    reviewer_role: "commercial diligence reviewer",
+    owner_area: "commercial_diligence",
+    sla_hours: 4,
+    review_day: 3,
+    entry_criteria_text: "Review buyer narrative against evidence basis bullets.",
+    exit_criteria_text: "Buyer brief is ready as the narrative review index.",
+  }),
+  makeCommercialCloseBuyerReviewStep({
+    step_key: "buyer_review_signoff_matrix",
+    review_order: 10,
+    lane: "signoff",
+    artifact_key: "release_signoff_matrix",
+    source_field: "commercial_close_signoff_matrix.status_code",
+    reviewer_role: "commercial diligence reviewer",
+    owner_area: "commercial_diligence",
+    sla_hours: 4,
+    review_day: 3,
+    entry_criteria_text: "Confirm every required role signoff is ready.",
+    exit_criteria_text: "Commercial close signoff matrix is ready.",
+  }),
+];
+
+const commercialCloseBuyerReviewPreviousBlockers = Array.from(
+  new Set(commercialCloseBuyerReviewBaseSteps.flatMap((step) => step.blocker_keys)),
+);
+
+const commercialCloseBuyerReviewReleaseReady =
+  commercialCloseReleasePackage.status_code === "release_ready" &&
+  commercialCloseBuyerReviewPreviousBlockers.length === 0;
+
+const commercialCloseBuyerReviewSteps = [
+  ...commercialCloseBuyerReviewBaseSteps,
+  {
+    step_key: "buyer_review_release_decision",
+    review_order: 11,
+    lane: "release",
+    status_code: commercialCloseBuyerReviewReleaseReady ? "ready" : "blocked",
+    evidence_file_name: "commercial-close-release-package.json",
+    source_field: "commercial_close_release_package.status_code",
+    reviewer_role: "buyer diligence lead",
+    owner_area: "buyer_diligence",
+    sla_hours: 4,
+    review_day: 3,
+    entry_criteria_text: "Confirm every buyer review step is ready.",
+    exit_criteria_text: "Approve the release package for buyer handoff.",
+    blocker_keys: commercialCloseBuyerReviewReleaseReady
+      ? []
+      : commercialCloseBuyerReviewPreviousBlockers.slice(0, 10),
+    contains_raw_content: false,
+    contains_stable_identifiers: false,
+    contains_provider_credentials: false,
+    provider_write_executed: false,
+  },
+];
+
+const commercialCloseBuyerReviewBlockedSteps = commercialCloseBuyerReviewSteps.filter(
+  (step) => step.status_code === "blocked",
+);
+
+const commercialCloseBuyerReviewBlockerKeys = Array.from(
+  new Set(commercialCloseBuyerReviewBlockedSteps.flatMap((step) => step.blocker_keys)),
+);
+
+const commercialCloseBuyerReviewRunbook = {
+  runbook_key: "commercial_close_buyer_review_runbook",
+  target_contract_value_krw: 2_000_000_000,
+  target_contract_label: "2,000,000,000 KRW",
+  status_code: "review_blocked",
+  total_step_count: commercialCloseBuyerReviewSteps.length,
+  ready_step_count: commercialCloseBuyerReviewSteps.length - commercialCloseBuyerReviewBlockedSteps.length,
+  blocked_step_count: commercialCloseBuyerReviewBlockedSteps.length,
+  blocker_key_count: commercialCloseBuyerReviewBlockerKeys.length,
+  blocked_step_keys: commercialCloseBuyerReviewBlockedSteps.map((step) => step.step_key),
+  blocker_keys: commercialCloseBuyerReviewBlockerKeys.slice(0, 10),
+  first_step_key: "buyer_review_intake",
+  final_decision_step_key: "buyer_review_release_decision",
+  verification_command: commercialCloseReleasePackage.verification_command,
+  buyer_handoff_text: "Buyer review runbook remains blocked for 2,000,000,000 KRW target review: 8 step(s) need remediation.",
+  next_action_text: "Resolve blocked buyer review steps, regenerate the evidence snapshot, rerun the offline verifier, and reissue the runbook.",
+  steps: commercialCloseBuyerReviewSteps,
+  provider_write_executed: false,
+};
+
 const dataQualitySurface = {
   workspace_id: "workspace-org-acme",
   organization_id: "org-acme",
@@ -2305,6 +2557,7 @@ const dataEvidenceSnapshot = {
     "commercial_close_execution_plan",
     "commercial_close_kpi_operating_model",
     "commercial_close_readiness_scorecard",
+    "commercial_close_buyer_review_runbook",
     "commercial_close_release_package",
     "commercial_close_signoff_matrix",
     "data_room_package_manifest",
@@ -2411,6 +2664,7 @@ const dataEvidenceSnapshot = {
   commercial_close_buyer_brief: commercialCloseBuyerBrief,
   commercial_close_signoff_matrix: commercialCloseSignoffMatrix,
   commercial_close_release_package: commercialCloseReleasePackage,
+  commercial_close_buyer_review_runbook: commercialCloseBuyerReviewRunbook,
   diligence_exception_register: diligenceExceptionRegister,
   diligence_close_artifact_review_queue: diligenceCloseArtifactReviewQueue,
   diligence_close_owner_handoff_queue: diligenceCloseOwnerHandoffQueue,
@@ -3081,6 +3335,14 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("buyer-data-room-release.json");
     expect(container.textContent).toContain("naruon-evidence-snapshot.json");
     expect(container.textContent).toContain("credentials: no");
+    expect(container.textContent).toContain("Commercial close buyer review runbook");
+    expect(container.textContent).toContain("commercial_close_buyer_review_runbook");
+    expect(container.textContent).toContain("buyer_review_intake");
+    expect(container.textContent).toContain("buyer_review_release_decision");
+    expect(container.textContent).toContain("review_blocked");
+    expect(container.textContent).toContain("blocked steps 8");
+    expect(container.textContent).toContain("commercial-close-signoff-matrix.json");
+    expect(container.textContent).toContain("python scripts/verify_evidence_snapshot.py <snapshot.json>");
     expect(container.textContent).toContain("Data room release summary");
     expect(container.textContent).toContain("release_blocked");
     expect(container.textContent).toContain("Data-room release remains blocked");
@@ -3242,6 +3504,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_buyer_brief");
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_signoff_matrix");
     expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_release_package");
+    expect(copiedSnapshot.canonical_payload_fields).toContain("commercial_close_buyer_review_runbook");
     expect(copiedSnapshot.verification_handoff.verifier_key).toBe("offline_evidence_snapshot_verifier");
     expect(copiedSnapshot.verification_handoff.failure_exit_codes.digest_mismatch).toBe(4);
     expect(copiedSnapshot.evidence_packet_checklist).toHaveLength(10);
@@ -3258,6 +3521,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.commercial_close_buyer_brief).toEqual(commercialCloseBuyerBrief);
     expect(copiedSnapshot.commercial_close_signoff_matrix).toEqual(commercialCloseSignoffMatrix);
     expect(copiedSnapshot.commercial_close_release_package).toEqual(commercialCloseReleasePackage);
+    expect(copiedSnapshot.commercial_close_buyer_review_runbook).toEqual(commercialCloseBuyerReviewRunbook);
     expect(copiedSnapshot.diligence_exception_register).toHaveLength(9);
     expect(copiedSnapshot.diligence_exception_register[0]).toEqual({
       exception_key: "exception_repair_thread_id_integrity",

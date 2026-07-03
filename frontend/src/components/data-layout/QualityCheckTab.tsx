@@ -47,6 +47,7 @@ export function QualityCheckTab({
   const commercialCloseBuyerBrief = evidenceSnapshot?.commercial_close_buyer_brief;
   const commercialCloseSignoffMatrix = evidenceSnapshot?.commercial_close_signoff_matrix;
   const commercialCloseReleasePackage = evidenceSnapshot?.commercial_close_release_package;
+  const commercialCloseBuyerReviewRunbook = evidenceSnapshot?.commercial_close_buyer_review_runbook;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
@@ -800,6 +801,143 @@ export function QualityCheckTab({
                               </dl>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {artifact.blocker_keys.map((blockerKey) => (
+                                  <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                                    {toSafeReactText(blockerKey)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {commercialCloseBuyerReviewRunbook && (
+                    <div className="border-t border-border p-5">
+                      <p className="text-xs font-black text-muted-foreground">Commercial close buyer review runbook</p>
+                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseBuyerReviewRunbook.status_code)}</h3>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerReviewRunbook.buyer_handoff_text)}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerReviewRunbook.next_action_text)}</p>
+                          </div>
+                          <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(commercialCloseBuyerReviewRunbook.status_code === 'review_ready' ? 'ready' : 'needs_attention')}`}>
+                            {toSafeReactText(commercialCloseBuyerReviewRunbook.runbook_key)}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <dt className="font-black text-muted-foreground">Target review value</dt>
+                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseBuyerReviewRunbook.target_contract_label)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Review steps</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerReviewRunbook.total_step_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Ready steps</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerReviewRunbook.ready_step_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Blocked steps</dt>
+                            <dd className="mt-1 text-sm font-bold">blocked steps {formatCount(commercialCloseBuyerReviewRunbook.blocked_step_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Blocker keys</dt>
+                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerReviewRunbook.blocker_key_count)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">First step</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseBuyerReviewRunbook.first_step_key)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Final decision</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseBuyerReviewRunbook.final_decision_step_key)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseBuyerReviewRunbook.provider_write_executed)}</dd>
+                          </div>
+                          <div className="sm:col-span-2 lg:col-span-4">
+                            <dt className="font-black text-muted-foreground">Verifier command</dt>
+                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseBuyerReviewRunbook.verification_command)}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseBuyerReviewRunbook.blocked_step_keys.map((stepKey) => (
+                            <span key={stepKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(stepKey)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {commercialCloseBuyerReviewRunbook.blocker_keys.map((blockerKey) => (
+                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
+                              {toSafeReactText(blockerKey)}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-4 divide-y divide-border">
+                          {commercialCloseBuyerReviewRunbook.steps.map((step) => (
+                            <div key={step.step_key} className="py-4 first:pt-0 last:pb-0">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <h4 className="break-all text-sm font-black">
+                                    {formatCount(step.review_order)}. {toSafeReactText(step.step_key)}
+                                  </h4>
+                                  <p className="mt-1 text-sm font-semibold text-muted-foreground">{toSafeReactText(step.evidence_file_name)}</p>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(step.entry_criteria_text)}</p>
+                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(step.exit_criteria_text)}</p>
+                                </div>
+                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(step.status_code === 'ready' ? 'ready' : 'needs_attention')}`}>
+                                  {toSafeReactText(step.status_code)}
+                                </span>
+                              </div>
+                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Lane</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(step.lane)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Reviewer role</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(step.reviewer_role)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Owner</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(step.owner_area)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Review day</dt>
+                                  <dd className="mt-1 text-sm font-bold">day {formatCount(step.review_day)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">SLA hours</dt>
+                                  <dd className="mt-1 text-sm font-bold">{formatCount(step.sla_hours)}</dd>
+                                </div>
+                                <div className="sm:col-span-2 lg:col-span-3">
+                                  <dt className="font-black text-muted-foreground">Source field</dt>
+                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(step.source_field)}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Raw content</dt>
+                                  <dd className="mt-1 text-sm font-bold">raw content: {step.contains_raw_content ? 'yes' : 'no'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Stable IDs</dt>
+                                  <dd className="mt-1 text-sm font-bold">stable IDs: {step.contains_stable_identifiers ? 'yes' : 'no'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Credentials</dt>
+                                  <dd className="mt-1 text-sm font-bold">credentials: {step.contains_provider_credentials ? 'yes' : 'no'}</dd>
+                                </div>
+                                <div>
+                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(step.provider_write_executed)}</dd>
+                                </div>
+                              </dl>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {step.blocker_keys.map((blockerKey) => (
                                   <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
                                     {toSafeReactText(blockerKey)}
                                   </span>
