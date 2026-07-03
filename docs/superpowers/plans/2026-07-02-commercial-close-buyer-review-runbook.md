@@ -98,9 +98,9 @@ Expected current fixture:
 - [x] Run `PATH=/opt/homebrew/opt/node@24/bin:$PATH /opt/homebrew/opt/node@24/bin/npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` from `frontend/`.
 - [x] Run `git diff --check`.
 - [x] Run Ponytail review on the diff and record complexity verdict.
-- [ ] Commit only intended files.
-- [ ] Push to `origin HEAD:refs/heads/plan/email-dom-paragraph-kg-2026-07-02`.
-- [ ] Re-verify live PR #901 `headRefOid`, merge state, unresolved review thread count, and check state.
+- [x] Commit only intended files.
+- [x] Push to `origin HEAD:refs/heads/plan/email-dom-paragraph-kg-2026-07-02`.
+- [x] Re-verify live PR #901 `headRefOid`, merge state, unresolved review thread count, and check state.
 
 ## Evidence
 
@@ -111,4 +111,4 @@ Expected current fixture:
 - Frontend lint: `PATH=/opt/homebrew/opt/node@24/bin:$PATH /opt/homebrew/opt/node@24/bin/npm run lint -- src/components/data-layout/QualityCheckTab.tsx src/components/data-layout/types.ts src/app/data/page.test.tsx` passed.
 - Diff check: `git diff --check` passed.
 - Ponytail: Lean already. Ship. The buyer review runbook stays in the existing snapshot contract, adds no dependency, and avoids a premature library/submodule split.
-- PR #901 live state: pending.
+- PR #901 live state after feature push: head `55774203da8480d2145d4b3f7da27f0612d31216`, mergeable `MERGEABLE`, merge state `BLOCKED`, current unresolved review threads 0, outdated unresolved review threads 4, checks queued/pending and not treated as blockers for this phase.
