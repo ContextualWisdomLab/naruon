@@ -341,7 +341,8 @@ def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
         "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
         in workflow
     )
-    assert "Upload CodeQL SARIF (merge preview)" in workflow
+    assert "analyze-merge:" in workflow
+    assert "CodeQL merge preview" in workflow
     assert "refs/pull/{0}/merge" in workflow
     assert (
         "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
@@ -407,7 +408,7 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
         "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
         in scorecard_workflow
     )
-    assert "Upload Scorecard SARIF (merge preview)" in scorecard_workflow
+    assert "scorecard-merge:" in scorecard_workflow
     assert "category: scorecard-merge" in scorecard_workflow
     assert "refs/pull/{0}/merge" in scorecard_workflow
 
