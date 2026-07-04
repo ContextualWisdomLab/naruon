@@ -344,6 +344,7 @@ def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
     assert "analyze-merge:" in workflow
     assert "CodeQL merge preview" in workflow
     assert "refs/pull/{0}/merge" in workflow
+    assert "github.event.pull_request.merge_commit_sha" in workflow
     assert (
         "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
         in workflow
