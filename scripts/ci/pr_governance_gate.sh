@@ -91,7 +91,12 @@ if [ "$UNRESOLVED_THREADS" != "0" ]; then
 fi
 
 if ! REQUIRED_CHECKS="$(gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --required --json name,state,link 2>"$PR_CHECKS_ERROR_FILE")"; then
-  add_blocker "Required check metadata could not be read: $(<"$PR_CHECKS_ERROR_FILE")."
+  PR_CHECKS_ERROR="$(<"$PR_CHECKS_ERROR_FILE")"
+  if printf '%s' "$PR_CHECKS_ERROR" | grep -qi 'no required checks reported'; then
+    add_waiting "Ruleset-governed branch: no legacy required status contexts reported for ${HEAD_REF_OID}; relying on ruleset workflows and code-scanning gates."
+  else
+    add_blocker "Required check metadata could not be read: ${PR_CHECKS_ERROR}."
+  fi
 else
   while IFS= read -r item; do
     [ -n "$item" ] && add_blocker "$item"
