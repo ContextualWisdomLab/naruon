@@ -323,16 +323,28 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     assert "continue-on-error: true" not in workflow
 
 
-def test_codeql_workflow_can_read_security_events_without_uploading_sarif() -> None:
+def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
     workflow = read_repo_text(".github/workflows/codeql.yml")
 
-    assert "permissions:\n  contents: read\n  security-events: read" in workflow
+    assert "permissions:\n  contents: read\n\njobs:" in workflow
     assert (
-        "    permissions:\n      actions: read\n      contents: read\n      security-events: read"
+        "    permissions:\n      actions: read\n      contents: read\n      security-events: write"
         in workflow
     )
-    assert "upload: never" in workflow
-    assert "security-events: write" not in workflow
+    assert "upload: always" in workflow
+    assert "upload: never" not in workflow
+    assert (
+        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
+        in workflow
+    )
+    assert (
+        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        in workflow
+    )
+    assert (
+        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        in workflow
+    )
 
 
 def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> None:
@@ -883,6 +895,8 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "/issues/${PR_NUMBER}/comments" in gate_script
     assert "COMMENT_MARKER" in gate_script
     assert "Waiting for" in gate_script
+    assert "no required checks reported" in gate_script
+    assert "ruleset workflows and code-scanning gates" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script
     assert "gh pr merge" not in gate_script
