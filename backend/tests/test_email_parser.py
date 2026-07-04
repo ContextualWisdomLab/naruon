@@ -54,6 +54,8 @@ Content-Type: text/html; charset="utf-8"
     try:
         parsed = parse_eml(temp_path)
         assert parsed["body"] == "This is HTML content"
+        assert parsed["body_content_type"] == "text/html"
+        assert parsed["body_parse_content"] == "<p>This is HTML content</p>"
     finally:
         os.unlink(temp_path)
 
@@ -132,7 +134,92 @@ Content-Disposition: attachment; filename="<img src=x onerror=alert(1)>.txt"
 
     try:
         parsed = parse_eml(temp_path)
-        assert parsed["attachments"] == [{"filename": ".txt", "content": "report"}]
+        assert parsed["attachments"] == [
+            {
+                "filename": ".txt",
+                "content": "report",
+                "content_type": "text/plain",
+                "parse_content": "<script>alert(1)</script>report",
+                "parse_content_type": "text/plain",
+                "parser_key": "plain_text",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            }
+        ]
+    finally:
+        os.unlink(temp_path)
+
+
+def test_parse_eml_extracts_supported_and_unsupported_attachment_metadata():
+    eml_content = b"""Message-ID: <attachment-types@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Attachment types
+Date: Mon, 27 Apr 2026 10:00:00 +0000
+Content-Type: multipart/mixed; boundary="mixed-boundary"
+
+--mixed-boundary
+Content-Type: text/plain; charset="utf-8"
+
+See attached.
+--mixed-boundary
+Content-Type: text/html; charset="utf-8"
+Content-Disposition: attachment; filename="page.html"
+
+<h1>Launch</h1><p>Ship</p>
+--mixed-boundary
+Content-Type: text/markdown; charset="utf-8"
+Content-Disposition: attachment; filename="plan.md"
+
+# Plan
+
+Ship graph
+--mixed-boundary
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="contract.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjcK
+--mixed-boundary--"""
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
+        f.write(eml_content)
+        temp_path = f.name
+
+    try:
+        parsed = parse_eml(temp_path)
+        assert parsed["attachments"] == [
+            {
+                "filename": "page.html",
+                "content": "Launch Ship",
+                "content_type": "text/html",
+                "parse_content": "<h1>Launch</h1><p>Ship</p>",
+                "parse_content_type": "text/html",
+                "parser_key": "html",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "plan.md",
+                "content": "# Plan Ship graph",
+                "content_type": "text/markdown",
+                "parse_content": "# Plan\n\nShip graph",
+                "parse_content_type": "text/markdown",
+                "parser_key": "markdown",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "contract.pdf",
+                "content": "",
+                "content_type": "application/pdf",
+                "parse_content": "",
+                "parse_content_type": "application/pdf",
+                "parser_key": "unsupported_binary",
+                "parse_status": "unsupported_content_type",
+                "parse_error_code": "unsupported_content_type",
+            },
+        ]
     finally:
         os.unlink(temp_path)
 
@@ -247,6 +334,7 @@ Test"""
     finally:
         os.unlink(temp_path)
 
+
 def test_parse_eml_mocked_oserror():
     with patch("builtins.open", side_effect=OSError("Mocked OS Error")):
         with pytest.raises(
@@ -278,6 +366,7 @@ def test_sanitize_nul():
     assert _sanitize_nul(12.3) == "12.3"
     assert _sanitize_nul(True) == "True"
 
+
 def test_sanitize_display_text():
     from services.email_parser import _sanitize_display_text
 
@@ -290,7 +379,10 @@ def test_sanitize_display_text():
     # Strings with HTML tags
     assert _sanitize_display_text("<b>hello</b> world") == "hello world"
     assert _sanitize_display_text("<script>alert('xss')</script>") == ""
-    assert _sanitize_display_text("hello <img src=x onerror=alert(1)>world") == "hello world"
+    assert (
+        _sanitize_display_text("hello <img src=x onerror=alert(1)>world")
+        == "hello world"
+    )
 
     # Strings combining NUL and HTML
     assert _sanitize_display_text("<b>hello\x00</b>") == "hello"
