@@ -90,10 +90,6 @@ jobs:
           persist-credentials: false
           ref: ${{ format('refs/pull/{0}/merge', github.event.pull_request.number) }}
 
-      - name: Resolve merge preview SHA
-        id: merge_preview
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
@@ -105,5 +101,3 @@ jobs:
         with:
           category: "/language:${{ matrix.language }}-merge"
           upload: always
-          ref: ${{ format('refs/pull/{0}/merge', github.event.pull_request.number) }}
-          sha: ${{ steps.merge_preview.outputs.sha }}

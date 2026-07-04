@@ -81,10 +81,6 @@ jobs:
           persist-credentials: false
           ref: ${{ format('refs/pull/{0}/merge', github.event.pull_request.number) }}
 
-      - name: Resolve merge preview SHA
-        id: merge_preview
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: Run Scorecard
         uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with:
@@ -110,4 +106,3 @@ jobs:
           sarif_file: scorecard-results.sarif
           category: scorecard-merge
           ref: ${{ format('refs/pull/{0}/merge', github.event.pull_request.number) }}
-          sha: ${{ steps.merge_preview.outputs.sha }}

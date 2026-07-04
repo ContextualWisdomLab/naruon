@@ -343,7 +343,6 @@ def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
     )
     assert "analyze-merge:" in workflow
     assert "CodeQL merge preview" in workflow
-    assert "Resolve merge preview SHA" in workflow
     assert "refs/pull/{0}/merge" in workflow
     assert (
         "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
@@ -410,7 +409,6 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
         in scorecard_workflow
     )
     assert "scorecard-merge:" in scorecard_workflow
-    assert "Resolve merge preview SHA" in scorecard_workflow
     assert "category: scorecard-merge" in scorecard_workflow
     assert "refs/pull/{0}/merge" in scorecard_workflow
 
