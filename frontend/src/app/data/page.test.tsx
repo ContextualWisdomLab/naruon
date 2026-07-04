@@ -2032,7 +2032,9 @@ describe("DataPage", () => {
   });
 
   it("renders API-backed pipeline embedding and quality tabs", async () => {
-    const writeText = vi.fn(async () => undefined);
+    const writeText = vi.fn(async (text: string) => {
+      void text;
+    });
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
