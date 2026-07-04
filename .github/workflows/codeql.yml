@@ -51,6 +51,7 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
 
       - name: Perform CodeQL Analysis
+        id: analyze
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
           category: "/language:${{ matrix.language }}"
@@ -59,3 +60,12 @@ jobs:
           upload: always
           ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
           sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Upload CodeQL SARIF (merge preview)
+        if: github.event_name == 'pull_request'
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        with:
+          sarif_file: ${{ steps.analyze.outputs.sarif-output }}
+          category: "/language:${{ matrix.language }}-merge"
+          ref: ${{ format('refs/pull/{0}/merge', github.event.pull_request.number) }}
+          sha: ${{ github.sha }}
