@@ -323,7 +323,7 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     assert "continue-on-error: true" not in workflow
 
 
-def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
+def test_codeql_workflow_uploads_default_branch_sarif_only() -> None:
     workflow = read_repo_text(".github/workflows/codeql.yml")
 
     assert "permissions:\n  contents: read\n\njobs:" in workflow
@@ -333,22 +333,21 @@ def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
     )
     assert "upload: always" in workflow
     assert "upload: never" not in workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
-        in workflow
-    )
-    assert (
-        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in workflow
-    )
-    assert "analyze-merge:" in workflow
-    assert "CodeQL merge preview" in workflow
-    assert "refs/pull/{0}/merge" in workflow
-    assert "github.event.pull_request.merge_commit_sha" in workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in workflow
-    )
+    assert "pull_request:" not in workflow
+    assert "analyze-merge:" not in workflow
+    assert "- develop" in workflow
+    assert "- master" in workflow
+
+
+def test_central_required_workflows_include_codeql_pr_for_ruleset_gate() -> None:
+    readme = read_repo_text("README.md")
+    architecture = read_repo_text("ARCHITECTURE.md")
+
+    for document in (readme, architecture):
+        assert "ContextualWisdomLab/.github" in document
+        assert "central required workflows" in document.lower() or "central required workflow" in document
+
+    assert not (REPO_ROOT / ".github/workflows/codeql-pr.yml").exists()
 
 
 def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> None:
@@ -489,6 +488,7 @@ def test_review_automation_uses_central_required_workflows_without_local_copies(
     normalized_security = " ".join(security.split())
 
     central_workflow_paths = [
+        ".github/workflows/codeql-pr.yml",
         ".github/workflows/opencode-review.yml",
         ".github/workflows/pr-review-merge-scheduler.yml",
         ".github/workflows/strix-selftest.yml",
