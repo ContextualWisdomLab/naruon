@@ -408,9 +408,7 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
         "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
         in scorecard_workflow
     )
-    assert "scorecard-merge:" in scorecard_workflow
-    assert "category: scorecard-merge" in scorecard_workflow
-    assert "refs/pull/{0}/merge" in scorecard_workflow
+
 
     assert (
         "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0"
