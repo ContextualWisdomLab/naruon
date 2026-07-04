@@ -2644,3 +2644,4 @@
   - `meeting_candidate_finder_handler`: 일정 후보 추천
   - `tone_analyzer_handler`: 작성 중인 답장 어조 교정
 - 각 신규 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
+- CI에서 발견된 미사용 `json` 패키지 import(`backend/api/tools.py`)를 제거하여 린트 오류를 수정했습니다.
