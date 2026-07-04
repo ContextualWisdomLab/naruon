@@ -1,0 +1,119 @@
+[
+  {
+    "content_segment_uid": "seg-project-alpha",
+    "source_kind": "email_body",
+    "source_record_uid": "email-alpha-1",
+    "safe_text_content": "Project Alpha 킥오프: 결제 현대화 프로젝트를 2026-07-02에 착수합니다.",
+    "heading_path": "Kickoff",
+    "segment_path": "/document[1]/paragraph[1]",
+    "ordinal_index": 1
+  },
+  {
+    "content_segment_uid": "seg-requirement-checkout",
+    "source_kind": "attachment",
+    "source_record_uid": "attachment-srs-1",
+    "safe_text_content": "요구사항: 결제 화면은 카드 승인 실패 시 사용자에게 재시도 안내를 반드시 보여줘야 합니다.",
+    "heading_path": "Requirements > Checkout",
+    "segment_path": "/document[1]/h2[1]/paragraph[1]",
+    "ordinal_index": 2
+  },
+  {
+    "content_segment_uid": "seg-feature-story",
+    "source_kind": "attachment",
+    "source_record_uid": "attachment-prd-1",
+    "safe_text_content": "Feature user story: 사용자는 결제 화면에서 acceptance criteria에 맞는 영수증 미리보기를 확인합니다.",
+    "heading_path": "Feature Definition",
+    "segment_path": "/document[1]/h2[2]/paragraph[1]",
+    "ordinal_index": 3
+  },
+  {
+    "content_segment_uid": "seg-issue-risk",
+    "source_kind": "email_body",
+    "source_record_uid": "email-alpha-2",
+    "safe_text_content": "Blocker: PG사 API 승인 지연 리스크가 있어 승인 필요 상태입니다.",
+    "heading_path": "Risks",
+    "segment_path": "/document[1]/paragraph[4]",
+    "ordinal_index": 4
+  },
+  {
+    "content_segment_uid": "seg-milestone",
+    "source_kind": "email_body",
+    "source_record_uid": "email-alpha-3",
+    "safe_text_content": "마일스톤 일정: 2026-07-15까지 1차 릴리즈 후보를 공유합니다.",
+    "heading_path": "Schedule",
+    "segment_path": "/document[1]/paragraph[5]",
+    "ordinal_index": 5
+  },
+  {
+    "content_segment_uid": "seg-wbs",
+    "source_kind": "attachment",
+    "source_record_uid": "attachment-plan-1",
+    "safe_text_content": "WBS Phase 1 작업: epic checkout, story approval-flow, sprint 3 task로 분리합니다.",
+    "heading_path": "WBS",
+    "segment_path": "/document[1]/table[1]/row[1]",
+    "ordinal_index": 6
+  },
+  {
+    "content_segment_uid": "seg-deliverable",
+    "source_kind": "attachment",
+    "source_record_uid": "attachment-deliverables-1",
+    "safe_text_content": "산출물: SRS 명세서, ERD, wireframe, test report를 주간 보고서와 함께 제출합니다.",
+    "heading_path": "Deliverables",
+    "segment_path": "/document[1]/list[1]/item[1]",
+    "ordinal_index": 7
+  },
+  {
+    "content_segment_uid": "seg-participant",
+    "source_kind": "email_body",
+    "source_record_uid": "email-alpha-4",
+    "safe_text_content": "담당자: 김PM은 owner이고 박책임은 승인권자 approver로 참여합니다.",
+    "heading_path": "People",
+    "segment_path": "/document[1]/paragraph[8]",
+    "ordinal_index": 8
+  },
+  {
+    "content_segment_uid": "seg-data-requirement",
+    "source_kind": "attachment",
+    "source_record_uid": "attachment-data-1",
+    "safe_text_content": "데이터 요건: Customer entity의 email attribute는 개인정보 privacy 항목이며 보존 retention은 3년입니다.",
+    "heading_path": "Data",
+    "segment_path": "/document[1]/paragraph[9]",
+    "ordinal_index": 9
+  },
+  {
+    "content_segment_uid": "seg-erd",
+    "source_kind": "attachment",
+    "source_record_uid": "attachment-erd-1",
+    "safe_text_content": "ERD: customer table과 payment table은 customer_id foreign key 관계를 가집니다.",
+    "heading_path": "ERD",
+    "segment_path": "/document[1]/paragraph[10]",
+    "ordinal_index": 10
+  },
+  {
+    "content_segment_uid": "seg-infra",
+    "source_kind": "attachment",
+    "source_record_uid": "attachment-infra-1",
+    "safe_text_content": "인프라 요건: staging environment는 private runner, secret vault, backup, SLO 99.9, deployment gate를 사용합니다.",
+    "heading_path": "Infrastructure",
+    "segment_path": "/document[1]/paragraph[11]",
+    "ordinal_index": 11
+  },
+  {
+    "content_segment_uid": "seg-report",
+    "source_kind": "email_body",
+    "source_record_uid": "email-alpha-5",
+    "safe_text_content": "주간 보고 delta: 이번 주 진척은 요구사항 확정과 API 승인 지연 이슈 변경입니다.",
+    "heading_path": "Weekly Report",
+    "segment_path": "/document[1]/paragraph[12]",
+    "ordinal_index": 12
+  },
+  {
+    "content_segment_uid": "seg-wiki",
+    "source_kind": "attachment",
+    "source_record_uid": "attachment-wiki-1",
+    "safe_text_content": "프로젝트 위키: LLM Wiki 페이지에 요구사항, WBS, ERD, 인프라 문서화를 연결합니다.",
+    "heading_path": "Wiki",
+    "segment_path": "/document[1]/paragraph[13]",
+    "ordinal_index": 13
+  }
+]
