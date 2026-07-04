@@ -15,8 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  scorecard-head:
-    name: scorecard
+  scorecard:
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -60,49 +59,3 @@ jobs:
           category: scorecard
           ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
           sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
-  scorecard-merge:
-    name: scorecard-merge
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
-      security-events: write
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-          ref: ${{ format('refs/pull/{0}/merge', github.event.pull_request.number) }}
-
-      - name: Run Scorecard
-        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          results_file: scorecard-results.sarif
-          results_format: sarif
-          publish_results: false
-
-      - name: Restore Scorecard SARIF ownership
-        run: |
-          if [ -e scorecard-results.sarif ]; then
-            sudo chown "$(id -u):$(id -g)" scorecard-results.sarif
-            chmod u+rw scorecard-results.sarif
-          fi
-
-      - name: Preserve Scorecard SARIF categories
-        run: python scripts/ci/ensure_scorecard_sarif_categories.py scorecard-results.sarif
-
-      - name: Upload Scorecard SARIF (merge preview)
-        if: ${{ always() }}
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
-        with:
-          sarif_file: scorecard-results.sarif
-          category: scorecard-merge
-          ref: ${{ format('refs/pull/{0}/merge', github.event.pull_request.number) }}
