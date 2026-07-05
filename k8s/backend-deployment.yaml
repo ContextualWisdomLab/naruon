@@ -16,12 +16,23 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-registry
+      # Image runs as the non-root `appuser` (Dockerfile `USER appuser`).
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: backend
         image: ghcr.io/seongho-bae/ai_email_client-backend:REPLACE_ME_VERSION
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
         env:
         - name: DATABASE_URL
           valueFrom:
@@ -33,3 +44,11 @@ spec:
             secretKeyRef:
               name: backend-secrets
               key: auth-session-hmac-secret
+        volumeMounts:
+        # readOnlyRootFilesystem needs a writable temp dir: email import
+        # extracts uploaded .zip/.mbox archives via tempfile (TMPDIR=/tmp).
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

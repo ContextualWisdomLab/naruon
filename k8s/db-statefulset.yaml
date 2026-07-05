@@ -15,9 +15,24 @@ spec:
       labels:
         app: postgres-db
     spec:
+      # pgvector/postgres runs the server as the `postgres` user (uid/gid 999).
+      # fsGroup makes the persistent volume writable by that group.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: pgvector/pgvector:pg16
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
         env:
         - name: POSTGRES_USER
           value: postgres
@@ -28,6 +43,34 @@ spec:
               key: password
         - name: POSTGRES_DB
           value: ai_email
+        # Keep data in a subdirectory of the mounted volume so the PVC root
+        # (which may carry lost+found) is not used as PGDATA directly.
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         ports:
         - containerPort: 5432
           name: postgres
+        volumeMounts:
+        - name: pgdata
+          mountPath: /var/lib/postgresql/data
+        # readOnlyRootFilesystem needs writable socket + temp dirs.
+        - name: run
+          mountPath: /var/run/postgresql
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: run
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+  # Persistent storage: without this the database is stored on the pod's
+  # ephemeral filesystem and is lost on every restart/reschedule.
+  volumeClaimTemplates:
+  - metadata:
+      name: pgdata
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
