@@ -309,7 +309,9 @@ async def get_emails(
         visible_groups = [
             email
             for group_key, email in grouped.items()
-            if has_sent_message.get(group_key, False)
+            # ⚡ Bolt Optimization: Use `in` operator instead of `.get(key, False)`
+            # 🎯 Why: `has_sent_message` only stores `True` values, so checking membership is safe and avoids method resolution overhead
+            if group_key in has_sent_message
         ]
     else:
         visible_groups = list(grouped.values())

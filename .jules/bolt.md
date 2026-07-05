@@ -7,3 +7,8 @@
 ## 2025-02-20 - Deduplication Optimization
 **Learning:** Python's `dict.fromkeys()` leverages the underlying C implementation and insertion-order preservation (in Python 3.7+) to deduplicate elements while maintaining order. It can be faster in some workloads (particularly when list size isn't massive) than manually tracking a `set` and appending to a `list` inside a `for` loop, especially for list preparations before database queries or API calls.
 **Action:** Use `list(dict.fromkeys(iterable))` instead of `seen = set(); result = []` for order-preserving deduplication loops to improve CPU performance.
+
+## 2025-03-09 - Safe Dictionary Membership Check Optimization
+
+**Learning:** When a dictionary strictly tracks only positive assertions (e.g., storing `True` when a condition is met, like `has_sent_message`), replacing `.get(key, False)` with the `in` operator (e.g., `key in my_dict`) avoids the overhead of method resolution and default argument evaluation. While this is technically a micro-optimization, using `in` is more idiomatic Python and slightly faster.
+**Action:** Use the `in` operator instead of `.get(key, False)` when checking for membership in dictionaries that only store positive assertions.
