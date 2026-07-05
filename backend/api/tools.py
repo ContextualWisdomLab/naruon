@@ -145,7 +145,7 @@ def is_safe_webhook_url(url: str) -> bool:
     # Avoid localhost and private IPs
     hostname = parsed.hostname or ""
     hostname = hostname.lower()
-    if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+    if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):  # nosec B104
         return False
     if (
         hostname.startswith("10.")
