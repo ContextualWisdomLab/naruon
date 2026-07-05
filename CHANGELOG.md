@@ -2634,3 +2634,11 @@
 - `POSTGRES_PASSWORD=change-me-local-only docker compose up -d --build`
 - `python scripts/check_compose_logs.py --compose-log-file <captured-log-file>`
 - `docker compose down`
+
+## [Unreleased]
+
+### Added
+- 도구(Tool) 레지스트리에 CRUD(생성, 조회, 수정, 삭제) 기능을 추가하여 런타임에 동적으로 도구를 관리할 수 있도록 개선.
+- 외부 웹훅(Webhook) URL을 연동하여 도구를 실행할 수 있는 기능을 추가. 이를 통해 확장 가능한 도구 생태계 구축 가능.
+- SSRF 취약점을 방지하기 위해 웹훅 URL 등록 시 내부망 및 예약된 IP 주소를 차단하는 강력한 검증 로직 도입.
+- 도구 API 백엔드 테스트 커버리지를 100%로 달성하여 안정성 확보.
