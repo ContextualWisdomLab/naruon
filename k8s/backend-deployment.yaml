@@ -16,12 +16,29 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-registry
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: backend
         image: ghcr.io/seongho-bae/ai_email_client-backend:REPLACE_ME_VERSION
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsUser: 10001
+          runAsGroup: 10001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
         env:
         - name: DATABASE_URL
           valueFrom:
