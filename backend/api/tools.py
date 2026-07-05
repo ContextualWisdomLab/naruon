@@ -312,7 +312,6 @@ def update_tool(code: str, tool_data: ToolUpdate) -> ToolInfo:
     update_data = tool_data.model_dump(exclude_unset=True)
 
     # Validate webhook URL first to avoid state inconsistency
-    new_webhook_url = update_data.get("webhook_url", tool.webhook_url)
     handler = None
     if "webhook_url" in update_data:
         if update_data["webhook_url"]:
