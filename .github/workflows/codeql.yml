@@ -104,4 +104,4 @@ jobs:
           # Ruleset code_scanning evaluates merge_commit_sha, which can differ
           # from the ephemeral SHA refs/pull/<n>/merge resolves to at upload time.
           ref: ${{ format('refs/pull/{0}/merge', github.event.pull_request.number) }}
-          sha: ${{ github.event.pull_request.merge_commit_sha }}
+          sha: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
