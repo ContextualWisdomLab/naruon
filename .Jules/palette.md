@@ -16,3 +16,9 @@
 ## 2026-06-25 - Explicit Loading Feedback for Intent Generation
 **Learning:** In deeply nested data-action layouts (like DataLayout's document and thread intent generation), missing explicit loading spinners and text changes (e.g., from "실행" to "처리 중") leaves users guessing if the button click registered. `disabled` alone is insufficient feedback for intent-checking actions which often take several seconds.
 **Action:** When adding asynchronous intent check actions (like WebDAV or thread validations), always combine `disabled={isLoading}`, `aria-busy={isLoading}`, a `Loader2` spinner, and a dynamic text label (e.g. `isLoading ? '점검 중' : '점검'`) to give immediate, unambiguous feedback.
+## 2024-07-06 - Ensure active tabs use `aria-current` and keyboard focus styles
+**Learning:** When using raw HTML `<button>` elements to create custom active tabs, missing `aria-current="page"` fails to expose the active state to screen readers. Also, missing Tailwind `focus-visible` utilities prevents keyboard navigation users from seeing which tab is focused.
+**Action:** Always include `aria-current={active ? 'page' : undefined}` (and optionally `aria-pressed={active}`) on active tabs, and explicitly add Tailwind's `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background` to maintain keyboard accessibility and visual focus indicators when using raw HTML buttons over UI components.
+## 2024-07-06 - Update: Use semantic `role="tab"` for view mode toggles
+**Learning:** For view mode toggles acting as tabs (switching content panes without navigating away), using `aria-current="page"` or `aria-pressed` is incorrect.
+**Action:** When implementing view toggles, wrap the buttons in a container with `role="tablist"` and give each button `role="tab"` and `aria-selected={active}` to correctly convey the semantic relationship to screen readers.

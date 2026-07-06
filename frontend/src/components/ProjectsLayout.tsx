@@ -851,13 +851,15 @@ export function ProjectsLayout() {
                 </button>
               ))}
             </div>
-            <div className="flex overflow-x-auto rounded-md border border-border">
+            <div className="flex overflow-x-auto rounded-md border border-border" role="tablist" aria-label="프로젝트 뷰 모드">
               {(['프로젝트 상세', '마일스톤', '의사결정 로그'] as ProjectViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   type="button"
+                  role="tab"
                   onClick={() => setViewMode(mode)}
-                  className={`min-h-9 shrink-0 px-3 text-xs font-semibold transition-colors sm:px-4 sm:text-sm ${viewMode === mode ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-secondary'}`}
+                  aria-selected={viewMode === mode}
+                  className={`min-h-9 shrink-0 px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background sm:px-4 sm:text-sm ${viewMode === mode ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-secondary'}`}
                 >
                   {mode}
                 </button>
