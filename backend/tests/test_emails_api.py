@@ -156,7 +156,23 @@ class LimitAwareMockSession(MockSession):
 
         limit_clause = getattr(query, "_limit_clause", None)
         limit_value = getattr(limit_clause, "value", None)
-        self.last_limit_value = limit_value
+        if limit_value is not None:
+            self.last_limit_value = limit_value
+
+        if "ranked_thread_heads" in str(query):
+            # Emulate the SQL window query: newest head row per thread,
+            # ordered by date desc, LIMIT applied to heads (not raw rows).
+            heads: dict[str, object] = {}
+            for item in sorted(
+                self.items, key=lambda email: email.date, reverse=True
+            ):
+                key = item.thread_id or item.message_id
+                heads.setdefault(key, item)
+            rows = list(heads.values())
+            if limit_value:
+                rows = rows[:limit_value]
+            return MockResult(rows)
+
         rows = self.items[:limit_value] if limit_value else self.items
         return MockResult(rows)
 
