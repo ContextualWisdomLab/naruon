@@ -262,9 +262,9 @@ def test_search_falls_back_to_full_text_when_embedding_provider_fails(
     assert response.status_code == 200
     data = response.json()
     assert len(data["results"]) == 1
-    query_text = str(session.statements[-1]).lower()
-    assert "ts_rank_cd" in query_text
-    assert "<=>" not in query_text
+    all_statements = " ".join(str(stmt).lower() for stmt in session.statements)
+    assert "ts_rank_cd" in all_statements
+    assert "<=>" not in all_statements
 
 
 @patch("api.search.generate_embeddings", new_callable=AsyncMock)
@@ -311,9 +311,13 @@ def test_search_uses_primary_config_session_and_readonly_search_session(
         "llm_providers" in str(stmt).lower() for stmt in config_session.statements
     )
     assert all(
-        "combined_search" not in str(stmt).lower() for stmt in config_session.statements
+        "ts_rank_cd" not in str(stmt).lower() for stmt in config_session.statements
     )
-    assert "combined_search" in str(search_session.statements[-1]).lower()
+    search_statements = " ".join(
+        str(stmt).lower() for stmt in search_session.statements
+    )
+    assert "ts_rank_cd" in search_statements  # lexical arms ran on search session
+    assert "thread_counts" in search_statements  # metadata joined reply counts
 
 
 @patch("api.search.generate_embeddings", new_callable=AsyncMock)
@@ -338,9 +342,9 @@ def test_search_pads_local_embedding_dimension_for_vector_search(
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    query_text = str(session.statements[-1]).lower()
-    assert "ts_rank_cd" in query_text
-    assert "<=>" in query_text
+    all_statements = [str(stmt).lower() for stmt in session.statements]
+    assert any("ts_rank_cd" in stmt for stmt in all_statements)
+    assert any("<=>" in stmt for stmt in all_statements)
 
 
 def test_build_reply_counts_subquery_with_user_id():
@@ -366,41 +370,100 @@ def test_build_reply_counts_subquery_with_user_and_org_id():
     assert "group by coalesce" in sql
 
 
-def test_process_search_results_deduplicates_and_applies_limit():
-    from api.search import process_search_results
+class _ArmRow:
+    def __init__(self, id, content):
+        self.id = id
+        self.content = content
 
-    rows = [
-        MockRow(1, "First", "sender@example.com", "First body", 1.0),
-        MockRow(1, "Duplicate", "sender@example.com", "Duplicate body", 0.9),
-        MockRow(2, "Second", "sender@example.com", "Second body", 0.8),
-        MockRow(3, "Third", "sender@example.com", "Third body", 0.7),
+
+def test_fuse_candidates_rrf_prefers_multi_arm_hits():
+    from api.search import fuse_candidates
+
+    lexical = [_ArmRow(1, "one"), _ArmRow(2, "two")]
+    vector = [_ArmRow(2, "two-vec"), _ArmRow(3, "three")]
+
+    scores, contents = fuse_candidates([lexical, vector])
+
+    # id 2 appears in both arms -> highest fused score.
+    assert max(scores, key=scores.get) == 2
+    # First arm that surfaced the id provides the snippet source.
+    assert contents[2] == "two"
+    assert contents[3] == "three"
+
+
+def test_fuse_candidates_rank_order_within_single_arm():
+    from api.search import fuse_candidates
+
+    scores, _contents = fuse_candidates([[_ArmRow(1, "a"), _ArmRow(2, "b")]])
+
+    assert scores[1] > scores[2]
+
+
+def test_build_search_results_orders_dedupes_and_limits():
+    from api.search import build_search_results
+
+    scores = {1: 0.9, 2: 0.5, 3: 0.7}
+    contents = {1: "First body", 2: "Second body", 3: "Third body"}
+    metadata = [
+        MockRow(1, "First", "sender@example.com", None, None),
+        MockRow(2, "Second", "sender@example.com", None, None),
+        MockRow(3, "Third", "sender@example.com", None, None),
     ]
 
-    results = process_search_results(rows, limit=2)
+    results = build_search_results(scores, contents, metadata, limit=2)
 
-    assert [item.id for item in results] == [1, 2]
+    assert [item.id for item in results] == [1, 3]
     assert results[0].subject == "First"
     assert results[0].snippet == "First body"
 
 
-def test_process_search_results_truncates_long_snippets():
-    from api.search import process_search_results
+def test_build_search_results_truncates_long_snippets():
+    from api.search import build_search_results
 
-    rows = [MockRow(1, "Long", "sender@example.com", "A" * 300, 1.0)]
+    metadata = [MockRow(1, "Long", "sender@example.com", None, None)]
 
-    results = process_search_results(rows, limit=10)
+    results = build_search_results({1: 1.0}, {1: "A" * 300}, metadata, limit=10)
 
     assert results[0].snippet == ("A" * 200) + "..."
 
 
-def test_process_search_results_applies_none_fallbacks():
-    from api.search import process_search_results
+def test_build_search_results_skips_ids_missing_metadata_and_falls_back():
+    from api.search import build_search_results
 
     row = MockRow(1, "Fallbacks", "sender@example.com", None, None)
     row.reply_count = None
 
-    results = process_search_results([row], limit=10)
+    results = build_search_results(
+        {1: 0.4, 99: 0.9}, {1: "", 99: "orphan"}, [row], limit=10
+    )
 
+    # id 99 has no metadata row (filtered by owner scope) -> skipped.
+    assert [item.id for item in results] == [1]
     assert results[0].snippet == ""
-    assert results[0].score == 0.0
     assert results[0].reply_count == 1
+
+
+def test_lexical_stmt_is_fts_gated_and_vector_stmt_is_pure_ann():
+    from sqlalchemy.dialects import postgresql
+
+    from api.search import build_lexical_email_stmt, build_vector_email_stmt
+    from db.models import Email
+
+    owner = Email.owner_filters("u1", "o1")
+    lexical_sql = str(
+        build_lexical_email_stmt("hello", owner, 20).compile(
+            dialect=postgresql.dialect()
+        )
+    ).lower()
+    assert "@@" in lexical_sql  # index-eligible FTS gate
+    assert "ts_rank_cd" in lexical_sql
+    assert "<=>" not in lexical_sql
+
+    vector_sql = str(
+        build_vector_email_stmt([0.1] * 3, owner, 20).compile(
+            dialect=postgresql.dialect()
+        )
+    ).lower()
+    assert "<=>" in vector_sql  # pure ANN order-by
+    assert "ts_rank_cd" not in vector_sql
+    assert "order by" in vector_sql and "limit" in vector_sql

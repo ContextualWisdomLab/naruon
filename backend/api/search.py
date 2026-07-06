@@ -3,7 +3,7 @@ import datetime
 import logging
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, union_all
+from sqlalchemy import select, func
 from db.session import get_db, get_readonly_db
 from db.models import Email, Attachment
 from services.embedding import STORAGE_EMBEDDING_DIMENSION, fit_embedding_vector, generate_embeddings
@@ -14,6 +14,11 @@ from services.llm_provider_selection import resolve_runtime_llm_provider
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 SEARCH_VECTOR_DIMENSIONS = STORAGE_EMBEDDING_DIMENSION
+
+# Reciprocal-rank-fusion constant (standard default). Fusing by rank instead
+# of raw scores avoids mixing incomparable scales (ts_rank_cd vs cosine
+# distance), which the previous subtraction-based score suffered from.
+RRF_K = 60
 
 
 class SearchRequest(BaseModel):
@@ -60,25 +65,104 @@ def build_reply_counts_subquery(
     return statement.group_by(group_key).subquery("thread_counts")
 
 
-def _search_score(text_column, embedding_column, query: str, query_embedding):
-    fts_score = func.ts_rank_cd(
+def _fts_match(text_column, query: str):
+    return func.to_tsvector("english", text_column).op("@@")(
+        func.plainto_tsquery("english", query)
+    )
+
+
+def _fts_rank(text_column, query: str):
+    return func.ts_rank_cd(
         func.to_tsvector("english", text_column),
         func.plainto_tsquery("english", query),
     )
-    if query_embedding is None:
-        return fts_score
-    vector_distance = embedding_column.cosine_distance(query_embedding)
-    return fts_score - vector_distance
 
 
-def build_email_search_stmt(query: str, query_embedding, owner_filters, reply_counts):
-    search_score = _search_score(
-        Email.body,
-        Email.embedding,
-        query,
-        query_embedding,
+def build_lexical_email_stmt(query: str, owner_filters, candidate_limit: int):
+    """FTS arm over email bodies: @@-gated so the GIN index applies."""
+    return (
+        select(Email.id, Email.body.label("content"))
+        .where(*owner_filters, _fts_match(Email.body, query))
+        .order_by(_fts_rank(Email.body, query).desc())
+        .limit(candidate_limit)
     )
 
+
+def build_lexical_attachment_stmt(query: str, owner_filters, candidate_limit: int):
+    """FTS arm over attachment content, mapped back to the parent email."""
+    return (
+        select(Attachment.email_id.label("id"), Attachment.content.label("content"))
+        .join(Email, Attachment.email_id == Email.id)
+        .where(*owner_filters, _fts_match(Attachment.content, query))
+        .order_by(_fts_rank(Attachment.content, query).desc())
+        .limit(candidate_limit)
+    )
+
+
+def build_vector_email_stmt(query_embedding, owner_filters, candidate_limit: int):
+    """ANN arm over email embeddings: pure distance ORDER BY so HNSW applies."""
+    return (
+        select(Email.id, Email.body.label("content"))
+        .where(*owner_filters)
+        .order_by(Email.embedding.cosine_distance(query_embedding))
+        .limit(candidate_limit)
+    )
+
+
+def build_vector_attachment_stmt(query_embedding, owner_filters, candidate_limit: int):
+    return (
+        select(Attachment.email_id.label("id"), Attachment.content.label("content"))
+        .join(Email, Attachment.email_id == Email.id)
+        .where(*owner_filters)
+        .order_by(Attachment.embedding.cosine_distance(query_embedding))
+        .limit(candidate_limit)
+    )
+
+
+def build_candidate_statements(
+    query: str, query_embedding, owner_filters, candidate_limit: int
+):
+    """Index-eligible candidate arms, strongest evidence first.
+
+    Lexical arms only run with a query string; vector arms only when an
+    embedding is available (the full-text fallback path keeps working when
+    the embedding provider errors).
+    """
+    statements = [
+        build_lexical_email_stmt(query, owner_filters, candidate_limit),
+        build_lexical_attachment_stmt(query, owner_filters, candidate_limit),
+    ]
+    if query_embedding is not None:
+        statements.append(
+            build_vector_email_stmt(query_embedding, owner_filters, candidate_limit)
+        )
+        statements.append(
+            build_vector_attachment_stmt(
+                query_embedding, owner_filters, candidate_limit
+            )
+        )
+    return statements
+
+
+def fuse_candidates(arm_rows: list[list]) -> tuple[dict[int, float], dict[int, str]]:
+    """Reciprocal-rank fusion across candidate arms.
+
+    Returns fused scores and a representative content snippet source per email
+    id (first arm that surfaced the id wins, i.e. strongest evidence).
+    """
+    scores: dict[int, float] = {}
+    contents: dict[int, str] = {}
+    for rows in arm_rows:
+        for rank, row in enumerate(rows):
+            email_id = row.id
+            scores[email_id] = scores.get(email_id, 0.0) + 1.0 / (RRF_K + rank + 1)
+            if email_id not in contents:
+                contents[email_id] = row.content or ""
+    return scores, contents
+
+
+def build_metadata_stmt(email_ids: list[int], owner_filters, reply_counts):
+    """Metadata + reply counts for the fused candidates only (bounded set)."""
     return (
         select(
             Email.id,
@@ -88,63 +172,36 @@ def build_email_search_stmt(query: str, query_embedding, owner_filters, reply_co
             Email.date,
             thread_group_key().label("thread_id"),
             reply_counts.c.reply_count,
-            Email.body.label("content"),
-            search_score.label("score"),
         )
         .select_from(Email)
         .join(reply_counts, reply_counts.c.thread_key == thread_group_key())
-        .where(*owner_filters)
+        .where(*owner_filters, Email.id.in_(email_ids))
     )
 
 
-def build_attachment_search_stmt(
-    query: str, query_embedding, owner_filters, reply_counts
-):
-    search_score = _search_score(
-        Attachment.content,
-        Attachment.embedding,
-        query,
-        query_embedding,
-    )
+def build_search_results(
+    scores: dict[int, float],
+    contents: dict[int, str],
+    metadata_rows,
+    limit: int,
+) -> list[SearchResultItem]:
+    metadata = {row.id: row for row in metadata_rows}
+    ranked_ids = sorted(scores, key=lambda email_id: scores[email_id], reverse=True)
 
-    return (
-        select(
-            Email.id,
-            Email.message_id.label("source_message_id"),
-            Email.subject,
-            Email.sender,
-            Email.date,
-            thread_group_key().label("thread_id"),
-            reply_counts.c.reply_count,
-            Attachment.content.label("content"),
-            search_score.label("score"),
-        )
-        .select_from(Attachment)
-        .join(Email, Attachment.email_id == Email.id)
-        .join(reply_counts, reply_counts.c.thread_key == thread_group_key())
-        .where(*owner_filters)
-    )
-
-
-def process_search_results(rows, limit: int) -> list[SearchResultItem]:
-    search_results = []
-    seen_ids = set()
-    for row in rows:
-        if row.id in seen_ids:
+    results: list[SearchResultItem] = []
+    for email_id in ranked_ids:
+        row = metadata.get(email_id)
+        if row is None:
             continue
-        seen_ids.add(row.id)
-
-        score = row.score
-        snippet_source = row.content or ""
+        snippet_source = contents.get(email_id, "")
         snippet = (
             snippet_source[:200] + "..."
             if len(snippet_source) > 200
             else snippet_source
         )
-
-        search_results.append(
+        results.append(
             SearchResultItem(
-                id=row.id,
+                id=email_id,
                 source_message_id=row.source_message_id,
                 subject=row.subject,
                 sender=row.sender,
@@ -152,14 +209,12 @@ def process_search_results(rows, limit: int) -> list[SearchResultItem]:
                 snippet=snippet,
                 thread_id=row.thread_id,
                 reply_count=row.reply_count or 1,
-                score=float(score) if score is not None else 0.0,
+                score=scores[email_id],
             )
         )
-
-        if len(search_results) >= limit:
+        if len(results) >= limit:
             break
-
-    return search_results
+    return results
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -205,39 +260,29 @@ async def hybrid_search(
         owner_filters = Email.owner_filters(
             target_user_id, auth_context.organization_id
         )
+        candidate_limit = request.limit * 2
+
+        arm_rows = []
+        for statement in build_candidate_statements(
+            request.query, query_embedding, owner_filters, candidate_limit
+        ):
+            arm_result = await search_db.execute(statement)
+            arm_rows.append(arm_result.all())
+
+        scores, contents = fuse_candidates(arm_rows)
+        if not scores:
+            return SearchResponse(results=[])
+
         reply_counts = build_reply_counts_subquery(
             target_user_id, auth_context.organization_id
         )
-
-        stmt_email = build_email_search_stmt(
-            request.query, query_embedding, owner_filters, reply_counts
-        )
-        stmt_att = build_attachment_search_stmt(
-            request.query, query_embedding, owner_filters, reply_counts
+        metadata_result = await search_db.execute(
+            build_metadata_stmt(list(scores), owner_filters, reply_counts)
         )
 
-        combined = union_all(stmt_email, stmt_att).cte("combined_search")
-
-        stmt = (
-            select(
-                combined.c.id,
-                combined.c.source_message_id,
-                combined.c.subject,
-                combined.c.sender,
-                combined.c.date,
-                combined.c.thread_id,
-                combined.c.reply_count,
-                combined.c.content,
-                combined.c.score,
-            )
-            .order_by(combined.c.score.desc())
-            .limit(request.limit * 2)
+        search_results = build_search_results(
+            scores, contents, metadata_result.all(), request.limit
         )
-
-        result = await search_db.execute(stmt)
-        rows = result.all()
-
-        search_results = process_search_results(rows, request.limit)
 
         return SearchResponse(results=search_results)
     except HTTPException:
