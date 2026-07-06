@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     ALLOW_LOCAL_LLM_PROVIDERS: bool = False
     ALLOWED_CORS_ORIGINS: str = ""
     ENABLE_PROMETHEUS_METRICS: bool = False
+    # Best-effort projection of imported-email content segments into the project
+    # semantic graph. Off by default; failure never affects email import.
+    PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (
