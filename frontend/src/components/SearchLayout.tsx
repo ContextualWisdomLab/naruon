@@ -43,6 +43,23 @@ type SearchResponse = {
   results: SearchResultItem[];
 };
 
+type AnswerCitation = {
+  email_id: number;
+  subject: string | null;
+  sender: string | null;
+  snippet: string;
+};
+
+type AnswerResponse = {
+  answer: string | null;
+  citations: AnswerCitation[];
+  provenance: string | null;
+};
+
+type AnswerState =
+  | { status: "idle" | "hidden" }
+  | { status: "done"; answer: string; citations: AnswerCitation[]; provenance: string | null };
+
 type SenderRelationship = {
   sender_email: string;
   parent_sender_email: string | null;
@@ -322,6 +339,9 @@ export function SearchLayout() {
     useState<DetailTab>("context");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [answerState, setAnswerState] = useState<AnswerState>({
+    status: "idle",
+  });
 
   useEffect(() => {
     const trimmedQuery = submittedQuery.trim();
@@ -348,6 +368,39 @@ export function SearchLayout() {
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [submittedQuery]);
+
+  useEffect(() => {
+    const trimmedQuery = submittedQuery.trim();
+    const controller = new AbortController();
+    if (!trimmedQuery) return () => controller.abort();
+
+    apiClient
+      .post<AnswerResponse>(
+        "/api/search/answer",
+        { query: trimmedQuery, limit: 5 },
+        { signal: controller.signal },
+      )
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        if (!response.answer) {
+          setAnswerState({ status: "hidden" });
+          return;
+        }
+        setAnswerState({
+          status: "done",
+          answer: response.answer,
+          citations: response.citations ?? [],
+          provenance: response.provenance,
+        });
+      })
+      .catch(() => {
+        // The grounded answer is an enhancement: search must not degrade
+        // when the endpoint is unavailable, so the card simply hides.
+        if (!controller.signal.aborted) setAnswerState({ status: "hidden" });
       });
 
     return () => controller.abort();
@@ -576,6 +629,39 @@ export function SearchLayout() {
 
         <main className="flex-1 overflow-y-auto bg-background p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:p-8">
           <div className="mx-auto max-w-5xl space-y-6">
+            {answerState.status === "done" && submittedQuery.trim() ? (
+              <section
+                aria-label="AI 답변"
+                data-testid="grounded-answer-card"
+                className="rounded-lg border border-primary/30 bg-primary/5 p-5 shadow-sm"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-primary">AI 답변</h3>
+                  {answerState.provenance ? (
+                    <span className="text-xs text-muted-foreground">
+                      {answerState.provenance}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="whitespace-pre-wrap text-sm leading-6">
+                  {answerState.answer}
+                </p>
+                {answerState.citations.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {answerState.citations.map((citation) => (
+                      <button
+                        key={citation.email_id}
+                        type="button"
+                        onClick={() => setActiveResultId(citation.email_id)}
+                        className="rounded-full border border-primary/30 bg-card px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      >
+                        근거: {citation.subject ?? `메일 #${citation.email_id}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
             {!activeResult ? (
               <div className="rounded-lg border border-border bg-card p-6 text-sm font-semibold text-muted-foreground shadow-sm">
                 결과를 선택하면 메일 스레드, 답장 추적, 발신자 관계를 함께
