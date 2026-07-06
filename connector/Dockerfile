@@ -16,4 +16,10 @@ RUN useradd --system --create-home --home-dir /home/connector --shell /usr/sbin/
     && chown -R connector:connector /app
 USER connector
 
+# ponytail: import-level liveness only; the connector is an outbound worker
+# with no port. Docker restart-on-exit covers main-process death; upgrade to a
+# heartbeat-file check if the worker gains one.
+HEALTHCHECK --interval=60s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["python", "-c", "import connector"]
+
 CMD ["python", "-m", "connector.main"]

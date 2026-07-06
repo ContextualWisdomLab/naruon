@@ -108,4 +108,8 @@ ENV ALLOW_DOCKER_BACKEND_INTERNAL_URL=1
 
 EXPOSE 3000 8000
 
+# Backend serves the public health route at /.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/', timeout=4).status == 200 else 1)"]
+
 CMD ["/app/scripts/docker_entrypoint.sh"]

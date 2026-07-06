@@ -45,3 +45,7 @@ RUN set -eux; \
 
 # Run as non-root for security (DS-0002).
 USER ollama
+
+# ollama CLI queries the serve endpoint; fails until the server responds.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["ollama", "ls"]
