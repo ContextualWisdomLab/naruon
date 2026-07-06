@@ -158,3 +158,91 @@ async def test_reply_sla_scheduler_start_stop_cancels_loop(monkeypatch):
     await scheduler.stop()
 
     assert scheduler._is_running is False
+
+
+class _FakePostgresSession:
+    """Session double whose bind reports postgresql and records scalar calls."""
+
+    def __init__(self, lease_acquired: bool):
+        self._lease_acquired = lease_acquired
+        self.scalar_calls: list[object] = []
+        self.executed = False
+
+    def get_bind(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def scalar(self, stmt, params=None):
+        self.scalar_calls.append(stmt)
+        if len(self.scalar_calls) == 1:
+            return self._lease_acquired
+        return True  # unlock result
+
+    async def execute(self, stmt):
+        self.executed = True
+
+        class _Result:
+            def scalars(self_inner):
+                class _Scalars:
+                    def all(self_all):
+                        return []
+
+                return _Scalars()
+
+        return _Result()
+
+
+@pytest.mark.asyncio
+async def test_sync_skips_sweep_when_lease_held_elsewhere(monkeypatch):
+    session = _FakePostgresSession(lease_acquired=False)
+    monkeypatch.setattr(
+        "services.reply_sla_scheduler.AsyncSessionLocal", lambda: session
+    )
+
+    scheduler = ReplySlaScheduler()
+    await scheduler._sync()
+
+    assert session.executed is False  # sweep skipped entirely
+    assert len(session.scalar_calls) == 1  # only the try-lock, no unlock
+
+
+@pytest.mark.asyncio
+async def test_sync_sweeps_and_releases_lease_when_acquired(monkeypatch):
+    session = _FakePostgresSession(lease_acquired=True)
+    monkeypatch.setattr(
+        "services.reply_sla_scheduler.AsyncSessionLocal", lambda: session
+    )
+
+    scheduler = ReplySlaScheduler()
+    await scheduler._sync()
+
+    assert session.executed is True  # sweep ran
+    assert len(session.scalar_calls) == 2  # try-lock + unlock
+
+
+@pytest.mark.asyncio
+async def test_sync_releases_lease_even_when_sweep_fails(monkeypatch):
+    session = _FakePostgresSession(lease_acquired=True)
+
+    async def boom(self, _session):
+        raise RuntimeError("sweep failed")
+
+    monkeypatch.setattr(
+        "services.reply_sla_scheduler.AsyncSessionLocal", lambda: session
+    )
+    monkeypatch.setattr(
+        ReplySlaScheduler, "_sweep_configured_owners", boom, raising=True
+    )
+
+    scheduler = ReplySlaScheduler()
+    with pytest.raises(RuntimeError):
+        await scheduler._sync()
+
+    assert len(session.scalar_calls) == 2  # unlock still happened
