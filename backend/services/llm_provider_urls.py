@@ -127,16 +127,13 @@ def _resolve_all_global_addresses(hostname: str, port: int) -> tuple[str, ...]:
 
     if not address_infos:
         raise ValueError(LLM_BASE_URL_NOT_ALLOWED)
-    addresses: list[str] = []
-    seen_addresses: set[str] = set()
-    for address_info in address_infos:
-        # Pass the original hostname so that Docker container names listed in
-        # ALLOWED_LLM_BASE_URL_HOSTS are matched before checking the resolved IP.
-        address = _validate_global_address(str(address_info[4][0]), hostname=hostname)
-        if address not in seen_addresses:
-            seen_addresses.add(address)
-            addresses.append(address)
-    return tuple(addresses)
+
+    # ⚡ Bolt: Use dict.fromkeys() for faster order-preserving deduplication
+    valid_addresses = (
+        _validate_global_address(str(info[4][0]), hostname=hostname)
+        for info in address_infos
+    )
+    return tuple(dict.fromkeys(valid_addresses))
 
 
 async def _resolve_all_global_addresses_async(
@@ -406,9 +403,7 @@ class _PinnedLLMProviderAsyncTransport(httpx.AsyncBaseTransport):
         validated_netloc = parsed_url.netloc.encode("ascii")
 
         safe_headers = [
-            (key, value)
-            for key, value in request.headers.raw
-            if key.lower() != b"host"
+            (key, value) for key, value in request.headers.raw if key.lower() != b"host"
         ]
         safe_headers.append((b"host", validated_netloc))
 

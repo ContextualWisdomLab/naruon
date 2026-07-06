@@ -230,7 +230,11 @@ async def get_project_evidence(
         project_uid=project_uid,
     )
     record = next(
-        (candidate for candidate in group.records if candidate.object_uid == object_uid),
+        (
+            candidate
+            for candidate in group.records
+            if candidate.object_uid == object_uid
+        ),
         None,
     )
     if record is None:
@@ -273,7 +277,11 @@ async def apply_project_correction(
         project_uid=project_uid,
     )
     record = next(
-        (candidate for candidate in group.records if candidate.object_uid == object_uid),
+        (
+            candidate
+            for candidate in group.records
+            if candidate.object_uid == object_uid
+        ),
         None,
     )
     if record is None:
@@ -436,7 +444,9 @@ def _candidate_groups(
             if explicit_candidate is not None
             else _synthetic_project_uid(group_records, scope=scope)
         )
-        groups.append(_CandidateGroup(project_uid=project_uid, records=tuple(group_records)))
+        groups.append(
+            _CandidateGroup(project_uid=project_uid, records=tuple(group_records))
+        )
     return tuple(groups)
 
 
@@ -472,7 +482,9 @@ def _candidate_summary(
     type_counts = Counter(record.object_type for record in group.records)
     representative = _representative_record(group.records)
     source_segment_uids = _record_segment_uids(group.records)
-    updated_values = [record.updated_at for record in group.records if record.updated_at]
+    updated_values = [
+        record.updated_at for record in group.records if record.updated_at
+    ]
     return ProjectCandidateSummary(
         candidate_uid=group.project_uid,
         project_uid=group.project_uid,
@@ -516,14 +528,15 @@ def _candidate_status(records: tuple[ProjectGraphObjectRecord, ...]) -> str:
 
 def _candidate_score(records: tuple[ProjectGraphObjectRecord, ...]) -> float:
     type_signal = sum(
-        PROJECT_OBJECT_SCORE_WEIGHTS.get(record.object_type, 0.04)
-        for record in records
+        PROJECT_OBJECT_SCORE_WEIGHTS.get(record.object_type, 0.04) for record in records
     )
     confidence_signal = (
         sum(record.confidence for record in records) / len(records) if records else 0.0
     )
     source_signal = min(len(set(_record_segment_uids(records))), 8) * 0.025
-    return round(min(0.99, 0.18 + type_signal + confidence_signal * 0.24 + source_signal), 3)
+    return round(
+        min(0.99, 0.18 + type_signal + confidence_signal * 0.24 + source_signal), 3
+    )
 
 
 def _representative_record(
@@ -551,7 +564,9 @@ def _trace_object(
         status_code=record.status_code,
         confidence=record.confidence,
         source_segment_uids=tuple(record.source_segment_uids),
-        citation_bundle=_citation_bundle(tuple(record.source_segment_uids), segment_map),
+        citation_bundle=_citation_bundle(
+            tuple(record.source_segment_uids), segment_map
+        ),
         attributes=dict(record.attributes_json or {}),
     )
 
@@ -612,15 +627,13 @@ def _citation_bundle(
     source_segment_uids: Iterable[str],
     segment_map: Mapping[str, ProjectCitation],
 ) -> tuple[ProjectCitation, ...]:
-    citations = []
-    seen: set[str] = set()
-    for source_uid in source_segment_uids:
-        if source_uid in seen:
-            continue
-        seen.add(source_uid)
-        citation = segment_map.get(source_uid)
-        if citation is not None:
-            citations.append(citation)
+    # ⚡ Bolt: Use dict.fromkeys() for faster order-preserving deduplication
+    unique_uids = dict.fromkeys(source_segment_uids)
+    citations = [
+        segment_map[source_uid]
+        for source_uid in unique_uids
+        if source_uid in segment_map
+    ]
     return tuple(citations)
 
 

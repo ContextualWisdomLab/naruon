@@ -7,3 +7,7 @@
 ## 2025-02-20 - Deduplication Optimization
 **Learning:** Python's `dict.fromkeys()` leverages the underlying C implementation and insertion-order preservation (in Python 3.7+) to deduplicate elements while maintaining order. It can be faster in some workloads (particularly when list size isn't massive) than manually tracking a `set` and appending to a `list` inside a `for` loop, especially for list preparations before database queries or API calls.
 **Action:** Use `list(dict.fromkeys(iterable))` instead of `seen = set(); result = []` for order-preserving deduplication loops to improve CPU performance.
+
+## 2024-05-28 - Ordered Deduplication Optimization
+**Learning:** Using `list(dict.fromkeys(...))` is significantly faster than manual `for` loops with `set()` tracking for order-preserving deduplication because it leverages Python 3.7+ dictionary insertion order at the C level.
+**Action:** Use `dict.fromkeys()` for deduplicating iterables while preserving order in tight loops.

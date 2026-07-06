@@ -125,13 +125,13 @@ def _resolve_global_addresses(
             f"{setting_name} host must resolve to a global address"
         ) from exc
 
-    addresses: list[str] = []
-    seen_addresses: set[str] = set()
-    for address_info in address_infos:
-        address = _validate_global_address(setting_name, str(address_info[4][0]))
-        if address not in seen_addresses:
-            seen_addresses.add(address)
-            addresses.append(address)
+    # ⚡ Bolt: Use dict.fromkeys() for faster order-preserving deduplication
+    valid_addresses = (
+        _validate_global_address(setting_name, str(info[4][0]))
+        for info in address_infos
+    )
+    addresses = tuple(dict.fromkeys(valid_addresses))
+
     if not addresses:
         raise ValueError(f"{setting_name} host must resolve to a global address")
-    return tuple(addresses)
+    return addresses
