@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     # Best-effort projection of imported-email content segments into the project
     # semantic graph. Off by default; failure never affects email import.
     PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
+    # Which extractor projects segments into the graph: "keyword"
+    # (deterministic baseline) or "llm" (grounded extraction with enforced
+    # segment citations; falls back to keyword on any failure).
+    PROJECT_GRAPH_EXTRACTOR: str = "keyword"
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (

@@ -37,6 +37,7 @@ from services.project_graph import (
     extract_project_semantics,
     persist_project_graph_projection,
 )
+from services.project_graph.llm_extractor import extract_project_semantics_llm
 from services.threading_service import (
     assign_thread_id,
     generate_email_fingerprint,
@@ -652,12 +653,45 @@ def _project_source_segments(email_obj: Email) -> list[ProjectSourceSegment]:
     ]
 
 
+async def _extract_project_semantics_for_import(
+    source_segments: list[ProjectSourceSegment],
+    *,
+    embedding_provider: EmailImportEmbeddingProvider | None,
+):
+    """Select the configured extractor; LLM failures fall back to keyword.
+
+    The LLM extractor reuses the import's OpenAI-compatible provider
+    credentials and enforces segment citations, so it cannot introduce
+    uncited claims; any provider/parse failure degrades to the deterministic
+    keyword baseline instead of losing the projection entirely.
+    """
+    if (
+        settings.PROJECT_GRAPH_EXTRACTOR == "llm"
+        and embedding_provider is not None
+        and embedding_provider.api_key
+    ):
+        try:
+            return await extract_project_semantics_llm(
+                source_segments,
+                api_key=embedding_provider.api_key,
+                base_url=embedding_provider.base_url,
+                model=settings.OPENAI_MODEL,
+            )
+        except Exception:
+            logger.warning(
+                "LLM project graph extraction failed; falling back to keyword",
+                exc_info=True,
+            )
+    return extract_project_semantics(source_segments)
+
+
 async def _persist_project_graph_projection(
     session: AsyncSession,
     source_segments: list[ProjectSourceSegment],
     *,
     user_id: str,
     organization_id: str,
+    embedding_provider: EmailImportEmbeddingProvider | None = None,
 ) -> None:
     """Best-effort projection of imported content segments into the project graph.
 
@@ -669,7 +703,9 @@ async def _persist_project_graph_projection(
     if not source_segments:
         return
     try:
-        extraction = extract_project_semantics(source_segments)
+        extraction = await _extract_project_semantics_for_import(
+            source_segments, embedding_provider=embedding_provider
+        )
         if not extraction.objects:
             return
         workspace_id = (
@@ -775,6 +811,7 @@ async def _import_single_eml(
         project_source_segments,
         user_id=user_id,
         organization_id=organization_id,
+        embedding_provider=embedding_provider,
     )
 
     return EmailImportItemResult(
