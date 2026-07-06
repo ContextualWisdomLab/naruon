@@ -1,0 +1,143 @@
+"""Tests for the grounded-answer endpoint and RAG citation enforcement."""
+
+import pytest
+from unittest.mock import AsyncMock, patch
+
+import services.rag_service as rag_service
+from services.rag_service import GroundedAnswerPayload, answer_from_emails
+
+
+def _context(email_id: int, content: str = "body") -> dict:
+    return {
+        "id": email_id,
+        "subject": f"Subject {email_id}",
+        "sender": "sender@example.com",
+        "date": "2026-07-06",
+        "content": content,
+    }
+
+
+@pytest.mark.asyncio
+async def test_answer_returns_none_without_context(monkeypatch):
+    call = AsyncMock()
+    monkeypatch.setattr(rag_service, "_call_llm", call)
+
+    result = await answer_from_emails("question", [], api_key="k")
+
+    assert result is None
+    call.assert_not_awaited()  # no LLM call without retrieved evidence
+
+
+@pytest.mark.asyncio
+async def test_answer_keeps_only_citations_from_retrieved_set(monkeypatch):
+    monkeypatch.setattr(
+        rag_service,
+        "_call_llm",
+        AsyncMock(
+            return_value=GroundedAnswerPayload(
+                answer="grounded answer",
+                cited_email_ids=[1, 999],  # 999 was never retrieved
+            )
+        ),
+    )
+
+    result = await answer_from_emails(
+        "question", [_context(1), _context(2)], api_key="k", model="gpt-test"
+    )
+
+    assert result is not None
+    assert result.answer == "grounded answer"
+    assert result.cited_email_ids == [1]
+    assert "gpt-test" in result.provenance
+
+
+@pytest.mark.asyncio
+async def test_answer_bounds_context_to_max_emails(monkeypatch):
+    captured = {}
+
+    async def fake_call(**kwargs):
+        captured.update(kwargs)
+        return GroundedAnswerPayload(answer="a", cited_email_ids=[])
+
+    monkeypatch.setattr(rag_service, "_call_llm", fake_call)
+
+    contexts = [_context(i) for i in range(10)]
+    await answer_from_emails("question", contexts, api_key="k")
+
+    assert captured["emails_json"].count("email_id") == rag_service.MAX_CONTEXT_EMAILS
+
+
+@pytest.mark.asyncio
+async def test_answer_truncates_long_content(monkeypatch):
+    captured = {}
+
+    async def fake_call(**kwargs):
+        captured.update(kwargs)
+        return GroundedAnswerPayload(answer="a", cited_email_ids=[])
+
+    monkeypatch.setattr(rag_service, "_call_llm", fake_call)
+
+    await answer_from_emails(
+        "question", [_context(1, content="X" * 5000)], api_key="k"
+    )
+
+    assert "X" * rag_service.MAX_CONTENT_CHARS in captured["emails_json"]
+    assert "X" * (rag_service.MAX_CONTENT_CHARS + 1) not in captured["emails_json"]
+
+
+# ---- endpoint tests (reuse the search suite's mock plumbing) ----
+from tests.test_search import override_get_db  # noqa: E402
+from db.session import get_db, get_readonly_db  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from main import app  # noqa: E402
+
+pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
+
+
+@pytest.fixture
+def client():
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_readonly_db] = override_get_db
+    with TestClient(app, headers={"X-User-Id": "testuser"}) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@patch("api.search.answer_from_emails", new_callable=AsyncMock)
+@patch("api.search.generate_embeddings", new_callable=AsyncMock)
+def test_answer_endpoint_returns_grounded_answer_with_citations(
+    mock_embeddings, mock_answer, client
+):
+    from services.rag_service import GroundedAnswer
+
+    mock_embeddings.return_value = [[0.1] * 1536]
+    mock_answer.return_value = GroundedAnswer(
+        answer="그 미팅은 화요일입니다.",
+        cited_email_ids=[1],
+        provenance="OpenAI (gpt-test)",
+    )
+
+    response = client.post("/api/search/answer", json={"query": "미팅 언제?"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["answer"] == "그 미팅은 화요일입니다."
+    assert [c["email_id"] for c in data["citations"]] == [1]
+    assert data["citations"][0]["subject"] == "Test Subject"
+    assert data["provenance"] == "OpenAI (gpt-test)"
+    # The model only saw retrieved, owner-scoped content.
+    context_arg = mock_answer.await_args.args[1]
+    assert {email["id"] for email in context_arg} == {1}
+
+
+@patch("api.search.answer_from_emails", new_callable=AsyncMock)
+@patch("api.search.generate_embeddings", new_callable=AsyncMock)
+def test_answer_endpoint_empty_query_short_circuits(
+    mock_embeddings, mock_answer, client
+):
+    response = client.post("/api/search/answer", json={"query": "   "})
+
+    assert response.status_code == 200
+    assert response.json() == {"answer": None, "citations": [], "provenance": None}
+    mock_answer.assert_not_awaited()
+    mock_embeddings.assert_not_awaited()

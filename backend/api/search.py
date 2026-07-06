@@ -10,6 +10,7 @@ from services.embedding import STORAGE_EMBEDDING_DIMENSION, fit_embedding_vector
 from api.auth import AuthContext, get_auth_context
 from services.exceptions import EmbeddingGenerationError
 from services.llm_provider_selection import resolve_runtime_llm_provider
+from services.rag_service import GroundedAnswer, answer_from_emails
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -290,3 +291,132 @@ async def hybrid_search(
     except Exception as e:
         logger.error("Search failed", exc_info=True)
         raise HTTPException(status_code=500, detail="Search failed") from e
+
+
+class AnswerRequest(BaseModel):
+    query: str
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+class AnswerCitation(BaseModel):
+    email_id: int
+    subject: str | None = None
+    sender: str | None = None
+    snippet: str = ""
+
+
+class AnswerResponse(BaseModel):
+    answer: str | None
+    citations: list[AnswerCitation]
+    provenance: str | None = None
+
+
+@router.post("/search/answer", response_model=AnswerResponse)
+async def grounded_answer(
+    request: AnswerRequest,
+    config_db: AsyncSession = Depends(get_db),
+    search_db: AsyncSession = Depends(get_readonly_db),
+    auth_context: AuthContext = Depends(get_auth_context),
+):
+    """Answer a question from the user's own emails with enforced citations.
+
+    Retrieval reuses the hybrid search arms (owner-scoped); the model only
+    sees retrieved content and citations are validated against it, so the
+    answer cannot reference emails retrieval did not surface.
+    """
+    if not request.query.strip():
+        return AnswerResponse(answer=None, citations=[])
+
+    try:
+        runtime_provider = await resolve_runtime_llm_provider(
+            config_db,
+            user_id=auth_context.user_id,
+            organization_id=auth_context.organization_id,
+        )
+        if runtime_provider is None:
+            raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+
+        query_embedding = None
+        try:
+            embeddings = await generate_embeddings(
+                [request.query],
+                runtime_provider.api_key,
+                base_url=runtime_provider.base_url,
+                model=runtime_provider.embedding_model,
+            )
+            query_embedding = (
+                fit_embedding_vector(embeddings[0], SEARCH_VECTOR_DIMENSIONS)
+                if embeddings
+                else None
+            )
+        except EmbeddingGenerationError:
+            logger.info("Answer embedding unavailable; retrieving via full text only")
+
+        owner_filters = Email.owner_filters(
+            auth_context.user_id, auth_context.organization_id
+        )
+        arm_rows = []
+        for statement in build_candidate_statements(
+            request.query, query_embedding, owner_filters, request.limit * 2
+        ):
+            arm_result = await search_db.execute(statement)
+            arm_rows.append(arm_result.all())
+        scores, contents = fuse_candidates(arm_rows)
+        if not scores:
+            return AnswerResponse(answer=None, citations=[])
+
+        top_ids = sorted(scores, key=lambda email_id: scores[email_id], reverse=True)[
+            : request.limit
+        ]
+        metadata_result = await search_db.execute(
+            select(
+                Email.id,
+                Email.subject,
+                Email.sender,
+                Email.date,
+            ).where(*owner_filters, Email.id.in_(top_ids))
+        )
+        metadata = {row.id: row for row in metadata_result.all()}
+        context_emails = [
+            {
+                "id": email_id,
+                "subject": metadata[email_id].subject,
+                "sender": metadata[email_id].sender,
+                "date": metadata[email_id].date,
+                "content": contents.get(email_id, ""),
+            }
+            for email_id in top_ids
+            if email_id in metadata
+        ]
+
+        grounded: GroundedAnswer | None = await answer_from_emails(
+            request.query,
+            context_emails,
+            api_key=runtime_provider.api_key,
+            base_url=runtime_provider.base_url,
+            provider_name=runtime_provider.provider_name,
+        )
+        if grounded is None:
+            return AnswerResponse(answer=None, citations=[])
+
+        by_id = {email["id"]: email for email in context_emails}
+        citations = [
+            AnswerCitation(
+                email_id=email_id,
+                subject=by_id[email_id]["subject"],
+                sender=by_id[email_id]["sender"],
+                snippet=(by_id[email_id]["content"] or "")[:200],
+            )
+            for email_id in grounded.cited_email_ids
+            if email_id in by_id
+        ]
+        return AnswerResponse(
+            answer=grounded.answer,
+            citations=citations,
+            provenance=grounded.provenance,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Grounded answer failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Answer failed") from e
