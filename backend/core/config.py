@@ -63,6 +63,15 @@ def parse_allowed_cors_origins(raw_origins: str) -> list[str]:
 class Settings(BaseSettings):
     DATABASE_URL: str
     READONLY_DATABASE_URL: str | None = None
+    # Connection-pool tuning. Sizing values default to None (SQLAlchemy
+    # defaults) so behavior is unchanged until an operator sets them.
+    # pre_ping detects dead connections at checkout; recycle avoids
+    # server-side idle timeouts killing pooled connections.
+    DB_POOL_SIZE: int | None = None
+    DB_MAX_OVERFLOW: int | None = None
+    DB_POOL_TIMEOUT_SECONDS: int | None = None
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    DB_POOL_PRE_PING: bool = True
     DEBUG: bool = False
     RUNTIME_ENVIRONMENT: str = "production"
     AUTH_SESSION_HMAC_SECRET: SecretStr | None = None
