@@ -4,6 +4,7 @@ from openai import AsyncOpenAI
 from core.config import settings
 from services.llm_provider_urls import build_llm_provider_http_client
 from services.exceptions import EmbeddingGenerationError
+from services.retry import retry_transient
 
 STORAGE_EMBEDDING_DIMENSION = 1536
 
@@ -55,8 +56,11 @@ async def generate_embeddings(
     )
 
     try:
-        response = await client.embeddings.create(
-            model=model or settings.OPENAI_EMBEDDING_MODEL, input=texts
+        response = await retry_transient(
+            lambda: client.embeddings.create(
+                model=model or settings.OPENAI_EMBEDDING_MODEL, input=texts
+            ),
+            operation_name="embedding generation",
         )
         return [data.embedding for data in response.data]
     except openai.OpenAIError as e:
