@@ -60,25 +60,43 @@ def compute_grounding_metrics(
     )
 
 
-def _owner_predicates(model, user_id: str, organization_id: str | None):
+def _owner_predicates(
+    model, user_id: str, organization_id: str | None, workspace_id: str
+):
     org_predicate = (
         model.organization_id.is_(None)
         if organization_id is None
         else model.organization_id == organization_id
     )
-    return (model.user_id == user_id, org_predicate)
+    return (
+        model.user_id == user_id,
+        org_predicate,
+        model.workspace_id == workspace_id,
+    )
 
 
 async def load_grounding_metrics(
-    session: AsyncSession, *, user_id: str, organization_id: str | None
+    session: AsyncSession,
+    *,
+    user_id: str,
+    organization_id: str | None,
+    workspace_id: str,
 ) -> GroundingMetrics:
-    """Owner-scoped fetch + compute over stored project-graph extraction objects."""
+    """Owner-scoped fetch + compute over stored project-graph extraction objects.
+
+    Scoped to user + organization + workspace to match the AI Hub surface, so a
+    user's other workspaces do not bleed into one workspace's grounding number.
+    """
     rows = (
         await session.execute(
             select(
                 ProjectGraphObjectRecord.confidence,
                 ProjectGraphObjectRecord.source_segment_uids,
-            ).where(*_owner_predicates(ProjectGraphObjectRecord, user_id, organization_id))
+            ).where(
+                *_owner_predicates(
+                    ProjectGraphObjectRecord, user_id, organization_id, workspace_id
+                )
+            )
         )
     ).all()
     # ponytail: loads per-object rows (bounded per owner at eval cadence); switch
@@ -92,7 +110,10 @@ async def load_grounding_metrics(
                 func.count(ProjectGraphCorrectionRecord.project_graph_correction_id)
             ).where(
                 *_owner_predicates(
-                    ProjectGraphCorrectionRecord, user_id, organization_id
+                    ProjectGraphCorrectionRecord,
+                    user_id,
+                    organization_id,
+                    workspace_id,
                 )
             )
         )

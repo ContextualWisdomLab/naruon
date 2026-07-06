@@ -510,6 +510,7 @@ async def get_ai_hub_surface(
         db,
         user_id=auth_context.user_id,
         organization_id=auth_context.organization_id,
+        workspace_id=auth_context.workspace_id,
     )
     evaluation_metrics = _evaluation_metrics(
         len(prompt_cards),
