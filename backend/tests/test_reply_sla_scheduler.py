@@ -189,9 +189,9 @@ class _FakePostgresSession:
         self.executed = True
 
         class _Result:
-            def scalars(self_inner):
+            def scalars(self):
                 class _Scalars:
-                    def all(self_all):
+                    def all(self):
                         return []
 
                 return _Scalars()

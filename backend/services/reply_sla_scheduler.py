@@ -109,7 +109,7 @@ class ReplySlaScheduler:
         # so they do not contend for the sweep lease at the same instant.
         try:
             await asyncio.sleep(
-                random.uniform(
+                random.uniform(  # nosec B311 - startup jitter only, not security-sensitive
                     0, min(self.interval_seconds / 10, MAX_STARTUP_JITTER_SECONDS)
                 )
             )
