@@ -9,6 +9,7 @@ from db.session import AsyncSessionLocal
 from services.reply_sla_escalation_service import create_reply_sla_escalation_tasks
 
 logger = logging.getLogger(__name__)
+_sysrand = random.SystemRandom()
 DEFAULT_REPLY_SLA_INTERVAL_SECONDS = 15 * 60
 DEFAULT_REPLY_SLA_OVERDUE_HOURS = 48
 DEFAULT_REPLY_SLA_LIMIT = 10
@@ -109,7 +110,7 @@ class ReplySlaScheduler:
         # so they do not contend for the sweep lease at the same instant.
         try:
             await asyncio.sleep(
-                random.uniform(  # nosec B311 - startup jitter only, not security-sensitive
+                _sysrand.uniform(
                     0, min(self.interval_seconds / 10, MAX_STARTUP_JITTER_SECONDS)
                 )
             )
