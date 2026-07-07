@@ -16,10 +16,28 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-registry
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: frontend
         image: ghcr.io/seongho-bae/ai_email_client-frontend:REPLACE_ME_VERSION
         imagePullPolicy: Always
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          runAsGroup: 10001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
         ports:
         - containerPort: 3000
         env:
@@ -27,3 +45,13 @@ spec:
             value: "http://backend:8000"
           - name: ALLOW_DOCKER_BACKEND_INTERNAL_URL
             value: "1"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: next-cache
+          mountPath: /app/.next/cache
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: next-cache
+        emptyDir: {}
