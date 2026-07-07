@@ -4,7 +4,7 @@
 기준 브랜치: `origin/develop` after PR #895 merge
 대상: 이메일 본문과 첨부파일의 DOM/문단 지식그래프를 프로젝트 관리 자동화 제품으로 확장
 가격 기준: 20억 원 판매 가능 수준의 엔터프라이즈 패키지
-Figma 산출물: [Naruon Project Semantic KG FigJam](https://www.figma.com/board/ayoR2im9q2xNCxR4hNK2nN?utm_source=codex&utm_content=edit_in_figjam&oai_id=&request_id=70bbbe58-03e0-4719-96a8-0758994a6aa2)
+Figma 산출물: [Naruon Project Semantic KG FigJam](https://www.figma.com/board/ayoR2im9q2xNCxR4hNK2nN)
 Figma Code Connect: 제외
 
 ## 현재 기반
@@ -93,11 +93,11 @@ flowchart LR
 | `project_wbs_item` | 산출물, 작업, phase, sprint, backlog 언급 | method, phase, epic, story, task | requirement, deliverable, issue |
 | `project_deliverable` | SRS, PRD, ERD, wireframe, report, test result | artifact type, completion state | WBS item, source file, evidence |
 | `project_participant` | 발신자, 수신자, 멘션, 역할 문구 | person, org, role, authority | thread, project, decision |
-| `data_requirement` | entity, attribute, source, privacy, retention, quality rule | entity, field, policy, quality rule | requirement, ERD entity |
+| `data_requirement` | entity, attribute, source, privacy, retention, quality rule | entity, field, policy, quality rule | source segment, requirement, ERD entity |
 | `erd_candidate` | 테이블, 관계, 컬럼, 식별자 문단 | entity, relationship, cardinality | data requirement, source segment |
 | `infra_requirement` | 환경, 네트워크, runner, secret, backup, SLO | environment, control, policy | requirement, issue, deliverable |
-| `project_report_snapshot` | graph delta와 period | daily/weekly, changes, unresolved gaps | every cited object |
-| `wiki_page_projection` | graph projection view | page slug, sections, freshness | source objects, report snapshot |
+| `project_report_snapshot` | graph delta와 period | daily/weekly, changes, unresolved gaps | source segment, every cited object |
+| `wiki_page_projection` | graph projection view | page slug, sections, freshness | source segment, source objects, report snapshot |
 
 ## 추적 엣지
 

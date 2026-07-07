@@ -3,7 +3,7 @@
 작성일: 2026-07-02
 기준: PR #895가 develop에 병합된 이후의 다음 실행 단계
 Goal: 20억 원 판매 가능 제품 기준으로 이메일/첨부 DOM·문단 지식그래프를 프로젝트 관리 자동화 그래프로 확장한다.
-Figma 산출물: [Naruon Project Semantic KG FigJam](https://www.figma.com/board/ayoR2im9q2xNCxR4hNK2nN?utm_source=codex&utm_content=edit_in_figjam&oai_id=&request_id=70bbbe58-03e0-4719-96a8-0758994a6aa2)
+Figma 산출물: [Naruon Project Semantic KG FigJam](https://www.figma.com/board/ayoR2im9q2xNCxR4hNK2nN)
 Figma Code Connect: 제외
 
 ## 완료 기준
