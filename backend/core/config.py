@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
 
+    # Codec Carver audio-conversion integration (operator-configured in-cluster
+    # Service base URL, e.g. http://codec-carver:8000). Converts recording
+    # attachments to FLAC/Opus for STT / omni-modal input. Disabled while unset.
+    CODEC_CARVER_BASE_URL: str | None = None
+    CODEC_CARVER_API_KEY: SecretStr | None = None
+
     # OIDC Settings
     OIDC_ISSUER_URL: str | None = None
     OIDC_CLIENT_ID: str | None = None
