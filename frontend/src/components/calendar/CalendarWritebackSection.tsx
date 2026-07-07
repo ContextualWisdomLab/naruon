@@ -45,7 +45,7 @@ export function CalendarWritebackSection({
             onClick={() => void requestWritebackIntent('create')}
             disabled={isWritebackActionDisabled}
             aria-busy={isWritebackLoading}
-            className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
+            className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             새 일정 intent 점검
           </button>
