@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
 
+    # Clearfolio document-viewer integration (operator-configured in-cluster
+    # Service base URL, e.g. http://clearfolio:8080). Integration is disabled
+    # while unset — the 미리보기 surface stays hidden.
+    CLEARFOLIO_BASE_URL: str | None = None
+
     # OIDC Settings
     OIDC_ISSUER_URL: str | None = None
     OIDC_CLIENT_ID: str | None = None
