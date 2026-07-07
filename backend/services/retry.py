@@ -16,6 +16,11 @@ import openai
 
 logger = logging.getLogger(__name__)
 
+# Backoff jitter is not security-sensitive, but use SystemRandom so this
+# module stays clean under bandit's B311 (no pseudo-random for any purpose)
+# without needing a suppression.
+_jitter = random.SystemRandom()
+
 T = TypeVar("T")
 
 # 429 and 5xx are worth one more attempt; 4xx auth/validation errors are not.
@@ -54,7 +59,7 @@ async def retry_transient(
             if attempt >= retries:
                 raise
             delay = min(base_delay_seconds * (2**attempt), MAX_DELAY_SECONDS)
-            delay += random.uniform(0, delay / 2)
+            delay += _jitter.uniform(0, delay / 2)
             attempt += 1
             logger.warning(
                 "Transient %s failure (attempt %d/%d), retrying in %.2fs: %s",
