@@ -323,7 +323,12 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     assert "continue-on-error: true" not in workflow
 
 
-def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
+def test_codeql_workflow_scans_default_branch_only() -> None:
+    # PR CodeQL and the code_scanning ruleset merge gate are delegated to the
+    # central ContextualWisdomLab/.github codeql-pr.yml (which uploads PR-head and
+    # merge-preview SARIF). The local workflow scans only the default branch on
+    # push, so it no longer double-uploads the same /language:<lang> category or
+    # duplicates the central PR check contexts.
     workflow = read_repo_text(".github/workflows/codeql.yml")
 
     assert "permissions:\n  contents: read\n\njobs:" in workflow
@@ -333,22 +338,13 @@ def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
     )
     assert "upload: always" in workflow
     assert "upload: never" not in workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
-        in workflow
-    )
-    assert (
-        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in workflow
-    )
-    assert "analyze-merge:" in workflow
-    assert "CodeQL merge preview" in workflow
-    assert "refs/pull/{0}/merge" in workflow
-    assert "github.event.pull_request.merge_commit_sha" in workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in workflow
-    )
+    # Default-branch scanning only — no PR trigger, no merge-preview job.
+    assert "pull_request:" not in workflow
+    assert "analyze-merge:" not in workflow
+    assert "CodeQL merge preview" not in workflow
+    assert "refs/pull/" not in workflow
+    assert "- develop" in workflow
+    assert "- master" in workflow
 
 
 def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> None:
