@@ -1,5 +1,46 @@
 # AGENTS.md
 
+<!-- BEGIN cwl-agent-guidance -->
+## Agent guidance (CWL governance)
+
+This section applies to every agent (Claude, Codex, Cursor, opencode, …) working
+in this repo.
+
+### Security Scan gate
+
+- Every PR runs the central **Security Scan** required gate: `osv-scan` +
+  `dependency-review` (diff-scoped) and `trivy-fs` (repo-wide, CRITICAL/HIGH,
+  fixable only). It runs on every PR base branch, **including stacked PRs**.
+- A failing **`trivy-fs` is a REAL finding, not a flake.** Read the job log — it
+  prints each finding's rule id / severity / file — or open the run's SARIF
+  results. Then **remediate**: bump the vulnerable dependency (this repo pins
+  Python deps in `requirements-*.txt`), fix the `Dockerfile` /
+  `docker-compose.*.yml` / `k8s/*.yaml` misconfig, or add a narrow, documented
+  `.trivyignore` / `.trivyignore.yaml` entry for a genuine false positive. Never
+  weaken, `continue-on-error`, or disable the gate.
+- **Worked example (currently blocking PRs here):** KSV-0118 (`runAsNonRoot`
+  unset) and KSV-0014 (`readOnlyRootFilesystem` unset), both HIGH k8s
+  misconfigs, fire on `k8s/*.yaml` because the Deployments/StatefulSet have no
+  `securityContext`. Fix by adding the container `securityContext`
+  (`runAsNonRoot: true`, `readOnlyRootFilesystem: true`, plus writable volume
+  mounts as needed) — do not ignore it.
+- A local `trivy` scan with a stale DB misses findings: run
+  `trivy --download-db-only` first, and scan the **merge ref**, not just the PR
+  head.
+- The org `code_scanning` ruleset is intentionally **CodeQL-only** (multiple
+  code-scanning tools can't converge on one PR ref). Gating is enforced by the
+  Security Scan **job result**, not by that rule — do **not** add Trivy,
+  Scorecard, or other tools to the `code_scanning` rule.
+
+### Code exploration
+
+- This repo has no `.codegraph/` index, so use normal search (grep/find/ripgrep).
+  If a `.codegraph/` index is later added at the repo root, prefer CodeGraph
+  (`codegraph explore "<query>"`, or the code-review-graph MCP tools) before
+  grep/find when understanding or locating code — it surfaces callers, callees,
+  and impact that text search misses.
+<!-- END cwl-agent-guidance -->
+
 ## Release governance defaults
 
 - GitHub Actions used by governed workflows must be pinned to full commit SHAs
