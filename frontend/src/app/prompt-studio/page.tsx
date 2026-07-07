@@ -148,7 +148,7 @@ const MODEL_OPTIONS = [
   { label: 'OpenAI Compatible', value: 'provider-default' },
 ];
 const RESPONSE_STYLES = ['전문적이고 간결하게', '친근하고 상세하게', '실행 항목 중심'];
-const OUTPUT_FORMATS = ['마크다운 (Markdown)', 'JSON 구조화', '짧은 핵심 맥락'];
+const OUTPUT_STYLES = ['마크다운 (Markdown)', 'JSON 구조화', '짧은 핵심 맥락'];
 
 const QUALITY_CHECKS = ['요구사항 충족', '구조 및 가독성', '정확성/사실성', '근거/출처 포함', '톤 & 스타일 일관성'];
 
@@ -203,7 +203,7 @@ export default function PromptStudioPage() {
     model: MODEL_OPTIONS[0].value,
     temperature: '0.3',
     responseStyle: RESPONSE_STYLES[0],
-    outputFormat: OUTPUT_FORMATS[0],
+    outputFormat: OUTPUT_STYLES[0],
   });
   const [showTemplateCounts, setShowTemplateCounts] = useState(true);
   const promptVariables = useMemo(() => extractPromptVariables(formData.content), [formData.content]);
@@ -594,7 +594,7 @@ export default function PromptStudioPage() {
                     onChange={(event) => setPromptSetting('outputFormat', event.target.value)}
                     className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
-                    {OUTPUT_FORMATS.map((format) => <option key={format}>{format}</option>)}
+                    {OUTPUT_STYLES.map((style) => <option key={style}>{style}</option>)}
                   </select>
                 </div>
               </CardContent>
