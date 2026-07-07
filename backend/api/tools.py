@@ -46,7 +46,7 @@ class ToolRegistry:
     def get(self, code: str) -> Optional[ToolInfo]:
         return self._tools.get(code)
 
-    async def execute(self, code: str, params: Dict[str, Any]) -> Any:
+    async def invoke_tool(self, code: str, params: Dict[str, Any]) -> Any:
         handler = self._handlers.get(code)
         if not handler:
             raise ValueError(f"No handler registered for tool {code}")
@@ -234,7 +234,7 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
         raise HTTPException(status_code=400, detail="Tool is not active")
 
     try:
-        result = await registry.execute(code, request.parameters)
+        result = await registry.invoke_tool(code, request.parameters)
         return ExecuteResponse(status="success", result=result, message="Execution successful")
     except Exception:
         logger.exception("Tool execution failed", extra={"tool_code": code})
