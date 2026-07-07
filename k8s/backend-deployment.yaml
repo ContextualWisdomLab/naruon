@@ -20,6 +20,8 @@ spec:
       - name: backend
         image: ghcr.io/seongho-bae/ai_email_client-backend:REPLACE_ME_VERSION
         imagePullPolicy: IfNotPresent
+        securityContext:
+          readOnlyRootFilesystem: true
         ports:
         - containerPort: 8000
         env:
@@ -33,3 +35,11 @@ spec:
             secretKeyRef:
               name: backend-secrets
               key: auth-session-hmac-secret
+        volumeMounts:
+        # readOnlyRootFilesystem is enabled, so provide writable scratch space
+        # for temp files (e.g. multipart upload spooling) that the app needs.
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

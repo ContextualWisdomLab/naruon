@@ -18,6 +18,8 @@ spec:
       containers:
       - name: postgres
         image: pgvector/pgvector:pg16
+        securityContext:
+          readOnlyRootFilesystem: true
         env:
         - name: POSTGRES_USER
           value: postgres
@@ -28,6 +30,30 @@ spec:
               key: password
         - name: POSTGRES_DB
           value: ai_email
+        # Keep PGDATA in a subdirectory of the mounted PVC so initdb sees an
+        # empty target even when the volume root contains lost+found.
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         ports:
         - containerPort: 5432
           name: postgres
+        volumeMounts:
+        # readOnlyRootFilesystem is enabled: the database data directory is
+        # persisted through the StatefulSet PVC below, and the Unix socket
+        # directory needs a small writable scratch mount.
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-run
+          mountPath: /var/run/postgresql
+      volumes:
+      - name: postgres-run
+        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
