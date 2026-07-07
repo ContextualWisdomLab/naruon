@@ -559,7 +559,7 @@ export function SearchLayout() {
               <button
                 key={filter.key}
                 type="button"
-                aria-label={`${filter.label} 필터`}
+                aria-label={`${filter.label} filter`}
                 aria-pressed={activeFilter === filter.key}
                 onClick={() => setActiveFilter(filter.key)}
                 className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background ${
