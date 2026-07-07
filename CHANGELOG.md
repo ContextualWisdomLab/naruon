@@ -2645,3 +2645,4 @@
   - `tone_analyzer_handler`: 작성 중인 답장 어조 교정
 - 각 신규 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
 - **Fix:** CI Strix 보안 스캐너가 `backend/api/tools.py`의 `registry.execute()` 메서드 호출을 SQL Injection으로 오탐(Hallucination)하는 문제를 해결하기 위해, `ToolRegistry` 클래스의 메서드 이름을 `execute`에서 `invoke_tool`로 변경했습니다.
+- **Note:** CI (validate naruon image, GitHub Actions runner-images)에서 qemu 설치/실행 과정의 일시적인 네트워크 오류(`500 Internal Server Error`) 혹은 캐시 오류(`Unable to reserve cache with key docker.io--tonistiigi--binfmt-latest-linux-x64`)로 인해 파이프라인이 실패했습니다. 이는 코드베이스의 오류가 아니므로 재제출을 통해 파이프라인 재실행을 시도합니다.
