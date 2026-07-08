@@ -517,6 +517,7 @@ describe("ProjectsPage", () => {
           ]);
         }
         if (path === "/api/tasks") return jsonResponse([]);
+        if (path === "/api/projects/candidates") return jsonResponse({ candidates: [] });
         return jsonResponse({}, false, 404);
       }),
     );
