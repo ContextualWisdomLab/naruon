@@ -138,6 +138,10 @@ def _tenant_batch_columns() -> list["sa.Column"]:
         sa.Column("batch_orchestrator_endpoint", sa.String(), nullable=True),
         sa.Column("batch_embedding_model", sa.String(), nullable=True),
         sa.Column("batch_local_dsn", sa.String(), nullable=True),
+        sa.Column("batch_attribution_service", sa.String(), nullable=True),
+        sa.Column("batch_attribution_team", sa.String(), nullable=True),
+        sa.Column("batch_attribution_group", sa.String(), nullable=True),
+        sa.Column("batch_attribution_company", sa.String(), nullable=True),
     ]
 
 

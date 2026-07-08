@@ -99,6 +99,12 @@ class BatchEmbeddingSettings:
     endpoint_alias: str | None
     model: str | None
     local_dsn: str | None
+    # Cost-attribution dimensions resolved from the tenant config (never env),
+    # forwarded to the orchestrator ledger so batch cost attribution is complete.
+    attribution_service: str | None = None
+    attribution_team: str | None = None
+    attribution_group: str | None = None
+    attribution_company: str | None = None
 
     @property
     def has_orchestrator(self) -> bool:
@@ -137,6 +143,18 @@ async def resolve_batch_embedding_settings(
         ),
         model=_clean(getattr(tenant_config, "batch_embedding_model", None)),
         local_dsn=_clean(getattr(tenant_config, "batch_local_dsn", None)),
+        attribution_service=_clean(
+            getattr(tenant_config, "batch_attribution_service", None)
+        ),
+        attribution_team=_clean(
+            getattr(tenant_config, "batch_attribution_team", None)
+        ),
+        attribution_group=_clean(
+            getattr(tenant_config, "batch_attribution_group", None)
+        ),
+        attribution_company=_clean(
+            getattr(tenant_config, "batch_attribution_company", None)
+        ),
     )
     if not settings.has_orchestrator and not settings.has_local_fallback:
         # Enabled but nothing configured to route to — behave as disabled.
@@ -257,11 +275,11 @@ async def _run_orchestrator_batch(
         "model": model,
         "endpoint": settings.endpoint_alias,
         "inputs": list(texts),
-        "metadata": {
-            "source": "naruon-email-import",
-            "organization_id": organization_id or "",
-            "user_id": user_id,
-        },
+        "metadata": _attribution_metadata(
+            settings=settings,
+            user_id=user_id,
+            organization_id=organization_id,
+        ),
     }
 
     try:
@@ -302,6 +320,37 @@ async def _run_orchestrator_batch(
         endpoint_alias=settings.endpoint_alias,
     )
     return vectors
+
+
+def _attribution_metadata(
+    *,
+    settings: BatchEmbeddingSettings,
+    user_id: str,
+    organization_id: str | None,
+) -> dict[str, str]:
+    """Build the FULL attribution metadata the orchestrator ledger expects.
+
+    Carries the cost-attribution dimensions (service, team, group, company)
+    resolved from the tenant config alongside the observability keys (source,
+    organization_id, user_id). ``company`` falls back to ``organization_id`` and
+    ``service`` to the import service name so cost is always attributed to a real
+    company/service even when the tenant leaves the optional dims unset. Empty
+    dimensions are omitted so the orchestrator does not record blank values.
+    """
+    org = organization_id or ""
+    metadata: dict[str, str] = {
+        "source": "naruon-email-import",
+        "organization_id": org,
+        "user_id": user_id,
+        "service": settings.attribution_service or "naruon-email-import",
+        "company": settings.attribution_company or org,
+    }
+    if settings.attribution_team:
+        metadata["team"] = settings.attribution_team
+    if settings.attribution_group:
+        metadata["group"] = settings.attribution_group
+    # Drop any dimension that resolved to an empty string (e.g. no organization).
+    return {key: value for key, value in metadata.items() if value}
 
 
 async def _submit_and_await(

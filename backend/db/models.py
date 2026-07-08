@@ -1185,6 +1185,15 @@ class TenantConfig(Base):
     )
     batch_embedding_model: Mapped[str | None] = mapped_column(String, nullable=True)
     batch_local_dsn: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # Cost-attribution dimensions forwarded to the orchestrator ledger so batch
+    # embedding cost is attributed across the full dimension set the hub expects
+    # (service / team / group / company, on top of the source / organization /
+    # user observability keys). Not secrets, so plain String. company falls back
+    # to organization_id at call time when left unset.
+    batch_attribution_service: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_team: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_group: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_company: Mapped[str | None] = mapped_column(String, nullable=True)
 
     def __repr__(self) -> str:
         return (
