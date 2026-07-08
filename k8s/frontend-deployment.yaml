@@ -14,11 +14,22 @@ spec:
       labels:
         app: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       imagePullSecrets:
         - name: ghcr-registry
       containers:
       - name: frontend
         image: ghcr.io/seongho-bae/ai_email_client-frontend:REPLACE_ME_VERSION
+
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         imagePullPolicy: Always
         ports:
         - containerPort: 3000

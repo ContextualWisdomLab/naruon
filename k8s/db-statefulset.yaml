@@ -15,9 +15,19 @@ spec:
       labels:
         app: postgres-db
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
       - name: postgres
         image: pgvector/pgvector:pg16
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         env:
         - name: POSTGRES_USER
           value: postgres
