@@ -609,6 +609,29 @@ vector counts, unsupported embedding model names, fake quality totals, or inert
 permanent ready-soon controls; use source-backed rows or explicit pending
 states.
 
+## Batch-tolerant LLM embeddings (optional submodule)
+
+`vendor/pg-llm-batch` is a git **submodule** (the org's standalone
+`pg_tiktoken` Postgres batch engine, Apache-2.0). It powers batch-tolerant
+hotspots such as bulk email-import embeddings. It is fully optional: naruon runs
+normally with the submodule uninitialized — the batch path degrades to the
+existing per-item embedding path whenever it is unconfigured or unavailable.
+
+To enable it (human actions):
+
+1. Initialize the submodule: `git submodule update --init vendor/pg-llm-batch`
+   and install it on the backend path (`pip install -e vendor/pg-llm-batch`).
+2. Bring up the batch Postgres:
+   `docker compose -f docker-compose.yml -f docker-compose.pg-llm-batch.yml up`.
+3. Seed per-tenant batch config in the Fernet DB (`tenant_configs`, never via
+   `os.getenv`): set `batch_embedding_enabled = true` and the Fernet-encrypted
+   `batch_embedding_dsn` (plus `batch_embedding_endpoint` / `batch_embedding_model`).
+   Provider credentials continue to resolve through `resolve_runtime_llm_provider`.
+
+Batch runs are recorded in the `llm_batch_jobs` / `llm_batch_items` control-plane
+tables (migration `0010_llm_batch_embedding`). The submodule can also run
+standalone — see `vendor/pg-llm-batch/README.md` and its own `docker-compose.yml`.
+
 ## Operations and release docs
 
 - `docs/operations/release-deployment-architecture.md`: release, CI, GHCR, and

@@ -274,6 +274,116 @@ class ProviderWritebackRetryItem(Base):
     )
 
 
+class LlmBatchJob(Base):
+    """A batch-tolerant embedding/completion job routed via pg-llm-batch.
+
+    naruon-side control-plane mirror of the component's ``llm_batches`` table.
+    Records one job per bulk embedding run (e.g. an email import batch) so the
+    batched work has a durable audit trail even though the JSONL assembly lives
+    in the batch engine's own Postgres. Modeled on
+    :class:`ProviderWritebackRetryItem` (string uid PK, scope indexes).
+    """
+
+    __tablename__ = "llm_batch_jobs"
+
+    batch_job_uid: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        default=lambda: f"llm_batch_{uuid.uuid4().hex}",
+    )
+    organization_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    job_status: Mapped[str] = mapped_column(
+        String,
+        index=True,
+        default="preparing",
+        nullable=False,
+    )
+    model_name: Mapped[str] = mapped_column(String, nullable=False)
+    endpoint_alias: Mapped[str | None] = mapped_column(String, nullable=True)
+    total_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completed_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    part_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    items: Mapped[list["LlmBatchItem"]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
+    __table_args__ = (
+        Index(
+            "ix_llm_batch_jobs_scope_status",
+            "organization_id",
+            "user_id",
+            "job_status",
+        ),
+    )
+
+
+class LlmBatchItem(Base):
+    """A single request within an :class:`LlmBatchJob`.
+
+    naruon-side mirror of the component's ``llm_requests`` rows. One item per
+    input text, carrying its token count and the partition (batch file part) it
+    was assigned to by the engine's token/byte/record accumulator.
+    """
+
+    __tablename__ = "llm_batch_items"
+
+    batch_item_uid: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        default=lambda: f"llm_batch_item_{uuid.uuid4().hex}",
+    )
+    batch_job_uid: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("llm_batch_jobs.batch_job_uid", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    part_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    item_status: Mapped[str] = mapped_column(
+        String,
+        index=True,
+        default="queued",
+        nullable=False,
+    )
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    job: Mapped["LlmBatchJob"] = relationship(back_populates="items")
+    __table_args__ = (
+        Index(
+            "ix_llm_batch_items_job_sequence",
+            "batch_job_uid",
+            "sequence_no",
+        ),
+    )
+
+
 class Organization(Base):
     __tablename__ = "organization_entities"
 
@@ -1041,6 +1151,20 @@ class TenantConfig(Base):
     google_client_secret: Mapped[str | None] = mapped_column(
         EncryptedString, nullable=True
     )
+
+    # Batch-tolerant embedding routing (pg-llm-batch submodule). All config here
+    # lives in the Fernet DB, never in os.getenv. The batch Postgres DSN is a
+    # connection secret, so it is stored EncryptedString (Fernet at rest).
+    batch_embedding_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    batch_embedding_dsn: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
+    batch_embedding_endpoint: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    batch_embedding_model: Mapped[str | None] = mapped_column(String, nullable=True)
 
     def __repr__(self) -> str:
         return (

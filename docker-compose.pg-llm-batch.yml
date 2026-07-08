@@ -1,0 +1,57 @@
+# Opt-in overlay for the pg-llm-batch submodule (batch-tolerant LLM embeddings).
+#
+# This file is NOT part of the default naruon stack. naruon runs fine without it
+# and without the submodule initialized — the batch embedding path degrades to
+# the per-item embedding path when unconfigured. Bring it up only when you want
+# the pg_tiktoken-enabled batch Postgres available to the backend.
+#
+# Prerequisites:
+#   git submodule update --init vendor/pg-llm-batch
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.pg-llm-batch.yml up
+#
+# Then seed per-tenant batch config in naruon's Fernet DB (tenant_configs):
+#   batch_embedding_enabled = true
+#   batch_embedding_dsn     = postgresql://pgllm:pgllm@pg-llm-batch-postgres:5432/pgllm
+#   batch_embedding_endpoint / batch_embedding_model as appropriate
+# (never via os.getenv — the DSN column is Fernet-encrypted at rest).
+
+services:
+  pg-llm-batch-postgres:
+    # Reuses the component's pg_tiktoken + pg_cron + pgsql-http Postgres image.
+    build:
+      context: ./vendor/pg-llm-batch
+      dockerfile: docker/postgres/Dockerfile
+      args:
+        PG_MAJOR: "16"
+        ENABLE_TIKTOKEN: "1"
+    environment:
+      POSTGRES_USER: pgllm
+      POSTGRES_PASSWORD: pgllm
+      POSTGRES_DB: pgllm
+    ports:
+      - "5442:5432"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready -U pgllm -d pgllm &&
+          psql -U pgllm -d pgllm -tAc
+          "SELECT bool_and(is_ready) FROM pg_llm_batch_health_check()
+           WHERE component IN ('database','pg_tiktoken','com_config')" | grep -q t
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    volumes:
+      - pg-llm-batch-data:/var/lib/postgresql/data
+    networks:
+      - naruon-network
+
+volumes:
+  pg-llm-batch-data:
+
+networks:
+  naruon-network:
+    external: true

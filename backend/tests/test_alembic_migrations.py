@@ -217,6 +217,33 @@ def test_project_graph_projection_has_incremental_revision():
     assert "if_exists=True" in revision_text
 
 
+def test_llm_batch_embedding_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0010_llm_batch_embedding.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0010_llm_batch_embedding"' in revision_text
+    assert 'down_revision = "0009_project_graph_projection"' in revision_text
+    assert '"llm_batch_jobs"' in revision_text
+    assert '"llm_batch_items"' in revision_text
+    assert '"batch_job_uid"' in revision_text
+    assert '"batch_item_uid"' in revision_text
+    assert '"batch_embedding_dsn"' in revision_text
+    assert '"batch_embedding_enabled"' in revision_text
+    assert "ix_llm_batch_jobs_scope_status" in revision_text
+    assert "ix_llm_batch_items_job_sequence" in revision_text
+    assert "ForeignKeyConstraint" in revision_text
+    assert "has_table" in revision_text
+    assert "has_column" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.add_column(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+
+
 def test_migration_runner_uses_alembic_upgrade_head_not_bootstrap_create_all():
     migration_runner = BACKEND_ROOT / "scripts" / "migrate_db.py"
 
