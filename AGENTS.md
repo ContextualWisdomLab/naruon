@@ -64,6 +64,37 @@ in this repo.
   that unlocks the registry and keep env strictly as bootstrap transport; do not
   add further `os.getenv` secret reads, and migrate toward the KV pattern as it
   is adopted.
+
+### This repo's role in the ecosystem
+
+- **This repo (naruon) is the ECOSYSTEM HUB:** email/PIM that DOM-decomposes
+  emails and files (PDF via the newsdom-api sidecar) into a persisted
+  content-graph + project-graph knowledge graph in Postgres, and composes the
+  ecosystem services below.
+- The org is an ecosystem around **naruon** (the hub: email/PIM that
+  DOM-decomposes emails/files into a persisted knowledge graph). Its components
+  are each a **standalone program that must ALSO work as a git submodule**,
+  grown separately and together: **waf-ids-ai-soc** = WAF/IDS/AI SOC/LB/APIM;
+  **clearfolio** = document viewer; **pg-erd-cloud** = ERD tool;
+  **contextual-orchestrator** = LLM cost/perf/upstream-LB gateway (beyond
+  LiteLLM); **codec-carver** = STT/omni-modal speech-video codec;
+  **fast-mlsirm** = LLM-as-a-Judge calibration + evaluation-item quality (uses
+  aFIPC FIPC + kaefa item-fit); **feelanet-adfs** = passwordless SSO
+  (OIDC/SCIM/ADFS/LDAP/FIDO2/OAuth2.1, eliminate passwords); **newsdom-api** =
+  PDF→DOM sidecar; **semantic-data-portal** = upper ontology/catalog/governance
+  plane with its own graph engine.
+
+### Research grounding (attach paper PDFs)
+
+- **Org rule:** substantive feature or process PRs should find the relevant
+  academic papers and **commit their PDFs into the PR** (e.g. a `docs/papers/`
+  or `references/` directory) with full citations, **respecting copyright** —
+  attach the PDF only when redistribution is permissible; otherwise cite, link,
+  and summarize instead.
+- **Example for this repo's domain:** a PR touching the content/project
+  knowledge-graph pipeline (DOM decomposition, entity/relation extraction,
+  grounded graph retrieval) should ground itself in the relevant layout-analysis
+  and knowledge-graph / grounded-retrieval literature.
 <!-- END cwl-agent-guidance -->
 
 ## Release governance defaults
