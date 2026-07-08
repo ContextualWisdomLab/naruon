@@ -412,7 +412,13 @@ async def test_build_agent_returns_none_without_runtime(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_agent_runs_tools_with_test_model():
+    # This is the ONLY test that exercises the real pydantic-ai build path
+    # (imports OpenAIChatModel, constructs the Agent, registers the tools and
+    # their RunContext-typed schemas). It is skipped only when pydantic-ai is
+    # genuinely absent; CI installs backend/requirements-agent.txt so it runs
+    # and proves build_noema_agent returns a working, tool-driving agent.
     pytest.importorskip("pydantic_ai")
+    from pydantic_ai import Agent as PydanticAgent
     from pydantic_ai.models.test import TestModel
 
     provider = RuntimeLLMProvider(
@@ -424,7 +430,9 @@ async def test_agent_runs_tools_with_test_model():
         provider_source="tenant_config",
     )
     agent, closer = await build_noema_agent(provider)
+    # A real Agent must be built — not the graceful-degradation None.
     assert agent is not None
+    assert isinstance(agent, PydanticAgent)
 
     session = _QueueSession([])  # every execute yields an empty result
     deps = _deps(session, writeback_enabled=False)
@@ -434,6 +442,9 @@ async def test_agent_runs_tools_with_test_model():
     finally:
         await closer()
 
-    # TestModel exercises each registered tool once.
-    assert deps.tool_calls
+    # TestModel exercises each registered tool once, so every declared tool
+    # name must show up in the recorded call log (proves the RunContext-typed
+    # tool schemas resolved and wired end to end).
+    expected_tools = {spec["name"] for spec in NOEMA_TOOL_SPECS}
+    assert expected_tools <= set(deps.tool_calls)
     assert getattr(result, "output", None) is not None

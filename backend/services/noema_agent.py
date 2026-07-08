@@ -44,6 +44,18 @@ from services.llm_provider_urls import build_llm_provider_http_client
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from pydantic_ai import Agent
 
+# ``RunContext`` must live in this module's globals so that pydantic-ai can
+# resolve the ``RunContext[NoemaAgentDeps]`` string annotations on the tool
+# functions (with ``from __future__ import annotations`` active, pydantic-ai
+# evaluates them via ``get_type_hints`` against each function's module globals —
+# a closure-local alias would raise ``NameError``). pydantic-ai stays optional:
+# when it is not installed this falls back to ``Any`` and the annotation is
+# never evaluated because ``build_noema_agent`` returns early.
+try:  # pragma: no cover - trivial import guard
+    from pydantic_ai import RunContext
+except ImportError:  # pydantic-ai is an optional runtime dependency
+    RunContext = Any  # type: ignore[assignment,misc]
+
 logger = logging.getLogger(__name__)
 
 AGENT_ID = "noema-general-agent"
@@ -435,7 +447,9 @@ def _load_pydantic_ai() -> Any | None:
     try:
         import pydantic_ai  # noqa: F401
         from pydantic_ai import Agent, RunContext
-        from pydantic_ai.models.openai import OpenAIModel
+        # pydantic-ai 2.x renamed ``OpenAIModel`` to ``OpenAIChatModel``. Import
+        # the current name; the old alias no longer exists on 2.x.
+        from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
     except ImportError:
         logger.info("pydantic-ai is not installed; noema agent is disabled.")
@@ -443,7 +457,7 @@ def _load_pydantic_ai() -> Any | None:
     return {
         "Agent": Agent,
         "RunContext": RunContext,
-        "OpenAIModel": OpenAIModel,
+        "OpenAIChatModel": OpenAIChatModel,
         "OpenAIProvider": OpenAIProvider,
     }
 
@@ -477,7 +491,7 @@ async def build_noema_agent(
     async def _closer() -> None:
         await openai_client.close()
 
-    model = modules["OpenAIModel"](
+    model = modules["OpenAIChatModel"](
         provider.chat_model,
         provider=modules["OpenAIProvider"](openai_client=openai_client),
     )
@@ -486,44 +500,43 @@ async def build_noema_agent(
         deps_type=NoemaAgentDeps,
         system_prompt=SYSTEM_PROMPT,
     )
-    run_context = modules["RunContext"]
 
     @agent.tool
     async def search_mail(  # type: ignore[unused-ignore]
-        ctx: run_context[NoemaAgentDeps], query: str, limit: int = 10
+        ctx: RunContext[NoemaAgentDeps], query: str, limit: int = 10
     ) -> list[dict[str, Any]]:
         """Search the owner's mail by subject, sender, or body text."""
         return await tool_search_mail(ctx.deps, query, limit)
 
     @agent.tool
-    async def read_mail(ctx: run_context[NoemaAgentDeps], message_id: str) -> dict[str, Any]:
+    async def read_mail(ctx: RunContext[NoemaAgentDeps], message_id: str) -> dict[str, Any]:
         """Read the full body of a single owned email by message id."""
         return await tool_read_mail(ctx.deps, message_id)
 
     @agent.tool
     async def content_graph_query(
-        ctx: run_context[NoemaAgentDeps], message_id: str
+        ctx: RunContext[NoemaAgentDeps], message_id: str
     ) -> dict[str, Any]:
         """Return the content-graph nodes and edges parsed from an owned email."""
         return await tool_content_graph_query(ctx.deps, message_id)
 
     @agent.tool
     async def list_tasks(
-        ctx: run_context[NoemaAgentDeps], status: str | None = None
+        ctx: RunContext[NoemaAgentDeps], status: str | None = None
     ) -> list[dict[str, Any]]:
         """List the owner's tasks, optionally filtered by status."""
         return await tool_list_tasks(ctx.deps, status)
 
     @agent.tool
     async def update_task_status(
-        ctx: run_context[NoemaAgentDeps], task_uid: str, status: str
+        ctx: RunContext[NoemaAgentDeps], task_uid: str, status: str
     ) -> dict[str, Any]:
         """Update the status of an owned task (audit-logged)."""
         return await tool_update_task_status(ctx.deps, task_uid, status)
 
     @agent.tool
     async def dispatch_writeback(
-        ctx: run_context[NoemaAgentDeps],
+        ctx: RunContext[NoemaAgentDeps],
         action: str,
         account: str,
         target_path: str,

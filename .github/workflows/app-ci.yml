@@ -48,6 +48,16 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
 
+      - name: Install Noema agent optional dependency
+        # Installs pydantic-ai (services/noema_agent.py) so the real build-path
+        # test (test_agent_runs_tools_with_test_model) executes instead of being
+        # skipped. Kept out of the hash-pinned set on purpose so the core install
+        # above stays deterministic; the already-installed pinned deps satisfy
+        # pydantic-ai's constraints, so pip adds only the new agent packages.
+        run: |
+          python -m pip install --disable-pip-version-check \
+            -r backend/requirements-agent.txt
+
       - name: Run backend lint
         run: |
           cd backend

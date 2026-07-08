@@ -7,4 +7,11 @@
 # Kept out of the hash-pinned runtime set (backend/requirements-hashes.txt) so
 # the core CI install stays deterministic. Install with:
 #     pip install -r backend/requirements-agent.txt
-pydantic-ai-slim[openai]>=0.0.49
+#
+# Pinned to the pydantic-ai 2.x line: services/noema_agent.py imports
+# ``OpenAIChatModel`` from ``pydantic_ai.models.openai`` (renamed from
+# ``OpenAIModel`` in 2.x) and constructs the model via ``OpenAIProvider``.
+# The previous unbounded ``>=0.0.49`` pin resolved to 2.x on a real install and
+# broke the removed ``OpenAIModel`` import. Cap below 3.0 so the next major API
+# break is opt-in, not silent.
+pydantic-ai-slim[openai]>=2.0,<3.0
