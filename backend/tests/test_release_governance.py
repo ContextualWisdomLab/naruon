@@ -224,11 +224,14 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"
     )
+    # dependency-review.yml was intentionally removed in #926: the org-wide
+    # central Security Scan already runs dependency-review on every PR, so the
+    # per-repo PR-only workflow was a duplicate. Only workflows that still exist
+    # in this repository are asserted here.
     hardened_workflows = [
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
         ".github/workflows/codeql.yml",
-        ".github/workflows/dependency-review.yml",
         ".github/workflows/docker-publish.yml",
         ".github/workflows/mail-smoke.yml",
         ".github/workflows/pr-governance.yml",
@@ -240,14 +243,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         workflow = read_repo_text(workflow_path)
         assert harden_runner_ref in workflow
         assert "egress-policy: audit" in workflow
-
-    dependency_review_workflow = read_repo_text(
-        ".github/workflows/dependency-review.yml"
-    )
-    assert (
-        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
-        in dependency_review_workflow
-    )
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -355,8 +350,12 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
     scorecard_workflow = read_repo_text(".github/workflows/scorecard.yml")
     trivy_workflow = read_repo_text(".github/workflows/trivy.yml")
 
+    # PR-triggered scorecard/trivy runs were removed in #926 because the org-wide
+    # central Security Scan already runs scorecard and trivy-fs on every PR. These
+    # per-repo workflows now cover the default branch only (push/schedule), so the
+    # PR trigger is intentionally absent and must NOT be asserted here.
     for workflow in (scorecard_workflow, trivy_workflow):
-        assert "pull_request:" in workflow
+        assert "pull_request:" not in workflow
         assert "push:" in workflow
         assert "- develop" in workflow
         assert "- master" in workflow
