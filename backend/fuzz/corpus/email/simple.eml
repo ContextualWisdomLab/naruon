@@ -1,0 +1,8 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Subject: Hello
+Message-ID: <msg-1@example.com>
+Date: Mon, 07 Jul 2026 10:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Hello world.

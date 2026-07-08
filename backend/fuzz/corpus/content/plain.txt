@@ -1,0 +1,5 @@
+plain text line
+another line
+
+
+new paragraph with <tag> chars & entities &amp;

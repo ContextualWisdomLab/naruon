@@ -39,13 +39,34 @@ def _sanitize_display_text(text: str) -> str:
     return strip_html_markup(_sanitize_nul(text))
 
 
+def _safe_formataddr(display_name: str, address: str) -> str:
+    """RFC-format an address, falling back to a plain rendering when the
+    addr-spec cannot be encoded.
+
+    ``email.utils.formataddr`` raises ``UnicodeEncodeError`` on a non-ASCII
+    addr-spec (e.g. an IDN domain, or an RFC 2047 encoded-word display name that
+    ``getaddresses`` parses as the address itself). Left unguarded this escapes
+    ``parse_eml_bytes`` -- whose declared contract is ``EmailParseError`` -- and
+    crashes email ingest on very common inbound mail. Fall back instead of
+    raising. Found by ``backend/fuzz`` (test_email_parser_fuzz).
+    """
+    try:
+        return formataddr((display_name, address))
+    except (UnicodeEncodeError, ValueError):
+        if display_name and address:
+            return f"{display_name} <{address}>"
+        return address or display_name
+
+
 def _sanitize_address_display_text(text: str) -> str:
     sanitized_parts: list[str] = []
     for display_name, address in getaddresses([text]):
         safe_display_name = _sanitize_display_text(display_name).strip()
         safe_address = _sanitize_nul(address).strip()
         if safe_address:
-            sanitized_parts.append(formataddr((safe_display_name, safe_address)))
+            sanitized_parts.append(
+                _safe_formataddr(safe_display_name, safe_address)
+            )
         elif safe_display_name:
             sanitized_parts.append(safe_display_name)
     if sanitized_parts:
@@ -105,7 +126,15 @@ def _process_singlepart_body(msg: Message) -> tuple[str, str, list[dict]]:
     plain_body = ""
     html_body = ""
     content_type = msg.get_content_type()
-    part_content = msg.get_content()
+    # get_content() raises for content types with no registered handler -- e.g. a
+    # message that declares multipart/* but carries no parsable parts, which
+    # is_multipart() reports as single-part. Guard it exactly like the
+    # attachment path (_attachment_part_content). Note KeyError <: LookupError.
+    try:
+        part_content = msg.get_content()
+    except (LookupError, TypeError, ValueError):
+        payload = msg.get_payload(decode=True)
+        part_content = payload.decode("utf-8", errors="replace") if payload else ""
     if isinstance(part_content, str):
         if content_type == "text/html":
             html_body = part_content
@@ -201,7 +230,10 @@ def parse_eml(file_path: str | Path) -> EmailData:
     except OSError as e:
         raise EmailParseError(f"Failed to read file {file_path}: {e}") from e
 
-    return _message_to_email_data(msg)
+    try:
+        return _message_to_email_data(msg)
+    except Exception as e:  # noqa: BLE001 -- enforce the declared contract
+        raise EmailParseError(f"Failed to parse email file {file_path}") from e
 
 
 def parse_eml_bytes(content: bytes) -> EmailData:
@@ -211,4 +243,12 @@ def parse_eml_bytes(content: bytes) -> EmailData:
     except Exception as e:
         raise EmailParseError("Failed to parse provider email bytes") from e
 
-    return _message_to_email_data(msg)
+    # Malformed messages can make the stdlib email stack raise deep inside
+    # header/body extraction (address, date, content-type handlers). The
+    # declared contract of this function is EmailParseError-or-EmailData, so any
+    # such raise is normalised rather than leaked to callers. Found by
+    # backend/fuzz (test_email_parser_fuzz).
+    try:
+        return _message_to_email_data(msg)
+    except Exception as e:  # noqa: BLE001 -- enforce the declared contract
+        raise EmailParseError("Failed to parse provider email bytes") from e
