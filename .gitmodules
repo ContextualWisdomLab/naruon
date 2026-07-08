@@ -1,0 +1,4 @@
+[submodule "vendor/newsdom-api"]
+	path = vendor/newsdom-api
+	url = https://github.com/ContextualWisdomLab/newsdom-api.git
+	branch = develop

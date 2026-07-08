@@ -45,6 +45,13 @@ _PARSER_MANIFEST = (
         parse_status="parsed",
     ),
     AttachmentParserDescriptor(
+        parser_key="pdf",
+        display_name="PDF documents (NewsDOM recognition)",
+        content_types=("application/pdf",),
+        extensions=(".pdf",),
+        parse_status="pdf_dom_recognition_pending",
+    ),
+    AttachmentParserDescriptor(
         parser_key="unsupported_binary",
         display_name="Unsupported binary attachments",
         content_types=("application/octet-stream",),
@@ -52,16 +59,27 @@ _PARSER_MANIFEST = (
         parse_status="unsupported_content_type",
     ),
 )
+# Statuses whose recognition is too heavy to run inline during import. The
+# attachment is stored with the pending status and a background worker later
+# calls the NewsDOM sidecar to fill in parse_content + the content graph.
+_DEFERRED_PARSE_STATUSES = frozenset({"pdf_dom_recognition_pending"})
 _SUPPORTED_CONTENT_TYPES = {
     content_type
     for descriptor in _PARSER_MANIFEST
     if descriptor.parse_status == "parsed"
     for content_type in descriptor.content_types
 }
+_DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE = {
+    content_type: descriptor
+    for descriptor in _PARSER_MANIFEST
+    if descriptor.parse_status in _DEFERRED_PARSE_STATUSES
+    for content_type in descriptor.content_types
+}
 _EXTENSION_CONTENT_TYPES = {
     extension: descriptor.content_types[0]
     for descriptor in _PARSER_MANIFEST
     if descriptor.parse_status == "parsed"
+    or descriptor.parse_status in _DEFERRED_PARSE_STATUSES
     for extension in descriptor.extensions
 }
 
@@ -94,6 +112,22 @@ def parse_email_attachment(
         safe_filename,
         normalized_content_type,
     )
+
+    deferred_descriptor = _DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE.get(parse_content_type)
+    if deferred_descriptor is not None:
+        # Heavy recognition (OCR/MinerU via the NewsDOM sidecar) must not run
+        # inline during import — mark the attachment pending and let the worker
+        # populate parse_content + the content graph.
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content="",
+            content_type=normalized_content_type,
+            parse_content="",
+            parse_content_type=parse_content_type,
+            parser_key=deferred_descriptor.parser_key,
+            parse_status=deferred_descriptor.parse_status,
+            parse_error_code=None,
+        )
 
     if parse_content_type not in _SUPPORTED_CONTENT_TYPES:
         parser_key = _parser_key_for(

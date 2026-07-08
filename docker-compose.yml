@@ -30,6 +30,22 @@ services:
     ports:
       - "11434:11434"
 
+  # NewsDOM PDF DOM recognition sidecar, built from the pinned
+  # vendor/newsdom-api submodule. Optional: the backend degrades gracefully
+  # (PDFs stay pending) when this service is absent or unconfigured.
+  newsdom:
+    build:
+      context: ./vendor/newsdom-api
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   backend:
     build:
       context: .
@@ -41,6 +57,11 @@ services:
       DEBUG: "false"
       ALLOW_LOCAL_LLM_PROVIDERS: "true"
       ALLOWED_LLM_BASE_URL_HOSTS: ollama
+      # NewsDOM sidecar allowlist. The actual base_url + bearer token are
+      # configured per-organization in the database (NewsdomProvider), NOT here;
+      # this only authorizes the container hostname for the SSRF-safe client.
+      ALLOW_LOCAL_NEWSDOM_PROVIDERS: "true"
+      ALLOWED_NEWSDOM_HOSTS: newsdom
       AUTH_SESSION_HMAC_SECRET: ${AUTH_SESSION_HMAC_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       OPENAI_API_KEY: ollama
@@ -51,6 +72,8 @@ services:
       db:
         condition: service_healthy
       ollama:
+        condition: service_started
+      newsdom:
         condition: service_started
     ports:
       - "8000:8000"

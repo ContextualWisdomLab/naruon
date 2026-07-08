@@ -40,7 +40,13 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
     manifest = get_attachment_parser_manifest()
     parser_keys = {descriptor.parser_key for descriptor in manifest}
 
-    assert {"plain_text", "html", "markdown", "unsupported_binary"} <= parser_keys
+    assert {
+        "plain_text",
+        "html",
+        "markdown",
+        "pdf",
+        "unsupported_binary",
+    } <= parser_keys
     markdown_descriptor = next(
         descriptor for descriptor in manifest if descriptor.parser_key == "markdown"
     )
@@ -79,6 +85,23 @@ def test_oversized_text_attachment_is_metadata_only_without_raw_content():
 
 def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
     result = parse_email_attachment(
+        filename="archive.zip",
+        content_type="application/zip",
+        raw_content=b"PK\x03\x04 raw bytes",
+    )
+
+    assert result.filename == "archive.zip"
+    assert result.content_type == "application/zip"
+    assert result.content == ""
+    assert result.parse_content == ""
+    assert result.parse_content_type == "application/zip"
+    assert result.parser_key == "unsupported_binary"
+    assert result.parse_status == "unsupported_content_type"
+    assert result.parse_error_code == "unsupported_content_type"
+
+
+def test_pdf_attachment_is_deferred_pending_newsdom_recognition():
+    result = parse_email_attachment(
         filename="contract.pdf",
         content_type="application/pdf",
         raw_content=b"%PDF-1.7 raw bytes",
@@ -86,9 +109,23 @@ def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
 
     assert result.filename == "contract.pdf"
     assert result.content_type == "application/pdf"
+    # Heavy OCR/MinerU recognition is deferred to the worker: nothing is parsed
+    # inline, and the attachment carries the pending status.
     assert result.content == ""
     assert result.parse_content == ""
     assert result.parse_content_type == "application/pdf"
-    assert result.parser_key == "unsupported_binary"
-    assert result.parse_status == "unsupported_content_type"
-    assert result.parse_error_code == "unsupported_content_type"
+    assert result.parser_key == "pdf"
+    assert result.parse_status == "pdf_dom_recognition_pending"
+    assert result.parse_error_code is None
+
+
+def test_pdf_extension_with_generic_content_type_is_deferred_pending():
+    result = parse_email_attachment(
+        filename="contract.pdf",
+        content_type="application/octet-stream",
+        raw_content=b"%PDF-1.7 raw bytes",
+    )
+
+    assert result.parse_content_type == "application/pdf"
+    assert result.parser_key == "pdf"
+    assert result.parse_status == "pdf_dom_recognition_pending"

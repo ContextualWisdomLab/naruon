@@ -215,9 +215,11 @@ JVBERi0xLjcK
                 "content_type": "application/pdf",
                 "parse_content": "",
                 "parse_content_type": "application/pdf",
-                "parser_key": "unsupported_binary",
-                "parse_status": "unsupported_content_type",
-                "parse_error_code": "unsupported_content_type",
+                # PDFs are deferred to the NewsDOM recognition worker rather than
+                # parsed inline, so they arrive pending (not unsupported).
+                "parser_key": "pdf",
+                "parse_status": "pdf_dom_recognition_pending",
+                "parse_error_code": None,
             },
         ]
     finally:
