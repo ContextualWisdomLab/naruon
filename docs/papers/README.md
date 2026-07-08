@@ -11,3 +11,30 @@ Background reading referenced by the codebase.
   (AFL/libFuzzer) and property/generational approaches used by
   [`backend/fuzz`](../../backend/fuzz), which fuzzes the untrusted-input
   parsers with Hypothesis (property-based) and Atheris (coverage-guided).
+
+## LLM cost, routing, and load balancing
+
+Background for routing batch-tolerant embedding work through
+**contextual-orchestrator** (the routing / cost hub) instead of calling a batch
+engine directly. The orchestrator owns provider selection, load balancing, and
+cost accounting; naruon submits a batch and records the reported cost. See
+[`backend/services/batch_embedding_service.py`](../../backend/services/batch_embedding_service.py).
+
+- **`frugalgpt.pdf`** —
+  L. Chen, M. Zaharia, J. Zou, *"FrugalGPT: How to Use Large Language Models
+  While Reducing Cost and Improving Performance"* (arXiv:2305.05176, 2023).
+  Motivates a cost-aware routing/cascade layer in front of LLM providers — the
+  role contextual-orchestrator plays here — rather than every caller hard-wiring
+  a single provider/engine.
+- **`routellm.pdf`** —
+  I. Ong, A. Almahairi, V. Wu, W.-L. Chiang, T. Wu, J. E. Gonzalez,
+  M. W. Kadous, I. Stoica, *"RouteLLM: Learning to Route LLMs with Preference
+  Data"* (arXiv:2406.18665, 2024). A learned router that dispatches each request
+  to the cheapest model meeting a quality bar — the routing-hub pattern this PR
+  moves batch embedding onto.
+- **`hybrid-llm-routing.pdf`** —
+  D. Ding, A. Mallick, C. Wang, R. Sim, S. Mukherjee, V. Rühle, L. V. S. Lakshmanan,
+  A. H. Awadallah, *"Hybrid LLM: Cost-Efficient and Quality-Aware Query Routing"*
+  (arXiv:2404.14618, 2024). Quality-aware routing across a small/large model pair
+  to balance cost against accuracy under load — the cost/quality trade-off the
+  orchestrator centralizes so individual naruon hotspots do not.

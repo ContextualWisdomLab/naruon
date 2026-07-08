@@ -1,0 +1,59 @@
+# Opt-in overlay for the OPTIONAL pg-llm-batch submodule (offline-dev only).
+#
+# This file is NOT part of the default naruon stack, and it is NOT the primary
+# batch path. In production, batch-tolerant embeddings route through
+# contextual-orchestrator (the routing / cost hub), which forwards to
+# pg-llm-batch and records cost — naruon does not talk to a batch Postgres
+# directly. This overlay only exists so a developer can run a local pg-llm-batch
+# Postgres when the orchestrator is unavailable; the code gates that fallback
+# behind "orchestrator unavailable" (see backend/services/batch_embedding_service.py).
+#
+# naruon runs fine without this file and with the submodule uninitialized: the
+# batch embedding path degrades to the per-item embedding path when unconfigured.
+#
+# Prerequisites (the submodule ships an empty placeholder until populated):
+#   git submodule update --init vendor/pg-llm-batch
+#   # vendor/pg-llm-batch must provide docker/postgres/Dockerfile before `up`.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.pg-llm-batch.yml up
+#
+# Then seed per-tenant batch config in naruon's Fernet DB (tenant_configs) —
+# never via os.getenv:
+#   batch_embedding_enabled = true
+#   batch_local_dsn         = postgresql://pgllm:pgllm@pg-llm-batch-postgres:5432/pgllm
+#   (batch_orchestrator_base_url / batch_orchestrator_token stay set for the
+#    primary orchestrator path; batch_local_dsn only feeds the offline fallback.)
+
+services:
+  pg-llm-batch-postgres:
+    # Reuses the component's pg_tiktoken + pg_cron + pgsql-http Postgres image.
+    build:
+      context: ./vendor/pg-llm-batch
+      dockerfile: docker/postgres/Dockerfile
+      args:
+        PG_MAJOR: "16"
+        ENABLE_TIKTOKEN: "1"
+    environment:
+      POSTGRES_USER: pgllm
+      POSTGRES_PASSWORD: pgllm
+      POSTGRES_DB: pgllm
+    ports:
+      - "5442:5432"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready -U pgllm -d pgllm &&
+          psql -U pgllm -d pgllm -tAc
+          "SELECT bool_and(is_ready) FROM pg_llm_batch_health_check()
+           WHERE component IN ('database','pg_tiktoken','com_config')" | grep -q t
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    volumes:
+      - pg-llm-batch-data:/var/lib/postgresql/data
+
+volumes:
+  pg-llm-batch-data:
