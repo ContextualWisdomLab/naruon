@@ -39,6 +39,31 @@ in this repo.
   (`codegraph explore "<query>"`, or the code-review-graph MCP tools) before
   grep/find when understanding or locating code — it surfaces callers, callees,
   and impact that text search misses.
+
+### Config & secrets (KV, not env)
+
+- **Org rule:** do **not** read config/secrets via `os.getenv()` / raw
+  environment variables at runtime. Read them from a KV / credential registry.
+  Org Actions secrets (e.g. `OPENAI_API_KEY`) flow **into** the KV via a
+  bootstrap/CI step; runtime reads from the KV — env is only transport into the
+  KV, never the runtime source. The reference implementation is
+  xtrmLLMBatchPython's pgcrypto-encrypted Postgres credential registry
+  (`get_credential(name)`); reuse that pattern (a DB-backed KV is fine) unless a
+  dedicated KV is adopted.
+- **Applies here:** this service authenticates to external systems (OpenAI, plus
+  SMTP/IMAP/POP3 mail) and holds signing/encryption secrets, so new config and
+  credentials belong in the registry, not scattered `os.getenv` reads.
+- **Already aligned — keep it this way:** per-tenant provider and mail
+  credentials (OpenAI keys, mailbox passwords) are stored in the DB-backed,
+  Fernet-encrypted tenant credential store and read from there at runtime (see
+  `backend/services/llm_provider_selection.py`, `backend/api/tenant_config.py`),
+  not from environment variables. Add any new tenant/app secret to that store.
+- **Known deviation to migrate:** the bootstrap keys `ENCRYPTION_KEY` and
+  `AUTH_SESSION_HMAC_SECRET` are still read from the environment at runtime via
+  pydantic-settings (`backend/core/config.py`). Treat these as the root-of-trust
+  that unlocks the registry and keep env strictly as bootstrap transport; do not
+  add further `os.getenv` secret reads, and migrate toward the KV pattern as it
+  is adopted.
 <!-- END cwl-agent-guidance -->
 
 ## Release governance defaults
