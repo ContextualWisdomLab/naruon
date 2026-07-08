@@ -1,0 +1,9 @@
+# Fuzzing dependencies (permissive licenses only; installed only by the
+# dedicated fuzz CI job / local runs, kept out of the hash-pinned runtime deps).
+#
+# hypothesis -- MPL-2.0  -- property-based testing, pure Python, always runnable.
+# atheris    -- Apache-2.0 -- coverage-guided (libFuzzer) harnesses; optional,
+#                             has no wheels for some Python versions so the CI
+#                             job installs it best-effort and skips if absent.
+hypothesis>=6.100,<7
+atheris>=2.3.0 ; python_version < "3.13"

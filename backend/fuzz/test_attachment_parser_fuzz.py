@@ -39,11 +39,7 @@ _RAW = st.one_of(
 )
 
 
-@settings(
-    max_examples=300,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     filename=_FILENAMES,
     content_type=st.sampled_from(ATTACHMENT_CONTENT_TYPES),

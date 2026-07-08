@@ -23,11 +23,7 @@ _CONTENT = st.text(
 )
 
 
-@settings(
-    max_examples=250,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(content=_CONTENT, content_type=st.sampled_from(CONTENT_TYPES))
 def test_parse_content_holds_invariants(content: str, content_type: str) -> None:
     check_parse_content(content, content_type)

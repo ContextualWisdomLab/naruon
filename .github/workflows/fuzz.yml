@@ -1,0 +1,121 @@
+name: Fuzz
+
+# Short, bounded property-based fuzzing of the untrusted-input parsers
+# (raw MIME email, HTML sanitiser, content-graph parser, attachment parser).
+# The PR budget is intentionally small so it never dominates CI cost; a longer
+# nightly campaign runs on a schedule.
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - master
+      - "release/**"
+  push:
+    branches:
+      - develop
+      - master
+  schedule:
+    # Nightly deeper campaign (optional; larger example budget).
+    - cron: "27 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hypothesis:
+    name: hypothesis (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - test_email_parser_fuzz.py
+          - test_text_safety_fuzz.py
+          - test_content_graph_fuzz.py
+          - test_attachment_parser_fuzz.py
+    env:
+      # 1000 examples/target on PRs, 20000 on the nightly schedule.
+      HYPOTHESIS_PROFILE: ci
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+
+      - name: Install fuzz dependencies
+        run: python -m pip install --disable-pip-version-check pytest hypothesis
+
+      - name: Select example budget
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "HYPOTHESIS_MAX_EXAMPLES=20000" >> "$GITHUB_ENV"
+          else
+            echo "HYPOTHESIS_MAX_EXAMPLES=1000" >> "$GITHUB_ENV"
+          fi
+
+      - name: Fuzz ${{ matrix.target }}
+        working-directory: backend
+        run: |
+          # Hard wall-clock cap so a target can never blow the CI budget.
+          timeout 150 python -m pytest "fuzz/${{ matrix.target }}" -q
+
+  # Optional coverage-guided (libFuzzer/Atheris) campaign. Best-effort: Atheris
+  # has no wheels for every Python version, so a failed install skips the job
+  # rather than failing the build. The Hypothesis job above is the gate.
+  atheris:
+    name: atheris (coverage-guided, best-effort)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    continue-on-error: true
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Atheris (best-effort)
+        id: install
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang || true
+          if python -m pip install --disable-pip-version-check atheris; then
+            echo "ok=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "Atheris unavailable for this runtime; skipping." >&2
+            echo "ok=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run coverage-guided harnesses (60s each)
+        if: steps.install.outputs.ok == '1'
+        working-directory: backend
+        run: |
+          set -x
+          declare -A corpus=(
+            [email_parser]=fuzz/corpus/email
+            [text_safety]=fuzz/corpus/html
+            [content_graph]=fuzz/corpus/content
+            [attachment_parser]=fuzz/corpus/attachment
+          )
+          for h in email_parser text_safety content_graph attachment_parser; do
+            python "fuzz/fuzz_${h}.py" -max_total_time=60 "${corpus[$h]}" || exit 1
+          done

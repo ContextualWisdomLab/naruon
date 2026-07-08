@@ -25,17 +25,13 @@ _HOSTILE_TEXT = st.text(
 )
 
 
-@settings(
-    max_examples=300,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(_HOSTILE_TEXT)
 def test_strip_html_markup_never_crashes_and_is_idempotent(value: str) -> None:
     check_strip_html_markup(value)
 
 
-@settings(max_examples=100, deadline=None)
+@settings(deadline=None)
 @given(st.text(max_size=512))
 def test_strip_html_markup_plain_text(value: str) -> None:
     check_strip_html_markup(value)

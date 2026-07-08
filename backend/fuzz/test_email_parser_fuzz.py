@@ -84,11 +84,7 @@ _INPUT = st.one_of(
 )
 
 
-@settings(
-    max_examples=400,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(_INPUT)
 def test_parse_eml_bytes_only_raises_email_parse_error(raw: bytes) -> None:
     check_parse_eml_bytes(raw)
