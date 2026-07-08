@@ -33,7 +33,17 @@ services:
   # NewsDOM PDF DOM recognition sidecar, built from the pinned
   # vendor/newsdom-api submodule. Optional: the backend degrades gracefully
   # (PDFs stay pending) when this service is absent or unconfigured.
+  #
+  # Gated behind the "newsdom" profile so the default `docker compose build`
+  # / `config` path (e.g. the coverage-evidence CI gate) never tries to build
+  # from vendor/newsdom-api, which is a submodule that is not checked out in
+  # every environment. Bring the sidecar up intentionally with:
+  #   docker compose --profile newsdom up
+  # (or COMPOSE_PROFILES=newsdom). The submodule must be checked out first:
+  #   git submodule update --init vendor/newsdom-api
   newsdom:
+    profiles:
+      - newsdom
     build:
       context: ./vendor/newsdom-api
       dockerfile: Dockerfile
@@ -73,8 +83,14 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      # Optional sidecar (see the "newsdom" profile above). required: false so
+      # that when the profile is inactive the dependency is dropped from the
+      # graph instead of failing config/build; the backend degrades gracefully
+      # (PDFs stay pending). When the profile is active, the backend still waits
+      # for the sidecar to start.
       newsdom:
         condition: service_started
+        required: false
     ports:
       - "8000:8000"
     command:
