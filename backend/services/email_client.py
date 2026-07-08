@@ -412,6 +412,18 @@ class _PinnedImplicitTlsSMTP(aiosmtplib.SMTP):
 
     def __init__(self, *, tls_server_hostname: str, **kwargs):
         self._tls_server_hostname = tls_server_hostname
+        # aiosmtplib validates that a socket-backed implicit-TLS client has a
+        # hostname (it raises "If using a socket with TLS, hostname is
+        # required"). The pinned client connects an already-resolved socket and
+        # supplies SNI via ``tls_server_hostname`` in ``_create_connection``, so
+        # mirror that value into ``hostname`` to satisfy validation without a
+        # second DNS lookup.
+        if (
+            kwargs.get("sock") is not None
+            and kwargs.get("use_tls")
+            and kwargs.get("hostname") is None
+        ):
+            kwargs["hostname"] = tls_server_hostname
         super().__init__(**kwargs)
 
     async def _create_connection(self, timeout: float | None):
