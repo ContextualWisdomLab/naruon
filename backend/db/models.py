@@ -169,6 +169,98 @@ class LLMProvider(Base):
     )
 
 
+class ScopeweavePromotionTarget(Base):
+    """Per-workspace scopeweave instance the promote action pushes work items to.
+
+    The ``base_url`` is validated against ``ALLOWED_SCOPEWEAVE_HOSTS`` at runtime
+    and the personal access token is stored Fernet-encrypted, mirroring how
+    ``LLMProvider`` keeps its ``api_key``. Config is resolved from the database
+    at request time (never from ``os.getenv``).
+    """
+
+    __tablename__ = "scopeweave_promotion_target"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "workspace_id",
+            name="uq_scopeweave_promotion_target_scope",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    base_url: Mapped[str] = mapped_column(String, nullable=False)
+    access_token: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
+class ScopeweavePromotionLink(Base):
+    """Mapping of a naruon project-graph object to its scopeweave work item.
+
+    One row per promoted ``object_uid`` within a workspace; re-promoting updates
+    the same row so the citation-carrying link between naruon evidence and the
+    scopeweave work item stays stable and idempotent.
+    """
+
+    __tablename__ = "scopeweave_promotion_link"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "object_uid",
+            name="uq_scopeweave_promotion_link_object",
+        ),
+        Index(
+            "ix_scopeweave_promotion_link_scope",
+            "organization_id",
+            "workspace_id",
+            "project_uid",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    project_uid: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    object_uid: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    object_type: Mapped[str] = mapped_column(String, nullable=False)
+    scopeweave_work_item_id: Mapped[str] = mapped_column(String, nullable=False)
+    scopeweave_work_item_url: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    promoted_confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    citation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    promoted_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
 class WorkspaceRunnerConfig(Base):
     __tablename__ = "workspace_runner_configs"
 
