@@ -13,6 +13,7 @@ import hashlib
 # email header processing, yielding a measurable speedup when handling long reference lists.
 REFERENCE_PATTERN = re.compile(r"<([^>]+)>")
 
+
 def generate_email_fingerprint(
     subject: str | None,
     date_str: str | None,
@@ -39,6 +40,12 @@ def normalize_message_id(value: str | None) -> str | None:
     return normalized or None
 
 
+def _ordered_dedupe(items):
+    # ⚡ Bolt Optimization: C-level ordered deduplication using dict.fromkeys()
+    # Validated tradeoff: For typical email header lists, CPU gain heavily outweighs the minor memory footprint increase.
+    return list(dict.fromkeys(items))
+
+
 def extract_reference_ids(value: str | None) -> list[str]:
     """Extract canonical message IDs from a References header in header order."""
     if not value:
@@ -48,15 +55,11 @@ def extract_reference_ids(value: str | None) -> list[str]:
     if not refs:
         refs = str(value).split()
 
-    normalized_refs: list[str] = []
-    # Optimization: Use a set for O(1) membership checks to avoid O(n^2) scaling on long reference lists
-    seen: set[str] = set()
-    for ref in refs:
-        normalized = normalize_message_id(ref)
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            normalized_refs.append(normalized)
-    return normalized_refs
+    return _ordered_dedupe(
+        normalized_id
+        for normalized_id in (normalize_message_id(ref) for ref in refs)
+        if normalized_id
+    )
 
 
 async def _find_existing_thread_ids(
@@ -69,13 +72,9 @@ async def _find_existing_thread_ids(
     if not message_ids:
         return {}
 
-    target_ids: list[str] = []
-    seen_target_ids: set[str] = set()
-    for message_id in message_ids:
-        for target_id in (message_id, f"<{message_id}>"):
-            if target_id not in seen_target_ids:
-                seen_target_ids.add(target_id)
-                target_ids.append(target_id)
+    target_ids = _ordered_dedupe(
+        target_id for msg_id in message_ids for target_id in (msg_id, f"<{msg_id}>")
+    )
 
     result = await session.execute(
         select(Email.message_id, Email.thread_id).where(
@@ -110,16 +109,8 @@ async def assign_thread_id(
     in_reply_to = normalize_message_id(email_data.get("in_reply_to"))
     references = extract_reference_ids(email_data.get("references"))
 
-    existing_candidates = []
-    # Optimization: Use a set for O(1) membership checks to prevent O(n^2) deduplication of candidates
-    seen = set()
-    if in_reply_to:
-        existing_candidates.append(in_reply_to)
-        seen.add(in_reply_to)
-    for ref in references:
-        if ref not in seen:
-            seen.add(ref)
-            existing_candidates.append(ref)
+    combined_candidates = ([in_reply_to] if in_reply_to else []) + references
+    existing_candidates = _ordered_dedupe(combined_candidates)
 
     if existing_candidates:
         thread_ids_by_message_id = await _find_existing_thread_ids(

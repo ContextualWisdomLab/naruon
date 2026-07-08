@@ -14,8 +14,15 @@ from typing import Literal
 from sqlalchemy import bindparam, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Attachment, Email
+from db.models import (
+    Attachment,
+    ContentNodeRecord,
+    ContentSegmentRecord,
+    Email,
+    KnowledgeGraphEdgeRecord,
+)
 from services.archive import extract_backup_async
+from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
@@ -261,10 +268,33 @@ def _build_email_object(
 
     attachment_count = 0
     for attachment_index, attachment in enumerate(attachment_payloads, start=1):
+        attachment_content_type = str(
+            attachment.get("content_type") or "application/octet-stream"
+        )
+        attachment_parse_status = str(attachment.get("parse_status") or "parsed")
+        attachment_parse_content_type = str(
+            attachment.get("parse_content_type") or attachment_content_type
+        )
+        attachment_parser_key = str(
+            attachment.get("parser_key")
+            or _fallback_attachment_parser_key(
+                attachment_parse_content_type,
+                attachment_parse_status,
+            )
+        )
         email_obj.attachments.append(
             Attachment(
                 filename=str(attachment.get("filename") or "attachment.txt"),
                 content=str(attachment.get("content") or ""),
+                content_type=attachment_content_type,
+                parse_status=attachment_parse_status,
+                parse_content_type=attachment_parse_content_type,
+                parser_key=attachment_parser_key,
+                parse_error_code=(
+                    str(attachment.get("parse_error_code"))
+                    if attachment.get("parse_error_code") is not None
+                    else None
+                ),
                 embedding=(
                     fitted_embeddings[attachment_index]
                     if attachment_index < len(fitted_embeddings)
@@ -274,7 +304,325 @@ def _build_email_object(
         )
         attachment_count += 1
 
+    _append_email_content_graph(
+        email_obj=email_obj,
+        parsed=parsed,
+        message_id=message_id,
+        attachment_payloads=attachment_payloads,
+    )
+    _append_knowledge_graph_edges(email_obj)
+
     return email_obj, attachment_count
+
+
+def _fallback_attachment_parser_key(
+    parse_content_type: str,
+    parse_status: str,
+) -> str:
+    if parse_status == "unsupported_content_type":
+        return "unsupported_binary"
+    if parse_content_type == "text/html":
+        return "html"
+    if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
+        return "markdown"
+    if parse_content_type == "text/plain":
+        return "plain_text"
+    return "unsupported_binary"
+
+
+def _append_email_content_graph(
+    *,
+    email_obj: Email,
+    parsed: EmailData,
+    message_id: str,
+    attachment_payloads: list[dict],
+) -> None:
+    body_parse_result = parse_content(
+        source_kind="email_body",
+        source_record_uid=_content_graph_source_record_uid("email", message_id),
+        content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
+        content_type=str(parsed.get("body_content_type") or "text/plain"),
+        display_name="Email body",
+    )
+    _append_parse_result_records(
+        email_obj=email_obj,
+        attachment_obj=None,
+        parse_result=body_parse_result,
+    )
+
+    for attachment_index, (attachment_obj, attachment_payload) in enumerate(
+        zip(email_obj.attachments, attachment_payloads),
+        start=1,
+    ):
+        if attachment_payload.get("parse_status", "parsed") != "parsed":
+            continue
+        parse_source_content = str(
+            attachment_payload.get("parse_content")
+            if attachment_payload.get("parse_content") is not None
+            else attachment_payload.get("content") or ""
+        )
+        if not parse_source_content.strip():
+            continue
+        attachment_parse_result = parse_content(
+            source_kind="attachment",
+            source_record_uid=_content_graph_source_record_uid(
+                "attachment",
+                message_id,
+                str(attachment_index),
+                attachment_obj.filename,
+            ),
+            content=parse_source_content,
+            content_type=str(
+                attachment_payload.get("parse_content_type")
+                or attachment_payload.get("content_type")
+                or "text/plain"
+            ),
+            display_name=attachment_obj.filename,
+        )
+        _append_parse_result_records(
+            email_obj=email_obj,
+            attachment_obj=attachment_obj,
+            parse_result=attachment_parse_result,
+        )
+
+
+def _append_parse_result_records(
+    *,
+    email_obj: Email,
+    attachment_obj: Attachment | None,
+    parse_result: ParseResult,
+) -> None:
+    node_records_by_uid: dict[str, ContentNodeRecord] = {}
+    for parsed_node in parse_result.nodes:
+        node_record = ContentNodeRecord(
+            content_node_uid=parsed_node.content_node_uid,
+            source_kind=parsed_node.source_kind,
+            source_record_uid=parsed_node.source_record_uid,
+            parent_node_uid=parsed_node.parent_node_uid,
+            node_kind=parsed_node.node_kind,
+            node_path=parsed_node.node_path,
+            ordinal_index=parsed_node.ordinal_index,
+            display_label=parsed_node.display_label,
+            safe_text_content=parsed_node.safe_text_content,
+            content_hash=parsed_node.content_hash,
+        )
+        email_obj.content_nodes.append(node_record)
+        if attachment_obj is not None:
+            attachment_obj.content_nodes.append(node_record)
+        node_records_by_uid[parsed_node.content_node_uid] = node_record
+
+    for parsed_segment in parse_result.segments:
+        segment_record = ContentSegmentRecord(
+            content_segment_uid=parsed_segment.content_segment_uid,
+            source_kind=parsed_segment.source_kind,
+            source_record_uid=parsed_segment.source_record_uid,
+            segment_kind=parsed_segment.segment_kind,
+            segment_path=parsed_segment.segment_path,
+            ordinal_index=parsed_segment.ordinal_index,
+            heading_path=parsed_segment.heading_path,
+            safe_text_content=parsed_segment.safe_text_content,
+            content_hash=parsed_segment.content_hash,
+            word_count=parsed_segment.word_count,
+        )
+        node_records_by_uid[parsed_segment.content_node_uid].segments.append(
+            segment_record
+        )
+        email_obj.content_segments.append(segment_record)
+        if attachment_obj is not None:
+            attachment_obj.content_segments.append(segment_record)
+
+
+def _append_knowledge_graph_edges(email_obj: Email) -> None:
+    nodes_by_uid = {
+        node.content_node_uid: node
+        for node in sorted(
+            email_obj.content_nodes,
+            key=lambda item: (
+                item.source_kind,
+                item.source_record_uid,
+                item.ordinal_index,
+                item.node_path,
+            ),
+        )
+    }
+    ordinal_index = 1
+
+    def add_edge(
+        *,
+        edge_kind: str,
+        edge_path: str,
+        source_kind: str,
+        source_record_uid: str,
+        source_node: ContentNodeRecord | None = None,
+        target_node: ContentNodeRecord | None = None,
+        source_segment: ContentSegmentRecord | None = None,
+        target_segment: ContentSegmentRecord | None = None,
+    ) -> None:
+        nonlocal ordinal_index
+        edge = KnowledgeGraphEdgeRecord(
+            edge_uid=_knowledge_graph_edge_uid(
+                edge_kind,
+                _edge_endpoint_uid(source_node, source_segment),
+                _edge_endpoint_uid(target_node, target_segment),
+                edge_path,
+            ),
+            source_kind=source_kind,
+            source_record_uid=source_record_uid,
+            edge_kind=edge_kind,
+            edge_path=edge_path,
+            ordinal_index=ordinal_index,
+            source_node=source_node,
+            target_node=target_node,
+            source_segment=source_segment,
+            target_segment=target_segment,
+        )
+        email_obj.knowledge_graph_edges.append(edge)
+        attachment = _edge_attachment(
+            source_node=source_node,
+            target_node=target_node,
+            source_segment=source_segment,
+            target_segment=target_segment,
+        )
+        if attachment is not None:
+            attachment.knowledge_graph_edges.append(edge)
+        ordinal_index += 1
+
+    for node in nodes_by_uid.values():
+        if not node.parent_node_uid:
+            continue
+        parent_node = nodes_by_uid.get(node.parent_node_uid)
+        if parent_node is None:
+            continue
+        add_edge(
+            edge_kind="node_contains_node",
+            edge_path=f"{parent_node.node_path}/contains/{node.node_path}",
+            source_kind=node.source_kind,
+            source_record_uid=node.source_record_uid,
+            source_node=parent_node,
+            target_node=node,
+        )
+
+    segments_by_source: dict[
+        tuple[str, str],
+        list[ContentSegmentRecord],
+    ] = {}
+    for segment in sorted(
+        email_obj.content_segments,
+        key=lambda item: (
+            item.source_kind,
+            item.source_record_uid,
+            item.ordinal_index,
+            item.segment_path,
+        ),
+    ):
+        segments_by_source.setdefault(
+            (segment.source_kind, segment.source_record_uid),
+            [],
+        ).append(segment)
+        add_edge(
+            edge_kind="node_has_segment",
+            edge_path=f"{segment.content_node.node_path}/has/{segment.segment_path}",
+            source_kind=segment.source_kind,
+            source_record_uid=segment.source_record_uid,
+            source_node=segment.content_node,
+            target_segment=segment,
+        )
+
+    for (_source_kind, _source_record_uid), segments in segments_by_source.items():
+        for source_segment, target_segment in zip(segments, segments[1:]):
+            add_edge(
+                edge_kind="segment_next",
+                edge_path=(
+                    f"{source_segment.segment_path}/next/"
+                    f"{target_segment.segment_path}"
+                ),
+                source_kind=source_segment.source_kind,
+                source_record_uid=source_segment.source_record_uid,
+                source_segment=source_segment,
+                target_segment=target_segment,
+            )
+
+        latest_heading_by_path: dict[str, ContentSegmentRecord] = {}
+        for segment in segments:
+            if segment.segment_kind == "heading" and segment.heading_path:
+                latest_heading_by_path[segment.heading_path] = segment
+                continue
+            if segment.segment_kind != "paragraph" or not segment.heading_path:
+                continue
+            heading_segment = _nearest_heading_segment(
+                segment.heading_path,
+                latest_heading_by_path,
+            )
+            if heading_segment is None:
+                continue
+            add_edge(
+                edge_kind="heading_contains_segment",
+                edge_path=(
+                    f"{heading_segment.segment_path}/contains/"
+                    f"{segment.segment_path}"
+                ),
+                source_kind=segment.source_kind,
+                source_record_uid=segment.source_record_uid,
+                source_segment=heading_segment,
+                target_segment=segment,
+            )
+
+
+def _edge_endpoint_uid(
+    node: ContentNodeRecord | None,
+    segment: ContentSegmentRecord | None,
+) -> str:
+    if segment is not None:
+        return f"segment:{segment.content_segment_uid}"
+    if node is not None:
+        return f"node:{node.content_node_uid}"
+    return "none"
+
+
+def _edge_attachment(
+    *,
+    source_node: ContentNodeRecord | None,
+    target_node: ContentNodeRecord | None,
+    source_segment: ContentSegmentRecord | None,
+    target_segment: ContentSegmentRecord | None,
+) -> Attachment | None:
+    for candidate in (source_segment, target_segment):
+        if candidate is not None and candidate.attachment is not None:
+            return candidate.attachment
+    for candidate in (source_node, target_node):
+        if candidate is not None and candidate.attachment is not None:
+            return candidate.attachment
+    return None
+
+
+def _nearest_heading_segment(
+    heading_path: str,
+    latest_heading_by_path: dict[str, ContentSegmentRecord],
+) -> ContentSegmentRecord | None:
+    heading_parts = heading_path.split(" > ")
+    while heading_parts:
+        candidate = " > ".join(heading_parts)
+        if candidate in latest_heading_by_path:
+            return latest_heading_by_path[candidate]
+        heading_parts.pop()
+    return None
+
+
+def _knowledge_graph_edge_uid(
+    edge_kind: str,
+    source_uid: str,
+    target_uid: str,
+    edge_path: str,
+) -> str:
+    payload = "\x00".join((edge_kind, source_uid, target_uid, edge_path))
+    digest = hashlib.sha256(payload.encode("utf-8", errors="surrogatepass")).hexdigest()
+    return f"kgedge_{digest[:32]}"
+
+
+def _content_graph_source_record_uid(prefix: str, *parts: str) -> str:
+    payload = "\x00".join(str(part) for part in parts)
+    digest = hashlib.sha256(payload.encode("utf-8", errors="surrogatepass")).hexdigest()
+    return f"{prefix}:{digest[:32]}"
 
 
 async def _import_single_eml(

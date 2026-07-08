@@ -243,6 +243,90 @@ def mock_db():
             [_project_folder("webdav_folder_roadmap")],
             (4, 1, 2, 3),  # email stats
             (3, 1, 1),  # attachment stats
+            (3, 8),  # content graph stats
+            (2, 10),  # knowledge graph stats
+            (8, 1),  # content segment text readiness stats
+            (10, 2),  # knowledge graph evidence endpoint readiness stats
+            [
+                ("email_body", "paragraph", 6),
+                ("attachment", "heading", 2),
+            ],  # content graph breakdown
+            [
+                ("email_body", "node_has_segment", 8),
+                ("attachment", "heading_contains_segment", 2),
+            ],  # knowledge graph breakdown
+            [
+                (
+                    "cseg_email_paragraph_1",
+                    "email_body",
+                    "paragraph",
+                    "/document[1]/paragraph[1]",
+                    12,
+                ),
+                (
+                    "cseg_attachment_heading_1",
+                    "attachment",
+                    "heading",
+                    "/document[1]/h1[1]",
+                    3,
+                ),
+            ],  # content graph evidence samples
+            [
+                (
+                    "kgedge_email_node_segment_1",
+                    "email_body",
+                    "node_has_segment",
+                    "/document[1]/paragraph[1]/has/segment[1]",
+                    None,
+                    12,
+                    44,
+                    None,
+                ),
+                (
+                    "kgedge_attachment_node_only_1",
+                    "attachment",
+                    "node_contains_node",
+                    "/document[1]/contains/h1[1]",
+                    None,
+                    None,
+                    55,
+                    56,
+                ),
+            ],  # knowledge graph evidence samples
+            (3, 2),  # semantic relation evidence stats
+            [
+                (
+                    "partner@example.com",
+                    "<asset-ready@example.com>",
+                    "thread-ready",
+                    "Vendor",
+                    0.92,
+                ),
+                (
+                    "updates@example.com",
+                    "<newsletter@example.com>",
+                    None,
+                    "Newsletter",
+                    0.86,
+                ),
+            ],  # semantic relation evidence samples
+            (2, 1),  # attachment parse stats
+            [
+                (
+                    "application/octet-stream",
+                    "text/markdown",
+                    "parsed",
+                    "markdown",
+                    2,
+                ),
+                (
+                    "application/pdf",
+                    "application/pdf",
+                    "unsupported_content_type",
+                    "unsupported_binary",
+                    1,
+                ),
+            ],  # attachment parse breakdown
             [_connector_event("connector_evt_data_quality")],
             [
                 (_attachment("roadmap.pdf", "extracted attachment text"), ready_email),
@@ -272,6 +356,2702 @@ def _restore_overrides(previous_secret, original_overrides):
     app.dependency_overrides.update(original_overrides)
 
 
+def _expected_sample_key(prefix: str, value: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return f"{prefix}_{digest[:16]}"
+
+
+def _expected_acquisition_readiness_kpis():
+    return [
+        {
+            "kpi_key": "thread_id_integrity_target",
+            "source_check_key": "thread_id_integrity",
+            "display_name": "Thread id integrity target",
+            "owner_area": "email_ingestion",
+            "priority_rank": 1,
+            "current_percent": 75,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "Thread provenance must reach target before acquisition close."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "dedupe_fingerprint_target",
+            "source_check_key": "dedupe_fingerprint",
+            "display_name": "Duplicate fingerprint target",
+            "owner_area": "email_ingestion",
+            "priority_rank": 2,
+            "current_percent": 50,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "Duplicate fingerprints must reach target before corpus valuation."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "attachment_content_target",
+            "source_check_key": "attachment_content",
+            "display_name": "Attachment content target",
+            "owner_area": "attachment_parsing",
+            "priority_rank": 3,
+            "current_percent": 67,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "Attachment text extraction must reach target before buyer review."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "content_graph_coverage_target",
+            "source_check_key": "content_graph_coverage",
+            "display_name": "DOM paragraph coverage target",
+            "owner_area": "content_graph",
+            "priority_rank": 4,
+            "current_percent": 75,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "DOM paragraph segmentation must reach target before graph claims."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "knowledge_graph_coverage_target",
+            "source_check_key": "knowledge_graph_coverage",
+            "display_name": "Knowledge graph coverage target",
+            "owner_area": "knowledge_graph",
+            "priority_rank": 5,
+            "current_percent": 50,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "Knowledge graph edge persistence must reach target before diligence."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "content_segment_text_readiness_target",
+            "source_check_key": "content_segment_text_readiness",
+            "display_name": "Segment text readiness target",
+            "owner_area": "content_graph",
+            "priority_rank": 6,
+            "current_percent": 88,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "Safe paragraph text and word counts must reach target."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "kg_evidence_endpoint_target",
+            "source_check_key": "knowledge_graph_evidence_endpoint_readiness",
+            "display_name": "KG evidence endpoint target",
+            "owner_area": "knowledge_graph",
+            "priority_rank": 7,
+            "current_percent": 80,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "KG evidence endpoints must reach target before buyer audit."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "semantic_relation_source_backing_target",
+            "source_check_key": "semantic_relation_source_backing",
+            "display_name": "Semantic relation source target",
+            "owner_area": "semantic_kg",
+            "priority_rank": 8,
+            "current_percent": 67,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "Semantic relation source backing must reach target."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "attachment_parse_coverage_target",
+            "source_check_key": "attachment_parse_coverage",
+            "display_name": "Attachment parser coverage target",
+            "owner_area": "attachment_parsing",
+            "priority_rank": 9,
+            "current_percent": 67,
+            "target_percent": 100,
+            "target_met": False,
+            "status_code": "needs_attention",
+            "guardrail_text": (
+                "Attachment parser coverage must reach target or have safe "
+                "exceptions."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "source_registry_target",
+            "source_check_key": "source_registry",
+            "display_name": "Source registry target",
+            "owner_area": "connector_registry",
+            "priority_rank": 10,
+            "current_percent": 100,
+            "target_percent": 100,
+            "target_met": True,
+            "status_code": "pass",
+            "guardrail_text": (
+                "Customer-owned source registration must stay complete."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "connector_signal_target",
+            "source_check_key": "connector_signal",
+            "display_name": "Connector observability target",
+            "owner_area": "connector_observability",
+            "priority_rank": 11,
+            "current_percent": 100,
+            "target_percent": 100,
+            "target_met": True,
+            "status_code": "pass",
+            "guardrail_text": "Connector observability must stay complete.",
+            "provider_write_executed": False,
+        },
+        {
+            "kpi_key": "semantic_kg_readiness_target",
+            "source_check_key": "semantic_kg_readiness",
+            "display_name": "Semantic KG evidence target",
+            "owner_area": "semantic_kg",
+            "priority_rank": 12,
+            "current_percent": 100,
+            "target_percent": 100,
+            "target_met": True,
+            "status_code": "pass",
+            "guardrail_text": (
+                "Semantic KG evidence must remain provenance-approved."
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+
+
+def _expected_acquisition_decision_summary():
+    return {
+        "summary_key": "buyer_diligence_decision",
+        "recommendation_code": "remediate_before_close",
+        "risk_level": "high",
+        "target_gap_count": 9,
+        "critical_action_count": 2,
+        "high_action_count": 6,
+        "medium_action_count": 1,
+        "headline_text": "Remediate acquisition evidence gaps before close.",
+        "next_step_text": (
+            "Resolve critical and high remediation actions, then regenerate the "
+            "diligence evidence snapshot."
+        ),
+        "provider_write_executed": False,
+    }
+
+
+def _expected_snapshot_verification_handoff():
+    return {
+        "verifier_key": "offline_evidence_snapshot_verifier",
+        "verifier_command": "python scripts/verify_evidence_snapshot.py <snapshot.json>",
+        "accepted_input": "file_path_or_stdin",
+        "digest_algorithm": "sha256",
+        "excluded_digest_fields": [
+            "canonical_payload_fields",
+            "digest_algorithm",
+            "snapshot_digest",
+        ],
+        "success_exit_code": 0,
+        "failure_exit_codes": {
+            "invalid_json": 1,
+            "missing_snapshot_digest": 2,
+            "unsupported_digest_algorithm": 3,
+            "digest_mismatch": 4,
+        },
+        "handoff_text": (
+            "Save the copied evidence snapshot JSON and verify it with the offline "
+            "verifier before sharing diligence materials."
+        ),
+        "provider_write_executed": False,
+    }
+
+
+def _expected_evidence_packet_checklist():
+    return [
+        {
+            "checklist_key": "privacy_redaction_policy",
+            "display_name": "Privacy redaction policy",
+            "state_code": "ready",
+            "source_field": "privacy_redaction_policy",
+            "required_artifact": "redacted_snapshot_policy",
+            "detail_text": (
+                "Snapshot excludes raw content, stable identifiers, credentials, "
+                "and database evidence strings."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "parser_manifest",
+            "display_name": "Attachment parser manifest",
+            "state_code": "ready",
+            "source_field": "parser_manifest_summary",
+            "required_artifact": "attachment_parser_registry",
+            "detail_text": (
+                "Parser family, supported content types, extensions, and unsupported "
+                "binary fallback are included."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "content_graph_topology",
+            "display_name": "DOM paragraph topology",
+            "state_code": "ready",
+            "source_field": "content_graph_topology_counts",
+            "required_artifact": "source_kind_segment_kind_counts",
+            "detail_text": (
+                "Email body and attachment segments are summarized by source and "
+                "paragraph or heading kind."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "content_graph_samples",
+            "display_name": "Paragraph evidence samples",
+            "state_code": "ready",
+            "source_field": "content_graph_evidence_samples",
+            "required_artifact": "redacted_segment_samples",
+            "detail_text": (
+                "Redacted paragraph samples include source kind, segment kind, path, "
+                "and word count."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "knowledge_graph_topology",
+            "display_name": "Knowledge graph topology",
+            "state_code": "ready",
+            "source_field": "knowledge_graph_topology_counts",
+            "required_artifact": "source_kind_edge_kind_counts",
+            "detail_text": (
+                "Stored KG edges are summarized by source and edge kind for "
+                "acquisition review."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "knowledge_graph_samples",
+            "display_name": "KG evidence samples",
+            "state_code": "ready",
+            "source_field": "knowledge_graph_evidence_samples",
+            "required_artifact": "redacted_edge_samples",
+            "detail_text": (
+                "Redacted KG samples include edge path and endpoint readiness "
+                "without exposing raw IDs."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "semantic_relation_samples",
+            "display_name": "Semantic relation evidence",
+            "state_code": "ready",
+            "source_field": "semantic_relation_evidence_samples",
+            "required_artifact": "source_backed_relation_samples",
+            "detail_text": (
+                "Semantic relationship samples include confidence, source scope, "
+                "and next action."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "semantic_extraction_manifest",
+            "display_name": "Semantic extraction manifest",
+            "state_code": "ready",
+            "source_field": "semantic_extraction_manifest",
+            "required_artifact": "extractor_provenance_manifest",
+            "detail_text": (
+                "Entity/relation extraction readiness and required provenance "
+                "evidence are included."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "acquisition_readiness_gate",
+            "display_name": "Acquisition readiness gate",
+            "state_code": "needs_attention",
+            "source_field": "acquisition_readiness_gate",
+            "required_artifact": "buyer_evidence_readiness_gate",
+            "detail_text": (
+                "Buyer readiness score, blocking checks, KPIs, decision summary, "
+                "and remediation actions are included."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "checklist_key": "offline_snapshot_verification",
+            "display_name": "Offline snapshot verification",
+            "state_code": "ready",
+            "source_field": "verification_handoff",
+            "required_artifact": "offline_digest_verifier_handoff",
+            "detail_text": (
+                "Offline verifier command, accepted input, digest algorithm, "
+                "excluded fields, and exit codes are included."
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+
+
+def _expected_data_room_package_manifest():
+    def entry(
+        *,
+        manifest_key: str,
+        file_name: str,
+        artifact_type: str,
+        display_name: str,
+        state_code: str,
+        source_field: str,
+        detail_text: str,
+    ):
+        return {
+            "manifest_key": manifest_key,
+            "file_name": file_name,
+            "artifact_type": artifact_type,
+            "display_name": display_name,
+            "state_code": state_code,
+            "source_field": source_field,
+            "required_for_close": True,
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "detail_text": detail_text,
+            "provider_write_executed": False,
+        }
+
+    return [
+        entry(
+            manifest_key="evidence_snapshot_json",
+            file_name="naruon-evidence-snapshot.json",
+            artifact_type="snapshot_json",
+            display_name="Evidence snapshot JSON",
+            state_code="ready",
+            source_field="snapshot_version,snapshot_digest,canonical_payload_fields",
+            detail_text=(
+                "Canonical redacted evidence snapshot for buyer diligence and "
+                "offline digest verification."
+            ),
+        ),
+        entry(
+            manifest_key="offline_verifier",
+            file_name="verify-evidence-snapshot.py",
+            artifact_type="verifier_script",
+            display_name="Offline digest verifier",
+            state_code="ready",
+            source_field="verification_handoff",
+            detail_text=(
+                "Offline verifier script and expected exit-code contract for "
+                "snapshot tamper checks."
+            ),
+        ),
+        entry(
+            manifest_key="privacy_policy",
+            file_name="privacy-redaction-policy.json",
+            artifact_type="policy_json",
+            display_name="Privacy redaction policy",
+            state_code="ready",
+            source_field="privacy_redaction_policy",
+            detail_text=(
+                "Redaction policy proving raw content, credentials, and stable IDs "
+                "are excluded."
+            ),
+        ),
+        entry(
+            manifest_key="attachment_parser_manifest",
+            file_name="attachment-parser-manifest.json",
+            artifact_type="manifest_json",
+            display_name="Attachment parser manifest",
+            state_code="ready",
+            source_field="parser_manifest_summary",
+            detail_text=(
+                "Supported attachment parser families, content types, extensions, "
+                "and unsupported fallback."
+            ),
+        ),
+        entry(
+            manifest_key="dom_paragraph_samples",
+            file_name="dom-paragraph-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="DOM paragraph evidence samples",
+            state_code="ready",
+            source_field="content_graph_evidence_samples",
+            detail_text=(
+                "Redacted DOM and paragraph samples for email and attachment "
+                "content segmentation."
+            ),
+        ),
+        entry(
+            manifest_key="knowledge_graph_samples",
+            file_name="knowledge-graph-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="Knowledge graph evidence samples",
+            state_code="ready",
+            source_field="knowledge_graph_evidence_samples",
+            detail_text="Redacted KG edge samples with safe paths and endpoint readiness.",
+        ),
+        entry(
+            manifest_key="semantic_relation_samples",
+            file_name="semantic-relation-evidence-samples.json",
+            artifact_type="evidence_samples_json",
+            display_name="Semantic relation evidence samples",
+            state_code="ready",
+            source_field="semantic_relation_evidence_samples",
+            detail_text=(
+                "Source-backed semantic relation samples with confidence and next "
+                "action."
+            ),
+        ),
+        entry(
+            manifest_key="evidence_packet_checklist",
+            file_name="buyer-evidence-packet-checklist.json",
+            artifact_type="manifest_json",
+            display_name="Buyer evidence packet checklist",
+            state_code="needs_attention",
+            source_field="evidence_packet_checklist",
+            detail_text=(
+                "Checklist mapping buyer-required packet artifacts to safe snapshot "
+                "fields."
+            ),
+        ),
+        entry(
+            manifest_key="acquisition_readiness_summary",
+            file_name="acquisition-readiness-summary.json",
+            artifact_type="readiness_summary_json",
+            display_name="Acquisition readiness summary",
+            state_code="needs_attention",
+            source_field="acquisition_readiness_gate",
+            detail_text=(
+                "Buyer readiness score, close recommendation, KPI gaps, and "
+                "blocking checks."
+            ),
+        ),
+        entry(
+            manifest_key="remediation_actions",
+            file_name="remediation-actions.json",
+            artifact_type="readiness_summary_json",
+            display_name="Remediation actions",
+            state_code="needs_attention",
+            source_field="acquisition_readiness_gate.remediation_actions",
+            detail_text=(
+                "Required remediation actions to close remaining diligence gaps."
+            ),
+        ),
+    ]
+
+
+def _expected_diligence_exception_register():
+    related_artifact_by_check_key = {
+        "thread_id_integrity": "acquisition-readiness-summary.json",
+        "dedupe_fingerprint": "acquisition-readiness-summary.json",
+        "attachment_content": "remediation-actions.json",
+        "content_graph_coverage": "dom-paragraph-evidence-samples.json",
+        "knowledge_graph_coverage": "knowledge-graph-evidence-samples.json",
+        "content_segment_text_readiness": "dom-paragraph-evidence-samples.json",
+        "knowledge_graph_evidence_endpoint_readiness": (
+            "knowledge-graph-evidence-samples.json"
+        ),
+        "semantic_relation_source_backing": "semantic-relation-evidence-samples.json",
+        "attachment_parse_coverage": "remediation-actions.json",
+    }
+    return [
+        {
+            "exception_key": f"exception_{action['action_key']}",
+            "blocking_check_key": action["blocking_check_key"],
+            "display_name": action["display_name"],
+            "severity_code": action["priority_code"],
+            "owner_area": action["owner_area"],
+            "source_field": f"quality_checks.{action['blocking_check_key']}",
+            "related_artifact": related_artifact_by_check_key[
+                action["blocking_check_key"]
+            ],
+            "blocks_close": True,
+            "detail_text": action["impact_text"],
+            "next_action": action["recommended_next_step"],
+            "provider_write_executed": False,
+        }
+        for action in _expected_acquisition_remediation_actions()
+    ]
+
+
+def _expected_diligence_risk_matrix():
+    return [
+        {
+            "matrix_key": (
+                "risk_critical_email_ingestion_acquisition_readiness_summary_json"
+            ),
+            "severity_code": "critical",
+            "owner_area": "email_ingestion",
+            "related_artifact": "acquisition-readiness-summary.json",
+            "exception_count": 2,
+            "representative_exception_keys": [
+                "exception_repair_thread_id_integrity",
+                "exception_backfill_dedupe_fingerprints",
+            ],
+            "risk_label": "Critical close blocker concentration",
+            "buyer_implication": (
+                "2 critical exception(s) in email_ingestion affect "
+                "acquisition-readiness-summary.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_repair_thread_id_integrity, "
+                "exception_backfill_dedupe_fingerprints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": "risk_high_attachment_parsing_remediation_actions_json",
+            "severity_code": "high",
+            "owner_area": "attachment_parsing",
+            "related_artifact": "remediation-actions.json",
+            "exception_count": 1,
+            "representative_exception_keys": [
+                "exception_recover_attachment_content",
+            ],
+            "risk_label": "High diligence evidence gap",
+            "buyer_implication": (
+                "1 high exception(s) in attachment_parsing affect "
+                "remediation-actions.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_recover_attachment_content, then regenerate "
+                "the evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": "risk_high_content_graph_dom_paragraph_evidence_samples_json",
+            "severity_code": "high",
+            "owner_area": "content_graph",
+            "related_artifact": "dom-paragraph-evidence-samples.json",
+            "exception_count": 2,
+            "representative_exception_keys": [
+                "exception_backfill_content_graph_coverage",
+                "exception_repair_segment_text_readiness",
+            ],
+            "risk_label": "High diligence evidence gap",
+            "buyer_implication": (
+                "2 high exception(s) in content_graph affect "
+                "dom-paragraph-evidence-samples.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_backfill_content_graph_coverage, "
+                "exception_repair_segment_text_readiness, then regenerate the "
+                "evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": (
+                "risk_high_knowledge_graph_knowledge_graph_evidence_samples_json"
+            ),
+            "severity_code": "high",
+            "owner_area": "knowledge_graph",
+            "related_artifact": "knowledge-graph-evidence-samples.json",
+            "exception_count": 2,
+            "representative_exception_keys": [
+                "exception_backfill_knowledge_graph_coverage",
+                "exception_attach_kg_evidence_endpoints",
+            ],
+            "risk_label": "High diligence evidence gap",
+            "buyer_implication": (
+                "2 high exception(s) in knowledge_graph affect "
+                "knowledge-graph-evidence-samples.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_backfill_knowledge_graph_coverage, "
+                "exception_attach_kg_evidence_endpoints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": (
+                "risk_high_semantic_kg_semantic_relation_evidence_samples_json"
+            ),
+            "severity_code": "high",
+            "owner_area": "semantic_kg",
+            "related_artifact": "semantic-relation-evidence-samples.json",
+            "exception_count": 1,
+            "representative_exception_keys": [
+                "exception_backfill_semantic_relation_sources",
+            ],
+            "risk_label": "High diligence evidence gap",
+            "buyer_implication": (
+                "1 high exception(s) in semantic_kg affect "
+                "semantic-relation-evidence-samples.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_backfill_semantic_relation_sources, then "
+                "regenerate the evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+        {
+            "matrix_key": "risk_medium_attachment_parsing_remediation_actions_json",
+            "severity_code": "medium",
+            "owner_area": "attachment_parsing",
+            "related_artifact": "remediation-actions.json",
+            "exception_count": 1,
+            "representative_exception_keys": [
+                "exception_expand_attachment_parse_coverage",
+            ],
+            "risk_label": "Medium diligence coverage gap",
+            "buyer_implication": (
+                "1 medium exception(s) in attachment_parsing affect "
+                "remediation-actions.json and block buyer close."
+            ),
+            "recommended_next_action": (
+                "Resolve exception_expand_attachment_parse_coverage, then "
+                "regenerate the evidence snapshot."
+            ),
+            "blocks_close": True,
+            "provider_write_executed": False,
+        },
+    ]
+
+
+def _expected_diligence_close_proof_plan():
+    dependency_by_severity = {
+        "critical": "critical evidence gate",
+        "high": "high priority evidence gate",
+        "medium": "coverage exception gate",
+    }
+    return [
+        {
+            "proof_key": f"proof_{risk['matrix_key']}",
+            "severity_code": risk["severity_code"],
+            "owner_area": risk["owner_area"],
+            "related_artifact": risk["related_artifact"],
+            "exception_count": risk["exception_count"],
+            "required_proof_artifact": risk["related_artifact"],
+            "acceptance_criteria": (
+                f"All {risk['exception_count']} exception(s) for "
+                f"{risk['owner_area']} are resolved and "
+                f"{risk['related_artifact']} is regenerated without raw content "
+                "or stable IDs."
+            ),
+            "verification_method": (
+                "Regenerate the evidence snapshot and run python "
+                "scripts/verify_evidence_snapshot.py <snapshot.json>."
+            ),
+            "buyer_close_dependency": dependency_by_severity[
+                risk["severity_code"]
+            ],
+            "close_gate_status": "blocked",
+            "next_action": risk["recommended_next_action"],
+            "provider_write_executed": False,
+        }
+        for risk in _expected_diligence_risk_matrix()
+    ]
+
+
+def _expected_diligence_close_decision_summary():
+    return {
+        "summary_key": "buyer_close_decision",
+        "decision_code": "close_blocked",
+        "total_proof_count": 6,
+        "blocked_proof_count": 6,
+        "ready_proof_count": 0,
+        "critical_blocker_count": 1,
+        "high_blocker_count": 4,
+        "medium_blocker_count": 1,
+        "required_artifact_count": 5,
+        "required_artifacts": [
+            "acquisition-readiness-summary.json",
+            "dom-paragraph-evidence-samples.json",
+            "knowledge-graph-evidence-samples.json",
+            "remediation-actions.json",
+            "semantic-relation-evidence-samples.json",
+        ],
+        "highest_severity": "critical",
+        "snapshot_verification_required": True,
+        "buyer_summary_text": (
+            "Close remains blocked by 6 proof requirement(s) across "
+            "5 required artifact(s)."
+        ),
+        "next_action_text": (
+            "Resolve critical and high proof blockers, regenerate the "
+            "evidence snapshot, and verify the copied JSON with the offline "
+            "snapshot verifier."
+        ),
+        "provider_write_executed": False,
+    }
+
+
+def _expected_diligence_close_artifact_review_queue():
+    return [
+        {
+            "queue_key": "review_acquisition_readiness_summary_json",
+            "required_proof_artifact": "acquisition-readiness-summary.json",
+            "owner_areas": ["email_ingestion"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "critical",
+            "buyer_review_role": "executive diligence reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) for acquisition-readiness-summary.json "
+                "need executive diligence reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_repair_thread_id_integrity, "
+                "exception_backfill_dedupe_fingerprints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "queue_key": "review_dom_paragraph_evidence_samples_json",
+            "required_proof_artifact": "dom-paragraph-evidence-samples.json",
+            "owner_areas": ["content_graph"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_role": "data quality reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) for dom-paragraph-evidence-samples.json "
+                "need data quality reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_content_graph_coverage, "
+                "exception_repair_segment_text_readiness, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "queue_key": "review_knowledge_graph_evidence_samples_json",
+            "required_proof_artifact": "knowledge-graph-evidence-samples.json",
+            "owner_areas": ["knowledge_graph"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_role": "data quality reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) for knowledge-graph-evidence-samples.json "
+                "need data quality reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_knowledge_graph_coverage, "
+                "exception_attach_kg_evidence_endpoints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "queue_key": "review_remediation_actions_json",
+            "required_proof_artifact": "remediation-actions.json",
+            "owner_areas": ["attachment_parsing"],
+            "proof_count": 2,
+            "blocked_proof_count": 2,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_role": "data quality reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "2 proof requirement(s) for remediation-actions.json need "
+                "data quality reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_recover_attachment_content, then regenerate the "
+                "evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, "
+                "then regenerate the evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "queue_key": "review_semantic_relation_evidence_samples_json",
+            "required_proof_artifact": "semantic-relation-evidence-samples.json",
+            "owner_areas": ["semantic_kg"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_role": "data quality reviewer",
+            "review_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) for semantic-relation-evidence-samples.json "
+                "need data quality reviewer review before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_semantic_relation_sources, then "
+                "regenerate the evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+    ]
+
+
+def _expected_diligence_close_owner_handoff_queue():
+    return [
+        {
+            "handoff_key": "handoff_attachment_parsing",
+            "owner_area": "attachment_parsing",
+            "related_artifacts": ["remediation-actions.json"],
+            "proof_count": 2,
+            "blocked_proof_count": 2,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_roles": ["data quality reviewer", "coverage reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "2 proof requirement(s) assigned to attachment_parsing affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_recover_attachment_content, then regenerate the "
+                "evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, "
+                "then regenerate the evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "handoff_key": "handoff_content_graph",
+            "owner_area": "content_graph",
+            "related_artifacts": ["dom-paragraph-evidence-samples.json"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_roles": ["data quality reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) assigned to content_graph affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_content_graph_coverage, "
+                "exception_repair_segment_text_readiness, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "handoff_key": "handoff_email_ingestion",
+            "owner_area": "email_ingestion",
+            "related_artifacts": ["acquisition-readiness-summary.json"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "critical",
+            "buyer_review_roles": ["executive diligence reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) assigned to email_ingestion affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_repair_thread_id_integrity, "
+                "exception_backfill_dedupe_fingerprints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "handoff_key": "handoff_knowledge_graph",
+            "owner_area": "knowledge_graph",
+            "related_artifacts": ["knowledge-graph-evidence-samples.json"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_roles": ["data quality reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) assigned to knowledge_graph affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_knowledge_graph_coverage, "
+                "exception_attach_kg_evidence_endpoints, then regenerate the "
+                "evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+        {
+            "handoff_key": "handoff_semantic_kg",
+            "owner_area": "semantic_kg",
+            "related_artifacts": ["semantic-relation-evidence-samples.json"],
+            "proof_count": 1,
+            "blocked_proof_count": 1,
+            "ready_proof_count": 0,
+            "highest_severity": "high",
+            "buyer_review_roles": ["data quality reviewer"],
+            "handoff_status": "blocked",
+            "acceptance_summary": (
+                "1 proof requirement(s) assigned to semantic_kg affect "
+                "1 artifact(s) before close."
+            ),
+            "next_action": (
+                "Resolve exception_backfill_semantic_relation_sources, then "
+                "regenerate the evidence snapshot."
+            ),
+            "snapshot_verification_required": True,
+            "provider_write_executed": False,
+        },
+    ]
+
+
+def _expected_diligence_close_traceability_map():
+    risk_by_key = {
+        risk["matrix_key"]: risk for risk in _expected_diligence_risk_matrix()
+    }
+    manifest_by_file = {
+        item["file_name"]: item for item in _expected_data_room_package_manifest()
+    }
+    artifact_review_by_artifact = {
+        item["required_proof_artifact"]: item
+        for item in _expected_diligence_close_artifact_review_queue()
+    }
+    owner_handoff_by_owner = {
+        item["owner_area"]: item for item in _expected_diligence_close_owner_handoff_queue()
+    }
+
+    entries = []
+    for proof in _expected_diligence_close_proof_plan():
+        risk_key = proof["proof_key"].removeprefix("proof_")
+        risk = risk_by_key[risk_key]
+        manifest = manifest_by_file[proof["required_proof_artifact"]]
+        artifact_review = artifact_review_by_artifact[
+            proof["required_proof_artifact"]
+        ]
+        owner_handoff = owner_handoff_by_owner[proof["owner_area"]]
+        entries.append(
+            {
+                "trace_key": f"trace_{risk_key}",
+                "source_field": manifest["source_field"],
+                "data_room_artifact": proof["required_proof_artifact"],
+                "manifest_key": manifest["manifest_key"],
+                "exception_keys": risk["representative_exception_keys"],
+                "risk_key": risk_key,
+                "proof_key": proof["proof_key"],
+                "artifact_review_key": artifact_review["queue_key"],
+                "owner_handoff_key": owner_handoff["handoff_key"],
+                "owner_area": proof["owner_area"],
+                "severity_code": proof["severity_code"],
+                "exception_count": proof["exception_count"],
+                "close_gate_status": proof["close_gate_status"],
+                "buyer_review_roles": owner_handoff["buyer_review_roles"],
+                "trace_summary": (
+                    f"{manifest['source_field']} feeds "
+                    f"{proof['required_proof_artifact']} for "
+                    f"{proof['owner_area']} close proof traceability."
+                ),
+                "next_action": proof["next_action"],
+                "snapshot_verification_required": True,
+                "provider_write_executed": False,
+            }
+        )
+    return entries
+
+
+def _expected_diligence_close_acceptance_checklist():
+    return [
+        {
+            "acceptance_key": f"accept_{trace['trace_key'].removeprefix('trace_')}",
+            "trace_key": trace["trace_key"],
+            "data_room_artifact": trace["data_room_artifact"],
+            "source_field": trace["source_field"],
+            "owner_area": trace["owner_area"],
+            "reviewer_roles": trace["buyer_review_roles"],
+            "acceptance_status": (
+                "blocked"
+                if trace["close_gate_status"] == "blocked"
+                else "ready_for_acceptance"
+            ),
+            "close_gate_status": trace["close_gate_status"],
+            "blocker_keys": (
+                trace["exception_keys"]
+                if trace["close_gate_status"] == "blocked"
+                else []
+            ),
+            "acceptance_criteria": (
+                f"Resolve {trace['exception_count']} exception(s), regenerate "
+                f"{trace['data_room_artifact']} from {trace['source_field']}, and "
+                "verify the copied snapshot digest before buyer acceptance."
+            ),
+            "verification_command": (
+                "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+            ),
+            "reviewer_evidence_summary": (
+                f"{', '.join(trace['buyer_review_roles'])} review "
+                f"{trace['data_room_artifact']} for {trace['owner_area']}; "
+                f"{trace['trace_key']} covers {trace['exception_count']} exception(s)."
+            ),
+            "next_action": trace["next_action"],
+            "snapshot_verification_required": trace["snapshot_verification_required"],
+            "provider_write_executed": False,
+        }
+        for trace in _expected_diligence_close_traceability_map()
+    ]
+
+
+def _expected_diligence_close_acceptance_summary():
+    checklist = _expected_diligence_close_acceptance_checklist()
+    blocked = [item for item in checklist if item["acceptance_status"] == "blocked"]
+    ready = [
+        item for item in checklist if item["acceptance_status"] == "ready_for_acceptance"
+    ]
+    reviewer_roles = sorted(
+        {role for item in checklist for role in item["reviewer_roles"]}
+    )
+    required_artifacts = sorted({item["data_room_artifact"] for item in checklist})
+    blocker_keys = sorted({key for item in blocked for key in item["blocker_keys"]})
+    return {
+        "summary_key": "buyer_close_acceptance",
+        "decision_code": "close_blocked" if blocked else "ready_to_close",
+        "total_acceptance_count": len(checklist),
+        "blocked_acceptance_count": len(blocked),
+        "ready_acceptance_count": len(ready),
+        "reviewer_role_count": len(reviewer_roles),
+        "reviewer_roles": reviewer_roles,
+        "required_artifact_count": len(required_artifacts),
+        "required_artifacts": required_artifacts,
+        "blocker_count": len(blocker_keys),
+        "blocker_keys": blocker_keys,
+        "close_gate_status": "blocked" if blocked else "ready",
+        "snapshot_verification_required": any(
+            item["snapshot_verification_required"] for item in checklist
+        ),
+        "buyer_summary_text": (
+            f"Buyer acceptance remains blocked by {len(blocked)} item(s) "
+            f"across {len(required_artifacts)} artifact(s) and "
+            f"{len(blocker_keys)} blocker key(s)."
+        )
+        if blocked
+        else (
+            f"Buyer acceptance is ready for {len(ready)} item(s) across "
+            f"{len(required_artifacts)} artifact(s)."
+        ),
+        "next_action_text": (
+            "Resolve blocker keys, regenerate the evidence snapshot, run the "
+            "offline verifier, and reissue the acceptance checklist."
+        )
+        if blocked
+        else (
+            "Share the verified snapshot and acceptance checklist with buyer "
+            "reviewers."
+        ),
+        "provider_write_executed": False,
+    }
+
+
+def _expected_data_room_release_summary():
+    manifest = _expected_data_room_package_manifest()
+    acceptance_summary = _expected_diligence_close_acceptance_summary()
+    blocked_artifact_files = sorted(
+        item["file_name"] for item in manifest if item["state_code"] != "ready"
+    )
+    return {
+        "release_key": "buyer_data_room_release",
+        "release_status": "release_blocked",
+        "total_artifact_count": len(manifest),
+        "ready_artifact_count": sum(
+            1 for item in manifest if item["state_code"] == "ready"
+        ),
+        "needs_attention_artifact_count": len(blocked_artifact_files),
+        "required_for_close_count": sum(
+            1 for item in manifest if item["required_for_close"]
+        ),
+        "blocked_artifact_files": blocked_artifact_files,
+        "privacy_exposure_count": 0,
+        "raw_content_exposure_count": 0,
+        "stable_identifier_exposure_count": 0,
+        "provider_credential_exposure_count": 0,
+        "snapshot_verification_required": True,
+        "verification_command": (
+            "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+        ),
+        "acceptance_blocker_count": acceptance_summary["blocker_count"],
+        "acceptance_blocker_keys": acceptance_summary["blocker_keys"],
+        "buyer_summary_text": (
+            "Data-room release remains blocked by 3 artifact(s), 9 blocker key(s), "
+            "and 0 privacy exposure(s)."
+        ),
+        "next_action_text": (
+            "Resolve blocked artifact states, clear acceptance blockers, run the "
+            "offline verifier, and reissue the release bundle."
+        ),
+        "provider_write_executed": False,
+    }
+
+
+def _expected_commercial_close_readiness_scorecard():
+    release_summary = _expected_data_room_release_summary()
+    acceptance_summary = _expected_diligence_close_acceptance_summary()
+    kpi_gap_keys = sorted(
+        kpi["source_check_key"]
+        for kpi in _expected_acquisition_readiness_kpis()
+        if not kpi["target_met"]
+    )
+    category_scores = [
+        {
+            "category_key": "evidence_packet_integrity",
+            "display_name": "Evidence packet integrity",
+            "status_code": "needs_attention",
+            "score": 14,
+            "max_score": 15,
+            "detail_text": "9 of 10 evidence packet checks are ready.",
+        },
+        {
+            "category_key": "data_room_release_integrity",
+            "display_name": "Data room release integrity",
+            "status_code": "needs_attention",
+            "score": 14,
+            "max_score": 20,
+            "detail_text": "7 of 10 data-room artifacts are ready.",
+        },
+        {
+            "category_key": "buyer_acceptance_clearance",
+            "display_name": "Buyer acceptance clearance",
+            "status_code": "needs_attention",
+            "score": 0,
+            "max_score": 20,
+            "detail_text": "9 acceptance blocker key(s) remain.",
+        },
+        {
+            "category_key": "privacy_boundary",
+            "display_name": "Privacy boundary",
+            "status_code": "ready",
+            "score": 20,
+            "max_score": 20,
+            "detail_text": "0 privacy exposure(s) remain.",
+        },
+        {
+            "category_key": "offline_verification",
+            "display_name": "Offline verification",
+            "status_code": "ready",
+            "score": 10,
+            "max_score": 10,
+            "detail_text": "Offline verifier contract is ready.",
+        },
+        {
+            "category_key": "product_kpi_attainment",
+            "display_name": "Product KPI attainment",
+            "status_code": "needs_attention",
+            "score": 4,
+            "max_score": 15,
+            "detail_text": "9 KPI target gap(s) remain for buyer review.",
+        },
+    ]
+    return {
+        "scorecard_key": "commercial_close_readiness",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "commercially_blocked",
+        "total_score": 62,
+        "max_score": 100,
+        "category_scores": category_scores,
+        "blocked_artifact_count": release_summary["needs_attention_artifact_count"],
+        "blocked_artifact_files": release_summary["blocked_artifact_files"],
+        "acceptance_blocker_count": acceptance_summary["blocker_count"],
+        "acceptance_blocker_keys": acceptance_summary["blocker_keys"],
+        "kpi_gap_count": len(kpi_gap_keys),
+        "kpi_gap_keys": kpi_gap_keys,
+        "privacy_exposure_count": 0,
+        "verifier_ready": True,
+        "release_status": "release_blocked",
+        "close_gate_status": "blocked",
+        "buyer_summary_text": (
+            "Commercial close remains blocked for 2,000,000,000 KRW target "
+            "review: score 62/100 with 9 KPI gap(s), 9 acceptance blocker "
+            "key(s), and 3 blocked data-room artifact(s)."
+        ),
+        "next_action_text": (
+            "Resolve KPI gaps and acceptance blockers, regenerate the data-room "
+            "bundle, run the offline verifier, and reissue the buyer scorecard."
+        ),
+        "provider_write_executed": False,
+    }
+
+
+def _expected_commercial_close_execution_plan():
+    verification_command = "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+    lanes = [
+        {
+            "lane_key": "lane_critical_email_ingestion_acquisition_readiness_summary_json",
+            "execution_order": 1,
+            "display_name": (
+                "Critical email_ingestion execution for "
+                "acquisition-readiness-summary.json"
+            ),
+            "owner_area": "email_ingestion",
+            "priority_code": "critical",
+            "status_code": "blocked",
+            "related_artifact": "acquisition-readiness-summary.json",
+            "artifact_ready": False,
+            "action_count": 2,
+            "action_keys": [
+                "repair_thread_id_integrity",
+                "backfill_dedupe_fingerprints",
+            ],
+            "blocking_check_keys": [
+                "thread_id_integrity",
+                "dedupe_fingerprint",
+            ],
+            "acceptance_blocker_keys": [
+                "exception_repair_thread_id_integrity",
+                "exception_backfill_dedupe_fingerprints",
+            ],
+            "kpi_gap_keys": [
+                "thread_id_integrity",
+                "dedupe_fingerprint",
+            ],
+            "acceptance_criteria": (
+                "Resolve 2 action(s), regenerate "
+                "acquisition-readiness-summary.json, run "
+                "python scripts/verify_evidence_snapshot.py <snapshot.json>, and "
+                "reissue the buyer scorecard."
+            ),
+            "verification_command": verification_command,
+            "next_action_text": (
+                "Run canonical threading repair for affected scoped emails. "
+                "Backfill duplicate-detection fingerprints for scoped email records."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "lane_key": "lane_high_attachment_parsing_remediation_actions_json",
+            "execution_order": 2,
+            "display_name": (
+                "High attachment_parsing execution for remediation-actions.json"
+            ),
+            "owner_area": "attachment_parsing",
+            "priority_code": "high",
+            "status_code": "blocked",
+            "related_artifact": "remediation-actions.json",
+            "artifact_ready": False,
+            "action_count": 1,
+            "action_keys": ["recover_attachment_content"],
+            "blocking_check_keys": ["attachment_content"],
+            "acceptance_blocker_keys": ["exception_recover_attachment_content"],
+            "kpi_gap_keys": ["attachment_content"],
+            "acceptance_criteria": (
+                "Resolve 1 action(s), regenerate remediation-actions.json, run "
+                "python scripts/verify_evidence_snapshot.py <snapshot.json>, and "
+                "reissue the buyer scorecard."
+            ),
+            "verification_command": verification_command,
+            "next_action_text": (
+                "Re-run attachment extraction for scoped attachments with blank safe "
+                "content."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "lane_key": "lane_high_content_graph_dom_paragraph_evidence_samples_json",
+            "execution_order": 3,
+            "display_name": (
+                "High content_graph execution for "
+                "dom-paragraph-evidence-samples.json"
+            ),
+            "owner_area": "content_graph",
+            "priority_code": "high",
+            "status_code": "blocked",
+            "related_artifact": "dom-paragraph-evidence-samples.json",
+            "artifact_ready": True,
+            "action_count": 2,
+            "action_keys": [
+                "backfill_content_graph_coverage",
+                "repair_segment_text_readiness",
+            ],
+            "blocking_check_keys": [
+                "content_graph_coverage",
+                "content_segment_text_readiness",
+            ],
+            "acceptance_blocker_keys": [
+                "exception_backfill_content_graph_coverage",
+                "exception_repair_segment_text_readiness",
+            ],
+            "kpi_gap_keys": [
+                "content_graph_coverage",
+                "content_segment_text_readiness",
+            ],
+            "acceptance_criteria": (
+                "Resolve 2 action(s), regenerate "
+                "dom-paragraph-evidence-samples.json, run "
+                "python scripts/verify_evidence_snapshot.py <snapshot.json>, and "
+                "reissue the buyer scorecard."
+            ),
+            "verification_command": verification_command,
+            "next_action_text": (
+                "Backfill DOM paragraph segmentation for unsegmented scoped emails. "
+                "Rebuild affected content segments with safe text and word-count "
+                "evidence."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "lane_key": "lane_high_knowledge_graph_knowledge_graph_evidence_samples_json",
+            "execution_order": 4,
+            "display_name": (
+                "High knowledge_graph execution for "
+                "knowledge-graph-evidence-samples.json"
+            ),
+            "owner_area": "knowledge_graph",
+            "priority_code": "high",
+            "status_code": "blocked",
+            "related_artifact": "knowledge-graph-evidence-samples.json",
+            "artifact_ready": True,
+            "action_count": 2,
+            "action_keys": [
+                "backfill_knowledge_graph_coverage",
+                "attach_kg_evidence_endpoints",
+            ],
+            "blocking_check_keys": [
+                "knowledge_graph_coverage",
+                "knowledge_graph_evidence_endpoint_readiness",
+            ],
+            "acceptance_blocker_keys": [
+                "exception_backfill_knowledge_graph_coverage",
+                "exception_attach_kg_evidence_endpoints",
+            ],
+            "kpi_gap_keys": [
+                "knowledge_graph_coverage",
+                "knowledge_graph_evidence_endpoint_readiness",
+            ],
+            "acceptance_criteria": (
+                "Resolve 2 action(s), regenerate "
+                "knowledge-graph-evidence-samples.json, run "
+                "python scripts/verify_evidence_snapshot.py <snapshot.json>, and "
+                "reissue the buyer scorecard."
+            ),
+            "verification_command": verification_command,
+            "next_action_text": (
+                "Persist deterministic knowledge graph edges for emails missing graph "
+                "coverage. Attach source or target paragraph segment endpoints to "
+                "affected KG edges."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "lane_key": "lane_high_semantic_kg_semantic_relation_evidence_samples_json",
+            "execution_order": 5,
+            "display_name": (
+                "High semantic_kg execution for "
+                "semantic-relation-evidence-samples.json"
+            ),
+            "owner_area": "semantic_kg",
+            "priority_code": "high",
+            "status_code": "blocked",
+            "related_artifact": "semantic-relation-evidence-samples.json",
+            "artifact_ready": True,
+            "action_count": 1,
+            "action_keys": ["backfill_semantic_relation_sources"],
+            "blocking_check_keys": ["semantic_relation_source_backing"],
+            "acceptance_blocker_keys": [
+                "exception_backfill_semantic_relation_sources"
+            ],
+            "kpi_gap_keys": ["semantic_relation_source_backing"],
+            "acceptance_criteria": (
+                "Resolve 1 action(s), regenerate "
+                "semantic-relation-evidence-samples.json, run "
+                "python scripts/verify_evidence_snapshot.py <snapshot.json>, and "
+                "reissue the buyer scorecard."
+            ),
+            "verification_command": verification_command,
+            "next_action_text": (
+                "Backfill source message or thread links for semantic relation records."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "lane_key": "lane_medium_attachment_parsing_remediation_actions_json",
+            "execution_order": 6,
+            "display_name": (
+                "Medium attachment_parsing execution for remediation-actions.json"
+            ),
+            "owner_area": "attachment_parsing",
+            "priority_code": "medium",
+            "status_code": "blocked",
+            "related_artifact": "remediation-actions.json",
+            "artifact_ready": False,
+            "action_count": 1,
+            "action_keys": ["expand_attachment_parse_coverage"],
+            "blocking_check_keys": ["attachment_parse_coverage"],
+            "acceptance_blocker_keys": ["exception_expand_attachment_parse_coverage"],
+            "kpi_gap_keys": ["attachment_parse_coverage"],
+            "acceptance_criteria": (
+                "Resolve 1 action(s), regenerate remediation-actions.json, run "
+                "python scripts/verify_evidence_snapshot.py <snapshot.json>, and "
+                "reissue the buyer scorecard."
+            ),
+            "verification_command": verification_command,
+            "next_action_text": (
+                "Add parser coverage or metadata-only exception evidence for "
+                "unsupported attachment types."
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+    return {
+        "plan_key": "commercial_close_execution_plan",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "execution_blocked",
+        "total_lane_count": 6,
+        "blocked_lane_count": 6,
+        "ready_lane_count": 0,
+        "critical_lane_count": 1,
+        "high_lane_count": 4,
+        "medium_lane_count": 1,
+        "related_artifact_count": 5,
+        "related_artifacts": [
+            "acquisition-readiness-summary.json",
+            "dom-paragraph-evidence-samples.json",
+            "knowledge-graph-evidence-samples.json",
+            "remediation-actions.json",
+            "semantic-relation-evidence-samples.json",
+        ],
+        "total_action_count": 9,
+        "kpi_gap_count": 9,
+        "acceptance_blocker_count": 9,
+        "verification_command": verification_command,
+        "buyer_summary_text": (
+            "Commercial close execution remains blocked for 2,000,000,000 KRW "
+            "target review: 6 lane(s), 9 action(s), and 5 artifact(s) require "
+            "remediation."
+        ),
+        "next_action_text": (
+            "Execute lanes in priority order, regenerate affected artifacts, run "
+            "the offline verifier, and reissue the buyer scorecard."
+        ),
+        "lanes": lanes,
+        "provider_write_executed": False,
+    }
+
+
+def _expected_commercial_close_kpi_operating_model():
+    metrics = [
+        {
+            "metric_key": "commercial_close_readiness_score",
+            "display_name": "Commercial close readiness score",
+            "metric_kind": "primary",
+            "status_code": "needs_attention",
+            "current_value": 62,
+            "target_value": 100,
+            "unit_label": "score",
+            "source_field": "commercial_close_readiness_scorecard.total_score",
+            "owner_area": "commercial_diligence",
+            "buyer_implication": (
+                "2,000,000,000 KRW review remains blocked until the readiness "
+                "score reaches 100 and blockers clear."
+            ),
+            "next_action_text": (
+                "Resolve KPI gaps and acceptance blockers, regenerate the data-room "
+                "bundle, run the offline verifier, and reissue the buyer scorecard."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "metric_key": "execution_lane_clearance",
+            "display_name": "Execution lane clearance",
+            "metric_kind": "driver",
+            "status_code": "needs_attention",
+            "current_value": 0,
+            "target_value": 6,
+            "unit_label": "lane",
+            "source_field": "commercial_close_execution_plan.ready_lane_count",
+            "owner_area": "program_management",
+            "buyer_implication": (
+                "Buyer review needs every commercial close execution lane cleared."
+            ),
+            "next_action_text": (
+                "Execute lanes in priority order, regenerate affected artifacts, run "
+                "the offline verifier, and reissue the buyer scorecard."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "metric_key": "data_room_artifact_readiness",
+            "display_name": "Data-room artifact readiness",
+            "metric_kind": "driver",
+            "status_code": "needs_attention",
+            "current_value": 7,
+            "target_value": 10,
+            "unit_label": "artifact",
+            "source_field": "data_room_release_summary.ready_artifact_count",
+            "owner_area": "data_room_ops",
+            "buyer_implication": (
+                "All required data-room artifacts must be ready before buyer release."
+            ),
+            "next_action_text": (
+                "Resolve blocked artifact states, clear acceptance blockers, run the "
+                "offline verifier, and reissue the release bundle."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "metric_key": "buyer_acceptance_clearance",
+            "display_name": "Buyer acceptance clearance",
+            "metric_kind": "driver",
+            "status_code": "needs_attention",
+            "current_value": 0,
+            "target_value": 6,
+            "unit_label": "acceptance",
+            "source_field": (
+                "diligence_close_acceptance_summary.ready_acceptance_count"
+            ),
+            "owner_area": "buyer_diligence",
+            "buyer_implication": (
+                "Buyer acceptance cannot close while acceptance items remain blocked."
+            ),
+            "next_action_text": (
+                "Resolve blocker keys, regenerate the evidence snapshot, run the "
+                "offline verifier, and reissue the acceptance checklist."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "metric_key": "product_kpi_attainment",
+            "display_name": "Product KPI attainment",
+            "metric_kind": "driver",
+            "status_code": "needs_attention",
+            "current_value": 3,
+            "target_value": 12,
+            "unit_label": "kpi",
+            "source_field": "acquisition_readiness_gate.kpis",
+            "owner_area": "data_quality",
+            "buyer_implication": (
+                "Product evidence KPIs must meet target before close readiness "
+                "can be claimed."
+            ),
+            "next_action_text": (
+                "Resolve critical and high remediation actions, then regenerate the "
+                "diligence evidence snapshot."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "metric_key": "privacy_exposure_control",
+            "display_name": "Privacy exposure control",
+            "metric_kind": "guardrail",
+            "status_code": "target_met",
+            "current_value": 0,
+            "target_value": 0,
+            "unit_label": "exposure",
+            "source_field": "data_room_release_summary.privacy_exposure_count",
+            "owner_area": "privacy_security",
+            "buyer_implication": (
+                "Buyer package must keep raw content, stable IDs, and credentials out."
+            ),
+            "next_action_text": "Keep the redaction policy enforced for every snapshot.",
+            "provider_write_executed": False,
+        },
+        {
+            "metric_key": "offline_verifier_contract",
+            "display_name": "Offline verifier contract",
+            "metric_kind": "guardrail",
+            "status_code": "target_met",
+            "current_value": 1,
+            "target_value": 1,
+            "unit_label": "contract",
+            "source_field": "verification_handoff.verifier_command",
+            "owner_area": "verification",
+            "buyer_implication": (
+                "Buyer reviewers need a repeatable offline verifier for copied JSON."
+            ),
+            "next_action_text": (
+                "Save the copied evidence snapshot JSON and verify it with the "
+                "offline verifier before sharing diligence materials."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "metric_key": "provider_write_boundary",
+            "display_name": "Provider write boundary",
+            "metric_kind": "guardrail",
+            "status_code": "target_met",
+            "current_value": 0,
+            "target_value": 0,
+            "unit_label": "write",
+            "source_field": "provider_write_executed",
+            "owner_area": "security_governance",
+            "buyer_implication": (
+                "Diligence evidence must remain read-only until explicit provider "
+                "write approval."
+            ),
+            "next_action_text": "Keep buyer evidence generation read-only.",
+            "provider_write_executed": False,
+        },
+    ]
+    return {
+        "model_key": "commercial_close_kpi_operating_model",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "operating_blocked",
+        "primary_metric_key": "commercial_close_readiness_score",
+        "total_metric_count": 8,
+        "target_met_metric_count": 3,
+        "needs_attention_metric_count": 5,
+        "primary_metric_count": 1,
+        "driver_metric_count": 4,
+        "guardrail_metric_count": 3,
+        "blocked_metric_keys": [
+            "commercial_close_readiness_score",
+            "execution_lane_clearance",
+            "data_room_artifact_readiness",
+            "buyer_acceptance_clearance",
+            "product_kpi_attainment",
+        ],
+        "guardrail_breach_count": 0,
+        "buyer_summary_text": (
+            "Commercial close KPI operating model remains blocked for "
+            "2,000,000,000 KRW target review: 5 of 8 metric(s) need attention "
+            "and 0 guardrail breach(es) remain."
+        ),
+        "next_action_text": (
+            "Use the blocked KPI list to sequence execution lanes, regenerate "
+            "artifacts, rerun verification, and reissue the buyer scorecard."
+        ),
+        "metrics": metrics,
+        "provider_write_executed": False,
+    }
+
+
+def _expected_commercial_close_buyer_brief():
+    return {
+        "brief_key": "commercial_close_buyer_brief",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "brief_blocked",
+        "readiness_headline_text": (
+            "Commercial close remains blocked: readiness score 62/100, 5 KPI "
+            "operating metric(s), 6 execution lane(s), and 9 exception(s) require "
+            "attention."
+        ),
+        "proof_thesis_text": (
+            "Naruon can package redacted DOM, paragraph, knowledge-graph, semantic "
+            "relation, data-room, KPI, and offline verifier evidence for buyer review "
+            "without exposing raw content, stable IDs, provider credentials, or "
+            "provider writes."
+        ),
+        "evidence_basis_bullets": [
+            {
+                "bullet_key": "buyer_brief_readiness_score",
+                "display_name": "Commercial readiness score",
+                "source_field": "commercial_close_readiness_scorecard.total_score",
+                "detail_text": (
+                    "Commercial readiness is 62/100 for 2,000,000,000 KRW target "
+                    "review; status is commercially_blocked."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_data_room_release",
+                "display_name": "Data-room release",
+                "source_field": "data_room_release_summary.ready_artifact_count",
+                "detail_text": (
+                    "Data-room release has 7/10 artifact(s) ready and 3 blocked "
+                    "artifact(s)."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_acceptance_clearance",
+                "display_name": "Buyer acceptance clearance",
+                "source_field": (
+                    "diligence_close_acceptance_summary.ready_acceptance_count"
+                ),
+                "detail_text": (
+                    "Buyer acceptance has 0/6 acceptance item(s) ready with 9 "
+                    "blocker key(s)."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_kpi_operating_model",
+                "display_name": "KPI operating model",
+                "source_field": (
+                    "commercial_close_kpi_operating_model.target_met_metric_count"
+                ),
+                "detail_text": (
+                    "KPI operating model has 3/8 metric(s) at target and 0 "
+                    "guardrail breach(es)."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_offline_verifier",
+                "display_name": "Offline verifier",
+                "source_field": "verification_handoff.verifier_command",
+                "detail_text": (
+                    "Copied snapshot JSON can be verified with python "
+                    "scripts/verify_evidence_snapshot.py <snapshot.json>."
+                ),
+                "provider_write_executed": False,
+            },
+        ],
+        "blocker_bullets": [
+            {
+                "bullet_key": "buyer_brief_blocker_exception_repair_thread_id_integrity",
+                "display_name": "Canonical thread repair",
+                "source_field": "quality_checks.thread_id_integrity",
+                "detail_text": (
+                    "critical blocker owned by email_ingestion for "
+                    "acquisition-readiness-summary.json: Run canonical threading "
+                    "repair for affected scoped emails."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": (
+                    "buyer_brief_blocker_exception_backfill_dedupe_fingerprints"
+                ),
+                "display_name": "Duplicate fingerprint backfill",
+                "source_field": "quality_checks.dedupe_fingerprint",
+                "detail_text": (
+                    "critical blocker owned by email_ingestion for "
+                    "acquisition-readiness-summary.json: Backfill "
+                    "duplicate-detection fingerprints for scoped email records."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_blocker_exception_recover_attachment_content",
+                "display_name": "Attachment content extraction",
+                "source_field": "quality_checks.attachment_content",
+                "detail_text": (
+                    "high blocker owned by attachment_parsing for "
+                    "remediation-actions.json: Re-run attachment extraction for scoped "
+                    "attachments with blank safe content."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": (
+                    "buyer_brief_blocker_exception_backfill_content_graph_coverage"
+                ),
+                "display_name": "DOM paragraph segmentation backfill",
+                "source_field": "quality_checks.content_graph_coverage",
+                "detail_text": (
+                    "high blocker owned by content_graph for "
+                    "dom-paragraph-evidence-samples.json: Backfill DOM paragraph "
+                    "segmentation for unsegmented scoped emails."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": (
+                    "buyer_brief_blocker_exception_backfill_knowledge_graph_coverage"
+                ),
+                "display_name": "Knowledge graph edge persistence",
+                "source_field": "quality_checks.knowledge_graph_coverage",
+                "detail_text": (
+                    "high blocker owned by knowledge_graph for "
+                    "knowledge-graph-evidence-samples.json: Persist deterministic "
+                    "knowledge graph edges for emails missing graph coverage."
+                ),
+                "provider_write_executed": False,
+            },
+        ],
+        "guardrail_bullets": [
+            {
+                "bullet_key": "buyer_brief_privacy_redaction",
+                "display_name": "Privacy redaction",
+                "source_field": "privacy_redaction_policy",
+                "detail_text": (
+                    "Privacy policy exposes raw content: no, stable IDs: no, "
+                    "provider credentials: no."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_data_room_exposure",
+                "display_name": "Data-room exposure controls",
+                "source_field": "data_room_release_summary.privacy_exposure_count",
+                "detail_text": (
+                    "Data-room summary reports 0 privacy exposure(s), 0 raw content "
+                    "exposure(s), 0 stable ID exposure(s), and 0 credential "
+                    "exposure(s)."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_provider_write_boundary",
+                "display_name": "Provider write boundary",
+                "source_field": "provider_write_executed",
+                "detail_text": (
+                    "Provider write execution count is 0; buyer evidence generation "
+                    "remains read-only."
+                ),
+                "provider_write_executed": False,
+            },
+            {
+                "bullet_key": "buyer_brief_snapshot_verifier",
+                "display_name": "Snapshot verifier",
+                "source_field": "verification_handoff",
+                "detail_text": (
+                    "Snapshot verification is required: yes; command python "
+                    "scripts/verify_evidence_snapshot.py <snapshot.json>."
+                ),
+                "provider_write_executed": False,
+            },
+        ],
+        "reviewer_handoff_text": (
+            "Buyer reviewers should start from commercial_close_buyer_brief, verify "
+            "copied JSON with python scripts/verify_evidence_snapshot.py "
+            "<snapshot.json>, then review 5 blocker bullet(s) before release."
+        ),
+        "next_action_text": (
+            "Resolve top blocker bullets, rerun parser and graph remediation, "
+            "regenerate the snapshot, rerun the offline verifier, and reissue the "
+            "buyer brief."
+        ),
+        "provider_write_executed": False,
+    }
+
+
+def _expected_commercial_close_signoff_matrix():
+    buyer_brief = _expected_commercial_close_buyer_brief()
+    scorecard = _expected_commercial_close_readiness_scorecard()
+    execution_plan = _expected_commercial_close_execution_plan()
+    release_summary = _expected_data_room_release_summary()
+    acceptance_summary = _expected_diligence_close_acceptance_summary()
+    verifier_command = "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+    signoffs = [
+        {
+            "signoff_key": "signoff_commercial_diligence",
+            "reviewer_role": "commercial diligence reviewer",
+            "owner_area": "commercial_diligence",
+            "status_code": "blocked",
+            "source_field": "commercial_close_buyer_brief.status_code",
+            "required_artifact": "commercial-close-buyer-brief.json",
+            "blocker_keys": [
+                bullet["bullet_key"] for bullet in buyer_brief["blocker_bullets"][:5]
+            ],
+            "acceptance_text": (
+                "Buyer brief is accepted when status is brief_ready and top "
+                "blocker bullets are cleared."
+            ),
+            "next_action_text": buyer_brief["next_action_text"],
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_program_management",
+            "reviewer_role": "program manager",
+            "owner_area": "program_management",
+            "status_code": "blocked",
+            "source_field": "commercial_close_execution_plan.status_code",
+            "required_artifact": "commercial-close-execution-plan.json",
+            "blocker_keys": [
+                lane["lane_key"]
+                for lane in execution_plan["lanes"]
+                if lane["status_code"] != "ready"
+            ][:5],
+            "acceptance_text": (
+                "Execution plan is accepted when every lane is ready and the "
+                "plan status is execution_ready."
+            ),
+            "next_action_text": execution_plan["next_action_text"],
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_data_room_ops",
+            "reviewer_role": "data-room operations reviewer",
+            "owner_area": "data_room_ops",
+            "status_code": "blocked",
+            "source_field": "data_room_release_summary.release_status",
+            "required_artifact": "buyer-data-room-release.json",
+            "blocker_keys": release_summary["blocked_artifact_files"][:5],
+            "acceptance_text": (
+                "Data-room release is accepted when release_status is "
+                "release_ready and all required artifacts are ready."
+            ),
+            "next_action_text": release_summary["next_action_text"],
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_buyer_diligence",
+            "reviewer_role": "buyer diligence reviewer",
+            "owner_area": "buyer_diligence",
+            "status_code": "blocked",
+            "source_field": "diligence_close_acceptance_summary.decision_code",
+            "required_artifact": "buyer-acceptance-checklist.json",
+            "blocker_keys": acceptance_summary["blocker_keys"][:5],
+            "acceptance_text": (
+                "Buyer diligence is accepted when decision_code is ready_to_close "
+                "and no acceptance blocker keys remain."
+            ),
+            "next_action_text": acceptance_summary["next_action_text"],
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_privacy_security",
+            "reviewer_role": "privacy/security reviewer",
+            "owner_area": "privacy_security",
+            "status_code": "signed_off",
+            "source_field": "privacy_redaction_policy",
+            "required_artifact": "redacted-snapshot-policy.json",
+            "blocker_keys": [],
+            "acceptance_text": (
+                "Privacy guardrail is accepted when raw content, stable IDs, "
+                "credentials, and data-room privacy exposures are zero."
+            ),
+            "next_action_text": (
+                "Keep redaction guardrails enforced before buyer release."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_verification",
+            "reviewer_role": "verification reviewer",
+            "owner_area": "verification",
+            "status_code": "signed_off",
+            "source_field": "verification_handoff.verifier_command",
+            "required_artifact": "verify-evidence-snapshot.py",
+            "blocker_keys": [],
+            "acceptance_text": (
+                "Verification is accepted when the offline verifier command and "
+                "snapshot verification requirement are present."
+            ),
+            "next_action_text": f"Save copied snapshot JSON and run {verifier_command}.",
+            "provider_write_executed": False,
+        },
+        {
+            "signoff_key": "signoff_security_governance",
+            "reviewer_role": "security governance reviewer",
+            "owner_area": "security_governance",
+            "status_code": "signed_off",
+            "source_field": "provider_write_executed",
+            "required_artifact": "read-only-evidence-boundary",
+            "blocker_keys": [],
+            "acceptance_text": (
+                "Security governance is accepted when provider_write_executed is "
+                "false across the buyer evidence snapshot."
+            ),
+            "next_action_text": (
+                "Keep provider write execution disabled until explicit approval."
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+    blocked = [item for item in signoffs if item["status_code"] == "blocked"]
+    blocker_keys = list(
+        dict.fromkeys(key for item in blocked for key in item["blocker_keys"])
+    )
+    return {
+        "matrix_key": "commercial_close_signoff_matrix",
+        "target_contract_value_krw": scorecard["target_contract_value_krw"],
+        "target_contract_label": scorecard["target_contract_label"],
+        "status_code": "signoff_blocked",
+        "required_signoff_count": 7,
+        "signed_off_count": 3,
+        "blocked_signoff_count": 4,
+        "blocker_key_count": len(blocker_keys),
+        "blocker_keys": blocker_keys[:8],
+        "guardrail_summary_text": (
+            "Privacy, offline verification, and provider write guardrails are "
+            "signed off; 4 role signoff(s) remain blocked."
+        ),
+        "reviewer_handoff_text": (
+            "Route blocked signoffs to commercial diligence reviewer, program "
+            "manager, data-room operations reviewer, buyer diligence reviewer "
+            "before buyer release."
+        ),
+        "next_action_text": (
+            "Resolve blocked signoff rows, regenerate the evidence snapshot, rerun "
+            "the offline verifier, and reissue the signoff matrix."
+        ),
+        "signoffs": signoffs,
+        "provider_write_executed": False,
+    }
+
+
+def _expected_commercial_close_release_package():
+    release_summary = _expected_data_room_release_summary()
+    acceptance_summary = _expected_diligence_close_acceptance_summary()
+    scorecard = _expected_commercial_close_readiness_scorecard()
+    execution_plan = _expected_commercial_close_execution_plan()
+    kpi_model = _expected_commercial_close_kpi_operating_model()
+    buyer_brief = _expected_commercial_close_buyer_brief()
+    signoff_matrix = _expected_commercial_close_signoff_matrix()
+    verifier_command = "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+    artifacts = [
+        {
+            "artifact_key": "release_evidence_snapshot",
+            "release_order": 1,
+            "file_name": "naruon-evidence-snapshot.json",
+            "display_name": "Canonical evidence snapshot",
+            "artifact_group": "core_evidence",
+            "status_code": "ready",
+            "source_field": "snapshot_version,snapshot_digest,canonical_payload_fields",
+            "required_artifact": "naruon-evidence-snapshot.json",
+            "reviewer_role": "buyer diligence reviewer",
+            "blocker_keys": [],
+            "release_instruction_text": (
+                "Start buyer review from the canonical redacted snapshot JSON."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_privacy_policy",
+            "release_order": 2,
+            "file_name": "privacy-redaction-policy.json",
+            "display_name": "Privacy redaction policy",
+            "artifact_group": "guardrail",
+            "status_code": "ready",
+            "source_field": "privacy_redaction_policy",
+            "required_artifact": "privacy-redaction-policy.json",
+            "reviewer_role": "privacy/security reviewer",
+            "blocker_keys": [],
+            "release_instruction_text": (
+                "Confirm raw content, stable identifiers, and credentials are absent."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_offline_verifier",
+            "release_order": 3,
+            "file_name": "verify-evidence-snapshot.py",
+            "display_name": "Offline evidence verifier",
+            "artifact_group": "guardrail",
+            "status_code": "ready",
+            "source_field": "verification_handoff.verifier_command",
+            "required_artifact": "verify-evidence-snapshot.py",
+            "reviewer_role": "verification reviewer",
+            "blocker_keys": [],
+            "release_instruction_text": (
+                "Run the verifier against copied snapshot JSON before sharing."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_data_room_summary",
+            "release_order": 4,
+            "file_name": "buyer-data-room-release.json",
+            "display_name": "Buyer data-room release summary",
+            "artifact_group": "buyer_diligence",
+            "status_code": "blocked",
+            "source_field": "data_room_release_summary.release_status",
+            "required_artifact": "buyer-data-room-release.json",
+            "reviewer_role": "data-room operations reviewer",
+            "blocker_keys": release_summary["blocked_artifact_files"][:5],
+            "release_instruction_text": (
+                "Confirm all buyer data-room artifacts are ready for close."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_acceptance_checklist",
+            "release_order": 5,
+            "file_name": "buyer-acceptance-checklist.json",
+            "display_name": "Buyer acceptance checklist",
+            "artifact_group": "buyer_diligence",
+            "status_code": "blocked",
+            "source_field": "diligence_close_acceptance_summary.decision_code",
+            "required_artifact": "buyer-acceptance-checklist.json",
+            "reviewer_role": "buyer diligence reviewer",
+            "blocker_keys": acceptance_summary["blocker_keys"][:5],
+            "release_instruction_text": (
+                "Resolve acceptance blockers before buyer close acceptance."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_readiness_scorecard",
+            "release_order": 6,
+            "file_name": "commercial-close-readiness-scorecard.json",
+            "display_name": "Commercial close readiness scorecard",
+            "artifact_group": "commercial_close",
+            "status_code": "blocked",
+            "source_field": "commercial_close_readiness_scorecard.status_code",
+            "required_artifact": "commercial-close-readiness-scorecard.json",
+            "reviewer_role": "commercial diligence reviewer",
+            "blocker_keys": (
+                scorecard["kpi_gap_keys"]
+                + scorecard["acceptance_blocker_keys"]
+                + scorecard["blocked_artifact_files"]
+            )[:5],
+            "release_instruction_text": (
+                "Review readiness score and blocker clearance for target review."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_execution_plan",
+            "release_order": 7,
+            "file_name": "commercial-close-execution-plan.json",
+            "display_name": "Commercial close execution plan",
+            "artifact_group": "commercial_close",
+            "status_code": "blocked",
+            "source_field": "commercial_close_execution_plan.status_code",
+            "required_artifact": "commercial-close-execution-plan.json",
+            "reviewer_role": "program manager",
+            "blocker_keys": [
+                lane["lane_key"]
+                for lane in execution_plan["lanes"]
+                if lane["status_code"] != "ready"
+            ][:5],
+            "release_instruction_text": (
+                "Execute blocked lanes before reissuing the commercial package."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_kpi_operating_model",
+            "release_order": 8,
+            "file_name": "commercial-close-kpi-operating-model.json",
+            "display_name": "Commercial close KPI operating model",
+            "artifact_group": "commercial_close",
+            "status_code": "blocked",
+            "source_field": "commercial_close_kpi_operating_model.status_code",
+            "required_artifact": "commercial-close-kpi-operating-model.json",
+            "reviewer_role": "commercial diligence reviewer",
+            "blocker_keys": kpi_model["blocked_metric_keys"][:5],
+            "release_instruction_text": (
+                "Verify all operating KPIs hit target before buyer package release."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_buyer_brief",
+            "release_order": 9,
+            "file_name": "commercial-close-buyer-brief.json",
+            "display_name": "Commercial close buyer brief",
+            "artifact_group": "commercial_close",
+            "status_code": "blocked",
+            "source_field": "commercial_close_buyer_brief.status_code",
+            "required_artifact": "commercial-close-buyer-brief.json",
+            "reviewer_role": "commercial diligence reviewer",
+            "blocker_keys": [
+                bullet["bullet_key"] for bullet in buyer_brief["blocker_bullets"][:5]
+            ],
+            "release_instruction_text": (
+                "Use the buyer brief as the narrative index for close reviewers."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        {
+            "artifact_key": "release_signoff_matrix",
+            "release_order": 10,
+            "file_name": "commercial-close-signoff-matrix.json",
+            "display_name": "Commercial close signoff matrix",
+            "artifact_group": "commercial_close",
+            "status_code": "blocked",
+            "source_field": "commercial_close_signoff_matrix.status_code",
+            "required_artifact": "commercial-close-signoff-matrix.json",
+            "reviewer_role": "commercial diligence reviewer",
+            "blocker_keys": signoff_matrix["blocker_keys"][:5],
+            "release_instruction_text": (
+                "Confirm role signoffs before issuing the buyer release package."
+            ),
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+    ]
+    blocked = [item for item in artifacts if item["status_code"] == "blocked"]
+    blocker_keys = list(
+        dict.fromkeys(key for item in blocked for key in item["blocker_keys"])
+    )
+    return {
+        "package_key": "commercial_close_release_package",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "release_blocked",
+        "total_artifact_count": 10,
+        "ready_artifact_count": 3,
+        "blocked_artifact_count": 7,
+        "signed_off_count": signoff_matrix["signed_off_count"],
+        "blocked_signoff_count": signoff_matrix["blocked_signoff_count"],
+        "blocker_key_count": len(blocker_keys),
+        "blocked_artifact_files": [item["file_name"] for item in blocked],
+        "blocker_keys": blocker_keys[:10],
+        "first_release_file_name": "naruon-evidence-snapshot.json",
+        "verification_command": verifier_command,
+        "buyer_handoff_text": (
+            "Commercial close release package remains blocked for 2,000,000,000 "
+            "KRW target review: 7 artifact(s) need remediation."
+        ),
+        "next_action_text": (
+            "Resolve blocked release artifacts, regenerate the evidence snapshot, "
+            "rerun the offline verifier, and reissue the release package."
+        ),
+        "artifacts": artifacts,
+        "provider_write_executed": False,
+    }
+
+
+def _expected_commercial_close_buyer_review_runbook():
+    release_package = _expected_commercial_close_release_package()
+    artifact_by_key = {
+        artifact["artifact_key"]: artifact for artifact in release_package["artifacts"]
+    }
+
+    def artifact_step(
+        *,
+        step_key,
+        review_order,
+        lane,
+        artifact_key,
+        source_field,
+        reviewer_role,
+        owner_area,
+        sla_hours,
+        review_day,
+        entry_criteria_text,
+        exit_criteria_text,
+    ):
+        artifact = artifact_by_key.get(artifact_key)
+        ready = artifact is not None and artifact["status_code"] == "ready"
+        if artifact is None:
+            evidence_file_name = ""
+            blocker_keys = [f"{artifact_key}_missing"]
+        else:
+            evidence_file_name = artifact["file_name"]
+            blocker_keys = artifact["blocker_keys"]
+        return {
+            "step_key": step_key,
+            "review_order": review_order,
+            "lane": lane,
+            "status_code": "ready" if ready else "blocked",
+            "evidence_file_name": evidence_file_name,
+            "source_field": source_field,
+            "reviewer_role": reviewer_role,
+            "owner_area": owner_area,
+            "sla_hours": sla_hours,
+            "review_day": review_day,
+            "entry_criteria_text": entry_criteria_text,
+            "exit_criteria_text": exit_criteria_text,
+            "blocker_keys": [] if ready else blocker_keys,
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        }
+
+    intake_ready = (
+        release_package["total_artifact_count"] > 0
+        and bool(release_package["first_release_file_name"])
+    )
+    steps = [
+        {
+            "step_key": "buyer_review_intake",
+            "review_order": 1,
+            "lane": "intake",
+            "status_code": "ready" if intake_ready else "blocked",
+            "evidence_file_name": release_package["first_release_file_name"],
+            "source_field": "commercial_close_release_package.first_release_file_name",
+            "reviewer_role": "buyer diligence lead",
+            "owner_area": "data_room_ops",
+            "sla_hours": 4,
+            "review_day": 1,
+            "entry_criteria_text": (
+                "Open the verified release package and confirm buyer review scope."
+            ),
+            "exit_criteria_text": (
+                "Buyer review starts from the canonical evidence snapshot file."
+            ),
+            "blocker_keys": [] if intake_ready else ["release_package_missing"],
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        },
+        artifact_step(
+            step_key="buyer_review_snapshot_verification",
+            review_order=2,
+            lane="verification",
+            artifact_key="release_offline_verifier",
+            source_field=(
+                "commercial_close_release_package.artifacts.release_offline_verifier"
+            ),
+            reviewer_role="verification reviewer",
+            owner_area="verification",
+            sla_hours=4,
+            review_day=1,
+            entry_criteria_text=(
+                "Run the offline verifier against copied snapshot JSON."
+            ),
+            exit_criteria_text=(
+                "Verifier exits successfully before evidence review starts."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_privacy_redaction",
+            review_order=3,
+            lane="privacy",
+            artifact_key="release_privacy_policy",
+            source_field=(
+                "commercial_close_release_package.artifacts.release_privacy_policy"
+            ),
+            reviewer_role="privacy/security reviewer",
+            owner_area="security_governance",
+            sla_hours=8,
+            review_day=1,
+            entry_criteria_text=(
+                "Inspect redaction policy before opening data-room files."
+            ),
+            exit_criteria_text=(
+                "Raw content, stable identifiers, and credentials are absent."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_data_room_release",
+            review_order=4,
+            lane="data_room",
+            artifact_key="release_data_room_summary",
+            source_field="data_room_release_summary.release_status",
+            reviewer_role="data-room operations reviewer",
+            owner_area="data_room_ops",
+            sla_hours=8,
+            review_day=1,
+            entry_criteria_text="Confirm buyer data-room artifact readiness.",
+            exit_criteria_text=(
+                "All data-room artifacts required for close are ready."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_acceptance_checklist",
+            review_order=5,
+            lane="data_room",
+            artifact_key="release_acceptance_checklist",
+            source_field="diligence_close_acceptance_summary.decision_code",
+            reviewer_role="buyer diligence reviewer",
+            owner_area="buyer_diligence",
+            sla_hours=8,
+            review_day=2,
+            entry_criteria_text="Review acceptance checklist against traceability map.",
+            exit_criteria_text=(
+                "All close acceptance rows are ready for buyer signoff."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_readiness_scorecard",
+            review_order=6,
+            lane="commercial",
+            artifact_key="release_readiness_scorecard",
+            source_field="commercial_close_readiness_scorecard.status_code",
+            reviewer_role="commercial diligence reviewer",
+            owner_area="commercial_diligence",
+            sla_hours=8,
+            review_day=2,
+            entry_criteria_text=(
+                "Review commercial readiness score and component blockers."
+            ),
+            exit_criteria_text=(
+                "Commercial readiness scorecard is commercially ready."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_execution_plan",
+            review_order=7,
+            lane="commercial",
+            artifact_key="release_execution_plan",
+            source_field="commercial_close_execution_plan.status_code",
+            reviewer_role="program manager",
+            owner_area="program_management",
+            sla_hours=8,
+            review_day=2,
+            entry_criteria_text="Review blocked execution lanes and owner actions.",
+            exit_criteria_text="Execution plan lanes required for close are ready.",
+        ),
+        artifact_step(
+            step_key="buyer_review_kpi_operating_model",
+            review_order=8,
+            lane="commercial",
+            artifact_key="release_kpi_operating_model",
+            source_field="commercial_close_kpi_operating_model.status_code",
+            reviewer_role="commercial diligence reviewer",
+            owner_area="commercial_diligence",
+            sla_hours=8,
+            review_day=2,
+            entry_criteria_text="Review KPI target coverage and guardrail breaches.",
+            exit_criteria_text="Operating KPIs meet target review thresholds.",
+        ),
+        artifact_step(
+            step_key="buyer_review_buyer_brief",
+            review_order=9,
+            lane="commercial",
+            artifact_key="release_buyer_brief",
+            source_field="commercial_close_buyer_brief.status_code",
+            reviewer_role="commercial diligence reviewer",
+            owner_area="commercial_diligence",
+            sla_hours=4,
+            review_day=3,
+            entry_criteria_text=(
+                "Review buyer narrative against evidence basis bullets."
+            ),
+            exit_criteria_text=(
+                "Buyer brief is ready as the narrative review index."
+            ),
+        ),
+        artifact_step(
+            step_key="buyer_review_signoff_matrix",
+            review_order=10,
+            lane="signoff",
+            artifact_key="release_signoff_matrix",
+            source_field="commercial_close_signoff_matrix.status_code",
+            reviewer_role="commercial diligence reviewer",
+            owner_area="commercial_diligence",
+            sla_hours=4,
+            review_day=3,
+            entry_criteria_text="Confirm every required role signoff is ready.",
+            exit_criteria_text="Commercial close signoff matrix is ready.",
+        ),
+    ]
+    previous_blockers = list(
+        dict.fromkeys(key for step in steps for key in step["blocker_keys"])
+    )
+    release_ready = (
+        release_package["status_code"] == "release_ready" and not previous_blockers
+    )
+    steps.append(
+        {
+            "step_key": "buyer_review_release_decision",
+            "review_order": 11,
+            "lane": "release",
+            "status_code": "ready" if release_ready else "blocked",
+            "evidence_file_name": "commercial-close-release-package.json",
+            "source_field": "commercial_close_release_package.status_code",
+            "reviewer_role": "buyer diligence lead",
+            "owner_area": "buyer_diligence",
+            "sla_hours": 4,
+            "review_day": 3,
+            "entry_criteria_text": "Confirm every buyer review step is ready.",
+            "exit_criteria_text": "Approve the release package for buyer handoff.",
+            "blocker_keys": [] if release_ready else previous_blockers[:10],
+            "contains_raw_content": False,
+            "contains_stable_identifiers": False,
+            "contains_provider_credentials": False,
+            "provider_write_executed": False,
+        }
+    )
+    blocked = [item for item in steps if item["status_code"] == "blocked"]
+    blocker_keys = list(
+        dict.fromkeys(key for item in blocked for key in item["blocker_keys"])
+    )
+    return {
+        "runbook_key": "commercial_close_buyer_review_runbook",
+        "target_contract_value_krw": 2_000_000_000,
+        "target_contract_label": "2,000,000,000 KRW",
+        "status_code": "review_blocked",
+        "total_step_count": 11,
+        "ready_step_count": 3,
+        "blocked_step_count": 8,
+        "blocker_key_count": len(blocker_keys),
+        "blocked_step_keys": [item["step_key"] for item in blocked],
+        "blocker_keys": blocker_keys[:10],
+        "first_step_key": "buyer_review_intake",
+        "final_decision_step_key": "buyer_review_release_decision",
+        "verification_command": release_package["verification_command"],
+        "buyer_handoff_text": (
+            "Buyer review runbook remains blocked for 2,000,000,000 KRW target "
+            "review: 8 step(s) need remediation."
+        ),
+        "next_action_text": (
+            "Resolve blocked buyer review steps, regenerate the evidence snapshot, "
+            "rerun the offline verifier, and reissue the runbook."
+        ),
+        "steps": steps,
+        "provider_write_executed": False,
+    }
+
+
+def _expected_acquisition_remediation_actions():
+    return [
+        {
+            "action_key": "repair_thread_id_integrity",
+            "blocking_check_key": "thread_id_integrity",
+            "display_name": "Canonical thread repair",
+            "owner_area": "email_ingestion",
+            "priority_rank": 1,
+            "priority_code": "critical",
+            "impact_text": "Thread provenance must be stable before buyer review.",
+            "recommended_next_step": (
+                "Run canonical threading repair for affected scoped emails."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "backfill_dedupe_fingerprints",
+            "blocking_check_key": "dedupe_fingerprint",
+            "display_name": "Duplicate fingerprint backfill",
+            "owner_area": "email_ingestion",
+            "priority_rank": 2,
+            "priority_code": "critical",
+            "impact_text": "Duplicate detection must be reliable before corpus valuation.",
+            "recommended_next_step": (
+                "Backfill duplicate-detection fingerprints for scoped email records."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "recover_attachment_content",
+            "blocking_check_key": "attachment_content",
+            "display_name": "Attachment content extraction",
+            "owner_area": "attachment_parsing",
+            "priority_rank": 3,
+            "priority_code": "high",
+            "impact_text": "Attachment text gaps reduce searchable diligence coverage.",
+            "recommended_next_step": (
+                "Re-run attachment extraction for scoped attachments with blank safe "
+                "content."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "backfill_content_graph_coverage",
+            "blocking_check_key": "content_graph_coverage",
+            "display_name": "DOM paragraph segmentation backfill",
+            "owner_area": "content_graph",
+            "priority_rank": 4,
+            "priority_code": "high",
+            "impact_text": (
+                "Every scoped email needs paragraph segments before graph evidence is "
+                "complete."
+            ),
+            "recommended_next_step": (
+                "Backfill DOM paragraph segmentation for unsegmented scoped emails."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "backfill_knowledge_graph_coverage",
+            "blocking_check_key": "knowledge_graph_coverage",
+            "display_name": "Knowledge graph edge persistence",
+            "owner_area": "knowledge_graph",
+            "priority_rank": 5,
+            "priority_code": "high",
+            "impact_text": "Stored edges are required to prove graph extraction coverage.",
+            "recommended_next_step": (
+                "Persist deterministic knowledge graph edges for emails missing graph "
+                "coverage."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "repair_segment_text_readiness",
+            "blocking_check_key": "content_segment_text_readiness",
+            "display_name": "Segment safe text repair",
+            "owner_area": "content_graph",
+            "priority_rank": 6,
+            "priority_code": "high",
+            "impact_text": (
+                "Paragraph evidence needs non-empty safe text and word counts."
+            ),
+            "recommended_next_step": (
+                "Rebuild affected content segments with safe text and word-count "
+                "evidence."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "attach_kg_evidence_endpoints",
+            "blocking_check_key": "knowledge_graph_evidence_endpoint_readiness",
+            "display_name": "KG evidence endpoint repair",
+            "owner_area": "knowledge_graph",
+            "priority_rank": 7,
+            "priority_code": "high",
+            "impact_text": "KG edges need paragraph endpoints to be auditable.",
+            "recommended_next_step": (
+                "Attach source or target paragraph segment endpoints to affected KG "
+                "edges."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "backfill_semantic_relation_sources",
+            "blocking_check_key": "semantic_relation_source_backing",
+            "display_name": "Semantic relation source backing",
+            "owner_area": "semantic_kg",
+            "priority_rank": 8,
+            "priority_code": "high",
+            "impact_text": (
+                "Semantic relations need source message or thread evidence."
+            ),
+            "recommended_next_step": (
+                "Backfill source message or thread links for semantic relation "
+                "records."
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "action_key": "expand_attachment_parse_coverage",
+            "blocking_check_key": "attachment_parse_coverage",
+            "display_name": "Attachment parser coverage",
+            "owner_area": "attachment_parsing",
+            "priority_rank": 9,
+            "priority_code": "medium",
+            "impact_text": "Unsupported attachments leave buyer-visible corpus gaps.",
+            "recommended_next_step": (
+                "Add parser coverage or metadata-only exception evidence for "
+                "unsupported attachment types."
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+
+
 def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_db):
     token = _signed_session_token(_valid_session_payload())
     client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
@@ -286,6 +3066,35 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
     assert data["audit_event"] == "data.quality_surface.viewed"
     assert data["workspace_id"] == "workspace-org-acme"
     assert data["provider_write_executed"] is False
+    assert data["acquisition_readiness_gate"] == {
+        "gate_key": "buyer_evidence_readiness",
+        "display_name": "Buyer evidence readiness",
+        "state_code": "needs_attention",
+        "readiness_score": 25,
+        "passed_checks": 3,
+        "issue_checks": 9,
+        "pending_checks": 0,
+        "total_checks": 12,
+        "blocking_check_keys": [
+            "thread_id_integrity",
+            "dedupe_fingerprint",
+            "attachment_content",
+            "content_graph_coverage",
+            "knowledge_graph_coverage",
+            "content_segment_text_readiness",
+            "knowledge_graph_evidence_endpoint_readiness",
+            "semantic_relation_source_backing",
+        ],
+        "evidence_packet_ready": True,
+        "snapshot_verification_ready": True,
+        "provider_write_executed": False,
+        "kpis": _expected_acquisition_readiness_kpis(),
+        "decision_summary": _expected_acquisition_decision_summary(),
+        "remediation_actions": _expected_acquisition_remediation_actions(),
+        "detail_text": (
+            "Buyer evidence packet is generated, but blocking quality checks remain."
+        ),
+    }
     assert {source["source_id"] for source in data["repositories"]} == {
         "email_repository",
         "attachment_repository",
@@ -296,6 +3105,34 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
     assert data["pipeline_stages"][1]["detail_text"] == (
         "4 emails and 3 attachments are visible in the signed workspace scope."
     )
+    stage_by_key = {stage["stage_key"]: stage for stage in data["pipeline_stages"]}
+    assert stage_by_key["content_graph_inventory"] == {
+        "stage_key": "content_graph_inventory",
+        "display_name": "Content graph inventory",
+        "status_code": "running",
+        "progress_percent": 75,
+        "evidence_source": "content_segments",
+        "detail_text": "3 of 4 emails have paragraph segments; 8 segments are stored.",
+        "provider_write_executed": False,
+    }
+    assert stage_by_key["knowledge_graph_inventory"] == {
+        "stage_key": "knowledge_graph_inventory",
+        "display_name": "Knowledge graph inventory",
+        "status_code": "running",
+        "progress_percent": 50,
+        "evidence_source": "knowledge_graph_edges",
+        "detail_text": "2 of 4 emails have graph edges; 10 edges are stored.",
+        "provider_write_executed": False,
+    }
+    assert stage_by_key["attachment_parse_inventory"] == {
+        "stage_key": "attachment_parse_inventory",
+        "display_name": "Attachment parse inventory",
+        "status_code": "running",
+        "progress_percent": 67,
+        "evidence_source": "email_attachments.parse_status",
+        "detail_text": "2 of 3 attachments are parseable; 1 attachments need parser coverage.",
+        "provider_write_executed": False,
+    }
     assert data["embedding_collections"][0] == {
         "collection_key": "emails_embedding",
         "display_name": "Email vectors",
@@ -311,6 +3148,249 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
     assert quality_by_key["thread_id_integrity"]["issue_count"] == 1
     assert quality_by_key["dedupe_fingerprint"]["issue_count"] == 2
     assert quality_by_key["attachment_content"]["issue_count"] == 1
+    assert quality_by_key["content_graph_coverage"] == {
+        "check_key": "content_graph_coverage",
+        "display_name": "Content graph coverage",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 4,
+        "evidence_source": "content_segments",
+        "detail_text": "Some scoped emails need DOM paragraph segmentation.",
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["knowledge_graph_coverage"] == {
+        "check_key": "knowledge_graph_coverage",
+        "display_name": "Knowledge graph coverage",
+        "status_code": "needs_attention",
+        "issue_count": 2,
+        "total_count": 4,
+        "evidence_source": "knowledge_graph_edges",
+        "detail_text": "Some scoped emails need persisted knowledge graph edges.",
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["content_segment_text_readiness"] == {
+        "check_key": "content_segment_text_readiness",
+        "display_name": "Content segment text readiness",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 8,
+        "evidence_source": (
+            "content_segments.word_count, content_segments.safe_text_content"
+        ),
+        "detail_text": (
+            "Some DOM paragraph segments need non-empty safe text and word counts."
+        ),
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["knowledge_graph_evidence_endpoint_readiness"] == {
+        "check_key": "knowledge_graph_evidence_endpoint_readiness",
+        "display_name": "Knowledge graph evidence endpoints",
+        "status_code": "needs_attention",
+        "issue_count": 2,
+        "total_count": 10,
+        "evidence_source": (
+            "knowledge_graph_edges.source_segment_id, "
+            "knowledge_graph_edges.target_segment_id"
+        ),
+        "detail_text": (
+            "Some knowledge graph edges need paragraph segment evidence endpoints."
+        ),
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["semantic_kg_readiness"] == {
+        "check_key": "semantic_kg_readiness",
+        "display_name": "Semantic KG readiness",
+        "status_code": "pass",
+        "issue_count": 0,
+        "total_count": 3,
+        "evidence_source": (
+            "knowledge_graph_edges.edge_kind, content_segments.segment_path"
+        ),
+        "detail_text": (
+            "Semantic entity/relation evidence is available for this workspace."
+        ),
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["semantic_relation_source_backing"] == {
+        "check_key": "semantic_relation_source_backing",
+        "display_name": "Semantic relation source backing",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 3,
+        "evidence_source": (
+            "sender_relationships.source_message_id, "
+            "sender_relationships.source_thread_id"
+        ),
+        "detail_text": "Some semantic relations need source message or thread evidence.",
+        "provider_write_executed": False,
+    }
+    assert quality_by_key["attachment_parse_coverage"] == {
+        "check_key": "attachment_parse_coverage",
+        "display_name": "Attachment parse coverage",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 3,
+        "evidence_source": "email_attachments.parse_status",
+        "detail_text": "Some scoped attachments need parser coverage.",
+        "provider_write_executed": False,
+    }
+    assert data["content_graph_breakdown"] == [
+        {
+            "source_kind": "email_body",
+            "segment_kind": "paragraph",
+            "object_count": 6,
+            "evidence_source": (
+                "content_segments.source_kind, content_segments.segment_kind"
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "source_kind": "attachment",
+            "segment_kind": "heading",
+            "object_count": 2,
+            "evidence_source": (
+                "content_segments.source_kind, content_segments.segment_kind"
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+    assert data["knowledge_graph_breakdown"] == [
+        {
+            "source_kind": "email_body",
+            "edge_kind": "node_has_segment",
+            "object_count": 8,
+            "evidence_source": (
+                "knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind"
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "source_kind": "attachment",
+            "edge_kind": "heading_contains_segment",
+            "object_count": 2,
+            "evidence_source": (
+                "knowledge_graph_edges.source_kind, knowledge_graph_edges.edge_kind"
+            ),
+            "provider_write_executed": False,
+        },
+    ]
+    assert data["content_graph_evidence_samples"] == [
+        {
+            "sample_key": _expected_sample_key(
+                "segment",
+                "cseg_email_paragraph_1",
+            ),
+            "source_kind": "email_body",
+            "segment_kind": "paragraph",
+            "segment_path": "/document[1]/paragraph[1]",
+            "word_count": 12,
+        },
+        {
+            "sample_key": _expected_sample_key(
+                "segment",
+                "cseg_attachment_heading_1",
+            ),
+            "source_kind": "attachment",
+            "segment_kind": "heading",
+            "segment_path": "/document[1]/h1[1]",
+            "word_count": 3,
+        },
+    ]
+    assert data["knowledge_graph_evidence_samples"] == [
+        {
+            "sample_key": _expected_sample_key(
+                "edge",
+                "kgedge_email_node_segment_1",
+            ),
+            "source_kind": "email_body",
+            "edge_kind": "node_has_segment",
+            "edge_path": "/document[1]/paragraph[1]/has/segment[1]",
+            "endpoint_status": "segment_backed",
+        },
+        {
+            "sample_key": _expected_sample_key(
+                "edge",
+                "kgedge_attachment_node_only_1",
+            ),
+            "source_kind": "attachment",
+            "edge_kind": "node_contains_node",
+            "edge_path": "/document[1]/contains/h1[1]",
+            "endpoint_status": "node_only",
+        },
+    ]
+    assert data["semantic_extraction_manifest"] == [
+        {
+            "manifest_key": "entity_relation_extraction",
+            "display_name": "Entity/relation extraction",
+            "state_code": "ready",
+            "structural_edge_count": 10,
+            "semantic_relation_count": 3,
+            "source_backed_relation_count": 2,
+            "required_evidence": [
+                "segment_citation",
+                "extractor_version",
+                "confidence_score",
+                "human_correction_path",
+            ],
+            "detail_text": (
+                "Semantic relation evidence is available from source-backed ontology "
+                "relationship records."
+            ),
+            "provider_write_executed": False,
+        }
+    ]
+    assert data["semantic_relation_evidence_samples"] == [
+        {
+            "sample_key": _expected_sample_key(
+                "relation",
+                "partner@example.com|<asset-ready@example.com>|thread-ready|Vendor",
+            ),
+            "relationship_type": "Vendor",
+            "confidence_bucket": "high",
+            "source_scope": "message_thread",
+            "next_action": "prepare_response_draft",
+        },
+        {
+            "sample_key": _expected_sample_key(
+                "relation",
+                "updates@example.com|<newsletter@example.com>||Newsletter",
+            ),
+            "relationship_type": "Newsletter",
+            "confidence_bucket": "high",
+            "source_scope": "message",
+            "next_action": "summarize_then_archive",
+        },
+    ]
+    assert data["attachment_parse_breakdown"] == [
+        {
+            "content_type": "application/octet-stream",
+            "parse_content_type": "text/markdown",
+            "parse_status": "parsed",
+            "parser_key": "markdown",
+            "display_name": "Markdown attachments",
+            "object_count": 2,
+            "evidence_source": (
+                "email_attachments.content_type, "
+                "email_attachments.parse_content_type, "
+                "email_attachments.parse_status, email_attachments.parser_key"
+            ),
+            "provider_write_executed": False,
+        },
+        {
+            "content_type": "application/pdf",
+            "parse_content_type": "application/pdf",
+            "parse_status": "unsupported_content_type",
+            "parser_key": "unsupported_binary",
+            "display_name": "Unsupported binary attachments",
+            "object_count": 1,
+            "evidence_source": (
+                "email_attachments.content_type, "
+                "email_attachments.parse_content_type, "
+                "email_attachments.parse_status, email_attachments.parser_key"
+            ),
+            "provider_write_executed": False,
+        },
+    ]
     assert data["connector_events"][0]["event_uid"] == "connector_evt_data_quality"
     assert data["repository_assets"][0] == {
         "asset_key": data["repository_assets"][0]["asset_key"],
@@ -344,8 +3424,728 @@ def test_data_quality_surface_returns_source_backed_counts_without_secrets(mock_
         "https://files.acme.example",
         "webdav_path",
         "/Projects/Naruon_Roadmap_2026",
+        "segmented body text",
+        "cseg_email_paragraph_1",
+        "kgedge_email_node_segment_1",
         "<asset-ready@example.com>",
+        "<newsletter@example.com>",
+        "partner@example.com",
+        "updates@example.com",
         "thread-ready",
+    ):
+        assert forbidden not in serialized
+
+
+def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_db):
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.get("/api/data/quality-surface/evidence-snapshot")
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 200, response.text
+    snapshot = response.json()
+    assert snapshot["snapshot_version"] == "data_quality_evidence_snapshot.v1"
+    assert snapshot["audit_event"] == "data.quality_surface.evidence_snapshot.viewed"
+    assert snapshot["scope_label"] == "signed_workspace_scope"
+    assert snapshot["generated_at"].endswith("Z")
+    assert snapshot["digest_algorithm"] == "sha256"
+    assert len(snapshot["snapshot_digest"]) == 64
+    assert set(snapshot["snapshot_digest"]) <= set("0123456789abcdef")
+    digest_payload = dict(snapshot)
+    for field_name in (
+        "snapshot_digest",
+        "digest_algorithm",
+        "canonical_payload_fields",
+    ):
+        digest_payload.pop(field_name)
+    canonical_payload = json.dumps(
+        digest_payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    assert snapshot["snapshot_digest"] == hashlib.sha256(canonical_payload).hexdigest()
+    assert snapshot["canonical_payload_fields"] == sorted(digest_payload)
+    assert "verification_handoff" in snapshot["canonical_payload_fields"]
+    assert snapshot["verification_handoff"] == _expected_snapshot_verification_handoff()
+    assert "evidence_packet_checklist" in snapshot["canonical_payload_fields"]
+    assert snapshot["evidence_packet_checklist"] == _expected_evidence_packet_checklist()
+    assert "data_room_package_manifest" in snapshot["canonical_payload_fields"]
+    assert snapshot["data_room_package_manifest"] == _expected_data_room_package_manifest()
+    assert "data_room_release_summary" in snapshot["canonical_payload_fields"]
+    assert snapshot["data_room_release_summary"] == _expected_data_room_release_summary()
+    assert "commercial_close_readiness_scorecard" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["commercial_close_readiness_scorecard"]
+        == _expected_commercial_close_readiness_scorecard()
+    )
+    assert "commercial_close_execution_plan" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["commercial_close_execution_plan"]
+        == _expected_commercial_close_execution_plan()
+    )
+    assert "commercial_close_kpi_operating_model" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["commercial_close_kpi_operating_model"]
+        == _expected_commercial_close_kpi_operating_model()
+    )
+    assert "commercial_close_buyer_brief" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["commercial_close_buyer_brief"]
+        == _expected_commercial_close_buyer_brief()
+    )
+    assert "commercial_close_signoff_matrix" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["commercial_close_signoff_matrix"]
+        == _expected_commercial_close_signoff_matrix()
+    )
+    assert "commercial_close_release_package" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["commercial_close_release_package"]
+        == _expected_commercial_close_release_package()
+    )
+    assert (
+        "commercial_close_buyer_review_runbook"
+        in snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["commercial_close_buyer_review_runbook"]
+        == _expected_commercial_close_buyer_review_runbook()
+    )
+    assert "diligence_exception_register" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["diligence_exception_register"]
+        == _expected_diligence_exception_register()
+    )
+    assert "diligence_risk_matrix" in snapshot["canonical_payload_fields"]
+    assert snapshot["diligence_risk_matrix"] == _expected_diligence_risk_matrix()
+    assert "diligence_close_proof_plan" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["diligence_close_proof_plan"]
+        == _expected_diligence_close_proof_plan()
+    )
+    assert "diligence_close_decision_summary" in snapshot["canonical_payload_fields"]
+    assert (
+        snapshot["diligence_close_decision_summary"]
+        == _expected_diligence_close_decision_summary()
+    )
+    assert "diligence_close_artifact_review_queue" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_artifact_review_queue"]
+        == _expected_diligence_close_artifact_review_queue()
+    )
+    assert "diligence_close_owner_handoff_queue" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_owner_handoff_queue"]
+        == _expected_diligence_close_owner_handoff_queue()
+    )
+    assert "diligence_close_traceability_map" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_traceability_map"]
+        == _expected_diligence_close_traceability_map()
+    )
+    assert "diligence_close_acceptance_checklist" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_acceptance_checklist"]
+        == _expected_diligence_close_acceptance_checklist()
+    )
+    assert "diligence_close_acceptance_summary" in (
+        snapshot["canonical_payload_fields"]
+    )
+    assert (
+        snapshot["diligence_close_acceptance_summary"]
+        == _expected_diligence_close_acceptance_summary()
+    )
+    for forbidden_field in (
+        "snapshot_digest",
+        "digest_algorithm",
+        "canonical_payload_fields",
+        "raw_email_body",
+        "raw_html",
+        "attachment_bytes",
+        "message_id",
+        "attachment_id",
+        "source_record_id",
+        "stable_database_id",
+        "provider_credentials",
+        "db_evidence_column_strings",
+    ):
+        assert forbidden_field not in snapshot["canonical_payload_fields"]
+    assert snapshot["privacy_redaction_policy"]["raw_content_exposed"] is False
+    assert snapshot["privacy_redaction_policy"]["stable_identifiers_exposed"] is False
+    assert snapshot["privacy_redaction_policy"]["provider_credentials_exposed"] is False
+    assert "raw_email_body" in snapshot["privacy_redaction_policy"]["redacted_fields"]
+    assert snapshot["privacy_redaction_policy"]["allowed_sample_fields"] == [
+        "sample_key",
+        "source_kind",
+        "segment_kind",
+        "edge_kind",
+        "segment_path",
+        "edge_path",
+        "word_count",
+        "endpoint_status",
+        "manifest_key",
+        "state_code",
+        "structural_edge_count",
+        "semantic_relation_count",
+        "source_backed_relation_count",
+        "relationship_type",
+        "confidence_bucket",
+        "source_scope",
+        "next_action",
+        "required_evidence",
+    ]
+    assert snapshot["validation_status"] == {
+        "status_code": "needs_attention",
+        "checks_passed": 3,
+        "checks_with_issues": 9,
+        "total_checks": 12,
+    }
+    assert "acquisition_readiness_gate" in snapshot["canonical_payload_fields"]
+    assert snapshot["acquisition_readiness_gate"] == {
+        "gate_key": "buyer_evidence_readiness",
+        "display_name": "Buyer evidence readiness",
+        "state_code": "needs_attention",
+        "readiness_score": 25,
+        "passed_checks": 3,
+        "issue_checks": 9,
+        "pending_checks": 0,
+        "total_checks": 12,
+        "blocking_check_keys": [
+            "thread_id_integrity",
+            "dedupe_fingerprint",
+            "attachment_content",
+            "content_graph_coverage",
+            "knowledge_graph_coverage",
+            "content_segment_text_readiness",
+            "knowledge_graph_evidence_endpoint_readiness",
+            "semantic_relation_source_backing",
+        ],
+        "evidence_packet_ready": True,
+        "snapshot_verification_ready": True,
+        "provider_write_executed": False,
+        "kpis": _expected_acquisition_readiness_kpis(),
+        "decision_summary": _expected_acquisition_decision_summary(),
+        "remediation_actions": _expected_acquisition_remediation_actions(),
+        "detail_text": (
+            "Buyer evidence packet is generated, but blocking quality checks remain."
+        ),
+    }
+    kpis = snapshot["acquisition_readiness_gate"]["kpis"]
+    assert len(kpis) == 12
+    assert kpis[0]["kpi_key"] == "thread_id_integrity_target"
+    assert kpis[0]["current_percent"] == 75
+    assert kpis[-1]["target_met"] is True
+    summary = snapshot["acquisition_readiness_gate"]["decision_summary"]
+    assert summary["recommendation_code"] == "remediate_before_close"
+    assert summary["risk_level"] == "high"
+    assert summary["target_gap_count"] == 9
+    assert summary["provider_write_executed"] is False
+    actions = snapshot["acquisition_readiness_gate"]["remediation_actions"]
+    assert len(actions) == 9
+    assert actions[0]["action_key"] == "repair_thread_id_integrity"
+    assert actions[0]["provider_write_executed"] is False
+    assert actions[-1]["action_key"] == "expand_attachment_parse_coverage"
+    checklist = snapshot["evidence_packet_checklist"]
+    assert len(checklist) == 10
+    assert checklist[0]["checklist_key"] == "privacy_redaction_policy"
+    assert checklist[8]["state_code"] == "needs_attention"
+    assert checklist[-1]["source_field"] == "verification_handoff"
+    data_room_manifest = snapshot["data_room_package_manifest"]
+    assert len(data_room_manifest) == 10
+    assert data_room_manifest[0]["file_name"] == "naruon-evidence-snapshot.json"
+    assert data_room_manifest[5]["file_name"] == "knowledge-graph-evidence-samples.json"
+    assert data_room_manifest[8]["state_code"] == "needs_attention"
+    for item in data_room_manifest:
+        assert item["required_for_close"] is True
+        assert item["contains_raw_content"] is False
+        assert item["contains_stable_identifiers"] is False
+        assert item["provider_write_executed"] is False
+    exception_register = snapshot["diligence_exception_register"]
+    assert len(exception_register) == 9
+    assert exception_register[0] == {
+        "exception_key": "exception_repair_thread_id_integrity",
+        "blocking_check_key": "thread_id_integrity",
+        "display_name": "Canonical thread repair",
+        "severity_code": "critical",
+        "owner_area": "email_ingestion",
+        "source_field": "quality_checks.thread_id_integrity",
+        "related_artifact": "acquisition-readiness-summary.json",
+        "blocks_close": True,
+        "detail_text": "Thread provenance must be stable before buyer review.",
+        "next_action": "Run canonical threading repair for affected scoped emails.",
+        "provider_write_executed": False,
+    }
+    assert exception_register[-1]["exception_key"] == (
+        "exception_expand_attachment_parse_coverage"
+    )
+    assert exception_register[-1]["severity_code"] == "medium"
+    assert exception_register[-1]["related_artifact"] == "remediation-actions.json"
+    assert all(item["blocks_close"] is True for item in exception_register)
+    risk_matrix = snapshot["diligence_risk_matrix"]
+    assert len(risk_matrix) == 6
+    assert risk_matrix[0] == {
+        "matrix_key": "risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "severity_code": "critical",
+        "owner_area": "email_ingestion",
+        "related_artifact": "acquisition-readiness-summary.json",
+        "exception_count": 2,
+        "representative_exception_keys": [
+            "exception_repair_thread_id_integrity",
+            "exception_backfill_dedupe_fingerprints",
+        ],
+        "risk_label": "Critical close blocker concentration",
+        "buyer_implication": (
+            "2 critical exception(s) in email_ingestion affect "
+            "acquisition-readiness-summary.json and block buyer close."
+        ),
+        "recommended_next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "blocks_close": True,
+        "provider_write_executed": False,
+    }
+    assert risk_matrix[-1]["matrix_key"] == (
+        "risk_medium_attachment_parsing_remediation_actions_json"
+    )
+    assert risk_matrix[-1]["severity_code"] == "medium"
+    assert risk_matrix[-1]["exception_count"] == 1
+    assert all(item["blocks_close"] is True for item in risk_matrix)
+    proof_plan = snapshot["diligence_close_proof_plan"]
+    assert len(proof_plan) == 6
+    assert proof_plan[0] == {
+        "proof_key": "proof_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "severity_code": "critical",
+        "owner_area": "email_ingestion",
+        "related_artifact": "acquisition-readiness-summary.json",
+        "exception_count": 2,
+        "required_proof_artifact": "acquisition-readiness-summary.json",
+        "acceptance_criteria": (
+            "All 2 exception(s) for email_ingestion are resolved and "
+            "acquisition-readiness-summary.json is regenerated without raw content "
+            "or stable IDs."
+        ),
+        "verification_method": (
+            "Regenerate the evidence snapshot and run python "
+            "scripts/verify_evidence_snapshot.py <snapshot.json>."
+        ),
+        "buyer_close_dependency": "critical evidence gate",
+        "close_gate_status": "blocked",
+        "next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "provider_write_executed": False,
+    }
+    assert proof_plan[-1]["proof_key"] == (
+        "proof_risk_medium_attachment_parsing_remediation_actions_json"
+    )
+    assert proof_plan[-1]["severity_code"] == "medium"
+    assert proof_plan[-1]["required_proof_artifact"] == "remediation-actions.json"
+    assert proof_plan[-1]["close_gate_status"] == "blocked"
+    assert snapshot["diligence_close_decision_summary"] == {
+        "summary_key": "buyer_close_decision",
+        "decision_code": "close_blocked",
+        "total_proof_count": 6,
+        "blocked_proof_count": 6,
+        "ready_proof_count": 0,
+        "critical_blocker_count": 1,
+        "high_blocker_count": 4,
+        "medium_blocker_count": 1,
+        "required_artifact_count": 5,
+        "required_artifacts": [
+            "acquisition-readiness-summary.json",
+            "dom-paragraph-evidence-samples.json",
+            "knowledge-graph-evidence-samples.json",
+            "remediation-actions.json",
+            "semantic-relation-evidence-samples.json",
+        ],
+        "highest_severity": "critical",
+        "snapshot_verification_required": True,
+        "buyer_summary_text": (
+            "Close remains blocked by 6 proof requirement(s) across "
+            "5 required artifact(s)."
+        ),
+        "next_action_text": (
+            "Resolve critical and high proof blockers, regenerate the "
+            "evidence snapshot, and verify the copied JSON with the offline "
+            "snapshot verifier."
+        ),
+        "provider_write_executed": False,
+    }
+    artifact_review_queue = snapshot["diligence_close_artifact_review_queue"]
+    assert len(artifact_review_queue) == 5
+    assert artifact_review_queue[0] == {
+        "queue_key": "review_acquisition_readiness_summary_json",
+        "required_proof_artifact": "acquisition-readiness-summary.json",
+        "owner_areas": ["email_ingestion"],
+        "proof_count": 1,
+        "blocked_proof_count": 1,
+        "ready_proof_count": 0,
+        "highest_severity": "critical",
+        "buyer_review_role": "executive diligence reviewer",
+        "review_status": "blocked",
+        "acceptance_summary": (
+            "1 proof requirement(s) for acquisition-readiness-summary.json need "
+            "executive diligence reviewer review before close."
+        ),
+        "next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "snapshot_verification_required": True,
+        "provider_write_executed": False,
+    }
+    assert artifact_review_queue[3]["required_proof_artifact"] == (
+        "remediation-actions.json"
+    )
+    assert artifact_review_queue[3]["proof_count"] == 2
+    assert artifact_review_queue[3]["highest_severity"] == "high"
+    assert artifact_review_queue[3]["buyer_review_role"] == "data quality reviewer"
+    assert artifact_review_queue[-1]["required_proof_artifact"] == (
+        "semantic-relation-evidence-samples.json"
+    )
+    assert all(
+        item["provider_write_executed"] is False for item in artifact_review_queue
+    )
+    owner_handoff_queue = snapshot["diligence_close_owner_handoff_queue"]
+    assert len(owner_handoff_queue) == 5
+    assert owner_handoff_queue[0] == {
+        "handoff_key": "handoff_attachment_parsing",
+        "owner_area": "attachment_parsing",
+        "related_artifacts": ["remediation-actions.json"],
+        "proof_count": 2,
+        "blocked_proof_count": 2,
+        "ready_proof_count": 0,
+        "highest_severity": "high",
+        "buyer_review_roles": ["data quality reviewer", "coverage reviewer"],
+        "handoff_status": "blocked",
+        "acceptance_summary": (
+            "2 proof requirement(s) assigned to attachment_parsing affect "
+            "1 artifact(s) before close."
+        ),
+        "next_action": (
+            "Resolve exception_recover_attachment_content, then regenerate the "
+            "evidence snapshot.; Resolve exception_expand_attachment_parse_coverage, "
+            "then regenerate the evidence snapshot."
+        ),
+        "snapshot_verification_required": True,
+        "provider_write_executed": False,
+    }
+    assert owner_handoff_queue[2]["owner_area"] == "email_ingestion"
+    assert owner_handoff_queue[2]["highest_severity"] == "critical"
+    assert owner_handoff_queue[2]["buyer_review_roles"] == [
+        "executive diligence reviewer"
+    ]
+    assert owner_handoff_queue[-1]["owner_area"] == "semantic_kg"
+    assert all(
+        item["provider_write_executed"] is False for item in owner_handoff_queue
+    )
+    traceability_map = snapshot["diligence_close_traceability_map"]
+    assert len(traceability_map) == 6
+    assert traceability_map[0] == {
+        "trace_key": "trace_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "source_field": "acquisition_readiness_gate",
+        "data_room_artifact": "acquisition-readiness-summary.json",
+        "manifest_key": "acquisition_readiness_summary",
+        "exception_keys": [
+            "exception_repair_thread_id_integrity",
+            "exception_backfill_dedupe_fingerprints",
+        ],
+        "risk_key": "risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "proof_key": "proof_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "artifact_review_key": "review_acquisition_readiness_summary_json",
+        "owner_handoff_key": "handoff_email_ingestion",
+        "owner_area": "email_ingestion",
+        "severity_code": "critical",
+        "exception_count": 2,
+        "close_gate_status": "blocked",
+        "buyer_review_roles": ["executive diligence reviewer"],
+        "trace_summary": (
+            "acquisition_readiness_gate feeds "
+            "acquisition-readiness-summary.json for email_ingestion close proof "
+            "traceability."
+        ),
+        "next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "snapshot_verification_required": True,
+        "provider_write_executed": False,
+    }
+    assert traceability_map[2]["source_field"] == "content_graph_evidence_samples"
+    assert traceability_map[2]["data_room_artifact"] == (
+        "dom-paragraph-evidence-samples.json"
+    )
+    assert traceability_map[3]["source_field"] == "knowledge_graph_evidence_samples"
+    assert traceability_map[3]["data_room_artifact"] == (
+        "knowledge-graph-evidence-samples.json"
+    )
+    assert traceability_map[-1]["source_field"] == (
+        "acquisition_readiness_gate.remediation_actions"
+    )
+    assert traceability_map[-1]["owner_handoff_key"] == "handoff_attachment_parsing"
+    assert all(
+        item["provider_write_executed"] is False for item in traceability_map
+    )
+    acceptance_checklist = snapshot["diligence_close_acceptance_checklist"]
+    assert len(acceptance_checklist) == 6
+    assert acceptance_checklist[0] == {
+        "acceptance_key": "accept_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "trace_key": "trace_risk_critical_email_ingestion_acquisition_readiness_summary_json",
+        "data_room_artifact": "acquisition-readiness-summary.json",
+        "source_field": "acquisition_readiness_gate",
+        "owner_area": "email_ingestion",
+        "reviewer_roles": ["executive diligence reviewer"],
+        "acceptance_status": "blocked",
+        "close_gate_status": "blocked",
+        "blocker_keys": [
+            "exception_repair_thread_id_integrity",
+            "exception_backfill_dedupe_fingerprints",
+        ],
+        "acceptance_criteria": (
+            "Resolve 2 exception(s), regenerate "
+            "acquisition-readiness-summary.json from acquisition_readiness_gate, "
+            "and verify the copied snapshot digest before buyer acceptance."
+        ),
+        "verification_command": (
+            "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+        ),
+        "reviewer_evidence_summary": (
+            "executive diligence reviewer review "
+            "acquisition-readiness-summary.json for email_ingestion; "
+            "trace_risk_critical_email_ingestion_acquisition_readiness_summary_json "
+            "covers 2 exception(s)."
+        ),
+        "next_action": (
+            "Resolve exception_repair_thread_id_integrity, "
+            "exception_backfill_dedupe_fingerprints, then regenerate the "
+            "evidence snapshot."
+        ),
+        "snapshot_verification_required": True,
+        "provider_write_executed": False,
+    }
+    assert acceptance_checklist[2]["source_field"] == "content_graph_evidence_samples"
+    assert acceptance_checklist[2]["reviewer_roles"] == ["data quality reviewer"]
+    assert acceptance_checklist[3]["data_room_artifact"] == (
+        "knowledge-graph-evidence-samples.json"
+    )
+    assert acceptance_checklist[-1]["blocker_keys"] == [
+        "exception_expand_attachment_parse_coverage"
+    ]
+    assert all(
+        item["provider_write_executed"] is False for item in acceptance_checklist
+    )
+    acceptance_summary = snapshot["diligence_close_acceptance_summary"]
+    assert acceptance_summary == {
+        "summary_key": "buyer_close_acceptance",
+        "decision_code": "close_blocked",
+        "total_acceptance_count": 6,
+        "blocked_acceptance_count": 6,
+        "ready_acceptance_count": 0,
+        "reviewer_role_count": 3,
+        "reviewer_roles": [
+            "coverage reviewer",
+            "data quality reviewer",
+            "executive diligence reviewer",
+        ],
+        "required_artifact_count": 5,
+        "required_artifacts": [
+            "acquisition-readiness-summary.json",
+            "dom-paragraph-evidence-samples.json",
+            "knowledge-graph-evidence-samples.json",
+            "remediation-actions.json",
+            "semantic-relation-evidence-samples.json",
+        ],
+        "blocker_count": 9,
+        "blocker_keys": [
+            "exception_attach_kg_evidence_endpoints",
+            "exception_backfill_content_graph_coverage",
+            "exception_backfill_dedupe_fingerprints",
+            "exception_backfill_knowledge_graph_coverage",
+            "exception_backfill_semantic_relation_sources",
+            "exception_expand_attachment_parse_coverage",
+            "exception_recover_attachment_content",
+            "exception_repair_segment_text_readiness",
+            "exception_repair_thread_id_integrity",
+        ],
+        "close_gate_status": "blocked",
+        "snapshot_verification_required": True,
+        "buyer_summary_text": (
+            "Buyer acceptance remains blocked by 6 item(s) across 5 artifact(s) "
+            "and 9 blocker key(s)."
+        ),
+        "next_action_text": (
+            "Resolve blocker keys, regenerate the evidence snapshot, run the "
+            "offline verifier, and reissue the acceptance checklist."
+        ),
+        "provider_write_executed": False,
+    }
+    release_summary = snapshot["data_room_release_summary"]
+    assert release_summary == {
+        "release_key": "buyer_data_room_release",
+        "release_status": "release_blocked",
+        "total_artifact_count": 10,
+        "ready_artifact_count": 7,
+        "needs_attention_artifact_count": 3,
+        "required_for_close_count": 10,
+        "blocked_artifact_files": [
+            "acquisition-readiness-summary.json",
+            "buyer-evidence-packet-checklist.json",
+            "remediation-actions.json",
+        ],
+        "privacy_exposure_count": 0,
+        "raw_content_exposure_count": 0,
+        "stable_identifier_exposure_count": 0,
+        "provider_credential_exposure_count": 0,
+        "snapshot_verification_required": True,
+        "verification_command": (
+            "python scripts/verify_evidence_snapshot.py <snapshot.json>"
+        ),
+        "acceptance_blocker_count": 9,
+        "acceptance_blocker_keys": [
+            "exception_attach_kg_evidence_endpoints",
+            "exception_backfill_content_graph_coverage",
+            "exception_backfill_dedupe_fingerprints",
+            "exception_backfill_knowledge_graph_coverage",
+            "exception_backfill_semantic_relation_sources",
+            "exception_expand_attachment_parse_coverage",
+            "exception_recover_attachment_content",
+            "exception_repair_segment_text_readiness",
+            "exception_repair_thread_id_integrity",
+        ],
+        "buyer_summary_text": (
+            "Data-room release remains blocked by 3 artifact(s), 9 blocker key(s), "
+            "and 0 privacy exposure(s)."
+        ),
+        "next_action_text": (
+            "Resolve blocked artifact states, clear acceptance blockers, run the "
+            "offline verifier, and reissue the release bundle."
+        ),
+        "provider_write_executed": False,
+    }
+    assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
+    assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
+    assert snapshot["parser_manifest_summary"][0] == {
+        "parser_key": "plain_text",
+        "display_name": "Plain text attachments",
+        "parse_status": "parsed",
+        "content_types": ["text/plain"],
+        "extensions": [".txt", ".text"],
+    }
+    assert snapshot["content_graph_topology_counts"] == [
+        {"source_kind": "email_body", "segment_kind": "paragraph", "object_count": 6},
+        {"source_kind": "attachment", "segment_kind": "heading", "object_count": 2},
+    ]
+    assert snapshot["knowledge_graph_topology_counts"] == [
+        {"source_kind": "email_body", "edge_kind": "node_has_segment", "object_count": 8},
+        {
+            "source_kind": "attachment",
+            "edge_kind": "heading_contains_segment",
+            "object_count": 2,
+        },
+    ]
+    assert snapshot["quality_checks"][0] == {
+        "check_key": "thread_id_integrity",
+        "display_name": "Thread id integrity",
+        "status_code": "needs_attention",
+        "issue_count": 1,
+        "total_count": 4,
+        "detail_text": "Some scoped emails need canonical thread ids.",
+    }
+    assert "evidence_source" not in snapshot["quality_checks"][0]
+    assert "provider_write_executed" not in snapshot["quality_checks"][0]
+    assert snapshot["content_graph_evidence_samples"][0] == {
+        "sample_key": _expected_sample_key("segment", "cseg_email_paragraph_1"),
+        "source_kind": "email_body",
+        "segment_kind": "paragraph",
+        "segment_path": "/document[1]/paragraph[1]",
+        "word_count": 12,
+    }
+    assert snapshot["knowledge_graph_evidence_samples"][0] == {
+        "sample_key": _expected_sample_key("edge", "kgedge_email_node_segment_1"),
+        "source_kind": "email_body",
+        "edge_kind": "node_has_segment",
+        "edge_path": "/document[1]/paragraph[1]/has/segment[1]",
+        "endpoint_status": "segment_backed",
+    }
+    assert snapshot["semantic_extraction_manifest"] == [
+        {
+            "manifest_key": "entity_relation_extraction",
+            "display_name": "Entity/relation extraction",
+            "state_code": "ready",
+            "structural_edge_count": 10,
+            "semantic_relation_count": 3,
+            "source_backed_relation_count": 2,
+            "required_evidence": [
+                "segment_citation",
+                "extractor_version",
+                "confidence_score",
+                "human_correction_path",
+            ],
+            "detail_text": (
+                "Semantic relation evidence is available from source-backed ontology "
+                "relationship records."
+            ),
+            "provider_write_executed": False,
+        }
+    ]
+    assert snapshot["semantic_relation_evidence_samples"] == [
+        {
+            "sample_key": _expected_sample_key(
+                "relation",
+                "partner@example.com|<asset-ready@example.com>|thread-ready|Vendor",
+            ),
+            "relationship_type": "Vendor",
+            "confidence_bucket": "high",
+            "source_scope": "message_thread",
+            "next_action": "prepare_response_draft",
+        },
+        {
+            "sample_key": _expected_sample_key(
+                "relation",
+                "updates@example.com|<newsletter@example.com>||Newsletter",
+            ),
+            "relationship_type": "Newsletter",
+            "confidence_bucket": "high",
+            "source_scope": "message",
+            "next_action": "summarize_then_archive",
+        },
+    ]
+
+    serialized = response.text
+    for forbidden in (
+        "source email body",
+        "extracted attachment text",
+        "content_segments.source_kind",
+        "knowledge_graph_edges.source_kind",
+        "email_attachments.content_type",
+        "cseg_email_paragraph_1",
+        "kgedge_email_node_segment_1",
+        "<asset-ready@example.com>",
+        "<newsletter@example.com>",
+        "partner@example.com",
+        "updates@example.com",
+        "thread-ready",
+        "credentials_encrypted",
     ):
         assert forbidden not in serialized
 
@@ -397,6 +4197,7 @@ def test_member_data_quality_queries_are_owner_scoped(mock_db):
     assert "webdav_accounts.workspace_id = :workspace_id_1" in rendered_queries
     assert "project_folders.user_id = :user_id_1" in rendered_queries
     assert "email_records.user_id = :user_id_1" in rendered_queries
+    assert "sender_relationships.user_id = :user_id_1" in rendered_queries
 
 
 def test_data_quality_surface_includes_workspace_document_assets(mock_db):
@@ -694,6 +4495,9 @@ async def _seed_smoke_test_data(conn, ids: dict):
     await conn.execute(text("SELECT 1"))
     await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     await conn.run_sync(Base.metadata.create_all)
+    first_message_id = f"<data-smoke-{uuid.uuid4().hex}@example.com>"
+    second_message_id = f"<data-smoke-missing-{uuid.uuid4().hex}@example.com>"
+    rival_message_id = f"<data-rival-{uuid.uuid4().hex}@example.com>"
     first_email = await conn.execute(
         text(
             """
@@ -705,13 +4509,13 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :user_id, :organization_id, :message_id, :thread_id,
                 :fingerprint, :sender, :recipients, :subject, now(), :body
             )
-            RETURNING id
+            RETURNING content_node_id
             """
         ),
         {
             "user_id": ids["user_id"],
             "organization_id": ids["organization_id"],
-            "message_id": f"<data-smoke-{uuid.uuid4().hex}@example.com>",
+            "message_id": first_message_id,
             "thread_id": "thread-data-smoke",
             "fingerprint": "sha256:data-smoke",
             "sender": "partner@example.com",
@@ -731,13 +4535,13 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :user_id, :organization_id, :message_id, :sender,
                 :recipients, :subject, now(), :body
             )
-            RETURNING id
+            RETURNING content_node_id
             """
         ),
         {
             "user_id": ids["user_id"],
             "organization_id": ids["organization_id"],
-            "message_id": f"<data-smoke-missing-{uuid.uuid4().hex}@example.com>",
+            "message_id": second_message_id,
             "sender": "partner@example.com",
             "recipients": "owner@example.com",
             "subject": "Data smoke missing",
@@ -761,7 +4565,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
         {
             "user_id": ids["rival_user_id"],
             "organization_id": ids["rival_organization_id"],
-            "message_id": f"<data-rival-{uuid.uuid4().hex}@example.com>",
+            "message_id": rival_message_id,
             "thread_id": "thread-rival",
             "fingerprint": "sha256:rival",
             "sender": "rival@example.com",
@@ -773,14 +4577,185 @@ async def _seed_smoke_test_data(conn, ids: dict):
     first_email_id = first_email.scalar_one()
     second_email_id = second_email.scalar_one()
     rival_email_id = rival_email.scalar_one()
+    first_node_uid = f"cnode_{uuid.uuid4().hex[:24]}"
+    rival_node_uid = f"cnode_{uuid.uuid4().hex[:24]}"
+    first_segment_uid = f"cseg_{uuid.uuid4().hex[:24]}"
+    rival_segment_uid = f"cseg_{uuid.uuid4().hex[:24]}"
+    first_node = await conn.execute(
+        text(
+            """
+            INSERT INTO content_nodes (
+                content_node_uid, email_id, source_kind, source_record_uid,
+                node_kind, node_path, ordinal_index, safe_text_content,
+                content_hash, created_at
+            )
+            VALUES (
+                :content_node_uid, :email_id, 'email_body',
+                :source_record_uid, 'paragraph', '/document[1]/paragraph[1]',
+                1, 'segmented body text', :content_hash, now()
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "content_node_uid": first_node_uid,
+            "email_id": first_email_id,
+            "source_record_uid": f"email:{first_email_id}",
+            "content_hash": hashlib.sha256(b"segmented body text").hexdigest(),
+        },
+    )
+    rival_node = await conn.execute(
+        text(
+            """
+            INSERT INTO content_nodes (
+                content_node_uid, email_id, source_kind, source_record_uid,
+                node_kind, node_path, ordinal_index, safe_text_content,
+                content_hash, created_at
+            )
+            VALUES (
+                :content_node_uid, :email_id, 'email_body',
+                :source_record_uid, 'paragraph', '/document[1]/paragraph[1]',
+                1, 'rival segmented body text', :content_hash, now()
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "content_node_uid": rival_node_uid,
+            "email_id": rival_email_id,
+            "source_record_uid": f"email:{rival_email_id}",
+            "content_hash": hashlib.sha256(b"rival segmented body text").hexdigest(),
+        },
+    )
+    first_node_id = first_node.scalar_one()
+    rival_node_id = rival_node.scalar_one()
     await conn.execute(
         text(
             """
-            INSERT INTO email_attachments (email_id, filename, content)
+            INSERT INTO content_segments (
+                content_segment_uid, email_id, content_node_id, source_kind,
+                source_record_uid, segment_kind, segment_path, ordinal_index,
+                safe_text_content, content_hash, word_count, created_at
+            )
             VALUES
-            (:first_email_id, 'ready.txt', 'ready attachment'),
-            (:second_email_id, 'blank.txt', ''),
-            (:rival_email_id, 'rival.txt', 'rival attachment')
+            (
+                :first_segment_uid, :first_email_id, :first_content_node_id,
+                'email_body', :first_source_record_uid, 'paragraph',
+                '/document[1]/paragraph[1]', 1, 'segmented body text',
+                :first_content_hash, 3, now()
+            ),
+            (
+                :rival_segment_uid, :rival_email_id, :rival_content_node_id,
+                'email_body', :rival_source_record_uid, 'paragraph',
+                '/document[1]/paragraph[1]', 1, 'rival segmented body text',
+                :rival_content_hash, 4, now()
+            )
+            """
+        ),
+        {
+            "first_segment_uid": first_segment_uid,
+            "first_email_id": first_email_id,
+            "first_content_node_id": first_node_id,
+            "first_source_record_uid": f"email:{first_email_id}",
+            "first_content_hash": hashlib.sha256(b"segmented body text").hexdigest(),
+            "rival_segment_uid": rival_segment_uid,
+            "rival_email_id": rival_email_id,
+            "rival_content_node_id": rival_node_id,
+            "rival_source_record_uid": f"email:{rival_email_id}",
+            "rival_content_hash": hashlib.sha256(
+                b"rival segmented body text"
+            ).hexdigest(),
+        },
+    )
+    await conn.execute(
+        text(
+            """
+            INSERT INTO knowledge_graph_edges (
+                edge_uid, email_id, source_node_id, target_segment_id,
+                source_kind, source_record_uid, edge_kind, edge_path,
+                ordinal_index, created_at
+            )
+            SELECT
+                :first_edge_uid, :first_email_id, :first_node_id,
+                first_segment.content_segment_id,
+                'email_body', :first_source_record_uid, 'node_has_segment',
+                '/document[1]/paragraph[1]/has/smoke', 1, now()
+            FROM content_segments AS first_segment
+            WHERE first_segment.content_segment_uid = :first_segment_uid
+            UNION ALL
+            SELECT
+                :rival_edge_uid, :rival_email_id, :rival_node_id,
+                rival_segment.content_segment_id,
+                'email_body', :rival_source_record_uid, 'node_has_segment',
+                '/document[1]/paragraph[1]/has/rival', 1, now()
+            FROM content_segments AS rival_segment
+            WHERE rival_segment.content_segment_uid = :rival_segment_uid
+            """
+        ),
+        {
+            "first_edge_uid": f"kgedge_{uuid.uuid4().hex[:32]}",
+            "first_email_id": first_email_id,
+            "first_node_id": first_node_id,
+            "first_source_record_uid": f"email:{first_email_id}",
+            "first_segment_uid": first_segment_uid,
+            "rival_edge_uid": f"kgedge_{uuid.uuid4().hex[:32]}",
+            "rival_email_id": rival_email_id,
+            "rival_node_id": rival_node_id,
+            "rival_source_record_uid": f"email:{rival_email_id}",
+            "rival_segment_uid": rival_segment_uid,
+        },
+    )
+    await conn.execute(
+        text(
+            """
+            INSERT INTO sender_relationships (
+                user_id, organization_id, sender_email, source_message_id,
+                source_thread_id, relationship_type, confidence_score,
+                created_at, updated_at
+            )
+            VALUES
+            (
+                :user_id, :organization_id, 'semantic-vendor@example.com',
+                :first_message_id, 'thread-data-smoke', 'Vendor', 0.91,
+                now(), now()
+            ),
+            (
+                :rival_user_id, :rival_organization_id,
+                'rival-semantic@example.com', :rival_message_id,
+                'thread-rival', 'Vendor', 0.99, now(), now()
+            )
+            """
+        ),
+        {
+            "user_id": ids["user_id"],
+            "organization_id": ids["organization_id"],
+            "first_message_id": first_message_id,
+            "rival_user_id": ids["rival_user_id"],
+            "rival_organization_id": ids["rival_organization_id"],
+            "rival_message_id": rival_message_id,
+        },
+    )
+    await conn.execute(
+        text(
+            """
+            INSERT INTO email_attachments (
+                email_id, filename, content,
+                content_type, parse_status, parse_error_code
+            )
+            VALUES
+            (
+                :first_email_id, 'ready.txt', 'ready attachment',
+                'text/plain', 'parsed', NULL
+            ),
+            (
+                :second_email_id, 'blank.txt', '',
+                'application/pdf', 'unsupported_content_type',
+                'unsupported_content_type'
+            ),
+            (
+                :rival_email_id, 'rival.txt', 'rival attachment',
+                'text/plain', 'parsed', NULL
+            )
             """
         ),
         {
@@ -873,6 +4848,49 @@ async def _seed_smoke_test_data(conn, ids: dict):
 
 
 async def _teardown_smoke_test_data(conn, ids: dict):
+    await conn.execute(
+        text(
+            "DELETE FROM sender_relationships "
+            "WHERE user_id IN (:user_id, :rival_user_id)"
+        ),
+        {"user_id": ids["user_id"], "rival_user_id": ids["rival_user_id"]},
+    )
+    await conn.execute(
+        text(
+            """
+            DELETE FROM knowledge_graph_edges
+            WHERE email_id IN (
+                SELECT id FROM email_records
+                WHERE user_id IN (:user_id, :rival_user_id)
+            )
+            """
+        ),
+        {"user_id": ids["user_id"], "rival_user_id": ids["rival_user_id"]},
+    )
+    await conn.execute(
+        text(
+            """
+            DELETE FROM content_segments
+            WHERE email_id IN (
+                SELECT id FROM email_records
+                WHERE user_id IN (:user_id, :rival_user_id)
+            )
+            """
+        ),
+        {"user_id": ids["user_id"], "rival_user_id": ids["rival_user_id"]},
+    )
+    await conn.execute(
+        text(
+            """
+            DELETE FROM content_nodes
+            WHERE email_id IN (
+                SELECT id FROM email_records
+                WHERE user_id IN (:user_id, :rival_user_id)
+            )
+            """
+        ),
+        {"user_id": ids["user_id"], "rival_user_id": ids["rival_user_id"]},
+    )
     await conn.execute(
         text(
             """
@@ -1012,6 +5030,13 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     assert quality_by_key["thread_id_integrity"]["issue_count"] == 1
     assert quality_by_key["dedupe_fingerprint"]["issue_count"] == 1
     assert quality_by_key["attachment_content"]["issue_count"] == 1
+    assert quality_by_key["content_graph_coverage"]["issue_count"] == 1
+    assert quality_by_key["knowledge_graph_coverage"]["issue_count"] == 1
+    assert quality_by_key["semantic_relation_source_backing"]["issue_count"] == 0
+    assert quality_by_key["attachment_parse_coverage"]["issue_count"] == 1
+    assert data["semantic_extraction_manifest"][0]["semantic_relation_count"] == 1
+    assert data["semantic_extraction_manifest"][0]["source_backed_relation_count"] == 1
+    assert data["semantic_relation_evidence_samples"][0]["relationship_type"] == "Vendor"
     assert event_uid in {event["event_uid"] for event in data["connector_events"]}
     asset_names = {asset["display_name"] for asset in data["repository_assets"]}
     assert {"ready.txt", "blank.txt"} <= asset_names
@@ -1024,6 +5049,8 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     assert assets_by_name["ready.txt"]["asset_key"].startswith("asset_")
     assert assets_by_name["ready.txt"]["thread_key"].startswith("thread_")
     assert other_workspace_event_uid not in response.text
+    assert "rival-semantic@example.com" not in response.text
+    assert "semantic-vendor@example.com" not in response.text
     assert "account_id" not in response.text
     assert "encrypted-data-secret" not in response.text
     assert "data@example.com" not in response.text
