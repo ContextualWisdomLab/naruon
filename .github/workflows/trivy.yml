@@ -6,6 +6,10 @@ on:
       - develop
       - master
   workflow_dispatch:
+  pull_request:
+    branches:
+      - develop
+      - master
 
 permissions:
   contents: read

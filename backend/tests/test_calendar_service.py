@@ -1,7 +1,10 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from services.calendar_service import create_calendar_event, create_calendar_events_batch
-from services.exceptions import CalendarServiceError, UnsafeCalendarTodoError
+from services.calendar_service import (
+    create_calendar_event,
+    create_calendar_events_batch,
+)
+from services.exceptions import CalendarServiceError, UnsafeCalendarActionItemError
 
 
 def _server_owned_google_credentials() -> dict[str, str]:
@@ -35,7 +38,9 @@ async def test_create_calendar_event_rejects_unsafe_summary_before_google_build(
     unsafe_summary,
 ):
     with patch("services.calendar_service.build") as mock_build:
-        with pytest.raises(UnsafeCalendarTodoError, match="Unsafe calendar todo text"):
+        with pytest.raises(
+            UnsafeCalendarActionItemError, match="Unsafe calendar action item text"
+        ):
             await create_calendar_event(unsafe_summary, {"token": "dummy"})
 
         mock_build.assert_not_called()
@@ -192,21 +197,19 @@ async def test_create_calendar_events_batch_chunks_large_batches(
     assert [event["summary"] for event in result] == ["One", "Two", "Three"]
     assert [len(service.batches) for service in fake_services] == [1, 1]
     assert [
-        len(batch.requests)
-        for service in fake_services
-        for batch in service.batches
+        len(batch.requests) for service in fake_services for batch in service.batches
     ] == [2, 1]
     assert [
-        batch.execute_count
-        for service in fake_services
-        for batch in service.batches
+        batch.execute_count for service in fake_services for batch in service.batches
     ] == [1, 1]
 
 
 @pytest.mark.asyncio
 async def test_create_calendar_events_batch_rejects_unsafe_summary_before_google_build():
     with patch("services.calendar_service.build") as mock_build:
-        with pytest.raises(UnsafeCalendarTodoError, match="Unsafe calendar todo text"):
+        with pytest.raises(
+            UnsafeCalendarActionItemError, match="Unsafe calendar action item text"
+        ):
             await create_calendar_events_batch(
                 ["Buy milk", "<script>alert(1)</script>"],
                 _server_owned_google_credentials(),
@@ -252,7 +255,5 @@ async def test_create_calendar_events_batch_waits_for_all_chunks_before_failure(
         )
 
     assert [
-        batch.execute_count
-        for service in fake_services
-        for batch in service.batches
+        batch.execute_count for service in fake_services for batch in service.batches
     ] == [1, 1]

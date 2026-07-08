@@ -25,7 +25,7 @@ class ExtractionResult(BaseModel):
     """Result model for email extraction."""
 
     summary: str
-    todos: list[str]
+    action_items: list[str]
     provenance: str | None = None
     confidence: int | None = Field(
         default=None,
@@ -35,14 +35,14 @@ class ExtractionResult(BaseModel):
     )
 
 
-async def extract_todos_and_summary(
+async def extract_action_items_and_summary(
     email_body: str,
     openai_api_key: str,
     base_url: str | None = None,
     provider_name: str = "OpenAI",
     model: str | None = None,
 ) -> ExtractionResult:
-    """Extract todos and summary from an email."""
+    """Extract action items and summary from an email."""
     if not openai_api_key:
         raise ValueError("API Key is not set")
 

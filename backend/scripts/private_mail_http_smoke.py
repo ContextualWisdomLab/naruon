@@ -98,8 +98,7 @@ def _header_text(raw: bytes) -> str:
     except Exception:
         return ""
     return "\n".join(
-        str(msg.get(name, ""))
-        for name in ("Subject", "From", "To", "Cc", "Date")
+        str(msg.get(name, "")) for name in ("Subject", "From", "To", "Cc", "Date")
     )
 
 
@@ -113,13 +112,15 @@ def _message_text(raw: bytes, max_parse_bytes: int) -> str:
     except Exception:
         return "\n".join(parts)
 
-    parts.extend([
-        str(msg.get("Subject", "")),
-        str(msg.get("From", "")),
-        str(msg.get("To", "")),
-        str(msg.get("Cc", "")),
-        str(msg.get("Date", "")),
-    ])
+    parts.extend(
+        [
+            str(msg.get("Subject", "")),
+            str(msg.get("From", "")),
+            str(msg.get("To", "")),
+            str(msg.get("Cc", "")),
+            str(msg.get("Date", "")),
+        ]
+    )
     if msg.is_multipart():
         for part in msg.walk():
             filename = part.get_filename()
@@ -307,7 +308,11 @@ def _request(
     parsed = urlsplit(base_url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise SystemExit("base-url must be http(s)")
-    cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+    cls = (
+        http.client.HTTPSConnection
+        if parsed.scheme == "https"
+        else http.client.HTTPConnection
+    )
     conn = cls(parsed.hostname, parsed.port, timeout=timeout)
     headers = {
         "Cookie": f"{SESSION_COOKIE_NAME}={token}",
@@ -323,7 +328,9 @@ def _request(
         resp = conn.getresponse()
         return resp.status, resp.read()
     except OSError as exc:
-        raise _RequestNetworkError(f"request transport error to {base_url}: {exc}") from exc
+        raise _RequestNetworkError(
+            f"request transport error to {base_url}: {exc}"
+        ) from exc
     finally:
         conn.close()
 
@@ -625,8 +632,7 @@ def _print_session_sync_hints(base_url: str, token: str, *, enabled: bool) -> No
         return
 
     print(
-        "session_token="
-        + token,
+        "session_token=" + token,
     )
     print("브라우저 동일 세션 동기화 방법:")
     print(
@@ -670,7 +676,9 @@ def _print_session_check_summary(claims: dict[str, object] | None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mail-dir", required=True, type=Path)
-    parser.add_argument("--base-url", default=os.environ.get("LIVE_BASE_URL", "http://127.0.0.1:18080"))
+    parser.add_argument(
+        "--base-url", default=os.environ.get("LIVE_BASE_URL", "http://127.0.0.1:18080")
+    )
     parser.add_argument(
         "--api-base-url",
         help="Optional override when frontend and backend ports differ",
@@ -679,20 +687,26 @@ def main() -> None:
         "--frontend-base-url",
         help="Optional override when frontend and backend ports differ",
     )
-    parser.add_argument("--session-secret", default=os.environ.get("LIVE_E2E_SESSION_SECRET", ""))
+    parser.add_argument(
+        "--session-secret", default=os.environ.get("LIVE_E2E_SESSION_SECRET", "")
+    )
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=10)
     parser.add_argument("--query", action="append", default=[])
     parser.add_argument("--match-mode", choices=["exact", "all-terms"], default="exact")
     parser.add_argument("--llm-smoke", action="store_true")
     parser.add_argument("--print-session-token", action="store_true")
-    parser.add_argument("--search-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS)
+    parser.add_argument(
+        "--search-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS
+    )
     parser.add_argument(
         "--search-retry-delay-seconds",
         type=float,
         default=SEARCH_RETRY_DEFAULT_DELAY_SECONDS,
     )
-    parser.add_argument("--inbox-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS)
+    parser.add_argument(
+        "--inbox-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS
+    )
     parser.add_argument(
         "--inbox-retry-delay-seconds",
         type=float,
@@ -728,7 +742,9 @@ def main() -> None:
         progress_every=max(0, args.progress_every),
     )
     if not files:
-        raise SystemExit("no matching supported .eml/.mbox/.zip messages found or directory is not readable")
+        raise SystemExit(
+            "no matching supported .eml/.mbox/.zip messages found or directory is not readable"
+        )
 
     try:
         token = _signed_token(args.session_secret)
@@ -766,7 +782,9 @@ def main() -> None:
             limit=api_limit,
             min_count=visible_min_count,
             attempts=args.inbox_retry_attempts if expected_min_count > 0 else 1,
-            delay_seconds=args.inbox_retry_delay_seconds if expected_min_count > 0 else 0.0,
+            delay_seconds=args.inbox_retry_delay_seconds
+            if expected_min_count > 0
+            else 0.0,
             timeout=120.0,
         )
         frontend_inbox_count = 0
@@ -847,7 +865,9 @@ def main() -> None:
                 if isinstance(candidate, dict):
                     target_id = candidate.get("id")
         if args.llm_smoke and target_id is not None:
-            status, raw = _request(api_base_url, token, "GET", f"/api/emails/{target_id}")
+            status, raw = _request(
+                api_base_url, token, "GET", f"/api/emails/{target_id}"
+            )
             detail = _json_or_empty(status, raw)
             body_text = str(detail.get("body", ""))
             summary = _post_json(
@@ -859,7 +879,7 @@ def main() -> None:
             )
             llm_status = (
                 f"ok summary_chars={len(str(summary.get('summary', '')))} "
-                f"todos={len(summary.get('todos', []))}"
+                f"action_items={len(summary.get('action_items', []))}"
             )
             draft = _post_json(
                 api_base_url,

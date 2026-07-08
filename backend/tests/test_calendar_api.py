@@ -115,21 +115,21 @@ def _calendar_writeback_source(
 @patch("api.calendar.create_calendar_events_batch", new_callable=AsyncMock)
 def test_calendar_sync_endpoint_success(mock_create, calendar_user_token_override):
     # Setup mock
-    mock_create.return_value = [{"id": "123", "summary": "Test todo"}]
+    mock_create.return_value = [{"id": "123", "summary": "Test action_item"}]
     user_token = _server_owned_google_credentials()
     calendar_user_token_override(user_token)
 
     response = client.post(
         "/api/calendar/sync",
-        json={"todos": ["Test todo"]},
+        json={"action_items": ["Test action_item"]},
     )
 
     assert response.status_code == 200
     assert response.json() == {
         "synced": 1,
-        "events": [{"id": "123", "summary": "Test todo"}],
+        "events": [{"id": "123", "summary": "Test action_item"}],
     }
-    mock_create.assert_called_once_with(["Test todo"], user_token)
+    mock_create.assert_called_once_with(["Test action_item"], user_token)
 
 
 @patch("api.calendar.create_calendar_events_batch", new_callable=AsyncMock)
@@ -138,7 +138,10 @@ def test_calendar_sync_rejects_client_supplied_user_token(mock_create):
 
     response = client.post(
         "/api/calendar/sync",
-        json={"todos": ["Test todo"], "user_token": {"token": "attacker"}},
+        json={
+            "action_items": ["Test action_item"],
+            "user_token": {"token": "attacker"},
+        },
     )
 
     assert response.status_code == 422
@@ -148,7 +151,7 @@ def test_calendar_sync_rejects_client_supplied_user_token(mock_create):
 
 @patch("api.calendar.create_calendar_events_batch", new_callable=AsyncMock)
 def test_calendar_sync_uses_server_authoritative_calendar_credentials(mock_create):
-    mock_create.return_value = [{"id": "123", "summary": "Test todo"}]
+    mock_create.return_value = [{"id": "123", "summary": "Test action_item"}]
     user_token = _server_owned_google_credentials()
 
     async def token_override():
@@ -156,54 +159,62 @@ def test_calendar_sync_uses_server_authoritative_calendar_credentials(mock_creat
 
     app.dependency_overrides[calendar_api.get_calendar_user_token] = token_override
     try:
-        response = client.post("/api/calendar/sync", json={"todos": ["Test todo"]})
+        response = client.post(
+            "/api/calendar/sync", json={"action_items": ["Test action_item"]}
+        )
     finally:
         app.dependency_overrides.pop(calendar_api.get_calendar_user_token, None)
 
     assert response.status_code == 200
     assert response.json() == {
         "synced": 1,
-        "events": [{"id": "123", "summary": "Test todo"}],
+        "events": [{"id": "123", "summary": "Test action_item"}],
     }
-    mock_create.assert_called_once_with(["Test todo"], user_token)
+    mock_create.assert_called_once_with(["Test action_item"], user_token)
 
 
 @patch("api.calendar.create_calendar_events_batch", new_callable=AsyncMock)
-def test_calendar_sync_endpoint_error(mock_create, calendar_user_token_override, caplog):
+def test_calendar_sync_endpoint_error(
+    mock_create, calendar_user_token_override, caplog
+):
     mock_create.side_effect = CalendarServiceError("Mocked error")
     calendar_user_token_override(_server_owned_google_credentials())
 
     with caplog.at_level("WARNING", logger="api.calendar"):
         response = client.post(
             "/api/calendar/sync",
-            json={"todos": ["Test todo"]},
+            json={"action_items": ["Test action_item"]},
         )
 
     assert response.status_code == 500
-    assert response.json() == {"detail": "An internal server error occurred while communicating with the calendar service"}
-    assert "Calendar service error during sync_todos" in caplog.text
+    assert response.json() == {
+        "detail": "An internal server error occurred while communicating with the calendar service"
+    }
+    assert "Calendar service error during sync_action_items" in caplog.text
     assert "Mocked error" not in caplog.text
 
 
 @pytest.mark.parametrize(
-    "unsafe_todo",
+    "unsafe_action_item",
     [
         "<script>alert('xss')</script>",
         "$(sleep 5)",
     ],
 )
 @patch("api.calendar.create_calendar_events_batch", new_callable=AsyncMock)
-def test_calendar_sync_rejects_unsafe_todo_text_before_writeback(
+def test_calendar_sync_rejects_unsafe_action_item_text_before_writeback(
     mock_create,
     calendar_user_token_override,
-    unsafe_todo,
+    unsafe_action_item,
 ):
     calendar_user_token_override(_server_owned_google_credentials())
 
-    response = client.post("/api/calendar/sync", json={"todos": [unsafe_todo]})
+    response = client.post(
+        "/api/calendar/sync", json={"action_items": [unsafe_action_item]}
+    )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "Invalid or unsafe calendar todo text"}
+    assert response.json() == {"detail": "Invalid or unsafe calendar action item text"}
     mock_create.assert_not_called()
 
 
@@ -217,11 +228,11 @@ def test_calendar_sync_rejects_mixed_batch_before_any_writeback(
 
     response = client.post(
         "/api/calendar/sync",
-        json={"todos": ["Buy milk", "<script>alert('xss')</script>"]},
+        json={"action_items": ["Buy milk", "<script>alert('xss')</script>"]},
     )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "Invalid or unsafe calendar todo text"}
+    assert response.json() == {"detail": "Invalid or unsafe calendar action item text"}
     mock_create.assert_not_called()
 
 
@@ -630,7 +641,7 @@ def test_calendar_writeback_targeted_authorization_hides_source_existence(
                 capabilities=["read", "write", "etag"],
                 writeback_enabled=True,
                 etag="cross-org-etag",
-            )
+            ),
         ]
     )
 
@@ -702,7 +713,6 @@ def test_calendar_writeback_rejects_org_admin_cross_user_targeting(
     )
 
     assert response.status_code == 403
-
 
 
 def test_calendar_writeback_rejects_system_admin_targeting_cross_org_source(
