@@ -91,3 +91,74 @@ async def test_packaged_connector_fails_closed_without_local_adapters():
             "error": "adapter_not_configured",
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_packaged_connector_dispatches_carddav_to_handler():
+    from unittest.mock import AsyncMock
+
+    handler = AsyncMock(
+        return_value={"status": "success", "provider_write_executed": True}
+    )
+    connector = SelfHostedConnector(
+        "wss://cp.example/ws/runner/nrn_registered-token",
+        "session-token",
+        carddav_write_handler=handler,
+    )
+    connector.send_response = AsyncMock()
+
+    await connector.handle_message(
+        json.dumps(
+            {
+                "action": "write_carddav",
+                "account": "mailbox-1",
+                "source_id": "carddav_src_1",
+            }
+        )
+    )
+
+    handler.assert_awaited_once()
+    response = connector.send_response.await_args.args[0]
+    assert response["action"] == "write_carddav"
+    assert response["protocol"] == "CardDAV"
+    assert response["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_packaged_connector_carddav_fails_closed_without_adapter():
+    from unittest.mock import AsyncMock
+
+    connector = SelfHostedConnector(
+        "wss://cp.example/ws/runner/nrn_registered-token",
+        "session-token",
+    )
+    connector.send_response = AsyncMock()
+
+    await connector.handle_message(
+        json.dumps({"action": "write_carddav", "account": "mailbox-1"})
+    )
+
+    response = connector.send_response.await_args.args[0]
+    assert response["error"] == "adapter_not_configured"
+    assert response["protocol"] == "CardDAV"
+
+
+def test_build_connector_accepts_seeded_handlers():
+    from unittest.mock import AsyncMock
+
+    handlers = {
+        "imap_fetch_handler": AsyncMock(),
+        "smtp_send_handler": AsyncMock(),
+        "webdav_write_handler": AsyncMock(),
+        "caldav_write_handler": AsyncMock(),
+        "carddav_write_handler": AsyncMock(),
+    }
+    connector = connector_main.build_connector(
+        {
+            "NARUON_REGISTRATION_TOKEN": "runner-token",
+            "NARUON_SESSION_TOKEN": "session-token",
+        },
+        handlers=handlers,
+    )
+    assert connector.carddav_write_handler is handlers["carddav_write_handler"]
+    assert connector.imap_fetch_handler is handlers["imap_fetch_handler"]

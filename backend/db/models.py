@@ -1395,6 +1395,22 @@ class CaldavAccount(Base):
     )
 
 
+class CarddavAccount(Base):
+    __tablename__ = "carddav_accounts"
+
+    id: Mapped[int] = mapped_column("account_id", primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    server_url: Mapped[str] = mapped_column(String, nullable=False)
+    username: Mapped[str] = mapped_column(String, nullable=False)
+    credentials_encrypted: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    discovery_source: Mapped[str | None] = mapped_column(String, nullable=True)
+    account_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+
 class CalendarWritebackSource(Base):
     __tablename__ = "calendar_writeback_sources"
 
