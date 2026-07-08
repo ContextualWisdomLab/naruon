@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from db.models import TenantConfig
-from services.reply_sla_scheduler import ReplySlaScheduler
+from services.reply_sla_scheduler import ReplySlaScheduler, _sysrand
 
 
 @pytest.mark.asyncio
@@ -246,3 +246,151 @@ async def test_sync_releases_lease_even_when_sweep_fails(monkeypatch):
         await scheduler._sync()
 
     assert len(session.scalar_calls) == 2  # unlock still happened
+
+
+@pytest.mark.asyncio
+async def test_start_ignores_second_call_while_running(monkeypatch):
+    """A second start() must not spawn a duplicate loop task."""
+    scheduler = ReplySlaScheduler(interval_seconds=60)
+    started = asyncio.Event()
+
+    async def fake_run_loop():
+        started.set()
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(scheduler, "_run_loop", fake_run_loop)
+
+    await scheduler.start()
+    await started.wait()
+    first_task = scheduler._task
+
+    # Guard must short-circuit: same task, still running, no second create_task.
+    await scheduler.start()
+    assert scheduler._task is first_task
+    assert scheduler._is_running is True
+
+    await scheduler.stop()
+    assert scheduler._is_running is False
+
+
+@pytest.mark.asyncio
+async def test_stop_is_noop_when_not_running():
+    """stop() before start() must return without touching any task."""
+    scheduler = ReplySlaScheduler()
+    cancel_called = False
+
+    class _StaleTask:
+        def cancel(self):
+            nonlocal cancel_called
+            cancel_called = True
+
+    # Simulate a stale reference while the scheduler is not running; the guard
+    # must return before reaching the cancel path.
+    scheduler._task = _StaleTask()
+
+    await scheduler.stop()
+
+    assert cancel_called is False
+    assert scheduler._is_running is False
+
+
+@pytest.mark.asyncio
+async def test_run_loop_cancelled_during_startup_jitter_skips_sweep(monkeypatch):
+    """Cancelling during the startup jitter returns before any sweep runs."""
+    scheduler = ReplySlaScheduler(interval_seconds=600)
+    # Long jitter so the loop is parked in the initial sleep when we cancel.
+    monkeypatch.setattr(_sysrand, "uniform", lambda _a, _b: 600)
+
+    swept = False
+
+    async def fake_sync():
+        nonlocal swept
+        swept = True
+
+    monkeypatch.setattr(scheduler, "_sync", fake_sync)
+
+    await scheduler.start()
+    await asyncio.sleep(0)  # let the loop reach the jitter sleep
+    await scheduler.stop()  # cancels during startup jitter
+
+    assert swept is False  # cancelled before the first sweep
+    assert scheduler._is_running is False
+
+
+@pytest.mark.asyncio
+async def test_run_loop_sweeps_then_stops_on_interval_cancel(monkeypatch):
+    """The loop performs a sweep, then stop() cancels the interval sleep."""
+    scheduler = ReplySlaScheduler(interval_seconds=600)
+    monkeypatch.setattr(_sysrand, "uniform", lambda _a, _b: 0)  # instant jitter
+
+    sync_calls = 0
+    swept = asyncio.Event()
+
+    async def fake_sync():
+        nonlocal sync_calls
+        sync_calls += 1
+        swept.set()
+
+    monkeypatch.setattr(scheduler, "_sync", fake_sync)
+
+    await scheduler.start()
+    await asyncio.wait_for(swept.wait(), timeout=1)
+    assert sync_calls >= 1
+
+    # Scheduler is now parked in the interval sleep; stop() must cancel it.
+    await scheduler.stop()
+    assert scheduler._is_running is False
+
+
+@pytest.mark.asyncio
+async def test_run_loop_breaks_when_sync_is_cancelled(monkeypatch):
+    """A CancelledError from _sync stops the loop instead of retrying."""
+    scheduler = ReplySlaScheduler(interval_seconds=600)
+    monkeypatch.setattr(_sysrand, "uniform", lambda _a, _b: 0)
+
+    sync_calls = 0
+    done = asyncio.Event()
+
+    async def cancelling_sync():
+        nonlocal sync_calls
+        sync_calls += 1
+        done.set()
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(scheduler, "_sync", cancelling_sync)
+
+    await scheduler.start()
+    await asyncio.wait_for(done.wait(), timeout=1)
+    await scheduler._task  # loop broke and returned on its own
+
+    assert sync_calls == 1  # no retry after cancellation
+
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
+async def test_run_loop_survives_sync_exception(monkeypatch):
+    """A non-cancel exception from _sync is logged and the loop keeps running."""
+    scheduler = ReplySlaScheduler(interval_seconds=600)
+    monkeypatch.setattr(_sysrand, "uniform", lambda _a, _b: 0)
+
+    attempts = 0
+    raised = asyncio.Event()
+
+    async def flaky_sync():
+        nonlocal attempts
+        attempts += 1
+        raised.set()
+        raise RuntimeError("sweep boom")
+
+    monkeypatch.setattr(scheduler, "_sync", flaky_sync)
+
+    await scheduler.start()
+    await asyncio.wait_for(raised.wait(), timeout=1)
+
+    # The loop must survive the error and remain running (parked on interval sleep).
+    assert attempts >= 1
+    assert scheduler._is_running is True
+
+    await scheduler.stop()
+    assert scheduler._is_running is False
