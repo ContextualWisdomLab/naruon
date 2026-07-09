@@ -19,12 +19,10 @@ from pathlib import Path
 import pytest
 
 from db.models import LlmBatchItem, LlmBatchJob, TenantConfig
-from services.email_import_service import EmailImportEmbeddingProvider
 from services.batch_embedding_service import (
     _BATCH_SUBMIT_PATH,
     try_batch_import_embeddings,
 )
-import services.batch_embedding_service as batch_module
 
 from tests.test_batch_embedding_service import (  # reuse the fakes
     FakeAsyncClient,
