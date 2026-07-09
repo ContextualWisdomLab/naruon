@@ -110,3 +110,8 @@
 **Vulnerability:** CI was failing because `trivy fs` flagged `KSV-0014` and `KSV-0118` inside local development k8s deployment manifests as HIGH security issues, but these are acceptable in standard local test environments.
 **Learning:** Trivy action exits with 1 when finding HIGH severity misconfigurations, even in non-production local development scripts, breaking PR pipelines.
 **Prevention:** Include `.trivyignore` to ignore intentional misconfigurations (`KSV-0014`, `KSV-0118`) and point Trivy to it using `trivyignores: .trivyignore` in the GitHub workflow.
+
+## 2026-07-09 - CI Governance Test Failures
+**Vulnerability:** CI governance tests (`test_release_governance.py`) failed because `.github/workflows/dependency-review.yml` was missing and some workflows were missing `pull_request` triggers.
+**Learning:** PRs that introduce CI changes must still satisfy overarching repository governance tests that assert the presence and exact pinning of required security scanners (e.g. scorecard, trivy, dependency review).
+**Prevention:** Ensure required workflows exist (`dependency-review.yml`) with strictly pinned exact SHAs and proper `pull_request` triggers when enforcing CI governance tests.
