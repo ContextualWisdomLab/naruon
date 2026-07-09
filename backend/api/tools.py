@@ -257,10 +257,17 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
     try:
         result = await registry.execute(code, request.parameters)
         return ExecuteResponse(status="success", result=result, message="Execution successful")
-    except Exception as e:
+    except ValueError as e:
         logger.exception("Tool execution failed", extra={"tool_code": code})
         return ExecuteResponse(
             status="failed",
             result=None,
-            message=f"Tool execution failed: {str(e)}" if isinstance(e, ValueError) else "Tool execution failed",
+            message=f"Tool execution failed: {str(e)}"
+        )
+    except Exception:
+        logger.exception("Tool execution failed", extra={"tool_code": code})
+        return ExecuteResponse(
+            status="failed",
+            result=None,
+            message="Tool execution failed",
         )
