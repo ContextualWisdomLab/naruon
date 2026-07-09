@@ -30,6 +30,9 @@ def test_backend_dockerfile_runtime_stages_run_as_non_root_user():
     assert "chown -R appuser:appuser /app" in dockerfile
     assert dockerfile.find("USER appuser") < dockerfile.find(backend_cmd)
     assert dockerfile.rfind("USER appuser") < dockerfile.find(combined_cmd)
+    assert "HEALTHCHECK --interval=30s --timeout=5s" in dockerfile
+    assert "http://127.0.0.1:8000/" in dockerfile
+    assert "http://127.0.0.1:3000/" in dockerfile
 
 
 def test_frontend_dockerfile_runs_as_non_root_user():
@@ -38,6 +41,8 @@ def test_frontend_dockerfile_runs_as_non_root_user():
     assert "RUN chown -R node:node /app" in dockerfile
     assert "USER node" in dockerfile
     assert dockerfile.rfind("USER node") > dockerfile.rfind("RUN pnpm run build")
+    assert "HEALTHCHECK --interval=30s --timeout=5s" in dockerfile
+    assert "fetch('http://127.0.0.1:' + (process.env.PORT || '3000'))" in dockerfile
 
 
 def test_ollama_dockerfile_keeps_pulled_models_available_to_runtime_user():
@@ -69,6 +74,17 @@ def test_ollama_dockerfile_keeps_pulled_models_available_to_runtime_user():
     assert dockerfile.rfind("USER ollama") > dockerfile.rfind(
         "chown -R ollama:ollama /usr/share/ollama/.ollama"
     )
+    assert "HEALTHCHECK --interval=30s --timeout=5s" in dockerfile
+    assert "ollama list >/dev/null 2>&1 || exit 1" in dockerfile
+
+
+def test_connector_dockerfile_has_non_http_healthcheck():
+    dockerfile = (REPO_ROOT / "connector" / "Dockerfile").read_text()
+
+    assert "USER connector" in dockerfile
+    assert "HEALTHCHECK --interval=30s --timeout=5s" in dockerfile
+    assert "from connector.main import DEFAULT_WS_URL" in dockerfile
+    assert "DEFAULT_WS_URL.startswith('wss://')" in dockerfile
 
 
 def test_backend_requirements_do_not_pin_yanked_email_validator():
