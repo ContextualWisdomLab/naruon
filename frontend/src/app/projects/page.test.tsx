@@ -377,7 +377,7 @@ describe("ProjectsPage", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_candidate%3Aalpha/traceability", expect.objectContaining({ headers: expect.any(Object) }));
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_candidate%3Aalpha/evidence/requirement%3Aalpha-payment-retry", expect.objectContaining({ headers: expect.any(Object) }));
     expect(container.textContent).toContain("Project: Alpha Checkout");
-    expect(container.textContent).toContain("프로젝트 지식그래프");
+    expect(container.textContent).toContain("프로젝트 관계 맥락");
     expect(container.textContent).toContain("Traceability Map");
     expect(container.textContent).toContain("Evidence Inspector");
     expect(container.textContent).toContain("문단 citation 경계 확인됨");
@@ -422,7 +422,7 @@ describe("ProjectsPage", () => {
     expect(container.textContent).toContain("Scope clarity");
     expect(container.textContent).toContain("Data/infra readiness");
     expect(container.textContent).toContain("Owner/action readiness");
-    expect(container.textContent).toContain("실행 준비 요약: 5개 컨트롤이 문단 근거로 준비됨");
+    expect(container.textContent).toContain("실행 준비 종합: 5개 컨트롤이 문단 근거로 준비됨");
     expect(container.textContent).toContain("검토자 액션: 누락 근거 없음, 인수 검토 가능");
 
     const reviewButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("문단 근거 검토 저장"));

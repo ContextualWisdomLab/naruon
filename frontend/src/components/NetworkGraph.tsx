@@ -175,7 +175,7 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   if (loading) {
-    return <div role="status" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center text-sm text-muted-foreground sm:min-h-[420px]">관계 그래프를 불러오는 중입니다...</div>;
+    return <div role="status" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center text-sm text-muted-foreground sm:min-h-[420px]">관계 맥락을 불러오는 중입니다...</div>;
   }
 
   if (error) {
@@ -195,7 +195,7 @@ export default function NetworkGraph() {
         <div className="max-w-xs rounded-2xl border border-primary/15 bg-primary/5 p-5">
           <div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-primary/10 text-2xl" aria-hidden="true">✦</div>
           <h4 className="font-bold text-foreground">관계 데이터가 없습니다</h4>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">메일이 연결되면 사람, 주제, 일정의 흐름을 그래프로 보여줍니다.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">메일이 연결되면 사람, 주제, 일정의 흐름을 관계 맥락으로 보여줍니다.</p>
         </div>
       </div>
     );

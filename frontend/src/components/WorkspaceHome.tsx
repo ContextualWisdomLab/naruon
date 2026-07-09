@@ -836,7 +836,7 @@ export function WorkspaceHome({
           <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
             <EmailDetail emailId={selectedEmail} actionCommand={desktopDetailActionCommand?.target === 'tablet' && desktopDetailActionCommand.modeVersion === desktopViewportModeVersion ? desktopDetailActionCommand : null} />
           </div>
-          <details aria-label="태블릿 맥락 그래프" className="shrink-0 rounded-2xl border border-primary/15 bg-gradient-to-r from-primary/5 via-card to-emerald-500/5 shadow-sm">
+          <details aria-label="태블릿 관계 맥락" className="shrink-0 rounded-2xl border border-primary/15 bg-gradient-to-r from-primary/5 via-card to-emerald-500/5 shadow-sm">
             <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
               <span className="flex items-center gap-2">
                 <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
@@ -847,7 +847,7 @@ export function WorkspaceHome({
               <span className="text-xs font-semibold text-muted-foreground">필요할 때 펼치기</span>
             </summary>
             <div className="border-t border-border/70 p-4">
-              <p className="mb-3 text-xs font-semibold text-muted-foreground">맥락 그래프는 필요할 때 펼쳐서 확인합니다.</p>
+              <p className="mb-3 text-xs font-semibold text-muted-foreground">관계 맥락은 필요할 때 펼쳐서 확인합니다.</p>
               <div className="h-80 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
                 <NetworkGraph />
               </div>
