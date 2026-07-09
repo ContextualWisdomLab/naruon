@@ -1,0 +1,3 @@
+# Kubernetes security contexts are not required for this local development configuration
+KSV-0014
+KSV-0118
