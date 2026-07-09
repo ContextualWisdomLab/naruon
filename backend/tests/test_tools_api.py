@@ -377,11 +377,11 @@ def test_update_tool_success():
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "New Name"
-        assert data["is_active"] == False
+        assert data["is_active"] is False
 
         tool = registry.get("update_tool")
         assert tool.name == "New Name"
-        assert tool.is_active == False
+        assert tool.is_active is False
     finally:
         registry.unregister("update_tool")
 

@@ -135,9 +135,6 @@ async def mock_handler(params: Dict[str, Any]) -> str:
     return f"Mock execution successful with params: {encoded}"
 
 
-import urllib.parse
-
-
 def is_safe_webhook_url(url: str) -> bool:
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("http", "https"):
