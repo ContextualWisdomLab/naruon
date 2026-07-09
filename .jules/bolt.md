@@ -4,6 +4,3 @@
 
 **Action:** Whenever iterating pre-sorted array lists from the database to group them into unique threads or items, leverage Python's dictionary insertion order preservation guarantees instead of explicitly appending arrays and sorting them. The first item encountered sets the insertion order, and if the parent array is already sorted descending, the resulting grouped entries are mathematically guaranteed to be correctly ordered.
 
-## 2025-02-20 - Deduplication Optimization
-**Learning:** Python's `dict.fromkeys()` leverages the underlying C implementation and insertion-order preservation (in Python 3.7+) to deduplicate elements while maintaining order. It can be faster in some workloads (particularly when list size isn't massive) than manually tracking a `set` and appending to a `list` inside a `for` loop, especially for list preparations before database queries or API calls.
-**Action:** Use `list(dict.fromkeys(iterable))` instead of `seen = set(); result = []` for order-preserving deduplication loops to improve CPU performance.
