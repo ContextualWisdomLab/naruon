@@ -417,6 +417,10 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
     )
     assert "format: sarif" in trivy_workflow
     assert "category: trivy" in trivy_workflow
+    assert "trivy-config: trivy.yaml" in trivy_workflow
+    assert 'trusted_registries:\n    - "docker.io"\n    - "ghcr.io"' in read_repo_text(
+        "trivy-checks-data.yaml"
+    )
     assert (
         "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
         in trivy_workflow
@@ -633,6 +637,35 @@ def test_frontend_dockerfile_builds_and_starts_production_artifact() -> None:
     )
     assert "pnpm run start" not in dockerfile
     assert "pnpm run dev" not in dockerfile
+
+
+def test_kubernetes_deployments_use_restricted_runtime_security_contexts() -> None:
+    backend_deployment = read_repo_text("k8s/backend-deployment.yaml")
+    db_statefulset = read_repo_text("k8s/db-statefulset.yaml")
+    frontend_deployment = read_repo_text("k8s/frontend-deployment.yaml")
+
+    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-backend" in backend_deployment
+    assert "image: docker.io/pgvector/pgvector:pg16" in db_statefulset
+    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend" in frontend_deployment
+
+    for manifest in (backend_deployment, db_statefulset, frontend_deployment):
+        assert "seccompProfile:\n          type: RuntimeDefault" in manifest
+        assert "allowPrivilegeEscalation: false" in manifest
+        assert "capabilities:\n            drop:\n              - ALL" in manifest
+        assert "readOnlyRootFilesystem: true" in manifest
+        assert "runAsNonRoot: true" in manifest
+        assert "mountPath: /tmp" in manifest
+
+    assert "runAsUser: 10001" in backend_deployment
+    assert "runAsGroup: 10001" in backend_deployment
+    assert "runAsUser: 999" in db_statefulset
+    assert "runAsGroup: 999" in db_statefulset
+    assert "fsGroup: 999" in db_statefulset
+    assert "mountPath: /var/lib/postgresql/data" in db_statefulset
+    assert "mountPath: /var/run/postgresql" in db_statefulset
+    assert "runAsUser: 1000" in frontend_deployment
+    assert "runAsGroup: 1000" in frontend_deployment
+    assert "mountPath: /app/.next/cache" in frontend_deployment
 
 
 def test_backend_dockerfile_uses_modern_env_syntax() -> None:

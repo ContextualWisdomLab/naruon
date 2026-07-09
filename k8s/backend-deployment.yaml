@@ -14,14 +14,29 @@ spec:
       labels:
         app: backend
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       imagePullSecrets:
         - name: ghcr-registry
       containers:
       - name: backend
-        image: ghcr.io/seongho-bae/ai_email_client-backend:REPLACE_ME_VERSION
+        image: ghcr.io/contextualwisdomlab/ai_email_client-backend:REPLACE_ME_VERSION
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 10001
+          runAsNonRoot: true
+          runAsUser: 10001
         ports:
         - containerPort: 8000
+        volumeMounts:
+        - name: backend-tmp
+          mountPath: /tmp
         env:
         - name: DATABASE_URL
           valueFrom:
@@ -33,3 +48,6 @@ spec:
             secretKeyRef:
               name: backend-secrets
               key: auth-session-hmac-secret
+      volumes:
+      - name: backend-tmp
+        emptyDir: {}

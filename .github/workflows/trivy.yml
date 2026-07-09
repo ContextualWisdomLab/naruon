@@ -5,6 +5,11 @@ on:
     branches:
       - develop
       - master
+  pull_request:
+    branches:
+      - develop
+      - master
+      - "release/**"
   workflow_dispatch:
 
 permissions:
@@ -32,6 +37,7 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          trivy-config: trivy.yaml
           format: sarif
           output: trivy-results.sarif
           severity: MEDIUM,HIGH,CRITICAL

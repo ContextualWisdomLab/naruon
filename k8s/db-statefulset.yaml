@@ -15,9 +15,22 @@ spec:
       labels:
         app: postgres-db
     spec:
+      securityContext:
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
-        image: pgvector/pgvector:pg16
+        image: docker.io/pgvector/pgvector:pg16
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 999
         env:
         - name: POSTGRES_USER
           value: postgres
@@ -31,3 +44,17 @@ spec:
         ports:
         - containerPort: 5432
           name: postgres
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-run
+          mountPath: /var/run/postgresql
+        - name: postgres-tmp
+          mountPath: /tmp
+      volumes:
+      - name: postgres-data
+        emptyDir: {}
+      - name: postgres-run
+        emptyDir: {}
+      - name: postgres-tmp
+        emptyDir: {}
