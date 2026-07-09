@@ -100,3 +100,8 @@
 **Vulnerability:** JWT decoding remained allowlisted but static analysis could not prove the accepted algorithm when `jwt.decode(..., algorithms=...)` received module-level variables.
 **Learning:** Security-sensitive decode boundaries should make accepted algorithms obvious to both runtime readers and static scanners.
 **Prevention:** Pass explicit hardcoded lists such as `algorithms=["HS256"]` and `algorithms=["RS256"]` at the decode call sites, and keep header preflight checks aligned with those exact values.
+
+## 2024-05-24 - Fix Open Redirect via URL-encoded characters
+**Vulnerability:** Open Redirect in `toSafeReturnTo` allowed bypassing path validation using URL-encoded characters like `/%5c%5c`.
+**Learning:** URL constructors do not always decode the pathname before returning it, allowing encoded backslashes or slashes to bypass simple string prefix checks.
+**Prevention:** Always use `decodeURIComponent` on URL paths before validating them for open redirects or directory traversals.
