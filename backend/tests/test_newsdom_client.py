@@ -7,7 +7,6 @@ request-time configuration guards.
 import pytest
 
 from core.config import settings
-from services import newsdom_client
 from services.newsdom_client import (
     NEWSDOM_BASE_URL_NOT_ALLOWED,
     NewsdomConfigurationError,
@@ -30,7 +29,7 @@ def test_allowlisted_https_host_is_normalized(newsdom_allowlist):
     )
     assert hostname == "newsdom.example.com"
     assert port == 443
-    assert normalized.startswith("https://newsdom.example.com")
+    assert normalized == "https://newsdom.example.com/parse-root/"
 
 
 def test_host_not_in_allowlist_is_rejected(newsdom_allowlist):
