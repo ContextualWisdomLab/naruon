@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from main import app
-from api.tools import registry, ToolInfo
+from api.tools import registry, ToolInfo, _parameter_type_name, ToolRegistry
 
 def _base64url_encode(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
@@ -68,7 +68,7 @@ def test_get_tools_returns_valid_data():
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) >= 5
+    assert len(data) >= 8
 
     first_tool = data[0]
     assert "code" in first_tool
@@ -132,7 +132,7 @@ def test_execute_tool_rejects_unexpected_parameter():
     data = response.json()
     assert data["status"] == "failed"
     assert data["result"] is None
-    assert data["message"] == "Tool execution failed"
+    assert "Tool execution failed" in data["message"]
 
 
 def test_execute_tool_rejects_invalid_parameter_type():
@@ -147,7 +147,7 @@ def test_execute_tool_rejects_invalid_parameter_type():
     data = response.json()
     assert data["status"] == "failed"
     assert data["result"] is None
-    assert data["message"] == "Tool execution failed"
+    assert "Tool execution failed" in data["message"]
 
 
 def test_execute_tool_not_found():
@@ -213,8 +213,7 @@ async def test_execute_tool_handler_error():
     data = response.json()
     assert data["status"] == "failed"
     assert data["result"] is None
-    assert data["message"] == "Tool execution failed"
-
+    assert data["message"] == "Tool execution failed: Simulated error"
 
 def test_execute_tool_sync_handler_success():
     try:
@@ -241,3 +240,97 @@ def test_execute_tool_sync_handler_success():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"] == {"received": "ok"}
+
+
+def test_registry_no_handler():
+    r = ToolRegistry()
+    r._tools["orphan"] = ToolInfo(code="orphan", name="O", description="D", category="C")
+    with pytest.raises(ValueError, match="No handler registered for tool orphan"):
+        import asyncio
+        asyncio.run(r.execute("orphan", {}))
+
+def test_validate_parameters_not_dict():
+    r = ToolRegistry()
+    with pytest.raises(ValueError, match="Tool parameters must be an object"):
+        r._validate_parameters("any", ["not", "a", "dict"])
+
+def test_validate_parameters_no_schema_but_params_provided():
+    r = ToolRegistry()
+    r._tools["no_params"] = ToolInfo(code="no_params", name="N", description="D", category="C")
+    with pytest.raises(ValueError, match="Tool does not accept parameters"):
+        r._validate_parameters("no_params", {"some": "param"})
+
+def test_validate_parameters_missing_required():
+    r = ToolRegistry()
+    r._tools["req_params"] = ToolInfo(
+        code="req_params", name="N", description="D", category="C",
+        parameters={"req1": "string"}
+    )
+    with pytest.raises(ValueError, match="Missing required tool parameter"):
+        r._validate_parameters("req_params", {})
+
+def test_parameter_type_name_dict():
+    assert _parameter_type_name({"type": "integer"}) == "integer"
+    assert _parameter_type_name({"other": "thing"}) == "string"
+    assert _parameter_type_name(123) == "string"
+
+
+# New Tests for Added Tools
+
+@pytest.mark.asyncio
+async def test_text_analyzer_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/text_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "Hello world\nThis is a test "}}
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = json.loads(data["result"])
+    assert result["char_count"] == 27
+    assert result["char_count_no_spaces"] == 21
+    assert result["word_count"] == 6
+
+@pytest.mark.asyncio
+async def test_base64_encoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/base64_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello"}}
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = json.loads(data["result"])
+    assert result["encoded_text"] == "aGVsbG8="
+
+@pytest.mark.asyncio
+async def test_base64_decoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/base64_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"encoded_text": "aGVsbG8="}}
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = json.loads(data["result"])
+    assert result["decoded_text"] == "hello"
+
+@pytest.mark.asyncio
+async def test_base64_decoder_tool_invalid_input():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/base64_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"encoded_text": "invalid_base64_string!"}}
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Invalid Base64 string" in data["message"]

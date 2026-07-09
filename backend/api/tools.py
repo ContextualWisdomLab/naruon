@@ -1,3 +1,4 @@
+import base64
 import inspect
 import json
 import logging
@@ -164,6 +165,67 @@ registry.register(
     mock_handler
 )
 
+async def text_analyzer_handler(params: Dict[str, Any]) -> str:
+    text = params.get("text", "")
+    char_count = len(text)
+    char_count_no_spaces = len(text.replace(" ", "").replace("\n", "").replace("\r", "").replace("\t", ""))
+    word_count = len(text.split())
+    result = {
+        "char_count": char_count,
+        "char_count_no_spaces": char_count_no_spaces,
+        "word_count": word_count
+    }
+    return json.dumps(result, ensure_ascii=False)
+
+registry.register(
+    ToolInfo(
+        code="text_analyzer",
+        name="텍스트 분석기 (Text Analyzer)",
+        description="텍스트의 글자 수, 단어 수, 공백 제외 글자 수를 분석합니다.",
+        category="유틸리티",
+        parameters={"text": "string"}
+    ),
+    text_analyzer_handler
+)
+
+async def base64_encoder_handler(params: Dict[str, Any]) -> str:
+    text = params.get("text", "")
+    encoded = base64.b64encode(text.encode("utf-8")).decode("utf-8")
+    result = {"encoded_text": encoded}
+    return json.dumps(result, ensure_ascii=False)
+
+registry.register(
+    ToolInfo(
+        code="base64_encoder",
+        name="Base64 인코더 (Base64 Encoder)",
+        description="일반 텍스트를 Base64 문자열로 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"}
+    ),
+    base64_encoder_handler
+)
+
+async def base64_decoder_handler(params: Dict[str, Any]) -> str:
+    encoded_text = params.get("encoded_text", "")
+    try:
+        decoded = base64.b64decode(encoded_text).decode("utf-8")
+        result = {"decoded_text": decoded}
+    except Exception as e:
+        raise ValueError(f"Invalid Base64 string: {e}")
+    return json.dumps(result, ensure_ascii=False)
+
+registry.register(
+    ToolInfo(
+        code="base64_decoder",
+        name="Base64 디코더 (Base64 Decoder)",
+        description="Base64 문자열을 일반 텍스트로 디코딩합니다.",
+        category="유틸리티",
+        parameters={"encoded_text": "string"}
+    ),
+    base64_decoder_handler
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
@@ -195,10 +257,10 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
     try:
         result = await registry.execute(code, request.parameters)
         return ExecuteResponse(status="success", result=result, message="Execution successful")
-    except Exception:
+    except Exception as e:
         logger.exception("Tool execution failed", extra={"tool_code": code})
         return ExecuteResponse(
             status="failed",
             result=None,
-            message="Tool execution failed",
+            message=f"Tool execution failed: {str(e)}" if isinstance(e, ValueError) else "Tool execution failed",
         )
