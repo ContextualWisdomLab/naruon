@@ -404,7 +404,7 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
     assert "category: trivy" in trivy_workflow
     assert "trivy-config: trivy.yaml" in trivy_workflow
     assert "Run Trivy findings summary" in trivy_workflow
-    assert 'trusted_registries:\n    - "docker.io"\n    - "ghcr.io"' in read_repo_text(
+    assert 'trusted_registries:\n    - "ghcr.io"\n    - "docker.io"' in read_repo_text(
         ".github/trivy/trusted-registries.yaml"
     )
     assert (
