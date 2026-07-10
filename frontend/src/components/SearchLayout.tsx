@@ -828,7 +828,7 @@ export function SearchLayout() {
                 </section>
 
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-bold">관계 그래프와 타임라인</h2>
+                  <h2 className="text-lg font-bold">관계 맥락과 타임라인</h2>
                   <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                     source/thread API 연결
                   </span>

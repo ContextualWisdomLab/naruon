@@ -108,6 +108,115 @@ def test_ai_hub_workflow_runs_have_incremental_revision():
     assert "if_exists=True" in revision_text
 
 
+def test_content_graph_records_have_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0005_content_graph_records.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0005_content_graph_records"' in revision_text
+    assert 'down_revision = "0004_ai_hub_workflow_runs"' in revision_text
+    assert '"content_nodes"' in revision_text
+    assert '"content_segments"' in revision_text
+    assert '"content_node_uid"' in revision_text
+    assert '"content_segment_uid"' in revision_text
+    assert '"content_node_id"' in revision_text
+    assert '"content_segment_id"' in revision_text
+    assert '"word_count"' in revision_text
+    assert '"token_count"' not in revision_text
+    assert '"email_id"' in revision_text
+    assert '"attachment_id"' in revision_text
+    assert "ix_content_nodes_email_source" in revision_text
+    assert "ix_content_segments_email_source" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+
+
+def test_knowledge_graph_edges_have_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0006_knowledge_graph_edges.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0006_knowledge_graph_edges"' in revision_text
+    assert 'down_revision = "0005_content_graph_records"' in revision_text
+    assert '"knowledge_graph_edges"' in revision_text
+    assert '"knowledge_graph_edge_id"' in revision_text
+    assert '"edge_uid"' in revision_text
+    assert '"email_id"' in revision_text
+    assert '"attachment_id"' in revision_text
+    assert '"source_node_id"' in revision_text
+    assert '"target_node_id"' in revision_text
+    assert '"source_segment_id"' in revision_text
+    assert '"target_segment_id"' in revision_text
+    assert '"content_nodes.content_node_id"' in revision_text
+    assert '"content_segments.content_segment_id"' in revision_text
+    assert '"source_kind"' in revision_text
+    assert '"source_record_uid"' in revision_text
+    assert '"edge_kind"' in revision_text
+    assert '"edge_path"' in revision_text
+    assert "ix_knowledge_graph_edges_email_kind" in revision_text
+    assert "ix_knowledge_graph_edges_source_segment" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+
+
+def test_attachment_parse_metadata_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0007_attachment_parse_metadata.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0007_attachment_parse_metadata"' in revision_text
+    assert 'down_revision = "0006_knowledge_graph_edges"' in revision_text
+    assert '"email_attachments"' in revision_text
+    assert '"content_type"' in revision_text
+    assert '"parse_status"' in revision_text
+    assert '"parse_error_code"' in revision_text
+    assert "has_column" in revision_text
+    assert "op.add_column(" in revision_text
+    assert "op.drop_column(" in revision_text
+
+
+def test_project_graph_projection_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0009_project_graph_projection.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0009_project_graph_projection"' in revision_text
+    assert 'down_revision = "0008_attachment_parser_audit_metadata"' in revision_text
+    assert '"project_graph_objects"' in revision_text
+    assert '"project_graph_edges"' in revision_text
+    assert '"project_graph_corrections"' in revision_text
+    assert '"object_uid"' in revision_text
+    assert '"edge_uid"' in revision_text
+    assert '"correction_uid"' in revision_text
+    assert '"workspace_id"' in revision_text
+    assert '"source_segment_uids"' in revision_text
+    assert '"attributes_json"' in revision_text
+    assert '"before_json"' in revision_text
+    assert '"after_json"' in revision_text
+    assert '"content_segments.content_segment_id"' in revision_text
+    assert "ix_project_graph_objects_scope_type_status" in revision_text
+    assert "ix_project_graph_edges_scope_type" in revision_text
+    assert "ix_project_graph_corrections_scope_time" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+
+
 def test_migration_runner_uses_alembic_upgrade_head_not_bootstrap_create_all():
     migration_runner = BACKEND_ROOT / "scripts" / "migrate_db.py"
 
