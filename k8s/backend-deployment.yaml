@@ -14,11 +14,15 @@ spec:
       labels:
         app: backend
     spec:
-      securityContext:
-        seccompProfile:
-          type: RuntimeDefault
       imagePullSecrets:
         - name: ghcr-registry
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: backend-tmp
+          emptyDir: {}
       containers:
       - name: backend
         image: ghcr.io/contextualwisdomlab/ai_email_client-backend:REPLACE_ME_VERSION
@@ -32,6 +36,15 @@ spec:
           runAsGroup: 10001
           runAsNonRoot: true
           runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
         ports:
         - containerPort: 8000
         volumeMounts:
@@ -48,6 +61,3 @@ spec:
             secretKeyRef:
               name: backend-secrets
               key: auth-session-hmac-secret
-      volumes:
-      - name: backend-tmp
-        emptyDir: {}

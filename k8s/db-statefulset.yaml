@@ -17,8 +17,14 @@ spec:
     spec:
       securityContext:
         fsGroup: 999
+        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+      - name: postgres-run
+        emptyDir: {}
+      - name: postgres-tmp
+        emptyDir: {}
       containers:
       - name: postgres
         image: docker.io/pgvector/pgvector:pg16
@@ -28,9 +34,18 @@ spec:
             drop:
               - ALL
           readOnlyRootFilesystem: true
-          runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 999
+          runAsGroup: 999
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
         env:
         - name: POSTGRES_USER
           value: postgres
@@ -41,6 +56,8 @@ spec:
               key: password
         - name: POSTGRES_DB
           value: ai_email
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         ports:
         - containerPort: 5432
           name: postgres
@@ -51,10 +68,12 @@ spec:
           mountPath: /var/run/postgresql
         - name: postgres-tmp
           mountPath: /tmp
-      volumes:
-      - name: postgres-data
-        emptyDir: {}
-      - name: postgres-run
-        emptyDir: {}
-      - name: postgres-tmp
-        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi

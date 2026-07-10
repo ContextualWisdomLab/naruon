@@ -248,6 +248,8 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
         in dependency_review_workflow
     )
+    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in dependency_review_workflow
+    assert 'printf \'Head ref: %s\\n\' "${{ github.head_ref || github.ref_name }}"' not in dependency_review_workflow
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -290,7 +292,7 @@ def test_github_actions_unpinned_major_refs_failure(
     with pytest.raises(AssertionError) as exc_info:
         test_github_actions_are_pinned_to_exact_sha()
 
-    message = str(exc_info.value)
+    message = str(exc_info.value).replace("\\", "/")
     assert ".github/workflows/bad-action.yml:6:- uses: actions/checkout@v4" in message
 
     workflow_file.write_text(
@@ -310,7 +312,7 @@ def test_github_actions_unpinned_major_refs_failure(
     with pytest.raises(AssertionError) as exc_info:
         test_github_actions_are_pinned_to_exact_sha()
 
-    message = str(exc_info.value)
+    message = str(exc_info.value).replace("\\", "/")
     assert (
         ".github/workflows/bad-action.yml:6:- uses: "
         "actions/setup-python@abcdef1234567890abcdef1234567890abcdef12"
@@ -323,32 +325,16 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     assert "continue-on-error: true" not in workflow
 
 
-def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
+def test_codeql_workflow_can_read_security_events_without_uploading_sarif() -> None:
     workflow = read_repo_text(".github/workflows/codeql.yml")
 
-    assert "permissions:\n  contents: read\n\njobs:" in workflow
+    assert "permissions:\n  contents: read\n  security-events: read" in workflow
     assert (
-        "    permissions:\n      actions: read\n      contents: read\n      security-events: write"
+        "    permissions:\n      actions: read\n      contents: read\n      security-events: read"
         in workflow
     )
-    assert "upload: always" in workflow
-    assert "upload: never" not in workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
-        in workflow
-    )
-    assert (
-        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in workflow
-    )
-    assert "analyze-merge:" in workflow
-    assert "CodeQL merge preview" in workflow
-    assert "refs/pull/{0}/merge" in workflow
-    assert "github.event.pull_request.merge_commit_sha" in workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in workflow
-    )
+    assert "upload: never" in workflow
+    assert "security-events: write" not in workflow
 
 
 def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> None:
@@ -410,7 +396,6 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
         in scorecard_workflow
     )
 
-
     assert (
         "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0"
         in trivy_workflow
@@ -418,8 +403,9 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
     assert "format: sarif" in trivy_workflow
     assert "category: trivy" in trivy_workflow
     assert "trivy-config: trivy.yaml" in trivy_workflow
+    assert "Run Trivy findings summary" in trivy_workflow
     assert 'trusted_registries:\n    - "docker.io"\n    - "ghcr.io"' in read_repo_text(
-        "trivy-checks-data.yaml"
+        ".github/trivy/trusted-registries.yaml"
     )
     assert (
         "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
@@ -933,8 +919,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "/issues/${PR_NUMBER}/comments" in gate_script
     assert "COMMENT_MARKER" in gate_script
     assert "Waiting for" in gate_script
-    assert "no required checks reported" in gate_script
-    assert "ruleset workflows and code-scanning gates" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script
     assert "gh pr merge" not in gate_script

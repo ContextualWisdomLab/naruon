@@ -175,7 +175,7 @@ export default function NetworkGraph() {
   }, [nodes]);
 
   if (loading) {
-    return <div role="status" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center text-sm text-muted-foreground sm:min-h-[420px]">관계 그래프를 불러오는 중입니다...</div>;
+    return <div role="status" aria-live="polite" className="flex h-full min-h-[320px] w-full items-center justify-center text-sm text-muted-foreground sm:min-h-[420px]">관계 맥락을 불러오는 중입니다...</div>;
   }
 
   if (error) {

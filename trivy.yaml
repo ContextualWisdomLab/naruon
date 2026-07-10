@@ -1,3 +1,9 @@
+scan:
+  scanners:
+    - vuln
+    - secret
+    - misconfig
+
 rego:
   data:
-    - trivy-checks-data.yaml
+    - .github/trivy

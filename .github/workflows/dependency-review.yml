@@ -19,6 +19,9 @@ concurrency:
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -31,14 +34,17 @@ jobs:
           persist-credentials: false
 
       - name: Log dependency review policy
+        env:
+          BASE_REF: ${{ github.base_ref || github.ref_name }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
         run: |
           printf 'Dependency Review fails on moderate, high, or critical dependency findings.\n'
-          printf 'Base ref: %s\n' "${{ github.base_ref || github.ref_name }}"
-          printf 'Head ref: %s\n' "${{ github.head_ref || github.ref_name }}"
+          printf 'Base ref: %s\n' "$BASE_REF"
+          printf 'Head ref: %s\n' "$HEAD_REF"
 
       - name: Review dependency changes
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
-          comment-summary-in-pr: always
+          comment-summary-in-pr: never
           warn-only: false
