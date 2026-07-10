@@ -945,6 +945,9 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "headRefOid" in gate_script
     assert "mergeStateStatus" in gate_script
     assert "gh pr checks" in gate_script and "--required" in gate_script
+    assert "no required checks reported" in gate_script
+    assert "no legacy required status contexts reported" in gate_script
+    assert "add_waiting" in gate_script
     assert "check-runs" in gate_script
     assert "Review skipped" in gate_script
     assert "CodeRabbit" in gate_script or "coderabbit" in gate_script
