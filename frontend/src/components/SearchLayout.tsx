@@ -20,6 +20,12 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 
 import { apiClient } from "@/lib/api-client";
+import {
+  bucketSearchRank,
+  bucketTextLength,
+  createProductEventId,
+  recordProductEvent,
+} from "@/lib/product-events";
 
 const NetworkGraph = dynamic(() => import("@/components/NetworkGraph"), {
   ssr: false,
@@ -108,6 +114,10 @@ function confidenceTone(percent: number | null) {
 
 function confidenceLabel(percent: number | null) {
   return percent === null ? "신뢰도 미제공" : `신뢰도 ${percent}%`;
+}
+
+function nowMs() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
 function ontologySourceKey(result: SearchResultItem | null) {
@@ -303,6 +313,8 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
 export function SearchLayout() {
   const [query, setQuery] = useState(DEFAULT_QUERY);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchSessionIdRef = useRef(createProductEventId("context_search_session"));
+  const lastOpenedResultKeyRef = useRef<string | null>(null);
   const [submittedQuery, setSubmittedQuery] = useState(DEFAULT_QUERY);
   const [activeFilter, setActiveFilter] = useState<ResultFilter>("all");
   const [results, setResults] = useState<SearchResultItem[]>([]);
@@ -329,6 +341,7 @@ export function SearchLayout() {
 
     if (!trimmedQuery) return () => controller.abort();
 
+    const startedAt = nowMs();
     apiClient
       .post<SearchResponse>(
         "/api/search",
@@ -339,12 +352,26 @@ export function SearchLayout() {
         if (controller.signal.aborted) return;
         setResults(response.results);
         setActiveResultId(response.results[0]?.id ?? null);
+        recordProductEvent("latency_guardrail_recorded", {
+          surface: "context_search",
+          request_trace_id: createProductEventId("search_trace"),
+          operation: "search",
+          duration_ms: Math.round(nowMs() - startedAt),
+          status: "success",
+        });
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         setResults([]);
         setActiveResultId(null);
         setError("맥락 검색 결과를 불러오지 못했습니다.");
+        recordProductEvent("latency_guardrail_recorded", {
+          surface: "context_search",
+          request_trace_id: createProductEventId("search_trace"),
+          operation: "search",
+          duration_ms: Math.round(nowMs() - startedAt),
+          status: "error",
+        });
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -391,6 +418,24 @@ export function SearchLayout() {
   const activeConfidence = confidencePercent(activeResult?.score);
 
   useEffect(() => {
+    if (!activeResult || loading) return;
+
+    const resultIndex = filteredResults.findIndex((result) => result.id === activeResult.id);
+    const eventKey = `${searchSessionIdRef.current}:${activeResult.id}`;
+    if (lastOpenedResultKeyRef.current === eventKey) return;
+    lastOpenedResultKeyRef.current = eventKey;
+
+    recordProductEvent("context_search_result_opened", {
+      surface: "context_search",
+      search_session_id: searchSessionIdRef.current,
+      result_id: activeResult.id,
+      result_type: "mail",
+      rank_bucket: bucketSearchRank(resultIndex < 0 ? 0 : resultIndex),
+      confidence: activeConfidence,
+    });
+  }, [activeConfidence, activeResult, filteredResults, loading]);
+
+  useEffect(() => {
     if (!activeOntologyUrl || !activeOntologySourceKey) return;
 
     const controller = new AbortController();
@@ -422,6 +467,15 @@ export function SearchLayout() {
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedQuery = query.trim();
+    searchSessionIdRef.current = createProductEventId("context_search_session");
+    lastOpenedResultKeyRef.current = null;
+    recordProductEvent("context_search_submitted", {
+      surface: "context_search",
+      search_session_id: searchSessionIdRef.current,
+      query_length_bucket: bucketTextLength(trimmedQuery),
+      filter_count: activeFilter === "all" ? 0 : 1,
+      source_filters: activeFilter === "all" ? null : activeFilter,
+    });
     setActiveFilter("all");
     setError(null);
     setResults([]);
@@ -431,26 +485,36 @@ export function SearchLayout() {
   };
 
   const captureSenderRelationship = () => {
-    if (!activeResult?.source_message_id || !activeOntologySourceKey) return;
+    const actionResult = activeResult;
+    const actionSourceKey = activeOntologySourceKey;
+    if (!actionResult?.source_message_id || !actionSourceKey) return;
     setCaptureState({ sourceKey: activeOntologySourceKey, status: "loading" });
     apiClient
       .post<SenderRelationship>("/api/ontology/relationships/capture-source", {
-        source_message_id: activeResult.source_message_id,
+        source_message_id: actionResult.source_message_id,
       })
       .then((response) => {
         setRelationshipState({
-          sourceKey: activeOntologySourceKey,
+          sourceKey: actionSourceKey,
           items: [response],
           error: null,
         });
         setCaptureState({
-          sourceKey: activeOntologySourceKey,
+          sourceKey: actionSourceKey,
           status: "success",
+        });
+        recordProductEvent("context_search_result_action_created", {
+          surface: "context_search",
+          search_session_id: searchSessionIdRef.current,
+          result_id: actionResult.id,
+          action_id: `relationship:${response.source_message_id ?? actionResult.source_message_id}`,
+          action_type: "relation_capture",
+          source_backlink_present: Boolean(actionResult.source_message_id),
         });
       })
       .catch(() => {
         setCaptureState({
-          sourceKey: activeOntologySourceKey,
+          sourceKey: actionSourceKey,
           status: "error",
         });
       });
@@ -547,7 +611,7 @@ export function SearchLayout() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-        <aside className="max-h-[42dvh] w-full shrink-0 overflow-y-auto border-b border-border bg-card md:max-h-none md:w-[400px] md:border-b-0 md:border-r">
+        <aside className="max-h-[34dvh] w-full shrink-0 overflow-y-auto border-b border-border bg-card sm:max-h-[42dvh] md:max-h-none md:w-[400px] md:border-b-0 md:border-r">
           <div className="flex items-center justify-between border-b border-border p-5">
             <h2 className="font-bold">통합 맥락 검색 결과</h2>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">

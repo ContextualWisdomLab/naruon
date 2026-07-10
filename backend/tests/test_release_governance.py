@@ -967,6 +967,69 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "dismiss" not in combined.lower()
 
 
+def test_20b_kpi_roi_claim_gate_separates_measurements_from_assumptions() -> None:
+    kpi_report = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-kpi-validation.md"
+    )
+    buyer_package = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-20b-buyer-package.md"
+    )
+    security_questionnaire = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-20b-security-questionnaire.md"
+    )
+    readiness_plan = read_repo_text(
+        "docs/superpowers/plans/2026-07-02-naruon-20b-full-product-commercial-readiness.md"
+    )
+
+    assert "### ROI Model And Claim Gate" in kpi_report
+    assert "estimated_period_value_krw" in kpi_report
+    for model_input in (
+        "time_saved_per_user_per_week_hours",
+        "fully_loaded_hourly_cost_krw",
+        "weekly_active_users",
+        "evidence_open_rate",
+        "decision_to_action_conversion_rate",
+        "pilot_period_weeks",
+        "risk_reduction_adjustment",
+    ):
+        assert model_input in kpi_report
+
+    assert "Measured value unavailable in this branch" in kpi_report
+    assert "must not be presented as a proven value" in kpi_report
+    assert "Naruon has proven a 20B KRW ROI" in kpi_report
+    assert "No live ROI number should be claimed" in buyer_package
+    assert "live measured data" in buyer_package
+    assert "live measured data is required before ROI claims" in security_questionnaire
+    assert "- [x] **Step 2: Define ROI model**" in readiness_plan
+    assert "- [ ] **Step 2: Define ROI model**" not in readiness_plan
+
+
+def test_20b_buyer_package_rejects_final_procurement_claim_language() -> None:
+    buyer_package = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-20b-buyer-package.md"
+    )
+    demo_script = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-20b-demo-script.md"
+    )
+    telemetry_report = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-design-to-code-telemetry-qa.md"
+    )
+
+    assert "Accepted buyer-review language:" in buyer_package
+    assert "Rejected language:" in buyer_package
+    assert "## Do Not Say" in demo_script
+    for rejected_claim in (
+        "Naruon is public-launch ready.",
+        "Live ROI has been proven.",
+        "All provider writes are production-proven.",
+    ):
+        assert rejected_claim in demo_script
+
+    assert "controlled enterprise buyer technical review" in buyer_package
+    assert "not a final public-launch or contract-close claim" in buyer_package
+    assert "not a claim that Naruon is ready for public SaaS launch" in telemetry_report
+
+
 def test_coderabbit_approval_is_decoupled_from_github_checks() -> None:
     config = read_repo_text(".coderabbit.yaml")
     policy = read_repo_text("docs/development/merge-gate-policy.md")

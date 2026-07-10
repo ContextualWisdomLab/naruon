@@ -38,6 +38,12 @@ async function flushAsyncWork() {
   });
 }
 
+function setNativeValue(element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, value: string) {
+  const prototype = Object.getPrototypeOf(element);
+  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  prototypeValueSetter?.call(element, value);
+}
+
 describe("ProjectsPage", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
@@ -147,6 +153,27 @@ describe("ProjectsPage", () => {
     expect(container.textContent).toContain("의사결정 추가");
     expect(container.textContent).toContain("관련 문서/메일 연결");
     expect(container.textContent).not.toContain("Naruon 2.0 런칭");
+
+    const evidenceNote = container.querySelector<HTMLTextAreaElement>('#project-evidence-note');
+    const evidenceSource = container.querySelector<HTMLSelectElement>('#project-evidence-source');
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes("근거 저장"));
+    expect(evidenceNote).not.toBeNull();
+    expect(evidenceSource).not.toBeNull();
+    expect(saveButton).toBeDefined();
+
+    await act(async () => {
+      setNativeValue(evidenceNote!, "이사회 승인 근거와 WebDAV 경계를 함께 검토합니다.");
+      evidenceNote!.dispatchEvent(new Event("input", { bubbles: true }));
+      setNativeValue(evidenceSource!, "document");
+      evidenceSource!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("문서 저장소 승인 기록 기준");
+
+    await act(async () => {
+      saveButton!.click();
+    });
+    expect(container.textContent).toContain("프로젝트 근거가 저장되었습니다: 문서 근거");
+    expect(container.textContent).toContain("이사회 승인 근거와 WebDAV 경계를 함께 검토합니다.");
   });
 
   it("renders the semantic project graph command center with paragraph citations", async () => {
