@@ -15,6 +15,16 @@ spec:
       labels:
         app: postgres-db
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      volumes:
+        - name: postgres-tmp
+          emptyDir: {}
+        - name: postgres-run
+          emptyDir: {}
       containers:
       - name: postgres
         image: pgvector/pgvector:pg16
@@ -31,3 +41,14 @@ spec:
         ports:
         - containerPort: 5432
           name: postgres
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: postgres-tmp
+            mountPath: /tmp
+          - name: postgres-run
+            mountPath: /var/run/postgresql

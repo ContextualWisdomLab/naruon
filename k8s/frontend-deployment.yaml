@@ -14,6 +14,18 @@ spec:
       labels:
         app: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      volumes:
+        - name: frontend-tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-pid
+          emptyDir: {}
       imagePullSecrets:
         - name: ghcr-registry
       containers:
@@ -27,3 +39,16 @@ spec:
             value: "http://backend:8000"
           - name: ALLOW_DOCKER_BACKEND_INTERNAL_URL
             value: "1"
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: frontend-tmp
+            mountPath: /tmp
+          - name: nginx-cache
+            mountPath: /var/cache/nginx
+          - name: nginx-pid
+            mountPath: /var/run
