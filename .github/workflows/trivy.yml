@@ -37,6 +37,7 @@ jobs:
           scan-type: fs
           scan-ref: .
           trivy-config: trivy.yaml
+          version: v0.72.0
           format: table
           severity: MEDIUM,HIGH,CRITICAL
           ignore-unfixed: true
@@ -48,6 +49,7 @@ jobs:
           scan-type: fs
           scan-ref: .
           trivy-config: trivy.yaml
+          version: v0.72.0
           format: sarif
           output: trivy-results.sarif
           severity: MEDIUM,HIGH,CRITICAL
