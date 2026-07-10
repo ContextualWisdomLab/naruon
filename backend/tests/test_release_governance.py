@@ -290,7 +290,7 @@ def test_github_actions_unpinned_major_refs_failure(
     with pytest.raises(AssertionError) as exc_info:
         test_github_actions_are_pinned_to_exact_sha()
 
-    message = str(exc_info.value)
+    message = str(exc_info.value).replace("\\", "/")
     assert ".github/workflows/bad-action.yml:6:- uses: actions/checkout@v4" in message
 
     workflow_file.write_text(
@@ -310,7 +310,7 @@ def test_github_actions_unpinned_major_refs_failure(
     with pytest.raises(AssertionError) as exc_info:
         test_github_actions_are_pinned_to_exact_sha()
 
-    message = str(exc_info.value)
+    message = str(exc_info.value).replace("\\", "/")
     assert (
         ".github/workflows/bad-action.yml:6:- uses: "
         "actions/setup-python@abcdef1234567890abcdef1234567890abcdef12"
