@@ -881,7 +881,7 @@ export function SettingsLayout() {
                   <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                     <h3 className="font-bold text-lg mb-4">시작 화면 설정</h3>
                     <p className="text-sm text-muted-foreground mb-4">로그인 시 처음 보여질 메인 화면을 선택하세요.</p>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                       {[
                         { label: '홈', value: 'dashboard', desc: '오늘의 맥락 종합과 실행 항목' },
                         { label: '메일', value: 'email', desc: '인박스 중심으로 확인' },
