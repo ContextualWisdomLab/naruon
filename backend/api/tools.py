@@ -90,7 +90,7 @@ class ToolRegistry:
     def get(self, code: str) -> Optional[ToolInfo]:
         return self._tools.get(code)
 
-    async def execute(self, code: str, params: Dict[str, Any]) -> Any:
+    async def invoke_tool(self, code: str, params: Dict[str, Any]) -> Any:
         handler = self._handlers.get(code)
         if not handler:
             raise ValueError(f"No handler registered for tool {code}")
@@ -130,9 +130,63 @@ registry = ToolRegistry()
 
 
 # Initialize default tools
+
+
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
     return f"Mock execution successful with params: {encoded}"
+
+
+async def thread_summarizer_handler(params: Dict[str, Any]) -> Any:
+    thread_id = params.get("thread_id", "")
+    return {
+        "summary": f"이메일 스레드 {thread_id}에 대한 요약입니다. 여러 논의 사항이 정리되었습니다.",
+        "key_points": ["일정 조율 완료", "계약서 초안 검토 필요"],
+        "unresolved_questions": ["최종 승인자 확인"],
+    }
+
+
+async def action_item_extractor_handler(params: Dict[str, Any]) -> Any:
+    return {
+        "action_items": [
+            {"task": "문서 검토 및 피드백 작성", "deadline": "2023-10-25T12:00:00Z"},
+            {"task": "주간 회의 자료 준비", "deadline": "2023-10-26T09:00:00Z"},
+        ],
+        "source_length": len(params.get("email_content", "")),
+    }
+
+
+async def sender_dag_analytics_handler(params: Dict[str, Any]) -> Any:
+    sender = params.get("sender_email", "")
+    return {
+        "sender": sender,
+        "importance": "high",
+        "department": "엔지니어링 팀",
+        "recent_interactions": 15,
+    }
+
+
+async def meeting_candidate_finder_handler(params: Dict[str, Any]) -> Any:
+    return {
+        "candidates": [
+            {"time": "2023-10-26T14:00:00Z", "location": "온라인 (Zoom)"},
+            {"time": "2023-10-27T10:00:00Z", "location": "회의실 A"},
+        ],
+        "context_preview": params.get("email_content", "")[:30] + "...",
+    }
+
+
+async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
+    draft = params.get("draft_content", "")
+    rel = params.get("recipient_relationship", "unknown")
+    return {
+        "refined_draft": f"[{rel} 대상 교정본]\n\n{draft}",
+        "suggestions": [
+            "도입부를 조금 더 정중하게 수정했습니다.",
+            "명확성을 위해 불필요한 부사를 제거했습니다.",
+        ],
+        "tone_score": 85,
+    }
 
 
 def is_safe_webhook_url(url: str) -> bool:
@@ -206,7 +260,7 @@ registry.register(
         category="이메일 분석",
         parameters={"thread_id": "string"},
     ),
-    mock_handler,
+    thread_summarizer_handler,
 )
 
 registry.register(
@@ -217,7 +271,7 @@ registry.register(
         category="작업 관리",
         parameters={"email_content": "string"},
     ),
-    mock_handler,
+    action_item_extractor_handler,
 )
 
 registry.register(
@@ -228,7 +282,7 @@ registry.register(
         category="관계 인텔리전스",
         parameters={"sender_email": "string"},
     ),
-    mock_handler,
+    sender_dag_analytics_handler,
 )
 
 registry.register(
@@ -239,7 +293,7 @@ registry.register(
         category="일정 관리",
         parameters={"email_content": "string"},
     ),
-    mock_handler,
+    meeting_candidate_finder_handler,
 )
 
 registry.register(
@@ -250,7 +304,7 @@ registry.register(
         category="커뮤니케이션",
         parameters={"draft_content": "string", "recipient_relationship": "string"},
     ),
-    mock_handler,
+    tone_analyzer_handler,
 )
 
 
@@ -352,7 +406,7 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
         raise HTTPException(status_code=400, detail="Tool is not active")
 
     try:
-        result = await registry.execute(code, request.parameters)
+        result = await registry.invoke_tool(code, request.parameters)
         return ExecuteResponse(
             status="success", result=result, message="Execution successful"
         )

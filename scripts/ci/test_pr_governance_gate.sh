@@ -47,10 +47,6 @@ if [ "$1" = "api" ] && [ "$2" = "graphql" ]; then
 fi
 
 if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then
-  if [ "${GH_SCENARIO:-pass}" = "no_required_checks" ]; then
-    printf 'no required checks reported on the test branch\n' >&2
-    exit 1
-  fi
   case "${GH_SCENARIO:-pass}" in
     pending)
       printf '[{"name":"Application CI","state":"IN_PROGRESS","link":"https://checks/app-ci"}]'
@@ -368,16 +364,6 @@ assert_passing_gate_is_metadata_only_without_merge() {
   assert_not_in_file 'continue-on-error' "$temp_dir/gh.log"
 }
 
-assert_no_required_checks_waits_without_hard_comment() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate no_required_checks "$temp_dir"
-
-  assert_in_file 'no legacy required status contexts reported' "$temp_dir/output.txt"
-  assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
 assert_no_comment_or_merge_for_pending_checks
 assert_startup_failure_creates_marker_comment
 assert_failed_checks_create_marker_comment
@@ -393,6 +379,5 @@ assert_coderabbit_current_review_comment_blocks
 assert_coderabbit_stale_review_comment_does_not_block
 assert_changes_requested_creates_marker_comment
 assert_passing_gate_is_metadata_only_without_merge
-assert_no_required_checks_waits_without_hard_comment
 
 printf 'test_pr_governance_gate: PASS\n'

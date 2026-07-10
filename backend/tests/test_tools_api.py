@@ -114,8 +114,79 @@ async def test_execute_tool_success():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert "Mock execution successful" in data["result"]
-    assert "123" in data["result"]
+    assert "summary" in data["result"]
+    assert "123" in data["result"]["summary"]
+    assert "key_points" in data["result"]
+    assert "unresolved_questions" in data["result"]
+
+
+@pytest.mark.asyncio
+async def test_execute_action_item_extractor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/action_item_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"email_content": "Please review by tomorrow."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "action_items" in data["result"]
+    assert len(data["result"]["action_items"]) == 2
+    assert "source_length" in data["result"]
+
+
+@pytest.mark.asyncio
+async def test_execute_sender_dag_analytics():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sender_dag_analytics/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"sender_email": "test@example.com"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sender"] == "test@example.com"
+    assert data["result"]["department"] == "엔지니어링 팀"
+
+
+@pytest.mark.asyncio
+async def test_execute_meeting_candidate_finder():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/meeting_candidate_finder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"email_content": "Let's meet tomorrow at 2pm."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "candidates" in data["result"]
+    assert len(data["result"]["candidates"]) == 2
+    assert "context_preview" in data["result"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tone_analyzer():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/tone_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "draft_content": "Give me the file.",
+                    "recipient_relationship": "manager",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "manager" in data["result"]["refined_draft"]
+    assert "Give me the file." in data["result"]["refined_draft"]
+    assert "suggestions" in data["result"]
+    assert data["result"]["tone_score"] == 85
 
 
 def test_execute_tool_rejects_unexpected_parameter():
@@ -579,7 +650,7 @@ def test_tool_registry_execute_no_handler():
         with pytest.raises(ValueError, match="No handler registered for tool"):
             import asyncio
 
-            asyncio.run(registry.execute("no_handler_tool", {}))
+            asyncio.run(registry.invoke_tool("no_handler_tool", {}))
     finally:
         registry._tools.pop("no_handler_tool", None)
 
@@ -623,7 +694,7 @@ def test_registry_execute_sync():
         lambda p: "internal_sync_result",
     )
     try:
-        res = asyncio.run(registry.execute("internal_sync", {}))
+        res = asyncio.run(registry.invoke_tool("internal_sync", {}))
         assert res == "internal_sync_result"
     finally:
         registry.unregister("internal_sync")
@@ -633,6 +704,7 @@ def test_validate_parameters_not_dict():
     # Internal registry test to hit line 80
     with pytest.raises(ValueError, match="Tool parameters must be an object"):
         registry._validate_parameters("some_code", "not a dict")  # type: ignore
+
 
 def test_create_tool_unsafe_webhook():
     with TestClient(app) as client:
@@ -644,8 +716,8 @@ def test_create_tool_unsafe_webhook():
                 "name": "Unsafe",
                 "description": "Unsafe",
                 "category": "Test",
-                "webhook_url": "http://localhost:8080/admin"
-            }
+                "webhook_url": "http://localhost:8080/admin",
+            },
         )
     assert response.status_code == 400
     assert "Invalid or unsafe webhook URL" in response.json()["detail"]
@@ -660,22 +732,22 @@ def test_update_tool_unsafe_webhook():
                 description="Safe",
                 category="Test",
             ),
-            lambda p: "ok"
+            lambda p: "ok",
         )
         with TestClient(app) as client:
             response = client.patch(
                 "/api/tools/unsafe_update_tool",
                 headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                json={
-                    "webhook_url": "http://169.254.169.254/latest/meta-data/"
-                }
+                json={"webhook_url": "http://169.254.169.254/latest/meta-data/"},
             )
         assert response.status_code == 400
         assert "Invalid or unsafe webhook URL" in response.json()["detail"]
     finally:
         registry.unregister("unsafe_update_tool")
 
+
 def test_is_safe_webhook_url_coverage():
     from api.tools import is_safe_webhook_url
+
     assert is_safe_webhook_url("ftp://example.com") is False
     assert is_safe_webhook_url("https://example.internal") is False
