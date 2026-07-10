@@ -40,26 +40,9 @@ export function QualityCheckTab({
   const acquisitionReadinessGate = dataQualitySurface?.acquisition_readiness_gate;
   const evidenceSnapshot = dataEvidenceSnapshot;
   const closeDecisionSummary = evidenceSnapshot?.diligence_close_decision_summary;
-  const releaseSummary = evidenceSnapshot?.data_room_release_summary;
-  const commercialCloseScorecard = evidenceSnapshot?.commercial_close_readiness_scorecard;
-  const commercialCloseExecutionPlan = evidenceSnapshot?.commercial_close_execution_plan;
-  const commercialCloseKpiOperatingModel = evidenceSnapshot?.commercial_close_kpi_operating_model;
-  const commercialCloseBuyerBrief = evidenceSnapshot?.commercial_close_buyer_brief;
-  const commercialCloseSignoffMatrix = evidenceSnapshot?.commercial_close_signoff_matrix;
-  const commercialCloseReleasePackage = evidenceSnapshot?.commercial_close_release_package;
-  const commercialCloseBuyerReviewRunbook = evidenceSnapshot?.commercial_close_buyer_review_runbook;
   const artifactReviewQueue = evidenceSnapshot?.diligence_close_artifact_review_queue ?? [];
   const ownerHandoffQueue = evidenceSnapshot?.diligence_close_owner_handoff_queue ?? [];
   const traceabilityMap = evidenceSnapshot?.diligence_close_traceability_map ?? [];
-  const acceptanceChecklist = evidenceSnapshot?.diligence_close_acceptance_checklist ?? [];
-  const acceptanceSummary = evidenceSnapshot?.diligence_close_acceptance_summary;
-  const commercialCloseBuyerBriefSections = commercialCloseBuyerBrief
-    ? [
-        { title: 'Evidence basis', bullets: commercialCloseBuyerBrief.evidence_basis_bullets },
-        { title: 'Top blocker bullets', bullets: commercialCloseBuyerBrief.blocker_bullets },
-        { title: 'Guardrail bullets', bullets: commercialCloseBuyerBrief.guardrail_bullets },
-      ]
-    : [];
   const copyEvidenceSnapshot = React.useCallback(async () => {
     if (!evidenceSnapshot) return;
     try {
@@ -141,7 +124,7 @@ export function QualityCheckTab({
                         </dd>
                       </div>
                       <div>
-                        <dt className="font-black text-muted-foreground">Write boundary</dt>
+                        <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                         <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(evidenceSnapshot.verification_handoff.provider_write_executed)}</dd>
                       </div>
                     </dl>
@@ -171,850 +154,12 @@ export function QualityCheckTab({
                                 <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.source_field)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
                           </article>
                         ))}
-                      </div>
-                    </div>
-                  )}
-                  {commercialCloseScorecard && (
-                    <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Commercial close readiness</p>
-                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseScorecard.status_code)}</h3>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseScorecard.buyer_summary_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseScorecard.next_action_text)}</p>
-                          </div>
-                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                            {toSafeReactText(commercialCloseScorecard.scorecard_key)}
-                          </span>
-                        </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                          <div>
-                            <dt className="font-black text-muted-foreground">Target review value</dt>
-                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseScorecard.target_contract_label)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Score</dt>
-                            <dd className="mt-1 text-sm font-bold">score {formatCount(commercialCloseScorecard.total_score)} / {formatCount(commercialCloseScorecard.max_score)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">KPI gaps</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseScorecard.kpi_gap_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Acceptance blockers</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseScorecard.acceptance_blocker_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Data-room blockers</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseScorecard.blocked_artifact_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Privacy exposures</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseScorecard.privacy_exposure_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Offline verifier</dt>
-                            <dd className="mt-1 text-sm font-bold">{commercialCloseScorecard.verifier_ready ? 'ready' : 'needs attention'}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
-                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseScorecard.provider_write_executed)}</dd>
-                          </div>
-                        </dl>
-                        <div className="mt-4 grid gap-3 md:grid-cols-2">
-                          {commercialCloseScorecard.category_scores.map((category) => (
-                            <div key={category.category_key} className="border-t border-border pt-3">
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0">
-                                  <h4 className="text-sm font-black">{toSafeReactText(category.display_name)}</h4>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(category.detail_text)}</p>
-                                </div>
-                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(category.status_code)}`}>
-                                  {formatCount(category.score)} / {formatCount(category.max_score)}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseScorecard.blocked_artifact_files.map((fileName) => (
-                            <span key={fileName} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(fileName)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseScorecard.acceptance_blocker_keys.map((blockerKey) => (
-                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(blockerKey)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseScorecard.kpi_gap_keys.map((gapKey) => (
-                            <span key={gapKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(gapKey)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {commercialCloseExecutionPlan && (
-                    <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Commercial close execution plan</p>
-                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseExecutionPlan.status_code)}</h3>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseExecutionPlan.buyer_summary_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseExecutionPlan.next_action_text)}</p>
-                          </div>
-                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                            {toSafeReactText(commercialCloseExecutionPlan.plan_key)}
-                          </span>
-                        </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                          <div>
-                            <dt className="font-black text-muted-foreground">Target review value</dt>
-                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseExecutionPlan.target_contract_label)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Execution lanes</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.total_lane_count)} lane(s)</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Blocked lanes</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.blocked_lane_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Ready lanes</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.ready_lane_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Priority lanes</dt>
-                            <dd className="mt-1 text-sm font-bold">
-                              critical {formatCount(commercialCloseExecutionPlan.critical_lane_count)} · high {formatCount(commercialCloseExecutionPlan.high_lane_count)} · medium {formatCount(commercialCloseExecutionPlan.medium_lane_count)}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Actions</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.total_action_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Artifacts</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.related_artifact_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">KPI gaps</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.kpi_gap_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Acceptance blockers</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseExecutionPlan.acceptance_blocker_count)}</dd>
-                          </div>
-                          <div className="sm:col-span-2 lg:col-span-3">
-                            <dt className="font-black text-muted-foreground">Verifier command</dt>
-                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseExecutionPlan.verification_command)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
-                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseExecutionPlan.provider_write_executed)}</dd>
-                          </div>
-                        </dl>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseExecutionPlan.related_artifacts.map((artifact) => (
-                            <span key={artifact} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(artifact)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-4 divide-y divide-border">
-                          {commercialCloseExecutionPlan.lanes.map((lane) => (
-                            <div key={lane.lane_key} className="py-4 first:pt-0 last:pb-0">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0">
-                                  <h4 className="text-sm font-black">
-                                    {formatCount(lane.execution_order)}. {toSafeReactText(lane.display_name)}
-                                  </h4>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(lane.acceptance_criteria)}</p>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(lane.next_action_text)}</p>
-                                </div>
-                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(lane.status_code === 'ready' ? 'ready' : 'needs_attention')}`}>
-                                  {toSafeReactText(lane.status_code)}
-                                </span>
-                              </div>
-                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Owner</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(lane.owner_area)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Priority</dt>
-                                  <dd className="mt-1 text-sm font-bold">{toSafeReactText(lane.priority_code)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Artifact ready</dt>
-                                  <dd className="mt-1 text-sm font-bold">{lane.artifact_ready ? 'yes' : 'no'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Action count</dt>
-                                  <dd className="mt-1 text-sm font-bold">{formatCount(lane.action_count)}</dd>
-                                </div>
-                                <div className="sm:col-span-2 lg:col-span-4">
-                                  <dt className="font-black text-muted-foreground">Related artifact</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(lane.related_artifact)}</dd>
-                                </div>
-                              </dl>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {lane.action_keys.map((actionKey) => (
-                                  <span key={actionKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                    {toSafeReactText(actionKey)}
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {lane.blocking_check_keys.map((checkKey) => (
-                                  <span key={checkKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                    {toSafeReactText(checkKey)}
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {lane.acceptance_blocker_keys.map((blockerKey) => (
-                                  <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                    {toSafeReactText(blockerKey)}
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {lane.kpi_gap_keys.map((gapKey) => (
-                                  <span key={gapKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                    {toSafeReactText(gapKey)}
-                                  </span>
-                                ))}
-                              </div>
-                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Lane verifier</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(lane.verification_command)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
-                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(lane.provider_write_executed)}</dd>
-                                </div>
-                              </dl>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {commercialCloseKpiOperatingModel && (
-                    <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Commercial close KPI operating model</p>
-                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseKpiOperatingModel.status_code)}</h3>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseKpiOperatingModel.buyer_summary_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseKpiOperatingModel.next_action_text)}</p>
-                          </div>
-                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                            {toSafeReactText(commercialCloseKpiOperatingModel.model_key)}
-                          </span>
-                        </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                          <div>
-                            <dt className="font-black text-muted-foreground">Target review value</dt>
-                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseKpiOperatingModel.target_contract_label)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Primary KPI</dt>
-                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseKpiOperatingModel.primary_metric_key)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Metrics</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.total_metric_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Target met</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.target_met_metric_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Needs attention</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.needs_attention_metric_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Driver metrics</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.driver_metric_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Guardrails</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.guardrail_metric_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Guardrail breaches</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseKpiOperatingModel.guardrail_breach_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
-                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseKpiOperatingModel.provider_write_executed)}</dd>
-                          </div>
-                        </dl>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseKpiOperatingModel.blocked_metric_keys.map((metricKey) => (
-                            <span key={metricKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(metricKey)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-4 divide-y divide-border">
-                          {commercialCloseKpiOperatingModel.metrics.map((metric) => (
-                            <div key={metric.metric_key} className="py-4 first:pt-0 last:pb-0">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0">
-                                  <h4 className="text-sm font-black">{toSafeReactText(metric.display_name)}</h4>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(metric.buyer_implication)}</p>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(metric.next_action_text)}</p>
-                                </div>
-                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(metric.status_code === 'target_met' ? 'ready' : 'needs_attention')}`}>
-                                  {toSafeReactText(metric.status_code)}
-                                </span>
-                              </div>
-                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Metric key</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(metric.metric_key)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Kind</dt>
-                                  <dd className="mt-1 text-sm font-bold">{toSafeReactText(metric.metric_kind)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Owner</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(metric.owner_area)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Value</dt>
-                                  <dd className="mt-1 text-sm font-bold">{formatCount(metric.current_value)} / {formatCount(metric.target_value)} {toSafeReactText(metric.unit_label)}</dd>
-                                </div>
-                                <div className="sm:col-span-2 lg:col-span-4">
-                                  <dt className="font-black text-muted-foreground">Source field</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(metric.source_field)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
-                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(metric.provider_write_executed)}</dd>
-                                </div>
-                              </dl>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {commercialCloseBuyerBrief && (
-                    <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Commercial close buyer brief</p>
-                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseBuyerBrief.status_code)}</h3>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.readiness_headline_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.proof_thesis_text)}</p>
-                          </div>
-                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                            {toSafeReactText(commercialCloseBuyerBrief.brief_key)}
-                          </span>
-                        </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                          <div>
-                            <dt className="font-black text-muted-foreground">Target review value</dt>
-                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseBuyerBrief.target_contract_label)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Evidence basis</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerBrief.evidence_basis_bullets.length)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Top blockers</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerBrief.blocker_bullets.length)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Guardrails</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerBrief.guardrail_bullets.length)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
-                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseBuyerBrief.provider_write_executed)}</dd>
-                          </div>
-                        </dl>
-                        <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                          {commercialCloseBuyerBriefSections.map((section) => (
-                            <div key={section.title}>
-                              <p className="text-xs font-black text-muted-foreground">{section.title}</p>
-                              <div className="mt-3 space-y-3">
-                                {section.bullets.map((bullet) => (
-                                  <div key={bullet.bullet_key} className="border-t border-border pt-3 first:border-t-0 first:pt-0">
-                                    <h4 className="text-sm font-black">{toSafeReactText(bullet.display_name)}</h4>
-                                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(bullet.detail_text)}</p>
-                                    <p className="mt-1 break-all text-xs font-bold text-muted-foreground">{toSafeReactText(bullet.bullet_key)} · {toSafeReactText(bullet.source_field)}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 border-t border-border pt-4">
-                          <p className="text-sm font-semibold leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.reviewer_handoff_text)}</p>
-                          <p className="mt-1 text-sm font-semibold leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerBrief.next_action_text)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {commercialCloseSignoffMatrix && (
-                    <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Commercial close signoff matrix</p>
-                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseSignoffMatrix.status_code)}</h3>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseSignoffMatrix.guardrail_summary_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseSignoffMatrix.reviewer_handoff_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseSignoffMatrix.next_action_text)}</p>
-                          </div>
-                          <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(commercialCloseSignoffMatrix.status_code === 'signoff_ready' ? 'ready' : 'needs_attention')}`}>
-                            {toSafeReactText(commercialCloseSignoffMatrix.matrix_key)}
-                          </span>
-                        </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                          <div>
-                            <dt className="font-black text-muted-foreground">Target review value</dt>
-                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseSignoffMatrix.target_contract_label)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Required signoffs</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseSignoffMatrix.required_signoff_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Signed off</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseSignoffMatrix.signed_off_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Blocked signoffs</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseSignoffMatrix.blocked_signoff_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Blocker keys</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseSignoffMatrix.blocker_key_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
-                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseSignoffMatrix.provider_write_executed)}</dd>
-                          </div>
-                        </dl>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseSignoffMatrix.blocker_keys.map((blockerKey) => (
-                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(blockerKey)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-4 divide-y divide-border">
-                          {commercialCloseSignoffMatrix.signoffs.map((signoff) => (
-                            <div key={signoff.signoff_key} className="py-4 first:pt-0 last:pb-0">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0">
-                                  <h4 className="text-sm font-black">{toSafeReactText(signoff.reviewer_role)}</h4>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(signoff.acceptance_text)}</p>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(signoff.next_action_text)}</p>
-                                </div>
-                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(signoff.status_code === 'signed_off' ? 'ready' : 'needs_attention')}`}>
-                                  {toSafeReactText(signoff.status_code)}
-                                </span>
-                              </div>
-                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Signoff key</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(signoff.signoff_key)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Owner</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(signoff.owner_area)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Required artifact</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(signoff.required_artifact)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
-                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(signoff.provider_write_executed)}</dd>
-                                </div>
-                                <div className="sm:col-span-2 lg:col-span-4">
-                                  <dt className="font-black text-muted-foreground">Source field</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(signoff.source_field)}</dd>
-                                </div>
-                              </dl>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {signoff.blocker_keys.map((blockerKey) => (
-                                  <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                    {toSafeReactText(blockerKey)}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {commercialCloseReleasePackage && (
-                    <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Commercial close release package</p>
-                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseReleasePackage.status_code)}</h3>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseReleasePackage.buyer_handoff_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseReleasePackage.next_action_text)}</p>
-                          </div>
-                          <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(commercialCloseReleasePackage.status_code === 'release_ready' ? 'ready' : 'needs_attention')}`}>
-                            {toSafeReactText(commercialCloseReleasePackage.package_key)}
-                          </span>
-                        </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                          <div>
-                            <dt className="font-black text-muted-foreground">Target review value</dt>
-                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseReleasePackage.target_contract_label)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Release artifacts</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.total_artifact_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Ready artifacts</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.ready_artifact_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Blocked artifacts</dt>
-                            <dd className="mt-1 text-sm font-bold">blocked artifacts {formatCount(commercialCloseReleasePackage.blocked_artifact_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Signed off</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.signed_off_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Blocked signoffs</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.blocked_signoff_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Blocker keys</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseReleasePackage.blocker_key_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">First release file</dt>
-                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseReleasePackage.first_release_file_name)}</dd>
-                          </div>
-                          <div className="sm:col-span-2 lg:col-span-3">
-                            <dt className="font-black text-muted-foreground">Verifier command</dt>
-                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseReleasePackage.verification_command)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
-                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseReleasePackage.provider_write_executed)}</dd>
-                          </div>
-                        </dl>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseReleasePackage.blocked_artifact_files.map((fileName) => (
-                            <span key={fileName} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(fileName)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseReleasePackage.blocker_keys.map((blockerKey) => (
-                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(blockerKey)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-4 divide-y divide-border">
-                          {commercialCloseReleasePackage.artifacts.map((artifact) => (
-                            <div key={artifact.artifact_key} className="py-4 first:pt-0 last:pb-0">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0">
-                                  <h4 className="break-all text-sm font-black">
-                                    {formatCount(artifact.release_order)}. {toSafeReactText(artifact.file_name)}
-                                  </h4>
-                                  <p className="mt-1 text-sm font-semibold text-muted-foreground">{toSafeReactText(artifact.display_name)}</p>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(artifact.release_instruction_text)}</p>
-                                </div>
-                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(artifact.status_code === 'ready' ? 'ready' : 'needs_attention')}`}>
-                                  {toSafeReactText(artifact.status_code)}
-                                </span>
-                              </div>
-                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Artifact key</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.artifact_key)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Group</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.artifact_group)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Reviewer role</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.reviewer_role)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Required artifact</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.required_artifact)}</dd>
-                                </div>
-                                <div className="sm:col-span-2 lg:col-span-4">
-                                  <dt className="font-black text-muted-foreground">Source field</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(artifact.source_field)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Raw content</dt>
-                                  <dd className="mt-1 text-sm font-bold">raw content: {artifact.contains_raw_content ? 'yes' : 'no'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Stable IDs</dt>
-                                  <dd className="mt-1 text-sm font-bold">stable IDs: {artifact.contains_stable_identifiers ? 'yes' : 'no'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Credentials</dt>
-                                  <dd className="mt-1 text-sm font-bold">credentials: {artifact.contains_provider_credentials ? 'yes' : 'no'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
-                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(artifact.provider_write_executed)}</dd>
-                                </div>
-                              </dl>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {artifact.blocker_keys.map((blockerKey) => (
-                                  <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                    {toSafeReactText(blockerKey)}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {commercialCloseBuyerReviewRunbook && (
-                    <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Commercial close buyer review runbook</p>
-                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-black">{toSafeReactText(commercialCloseBuyerReviewRunbook.status_code)}</h3>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerReviewRunbook.buyer_handoff_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(commercialCloseBuyerReviewRunbook.next_action_text)}</p>
-                          </div>
-                          <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(commercialCloseBuyerReviewRunbook.status_code === 'review_ready' ? 'ready' : 'needs_attention')}`}>
-                            {toSafeReactText(commercialCloseBuyerReviewRunbook.runbook_key)}
-                          </span>
-                        </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                          <div>
-                            <dt className="font-black text-muted-foreground">Target review value</dt>
-                            <dd className="mt-1 text-sm font-bold">{toSafeReactText(commercialCloseBuyerReviewRunbook.target_contract_label)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Review steps</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerReviewRunbook.total_step_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Ready steps</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerReviewRunbook.ready_step_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Blocked steps</dt>
-                            <dd className="mt-1 text-sm font-bold">blocked steps {formatCount(commercialCloseBuyerReviewRunbook.blocked_step_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Blocker keys</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(commercialCloseBuyerReviewRunbook.blocker_key_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">First step</dt>
-                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseBuyerReviewRunbook.first_step_key)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Final decision</dt>
-                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseBuyerReviewRunbook.final_decision_step_key)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
-                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(commercialCloseBuyerReviewRunbook.provider_write_executed)}</dd>
-                          </div>
-                          <div className="sm:col-span-2 lg:col-span-4">
-                            <dt className="font-black text-muted-foreground">Verifier command</dt>
-                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(commercialCloseBuyerReviewRunbook.verification_command)}</dd>
-                          </div>
-                        </dl>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseBuyerReviewRunbook.blocked_step_keys.map((stepKey) => (
-                            <span key={stepKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(stepKey)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {commercialCloseBuyerReviewRunbook.blocker_keys.map((blockerKey) => (
-                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(blockerKey)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-4 divide-y divide-border">
-                          {commercialCloseBuyerReviewRunbook.steps.map((step) => (
-                            <div key={step.step_key} className="py-4 first:pt-0 last:pb-0">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0">
-                                  <h4 className="break-all text-sm font-black">
-                                    {formatCount(step.review_order)}. {toSafeReactText(step.step_key)}
-                                  </h4>
-                                  <p className="mt-1 text-sm font-semibold text-muted-foreground">{toSafeReactText(step.evidence_file_name)}</p>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(step.entry_criteria_text)}</p>
-                                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(step.exit_criteria_text)}</p>
-                                </div>
-                                <span className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs font-bold ${getSurfaceStatusClass(step.status_code === 'ready' ? 'ready' : 'needs_attention')}`}>
-                                  {toSafeReactText(step.status_code)}
-                                </span>
-                              </div>
-                              <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Lane</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(step.lane)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Reviewer role</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(step.reviewer_role)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Owner</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(step.owner_area)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Review day</dt>
-                                  <dd className="mt-1 text-sm font-bold">day {formatCount(step.review_day)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">SLA hours</dt>
-                                  <dd className="mt-1 text-sm font-bold">{formatCount(step.sla_hours)}</dd>
-                                </div>
-                                <div className="sm:col-span-2 lg:col-span-3">
-                                  <dt className="font-black text-muted-foreground">Source field</dt>
-                                  <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(step.source_field)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Raw content</dt>
-                                  <dd className="mt-1 text-sm font-bold">raw content: {step.contains_raw_content ? 'yes' : 'no'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Stable IDs</dt>
-                                  <dd className="mt-1 text-sm font-bold">stable IDs: {step.contains_stable_identifiers ? 'yes' : 'no'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Credentials</dt>
-                                  <dd className="mt-1 text-sm font-bold">credentials: {step.contains_provider_credentials ? 'yes' : 'no'}</dd>
-                                </div>
-                                <div>
-                                  <dt className="font-black text-muted-foreground">Write boundary</dt>
-                                  <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(step.provider_write_executed)}</dd>
-                                </div>
-                              </dl>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {step.blocker_keys.map((blockerKey) => (
-                                  <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                    {toSafeReactText(blockerKey)}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {releaseSummary && (
-                    <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Data room release summary</p>
-                      <div className="mt-3 rounded-xl border border-border bg-background p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-black">{toSafeReactText(releaseSummary.release_status)}</h3>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(releaseSummary.buyer_summary_text)}</p>
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(releaseSummary.next_action_text)}</p>
-                          </div>
-                          <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                            {toSafeReactText(releaseSummary.release_key)}
-                          </span>
-                        </div>
-                        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-                          <div>
-                            <dt className="font-black text-muted-foreground">Artifacts</dt>
-                            <dd className="mt-1 text-sm font-bold">
-                              total {formatCount(releaseSummary.total_artifact_count)} · ready {formatCount(releaseSummary.ready_artifact_count)} · blocked {formatCount(releaseSummary.needs_attention_artifact_count)}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Required for close</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(releaseSummary.required_for_close_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Privacy exposures</dt>
-                            <dd className="mt-1 text-sm font-bold">privacy exposures {formatCount(releaseSummary.privacy_exposure_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Raw / stable / credential</dt>
-                            <dd className="mt-1 text-sm font-bold">
-                              {formatCount(releaseSummary.raw_content_exposure_count)} / {formatCount(releaseSummary.stable_identifier_exposure_count)} / {formatCount(releaseSummary.provider_credential_exposure_count)}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Acceptance blockers</dt>
-                            <dd className="mt-1 text-sm font-bold">{formatCount(releaseSummary.acceptance_blocker_count)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Snapshot verification</dt>
-                            <dd className="mt-1 text-sm font-bold">{releaseSummary.snapshot_verification_required ? 'required' : 'not required'}</dd>
-                          </div>
-                          <div className="lg:col-span-2">
-                            <dt className="font-black text-muted-foreground">Verification command</dt>
-                            <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(releaseSummary.verification_command)}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
-                            <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(releaseSummary.provider_write_executed)}</dd>
-                          </div>
-                        </dl>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {releaseSummary.blocked_artifact_files.map((fileName) => (
-                            <span key={fileName} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(fileName)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {releaseSummary.acceptance_blocker_keys.map((blockerKey) => (
-                            <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(blockerKey)}
-                            </span>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   )}
@@ -1056,7 +201,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">stable IDs: {item.contains_stable_identifiers ? 'yes' : 'no'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1103,7 +248,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">blocks close: {item.blocks_close ? 'yes' : 'no'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1146,7 +291,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">blocks close: {item.blocks_close ? 'yes' : 'no'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1214,7 +359,7 @@ export function QualityCheckTab({
                             </dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                             <dd className="mt-1 text-sm font-bold">
                               {getWriteBoundaryLabel(closeDecisionSummary.provider_write_executed)}
                             </dd>
@@ -1271,7 +416,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{item.snapshot_verification_required ? 'required' : 'not required'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1328,7 +473,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{item.snapshot_verification_required ? 'required' : 'not required'}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1403,7 +548,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.severity_code)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1417,134 +562,6 @@ export function QualityCheckTab({
                           </article>
                         ))}
                       </div>
-                    </div>
-                  )}
-                  {(acceptanceSummary || acceptanceChecklist.length > 0) && (
-                    <div className="border-t border-border p-5">
-                      {acceptanceSummary && (
-                        <div className="mb-3 rounded-xl border border-border bg-background p-4">
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0">
-                              <p className="text-xs font-black text-muted-foreground">Diligence close acceptance summary</p>
-                              <h3 className="mt-1 text-sm font-black">{toSafeReactText(acceptanceSummary.decision_code)}</h3>
-                              <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(acceptanceSummary.buyer_summary_text)}</p>
-                              <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(acceptanceSummary.next_action_text)}</p>
-                            </div>
-                            <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                              {toSafeReactText(acceptanceSummary.close_gate_status)}
-                            </span>
-                          </div>
-                          <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-                            <div>
-                              <dt className="font-black text-muted-foreground">Acceptance items</dt>
-                              <dd className="mt-1 text-sm font-bold">
-                                total {formatCount(acceptanceSummary.total_acceptance_count)} · blocked {formatCount(acceptanceSummary.blocked_acceptance_count)} · ready {formatCount(acceptanceSummary.ready_acceptance_count)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="font-black text-muted-foreground">Reviewer roles</dt>
-                              <dd className="mt-1 text-sm font-bold">{formatCount(acceptanceSummary.reviewer_role_count)}</dd>
-                            </div>
-                            <div>
-                              <dt className="font-black text-muted-foreground">Required artifacts</dt>
-                              <dd className="mt-1 text-sm font-bold">{formatCount(acceptanceSummary.required_artifact_count)}</dd>
-                            </div>
-                            <div>
-                              <dt className="font-black text-muted-foreground">Blocker keys</dt>
-                              <dd className="mt-1 text-sm font-bold">{formatCount(acceptanceSummary.blocker_count)}</dd>
-                            </div>
-                            <div>
-                              <dt className="font-black text-muted-foreground">Snapshot verification</dt>
-                              <dd className="mt-1 text-sm font-bold">{acceptanceSummary.snapshot_verification_required ? 'required' : 'not required'}</dd>
-                            </div>
-                            <div>
-                              <dt className="font-black text-muted-foreground">Write boundary</dt>
-                              <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acceptanceSummary.provider_write_executed)}</dd>
-                            </div>
-                          </dl>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {acceptanceSummary.reviewer_roles.map((role) => (
-                              <span key={role} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                {toSafeReactText(role)}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {acceptanceSummary.required_artifacts.map((artifact) => (
-                              <span key={artifact} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                {toSafeReactText(artifact)}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {acceptanceSummary.blocker_keys.map((blockerKey) => (
-                              <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                {toSafeReactText(blockerKey)}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {acceptanceChecklist.length > 0 && (
-                        <>
-                          <p className="text-xs font-black text-muted-foreground">Diligence close acceptance checklist</p>
-                          <div className="mt-3 grid gap-3 md:grid-cols-2">
-                            {acceptanceChecklist.map((item) => (
-                          <article key={item.acceptance_key} className="rounded-xl border border-border bg-background p-4">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="min-w-0">
-                                <h3 className="break-all text-sm font-black">{toSafeReactText(item.data_room_artifact)}</h3>
-                                <p className="mt-1 text-sm font-semibold text-muted-foreground">{toSafeReactText(item.reviewer_roles.join(', '))}</p>
-                                <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(item.acceptance_criteria)}</p>
-                                <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(item.reviewer_evidence_summary)}</p>
-                                <p className="mt-1 text-sm leading-6 text-muted-foreground">{toSafeReactText(item.next_action)}</p>
-                              </div>
-                              <span className="w-fit shrink-0 rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                {toSafeReactText(item.acceptance_status)}
-                              </span>
-                            </div>
-                            <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-                              <div>
-                                <dt className="font-black text-muted-foreground">Trace key</dt>
-                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.trace_key)}</dd>
-                              </div>
-                              <div>
-                                <dt className="font-black text-muted-foreground">Source field</dt>
-                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.source_field)}</dd>
-                              </div>
-                              <div>
-                                <dt className="font-black text-muted-foreground">Owner area</dt>
-                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.owner_area)}</dd>
-                              </div>
-                              <div>
-                                <dt className="font-black text-muted-foreground">Verification command</dt>
-                                <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.verification_command)}</dd>
-                              </div>
-                              <div>
-                                <dt className="font-black text-muted-foreground">Close gate</dt>
-                                <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.close_gate_status)}</dd>
-                              </div>
-                              <div>
-                                <dt className="font-black text-muted-foreground">Snapshot verification</dt>
-                                <dd className="mt-1 text-sm font-bold">{item.snapshot_verification_required ? 'required' : 'not required'}</dd>
-                              </div>
-                              <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
-                                <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
-                              </div>
-                            </dl>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {item.blocker_keys.map((blockerKey) => (
-                                <span key={blockerKey} className="max-w-full break-all rounded-full bg-secondary px-2 py-1 text-xs font-bold text-secondary-foreground">
-                                  {toSafeReactText(blockerKey)}
-                                </span>
-                              ))}
-                            </div>
-                          </article>
-                            ))}
-                          </div>
-                        </>
-                      )}
                     </div>
                   )}
                   {evidenceSnapshot.diligence_close_proof_plan.length > 0 && (
@@ -1586,7 +603,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.severity_code)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1635,7 +652,7 @@ export function QualityCheckTab({
                       <dd className="mt-1 text-sm font-bold">{acquisitionReadinessGate.snapshot_verification_ready ? 'Snapshot verification ready' : 'Snapshot verification pending'}</dd>
                     </div>
                     <div>
-                      <dt className="font-black text-muted-foreground">Write boundary</dt>
+                      <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                       <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acquisitionReadinessGate.provider_write_executed)}</dd>
                     </div>
                   </dl>
@@ -1667,7 +684,7 @@ export function QualityCheckTab({
                           <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(acquisitionReadinessGate.decision_summary.summary_key)}</dd>
                         </div>
                         <div>
-                          <dt className="font-black text-muted-foreground">Write boundary</dt>
+                          <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                           <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(acquisitionReadinessGate.decision_summary.provider_write_executed)}</dd>
                         </div>
                       </dl>
@@ -1710,7 +727,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(kpi.owner_area)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(kpi.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1748,7 +765,7 @@ export function QualityCheckTab({
                                 <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(action.blocking_check_key)}</dd>
                               </div>
                               <div>
-                                <dt className="font-black text-muted-foreground">Write boundary</dt>
+                                <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                                 <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(action.provider_write_executed)}</dd>
                               </div>
                             </dl>
@@ -1817,7 +834,7 @@ export function QualityCheckTab({
                           <dd className="mt-1 text-sm font-bold">{formatCount(check.total_count)}</dd>
                         </div>
                         <div>
-                          <dt className="font-black text-muted-foreground">Write boundary</dt>
+                          <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                           <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(check.provider_write_executed)}</dd>
                         </div>
                       </dl>
@@ -1848,7 +865,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{formatCount(item.object_count)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -1880,7 +897,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{formatCount(item.object_count)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -1981,7 +998,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{formatCount(item.source_backed_relation_count)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                           </div>
                         </dl>
@@ -2019,7 +1036,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 text-sm font-bold">{toSafeReactText(item.source_scope)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(false)}</dd>
                           </div>
                         </dl>
@@ -2058,7 +1075,7 @@ export function QualityCheckTab({
                             <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(item.parser_key)}</dd>
                           </div>
                           <div>
-                            <dt className="font-black text-muted-foreground">Write boundary</dt>
+                            <dt className="font-black text-muted-foreground">쓰기 경계</dt>
                             <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(item.provider_write_executed)}</dd>
                           </div>
                         </dl>

@@ -92,7 +92,7 @@ describe("DashboardLayout", () => {
     expect(main).not.toBeNull();
     expect(skipLink).not.toBeNull();
     expect(logo?.getAttribute("src")).toBe("/brand/naruon-symbol.svg");
-    expect(globalSearchInput?.getAttribute("type")).toBe("search");
+    expect(globalSearchInput?.getAttribute("type")).toBe("text");
     expect(globalSearchInput?.getAttribute("inputmode")).toBe("search");
     expect(globalSearchInput?.getAttribute("role")).toBe("searchbox");
     expect(headerActionButtons).toEqual(["일정 반영", "답장 초안", "실행 항목 생성"]);
@@ -222,7 +222,7 @@ describe("DashboardLayout", () => {
 
     const input = container.querySelector<HTMLInputElement>("#global-search-input");
     expect(input).not.toBeNull();
-    expect(input?.getAttribute("type")).toBe("search");
+    expect(input?.getAttribute("type")).toBe("text");
     expect(input?.getAttribute("inputmode")).toBe("search");
     expect(input?.getAttribute("role")).toBe("searchbox");
 
