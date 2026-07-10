@@ -61,11 +61,15 @@ def _enforce_send_email_rate_limit(auth_context: AuthContext) -> None:
 
     # ponytail: process-local throttle; move to Redis when multi-worker send volume matters.
     with _email_send_rate_limit_lock:
-        attempts = [
-            attempt
-            for attempt in _email_send_attempts_by_scope.get(key, [])
-            if attempt > cutoff
-        ]
+        # ⚡ Bolt: Use 'in' to avoid method resolution overhead and empty list allocation from .get()
+        if key in _email_send_attempts_by_scope:
+            attempts = [
+                attempt
+                for attempt in _email_send_attempts_by_scope[key]
+                if attempt > cutoff
+            ]
+        else:
+            attempts = []
         if len(attempts) >= _SEND_EMAIL_RATE_LIMIT_MAX_ATTEMPTS:
             _email_send_attempts_by_scope[key] = attempts
             raise HTTPException(
@@ -282,12 +286,12 @@ async def get_emails(
     )
     emails = list(result.scalars().all())
 
-
     grouped = {}
 
     reply_counts = defaultdict(int)
     thread_messages = defaultdict(list)
-    has_sent_message = {}
+    # ⚡ Bolt: Replace dictionary with a set to eliminate dictionary .get() default evaluation and boolean assignment overhead, and to reduce memory footprint
+    has_sent_message = set()
 
     is_sent_folder = folder == "sent"
 
@@ -303,13 +307,13 @@ async def get_emails(
 
         if is_sent_folder and group_key not in has_sent_message:
             if message_is_from_user(email, user_addresses):
-                has_sent_message[group_key] = True
+                has_sent_message.add(group_key)
 
     if is_sent_folder:
         visible_groups = [
             email
             for group_key, email in grouped.items()
-            if has_sent_message.get(group_key, False)
+            if group_key in has_sent_message
         ]
     else:
         visible_groups = list(grouped.values())
