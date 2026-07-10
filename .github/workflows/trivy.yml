@@ -1,14 +1,15 @@
 name: Trivy Security Scan
 
 on:
-  pull_request:
-    branches:
-      - develop
-      - master
   push:
     branches:
       - develop
       - master
+  pull_request:
+    branches:
+      - develop
+      - master
+      - "release/**"
   workflow_dispatch:
 
 permissions:

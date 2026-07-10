@@ -220,6 +220,41 @@ def test_github_actions_are_pinned_to_exact_sha() -> None:
     assert missing_version_comments == [], "\n".join(missing_version_comments)
 
 
+def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
+    assert WORKFLOW_DIR.exists(), (
+        "required governance artifact is missing: .github/workflows"
+    )
+    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
+        WORKFLOW_DIR.glob("*.yaml")
+    )
+    assert governed_workflows, "no governed GitHub workflows found"
+
+    duplicates: list[str] = []
+    top_level_key = re.compile(r"^([A-Za-z0-9_-]+):(?:\s|$)")
+
+    for workflow_path in governed_workflows:
+        seen_keys: dict[str, int] = {}
+        workflow_lines = workflow_path.read_text(encoding="utf-8").splitlines()
+        for line_number, line in enumerate(workflow_lines, 1):
+            if not line or line.startswith((" ", "\t")) or line.lstrip().startswith("#"):
+                continue
+            match = top_level_key.match(line)
+            if not match:
+                continue
+
+            key = match.group(1)
+            if key in seen_keys:
+                duplicates.append(
+                    f"{workflow_path.relative_to(REPO_ROOT)}:{line_number}:"
+                    f" duplicate top-level key {key!r}; first defined on line "
+                    f"{seen_keys[key]}"
+                )
+            else:
+                seen_keys[key] = line_number
+
+    assert duplicates == [], "\n".join(duplicates)
+
+
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"
@@ -248,6 +283,8 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
         in dependency_review_workflow
     )
+    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in dependency_review_workflow
+    assert 'printf \'Head ref: %s\\n\' "${{ github.head_ref || github.ref_name }}"' not in dependency_review_workflow
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -290,7 +327,7 @@ def test_github_actions_unpinned_major_refs_failure(
     with pytest.raises(AssertionError) as exc_info:
         test_github_actions_are_pinned_to_exact_sha()
 
-    message = str(exc_info.value)
+    message = str(exc_info.value).replace("\\", "/")
     assert ".github/workflows/bad-action.yml:6:- uses: actions/checkout@v4" in message
 
     workflow_file.write_text(
@@ -310,7 +347,7 @@ def test_github_actions_unpinned_major_refs_failure(
     with pytest.raises(AssertionError) as exc_info:
         test_github_actions_are_pinned_to_exact_sha()
 
-    message = str(exc_info.value)
+    message = str(exc_info.value).replace("\\", "/")
     assert (
         ".github/workflows/bad-action.yml:6:- uses: "
         "actions/setup-python@abcdef1234567890abcdef1234567890abcdef12"
@@ -400,6 +437,11 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
     )
     assert "format: sarif" in trivy_workflow
     assert "category: trivy" in trivy_workflow
+    assert "trivy-config: trivy.yaml" in trivy_workflow
+    assert "Run Trivy findings summary" in trivy_workflow
+    assert 'trusted_registries:\n    - "ghcr.io"\n    - "docker.io"' in read_repo_text(
+        ".github/trivy/trusted-registries.yaml"
+    )
     assert (
         "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
         in trivy_workflow
@@ -616,6 +658,35 @@ def test_frontend_dockerfile_builds_and_starts_production_artifact() -> None:
     )
     assert "pnpm run start" not in dockerfile
     assert "pnpm run dev" not in dockerfile
+
+
+def test_kubernetes_deployments_use_restricted_runtime_security_contexts() -> None:
+    backend_deployment = read_repo_text("k8s/backend-deployment.yaml")
+    db_statefulset = read_repo_text("k8s/db-statefulset.yaml")
+    frontend_deployment = read_repo_text("k8s/frontend-deployment.yaml")
+
+    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-backend" in backend_deployment
+    assert "image: docker.io/pgvector/pgvector:pg16" in db_statefulset
+    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend" in frontend_deployment
+
+    for manifest in (backend_deployment, db_statefulset, frontend_deployment):
+        assert "seccompProfile:\n          type: RuntimeDefault" in manifest
+        assert "allowPrivilegeEscalation: false" in manifest
+        assert "capabilities:\n            drop:\n              - ALL" in manifest
+        assert "readOnlyRootFilesystem: true" in manifest
+        assert "runAsNonRoot: true" in manifest
+        assert "mountPath: /tmp" in manifest
+
+    assert "runAsUser: 10001" in backend_deployment
+    assert "runAsGroup: 10001" in backend_deployment
+    assert "runAsUser: 999" in db_statefulset
+    assert "runAsGroup: 999" in db_statefulset
+    assert "fsGroup: 999" in db_statefulset
+    assert "mountPath: /var/lib/postgresql/data" in db_statefulset
+    assert "mountPath: /var/run/postgresql" in db_statefulset
+    assert "runAsUser: 1000" in frontend_deployment
+    assert "runAsGroup: 1000" in frontend_deployment
+    assert "mountPath: /app/.next/cache" in frontend_deployment
 
 
 def test_backend_dockerfile_uses_modern_env_syntax() -> None:

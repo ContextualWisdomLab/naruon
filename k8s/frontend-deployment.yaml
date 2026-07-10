@@ -27,7 +27,7 @@ spec:
           emptyDir: {}
       containers:
       - name: frontend
-        image: ghcr.io/seongho-bae/ai_email_client-frontend:REPLACE_ME_VERSION
+        image: ghcr.io/contextualwisdomlab/ai_email_client-frontend:REPLACE_ME_VERSION
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
@@ -35,7 +35,9 @@ spec:
             drop:
               - ALL
           readOnlyRootFilesystem: true
+          runAsGroup: 1000
           runAsNonRoot: true
+          runAsUser: 1000
           seccompProfile:
             type: RuntimeDefault
         resources:
