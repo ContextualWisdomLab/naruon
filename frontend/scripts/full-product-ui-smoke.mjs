@@ -13,6 +13,7 @@ const screenshotDir = process.env.NARUON_FULL_PRODUCT_SCREENSHOT_DIR || "/tmp/na
 const ALLOWED_FULL_PRODUCT_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 const SERVER_PROBE_TIMEOUT_MS = 5_000;
 const SERVER_READY_TIMEOUT_MS = 90_000;
+const IS_WINDOWS = process.platform === "win32";
 
 export const FULL_PRODUCT_ROUTES = [
   { path: "/", name: "home", expectedText: "Naruon" },
@@ -156,13 +157,15 @@ async function startServerIfNeeded() {
   }
 
   const child = spawn(
-    "pnpm",
-    ["dev", "--hostname", url.hostname, "--port", url.port || "3001"],
+    IS_WINDOWS ? process.env.ComSpec || "cmd.exe" : "pnpm",
+    IS_WINDOWS
+      ? ["/d", "/s", "/c", "pnpm", "dev", "--hostname", url.hostname, "--port", url.port || "3001"]
+      : ["dev", "--hostname", url.hostname, "--port", url.port || "3001"],
     {
       cwd: frontendDir,
       env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
       stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
+      detached: !IS_WINDOWS,
     },
   );
   child.stdout.on("data", (chunk) => process.stdout.write(chunk));
@@ -183,6 +186,15 @@ async function stopServerProcess(child) {
     child.once("exit", resolve);
   });
   const timeout = (ms) => new Promise((resolve) => setTimeout(resolve, ms, "timeout"));
+
+  if (IS_WINDOWS) {
+    await Promise.race([
+      new Promise((resolve) => spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" }).once("close", resolve)),
+      timeout(5_000),
+    ]);
+    await Promise.race([waitForExit, timeout(2_000)]);
+    return;
+  }
 
   try {
     process.kill(-child.pid, "SIGTERM");
@@ -511,6 +523,51 @@ const dataQualitySurface = {
   ],
 };
 
+const dataEvidenceSnapshot = {
+  snapshot_version: "data_quality_evidence_snapshot.v1",
+  generated_at: "2026-05-28T05:47:00Z",
+  audit_event: "data.quality_surface.evidence_snapshot.viewed",
+  scope_label: "full_product_smoke",
+  snapshot_digest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  digest_algorithm: "sha256",
+  canonical_payload_fields: [],
+  privacy_redaction_policy: {
+    raw_content_exposed: false,
+    stable_identifiers_exposed: false,
+    provider_credentials_exposed: false,
+    redacted_fields: [],
+    allowed_sample_fields: [],
+  },
+  validation_status: {
+    status_code: "ready",
+    display_name: "Ready",
+    detail_text: "Smoke evidence snapshot is redacted and verifier-ready.",
+    provider_write_executed: false,
+  },
+  verification_handoff: {
+    handoff_text: "Verify the copied smoke snapshot JSON before sharing diligence materials.",
+    verifier_command: "python scripts/verify_evidence_snapshot.py snapshot.json",
+    accepted_input: "data_quality_evidence_snapshot.v1 JSON",
+    digest_algorithm: "sha256",
+    excluded_digest_fields: ["snapshot_digest"],
+    success_exit_code: 0,
+    failure_exit_codes: { invalid_digest: 2 },
+    provider_write_executed: false,
+  },
+  parser_manifest_summary: [],
+  content_graph_evidence_samples: [],
+  knowledge_graph_evidence_samples: [],
+  evidence_packet_checklist: [],
+  data_room_package_manifest: [],
+  diligence_exception_register: [],
+  diligence_risk_matrix: [],
+  diligence_close_artifact_review_queue: [],
+  diligence_close_owner_handoff_queue: [],
+  diligence_close_traceability_map: [],
+  diligence_close_decision_summary: null,
+  diligence_close_proof_plan: [],
+};
+
 const accountConfig = {
   user_id: "smoke-user",
   smtp_server: null,
@@ -735,6 +792,7 @@ async function installRoutes(page) {
       });
     }
     if (endpoint === "/api/data/quality-surface") return routeJson(route, dataQualitySurface);
+    if (endpoint === "/api/data/quality-surface/evidence-snapshot") return routeJson(route, dataEvidenceSnapshot);
     if (endpoint === "/api/data/documents") return routeJson(route, { document_id: "doc-smoke", status: "stored" });
     if (endpoint === "/api/data/documents/doc_repository_ready/embedding-regeneration-intent") {
       return routeJson(route, {
@@ -972,7 +1030,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("계약 검토 담당자를 확인합니다.").waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "관계 원본", exact: true }).click();
     await page.getByText("1개 관계 연결", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("heading", { name: "관계 그래프와 타임라인", exact: true }).scrollIntoViewIfNeeded();
+    await page.getByRole("heading", { name: "관계 맥락과 타임라인", exact: true }).scrollIntoViewIfNeeded();
     await page.getByText("3개 노드와 2개 관계가 이 스레드 맥락에 연결되어 있습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("관련 노드: PM 김지현, 20B readiness thread, 이사회 일정", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.locator('[aria-label="3개 노드와 2개 관계가 있는 관계 맥락"]').waitFor({ state: "visible", timeout: 10_000 });
