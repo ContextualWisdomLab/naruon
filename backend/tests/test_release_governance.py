@@ -220,6 +220,41 @@ def test_github_actions_are_pinned_to_exact_sha() -> None:
     assert missing_version_comments == [], "\n".join(missing_version_comments)
 
 
+def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
+    assert WORKFLOW_DIR.exists(), (
+        "required governance artifact is missing: .github/workflows"
+    )
+    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
+        WORKFLOW_DIR.glob("*.yaml")
+    )
+    assert governed_workflows, "no governed GitHub workflows found"
+
+    duplicates: list[str] = []
+    top_level_key = re.compile(r"^([A-Za-z0-9_-]+):(?:\s|$)")
+
+    for workflow_path in governed_workflows:
+        seen_keys: dict[str, int] = {}
+        workflow_lines = workflow_path.read_text(encoding="utf-8").splitlines()
+        for line_number, line in enumerate(workflow_lines, 1):
+            if not line or line.startswith((" ", "\t")) or line.lstrip().startswith("#"):
+                continue
+            match = top_level_key.match(line)
+            if not match:
+                continue
+
+            key = match.group(1)
+            if key in seen_keys:
+                duplicates.append(
+                    f"{workflow_path.relative_to(REPO_ROOT)}:{line_number}:"
+                    f" duplicate top-level key {key!r}; first defined on line "
+                    f"{seen_keys[key]}"
+                )
+            else:
+                seen_keys[key] = line_number
+
+    assert duplicates == [], "\n".join(duplicates)
+
+
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"

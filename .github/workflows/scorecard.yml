@@ -5,15 +5,11 @@ on:
     branches:
       - develop
       - master
+      - "release/**"
   push:
     branches:
       - develop
       - master
-  pull_request:
-    branches:
-      - develop
-      - master
-      - "release/**"
   workflow_dispatch:
 
 permissions:
