@@ -511,14 +511,14 @@ export function SearchLayout() {
             <input
               id="search-input"
               ref={searchInputRef}
-              type="search"
+              type="text"
               inputMode="search"
               role="searchbox"
               aria-label="맥락 검색어 입력"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="메일, 일정, 파일, 사람, 의사결정 로그 맥락 검색..."
-              className="h-12 w-full rounded-full border-2 border-primary/20 bg-background pl-12 pr-12 text-base shadow-sm transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 [&::-webkit-search-cancel-button]:hidden"
+              className="h-12 w-full rounded-full border-2 border-primary/20 bg-background pl-12 pr-12 text-base shadow-sm transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10"
             />
             {query && (
               <button
@@ -764,7 +764,7 @@ export function SearchLayout() {
                 </section>
 
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-bold">관계 그래프와 타임라인</h2>
+                  <h2 className="text-lg font-bold">관계 맥락과 타임라인</h2>
                   <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                     source/thread API 연결
                   </span>
