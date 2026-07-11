@@ -57,11 +57,19 @@ class MockAsyncSession:
             connector_events or [],
         ]
         self.execute_calls = 0
+        self.added: list[object] = []
+        self.committed = False
 
     async def execute(self, query):
         result = self.results[self.execute_calls]
         self.execute_calls += 1
         return MockResult(_scope_rows_for_query(query, result))
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def commit(self):
+        self.committed = True
 
 
 def _scope_rows_for_query(query, rows):
@@ -411,6 +419,164 @@ def test_access_surface_redacts_sequential_ids_and_credentials(admin_client):
         "audit_id",
     ):
         assert forbidden not in serialized
+
+
+def test_permission_change_intent_records_provider_denial_without_external_write(
+    admin_client,
+    mock_db,
+):
+    response = admin_client.post(
+        "/api/security/permission-change-intent",
+        json={"decision": "deny_external_write", "resource_type": "provider_secret"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body == {
+        "decision": "deny_external_write",
+        "resource_type": "provider_secret",
+        "allowed": False,
+        "reason": "organization_denied",
+        "evidence_label": "policy_engine_evidence",
+        "audit_event": "security.permission_change_intent",
+        "provider_write_executed": False,
+        "denial_result": "provider_denied_by_policy",
+        "observed_at": body["observed_at"],
+    }
+    assert body["observed_at"].endswith("Z")
+    assert mock_db.committed is True
+    assert len(mock_db.added) == 1
+    audit_event = mock_db.added[0]
+    assert isinstance(audit_event, SecurityAuditEvent)
+    assert audit_event.event_action == "permission_change_intent"
+    assert audit_event.resource_type == "provider_secret"
+    assert audit_event.actor_user_id == "admin"
+    assert audit_event.actor_role == "tenant_admin"
+    assert audit_event.organization_id == "org-acme"
+    assert audit_event.workspace_id == "workspace-org-acme"
+    assert audit_event.evidence_source == "api.security.permission_change_intent"
+    assert audit_event.detail_text == (
+        "permission_intent=deny_external_write; "
+        "resource_type=provider_secret; "
+        "policy_reason=organization_denied; "
+        "provider_write_executed=false"
+    )
+    assert "sk-" not in response.text
+    assert "credential" not in response.text
+    assert "org-outside-scope" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("request_body", "expected_allowed", "expected_reason", "expected_denial_result"),
+    [
+        (
+            {"decision": "allow_writeback", "resource_type": "webdav_repository"},
+            True,
+            "allowed",
+            "approval_required_before_external_write",
+        ),
+        (
+            {"decision": "deny_workspace_write", "resource_type": "webdav_repository"},
+            False,
+            "workspace_denied",
+            "provider_denied_by_policy",
+        ),
+        (
+            {"decision": "deny_region_export", "resource_type": "data_export"},
+            False,
+            "data_region_denied",
+            "provider_denied_by_policy",
+        ),
+        (
+            {"decision": "deny_missing_consent", "resource_type": "caldav_source"},
+            False,
+            "consent_denied",
+            "provider_denied_by_policy",
+        ),
+    ],
+)
+def test_permission_change_intent_records_policy_variants_without_provider_write(
+    admin_client,
+    mock_db,
+    request_body,
+    expected_allowed,
+    expected_reason,
+    expected_denial_result,
+):
+    response = admin_client.post(
+        "/api/security/permission-change-intent",
+        json=request_body,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["decision"] == request_body["decision"]
+    assert body["resource_type"] == request_body["resource_type"]
+    assert body["allowed"] is expected_allowed
+    assert body["reason"] == expected_reason
+    assert body["provider_write_executed"] is False
+    assert body["denial_result"] == expected_denial_result
+    assert mock_db.committed is True
+    assert len(mock_db.added) == 1
+    audit_event = mock_db.added[0]
+    assert isinstance(audit_event, SecurityAuditEvent)
+    assert audit_event.event_action == "permission_change_intent"
+    assert audit_event.resource_type == request_body["resource_type"]
+    assert audit_event.detail_text == (
+        f"permission_intent={request_body['decision']}; "
+        f"resource_type={request_body['resource_type']}; "
+        f"policy_reason={expected_reason}; "
+        "provider_write_executed=false"
+    )
+    assert "workspace-outside-scope" not in response.text
+    assert settings.SECONDARY_DATA_REGION not in response.text
+    assert "provider.write" not in response.text
+
+
+def test_permission_change_intent_requires_admin_role(mock_db):
+    async def override_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(
+            app,
+            headers={
+                "X-User-Id": "member",
+                "X-User-Role": "member",
+                "X-Organization-Id": "org-acme",
+            },
+        ) as client:
+            response = client.post(
+                "/api/security/permission-change-intent",
+                json={
+                    "decision": "allow_writeback",
+                    "resource_type": "webdav_repository",
+                },
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 403
+    assert "Admin role is required" in response.text
+    assert mock_db.added == []
+    assert mock_db.committed is False
+
+
+def test_permission_change_intent_rejects_extra_client_controlled_fields(
+    admin_client,
+):
+    response = admin_client.post(
+        "/api/security/permission-change-intent",
+        json={
+            "decision": "deny_external_write",
+            "resource_type": "provider_secret",
+            "x-user-id": "attacker",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "extra_forbidden" in response.text
 
 
 def test_member_surface_only_returns_owned_sources(mock_db):

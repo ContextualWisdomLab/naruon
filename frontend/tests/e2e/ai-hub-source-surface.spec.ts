@@ -48,16 +48,16 @@ for (const viewport of viewports) {
     await expect(
       page.getByRole('region', { name: '맥락 종합' }).getByRole('heading', { name: '의사결정 로그 맥락 종합' }),
     ).toBeVisible();
-    await page.getByRole('button', { name: /워크플로우/ }).click();
+    await page.getByRole('tab', { name: /워크플로우/ }).click();
     await expect(
-      page.getByRole('region', { name: '워크플로우' }).getByRole('heading', { name: '의사결정 로그 자동 작성' }),
+      page.getByRole('tabpanel', { name: '워크플로우' }).getByRole('heading', { name: '의사결정 로그 자동 작성' }),
     ).toBeVisible();
-    await page.getByRole('button', { name: /AI 에이전트/ }).click();
-    await expect(page.getByRole('region', { name: 'AI 에이전트' }).getByRole('heading', { name: 'Primary OpenAI' })).toBeVisible();
-    await page.getByRole('button', { name: /평가/ }).click();
-    await expect(page.getByRole('region', { name: '평가' }).getByRole('heading', { name: '연동 준비도' })).toBeVisible();
-    await page.getByRole('button', { name: /실행 이력/ }).click();
-    await expect(page.getByRole('region', { name: '실행 이력' }).getByText('agent_run_records')).toBeVisible();
+    await page.getByRole('tab', { name: /판단 보조/ }).click();
+    await expect(page.getByRole('tabpanel', { name: '판단 보조' }).getByRole('heading', { name: 'Primary OpenAI' })).toBeVisible();
+    await page.getByRole('tab', { name: /평가/ }).click();
+    await expect(page.getByRole('tabpanel', { name: '평가' }).getByRole('heading', { name: '연동 준비도' })).toBeVisible();
+    await page.getByRole('tab', { name: /실행 이력/ }).click();
+    await expect(page.getByRole('tabpanel', { name: '실행 이력' }).getByText('agent_run_records')).toBeVisible();
 
     const horizontalOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
