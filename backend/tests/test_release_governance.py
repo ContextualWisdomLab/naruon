@@ -933,6 +933,8 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert ".base.sha" in workflow
     assert "TRUSTED_BASE_SHA" in workflow
     assert "github.event.pull_request.base.sha" in workflow
+    assert "base_sha:" in workflow
+    assert "github.event.inputs.base_sha" in workflow
     assert "Using event-provided trusted governance base SHA" in workflow
     assert "github.sha" not in workflow
     assert "tarball/${trusted_ref}" in workflow
