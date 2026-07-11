@@ -16,18 +16,38 @@ spec:
         app: postgres-db
     spec:
       securityContext:
+        fsGroup: 999
         runAsNonRoot: true
         runAsUser: 999
         runAsGroup: 999
-        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
-        - name: postgres-tmp
-          emptyDir: {}
-        - name: postgres-run
-          emptyDir: {}
+      - name: postgres-run
+        emptyDir: {}
+      - name: postgres-tmp
+        emptyDir: {}
       containers:
       - name: postgres
-        image: pgvector/pgvector:pg16
+        image: docker.io/pgvector/pgvector:pg16
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 999
+          runAsGroup: 999
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
         env:
         - name: POSTGRES_USER
           value: postgres
@@ -38,17 +58,24 @@ spec:
               key: password
         - name: POSTGRES_DB
           value: ai_email
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         ports:
         - containerPort: 5432
           name: postgres
-        securityContext:
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - ALL
         volumeMounts:
-          - name: postgres-tmp
-            mountPath: /tmp
-          - name: postgres-run
-            mountPath: /var/run/postgresql
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-run
+          mountPath: /var/run/postgresql
+        - name: postgres-tmp
+          mountPath: /tmp
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
