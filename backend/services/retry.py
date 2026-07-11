@@ -8,8 +8,8 @@ their existing fail-closed behavior.
 
 import asyncio
 import logging
-import random
 from collections.abc import Awaitable, Callable
+from secrets import randbelow
 from typing import TypeVar
 
 import openai
@@ -29,6 +29,13 @@ TRANSIENT_OPENAI_ERRORS: tuple[type[Exception], ...] = (
 DEFAULT_PROVIDER_RETRIES = 2
 DEFAULT_BASE_DELAY_SECONDS = 0.5
 MAX_DELAY_SECONDS = 8.0
+JITTER_RESOLUTION = 1_000_000
+
+
+def _jitter_seconds(max_seconds: float) -> float:
+    if max_seconds <= 0:
+        return 0.0
+    return (randbelow(JITTER_RESOLUTION + 1) / JITTER_RESOLUTION) * max_seconds
 
 
 async def retry_transient(
@@ -54,7 +61,7 @@ async def retry_transient(
             if attempt >= retries:
                 raise
             delay = min(base_delay_seconds * (2**attempt), MAX_DELAY_SECONDS)
-            delay += random.uniform(0, delay / 2)
+            delay += _jitter_seconds(delay / 2)
             attempt += 1
             logger.warning(
                 "Transient %s failure (attempt %d/%d), retrying in %.2fs: %s",
