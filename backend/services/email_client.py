@@ -416,9 +416,12 @@ class _PinnedImplicitTlsSMTP(aiosmtplib.SMTP):
         # hostname="localhost" default. The socket is already connected to the
         # validated address; SNI is supplied separately during TLS setup.
         if kwargs.get("sock") is not None:
-            kwargs.setdefault("hostname", None)
             kwargs.setdefault("port", None)
             kwargs.setdefault("socket_path", None)
+            if kwargs.get("use_tls") and kwargs.get("hostname") is None:
+                kwargs["hostname"] = tls_server_hostname
+            else:
+                kwargs.setdefault("hostname", None)
         super().__init__(**kwargs)
 
     async def _create_connection(self, timeout: float | None):
