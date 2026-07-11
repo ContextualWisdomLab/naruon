@@ -131,7 +131,6 @@ registry = ToolRegistry()
 
 # Initialize default tools
 
-
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
     return f"Mock execution successful with params: {encoded}"

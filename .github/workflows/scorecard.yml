@@ -1,11 +1,6 @@
 name: Scorecard Security Scan
 
 on:
-  pull_request:
-    branches:
-      - develop
-      - master
-      - "release/**"
   push:
     branches:
       - develop

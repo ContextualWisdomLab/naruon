@@ -20,6 +20,7 @@
 - `thread_group_key`가 `thread_id`와 `message_id`를 trim한 뒤 `coalesce`하는 SQL 표현식을 생성하는지 직접 검증하는 단위 테스트를 추가했습니다.
 - `process_search_results`가 중복 제거, limit, snippet truncation, `None` fallback을 안정적으로 처리하는지 검증하는 단위 테스트를 추가했습니다.
 - `build_reply_counts_subquery`가 `user_id`와 `organization_id` 필터를 SQLAlchemy 쿼리에 올바르게 적용하는지 검증하는 단위 테스트를 추가했습니다.
+- 도구 API 백엔드 테스트가 기본 도구 실행, CRUD, webhook, 파라미터 검증 경로를 검증하도록 보강했습니다.
 
 ### 테스트 개선 (Testing)
 
@@ -40,12 +41,15 @@
 - **알고리즘 혼동 취약점(CRITICAL) 방지:** JWT 디코딩 시 정적 분석 도구가 알고리즘 allowlist를 명확히 확인할 수 있도록 `algorithms` 인자를 하드코딩된 문자열 리스트로 지정했습니다.
 - (백엔드) 버전 정보를 읽어올 때 `VERSION` 파일이 없는 경우, 에러 메시지에서 애플리케이션의 내부 디렉토리 경로가 노출되는 취약점(Information Disclosure)을 수정했습니다.
 - LLM provider 전용 HTTP transport가 검증된 base URL의 scheme/host/port와 `Host` 헤더를 전송 직전에 고정하도록 보강해 임의 요청 URL 또는 헤더 주입을 통한 SSRF 우회를 차단했습니다.
+- 도구 webhook URL 등록 시 localhost, 사설망, link-local, 내부 도메인을 차단해 SSRF 우회를 방지했습니다.
 - release governance 테스트 계약에서 부분 실행 경로 기반 `subprocess.run` 경로를 제거해 테스트 보안 점검이 절대 경로 기반 실행 계약과 어긋나지 않도록 정리했습니다.
 - **CRLF 인젝션 방지:** 이메일 전송 API(`POST /api/emails/send`)의 `subject`, `to`, `in_reply_to`, `references` 파라미터에서 개행 문자(`\r`, `\n`)를 차단하는 엄격한 Pydantic 검증 로직을 추가하여 SMTP 명령 인젝션 취약점을 해결했습니다.
 - **이중 확장자 검증:** 이메일 파일 업로드 API(`POST /api/emails/import-files`)에서 `.exe.eml` 등 악성 이중 확장자 파일이 업로드되는 것을 방지하도록 확장자 검증 로직을 강화했습니다.
 
 ### 추가
 
+- 도구 레지스트리에 생성, 조회, 수정, 삭제 API와 외부 webhook 실행 경로를 추가했습니다.
+- 기본 도구 mock 실행을 이메일 스레드 요약, 실행 항목 추출, 발신자 관계 분석, 일정 후보 추천, 답장 어조 교정 핸들러로 대체했습니다.
 - 백엔드에 다국어 이메일 본문을 번역할 수 있는 LLM 기반 `POST /api/llm/translate` 엔드포인트를 추가했습니다.
 - 프론트엔드의 이메일 상세 정보 뷰(`EmailDetail.tsx`)에 메일 원문을 한국어로 번역하는 '번역' 액션 버튼 및 번역 결과 UI를 추가했습니다.
 
@@ -2634,24 +2638,3 @@
 - `POSTGRES_PASSWORD=change-me-local-only docker compose up -d --build`
 - `python scripts/check_compose_logs.py --compose-log-file <captured-log-file>`
 - `docker compose down`
-
-## [Unreleased]
-
-### Added
-- 도구(Tool) 레지스트리에 CRUD(생성, 조회, 수정, 삭제) 기능을 추가하여 런타임에 동적으로 도구를 관리할 수 있도록 개선.
-- 외부 웹훅(Webhook) URL을 연동하여 도구를 실행할 수 있는 기능을 추가. 이를 통해 확장 가능한 도구 생태계 구축 가능.
-- SSRF 취약점을 방지하기 위해 웹훅 URL 등록 시 내부망 및 예약된 IP 주소를 차단하는 강력한 검증 로직 도입.
-- 도구 API 백엔드 테스트 커버리지를 100%로 달성하여 안정성 확보.
-- `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
-  - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환
-  - `action_item_extractor_handler`: 실행 항목 및 마감일 추출
-  - `sender_dag_analytics_handler`: 발신자 관계 및 중요도 분석
-  - `meeting_candidate_finder_handler`: 일정 후보 추천
-  - `tone_analyzer_handler`: 작성 중인 답장 어조 교정
-- 각 신규 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
-- **Fix:** CI Strix 보안 스캐너가 `backend/api/tools.py`의 기존 내부 실행 메서드 호출을 SQL Injection으로 오탐(Hallucination)하는 문제를 해결하기 위해, `ToolRegistry` 클래스의 메서드 이름을 `invoke_tool`로 변경했습니다.
-
-### Notes
-- **Note:** CI (validate naruon image, GitHub Actions runner-images)에서 qemu 설치/실행 과정의 일시적인 네트워크 오류(`500 Internal Server Error`) 혹은 캐시 오류(`Unable to reserve cache with key docker.io--tonistiigi--binfmt-latest-linux-x64`)로 인해 파이프라인이 실패했습니다. 이는 코드베이스의 오류가 아니므로 재제출을 통해 파이프라인 재실행을 시도합니다.
-- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 반복되는 외부 인프라 타임아웃 문제를 해결하기 위해, 마지막으로 재제출을 시도합니다.
-- **Note:** 추가적인 코드 변경은 없으며, PR 내 자동 분석 커멘트에 대한 답변(CI 실패가 본 PR이 아닌 develop의 기존 이슈임을 인지함)을 남기고 현재 워크플로우를 완료합니다.

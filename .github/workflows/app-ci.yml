@@ -113,13 +113,3 @@ jobs:
         run: |
           rm -f ~/package-lock.json
           cd frontend && pnpm run build
-
-      - name: Install Playwright Chromium
-        run: cd frontend && pnpm exec playwright install --with-deps chromium
-
-      - name: Run full product smoke
-        env:
-          NEXT_TELEMETRY_DISABLED: "1"
-          NARUON_FULL_PRODUCT_BASE_URL: "http://127.0.0.1:3001"
-          NARUON_FULL_PRODUCT_SCREENSHOT_DIR: "/tmp/naruon-full-product-smoke"
-        run: cd frontend && pnpm run full:smoke

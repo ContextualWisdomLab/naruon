@@ -102,10 +102,10 @@ function getSafeErrorSummary(error: unknown, fallback: string) {
 
 const TEMPLATE_GROUPS = [
   {
-    name: '업무 종합',
+    name: '업무 요약',
     items: [
-      { id: 'summary', title: '문서 종합/초안 작성', favorite: true },
-      { id: 'insight', title: '데이터 분석 판단 포인트' },
+      { id: 'summary', title: '문서 요약/초안 작성', favorite: true },
+      { id: 'insight', title: '데이터 분석 인사이트' },
       { id: 'mail', title: '이메일 작성' },
       { id: 'automation', title: '업무 자동화 제안' },
     ],
@@ -114,7 +114,7 @@ const TEMPLATE_GROUPS = [
     name: '회의/리포트',
     items: [
       { id: 'meeting', title: '회의록 작성' },
-      { id: 'decision', title: '의사결정 종합' },
+      { id: 'decision', title: '의사결정 요약' },
       { id: 'weekly', title: '주간 보고서 작성' },
     ],
   },
@@ -148,7 +148,7 @@ const MODEL_OPTIONS = [
   { label: 'OpenAI Compatible', value: 'provider-default' },
 ];
 const RESPONSE_STYLES = ['전문적이고 간결하게', '친근하고 상세하게', '실행 항목 중심'];
-const OUTPUT_FORMATS = ['마크다운 (Markdown)', 'JSON 구조화', '짧은 종합'];
+const OUTPUT_FORMATS = ['마크다운 (Markdown)', 'JSON 구조화', '짧은 요약'];
 
 const QUALITY_CHECKS = ['요구사항 충족', '구조 및 가독성', '정확성/사실성', '근거/출처 포함', '톤 & 스타일 일관성'];
 
@@ -160,10 +160,10 @@ const VERSION_HISTORY = [
 ];
 
 const RECENT_TEST_RESULTS = [
-  { time: '2024.05.25 10:22', case: '분기 성과 보고서 종합', result: '성공', score: 92, tokens: '1,024', duration: '2.8초' },
+  { time: '2024.05.25 10:22', case: '분기 성과 보고서 요약', result: '성공', score: 92, tokens: '1,024', duration: '2.8초' },
   { time: '2024.05.25 10:18', case: '고객 피드백 분석', result: '성공', score: 88, tokens: '1,156', duration: '3.1초' },
   { time: '2024.05.25 10:12', case: '경쟁사 분석 리포트', result: '부분 성공', score: 76, tokens: '1,432', duration: '3.6초' },
-  { time: '2024.05.25 10:05', case: '제품 출시 계획 종합', result: '성공', score: 95, tokens: '987', duration: '2.6초' },
+  { time: '2024.05.25 10:05', case: '제품 출시 계획 요약', result: '성공', score: 95, tokens: '987', duration: '2.6초' },
 ];
 
 const DEPLOYMENT_HISTORY = [
