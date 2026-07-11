@@ -6,11 +6,6 @@ from collections.abc import Callable
 from typing import Any, Dict, List, Optional
 
 import httpx
-from core.url_validation import (
-    _normalize_host,
-    _reject_unsafe_ip_literal,
-    _resolve_global_addresses,
-)
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -95,7 +90,7 @@ class ToolRegistry:
     def get(self, code: str) -> Optional[ToolInfo]:
         return self._tools.get(code)
 
-    async def invoke_tool(self, code: str, params: Dict[str, Any]) -> Any:
+    async def execute(self, code: str, params: Dict[str, Any]) -> Any:
         handler = self._handlers.get(code)
         if not handler:
             raise ValueError(f"No handler registered for tool {code}")
@@ -135,99 +130,51 @@ registry = ToolRegistry()
 
 
 # Initialize default tools
-
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
     return f"Mock execution successful with params: {encoded}"
 
 
-async def thread_summarizer_handler(params: Dict[str, Any]) -> Any:
-    thread_id = params.get("thread_id", "")
-    return {
-        "summary": f"이메일 스레드 {thread_id}에 대한 요약입니다. 여러 논의 사항이 정리되었습니다.",
-        "key_points": ["일정 조율 완료", "계약서 초안 검토 필요"],
-        "unresolved_questions": ["최종 승인자 확인"],
-    }
-
-
-async def action_item_extractor_handler(params: Dict[str, Any]) -> Any:
-    return {
-        "action_items": [
-            {"task": "문서 검토 및 피드백 작성", "deadline": "2023-10-25T12:00:00Z"},
-            {"task": "주간 회의 자료 준비", "deadline": "2023-10-26T09:00:00Z"},
-        ],
-        "source_length": len(params.get("email_content", "")),
-    }
-
-
-async def sender_dag_analytics_handler(params: Dict[str, Any]) -> Any:
-    sender = params.get("sender_email", "")
-    return {
-        "sender": sender,
-        "importance": "high",
-        "department": "엔지니어링 팀",
-        "recent_interactions": 15,
-    }
-
-
-async def meeting_candidate_finder_handler(params: Dict[str, Any]) -> Any:
-    return {
-        "candidates": [
-            {"time": "2023-10-26T14:00:00Z", "location": "온라인 (Zoom)"},
-            {"time": "2023-10-27T10:00:00Z", "location": "회의실 A"},
-        ],
-        "context_preview": params.get("email_content", "")[:30] + "...",
-    }
-
-
-async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
-    draft = params.get("draft_content", "")
-    rel = params.get("recipient_relationship", "unknown")
-    return {
-        "refined_draft": f"[{rel} 대상 교정본]\n\n{draft}",
-        "suggestions": [
-            "도입부를 조금 더 정중하게 수정했습니다.",
-            "명확성을 위해 불필요한 부사를 제거했습니다.",
-        ],
-        "tone_score": 85,
-    }
+import ipaddress
+import socket
 
 
 def is_safe_webhook_url(url: str) -> bool:
-    try:
-        validate_webhook_url(url)
-    except ValueError:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
         return False
+    hostname = parsed.hostname or ""
+    if not hostname:
+        return False
+
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False
+
+    for res in addr_info:
+        ip = res[4][0]
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+            if (
+                ip_obj.is_private
+                or ip_obj.is_loopback
+                or ip_obj.is_link_local
+                or ip_obj.is_multicast
+                or ip_obj.is_unspecified
+            ):
+                return False
+        except ValueError:
+            return False
+
     return True
 
 
-def validate_webhook_url(url: str) -> None:
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme.lower() != "https":
-        raise ValueError("Webhook URL must use https")
-    if parsed.username or parsed.password:
-        raise ValueError("Webhook URL must not include userinfo")
-    if parsed.fragment:
-        raise ValueError("Webhook URL must not include a fragment")
-    if not parsed.hostname:
-        raise ValueError("Webhook URL must include a host")
-
-    hostname = _normalize_host(parsed.hostname)
-    if hostname.endswith(".internal") or hostname.endswith(".local"):
-        raise ValueError("Webhook URL host must not use an internal domain suffix")
-    _reject_unsafe_ip_literal("Webhook URL", hostname)
-    try:
-        port = parsed.port or 443
-    except ValueError as exc:
-        raise ValueError("Webhook URL port must be valid") from exc
-    _resolve_global_addresses("Webhook URL", hostname, port)
-
-
 def make_webhook_handler(webhook_url: str) -> ToolHandler:
-    validate_webhook_url(webhook_url)
+    if not is_safe_webhook_url(webhook_url):
+        raise ValueError("Invalid or unsafe webhook URL")
 
     async def handler(params: Dict[str, Any]) -> Any:
-        validate_webhook_url(webhook_url)
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
@@ -273,7 +220,7 @@ registry.register(
         category="이메일 분석",
         parameters={"thread_id": "string"},
     ),
-    thread_summarizer_handler,
+    mock_handler,
 )
 
 registry.register(
@@ -284,7 +231,7 @@ registry.register(
         category="작업 관리",
         parameters={"email_content": "string"},
     ),
-    action_item_extractor_handler,
+    mock_handler,
 )
 
 registry.register(
@@ -295,7 +242,7 @@ registry.register(
         category="관계 인텔리전스",
         parameters={"sender_email": "string"},
     ),
-    sender_dag_analytics_handler,
+    mock_handler,
 )
 
 registry.register(
@@ -306,7 +253,7 @@ registry.register(
         category="일정 관리",
         parameters={"email_content": "string"},
     ),
-    meeting_candidate_finder_handler,
+    mock_handler,
 )
 
 registry.register(
@@ -317,7 +264,7 @@ registry.register(
         category="커뮤니케이션",
         parameters={"draft_content": "string", "recipient_relationship": "string"},
     ),
-    tone_analyzer_handler,
+    mock_handler,
 )
 
 
@@ -345,9 +292,7 @@ def create_tool(tool_data: ToolCreate) -> ToolInfo:
         try:
             handler = make_webhook_handler(tool_info.webhook_url)
         except ValueError as e:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid or unsafe webhook URL: {e}"
-            )
+            raise HTTPException(status_code=400, detail=str(e))
     else:
         handler = mock_handler
 
@@ -384,9 +329,7 @@ def update_tool(code: str, tool_data: ToolUpdate) -> ToolInfo:
             try:
                 handler = make_webhook_handler(update_data["webhook_url"])
             except ValueError as e:
-                raise HTTPException(
-                    status_code=400, detail=f"Invalid or unsafe webhook URL: {e}"
-                )
+                raise HTTPException(status_code=400, detail=str(e))
         else:
             handler = mock_handler
 
@@ -423,7 +366,7 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
         raise HTTPException(status_code=400, detail="Tool is not active")
 
     try:
-        result = await registry.invoke_tool(code, request.parameters)
+        result = await registry.execute(code, request.parameters)
         return ExecuteResponse(
             status="success", result=result, message="Execution successful"
         )

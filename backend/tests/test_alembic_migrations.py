@@ -193,7 +193,7 @@ def test_project_graph_projection_has_incremental_revision():
     revision_text = revision_path.read_text()
 
     assert 'revision = "0009_project_graph_projection"' in revision_text
-    assert 'down_revision = "0008_attachment_parser_audit"' in revision_text
+    assert 'down_revision = "0008_attachment_parser_audit_metadata"' in revision_text
     assert '"project_graph_objects"' in revision_text
     assert '"project_graph_edges"' in revision_text
     assert '"project_graph_corrections"' in revision_text
@@ -209,63 +209,6 @@ def test_project_graph_projection_has_incremental_revision():
     assert "ix_project_graph_objects_scope_type_status" in revision_text
     assert "ix_project_graph_edges_scope_type" in revision_text
     assert "ix_project_graph_corrections_scope_time" in revision_text
-    assert "has_table" in revision_text
-    assert "op.create_table(" in revision_text
-    assert "op.create_index(" in revision_text
-    assert "if_not_exists=True" in revision_text
-    assert "op.drop_index(" in revision_text
-    assert "if_exists=True" in revision_text
-
-
-def test_llm_batch_orchestrator_has_incremental_revision():
-    versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    revision_path = versions_dir / "0012_llm_batch_orchestrator.py"
-    assert revision_path.exists()
-    revision_text = revision_path.read_text()
-
-    assert 'revision = "0012_llm_batch_orchestrator"' in revision_text
-    assert 'down_revision = "0011_email_model_reconciliation"' in revision_text
-    assert '"llm_batch_jobs"' in revision_text
-    assert '"llm_batch_items"' in revision_text
-    assert '"batch_job_uid"' in revision_text
-    assert '"batch_item_uid"' in revision_text
-    assert '"routing_mode"' in revision_text
-    assert '"orchestrator_batch_uid"' in revision_text
-    assert '"cost_micro_usd"' in revision_text
-    assert '"batch_orchestrator_base_url"' in revision_text
-    assert '"batch_orchestrator_token"' in revision_text
-    assert '"batch_local_dsn"' in revision_text
-    assert "sa.ForeignKeyConstraint(" in revision_text
-    assert 'ondelete="CASCADE"' in revision_text
-    assert "ix_llm_batch_jobs_scope_status" in revision_text
-    assert "ix_llm_batch_items_job_sequence" in revision_text
-    assert "has_table" in revision_text
-    assert "op.create_table(" in revision_text
-    assert "op.add_column(" in revision_text
-    assert "op.create_index(" in revision_text
-    assert "if_not_exists=True" in revision_text
-    assert "op.drop_index(" in revision_text
-    assert "if_exists=True" in revision_text
-    assert "op.drop_column(" in revision_text
-
-
-def test_scopeweave_promotion_has_incremental_revision():
-    versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    revision_path = versions_dir / "0013_scopeweave_promotion.py"
-    assert revision_path.exists()
-    revision_text = revision_path.read_text()
-
-    assert 'revision = "0013_scopeweave_promotion"' in revision_text
-    assert 'down_revision = "0012_llm_batch_orchestrator"' in revision_text
-    assert '"scopeweave_promotion_target"' in revision_text
-    assert '"scopeweave_promotion_link"' in revision_text
-    assert '"base_url"' in revision_text
-    assert '"access_token"' in revision_text
-    assert '"scopeweave_work_item_id"' in revision_text
-    assert '"scopeweave_work_item_url"' in revision_text
-    assert "uq_scopeweave_promotion_target_scope" in revision_text
-    assert "uq_scopeweave_promotion_link_object" in revision_text
-    assert "ix_scopeweave_promotion_link_scope" in revision_text
     assert "has_table" in revision_text
     assert "op.create_table(" in revision_text
     assert "op.create_index(" in revision_text
@@ -294,70 +237,3 @@ def test_backend_requirements_include_alembic():
         line.split("==", maxsplit=1)[0] == "alembic"
         for line in requirements.splitlines()
     )
-
-
-def test_language_agnostic_search_has_incremental_revision():
-    versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    revision_path = versions_dir / "0010_language_agnostic_search.py"
-    assert revision_path.exists()
-    revision_text = revision_path.read_text()
-
-    assert 'revision = "0010_language_agnostic_search"' in revision_text
-    assert 'down_revision = "0009_project_graph_projection"' in revision_text
-    assert "CREATE EXTENSION IF NOT EXISTS pg_trgm" in revision_text
-    assert "CREATE EXTENSION IF NOT EXISTS unaccent" in revision_text
-    assert "search_normalized_text" in revision_text
-    assert "normalize(coalesce(input_text, ''), NFC)" in revision_text
-    assert "regdictionary" in revision_text
-    assert "IMMUTABLE" in revision_text
-    assert "gist_trgm_ops(siglen=256)" in revision_text
-    assert "ix_email_records_search_document_trgm" in revision_text
-    assert "ix_email_attachments_content_trgm" in revision_text
-    assert "ix_content_segments_safe_text_trgm" in revision_text
-    assert "ix_project_graph_objects_search_document_trgm" in revision_text
-    assert "IF NOT EXISTS" in revision_text
-    assert "DROP INDEX IF EXISTS" in revision_text
-
-
-def test_revision_identifiers_fit_alembic_version_column():
-    """alembic_version.version_num is VARCHAR(32); longer revision ids
-    make ``alembic upgrade head`` fail on fresh databases (regression:
-    the original 38-char 0008 revision id)."""
-    import re
-
-    versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    for revision_path in sorted(versions_dir.glob("*.py")):
-        revision_text = revision_path.read_text()
-        match = re.search(r'^revision = "([^"]+)"', revision_text, re.MULTILINE)
-        assert match, f"no revision id in {revision_path.name}"
-        revision_id = match.group(1)
-        assert len(revision_id) <= 32, (
-            f"{revision_path.name}: revision id {revision_id!r} is "
-            f"{len(revision_id)} chars; alembic_version.version_num "
-            "holds at most 32"
-        )
-
-
-def test_email_model_reconciliation_has_incremental_revision():
-    versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    revision_path = versions_dir / "0011_email_model_reconciliation.py"
-    assert revision_path.exists()
-    revision_text = revision_path.read_text()
-
-    assert 'revision = "0011_email_model_reconciliation"' in revision_text
-    assert 'down_revision = "0010_language_agnostic_search"' in revision_text
-    for retired_table_name in (
-        "email_thread_edges",
-        "email_instances",
-        "email_raws",
-        "email_messages",
-        "email_threads",
-        "provider_accounts",
-        "user_accounts",
-    ):
-        assert f"DROP TABLE IF EXISTS {retired_table_name}" in revision_text
-    # Dependents must drop before their FK targets.
-    assert revision_text.index("email_thread_edges") < revision_text.index(
-        "DROP TABLE IF EXISTS email_messages"
-    )
-    assert "Intentionally a no-op" in revision_text

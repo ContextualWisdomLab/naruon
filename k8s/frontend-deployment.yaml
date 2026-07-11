@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: naruon-dev
   labels:
     app: frontend
 spec:
@@ -16,47 +15,42 @@ spec:
         app: frontend
     spec:
       imagePullSecrets:
-        - name: ghcr-registry
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-      volumes:
-        - name: frontend-tmp
-          emptyDir: {}
-        - name: frontend-next-cache
-          emptyDir: {}
+      - name: ghcr-registry
       containers:
       - name: frontend
-        image: ghcr.io/contextualwisdomlab/ai_email_client-frontend:REPLACE_ME_VERSION
+        image: ghcr.io/seongho-bae/ai_email_client-frontend:REPLACE_ME_VERSION
         imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        env:
+        - name: BACKEND_INTERNAL_URL
+          value: http://backend:8000
+        - name: ALLOW_DOCKER_BACKEND_INTERNAL_URL
+          value: '1'
         securityContext:
+          readOnlyRootFilesystem: true
+          runAsUser: 10001
+          runAsGroup: 10001
           allowPrivilegeEscalation: false
           capabilities:
             drop:
-              - ALL
-          readOnlyRootFilesystem: true
-          runAsGroup: 10001
-          runAsNonRoot: true
-          runAsUser: 10001
+            - ALL
           seccompProfile:
             type: RuntimeDefault
-        ports:
-        - containerPort: 3000
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
         volumeMounts:
-        - name: frontend-tmp
+        - name: tmp-volume
           mountPath: /tmp
-        - name: frontend-next-cache
-          mountPath: /app/.next/cache
-        env:
-          - name: BACKEND_INTERNAL_URL
-            value: "http://backend:8000"
-          - name: ALLOW_DOCKER_BACKEND_INTERNAL_URL
-            value: "1"
+        - name: next-volume
+          mountPath: /app/.next
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: next-volume
+        emptyDir: {}

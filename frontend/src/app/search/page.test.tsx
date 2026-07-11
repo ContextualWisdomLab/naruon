@@ -164,7 +164,7 @@ describe("SearchPage", () => {
     expect(container.textContent).toContain("증거 바인딩");
     expect(container.textContent).toContain("맥락 정보");
     expect(container.textContent).toContain("메일 열기");
-    expect(container.textContent).toContain("관계 맥락과 타임라인");
+    expect(container.textContent).toContain("관계 그래프와 타임라인");
     expect(container.textContent).toContain("발신자 DAG");
     expect(container.textContent).toContain("track_reply_and_tasks");
     expect(container.textContent).toContain("source=<q2@example.com>");

@@ -9,45 +9,6 @@ from services.knowledge_extractor import extract_knowledge_from_self_sent
 
 logger = logging.getLogger(__name__)
 
-NEWSLETTER_TERMS = (
-    "unsubscribe",
-    "view in browser",
-    "manage preferences",
-    "newsletter",
-    "mailing list",
-)
-NEWSLETTER_LOCAL_PARTS = ("newsletter", "news", "updates", "digest", "noreply", "no-reply")
-VENDOR_TERMS = (
-    "invoice",
-    "receipt",
-    "payment",
-    "billing",
-    "subscription",
-    "shipment",
-    "support ticket",
-    "service renewal",
-    "purchase order",
-)
-VENDOR_LOCAL_PARTS = ("billing", "invoice", "support", "orders", "accounts", "vendor")
-CLIENT_TERMS = (
-    "proposal",
-    "contract",
-    "statement of work",
-    "sow",
-    "deliverable",
-    "pricing",
-    "renewal",
-    "budget approval",
-    "kickoff",
-)
-PERSONAL_EMAIL_DOMAINS = {
-    "gmail.com",
-    "hotmail.com",
-    "icloud.com",
-    "outlook.com",
-    "yahoo.com",
-}
-
 
 @dataclass
 class RelationshipData:
@@ -92,52 +53,30 @@ class OntologyService:
         """
         Analyze content to build the user's sender relationship graph.
         """
+        # A simple stub logic for Phase 10 implementation
         relationship_type = "Unknown"
         confidence = 0.5
-        signals: list[str] = []
-        content = email_content.lower()
-        user_domain = _email_domain(user_email)
-        sender_domain = _email_domain(sender_email)
-        sender_local = _email_local_part(sender_email)
 
-        if _contains_any(content, NEWSLETTER_TERMS) or sender_local in NEWSLETTER_LOCAL_PARTS:
+        if "unsubscribe" in email_content.lower():
             relationship_type = "Newsletter"
             confidence = 0.9
-            signals.append("bulk_sender")
-        elif user_domain and sender_domain and user_domain == sender_domain:
-            relationship_type = "Colleague"
-            confidence = 0.85
-            signals.append("same_domain")
-        else:
-            vendor_score = _term_score(content, VENDOR_TERMS) + int(
-                sender_local in VENDOR_LOCAL_PARTS
-            )
-            client_score = _term_score(content, CLIENT_TERMS)
-            if vendor_score > client_score and vendor_score > 0:
-                relationship_type = "Vendor"
-                confidence = min(0.95, 0.72 + (vendor_score * 0.06))
-                signals.append("vendor_commercial_terms")
-            elif client_score > 0:
-                relationship_type = "Client"
-                confidence = min(0.92, 0.7 + (client_score * 0.06))
-                signals.append("client_commercial_terms")
-            elif sender_domain and sender_domain not in PERSONAL_EMAIL_DOMAINS:
-                relationship_type = "Vendor"
-                confidence = 0.62
-                signals.append("external_business_domain")
+        elif "@" in user_email and "@" in sender_email:
+            user_domain = user_email.split("@")[1].lower()
+            sender_domain = sender_email.split("@")[1].lower()
+            if user_domain == sender_domain:
+                relationship_type = "Colleague"
+                confidence = 0.85
 
         action = self.next_action_for_relationship(relationship_type)
         logger.info(
-            "Analyzed sender relationship %s as %s with confidence %.2f using %s",
+            "Analyzed sender relationship %s as %s with confidence %.2f",
             sender_email,
             relationship_type,
             confidence,
-            ",".join(signals) or "no_signal",
         )
         return {
             "type": relationship_type,
             "confidence": confidence,
-            "signals": signals,
             **action,
         }
 
@@ -217,24 +156,6 @@ def _owner_address_list(owner_addresses: Iterable[str] | None) -> list[str]:
     if isinstance(owner_addresses, str):
         return [owner_addresses]
     return list(owner_addresses)
-
-
-def _email_domain(address: str) -> str | None:
-    _, separator, domain = address.strip().lower().rpartition("@")
-    return domain if separator and domain else None
-
-
-def _email_local_part(address: str) -> str:
-    local_part, _, _ = address.strip().lower().partition("@")
-    return local_part
-
-
-def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
-    return any(term in text for term in terms)
-
-
-def _term_score(text: str, terms: tuple[str, ...]) -> int:
-    return sum(1 for term in terms if term in text)
 
 
 ontology_service = OntologyService()

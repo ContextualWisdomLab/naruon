@@ -1,62 +1,19 @@
-"""Context Search API — language-agnostic hybrid retrieval (G6).
-
-Two channels per query, fused per candidate email:
-
-- lexical: pg_trgm character-trigram word similarity over the four KG
-  search surfaces (email subject+body, attachment content, content
-  segments, project-graph objects) — no per-language tokenizer, no
-  ``to_tsvector`` configuration;
-- dense: pgvector cosine over the stored multilingual embeddings
-  (emails + attachments today).
-
-Fusion defaults to a convex combination of theoretically min-max
-normalized scores (TM2C2; Bruch, Gai & Ingber 2023) with RRF
-(Cormack, Clarke & Büttcher 2009) available as the non-parametric
-alternative. See docs/engineering/language-agnostic-hybrid-retrieval.md.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException
-import dataclasses
 import datetime
 import logging
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Select, func, select
-from core.config import settings
+from sqlalchemy import select, func, union_all
 from db.session import get_db, get_readonly_db
-from db.models import Email
-from services.embedding import (
-    STORAGE_EMBEDDING_DIMENSION,
-    fit_embedding_vector,
-    generate_embeddings,
-)
+from db.models import Email, Attachment
+from services.embedding import STORAGE_EMBEDDING_DIMENSION, fit_embedding_vector, generate_embeddings
 from api.auth import AuthContext, get_auth_context
 from services.exceptions import EmbeddingGenerationError
-from services.hybrid_retrieval import (
-    FusionSettings,
-    fuse_channel_scores,
-    normalize_search_text,
-)
-from services.hybrid_retrieval.retrieval_channels import (
-    DENSE_ATTACHMENT_CHANNEL,
-    DENSE_EMAIL_CHANNEL,
-    LEXICAL_ATTACHMENT_CHANNEL,
-    LEXICAL_CONTENT_SEGMENT_CHANNEL,
-    LEXICAL_EMAIL_CHANNEL,
-    LEXICAL_PROJECT_OBJECT_CHANNEL,
-    build_dense_attachment_statement,
-    build_dense_email_statement,
-    build_lexical_attachment_statement,
-    build_lexical_content_segment_statement,
-    build_lexical_email_statement,
-    build_lexical_project_object_statement,
-)
 from services.llm_provider_selection import resolve_runtime_llm_provider
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 SEARCH_VECTOR_DIMENSIONS = STORAGE_EMBEDDING_DIMENSION
-_SNIPPET_CHARACTER_LIMIT = 200
 
 
 class SearchRequest(BaseModel):
@@ -74,8 +31,6 @@ class SearchResultItem(BaseModel):
     thread_id: str | None = None
     reply_count: int = 1
     score: float
-    result_kind: str | None = None
-    evidence_kinds: list[str] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):
@@ -92,208 +47,119 @@ def thread_group_key():
     return func.coalesce(normalized_thread_id, normalized_message_id)
 
 
-def build_reply_counts_stmt(
-    thread_keys: list[str], user_id: str, organization_id: str | None
-) -> Select:
+def build_reply_counts_subquery(
+    user_id: str | None = None, organization_id: str | None = None
+):
     group_key = thread_group_key()
+    statement = select(
+        group_key.label("thread_key"),
+        func.count(Email.id).label("reply_count"),
+    ).select_from(Email)
+    if user_id is not None:
+        statement = statement.where(*Email.owner_filters(user_id, organization_id))
+    return statement.group_by(group_key).subquery("thread_counts")
+
+
+def _search_score(text_column, embedding_column, query: str, query_embedding):
+    fts_score = func.ts_rank_cd(
+        func.to_tsvector("english", text_column),
+        func.plainto_tsquery("english", query),
+    )
+    if query_embedding is None:
+        return fts_score
+    vector_distance = embedding_column.cosine_distance(query_embedding)
+    return fts_score - vector_distance
+
+
+def build_email_search_stmt(query: str, query_embedding, owner_filters, reply_counts):
+    search_score = _search_score(
+        Email.body,
+        Email.embedding,
+        query,
+        query_embedding,
+    )
+
     return (
         select(
-            group_key.label("thread_key"),
-            func.count(Email.id).label("reply_count"),
+            Email.id,
+            Email.message_id.label("source_message_id"),
+            Email.subject,
+            Email.sender,
+            Email.date,
+            thread_group_key().label("thread_id"),
+            reply_counts.c.reply_count,
+            Email.body.label("content"),
+            search_score.label("score"),
         )
         .select_from(Email)
-        .where(*Email.owner_filters(user_id, organization_id))
-        .where(group_key.in_(thread_keys))
-        .group_by(group_key)
+        .join(reply_counts, reply_counts.c.thread_key == thread_group_key())
+        .where(*owner_filters)
     )
 
 
-def resolve_fusion_settings() -> FusionSettings:
-    return FusionSettings(
-        strategy_name=settings.SEARCH_FUSION_STRATEGY,
-        semantic_weight_alpha=settings.SEARCH_FUSION_SEMANTIC_WEIGHT,
-        rank_constant_eta=settings.SEARCH_RRF_RANK_CONSTANT,
+def build_attachment_search_stmt(
+    query: str, query_embedding, owner_filters, reply_counts
+):
+    search_score = _search_score(
+        Attachment.content,
+        Attachment.embedding,
+        query,
+        query_embedding,
     )
 
-
-@dataclasses.dataclass
-class EmailCandidateEvidence:
-    """Accumulated cross-channel evidence for one candidate email."""
-
-    email_id: int
-    source_message_id: str | None
-    subject: str | None
-    sender: str
-    date: datetime.datetime
-    thread_key: str | None
-    best_word_similarity: float | None = None
-    best_cosine_distance: float | None = None
-    channel_ranks: dict[str, int] = dataclasses.field(default_factory=dict)
-    evidence_kinds: set[str] = dataclasses.field(default_factory=set)
-    primary_result_kind: str | None = None
-    primary_matched_text: str = ""
-    _primary_row_score: float = -1.0
-
-    def observe_row(
-        self,
-        *,
-        channel_name: str,
-        one_based_rank: int,
-        result_kind: str,
-        matched_text: str | None,
-        word_similarity_score: float | None,
-        cosine_distance: float | None,
-        fusion_settings: FusionSettings,
-    ) -> None:
-        existing_rank = self.channel_ranks.get(channel_name)
-        if existing_rank is None or one_based_rank < existing_rank:
-            self.channel_ranks[channel_name] = one_based_rank
-        if word_similarity_score is not None and (
-            self.best_word_similarity is None
-            or word_similarity_score > self.best_word_similarity
-        ):
-            self.best_word_similarity = word_similarity_score
-        if cosine_distance is not None and (
-            self.best_cosine_distance is None
-            or cosine_distance < self.best_cosine_distance
-        ):
-            self.best_cosine_distance = cosine_distance
-        self.evidence_kinds.add(result_kind)
-
-        row_score = fuse_channel_scores(
-            word_similarity_score=word_similarity_score,
-            cosine_distance=cosine_distance,
-            channel_ranks={channel_name: one_based_rank},
-            settings=fusion_settings,
+    return (
+        select(
+            Email.id,
+            Email.message_id.label("source_message_id"),
+            Email.subject,
+            Email.sender,
+            Email.date,
+            thread_group_key().label("thread_id"),
+            reply_counts.c.reply_count,
+            Attachment.content.label("content"),
+            search_score.label("score"),
         )
-        if row_score > self._primary_row_score:
-            self._primary_row_score = row_score
-            self.primary_result_kind = result_kind
-            self.primary_matched_text = matched_text or ""
-
-    def fused_score(self, fusion_settings: FusionSettings) -> float:
-        return fuse_channel_scores(
-            word_similarity_score=self.best_word_similarity,
-            cosine_distance=self.best_cosine_distance,
-            channel_ranks=self.channel_ranks,
-            settings=fusion_settings,
-        )
-
-
-def merge_candidate_rows(
-    channel_rows: list[tuple[str, list]],
-    fusion_settings: FusionSettings,
-) -> dict[int, EmailCandidateEvidence]:
-    """Merge per-channel candidate rows into per-email evidence.
-
-    ``channel_rows`` pairs a channel name with that channel's rows in
-    channel rank order. Rows must expose the uniform candidate columns
-    built by ``services.hybrid_retrieval.retrieval_channels``.
-    """
-    candidates: dict[int, EmailCandidateEvidence] = {}
-    for channel_name, rows in channel_rows:
-        for zero_based_position, row in enumerate(rows):
-            email_id = row.email_id
-            evidence = candidates.get(email_id)
-            if evidence is None:
-                evidence = EmailCandidateEvidence(
-                    email_id=email_id,
-                    source_message_id=row.source_message_id,
-                    subject=row.subject,
-                    sender=row.sender,
-                    date=row.date,
-                    thread_key=row.thread_key,
-                )
-                candidates[email_id] = evidence
-            evidence.observe_row(
-                channel_name=channel_name,
-                one_based_rank=zero_based_position + 1,
-                result_kind=row.result_kind,
-                matched_text=row.matched_text,
-                word_similarity_score=getattr(
-                    row, "word_similarity_score", None
-                ),
-                cosine_distance=getattr(row, "cosine_distance", None),
-                fusion_settings=fusion_settings,
-            )
-    return candidates
-
-
-def build_search_result_items(
-    candidates: dict[int, EmailCandidateEvidence],
-    fusion_settings: FusionSettings,
-    limit: int,
-    reply_counts_by_thread_key: dict[str, int],
-) -> list[SearchResultItem]:
-    scored_candidates = sorted(
-        (
-            (candidate.fused_score(fusion_settings), candidate)
-            for candidate in candidates.values()
-        ),
-        key=lambda scored: (-scored[0], scored[1].email_id),
+        .select_from(Attachment)
+        .join(Email, Attachment.email_id == Email.id)
+        .join(reply_counts, reply_counts.c.thread_key == thread_group_key())
+        .where(*owner_filters)
     )
-    search_results: list[SearchResultItem] = []
-    for fused_score, candidate in scored_candidates:
-        if fused_score < settings.SEARCH_MINIMUM_FUSED_SCORE:
+
+
+def process_search_results(rows, limit: int) -> list[SearchResultItem]:
+    search_results = []
+    seen_ids = set()
+    for row in rows:
+        if row.id in seen_ids:
             continue
-        snippet_source = candidate.primary_matched_text or ""
+        seen_ids.add(row.id)
+
+        score = row.score
+        snippet_source = row.content or ""
         snippet = (
-            snippet_source[:_SNIPPET_CHARACTER_LIMIT] + "..."
-            if len(snippet_source) > _SNIPPET_CHARACTER_LIMIT
+            snippet_source[:200] + "..."
+            if len(snippet_source) > 200
             else snippet_source
         )
+
         search_results.append(
             SearchResultItem(
-                id=candidate.email_id,
-                source_message_id=candidate.source_message_id,
-                subject=candidate.subject,
-                sender=candidate.sender,
-                date=candidate.date,
+                id=row.id,
+                source_message_id=row.source_message_id,
+                subject=row.subject,
+                sender=row.sender,
+                date=row.date,
                 snippet=snippet,
-                thread_id=candidate.thread_key,
-                reply_count=reply_counts_by_thread_key.get(
-                    candidate.thread_key or "", 1
-                ),
-                score=fused_score,
-                result_kind=candidate.primary_result_kind,
-                evidence_kinds=sorted(candidate.evidence_kinds),
+                thread_id=row.thread_id,
+                reply_count=row.reply_count or 1,
+                score=float(score) if score is not None else 0.0,
             )
         )
+
         if len(search_results) >= limit:
             break
+
     return search_results
-
-
-async def _resolve_query_embedding(
-    config_db: AsyncSession,
-    normalized_query: str,
-    user_id: str,
-    organization_id: str | None,
-) -> list[float] | None:
-    """Best-effort query embedding; lexical search works without it."""
-    runtime_provider = await resolve_runtime_llm_provider(
-        config_db,
-        user_id=user_id,
-        organization_id=organization_id,
-    )
-    if runtime_provider is None:
-        logger.info(
-            "No LLM provider configured; hybrid search running lexical-only"
-        )
-        return None
-    try:
-        embeddings = await generate_embeddings(
-            [normalized_query],
-            runtime_provider.api_key,
-            base_url=runtime_provider.base_url,
-            model=runtime_provider.embedding_model,
-        )
-    except EmbeddingGenerationError:
-        logger.info("Search embedding unavailable; using lexical search only")
-        return None
-    if not embeddings:
-        return None
-    return fit_embedding_vector(embeddings[0], SEARCH_VECTOR_DIMENSIONS)
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -308,102 +174,71 @@ async def hybrid_search(
         raise HTTPException(status_code=403, detail="Not authorized")
     target_user_id = user_id or auth_context.user_id
 
-    normalized_query = normalize_search_text(request.query)
-    if not normalized_query:
+    if not request.query.strip():
         return SearchResponse(results=[])
 
     try:
-        fusion_settings = resolve_fusion_settings()
-        query_embedding = await _resolve_query_embedding(
+        runtime_provider = await resolve_runtime_llm_provider(
             config_db,
-            normalized_query,
-            target_user_id,
-            auth_context.organization_id,
+            user_id=target_user_id,
+            organization_id=auth_context.organization_id,
         )
+        if runtime_provider is None:
+            raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+
+        query_embedding = None
+        try:
+            embeddings = await generate_embeddings(
+                [request.query],
+                runtime_provider.api_key,
+                base_url=runtime_provider.base_url,
+                model=runtime_provider.embedding_model,
+            )
+            query_embedding = (
+                fit_embedding_vector(embeddings[0], SEARCH_VECTOR_DIMENSIONS)
+                if embeddings
+                else None
+            )
+        except EmbeddingGenerationError:
+            logger.info("Search embedding unavailable; using full-text search only")
 
         owner_filters = Email.owner_filters(
             target_user_id, auth_context.organization_id
         )
-        candidate_limit = settings.SEARCH_CHANNEL_CANDIDATE_LIMIT
-
-        channel_statements: list[tuple[str, Select]] = [
-            (
-                LEXICAL_EMAIL_CHANNEL,
-                build_lexical_email_statement(
-                    normalized_query, owner_filters, candidate_limit
-                ),
-            ),
-            (
-                LEXICAL_ATTACHMENT_CHANNEL,
-                build_lexical_attachment_statement(
-                    normalized_query, owner_filters, candidate_limit
-                ),
-            ),
-            (
-                LEXICAL_CONTENT_SEGMENT_CHANNEL,
-                build_lexical_content_segment_statement(
-                    normalized_query, owner_filters, candidate_limit
-                ),
-            ),
-            (
-                LEXICAL_PROJECT_OBJECT_CHANNEL,
-                build_lexical_project_object_statement(
-                    normalized_query, owner_filters, candidate_limit
-                ),
-            ),
-        ]
-        if query_embedding is not None:
-            channel_statements.extend(
-                [
-                    (
-                        DENSE_EMAIL_CHANNEL,
-                        build_dense_email_statement(
-                            query_embedding, owner_filters, candidate_limit
-                        ),
-                    ),
-                    (
-                        DENSE_ATTACHMENT_CHANNEL,
-                        build_dense_attachment_statement(
-                            query_embedding, owner_filters, candidate_limit
-                        ),
-                    ),
-                ]
-            )
-
-        channel_rows: list[tuple[str, list]] = []
-        for channel_name, channel_statement in channel_statements:
-            channel_result = await search_db.execute(channel_statement)
-            channel_rows.append((channel_name, list(channel_result.all())))
-
-        candidates = merge_candidate_rows(channel_rows, fusion_settings)
-
-        reply_counts_by_thread_key: dict[str, int] = {}
-        candidate_thread_keys = sorted(
-            {
-                candidate.thread_key
-                for candidate in candidates.values()
-                if candidate.thread_key
-            }
+        reply_counts = build_reply_counts_subquery(
+            target_user_id, auth_context.organization_id
         )
-        if candidate_thread_keys:
-            reply_counts_result = await search_db.execute(
-                build_reply_counts_stmt(
-                    candidate_thread_keys,
-                    target_user_id,
-                    auth_context.organization_id,
-                )
-            )
-            reply_counts_by_thread_key = {
-                row.thread_key: row.reply_count
-                for row in reply_counts_result.all()
-            }
 
-        search_results = build_search_result_items(
-            candidates,
-            fusion_settings,
-            request.limit,
-            reply_counts_by_thread_key,
+        stmt_email = build_email_search_stmt(
+            request.query, query_embedding, owner_filters, reply_counts
         )
+        stmt_att = build_attachment_search_stmt(
+            request.query, query_embedding, owner_filters, reply_counts
+        )
+
+        combined = union_all(stmt_email, stmt_att).cte("combined_search")
+
+        stmt = (
+            select(
+                combined.c.id,
+                combined.c.source_message_id,
+                combined.c.subject,
+                combined.c.sender,
+                combined.c.date,
+                combined.c.thread_id,
+                combined.c.reply_count,
+                combined.c.content,
+                combined.c.score,
+            )
+            .order_by(combined.c.score.desc())
+            .limit(request.limit * 2)
+        )
+
+        result = await search_db.execute(stmt)
+        rows = result.all()
+
+        search_results = process_search_results(rows, request.limit)
+
         return SearchResponse(results=search_results)
     except HTTPException:
         raise

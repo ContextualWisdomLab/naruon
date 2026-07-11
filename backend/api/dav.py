@@ -167,11 +167,9 @@ async def dav_handler(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Route the authenticated DAV surface that is implemented for this slice.
-
-    Collection discovery is served from the server-side project registry.
-    Provider-backed writeback stays fail-closed until source capability and
-    ETag/If-Match enforcement are available through signed writeback intents.
+    Skeleton endpoint for CalDAV / WebDAV routing.
+    In the future, this will parse XML namespaces and bridge
+    Naruon's Tasks and Events into DAV compliant responses.
     """
     _ensure_dav_owner_scope(path, auth_context)
     safe_path = repr(path)[1:-1]
@@ -199,11 +197,6 @@ async def dav_handler(
         body = await request.body()
         safe_path = repr(path)[1:-1]
         logger.info("DAV PUT received %s bytes at /%s", len(body), safe_path)
-        logger.warning(
-            "DAV PUT rejected at /%s: provider-backed DAV writeback is not "
-            "implemented; signed writeback-intent API is required",
-            safe_path,
-        )
         return Response(
             content=(
                 "Provider-backed DAV writeback is not implemented; use signed "
@@ -214,17 +207,4 @@ async def dav_handler(
             status_code=501,
         )
 
-    logger.warning(
-        "DAV %s rejected at /%s: method is not implemented for the "
-        "provider-backed DAV gateway",
-        request.method,
-        safe_path,
-    )
-    return Response(
-        content=(
-            "Provider-backed DAV method is not implemented; use supported "
-            "PROPFIND/OPTIONS discovery or signed writeback-intent APIs."
-        ),
-        media_type="text/plain",
-        status_code=501,
-    )
+    return Response(content="Not Implemented", status_code=501)

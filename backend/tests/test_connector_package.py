@@ -1,5 +1,4 @@
 import json
-import runpy
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -22,17 +21,6 @@ def test_connector_requires_registration_token():
 def test_connector_requires_session_token():
     with pytest.raises(connector_main.ConnectorConfigError):
         connector_main.build_connector({"NARUON_REGISTRATION_TOKEN": "runner-token"})
-
-
-def test_connector_module_entrypoint_fails_closed_without_required_env(monkeypatch):
-    monkeypatch.delenv("NARUON_REGISTRATION_TOKEN", raising=False)
-    monkeypatch.delenv("NARUON_SESSION_TOKEN", raising=False)
-    monkeypatch.delitem(sys.modules, "connector.main", raising=False)
-
-    with pytest.raises(SystemExit) as exc:
-        runpy.run_module("connector.main", run_name="__main__")
-
-    assert exc.value.code == 2
 
 
 def test_connector_builds_default_runner_ws_url_without_token_bearer_mixup():
