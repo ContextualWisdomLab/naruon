@@ -6,6 +6,11 @@ from collections.abc import Callable
 from typing import Any, Dict, List, Optional
 
 import httpx
+from core.url_validation import (
+    _normalize_host,
+    _reject_unsafe_ip_literal,
+    _resolve_global_addresses,
+)
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -189,31 +194,40 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
 
 
 def is_safe_webhook_url(url: str) -> bool:
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        return False
-    # Avoid localhost and private IPs
-    hostname = parsed.hostname or ""
-    hostname = hostname.lower()
-    if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):  # nosec B104
-        return False
-    if (
-        hostname.startswith("10.")
-        or hostname.startswith("192.168.")
-        or hostname.startswith("172.")
-        or hostname.startswith("169.254.")
-    ):
-        return False
-    if hostname.endswith(".internal") or hostname.endswith(".local"):
+    try:
+        validate_webhook_url(url)
+    except ValueError:
         return False
     return True
 
 
+def validate_webhook_url(url: str) -> None:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme.lower() != "https":
+        raise ValueError("Webhook URL must use https")
+    if parsed.username or parsed.password:
+        raise ValueError("Webhook URL must not include userinfo")
+    if parsed.fragment:
+        raise ValueError("Webhook URL must not include a fragment")
+    if not parsed.hostname:
+        raise ValueError("Webhook URL must include a host")
+
+    hostname = _normalize_host(parsed.hostname)
+    if hostname.endswith(".internal") or hostname.endswith(".local"):
+        raise ValueError("Webhook URL host must not use an internal domain suffix")
+    _reject_unsafe_ip_literal("Webhook URL", hostname)
+    try:
+        port = parsed.port or 443
+    except ValueError as exc:
+        raise ValueError("Webhook URL port must be valid") from exc
+    _resolve_global_addresses("Webhook URL", hostname, port)
+
+
 def make_webhook_handler(webhook_url: str) -> ToolHandler:
-    if not is_safe_webhook_url(webhook_url):
-        raise ValueError("Invalid or unsafe webhook URL")
+    validate_webhook_url(webhook_url)
 
     async def handler(params: Dict[str, Any]) -> Any:
+        validate_webhook_url(webhook_url)
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
@@ -331,7 +345,9 @@ def create_tool(tool_data: ToolCreate) -> ToolInfo:
         try:
             handler = make_webhook_handler(tool_info.webhook_url)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(
+                status_code=400, detail=f"Invalid or unsafe webhook URL: {e}"
+            )
     else:
         handler = mock_handler
 
@@ -368,7 +384,9 @@ def update_tool(code: str, tool_data: ToolUpdate) -> ToolInfo:
             try:
                 handler = make_webhook_handler(update_data["webhook_url"])
             except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid or unsafe webhook URL: {e}"
+                )
         else:
             handler = mock_handler
 

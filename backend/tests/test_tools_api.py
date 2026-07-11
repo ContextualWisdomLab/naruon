@@ -469,12 +469,16 @@ def test_update_tool_with_webhook():
             lambda p: "ok",
         )
 
-        with TestClient(app) as client:
-            response = client.patch(
-                "/api/tools/webhook_update_tool",
-                headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                json={"webhook_url": "https://example.com/webhook"},
-            )
+        with patch(
+            "api.tools._resolve_global_addresses",
+            return_value=("93.184.216.34",),
+        ):
+            with TestClient(app) as client:
+                response = client.patch(
+                    "/api/tools/webhook_update_tool",
+                    headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                    json={"webhook_url": "https://example.com/webhook"},
+                )
 
         assert response.status_code == 200
         tool = registry.get("webhook_update_tool")
@@ -556,47 +560,51 @@ def test_delete_tool_not_found():
 @pytest.mark.asyncio
 async def test_webhook_handler_success():
     try:
-        with TestClient(app) as client:
-            client.post(
-                "/api/tools",
-                headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                json={
-                    "code": "webhook_tool",
-                    "name": "Webhook Tool",
-                    "description": "Calls external webhook",
-                    "category": "Test",
-                    "parameters": {"input": "string"},
-                    "webhook_url": "https://example.com/webhook",
-                },
-            )
-
-        with patch("httpx.AsyncClient.post") as mock_post:
-            mock_response = AsyncMock()
-            mock_response.json.return_value = {
-                "webhook_success": True
-            }  # json() is sync, return_value returns coroutine from AsyncMock, wait...
-            from unittest.mock import MagicMock
-
-            mock_response.json = MagicMock(return_value={"webhook_success": True})
-            mock_response.raise_for_status = lambda: None
-            mock_post.return_value = mock_response
-
+        with patch(
+            "api.tools._resolve_global_addresses",
+            return_value=("93.184.216.34",),
+        ):
             with TestClient(app) as client:
-                response = client.post(
-                    "/api/tools/webhook_tool/execute",
+                client.post(
+                    "/api/tools",
                     headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                    json={"parameters": {"input": "hello"}},
+                    json={
+                        "code": "webhook_tool",
+                        "name": "Webhook Tool",
+                        "description": "Calls external webhook",
+                        "category": "Test",
+                        "parameters": {"input": "string"},
+                        "webhook_url": "https://example.com/webhook",
+                    },
                 )
 
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "success"
-            assert data["result"] == {"webhook_success": True}
+            with patch("httpx.AsyncClient.post") as mock_post:
+                mock_response = AsyncMock()
+                mock_response.json.return_value = {
+                    "webhook_success": True
+                }  # json() is sync, return_value returns coroutine from AsyncMock, wait...
+                from unittest.mock import MagicMock
 
-            mock_post.assert_called_once()
-            args, kwargs = mock_post.call_args
-            assert args[0] == "https://example.com/webhook"
-            assert kwargs["json"] == {"parameters": {"input": "hello"}}
+                mock_response.json = MagicMock(return_value={"webhook_success": True})
+                mock_response.raise_for_status = lambda: None
+                mock_post.return_value = mock_response
+
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/tools/webhook_tool/execute",
+                        headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                        json={"parameters": {"input": "hello"}},
+                    )
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "success"
+                assert data["result"] == {"webhook_success": True}
+
+                mock_post.assert_called_once()
+                args, kwargs = mock_post.call_args
+                assert args[0] == "https://example.com/webhook"
+                assert kwargs["json"] == {"parameters": {"input": "hello"}}
 
     finally:
         registry.unregister("webhook_tool")
@@ -605,34 +613,41 @@ async def test_webhook_handler_success():
 @pytest.mark.asyncio
 async def test_webhook_handler_http_error():
     try:
-        with TestClient(app) as client:
-            client.post(
-                "/api/tools",
-                headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                json={
-                    "code": "webhook_fail_tool",
-                    "name": "Webhook Fail Tool",
-                    "description": "Calls external webhook",
-                    "category": "Test",
-                    "parameters": {"input": "string"},
-                    "webhook_url": "https://example.com/webhook",
-                },
-            )
-
-        with patch("httpx.AsyncClient.post") as mock_post:
-            mock_post.side_effect = httpx.HTTPError("Simulated HTTP Error")
-
+        with patch(
+            "api.tools._resolve_global_addresses",
+            return_value=("93.184.216.34",),
+        ):
             with TestClient(app) as client:
-                response = client.post(
-                    "/api/tools/webhook_fail_tool/execute",
+                client.post(
+                    "/api/tools",
                     headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                    json={"parameters": {"input": "hello"}},
+                    json={
+                        "code": "webhook_fail_tool",
+                        "name": "Webhook Fail Tool",
+                        "description": "Calls external webhook",
+                        "category": "Test",
+                        "parameters": {"input": "string"},
+                        "webhook_url": "https://example.com/webhook",
+                    },
                 )
 
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "failed"
-            assert "Webhook execution failed: Simulated HTTP Error" in data["message"]
+            with patch("httpx.AsyncClient.post") as mock_post:
+                mock_post.side_effect = httpx.HTTPError("Simulated HTTP Error")
+
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/tools/webhook_fail_tool/execute",
+                        headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                        json={"parameters": {"input": "hello"}},
+                    )
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "failed"
+                assert (
+                    "Webhook execution failed: Simulated HTTP Error"
+                    in data["message"]
+                )
 
     finally:
         registry.unregister("webhook_fail_tool")
@@ -749,5 +764,16 @@ def test_update_tool_unsafe_webhook():
 def test_is_safe_webhook_url_coverage():
     from api.tools import is_safe_webhook_url
 
+    with patch(
+        "api.tools._resolve_global_addresses",
+        return_value=("93.184.216.34",),
+    ):
+        assert is_safe_webhook_url("https://example.com/webhook") is True
     assert is_safe_webhook_url("ftp://example.com") is False
+    assert is_safe_webhook_url("http://example.com") is False
     assert is_safe_webhook_url("https://example.internal") is False
+    assert is_safe_webhook_url("https://localhost/admin") is False
+    assert is_safe_webhook_url("https://127.0.0.1/admin") is False
+    assert is_safe_webhook_url("https://[::1]/admin") is False
+    assert is_safe_webhook_url("https://user:pass@example.com/webhook") is False
+    assert is_safe_webhook_url("https://example.com/webhook#fragment") is False
