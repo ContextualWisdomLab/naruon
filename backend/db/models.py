@@ -729,6 +729,8 @@ class Email(Base):
     references: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
     body: Mapped[str] = mapped_column(Text)
+    # IMAP \Seen read state; defaults read so historical/file imports don't nag.
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
     attachments: Mapped[list["Attachment"]] = relationship(
