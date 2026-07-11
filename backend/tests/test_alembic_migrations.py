@@ -193,7 +193,7 @@ def test_project_graph_projection_has_incremental_revision():
     revision_text = revision_path.read_text()
 
     assert 'revision = "0009_project_graph_projection"' in revision_text
-    assert 'down_revision = "0008_attachment_parser_audit_metadata"' in revision_text
+    assert 'down_revision = "0008_attachment_parser_audit"' in revision_text
     assert '"project_graph_objects"' in revision_text
     assert '"project_graph_edges"' in revision_text
     assert '"project_graph_corrections"' in revision_text
@@ -237,3 +237,70 @@ def test_backend_requirements_include_alembic():
         line.split("==", maxsplit=1)[0] == "alembic"
         for line in requirements.splitlines()
     )
+
+
+def test_language_agnostic_search_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0010_language_agnostic_search.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0010_language_agnostic_search"' in revision_text
+    assert 'down_revision = "0009_project_graph_projection"' in revision_text
+    assert "CREATE EXTENSION IF NOT EXISTS pg_trgm" in revision_text
+    assert "CREATE EXTENSION IF NOT EXISTS unaccent" in revision_text
+    assert "search_normalized_text" in revision_text
+    assert "normalize(coalesce(input_text, ''), NFC)" in revision_text
+    assert "regdictionary" in revision_text
+    assert "IMMUTABLE" in revision_text
+    assert "gist_trgm_ops(siglen=256)" in revision_text
+    assert "ix_email_records_search_document_trgm" in revision_text
+    assert "ix_email_attachments_content_trgm" in revision_text
+    assert "ix_content_segments_safe_text_trgm" in revision_text
+    assert "ix_project_graph_objects_search_document_trgm" in revision_text
+    assert "IF NOT EXISTS" in revision_text
+    assert "DROP INDEX IF EXISTS" in revision_text
+
+
+def test_revision_identifiers_fit_alembic_version_column():
+    """alembic_version.version_num is VARCHAR(32); longer revision ids
+    make ``alembic upgrade head`` fail on fresh databases (regression:
+    the original 38-char 0008 revision id)."""
+    import re
+
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    for revision_path in sorted(versions_dir.glob("*.py")):
+        revision_text = revision_path.read_text()
+        match = re.search(r'^revision = "([^"]+)"', revision_text, re.MULTILINE)
+        assert match, f"no revision id in {revision_path.name}"
+        revision_id = match.group(1)
+        assert len(revision_id) <= 32, (
+            f"{revision_path.name}: revision id {revision_id!r} is "
+            f"{len(revision_id)} chars; alembic_version.version_num "
+            "holds at most 32"
+        )
+
+
+def test_email_model_reconciliation_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0011_email_model_reconciliation.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0011_email_model_reconciliation"' in revision_text
+    assert 'down_revision = "0010_language_agnostic_search"' in revision_text
+    for retired_table_name in (
+        "email_thread_edges",
+        "email_instances",
+        "email_raws",
+        "email_messages",
+        "email_threads",
+        "provider_accounts",
+        "user_accounts",
+    ):
+        assert f"DROP TABLE IF EXISTS {retired_table_name}" in revision_text
+    # Dependents must drop before their FK targets.
+    assert revision_text.index("email_thread_edges") < revision_text.index(
+        "DROP TABLE IF EXISTS email_messages"
+    )
+    assert "Intentionally a no-op" in revision_text
