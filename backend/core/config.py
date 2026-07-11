@@ -8,6 +8,7 @@ from core.env_paths import ENV_FILE_PATHS, operator_env_file_paths
 from core.runtime_secrets import (
     validate_auth_session_hmac_secret_value,
 )
+from core.env_paths import ENV_FILE_PATHS, operator_env_file_paths
 from core.url_validation import (
     parse_allowed_hosts,
     validate_https_url_host_details,
@@ -64,6 +65,15 @@ def parse_allowed_cors_origins(raw_origins: str) -> list[str]:
 class Settings(BaseSettings):
     DATABASE_URL: str
     READONLY_DATABASE_URL: str | None = None
+    # Connection-pool tuning. Sizing values default to None (SQLAlchemy
+    # defaults) so behavior is unchanged until an operator sets them.
+    # pre_ping detects dead connections at checkout; recycle avoids
+    # server-side idle timeouts killing pooled connections.
+    DB_POOL_SIZE: int | None = None
+    DB_MAX_OVERFLOW: int | None = None
+    DB_POOL_TIMEOUT_SECONDS: int | None = None
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    DB_POOL_PRE_PING: bool = True
     DEBUG: bool = False
     RUNTIME_ENVIRONMENT: str = "production"
     AUTH_SESSION_HMAC_SECRET: SecretStr | None = None
@@ -84,6 +94,13 @@ class Settings(BaseSettings):
     ALLOWED_SCOPEWEAVE_HOSTS: str = ""
     ALLOWED_CORS_ORIGINS: str = ""
     ENABLE_PROMETHEUS_METRICS: bool = False
+    # Best-effort projection of imported-email content segments into the project
+    # semantic graph. Off by default; failure never affects email import.
+    PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
+    # Which extractor projects segments into the graph: "keyword"
+    # (deterministic baseline) or "llm" (grounded extraction with enforced
+    # segment citations; falls back to keyword on any failure).
+    PROJECT_GRAPH_EXTRACTOR: str = "keyword"
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (

@@ -285,7 +285,12 @@ def _selected_upload_files(
         final_dir = Path(
             os.environ.get(
                 "NARUON_PRIVATE_MAIL_CACHE",
-                str(operator_home() / ".cache" / "naruon" / "private-mail-upload-cache"),
+                str(
+                    operator_home()
+                    / ".cache"
+                    / "naruon"
+                    / "private-mail-upload-cache"
+                ),
             )
         )
         final_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
