@@ -14,6 +14,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
@@ -253,6 +254,49 @@ def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
                 )
             else:
                 seen_keys[key] = line_number
+
+    assert duplicates == [], "\n".join(duplicates)
+
+
+def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
+    assert WORKFLOW_DIR.exists(), (
+        "required governance artifact is missing: .github/workflows"
+    )
+    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
+        WORKFLOW_DIR.glob("*.yaml")
+    )
+    assert governed_workflows, "no governed GitHub workflows found"
+
+    class UniqueKeyLoader(yaml.SafeLoader):
+        pass
+
+    def construct_mapping(
+        loader: yaml.SafeLoader,
+        node: yaml.MappingNode,
+        deep: bool = False,
+    ) -> dict[object, object]:
+        mapping: dict[object, object] = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise AssertionError(
+                    f"duplicate mapping key {key!r} on line "
+                    f"{key_node.start_mark.line + 1}"
+                )
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        return mapping
+
+    UniqueKeyLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        construct_mapping,
+    )
+
+    duplicates: list[str] = []
+    for workflow_path in governed_workflows:
+        try:
+            yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
+        except AssertionError as exc:
+            duplicates.append(f"{workflow_path.relative_to(REPO_ROOT)}: {exc}")
 
     assert duplicates == [], "\n".join(duplicates)
 
