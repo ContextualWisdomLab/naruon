@@ -54,6 +54,7 @@ describe("ProjectsPage", () => {
     container?.remove();
     container = null;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     window.localStorage.clear();
   });
 
@@ -491,5 +492,50 @@ describe("ProjectsPage", () => {
       Array.from(container.querySelectorAll('a[href="/data"]')).some((link) => link.textContent?.includes("원본 연결") || link.textContent?.includes("새 프로젝트")),
     ).toBe(true);
     expect(container.textContent).toContain("원본 연결 작업 대기열");
+  });
+
+  it("renders an actionable empty state when a project has no linked tasks", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === "/auth/session") {
+          return jsonResponse({
+            authenticated: true,
+            claims: { userId: "alice", organizationId: "org-acme" },
+          });
+        }
+        if (path === "/api/webdav/folders") {
+          return jsonResponse([
+            {
+              folder_uid: "webdav_folder_empty",
+              project_name: "Evidence Empty Project",
+              webdav_path: "/Projects/Evidence_Empty",
+              owner_user_id: "alice",
+              organization_id: "org-acme",
+            },
+          ]);
+        }
+        if (path === "/api/tasks") return jsonResponse([]);
+        if (path === "/api/projects/candidates") return jsonResponse({ candidates: [] });
+        return jsonResponse({}, false, 404);
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<ProjectsPage />);
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("Evidence Empty Project");
+    expect(container.textContent).toContain("연결된 실행 항목이 아직 없습니다.");
+    expect(container.textContent).toContain("작업 API에 프로젝트와 연결된 메일, 문서, 스레드 근거");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("연결된 실행 항목");
+    expect(Array.from(container.querySelectorAll('a[href="/tasks"]')).some((link) => link.textContent?.includes("작업 보드 열기"))).toBe(true);
+    expect(Array.from(container.querySelectorAll('a[href="/search"]')).some((link) => link.textContent?.includes("관련 근거 찾기"))).toBe(true);
   });
 });
