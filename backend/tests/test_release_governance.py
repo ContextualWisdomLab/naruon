@@ -969,6 +969,11 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "github.sha" not in workflow
     assert "tarball/${trusted_ref}" in workflow
     assert "gh_api_with_retry" in workflow
+    assert "extract_json_value" in workflow
+    assert "empty response body" in workflow
+    assert "invalid JSON response body" in workflow
+    assert "returned invalid JSON" in workflow
+    assert "did not produce valid JSON after 4 attempts" in workflow
     assert "GitHub API request attempt" in workflow
     assert "Trusted governance ref must be a full commit SHA" in workflow
     assert "trusted_archive_candidate" in workflow
