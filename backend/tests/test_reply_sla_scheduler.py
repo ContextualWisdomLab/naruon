@@ -361,7 +361,11 @@ async def test_run_loop_breaks_when_sync_is_cancelled(monkeypatch):
 
     await scheduler.start()
     await asyncio.wait_for(done.wait(), timeout=1)
-    await scheduler._task  # loop broke and returned on its own
+    done_tasks, pending_tasks = await asyncio.wait({scheduler._task}, timeout=1)
+
+    assert scheduler._task in done_tasks
+    assert pending_tasks == set()
+    assert scheduler._task.result() is None
 
     assert sync_calls == 1  # no retry after cancellation
 

@@ -11,6 +11,13 @@ from services.exceptions import (
 )
 
 
+def _symlink_or_skip(target, link) -> None:
+    try:
+        os.symlink(target, link)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable in this test session: {exc}")
+
+
 def test_extract_backup_success(tmp_path):
     zip_path = tmp_path / "test.zip"
     with zipfile.ZipFile(zip_path, "w") as z:
@@ -101,7 +108,7 @@ def test_extract_backup_rejects_preexisting_symlink_escape(tmp_path):
     outside_dir = tmp_path / "outside"
     out_dir.mkdir()
     outside_dir.mkdir()
-    os.symlink(outside_dir, out_dir / "link")
+    _symlink_or_skip(outside_dir, out_dir / "link")
     with zipfile.ZipFile(zip_path, "w") as z:
         z.writestr("link/escaped.eml", b"Subject: Escaped Email")
 
