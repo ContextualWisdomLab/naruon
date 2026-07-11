@@ -15,7 +15,8 @@ RUN PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ONLY_BINARY=
 COPY VERSION /app/VERSION
 COPY backend /app/
 
-RUN useradd --system --create-home --home-dir /home/appuser --shell /usr/sbin/nologin appuser \
+RUN groupadd --system --gid 10001 appuser \
+    && useradd --system --create-home --home-dir /home/appuser --uid 10001 --gid appuser --shell /usr/sbin/nologin appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
@@ -107,5 +108,8 @@ ENV BACKEND_INTERNAL_URL=http://127.0.0.1:8000
 ENV ALLOW_DOCKER_BACKEND_INTERNAL_URL=1
 
 EXPOSE 3000 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+    CMD python -c "import urllib.request; [urllib.request.urlopen(url, timeout=3).close() for url in ('http://127.0.0.1:8000/', 'http://127.0.0.1:3000/')]"
 
 CMD ["/app/scripts/docker_entrypoint.sh"]
