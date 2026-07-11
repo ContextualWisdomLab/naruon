@@ -1,7 +1,7 @@
 """add project graph projection records
 
 Revision ID: 0009_project_graph_projection
-Revises: 0008_attachment_parser_audit_metadata
+Revises: 0008_attachment_parser_audit
 Create Date: 2026-07-02 00:00:00.000000
 """
 
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0009_project_graph_projection"
-down_revision = "0008_attachment_parser_audit_metadata"
+down_revision = "0008_attachment_parser_audit"
 
 _OBJECT_TABLE = "project_graph_objects"
 _EDGE_TABLE = "project_graph_edges"

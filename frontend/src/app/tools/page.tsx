@@ -186,7 +186,7 @@ export default function ToolsPage() {
         </header>
 
         {!loading && !loadError && tools.length > 0 && (
-          <section aria-label="도구 레지스트리 요약" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section aria-label="도구 레지스트리 종합" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {summaryCards.map(({ label, value, detail, icon: Icon }) => (
               <Card key={label} size="sm">
                 <CardHeader>
