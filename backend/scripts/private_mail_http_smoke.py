@@ -22,6 +22,8 @@ from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 from zipfile import BadZipFile, ZipFile
 
+from core.env_paths import operator_home
+
 SESSION_COOKIE_NAME = "naruon_session"
 SUPPORTED_SUFFIXES = {".eml", ".emlx", ".mbox", ".zip"}
 MATCH_SEPARATORS = str.maketrans("", "", " \t\r\n-_./\\()[]{}:;·ㆍ")
@@ -279,7 +281,12 @@ def _selected_upload_files(
         final_dir = Path(
             os.environ.get(
                 "NARUON_PRIVATE_MAIL_CACHE",
-                str(Path.home() / ".cache" / "naruon" / "private-mail-upload-cache"),
+                str(
+                    operator_home()
+                    / ".cache"
+                    / "naruon"
+                    / "private-mail-upload-cache"
+                ),
             )
         )
         final_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
