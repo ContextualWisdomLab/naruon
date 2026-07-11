@@ -14,3 +14,7 @@ async def test_engine_creation():
             await conn.execute(text("SELECT 1"))
     except Exception as e:
         pytest.skip(f"Database not available: {e}")
+    finally:
+        # Leaked pooled connections surface as GC ResourceWarnings in
+        # unrelated later tests under PYTHONWARNINGS=error.
+        await engine.dispose()

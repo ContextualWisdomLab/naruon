@@ -806,6 +806,7 @@ async def test_reply_sla_escalation_real_postgres_smoke():
         session.add(
             TenantConfig(
                 user_id=user_id,
+                organization_id=organization_id,
                 smtp_username="reply-sla-smoke@example.com",
                 imap_username=None,
             )
