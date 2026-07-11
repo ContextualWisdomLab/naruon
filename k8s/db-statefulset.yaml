@@ -29,7 +29,7 @@ spec:
           emptyDir: {}
       containers:
       - name: postgres
-        image: pgvector/pgvector:pg16
+        image: docker.io/pgvector/pgvector:pg16
         env:
         - name: POSTGRES_USER
           value: postgres
@@ -46,6 +46,8 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
           capabilities:
             drop:
               - ALL
