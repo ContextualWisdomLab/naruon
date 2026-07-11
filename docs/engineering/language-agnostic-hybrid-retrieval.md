@@ -97,14 +97,14 @@ Verified sources (content read and confirmed this session):
    `unaccent` (STABLE-by-search-path; explicit-dictionary immutable
    wrapper pattern).
 
-PDF archival note (governance: attach permissively-licensed paper
-PDFs): this session's sandbox network policy blocks arxiv.org /
-aclanthology.org downloads (gateway 403), so PDFs could not be
-committed this round; sources above were read and verified through a
-paper-access service instead. Chen et al. 2024 is CC BY 4.0 (ACL
-Anthology) and should be archived under `docs/research/` in a session
-with those hosts allowed; Bruch et al. / Cormack et al. remain
-cite-only unless a permissively-licensed copy is confirmed.
+PDF archival note (governance: attach source research evidence):
+source PDFs for Bruch et al. 2023, Chen et al. 2024, and Cormack et al.
+2009 are preserved under
+`docs/research/language-agnostic-hybrid-retrieval/pdfs/`. The same
+evidence pack preserves upstream snapshots of UAX #15 and the current
+PostgreSQL `pg_trgm` / `unaccent` documentation under
+`docs/research/language-agnostic-hybrid-retrieval/standards/`. Git LFS
+is intentionally not used.
 
 ## Why not …
 
