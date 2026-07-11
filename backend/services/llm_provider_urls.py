@@ -452,3 +452,31 @@ async def build_llm_provider_http_client(
             transport=_PinnedLLMProviderAsyncTransport(validated),
         ),
     )
+
+
+def build_pinned_https_async_client(
+    normalized_url: str,
+    hostname: str,
+    port: int,
+    addresses: tuple[str, ...],
+) -> httpx.AsyncClient:
+    """Build a DNS-pinned ``httpx.AsyncClient`` for an already-validated host.
+
+    The caller is responsible for validating the URL against its own host
+    allowlist (see ``core.url_validation.validate_https_url_host_details``)
+    before calling this helper. The returned client re-pins every outbound
+    connection to ``addresses`` and rejects any host/port that differs from the
+    validated one, closing the DNS-rebinding gap for outbound integrations that
+    reuse this hardened transport.
+    """
+    pinned = ValidatedLLMProviderBaseURL(
+        normalized_url=normalized_url,
+        hostname=hostname,
+        port=port,
+        addresses=addresses,
+    )
+    return httpx.AsyncClient(
+        follow_redirects=False,
+        trust_env=False,
+        transport=_PinnedLLMProviderAsyncTransport(pinned),
+    )
