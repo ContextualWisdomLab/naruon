@@ -682,6 +682,8 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert workflow.count("image: naruon") == 2
     assert "push: false" in workflow
     assert "push: true" in workflow
+    assert "sbom: false" in workflow
+    assert workflow.count("sbom: true") == 1
     assert "type=semver" in workflow
     assert "type=ref,event=branch" not in workflow
     assert "deploy_preflight:" in workflow
