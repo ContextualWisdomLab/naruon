@@ -845,3 +845,21 @@ def test_execute_grammar_checker():
     assert data["status"] == "success"
     assert "안녕하세요" in data["result"]["corrected_text"]
     assert data["result"]["errors_found"] == 1
+
+
+
+@pytest.mark.asyncio
+async def test_mock_handler():
+    from api.tools import mock_handler
+    res = await mock_handler({"test": 123})
+    assert "123" in res
+
+def test_validate_webhook_url_no_host():
+    from api.tools import validate_webhook_url
+    with pytest.raises(ValueError, match="Webhook URL must include a host"):
+        validate_webhook_url("https://")
+
+def test_validate_webhook_url_invalid_port():
+    from api.tools import validate_webhook_url
+    with pytest.raises(ValueError, match="Webhook URL port must be valid"):
+        validate_webhook_url("https://example.com:9999999/webhook")
