@@ -14,6 +14,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
@@ -209,15 +210,95 @@ def test_github_actions_are_pinned_to_exact_sha() -> None:
         for line_number, line in enumerate(workflow_lines, 1):
             if major_only_action.search(line):
                 unpinned_major_refs.append(
-                    f"{workflow_path.relative_to(REPO_ROOT)}:{line_number}:{line.strip()}"
+                    f"{workflow_path.relative_to(REPO_ROOT).as_posix()}:"
+                    f"{line_number}:{line.strip()}"
                 )
             elif sha_without_version_comment.search(line):
                 missing_version_comments.append(
-                    f"{workflow_path.relative_to(REPO_ROOT)}:{line_number}:{line.strip()}"
+                    f"{workflow_path.relative_to(REPO_ROOT).as_posix()}:"
+                    f"{line_number}:{line.strip()}"
                 )
 
     assert unpinned_major_refs == [], "\n".join(unpinned_major_refs)
     assert missing_version_comments == [], "\n".join(missing_version_comments)
+
+
+def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
+    assert WORKFLOW_DIR.exists(), (
+        "required governance artifact is missing: .github/workflows"
+    )
+    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
+        WORKFLOW_DIR.glob("*.yaml")
+    )
+    assert governed_workflows, "no governed GitHub workflows found"
+
+    duplicates: list[str] = []
+    top_level_key = re.compile(r"^([A-Za-z0-9_-]+):(?:\s|$)")
+
+    for workflow_path in governed_workflows:
+        seen_keys: dict[str, int] = {}
+        workflow_lines = workflow_path.read_text(encoding="utf-8").splitlines()
+        for line_number, line in enumerate(workflow_lines, 1):
+            if not line or line.startswith((" ", "\t")) or line.lstrip().startswith("#"):
+                continue
+            match = top_level_key.match(line)
+            if not match:
+                continue
+
+            key = match.group(1)
+            if key in seen_keys:
+                duplicates.append(
+                    f"{workflow_path.relative_to(REPO_ROOT)}:{line_number}:"
+                    f" duplicate top-level key {key!r}; first defined on line "
+                    f"{seen_keys[key]}"
+                )
+            else:
+                seen_keys[key] = line_number
+
+    assert duplicates == [], "\n".join(duplicates)
+
+
+def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
+    assert WORKFLOW_DIR.exists(), (
+        "required governance artifact is missing: .github/workflows"
+    )
+    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
+        WORKFLOW_DIR.glob("*.yaml")
+    )
+    assert governed_workflows, "no governed GitHub workflows found"
+
+    class UniqueKeyLoader(yaml.SafeLoader):
+        pass
+
+    def construct_mapping(
+        loader: yaml.SafeLoader,
+        node: yaml.MappingNode,
+        deep: bool = False,
+    ) -> dict[object, object]:
+        mapping: dict[object, object] = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise AssertionError(
+                    f"duplicate mapping key {key!r} on line "
+                    f"{key_node.start_mark.line + 1}"
+                )
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        return mapping
+
+    UniqueKeyLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        construct_mapping,
+    )
+
+    duplicates: list[str] = []
+    for workflow_path in governed_workflows:
+        try:
+            yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
+        except AssertionError as exc:
+            duplicates.append(f"{workflow_path.relative_to(REPO_ROOT)}: {exc}")
+
+    assert duplicates == [], "\n".join(duplicates)
 
 
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
@@ -248,6 +329,24 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
         in dependency_review_workflow
     )
+    assert "BASE_REF: ${{ github.base_ref || github.ref_name }}" in (
+        dependency_review_workflow
+    )
+    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in (
+        dependency_review_workflow
+    )
+    log_dependency_review_step = dependency_review_workflow.split(
+        "- name: Log dependency review policy", 1
+    )[1].split("- name: Review dependency changes", 1)[0]
+    log_dependency_review_script = log_dependency_review_step.split("run: |", 1)[1]
+    assert "${{ github.base_ref || github.ref_name }}" not in (
+        log_dependency_review_script
+    )
+    assert "${{ github.head_ref || github.ref_name }}" not in (
+        log_dependency_review_script
+    )
+    assert 'printf \'Base ref: %s\\n\' "$BASE_REF"' in log_dependency_review_script
+    assert 'printf \'Head ref: %s\\n\' "$HEAD_REF"' in log_dependency_review_script
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -290,7 +389,7 @@ def test_github_actions_unpinned_major_refs_failure(
     with pytest.raises(AssertionError) as exc_info:
         test_github_actions_are_pinned_to_exact_sha()
 
-    message = str(exc_info.value)
+    message = str(exc_info.value).replace("\\", "/")
     assert ".github/workflows/bad-action.yml:6:- uses: actions/checkout@v4" in message
 
     workflow_file.write_text(
@@ -310,7 +409,7 @@ def test_github_actions_unpinned_major_refs_failure(
     with pytest.raises(AssertionError) as exc_info:
         test_github_actions_are_pinned_to_exact_sha()
 
-    message = str(exc_info.value)
+    message = str(exc_info.value).replace("\\", "/")
     assert (
         ".github/workflows/bad-action.yml:6:- uses: "
         "actions/setup-python@abcdef1234567890abcdef1234567890abcdef12"
@@ -323,32 +422,16 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     assert "continue-on-error: true" not in workflow
 
 
-def test_codeql_workflow_uploads_pr_head_sarif_for_ruleset_gate() -> None:
+def test_codeql_workflow_can_read_security_events_without_uploading_sarif() -> None:
     workflow = read_repo_text(".github/workflows/codeql.yml")
 
-    assert "permissions:\n  contents: read\n\njobs:" in workflow
+    assert "permissions:\n  contents: read\n  security-events: read" in workflow
     assert (
-        "    permissions:\n      actions: read\n      contents: read\n      security-events: write"
+        "    permissions:\n      actions: read\n      contents: read\n      security-events: read"
         in workflow
     )
-    assert "upload: always" in workflow
-    assert "upload: never" not in workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
-        in workflow
-    )
-    assert (
-        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in workflow
-    )
-    assert "analyze-merge:" in workflow
-    assert "CodeQL merge preview" in workflow
-    assert "refs/pull/{0}/merge" in workflow
-    assert "github.event.pull_request.merge_commit_sha" in workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in workflow
-    )
+    assert "upload: never" in workflow
+    assert "security-events: write" not in workflow
 
 
 def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> None:
@@ -410,13 +493,17 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
         in scorecard_workflow
     )
 
-
     assert (
         "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0"
         in trivy_workflow
     )
     assert "format: sarif" in trivy_workflow
     assert "category: trivy" in trivy_workflow
+    assert "trivy-config: trivy.yaml" in trivy_workflow
+    assert "Run Trivy findings summary" in trivy_workflow
+    assert 'trusted_registries:\n    - "ghcr.io"\n    - "docker.io"' in read_repo_text(
+        ".github/trivy/trusted-registries.yaml"
+    )
     assert (
         "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
         in trivy_workflow
@@ -595,6 +682,8 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert workflow.count("image: naruon") == 2
     assert "push: false" in workflow
     assert "push: true" in workflow
+    assert "sbom: false" in workflow
+    assert workflow.count("sbom: true") == 1
     assert "type=semver" in workflow
     assert "type=ref,event=branch" not in workflow
     assert "deploy_preflight:" in workflow
@@ -631,8 +720,51 @@ def test_frontend_dockerfile_builds_and_starts_production_artifact() -> None:
         'CMD sh -c "exec ./node_modules/.bin/next start --hostname 0.0.0.0 --port ${PORT:-3000}"'
         in dockerfile
     )
+    assert "HEALTHCHECK --interval=30s --timeout=5s" in dockerfile
+    assert "fetch('http://127.0.0.1:' + (process.env.PORT || '3000'))" in dockerfile
     assert "pnpm run start" not in dockerfile
     assert "pnpm run dev" not in dockerfile
+
+
+def test_kubernetes_deployments_use_restricted_runtime_security_contexts() -> None:
+    backend_deployment = read_repo_text("k8s/backend-deployment.yaml")
+    db_statefulset = read_repo_text("k8s/db-statefulset.yaml")
+    frontend_deployment = read_repo_text("k8s/frontend-deployment.yaml")
+
+    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-backend" in backend_deployment
+    assert "image: docker.io/pgvector/pgvector:pg16" in db_statefulset
+    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend" in frontend_deployment
+
+    for manifest in (backend_deployment, db_statefulset, frontend_deployment):
+        assert "namespace: naruon-dev" in manifest
+        assert "seccompProfile:\n          type: RuntimeDefault" in manifest
+        assert "allowPrivilegeEscalation: false" in manifest
+        assert "capabilities:\n            drop:\n              - ALL" in manifest
+        assert "readOnlyRootFilesystem: true" in manifest
+        assert "runAsNonRoot: true" in manifest
+        assert "resources:\n          requests:" in manifest
+        assert "cpu:" in manifest
+        assert "memory:" in manifest
+        assert "mountPath: /tmp" in manifest
+
+    assert "runAsUser: 10001" in backend_deployment
+    assert "runAsGroup: 10001" in backend_deployment
+    assert "runAsUser: 10001" in db_statefulset
+    assert "runAsGroup: 10001" in db_statefulset
+    assert "fsGroup: 10001" in db_statefulset
+    assert "mountPath: /var/lib/postgresql/data" in db_statefulset
+    assert "mountPath: /var/run/postgresql" in db_statefulset
+    assert "runAsUser: 10001" in frontend_deployment
+    assert "runAsGroup: 10001" in frontend_deployment
+    assert "mountPath: /app/.next/cache" in frontend_deployment
+
+    for service_manifest in (
+        "k8s/backend-service.yaml",
+        "k8s/db-service.yaml",
+        "k8s/frontend-service.yaml",
+        "k8s/ingress.yaml",
+    ):
+        assert "namespace: naruon-dev" in read_repo_text(service_manifest)
 
 
 def test_backend_dockerfile_uses_modern_env_syntax() -> None:
@@ -658,6 +790,9 @@ def test_backend_dockerfile_uses_modern_env_syntax() -> None:
     assert "ENV DATABASE_URL=" not in dockerfile
     assert '"/app/scripts/docker_entrypoint.sh"' in dockerfile
     assert "RUN chmod +x /app/scripts/docker_entrypoint.sh" in dockerfile
+    assert "HEALTHCHECK --interval=30s --timeout=5s" in dockerfile
+    assert "http://127.0.0.1:8000/" in dockerfile
+    assert "http://127.0.0.1:3000/" in dockerfile
     assert "useradd --system --create-home --home-dir /home/appuser" in dockerfile
     backend_cmd = 'CMD ["python", "scripts/start_backend.py", "--host", "0.0.0.0", "--port", "8000"]'
     assert dockerfile.find("USER appuser") < dockerfile.find(backend_cmd)
@@ -880,6 +1015,11 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "github.sha" not in workflow
     assert "tarball/${trusted_ref}" in workflow
     assert "gh_api_with_retry" in workflow
+    assert "extract_json_value" in workflow
+    assert "empty response body" in workflow
+    assert "invalid JSON response body" in workflow
+    assert "returned invalid JSON" in workflow
+    assert "did not produce valid JSON after 4 attempts" in workflow
     assert "GitHub API request attempt" in workflow
     assert "Trusted governance ref must be a full commit SHA" in workflow
     assert "trusted_archive_candidate" in workflow
@@ -891,6 +1031,9 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "headRefOid" in gate_script
     assert "mergeStateStatus" in gate_script
     assert "gh pr checks" in gate_script and "--required" in gate_script
+    assert "no required checks reported" in gate_script
+    assert "no legacy required status contexts reported" in gate_script
+    assert "add_waiting" in gate_script
     assert "check-runs" in gate_script
     assert "Review skipped" in gate_script
     assert "CodeRabbit" in gate_script or "coderabbit" in gate_script
@@ -900,8 +1043,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "/issues/${PR_NUMBER}/comments" in gate_script
     assert "COMMENT_MARKER" in gate_script
     assert "Waiting for" in gate_script
-    assert "no required checks reported" in gate_script
-    assert "ruleset workflows and code-scanning gates" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script
     assert "gh pr merge" not in gate_script
@@ -913,6 +1054,69 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "contents: write" not in combined
     assert "continue-on-error: true" not in combined
     assert "dismiss" not in combined.lower()
+
+
+def test_20b_kpi_roi_claim_gate_separates_measurements_from_assumptions() -> None:
+    kpi_report = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-kpi-validation.md"
+    )
+    buyer_package = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-20b-buyer-package.md"
+    )
+    security_questionnaire = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-20b-security-questionnaire.md"
+    )
+    readiness_plan = read_repo_text(
+        "docs/superpowers/plans/2026-07-02-naruon-20b-full-product-commercial-readiness.md"
+    )
+
+    assert "### ROI Model And Claim Gate" in kpi_report
+    assert "estimated_period_value_krw" in kpi_report
+    for model_input in (
+        "time_saved_per_user_per_week_hours",
+        "fully_loaded_hourly_cost_krw",
+        "weekly_active_users",
+        "evidence_open_rate",
+        "decision_to_action_conversion_rate",
+        "pilot_period_weeks",
+        "risk_reduction_adjustment",
+    ):
+        assert model_input in kpi_report
+
+    assert "Measured value unavailable in this branch" in kpi_report
+    assert "must not be presented as a proven value" in kpi_report
+    assert "Naruon has proven a 20B KRW ROI" in kpi_report
+    assert "No live ROI number should be claimed" in buyer_package
+    assert "live measured data" in buyer_package
+    assert "live measured data is required before ROI claims" in security_questionnaire
+    assert "- [x] **Step 2: Define ROI model**" in readiness_plan
+    assert "- [ ] **Step 2: Define ROI model**" not in readiness_plan
+
+
+def test_20b_buyer_package_rejects_final_procurement_claim_language() -> None:
+    buyer_package = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-20b-buyer-package.md"
+    )
+    demo_script = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-20b-demo-script.md"
+    )
+    telemetry_report = read_repo_text(
+        "docs/superpowers/reports/2026-07-02-naruon-design-to-code-telemetry-qa.md"
+    )
+
+    assert "Accepted buyer-review language:" in buyer_package
+    assert "Rejected language:" in buyer_package
+    assert "## Do Not Say" in demo_script
+    for rejected_claim in (
+        "Naruon is public-launch ready.",
+        "Live ROI has been proven.",
+        "All provider writes are production-proven.",
+    ):
+        assert rejected_claim in demo_script
+
+    assert "controlled enterprise buyer technical review" in buyer_package
+    assert "not a final public-launch or contract-close claim" in buyer_package
+    assert "not a claim that Naruon is ready for public SaaS launch" in telemetry_report
 
 
 def test_coderabbit_approval_is_decoupled_from_github_checks() -> None:
