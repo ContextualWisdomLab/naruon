@@ -26,4 +26,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Baseline migration: production rollbacks should restore from backup or a
     # later explicit down revision rather than dropping customer-owned metadata.
-    pass
+    return None

@@ -1,27 +1,50 @@
-# Dependency Review Action
-#
-# This Action will scan dependency manifest files that change as part of a Pull Request,
-# surfacing known-vulnerable versions of the packages declared or updated in the PR.
-# Once installed, if the workflow run is marked as required,
-# PRs introducing known-vulnerable packages will be blocked from merging.
-#
-# Source repository: https://github.com/actions/dependency-review-action
-name: 'Dependency Review'
-on: [pull_request]
+name: Dependency Review
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - master
+      - "release/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
+
+concurrency:
+  group: dependency-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
-      - name: 'Checkout Repository'
+      - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: 'Dependency Review'
+        with:
+          persist-credentials: false
+
+      - name: Log dependency review policy
+        env:
+          BASE_REF: ${{ github.base_ref || github.ref_name }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          printf 'Dependency Review fails on moderate, high, or critical dependency findings.\n'
+          printf 'Base ref: %s\n' "$BASE_REF"
+          printf 'Head ref: %s\n' "$HEAD_REF"
+
+      - name: Review dependency changes
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: never
+          warn-only: false

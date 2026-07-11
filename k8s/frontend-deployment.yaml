@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
+  namespace: naruon-dev
   labels:
     app: frontend
 spec:
@@ -21,10 +22,26 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: frontend-tmp
+          emptyDir: {}
+        - name: frontend-next-cache
+          emptyDir: {}
       containers:
       - name: frontend
-        image: ghcr.io/seongho-bae/ai_email_client-frontend:REPLACE_ME_VERSION
+        image: ghcr.io/contextualwisdomlab/ai_email_client-frontend:REPLACE_ME_VERSION
         imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 10001
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
         ports:
         - containerPort: 3000
         resources:
@@ -34,27 +51,13 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-              - ALL
+        volumeMounts:
+        - name: frontend-tmp
+          mountPath: /tmp
+        - name: frontend-next-cache
+          mountPath: /app/.next/cache
         env:
           - name: BACKEND_INTERNAL_URL
             value: "http://backend:8000"
           - name: ALLOW_DOCKER_BACKEND_INTERNAL_URL
             value: "1"
-        volumeMounts:
-        # readOnlyRootFilesystem needs writable paths for `next start`:
-        # Next.js writes runtime caches under .next/cache (fetch/image cache),
-        # and libraries may use /tmp. WORKDIR is /app (frontend/Dockerfile).
-        - name: next-cache
-          mountPath: /app/.next/cache
-        - name: tmp
-          mountPath: /tmp
-      volumes:
-      - name: next-cache
-        emptyDir: {}
-      - name: tmp
-        emptyDir: {}

@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres-db
+  namespace: naruon-dev
   labels:
     app: postgres-db
 spec:
@@ -15,24 +16,39 @@ spec:
       labels:
         app: postgres-db
     spec:
-      # pgvector/postgres runs the server as the `postgres` user (uid/gid 999).
-      # fsGroup makes the persistent volume writable by that group.
+      # Official postgres-derived images support arbitrary non-root UIDs when
+      # writable data, socket, and temp directories are mounted explicitly.
       securityContext:
+        fsGroup: 10001
         runAsNonRoot: true
-        runAsUser: 999
-        runAsGroup: 999
-        fsGroup: 999
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+      - name: postgres-run
+        emptyDir: {}
+      - name: postgres-tmp
+        emptyDir: {}
       containers:
       - name: postgres
-        image: pgvector/pgvector:pg16
+        image: docker.io/pgvector/pgvector:pg16
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
           capabilities:
             drop:
               - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10001
+          runAsGroup: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
         env:
         - name: POSTGRES_USER
           value: postgres
@@ -50,34 +66,19 @@ spec:
         ports:
         - containerPort: 5432
           name: postgres
-        resources:
-          requests:
-            cpu: 250m
-            memory: 512Mi
-          limits:
-            cpu: "1"
-            memory: 1Gi
         volumeMounts:
-        - name: pgdata
+        - name: postgres-data
           mountPath: /var/lib/postgresql/data
-        # readOnlyRootFilesystem needs writable socket + temp dirs.
-        - name: run
+        - name: postgres-run
           mountPath: /var/run/postgresql
-        - name: tmp
+        - name: postgres-tmp
           mountPath: /tmp
-      volumes:
-      - name: run
-        emptyDir: {}
-      - name: tmp
-        emptyDir: {}
-  # Persistent storage: without this the database is stored on the pod's
-  # ephemeral filesystem and is lost on every restart/reschedule.
   volumeClaimTemplates:
   - metadata:
-      name: pgdata
+      name: postgres-data
     spec:
       accessModes:
-        - ReadWriteOnce
+      - ReadWriteOnce
       resources:
         requests:
           storage: 10Gi

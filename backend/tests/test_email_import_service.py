@@ -267,6 +267,98 @@ def test_build_email_object_persists_attachment_parse_metadata():
     assert email_obj.attachments[1].content_segments == []
 
 
+def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
+    parsed = {
+        "message_id": "<structured@example.com>",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": "owner@example.com",
+        "subject": "Structured attachments",
+        "in_reply_to": None,
+        "references": None,
+        "body": "See attached",
+        "body_content_type": "text/plain",
+        "body_parse_content": "See attached",
+        "attachments": [
+            {
+                "filename": "status.json",
+                "content": '{"project":"Launch"}',
+                "content_type": "application/json",
+                "parse_content": '{"project":"Launch"}',
+                "parse_content_type": "application/json",
+                "parser_key": "json",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "status.csv",
+                "content": "name,status Launch,Ready",
+                "content_type": "text/csv",
+                "parse_content": "name,status\nLaunch,Ready",
+                "parse_content_type": "text/csv",
+                "parser_key": "csv",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "status.xml",
+                "content": "Launch",
+                "content_type": "application/xml",
+                "parse_content": "<root>Launch</root>",
+                "parse_content_type": "application/xml",
+                "parser_key": "xml",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "invite.ics",
+                "content": "BEGIN:VCALENDAR SUMMARY:Launch END:VCALENDAR",
+                "content_type": "text/calendar",
+                "parse_content": "BEGIN:VCALENDAR\nSUMMARY:Launch\nEND:VCALENDAR",
+                "parse_content_type": "text/calendar",
+                "parser_key": "calendar",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+        ],
+    }
+
+    email_obj, attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<structured@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-1",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=list(parsed["attachments"]),
+        fitted_embeddings=[
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+        ],
+    )
+
+    assert attachment_count == 4
+    segment_text_by_filename = {
+        attachment.filename: [
+            segment.safe_text_content for segment in attachment.content_segments
+        ]
+        for attachment in email_obj.attachments
+    }
+    assert segment_text_by_filename == {
+        "status.json": ["project: Launch"],
+        "status.csv": ["name, status", "name=Launch; status=Ready"],
+        "status.xml": ["Launch"],
+        "invite.ics": ["SUMMARY: Launch"],
+    }
+    assert {
+        attachment.parser_key for attachment in email_obj.attachments
+    } == {"json", "csv", "xml", "calendar"}
+
+
 @pytest.mark.asyncio
 async def test_import_single_eml_offloads_read_and_parse(monkeypatch, tmp_path):
     eml_path = tmp_path / "message.eml"
@@ -356,7 +448,10 @@ async def test_import_single_eml_rejects_symlink(tmp_path):
     target_path = tmp_path / "target.txt"
     target_path.write_text("not an eml")
     symlink_path = tmp_path / "message.eml"
-    symlink_path.symlink_to(target_path)
+    try:
+        symlink_path.symlink_to(target_path)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable in this test session: {exc}")
     session = AsyncMock(spec=AsyncSession)
 
     result = await email_import_module._import_single_eml(
