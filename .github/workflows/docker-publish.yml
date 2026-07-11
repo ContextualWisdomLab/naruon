@@ -136,7 +136,11 @@ jobs:
             OCI_IMAGE_BASE_DIGEST=${{ steps.oci.outputs.base_digest }}
             OCI_IMAGE_BASE_NAME=${{ steps.oci.outputs.base_name }}
           provenance: true
-          sbom: true
+          # PR validation only checks that each image still builds. Release
+          # publishing keeps SBOM attestation enabled for distributable images;
+          # avoiding it here prevents unrelated PRs from failing on transient
+          # Docker Hub buildkit-syft-scanner pulls.
+          sbom: false
 
   publish_images:
     name: publish ${{ matrix.component }} image
