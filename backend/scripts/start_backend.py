@@ -12,7 +12,6 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from core.env_paths import ENV_FILE_PATHS, expand_operator_path  # noqa: E402
 from core.runtime_secrets import validate_auth_session_hmac_secret_value  # noqa: E402
-from core.env_paths import ENV_FILE_PATHS, expand_operator_path  # noqa: E402
 from core.url_validation import (  # noqa: E402
     parse_allowed_hosts,
     validate_https_url_host_details,
