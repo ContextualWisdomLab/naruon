@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.env_paths import ENV_FILE_PATHS, operator_env_file_paths
 from core.runtime_secrets import (
     validate_auth_session_hmac_secret_value,
 )
@@ -120,10 +121,14 @@ class Settings(BaseSettings):
     ALLOWED_OIDC_HOSTS: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=("~/.env", "../.env", ".env"),
+        env_file=ENV_FILE_PATHS,
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    def __init__(self, **values: Any) -> None:
+        values.setdefault("_env_file", operator_env_file_paths())
+        super().__init__(**values)
 
     @field_validator("READONLY_DATABASE_URL", mode="before")
     @classmethod

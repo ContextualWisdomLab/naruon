@@ -946,12 +946,12 @@ async def _generate_import_embeddings(
 
 def _read_eml_bytes(eml_path: Path) -> bytes:
     no_follow_flag = getattr(os, "O_NOFOLLOW", None)
-    if no_follow_flag is None:
-        raise EmailParseError(
-            "Email import requires O_NOFOLLOW support (unavailable on this platform)"
-        )
+    if no_follow_flag is None and eml_path.is_symlink():
+        raise EmailParseError("Failed to read email file")
 
-    open_flags = os.O_RDONLY | no_follow_flag
+    open_flags = os.O_RDONLY
+    if no_follow_flag is not None:
+        open_flags |= no_follow_flag
     file_descriptor_transferred = False
     try:
         file_descriptor = os.open(eml_path, open_flags)
