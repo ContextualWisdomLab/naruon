@@ -766,7 +766,12 @@ async def _import_single_eml(
 ) -> EmailImportItemResult:
     try:
         content, parsed = await asyncio.to_thread(_read_and_parse_eml, eml_path)
-    except EmailParseError:
+    except EmailParseError as exc:
+        logger.warning(
+            "Email import item failed: reason_code=parse_failed filename=%s error_type=%s",
+            display_filename,
+            type(exc).__name__,
+        )
         return EmailImportItemResult(
             filename=display_filename,
             status="failed",
@@ -826,6 +831,10 @@ async def _import_single_eml(
         await session.commit()
     except Exception:
         await session.rollback()
+        logger.warning(
+            "Email import item failed: reason_code=database_commit_failed filename=%s",
+            display_filename,
+        )
         return EmailImportItemResult(
             filename=display_filename,
             status="failed",
@@ -946,8 +955,14 @@ async def _generate_import_embeddings(
 
 def _read_eml_bytes(eml_path: Path) -> bytes:
     no_follow_flag = getattr(os, "O_NOFOLLOW", None)
-    if no_follow_flag is None and eml_path.is_symlink():
-        raise EmailParseError("Failed to read email file")
+    path_stat = None
+    if no_follow_flag is None:
+        try:
+            path_stat = eml_path.lstat()
+        except OSError as exc:
+            raise EmailParseError("Failed to read email file") from exc
+        if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISREG(path_stat.st_mode):
+            raise EmailParseError("Failed to read email file")
 
     open_flags = os.O_RDONLY
     if no_follow_flag is not None:
@@ -961,6 +976,11 @@ def _read_eml_bytes(eml_path: Path) -> bytes:
     try:
         file_stat = os.fstat(file_descriptor)
         if not stat.S_ISREG(file_stat.st_mode):
+            raise EmailParseError("Failed to read email file")
+        if path_stat is not None and (
+            getattr(file_stat, "st_ino", None) != getattr(path_stat, "st_ino", None)
+            or getattr(file_stat, "st_dev", None) != getattr(path_stat, "st_dev", None)
+        ):
             raise EmailParseError("Failed to read email file")
         file_handle = os.fdopen(file_descriptor, "rb")
         file_descriptor_transferred = True
@@ -1073,6 +1093,11 @@ async def import_email_uploads(
                     upload_dir=upload_dir,
                 )
                 if failure_reason is not None:
+                    logger.warning(
+                        "Email import upload failed: reason_code=%s filename=%s",
+                        failure_reason,
+                        upload_name,
+                    )
                     result.add_item(
                         EmailImportItemResult(
                             filename=upload_name,
