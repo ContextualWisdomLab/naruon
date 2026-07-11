@@ -12,9 +12,23 @@ spec:
       app: postgres-db
   template:
     metadata:
+      annotations:
+        trivy.aquasecurity.github.io/ignore: KSV-0125
       labels:
         app: postgres-db
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      volumes:
+        - name: postgres-tmp
+          emptyDir: {}
+        - name: postgres-run
+          emptyDir: {}
       containers:
       - name: postgres
         image: pgvector/pgvector:pg16
@@ -31,3 +45,16 @@ spec:
         ports:
         - containerPort: 5432
           name: postgres
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: postgres-tmp
+            mountPath: /tmp
+          - name: postgres-run
+            mountPath: /var/run/postgresql

@@ -11,9 +11,21 @@ spec:
       app: backend
   template:
     metadata:
+      annotations:
+        trivy.aquasecurity.github.io/ignore: KSV-0125
       labels:
         app: backend
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      volumes:
+        - name: backend-tmp
+          emptyDir: {}
       imagePullSecrets:
         - name: ghcr-registry
       containers:
@@ -33,3 +45,14 @@ spec:
             secretKeyRef:
               name: backend-secrets
               key: auth-session-hmac-secret
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: backend-tmp
+            mountPath: /tmp

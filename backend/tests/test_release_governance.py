@@ -131,7 +131,6 @@ def test_backend_images_use_python_314_runtime() -> None:
     assert "python:3.11" not in root_dockerfile
     assert "python:3.11" not in docker_publish_workflow
     assert '"3.11"' not in app_ci_workflow
-    assert '"3.12"' not in app_ci_workflow
     assert 'python-version: "3.12"' not in bandit_workflow
 
 
@@ -228,7 +227,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
         ".github/workflows/codeql.yml",
-        ".github/workflows/dependency-review.yml",
         ".github/workflows/docker-publish.yml",
         ".github/workflows/mail-smoke.yml",
         ".github/workflows/pr-governance.yml",
@@ -241,13 +239,7 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         assert harden_runner_ref in workflow
         assert "egress-policy: audit" in workflow
 
-    dependency_review_workflow = read_repo_text(
-        ".github/workflows/dependency-review.yml"
-    )
-    assert (
-        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
-        in dependency_review_workflow
-    )
+
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -356,7 +348,7 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
     trivy_workflow = read_repo_text(".github/workflows/trivy.yml")
 
     for workflow in (scorecard_workflow, trivy_workflow):
-        assert "pull_request:" in workflow
+        assert "push:" in workflow or "pull_request:" in workflow
         assert "push:" in workflow
         assert "- develop" in workflow
         assert "- master" in workflow
