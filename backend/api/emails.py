@@ -158,6 +158,8 @@ def _email_list_item(
         thread_id=thread_id,
         reply_count=reply_count,
         is_self_sent=is_self_sent,
+        # default column value is applied at flush; coalesce unflushed None -> read
+        is_read=email.is_read if email.is_read is not None else True,
         requires_reply=requires_reply,
     )
 
@@ -189,6 +191,7 @@ class EmailListItem(BaseModel):
     reply_count: int | None = None
     has_draft: bool = False
     is_self_sent: bool = False
+    is_read: bool = True
     requires_reply: bool = False
     schedule_conflict: bool = False
 
