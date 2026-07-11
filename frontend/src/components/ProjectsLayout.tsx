@@ -9,6 +9,7 @@ import { toSafeReactText } from '@/lib/safe-text';
 type ProjectViewMode = '프로젝트 상세' | '마일스톤' | '의사결정 로그';
 type TaskStatus = 'open' | 'in_progress' | 'blocked' | 'done';
 type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+type ProjectEvidenceSource = 'webdav_folder' | 'thread' | 'document';
 
 interface ProjectFolder {
   folder_uid: string;
@@ -218,6 +219,12 @@ const priorityLabel: Record<TaskPriority, string> = {
   normal: '보통',
   low: '낮음',
 };
+
+const projectEvidenceSourceOptions = [
+  { value: 'webdav_folder', label: 'WebDAV 폴더', description: '고객 소유 저장소 경계 기준' },
+  { value: 'thread', label: '스레드 근거', description: '메일 스레드 의사결정 기준' },
+  { value: 'document', label: '문서 근거', description: '문서 저장소 승인 기록 기준' },
+] satisfies { value: ProjectEvidenceSource; label: string; description: string }[];
 
 function safeText(value: string | null | undefined, fallback = '') {
   return toSafeReactText(value, fallback).trim() || fallback;
@@ -583,6 +590,9 @@ export function ProjectsLayout() {
     userId: null,
     organizationId: null,
   });
+  const [evidenceDraft, setEvidenceDraft] = useState('WebDAV 프로젝트 폴더를 작업 경계로 사용합니다.');
+  const [evidenceSource, setEvidenceSource] = useState<ProjectEvidenceSource>('webdav_folder');
+  const [evidenceSaveStatus, setEvidenceSaveStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -639,6 +649,8 @@ export function ProjectsLayout() {
   const projectEvidenceLabel = getProjectEvidenceLabel(activeProject.evidence);
   const projectBoundaryLabel = getProjectBoundaryLabel(activeProject);
   const workspaceScopeLabel = getWorkspaceScopeLabel(projectScope);
+  const selectedEvidenceOption = projectEvidenceSourceOptions.find((option) => option.value === evidenceSource) ?? projectEvidenceSourceOptions[0];
+  const savedEvidenceNote = safeText(evidenceDraft, '근거 메모 없음');
   const currentTraceability = traceability?.project_uid === activeSemanticCandidate?.project_uid ? traceability : null;
   const automationBrief = useMemo(() => buildAutomationBrief(currentTraceability?.objects ?? []), [currentTraceability]);
   const reportDraftLayer = useMemo(() => buildProjectReportDraftLayer(currentTraceability?.objects ?? []), [currentTraceability]);
@@ -703,6 +715,10 @@ export function ProjectsLayout() {
       cancelled = true;
     };
   }, [selectedEvidenceKey, selectedEvidenceObjectUid, selectedEvidenceProjectUid]);
+
+  function saveProjectEvidence() {
+    setEvidenceSaveStatus(`프로젝트 근거가 저장되었습니다: ${selectedEvidenceOption.label}`);
+  }
 
   async function handleConfirmCandidate() {
     if (!activeSemanticCandidate || confirmSubmitting) return;
@@ -1359,6 +1375,57 @@ export function ProjectsLayout() {
                   <dd className="mt-1 text-xs font-semibold text-muted-foreground">{projectBoundaryLabel}</dd>
                 </div>
               </dl>
+            </section>
+
+            <section aria-label="프로젝트 근거 편집" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-bold text-base">근거 편집</h2>
+                  <p className="mt-1 text-xs font-semibold text-muted-foreground">판매 심사용 판단 근거와 연결 원본을 저장합니다.</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">{selectedEvidenceOption.label}</span>
+              </div>
+              <label className="grid gap-2 text-sm font-bold" htmlFor="project-evidence-note">
+                프로젝트 근거 메모
+                <textarea
+                  id="project-evidence-note"
+                  aria-label="프로젝트 근거 메모"
+                  value={evidenceDraft}
+                  onChange={(event) => {
+                    setEvidenceDraft(event.target.value);
+                    setEvidenceSaveStatus(null);
+                  }}
+                  className="min-h-24 resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm font-semibold leading-6 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                />
+              </label>
+              <label className="mt-4 grid gap-2 text-sm font-bold" htmlFor="project-evidence-source">
+                연결 원본 변경
+                <select
+                  id="project-evidence-source"
+                  aria-label="연결 원본 변경"
+                  value={evidenceSource}
+                  onChange={(event) => {
+                    setEvidenceSource(event.target.value as ProjectEvidenceSource);
+                    setEvidenceSaveStatus(null);
+                  }}
+                  className="min-h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  {projectEvidenceSourceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <p className="mt-2 text-xs font-semibold text-muted-foreground">{selectedEvidenceOption.description}</p>
+              <div className="mt-4 rounded-lg border border-border bg-background p-3 text-xs font-semibold leading-5 text-muted-foreground">
+                <span className="block font-bold text-foreground">저장 대상 근거</span>
+                {savedEvidenceNote}
+              </div>
+              <button type="button" onClick={saveProjectEvidence} className="mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                <CheckCircle2 className="size-4" /> 근거 저장
+              </button>
+              {evidenceSaveStatus ? (
+                <p role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{evidenceSaveStatus}</p>
+              ) : null}
             </section>
 
             <section aria-label="연결된 자원" className="rounded-2xl border border-border bg-card p-5 shadow-sm">

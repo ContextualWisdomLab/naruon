@@ -16,12 +16,40 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-registry
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: backend-tmp
+          emptyDir: {}
       containers:
       - name: backend
-        image: ghcr.io/seongho-bae/ai_email_client-backend:REPLACE_ME_VERSION
+        image: ghcr.io/contextualwisdomlab/ai_email_client-backend:REPLACE_ME_VERSION
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 10001
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
         ports:
         - containerPort: 8000
+        volumeMounts:
+        - name: backend-tmp
+          mountPath: /tmp
         env:
         - name: DATABASE_URL
           valueFrom:
