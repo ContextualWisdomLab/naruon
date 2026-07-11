@@ -931,6 +931,11 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "permissions:\n  contents: read" in workflow
     assert "trusted-governance" in workflow
     assert ".base.sha" in workflow
+    assert "TRUSTED_BASE_SHA" in workflow
+    assert "github.event.pull_request.base.sha" in workflow
+    assert "base_sha:" in workflow
+    assert "github.event.inputs.base_sha" in workflow
+    assert "Using event-provided trusted governance base SHA" in workflow
     assert "github.sha" not in workflow
     assert "tarball/${trusted_ref}" in workflow
     assert "gh_api_with_retry" in workflow
@@ -945,6 +950,9 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "headRefOid" in gate_script
     assert "mergeStateStatus" in gate_script
     assert "gh pr checks" in gate_script and "--required" in gate_script
+    assert "no required checks reported" in gate_script
+    assert "no legacy required status contexts reported" in gate_script
+    assert "add_waiting" in gate_script
     assert "check-runs" in gate_script
     assert "Review skipped" in gate_script
     assert "CodeRabbit" in gate_script or "coderabbit" in gate_script
