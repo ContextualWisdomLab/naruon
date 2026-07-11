@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 import { describe, expect, it } from 'vitest';
-import { toSafeReturnTo } from './page';
+import { toSafeReturnTo } from './return-target';
 
 describe('auth callback return target validation', () => {
   it('allows local callback return paths', () => {
