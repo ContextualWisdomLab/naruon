@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres-db
+  namespace: naruon-dev
   labels:
     app: postgres-db
 spec:
@@ -16,7 +17,7 @@ spec:
         app: postgres-db
     spec:
       securityContext:
-        fsGroup: 999
+        fsGroup: 10001
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
@@ -35,8 +36,8 @@ spec:
               - ALL
           readOnlyRootFilesystem: true
           runAsNonRoot: true
-          runAsUser: 999
-          runAsGroup: 999
+          runAsUser: 10001
+          runAsGroup: 10001
           seccompProfile:
             type: RuntimeDefault
         resources:

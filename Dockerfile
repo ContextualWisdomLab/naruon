@@ -109,4 +109,7 @@ ENV ALLOW_DOCKER_BACKEND_INTERNAL_URL=1
 
 EXPOSE 3000 8000
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+    CMD python -c "import urllib.request; [urllib.request.urlopen(url, timeout=3).close() for url in ('http://127.0.0.1:8000/', 'http://127.0.0.1:3000/')]"
+
 CMD ["/app/scripts/docker_entrypoint.sh"]

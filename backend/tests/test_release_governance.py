@@ -14,6 +14,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
@@ -209,11 +210,13 @@ def test_github_actions_are_pinned_to_exact_sha() -> None:
         for line_number, line in enumerate(workflow_lines, 1):
             if major_only_action.search(line):
                 unpinned_major_refs.append(
-                    f"{workflow_path.relative_to(REPO_ROOT)}:{line_number}:{line.strip()}"
+                    f"{workflow_path.relative_to(REPO_ROOT).as_posix()}:"
+                    f"{line_number}:{line.strip()}"
                 )
             elif sha_without_version_comment.search(line):
                 missing_version_comments.append(
-                    f"{workflow_path.relative_to(REPO_ROOT)}:{line_number}:{line.strip()}"
+                    f"{workflow_path.relative_to(REPO_ROOT).as_posix()}:"
+                    f"{line_number}:{line.strip()}"
                 )
 
     assert unpinned_major_refs == [], "\n".join(unpinned_major_refs)
@@ -255,6 +258,49 @@ def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
     assert duplicates == [], "\n".join(duplicates)
 
 
+def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
+    assert WORKFLOW_DIR.exists(), (
+        "required governance artifact is missing: .github/workflows"
+    )
+    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
+        WORKFLOW_DIR.glob("*.yaml")
+    )
+    assert governed_workflows, "no governed GitHub workflows found"
+
+    class UniqueKeyLoader(yaml.SafeLoader):
+        pass
+
+    def construct_mapping(
+        loader: yaml.SafeLoader,
+        node: yaml.MappingNode,
+        deep: bool = False,
+    ) -> dict[object, object]:
+        mapping: dict[object, object] = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise AssertionError(
+                    f"duplicate mapping key {key!r} on line "
+                    f"{key_node.start_mark.line + 1}"
+                )
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        return mapping
+
+    UniqueKeyLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        construct_mapping,
+    )
+
+    duplicates: list[str] = []
+    for workflow_path in governed_workflows:
+        try:
+            yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
+        except AssertionError as exc:
+            duplicates.append(f"{workflow_path.relative_to(REPO_ROOT)}: {exc}")
+
+    assert duplicates == [], "\n".join(duplicates)
+
+
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"
@@ -283,8 +329,24 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
         in dependency_review_workflow
     )
-    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in dependency_review_workflow
-    assert 'printf \'Head ref: %s\\n\' "${{ github.head_ref || github.ref_name }}"' not in dependency_review_workflow
+    assert "BASE_REF: ${{ github.base_ref || github.ref_name }}" in (
+        dependency_review_workflow
+    )
+    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in (
+        dependency_review_workflow
+    )
+    log_dependency_review_step = dependency_review_workflow.split(
+        "- name: Log dependency review policy", 1
+    )[1].split("- name: Review dependency changes", 1)[0]
+    log_dependency_review_script = log_dependency_review_step.split("run: |", 1)[1]
+    assert "${{ github.base_ref || github.ref_name }}" not in (
+        log_dependency_review_script
+    )
+    assert "${{ github.head_ref || github.ref_name }}" not in (
+        log_dependency_review_script
+    )
+    assert 'printf \'Base ref: %s\\n\' "$BASE_REF"' in log_dependency_review_script
+    assert 'printf \'Head ref: %s\\n\' "$HEAD_REF"' in log_dependency_review_script
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -620,6 +682,8 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert workflow.count("image: naruon") == 2
     assert "push: false" in workflow
     assert "push: true" in workflow
+    assert "sbom: false" in workflow
+    assert workflow.count("sbom: true") == 1
     assert "type=semver" in workflow
     assert "type=ref,event=branch" not in workflow
     assert "deploy_preflight:" in workflow
@@ -656,6 +720,8 @@ def test_frontend_dockerfile_builds_and_starts_production_artifact() -> None:
         'CMD sh -c "exec ./node_modules/.bin/next start --hostname 0.0.0.0 --port ${PORT:-3000}"'
         in dockerfile
     )
+    assert "HEALTHCHECK --interval=30s --timeout=5s" in dockerfile
+    assert "fetch('http://127.0.0.1:' + (process.env.PORT || '3000'))" in dockerfile
     assert "pnpm run start" not in dockerfile
     assert "pnpm run dev" not in dockerfile
 
@@ -670,23 +736,35 @@ def test_kubernetes_deployments_use_restricted_runtime_security_contexts() -> No
     assert "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend" in frontend_deployment
 
     for manifest in (backend_deployment, db_statefulset, frontend_deployment):
+        assert "namespace: naruon-dev" in manifest
         assert "seccompProfile:\n          type: RuntimeDefault" in manifest
         assert "allowPrivilegeEscalation: false" in manifest
         assert "capabilities:\n            drop:\n              - ALL" in manifest
         assert "readOnlyRootFilesystem: true" in manifest
         assert "runAsNonRoot: true" in manifest
+        assert "resources:\n          requests:" in manifest
+        assert "cpu:" in manifest
+        assert "memory:" in manifest
         assert "mountPath: /tmp" in manifest
 
     assert "runAsUser: 10001" in backend_deployment
     assert "runAsGroup: 10001" in backend_deployment
-    assert "runAsUser: 999" in db_statefulset
-    assert "runAsGroup: 999" in db_statefulset
-    assert "fsGroup: 999" in db_statefulset
+    assert "runAsUser: 10001" in db_statefulset
+    assert "runAsGroup: 10001" in db_statefulset
+    assert "fsGroup: 10001" in db_statefulset
     assert "mountPath: /var/lib/postgresql/data" in db_statefulset
     assert "mountPath: /var/run/postgresql" in db_statefulset
-    assert "runAsUser: 1000" in frontend_deployment
-    assert "runAsGroup: 1000" in frontend_deployment
+    assert "runAsUser: 10001" in frontend_deployment
+    assert "runAsGroup: 10001" in frontend_deployment
     assert "mountPath: /app/.next/cache" in frontend_deployment
+
+    for service_manifest in (
+        "k8s/backend-service.yaml",
+        "k8s/db-service.yaml",
+        "k8s/frontend-service.yaml",
+        "k8s/ingress.yaml",
+    ):
+        assert "namespace: naruon-dev" in read_repo_text(service_manifest)
 
 
 def test_backend_dockerfile_uses_modern_env_syntax() -> None:
@@ -712,6 +790,9 @@ def test_backend_dockerfile_uses_modern_env_syntax() -> None:
     assert "ENV DATABASE_URL=" not in dockerfile
     assert '"/app/scripts/docker_entrypoint.sh"' in dockerfile
     assert "RUN chmod +x /app/scripts/docker_entrypoint.sh" in dockerfile
+    assert "HEALTHCHECK --interval=30s --timeout=5s" in dockerfile
+    assert "http://127.0.0.1:8000/" in dockerfile
+    assert "http://127.0.0.1:3000/" in dockerfile
     assert "useradd --system --create-home --home-dir /home/appuser" in dockerfile
     backend_cmd = 'CMD ["python", "scripts/start_backend.py", "--host", "0.0.0.0", "--port", "8000"]'
     assert dockerfile.find("USER appuser") < dockerfile.find(backend_cmd)
@@ -934,6 +1015,11 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "github.sha" not in workflow
     assert "tarball/${trusted_ref}" in workflow
     assert "gh_api_with_retry" in workflow
+    assert "extract_json_value" in workflow
+    assert "empty response body" in workflow
+    assert "invalid JSON response body" in workflow
+    assert "returned invalid JSON" in workflow
+    assert "did not produce valid JSON after 4 attempts" in workflow
     assert "GitHub API request attempt" in workflow
     assert "Trusted governance ref must be a full commit SHA" in workflow
     assert "trusted_archive_candidate" in workflow
