@@ -14,7 +14,6 @@ docs/engineering/email-model-reconciliation.md.
 """
 
 import db.models as db_models
-from db.models import Base
 
 _RETIRED_TABLE_NAMES = (
     "user_accounts",
@@ -39,7 +38,7 @@ _RETIRED_MODEL_CLASS_NAMES = (
 
 def test_retired_parallel_email_tables_stay_out_of_metadata():
     for retired_table_name in _RETIRED_TABLE_NAMES:
-        assert retired_table_name not in Base.metadata.tables, (
+        assert retired_table_name not in db_models.Base.metadata.tables, (
             f"{retired_table_name!r} belongs to the retired parallel email "
             "model; email_records is the single source of truth "
             "(docs/engineering/email-model-reconciliation.md)"
@@ -63,4 +62,4 @@ def test_email_source_of_truth_tables_present():
         "caldav_accounts",
         "webdav_accounts",
     ):
-        assert live_table_name in Base.metadata.tables
+        assert live_table_name in db_models.Base.metadata.tables
