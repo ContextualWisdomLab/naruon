@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     ALLOWED_POP3_PORTS: str = "995"
     ALLOWED_LLM_BASE_URL_HOSTS: str = ""
     ALLOW_LOCAL_LLM_PROVIDERS: bool = False
+    # Host allowlist for the scopeweave promotion target. The per-workspace
+    # base URL and PAT themselves live encrypted in the database
+    # (scopeweave_promotion_target); this setting only pins which hosts an
+    # operator is permitted to promote work items to (SSRF host allowlist).
+    ALLOWED_SCOPEWEAVE_HOSTS: str = ""
     ALLOWED_CORS_ORIGINS: str = ""
     ENABLE_PROMETHEUS_METRICS: bool = False
     DATA_REGION: str = "kr"
@@ -101,6 +106,14 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
+
+    # Hybrid search fusion (see services/hybrid_retrieval/score_fusion.py;
+    # defaults grounded in Bruch, Gai & Ingber 2023 and Cormack et al. 2009)
+    SEARCH_FUSION_STRATEGY: str = "convex_combination"
+    SEARCH_FUSION_SEMANTIC_WEIGHT: float = 0.7
+    SEARCH_RRF_RANK_CONSTANT: int = 60
+    SEARCH_CHANNEL_CANDIDATE_LIMIT: int = 50
+    SEARCH_MINIMUM_FUSED_SCORE: float = 0.05
 
     # OIDC Settings
     OIDC_ISSUER_URL: str | None = None
