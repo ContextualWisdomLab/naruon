@@ -43,7 +43,21 @@ type SearchResultItem = {
   thread_id: string | null;
   reply_count?: number;
   score?: number;
+  result_kind?: string | null;
+  evidence_kinds?: string[];
 };
+
+const EVIDENCE_KIND_LABELS: Record<string, string> = {
+  email_body: "본문",
+  attachment_content: "첨부",
+  content_segment: "문서 구절",
+  project_graph_object: "프로젝트 항목",
+};
+
+function evidenceKindLabel(kind: string | null | undefined) {
+  if (!kind || kind === "email_body") return null;
+  return EVIDENCE_KIND_LABELS[kind] ?? kind;
+}
 
 type SearchResponse = {
   results: SearchResultItem[];
@@ -298,6 +312,11 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
             <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
               답장 {result.reply_count ?? 1}건
             </span>
+            {evidenceKindLabel(result.result_kind) ? (
+              <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                근거: {evidenceKindLabel(result.result_kind)}
+              </span>
+            ) : null}
             <span
               className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${confidenceTone(confidence)}`}
             >
