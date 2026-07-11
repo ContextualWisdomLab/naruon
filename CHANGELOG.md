@@ -1,4 +1,14 @@
 ## [Unreleased]
+### 검색 (Context Search)
+
+- Context Search를 언어 독립(hybrid lexical+dense) 검색으로 전면 교체했습니다 (G6, naruon#981·naruon#975): `to_tsvector('english')` 기반 FTS를 제거하고, `pg_trgm` 문자 trigram(word similarity, GiST kNN) lexical 채널 + pgvector 멀티링구얼 dense 채널을 후보 단위로 융합합니다. CJK 질의가 형태소 분석기 없이 매칭되고, 베트남어는 NFC/NFD·성조 유무와 무관하게 매칭됩니다.
+- 점수 융합을 연구 근거 기반 seam으로 도입했습니다: 기본은 이론적 min-max 정규화 convex combination(TM2C2, α=0.7; Bruch·Gai·Ingber 2023), 대안으로 Reciprocal Rank Fusion(η=60; Cormack et al. 2009)을 설정(`SEARCH_FUSION_STRATEGY`)으로 선택할 수 있습니다. 반환 score는 [0,1]로 유계입니다.
+- 검색 표면을 `content_segments`(문서 구절)와 `project_graph_objects`(프로젝트 항목)로 확장하고, 결과에 `result_kind`/`evidence_kinds`(근거 출처)를 노출합니다. 검색 UI에 근거 배지를 추가했습니다.
+- LLM 프로바이더가 없거나 임베딩 생성이 실패해도 400 대신 lexical 전용으로 degrade 합니다.
+- 마이그레이션 `0010_language_agnostic_search`: `pg_trgm`·`unaccent` 확장, IMMUTABLE `search_normalized_text(text)` 함수(NFC normalize + unaccent + lower), 4개 검색 표면 GiST trigram 표현식 인덱스(siglen=256).
+- (수정) alembic revision id `0008_attachment_parser_audit_metadata`(38자)가 `alembic_version.version_num` VARCHAR(32)를 초과해 신규 DB에서 `alembic upgrade head`가 실패하던 문제를 id 단축(`0008_attachment_parser_audit`)으로 해결하고, revision id 길이(≤32) 가드 테스트를 추가했습니다.
+- 설계·연구 근거 기록: `docs/engineering/language-agnostic-hybrid-retrieval.md`.
+
 ### UI/UX 개선
 - `CalendarLayout`의 성공 상태에서 기술적 세부 정보 대신 사용자 친화적인 메시지를 표시하도록 개선하여 불필요한 정보 노출을 방지했습니다.
 - `CalendarLayout`의 일정 쓰기(Writeback) 액션 버튼들에 로딩 스피너(`Loader2`)를 추가하여 비동기 작업 시 즉각적인 시각적 피드백을 제공합니다.
