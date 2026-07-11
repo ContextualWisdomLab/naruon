@@ -98,6 +98,14 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
 
+    # Hybrid search fusion (see services/hybrid_retrieval/score_fusion.py;
+    # defaults grounded in Bruch, Gai & Ingber 2023 and Cormack et al. 2009)
+    SEARCH_FUSION_STRATEGY: str = "convex_combination"
+    SEARCH_FUSION_SEMANTIC_WEIGHT: float = 0.7
+    SEARCH_RRF_RANK_CONSTANT: int = 60
+    SEARCH_CHANNEL_CANDIDATE_LIMIT: int = 50
+    SEARCH_MINIMUM_FUSED_SCORE: float = 0.05
+
     # OIDC Settings
     OIDC_ISSUER_URL: str | None = None
     OIDC_CLIENT_ID: str | None = None

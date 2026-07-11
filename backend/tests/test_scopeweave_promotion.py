@@ -1,9 +1,9 @@
+import importlib
+
 import httpx
 import pytest
 
 import api.projects as projects_api
-import services.scopeweave_client as scopeweave_client
-import services.scopeweave_promotion as scopeweave_promotion
 from core.url_validation import ValidatedHTTPSURLHost
 from db.models import ScopeweavePromotionLink, ScopeweavePromotionTarget
 from db.session import get_db
@@ -25,6 +25,9 @@ from services.scopeweave_promotion import (
     build_import_payload,
     promote_project_object,
 )
+
+scopeweave_client = importlib.import_module("services.scopeweave_client")
+scopeweave_promotion = importlib.import_module("services.scopeweave_promotion")
 
 
 def _evidence() -> ProjectEvidence:

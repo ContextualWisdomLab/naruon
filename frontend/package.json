@@ -10,6 +10,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "full:smoke": "node scripts/full-product-ui-smoke.mjs",
+    "pilot:smoke": "node scripts/pilot-ui-smoke.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
