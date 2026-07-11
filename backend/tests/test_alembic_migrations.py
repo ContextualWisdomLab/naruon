@@ -219,12 +219,12 @@ def test_project_graph_projection_has_incremental_revision():
 
 def test_llm_batch_orchestrator_has_incremental_revision():
     versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    revision_path = versions_dir / "0010_llm_batch_orchestrator.py"
+    revision_path = versions_dir / "0011_llm_batch_orchestrator.py"
     assert revision_path.exists()
     revision_text = revision_path.read_text()
 
-    assert 'revision = "0010_llm_batch_orchestrator"' in revision_text
-    assert 'down_revision = "0009_project_graph_projection"' in revision_text
+    assert 'revision = "0011_llm_batch_orchestrator"' in revision_text
+    assert 'down_revision = "0010_language_agnostic_search"' in revision_text
     assert '"llm_batch_jobs"' in revision_text
     assert '"llm_batch_items"' in revision_text
     assert '"batch_job_uid"' in revision_text

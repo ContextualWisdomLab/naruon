@@ -61,7 +61,6 @@ _ORCHESTRATOR_TIMEOUT_SECONDS = 30.0
 # Poll budget while the orchestrator drains the batch through pg-llm-batch.
 _ORCHESTRATOR_POLL_INTERVAL_SECONDS = 1.0
 _ORCHESTRATOR_MAX_POLLS = 30
-_TERMINAL_STATUSES = frozenset({"completed", "succeeded", "failed", "error", "canceled"})
 _SUCCESS_STATUSES = frozenset({"completed", "succeeded"})
 
 # Cache the (im)port result so repeated imports don't re-probe sys.path.
@@ -173,7 +172,7 @@ async def try_batch_import_embeddings(
     session: AsyncSession,
     texts: list[str],
     *,
-    embedding_provider: "EmailImportEmbeddingProvider",
+    embedding_provider: EmailImportEmbeddingProvider,
     user_id: str,
     organization_id: str | None,
     dimension: int = STORAGE_EMBEDDING_DIMENSION,
@@ -549,14 +548,17 @@ def _plan_partitions(
             try:
                 close()
             except Exception:  # pragma: no cover - defensive
-                pass
+                logger.debug(
+                    "Failed to close pg_llm_batch config store",
+                    exc_info=True,
+                )
 
 
 async def _run_local_submodule_batch(
     session: AsyncSession,
     texts: list[str],
     *,
-    embedding_provider: "EmailImportEmbeddingProvider",
+    embedding_provider: EmailImportEmbeddingProvider,
     settings: BatchEmbeddingSettings,
     model: str,
     user_id: str,

@@ -35,10 +35,6 @@ from services.email_import_service import (
     _generate_import_embeddings,
 )
 import services.batch_embedding_service as batch_module
-from services.batch_embedding_service import (
-    resolve_batch_embedding_settings,
-    try_batch_import_embeddings,
-)
 
 
 PROVIDER = EmailImportEmbeddingProvider(
@@ -231,7 +227,7 @@ async def test_import_embeddings_route_through_orchestrator(monkeypatch):
     _patch_client(monkeypatch, client)
 
     texts = ["body", "att-1", "att-2"]
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         texts,
         embedding_provider=PROVIDER,
@@ -285,7 +281,7 @@ async def test_orchestrator_submit_then_retrieve_poll(monkeypatch):
     client = FakeAsyncClient(post_responses=[submit], get_responses=[running, done])
     _patch_client(monkeypatch, client)
 
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         ["body", "att-1"],
         embedding_provider=PROVIDER,
@@ -315,7 +311,7 @@ async def test_fall_back_when_batch_disabled(monkeypatch):
     build = AsyncMock()
     monkeypatch.setattr(batch_module, "build_llm_provider_http_client", build)
 
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         ["body"],
         embedding_provider=PROVIDER,
@@ -335,7 +331,7 @@ async def test_fall_back_when_orchestrator_base_url_rejected(monkeypatch):
     rejecting_client = FakeAsyncClient()
     _patch_client(monkeypatch, rejecting_client, normalized_url=None)
 
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         ["body"],
         embedding_provider=PROVIDER,
@@ -356,7 +352,7 @@ async def test_fall_back_when_orchestrator_unreachable_no_local(monkeypatch):
     )
     _patch_client(monkeypatch, client)
 
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         ["body"],
         embedding_provider=PROVIDER,
@@ -375,7 +371,7 @@ async def test_fall_back_when_orchestrator_http_error(monkeypatch):
     client = FakeAsyncClient(post_responses=[FakeResponse({}, status_code=503)])
     _patch_client(monkeypatch, client)
 
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         ["body", "att"],
         embedding_provider=PROVIDER,
@@ -404,7 +400,7 @@ async def test_fall_back_when_orchestrator_returns_incomplete_vectors(monkeypatc
     )
     _patch_client(monkeypatch, client)
 
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         ["body", "att"],
         embedding_provider=PROVIDER,
@@ -433,7 +429,7 @@ async def test_falls_back_to_local_submodule_when_orchestrator_unavailable(monke
     monkeypatch.setattr(batch_module, "generate_embeddings", generate)
 
     texts = ["body", "att-1", "att-2", "att-3", "att-4"]
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         texts,
         embedding_provider=PROVIDER,
@@ -465,7 +461,7 @@ async def test_local_fallback_skipped_when_submodule_missing(monkeypatch):
     generate = AsyncMock()
     monkeypatch.setattr(batch_module, "generate_embeddings", generate)
 
-    result = await try_batch_import_embeddings(
+    result = await batch_module.try_batch_import_embeddings(
         session,
         ["body"],
         embedding_provider=PROVIDER,
@@ -590,7 +586,7 @@ async def test_batch_config_resolves_from_fernet_db_not_env(monkeypatch):
 
     # The resolver returns the secrets decrypted from the DB row; no env var
     # supplied them.
-    resolved = await resolve_batch_embedding_settings(
+    resolved = await batch_module.resolve_batch_embedding_settings(
         FakeAsyncSession(reloaded),
         user_id="user-1",
         organization_id="org-acme",
@@ -612,7 +608,7 @@ async def test_resolve_returns_none_when_enabled_but_unconfigured():
     config.batch_orchestrator_token = None
     config.batch_local_dsn = None
 
-    resolved = await resolve_batch_embedding_settings(
+    resolved = await batch_module.resolve_batch_embedding_settings(
         FakeAsyncSession(config),
         user_id="user-1",
         organization_id="org-acme",
