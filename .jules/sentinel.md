@@ -100,3 +100,9 @@
 **Vulnerability:** JWT decoding remained allowlisted but static analysis could not prove the accepted algorithm when `jwt.decode(..., algorithms=...)` received module-level variables.
 **Learning:** Security-sensitive decode boundaries should make accepted algorithms obvious to both runtime readers and static scanners.
 **Prevention:** Pass explicit hardcoded lists such as `algorithms=["HS256"]` and `algorithms=["RS256"]` at the decode call sites, and keep header preflight checks aligned with those exact values.
+## 2026-07-10 - Trivy CI failures with KSV-0014 and KSV-0118
+**Learning:** Trivy complains if Kubernetes workloads don't have properly restricted security contexts. For  and  we need to set , ,  and specify a .
+**Action:** Configure proper security context in deployment and statefulset yaml files, remembering to mount emptyDirs at  and  to support read-only file systems.
+## 2026-07-10 - Trivy CI failures with KSV-0014 and KSV-0118
+**Learning:** Trivy complains if Kubernetes workloads don't have properly restricted security contexts. For KSV-0014 and KSV-0118 we need to set `readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false`, `runAsNonRoot: true` and specify a `runAsUser`.
+**Action:** Configure proper security context in deployment and statefulset yaml files, remembering to mount emptyDirs at `/tmp` and `/var/run` to support read-only file systems.

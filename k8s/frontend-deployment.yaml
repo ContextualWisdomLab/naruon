@@ -14,48 +14,45 @@ spec:
       labels:
         app: frontend
     spec:
-      imagePullSecrets:
-        - name: ghcr-registry
       securityContext:
-        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       volumes:
         - name: frontend-tmp
           emptyDir: {}
-        - name: frontend-next-cache
+        - name: nginx-cache
           emptyDir: {}
+        - name: nginx-pid
+          emptyDir: {}
+      imagePullSecrets:
+        - name: ghcr-registry
       containers:
       - name: frontend
-        image: ghcr.io/contextualwisdomlab/ai_email_client-frontend:REPLACE_ME_VERSION
+        image: ghcr.io/seongho-bae/ai_email_client-frontend:REPLACE_ME_VERSION
         imagePullPolicy: Always
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - ALL
-          readOnlyRootFilesystem: true
-          runAsGroup: 1000
-          runAsNonRoot: true
-          runAsUser: 1000
-          seccompProfile:
-            type: RuntimeDefault
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
         ports:
         - containerPort: 3000
-        volumeMounts:
-        - name: frontend-tmp
-          mountPath: /tmp
-        - name: frontend-next-cache
-          mountPath: /app/.next/cache
         env:
           - name: BACKEND_INTERNAL_URL
             value: "http://backend:8000"
           - name: ALLOW_DOCKER_BACKEND_INTERNAL_URL
             value: "1"
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: frontend-tmp
+            mountPath: /tmp
+          - name: nginx-cache
+            mountPath: /var/cache/nginx
+          - name: nginx-pid
+            mountPath: /var/run
