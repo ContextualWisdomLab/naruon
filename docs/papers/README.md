@@ -2,6 +2,22 @@
 
 Background reading referenced by the codebase.
 
+## Project graph promotion and requirements engineering
+
+Background for the project-graph to scopeweave promotion path: naruon extracts
+evidence-grounded requirements, issues, and features from natural-language email
+threads, and this literature grounds that requirements-engineering work.
+
+- **`nlp-in-software-requirements-engineering-slr.pdf`** -
+  Sabina-Cristiana Necula, Florin Dumitriu, Valerica Greavu-Serban,
+  *"A Systematic Literature Review on Using Natural Language Processing in
+  Software Requirements Engineering"* (*Electronics* 2024, 13(11), 2055).
+  DOI: https://doi.org/10.3390/electronics13112055
+  License: Creative Commons Attribution 4.0 International (CC BY 4.0),
+  https://creativecommons.org/licenses/by/4.0/
+  Redistributed unmodified under CC BY 4.0. Commercial reuse is permitted with
+  attribution; no GPL/AGPL obligations apply.
+
 ## LLM cost, routing, and load balancing
 
 Background for routing batch-tolerant embedding work through

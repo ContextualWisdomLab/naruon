@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     ALLOWED_POP3_PORTS: str = "995"
     ALLOWED_LLM_BASE_URL_HOSTS: str = ""
     ALLOW_LOCAL_LLM_PROVIDERS: bool = False
+    # Host allowlist for the scopeweave promotion target. The per-workspace
+    # base URL and PAT themselves live encrypted in the database
+    # (scopeweave_promotion_target); this setting only pins which hosts an
+    # operator is permitted to promote work items to (SSRF host allowlist).
+    ALLOWED_SCOPEWEAVE_HOSTS: str = ""
     ALLOWED_CORS_ORIGINS: str = ""
     ENABLE_PROMETHEUS_METRICS: bool = False
     DATA_REGION: str = "kr"

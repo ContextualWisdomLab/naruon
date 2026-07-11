@@ -249,6 +249,31 @@ def test_llm_batch_orchestrator_has_incremental_revision():
     assert "op.drop_column(" in revision_text
 
 
+def test_scopeweave_promotion_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0013_scopeweave_promotion.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0013_scopeweave_promotion"' in revision_text
+    assert 'down_revision = "0012_llm_batch_orchestrator"' in revision_text
+    assert '"scopeweave_promotion_target"' in revision_text
+    assert '"scopeweave_promotion_link"' in revision_text
+    assert '"base_url"' in revision_text
+    assert '"access_token"' in revision_text
+    assert '"scopeweave_work_item_id"' in revision_text
+    assert '"scopeweave_work_item_url"' in revision_text
+    assert "uq_scopeweave_promotion_target_scope" in revision_text
+    assert "uq_scopeweave_promotion_link_object" in revision_text
+    assert "ix_scopeweave_promotion_link_scope" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+
+
 def test_migration_runner_uses_alembic_upgrade_head_not_bootstrap_create_all():
     migration_runner = BACKEND_ROOT / "scripts" / "migrate_db.py"
 

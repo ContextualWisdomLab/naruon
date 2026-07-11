@@ -37,6 +37,7 @@
 - `thread_group_key`가 `thread_id`와 `message_id`를 trim한 뒤 `coalesce`하는 SQL 표현식을 생성하는지 직접 검증하는 단위 테스트를 추가했습니다.
 - `process_search_results`가 중복 제거, limit, snippet truncation, `None` fallback을 안정적으로 처리하는지 검증하는 단위 테스트를 추가했습니다.
 - `build_reply_counts_subquery`가 `user_id`와 `organization_id` 필터를 SQLAlchemy 쿼리에 올바르게 적용하는지 검증하는 단위 테스트를 추가했습니다.
+- 도구 API 백엔드 테스트가 기본 도구 실행, CRUD, webhook, 파라미터 검증 경로를 검증하도록 보강했습니다.
 
 ### 테스트 개선 (Testing)
 
@@ -57,12 +58,15 @@
 - **알고리즘 혼동 취약점(CRITICAL) 방지:** JWT 디코딩 시 정적 분석 도구가 알고리즘 allowlist를 명확히 확인할 수 있도록 `algorithms` 인자를 하드코딩된 문자열 리스트로 지정했습니다.
 - (백엔드) 버전 정보를 읽어올 때 `VERSION` 파일이 없는 경우, 에러 메시지에서 애플리케이션의 내부 디렉토리 경로가 노출되는 취약점(Information Disclosure)을 수정했습니다.
 - LLM provider 전용 HTTP transport가 검증된 base URL의 scheme/host/port와 `Host` 헤더를 전송 직전에 고정하도록 보강해 임의 요청 URL 또는 헤더 주입을 통한 SSRF 우회를 차단했습니다.
+- 도구 webhook URL 등록 시 localhost, 사설망, link-local, 내부 도메인을 차단해 SSRF 우회를 방지했습니다.
 - release governance 테스트 계약에서 부분 실행 경로 기반 `subprocess.run` 경로를 제거해 테스트 보안 점검이 절대 경로 기반 실행 계약과 어긋나지 않도록 정리했습니다.
 - **CRLF 인젝션 방지:** 이메일 전송 API(`POST /api/emails/send`)의 `subject`, `to`, `in_reply_to`, `references` 파라미터에서 개행 문자(`\r`, `\n`)를 차단하는 엄격한 Pydantic 검증 로직을 추가하여 SMTP 명령 인젝션 취약점을 해결했습니다.
 - **이중 확장자 검증:** 이메일 파일 업로드 API(`POST /api/emails/import-files`)에서 `.exe.eml` 등 악성 이중 확장자 파일이 업로드되는 것을 방지하도록 확장자 검증 로직을 강화했습니다.
 
 ### 추가
 
+- 도구 레지스트리에 생성, 조회, 수정, 삭제 API와 외부 webhook 실행 경로를 추가했습니다.
+- 기본 도구 mock 실행을 이메일 스레드 요약, 실행 항목 추출, 발신자 관계 분석, 일정 후보 추천, 답장 어조 교정 핸들러로 대체했습니다.
 - 백엔드에 다국어 이메일 본문을 번역할 수 있는 LLM 기반 `POST /api/llm/translate` 엔드포인트를 추가했습니다.
 - 프론트엔드의 이메일 상세 정보 뷰(`EmailDetail.tsx`)에 메일 원문을 한국어로 번역하는 '번역' 액션 버튼 및 번역 결과 UI를 추가했습니다.
 
