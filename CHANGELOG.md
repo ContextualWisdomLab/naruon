@@ -1,4 +1,7 @@
 ## [Unreleased]
+### 기능 추가 (Features)
+- `text_analyzer`, `base64_encoder`, `base64_decoder` 등의 실용적인 유틸리티 도구들을 추가했습니다.
+
 ### 데이터 모델 정합화 (Email Model Reconciliation)
 
 - 이메일 데이터 모델을 단일 소스(`email_records`)로 정합화했습니다 (naruon#975 P0): 어디서도 참조되지 않고 마이그레이션도 없던 병렬 계정 중심 모델 7종(`user_accounts`, `provider_accounts`, `email_raws`, `email_messages`, `email_instances`, `email_threads`, `email_thread_edges`)을 제거하고, 마이그레이션 `0011_email_model_reconciliation`이 dev/test DB의 잔존 테이블을 방어적으로 정리합니다(운영 DB에는 애초에 생성된 적 없음). 재도입 방지 가드 테스트와 결정 기록(`docs/engineering/email-model-reconciliation.md`, JMAP RFC 8620/8621·RFC 5322 근거)을 추가했습니다. 계정/프로바이더 설정 평면은 `tenant_configs`(/api/accounts)·`caldav_accounts`·`webdav_accounts`로 유지되며, P2 멀티계정 identity binding은 병렬 저장소가 아닌 KG 1급 엔티티로 이 기반 위에 구축됩니다.

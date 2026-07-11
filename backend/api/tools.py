@@ -1,3 +1,4 @@
+import base64
 import inspect
 import json
 import logging
@@ -320,6 +321,69 @@ registry.register(
     tone_analyzer_handler,
 )
 
+async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
+    text = params.get("text", "")
+    char_count = len(text)
+    char_count_no_spaces = len(
+        text.replace(" ", "").replace("\n", "").replace("\r", "").replace("\t", "")
+    )
+    return {
+        "char_count": char_count,
+        "char_count_no_spaces": char_count_no_spaces,
+        "word_count": len(text.split()),
+    }
+
+registry.register(
+    ToolInfo(
+        code="text_analyzer",
+        name="텍스트 분석기 (Text Analyzer)",
+        description="텍스트의 글자 수, 단어 수, 공백 제외 글자 수를 분석합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    text_analyzer_handler,
+)
+
+
+async def base64_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"encoded_text": base64.b64encode(text.encode("utf-8")).decode("utf-8")}
+
+
+registry.register(
+    ToolInfo(
+        code="base64_encoder",
+        name="Base64 인코더 (Base64 Encoder)",
+        description="일반 텍스트를 Base64 문자열로 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    base64_encoder_handler,
+)
+
+
+async def base64_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    encoded_text = params.get("encoded_text", "")
+    try:
+        return {
+            "decoded_text": base64.b64decode(encoded_text, validate=True).decode(
+                "utf-8"
+            )
+        }
+    except Exception as e:
+        raise ValueError(f"Invalid Base64 string: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="base64_decoder",
+        name="Base64 디코더 (Base64 Decoder)",
+        description="Base64 문자열을 일반 텍스트로 디코딩합니다.",
+        category="유틸리티",
+        parameters={"encoded_text": "string"},
+    ),
+    base64_decoder_handler,
+)
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
