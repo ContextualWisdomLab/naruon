@@ -1,7 +1,7 @@
 """Tests for batch-tolerant embedding routing via contextual-orchestrator.
 
 Fast, fully-mocked unit tests: no live orchestrator, Postgres, pg_tiktoken, or
-the pg-llm-batch submodule is required. They verify the properties the
+the pg-llm-batch package is required. They verify the properties the
 integration promises:
 
 * bulk import embeddings route through the **orchestrator batch API** (submit +
@@ -10,7 +10,7 @@ integration promises:
 * the path degrades gracefully (returns ``None`` so callers fall back to the
   per-item path) when batching is disabled, the orchestrator base URL is
   rejected by the SSRF/allowlist guard, or the orchestrator is unreachable;
-* the ``pg-llm-batch`` submodule is only used as an offline-dev fallback, gated
+* the ``pg-llm-batch`` package is only used as an offline-dev fallback, gated
   behind orchestrator-unavailable;
 * batch config (enablement, base URL, token, DSN) is read from the per-tenant
   Fernet-encrypted ``tenant_configs`` row, never from ``os.getenv``.
@@ -413,15 +413,15 @@ async def test_fall_back_when_orchestrator_returns_incomplete_vectors(monkeypatc
     assert session.added == []
 
 
-# --- Offline-dev fallback: local pg-llm-batch submodule ---------------------
+# --- Offline-dev fallback: local pg-llm-batch package -----------------------
 
 
 @pytest.mark.asyncio
-async def test_falls_back_to_local_submodule_when_orchestrator_unavailable(monkeypatch):
+async def test_falls_back_to_local_engine_when_orchestrator_unavailable(monkeypatch):
     session = FakeAsyncSession(
         _orchestrator_tenant_config(batch_local_dsn="postgresql://batch-host/batch_db")
     )
-    # Orchestrator submit fails (network) so the local submodule path is tried.
+    # Orchestrator submit fails (network) so the local package path is tried.
     client = FakeAsyncClient(post_responses=[httpx.ConnectError("down")])
     _patch_client(monkeypatch, client)
     monkeypatch.setattr(batch_module, "load_batch_engine", _fake_engine)
@@ -445,13 +445,13 @@ async def test_falls_back_to_local_submodule_when_orchestrator_unavailable(monke
     # Credentials came from the runtime provider, not os.getenv.
     assert generate.await_args_list[0].args[1] == "secret-provider-token"
     jobs = [obj for obj in session.added if isinstance(obj, LlmBatchJob)]
-    assert jobs[0].routing_mode == "local_submodule"
+    assert jobs[0].routing_mode == "local_engine"
     assert jobs[0].job_status == "completed"
     assert jobs[0].part_count == 3
 
 
 @pytest.mark.asyncio
-async def test_local_fallback_skipped_when_submodule_missing(monkeypatch):
+async def test_local_fallback_skipped_when_package_missing(monkeypatch):
     session = FakeAsyncSession(
         _orchestrator_tenant_config(batch_local_dsn="postgresql://batch-host/batch_db")
     )
@@ -476,7 +476,7 @@ async def test_local_fallback_skipped_when_submodule_missing(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_load_batch_engine_is_import_guarded():
-    # The submodule is not installed on the backend path in this environment,
+    # The package is not installed on the backend path in this environment,
     # so the loader must degrade to None rather than raising ImportError.
     batch_module._ENGINE_CACHE.clear()
     try:

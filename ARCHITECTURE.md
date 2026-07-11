@@ -179,9 +179,10 @@ naruon records a durable `llm_batch_jobs` / `llm_batch_items` audit trail
 (routing mode, the orchestrator's batch id, reported cost) for observability.
 The path degrades gracefully: if batching is disabled, the orchestrator base URL
 is rejected by the egress guard, or the orchestrator is unreachable, the caller
-transparently falls back to the per-item embedding path. The `pg-llm-batch`
-submodule remains only as an optional offline-dev fallback, gated behind
-orchestrator-unavailable and an explicit local DSN.
+transparently falls back to the per-item embedding path. A local `pg-llm-batch`
+package/checkout remains only as an optional offline-dev fallback, gated behind
+orchestrator-unavailable and an explicit local DSN; naruon does not vendor a
+gitlink for that fallback in this PR.
 
 ## CI security boundary
 

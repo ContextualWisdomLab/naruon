@@ -1,4 +1,4 @@
-# Opt-in overlay for the OPTIONAL pg-llm-batch submodule (offline-dev only).
+# Opt-in overlay for an OPTIONAL pg-llm-batch checkout (offline-dev only).
 #
 # This file is NOT part of the default naruon stack, and it is NOT the primary
 # batch path. In production, batch-tolerant embeddings route through
@@ -8,15 +8,17 @@
 # Postgres when the orchestrator is unavailable; the code gates that fallback
 # behind "orchestrator unavailable" (see backend/services/batch_embedding_service.py).
 #
-# naruon runs fine without this file and with the submodule uninitialized: the
-# batch embedding path degrades to the per-item embedding path when unconfigured.
+# naruon runs fine without this file and without a local pg-llm-batch checkout:
+# the batch embedding path degrades to the per-item embedding path when
+# unconfigured.
 #
-# Prerequisites (the submodule ships an empty placeholder until populated):
-#   git submodule update --init vendor/pg-llm-batch
-#   # vendor/pg-llm-batch must provide docker/postgres/Dockerfile before `up`.
+# Prerequisites:
+#   git clone https://github.com/ContextualWisdomLab/pg-llm-batch.git ../pg-llm-batch
+#   # The checkout must provide docker/postgres/Dockerfile before `up`.
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.pg-llm-batch.yml up
+#   PG_LLM_BATCH_CHECKOUT=../pg-llm-batch \
+#     docker compose -f docker-compose.yml -f docker-compose.pg-llm-batch.yml up
 #
 # Then seed per-tenant batch config in naruon's Fernet DB (tenant_configs) —
 # never via os.getenv:
@@ -29,7 +31,7 @@ services:
   pg-llm-batch-postgres:
     # Reuses the component's pg_tiktoken + pg_cron + pgsql-http Postgres image.
     build:
-      context: ./vendor/pg-llm-batch
+      context: ${PG_LLM_BATCH_CHECKOUT:-../pg-llm-batch}
       dockerfile: docker/postgres/Dockerfile
       args:
         PG_MAJOR: "16"

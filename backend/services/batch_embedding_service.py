@@ -12,9 +12,9 @@ naruon keeps a durable job/item audit trail (``llm_batch_jobs`` /
 Design constraints:
 
 * **Orchestrator is primary.** naruon submits to the orchestrator batch endpoint
-  and lets it own provider routing, load balancing and cost accounting. The
-  ``pg-llm-batch`` submodule remains only as an *offline-dev fallback*, gated
-  behind "orchestrator unavailable" (see :func:`_run_local_submodule_batch`).
+  and lets it own provider routing, load balancing and cost accounting. A local
+  ``pg_llm_batch`` package remains only as an *offline-dev fallback*, gated behind
+  "orchestrator unavailable" (see :func:`_run_local_engine_batch`).
 * **Graceful degradation.** If batching is disabled/unconfigured for the tenant,
   the orchestrator is unreachable/misconfigured, and the local fallback is also
   unavailable, every entry point returns ``None`` so the caller transparently
@@ -70,7 +70,7 @@ _ENGINE_CACHE: list[ModuleType | None] = []
 def load_batch_engine() -> ModuleType | None:
     """Return the ``pg_llm_batch`` module, or ``None`` when unavailable.
 
-    The submodule is an *optional* offline-dev dependency (the orchestrator is
+    The package is an *optional* offline-dev dependency (the orchestrator is
     the primary path): naruon must run with it uninitialized. When the package
     cannot be imported we log once at debug level and signal fallback by
     returning ``None``.
@@ -81,7 +81,7 @@ def load_batch_engine() -> ModuleType | None:
         import pg_llm_batch  # type: ignore
     except ImportError:
         logger.debug(
-            "pg_llm_batch submodule not importable; local batch fallback disabled"
+            "pg_llm_batch package not importable; local batch fallback disabled"
         )
         _ENGINE_CACHE.append(None)
         return None
@@ -182,7 +182,7 @@ async def try_batch_import_embeddings(
     On success returns one fitted vector per input text (original order). The
     primary path submits to contextual-orchestrator; only if the orchestrator is
     unconfigured or unavailable does it consider the local ``pg-llm-batch``
-    submodule fallback. Any failure returns ``None`` so the caller uses its
+    package fallback. Any failure returns ``None`` so the caller uses its
     per-item path. The run is recorded in ``llm_batch_jobs`` / ``llm_batch_items``
     for observability.
     """
@@ -212,7 +212,7 @@ async def try_batch_import_embeddings(
         # Orchestrator unavailable/misconfigured — consider the local fallback.
 
     if settings.has_local_fallback:
-        return await _run_local_submodule_batch(
+        return await _run_local_engine_batch(
             session,
             texts,
             embedding_provider=embedding_provider,
@@ -509,7 +509,7 @@ def _optional_int(value: Any) -> int | None:
         return None
 
 
-# --- Offline-dev fallback: local pg-llm-batch submodule ---------------------
+# --- Offline-dev fallback: local pg-llm-batch package -----------------------
 
 
 def _plan_partitions(
@@ -554,7 +554,7 @@ def _plan_partitions(
                 )
 
 
-async def _run_local_submodule_batch(
+async def _run_local_engine_batch(
     session: AsyncSession,
     texts: list[str],
     *,
@@ -565,7 +565,7 @@ async def _run_local_submodule_batch(
     organization_id: str | None,
     dimension: int,
 ) -> list[list[float]] | None:
-    """Offline-dev fallback: partition locally via the pg-llm-batch submodule.
+    """Offline-dev fallback: partition locally via a pg-llm-batch package.
 
     Only reached when the orchestrator is unconfigured/unavailable *and* a local
     DSN is present. Returns fitted vectors on success, else ``None`` to fall back
@@ -597,7 +597,7 @@ async def _run_local_submodule_batch(
         organization_id=organization_id or "",
         user_id=user_id,
         job_status="preparing",
-        routing_mode="local_submodule",
+        routing_mode="local_engine",
         model_name=model,
         endpoint_alias=settings.endpoint_alias,
         total_items=len(texts),

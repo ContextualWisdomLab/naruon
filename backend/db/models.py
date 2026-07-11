@@ -303,7 +303,7 @@ class LlmBatchJob(Base):
         default="preparing",
         nullable=False,
     )
-    # "orchestrator" (primary) or "local_submodule" (offline dev fallback).
+    # "orchestrator" (primary) or "local_engine" (offline dev fallback).
     routing_mode: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     model_name: Mapped[str] = mapped_column(String, nullable=False)
     endpoint_alias: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -1170,7 +1170,7 @@ class TenantConfig(Base):
     # pg-llm-batch and records cost. The bearer token is a secret so it is stored
     # EncryptedString (Fernet at rest); the base URL is not a secret but is
     # SSRF-guarded + allowlisted at call time. batch_local_dsn is an optional
-    # offline-dev fallback DSN for the pg-llm-batch submodule (also a secret).
+    # offline-dev fallback DSN for a local pg-llm-batch package (also a secret).
     batch_embedding_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )

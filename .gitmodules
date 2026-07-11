@@ -1,3 +1,0 @@
-[submodule "vendor/pg-llm-batch"]
-	path = vendor/pg-llm-batch
-	url = https://github.com/ContextualWisdomLab/pg-llm-batch.git
