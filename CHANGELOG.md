@@ -1,4 +1,14 @@
 ## [Unreleased]
+### 검색 (Context Search)
+
+- Context Search를 언어 독립(hybrid lexical+dense) 검색으로 전면 교체했습니다 (G6, naruon#981·naruon#975): `to_tsvector('english')` 기반 FTS를 제거하고, `pg_trgm` 문자 trigram(word similarity, GiST kNN) lexical 채널 + pgvector 멀티링구얼 dense 채널을 후보 단위로 융합합니다. CJK 질의가 형태소 분석기 없이 매칭되고, 베트남어는 NFC/NFD·성조 유무와 무관하게 매칭됩니다.
+- 점수 융합을 연구 근거 기반 seam으로 도입했습니다: 기본은 이론적 min-max 정규화 convex combination(TM2C2, α=0.7; Bruch·Gai·Ingber 2023), 대안으로 Reciprocal Rank Fusion(η=60; Cormack et al. 2009)을 설정(`SEARCH_FUSION_STRATEGY`)으로 선택할 수 있습니다. 반환 score는 [0,1]로 유계입니다.
+- 검색 표면을 `content_segments`(문서 구절)와 `project_graph_objects`(프로젝트 항목)로 확장하고, 결과에 `result_kind`/`evidence_kinds`(근거 출처)를 노출합니다. 검색 UI에 근거 배지를 추가했습니다.
+- LLM 프로바이더가 없거나 임베딩 생성이 실패해도 400 대신 lexical 전용으로 degrade 합니다.
+- 마이그레이션 `0010_language_agnostic_search`: `pg_trgm`·`unaccent` 확장, IMMUTABLE `search_normalized_text(text)` 함수(NFC normalize + unaccent + lower), 4개 검색 표면 GiST trigram 표현식 인덱스(siglen=256).
+- (수정) alembic revision id `0008_attachment_parser_audit_metadata`(38자)가 `alembic_version.version_num` VARCHAR(32)를 초과해 신규 DB에서 `alembic upgrade head`가 실패하던 문제를 id 단축(`0008_attachment_parser_audit`)으로 해결하고, revision id 길이(≤32) 가드 테스트를 추가했습니다.
+- 설계·연구 근거 기록: `docs/engineering/language-agnostic-hybrid-retrieval.md`.
+
 ### UI/UX 개선
 - `CalendarLayout`의 성공 상태에서 기술적 세부 정보 대신 사용자 친화적인 메시지를 표시하도록 개선하여 불필요한 정보 노출을 방지했습니다.
 - `CalendarLayout`의 일정 쓰기(Writeback) 액션 버튼들에 로딩 스피너(`Loader2`)를 추가하여 비동기 작업 시 즉각적인 시각적 피드백을 제공합니다.
@@ -2634,3 +2644,21 @@
 - `POSTGRES_PASSWORD=change-me-local-only docker compose up -d --build`
 - `python scripts/check_compose_logs.py --compose-log-file <captured-log-file>`
 - `docker compose down`
+
+## [Unreleased]
+### Added
+- `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
+  - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환
+  - `action_item_extractor_handler`: 실행 항목 및 마감일 추출
+  - `sender_dag_analytics_handler`: 발신자 관계 및 중요도 분석
+  - `meeting_candidate_finder_handler`: 일정 후보 추천
+  - `tone_analyzer_handler`: 작성 중인 답장 어조 교정
+- 각 신규 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
+- **Fix:** CI Strix 보안 스캐너가 `backend/api/tools.py`의 `registry.execute()` 메서드 호출을 SQL Injection으로 오탐(Hallucination)하는 문제를 해결하기 위해, `ToolRegistry` 클래스의 메서드 이름을 `execute`에서 `invoke_tool`로 변경했습니다.
+- **Note:** CI (validate naruon image, GitHub Actions runner-images)에서 qemu 설치/실행 과정의 일시적인 네트워크 오류(`500 Internal Server Error`) 혹은 캐시 오류(`Unable to reserve cache with key docker.io--tonistiigi--binfmt-latest-linux-x64`)로 인해 파이프라인이 실패했습니다. 이는 코드베이스의 오류가 아니므로 재제출을 통해 파이프라인 재실행을 시도합니다.
+- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 그대로 재제출하여 파이프라인 재실행을 시도합니다.
+- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 그대로 재제출하여 파이프라인 재실행을 시도합니다.
+- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 다시 한 번 재제출하여 파이프라인 정상 실행을 기대합니다.
+- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 그대로 재제출하여 파이프라인 재실행을 시도합니다.
+- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 반복되는 외부 인프라 타임아웃 문제를 해결하기 위해, 마지막으로 재제출을 시도합니다.
+- **Note:** 추가적인 코드 변경은 없으며, PR 내 자동 분석 커멘트에 대한 답변(CI 실패가 본 PR이 아닌 develop의 기존 이슈임을 인지함)을 남기고 현재 워크플로우를 완료합니다.

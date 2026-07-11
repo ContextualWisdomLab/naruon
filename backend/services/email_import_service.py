@@ -338,6 +338,14 @@ def _fallback_attachment_parser_key(
 ) -> str:
     if parse_status == "unsupported_content_type":
         return "unsupported_binary"
+    if parse_content_type in {"application/json", "text/json"}:
+        return "json"
+    if parse_content_type in {"text/csv", "application/csv"}:
+        return "csv"
+    if parse_content_type in {"application/xml", "text/xml"}:
+        return "xml"
+    if parse_content_type == "text/calendar":
+        return "calendar"
     if parse_content_type == "text/html":
         return "html"
     if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
