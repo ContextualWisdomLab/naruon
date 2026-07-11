@@ -217,6 +217,38 @@ def test_project_graph_projection_has_incremental_revision():
     assert "if_exists=True" in revision_text
 
 
+def test_llm_batch_orchestrator_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0012_llm_batch_orchestrator.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0012_llm_batch_orchestrator"' in revision_text
+    assert 'down_revision = "0011_email_model_reconciliation"' in revision_text
+    assert '"llm_batch_jobs"' in revision_text
+    assert '"llm_batch_items"' in revision_text
+    assert '"batch_job_uid"' in revision_text
+    assert '"batch_item_uid"' in revision_text
+    assert '"routing_mode"' in revision_text
+    assert '"orchestrator_batch_uid"' in revision_text
+    assert '"cost_micro_usd"' in revision_text
+    assert '"batch_orchestrator_base_url"' in revision_text
+    assert '"batch_orchestrator_token"' in revision_text
+    assert '"batch_local_dsn"' in revision_text
+    assert "sa.ForeignKeyConstraint(" in revision_text
+    assert 'ondelete="CASCADE"' in revision_text
+    assert "ix_llm_batch_jobs_scope_status" in revision_text
+    assert "ix_llm_batch_items_job_sequence" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.add_column(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+    assert "op.drop_column(" in revision_text
+
+
 def test_migration_runner_uses_alembic_upgrade_head_not_bootstrap_create_all():
     migration_runner = BACKEND_ROOT / "scripts" / "migrate_db.py"
 
