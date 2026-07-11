@@ -282,12 +282,12 @@ export function TasksLayout() {
     );
   }, [filteredTicketTasks]);
 
-  const currentColumns = [
+  const currentColumns = useMemo(() => [
     { id: 'open' as const, title: '접수', count: liveBoardCounts.open, color: 'bg-blue-100 text-blue-700' },
     { id: 'in_progress' as const, title: '진행', count: liveBoardCounts.in_progress, color: 'bg-orange-100 text-orange-700' },
     { id: 'blocked' as const, title: '검토 필요', count: liveBoardCounts.blocked, color: 'bg-red-100 text-red-700' },
     { id: 'done' as const, title: '완료', count: liveBoardCounts.done, color: 'bg-green-100 text-green-700' },
-  ];
+  ], [liveBoardCounts.blocked, liveBoardCounts.done, liveBoardCounts.in_progress, liveBoardCounts.open]);
 
   const selectedTask = useMemo(
     () => ticketTasks.find((task) => task.id === selectedTaskId) ?? null,
