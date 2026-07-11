@@ -40,12 +40,31 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
     manifest = get_attachment_parser_manifest()
     parser_keys = {descriptor.parser_key for descriptor in manifest}
 
-    assert {"plain_text", "html", "markdown", "unsupported_binary"} <= parser_keys
+    assert {
+        "plain_text",
+        "html",
+        "markdown",
+        "json",
+        "csv",
+        "xml",
+        "calendar",
+        "unsupported_binary",
+    } <= parser_keys
     markdown_descriptor = next(
         descriptor for descriptor in manifest if descriptor.parser_key == "markdown"
     )
     assert "text/markdown" in markdown_descriptor.content_types
     assert ".md" in markdown_descriptor.extensions
+    json_descriptor = next(
+        descriptor for descriptor in manifest if descriptor.parser_key == "json"
+    )
+    assert "application/json" in json_descriptor.content_types
+    assert ".json" in json_descriptor.extensions
+    calendar_descriptor = next(
+        descriptor for descriptor in manifest if descriptor.parser_key == "calendar"
+    )
+    assert "text/calendar" in calendar_descriptor.content_types
+    assert ".ics" in calendar_descriptor.extensions
 
 
 def test_generic_binary_content_type_can_fall_back_to_markdown_extension():
@@ -60,6 +79,46 @@ def test_generic_binary_content_type_can_fall_back_to_markdown_extension():
     assert result.parser_key == "markdown"
     assert result.parse_status == "parsed"
     assert result.content == "# Plan Ship graph"
+
+
+def test_generic_binary_content_type_can_fall_back_to_json_extension():
+    result = parse_email_attachment(
+        filename="status.json",
+        content_type="application/octet-stream",
+        raw_content='{"project": "Launch"}',
+    )
+
+    assert result.content_type == "application/octet-stream"
+    assert result.parse_content_type == "application/json"
+    assert result.parser_key == "json"
+    assert result.parse_status == "parsed"
+    assert result.content == '{"project": "Launch"}'
+
+
+def test_structured_non_pdf_attachment_media_types_are_parseable():
+    cases = [
+        ("status.csv", "text/csv; charset=utf-8", "name,status\nLaunch,Ready", "csv"),
+        ("status.xml", "application/xml", "<root>Launch</root>", "xml"),
+        (
+            "invite.ics",
+            "text/calendar",
+            "BEGIN:VCALENDAR\nSUMMARY:Launch\nEND:VCALENDAR",
+            "calendar",
+        ),
+    ]
+
+    for filename, content_type, raw_content, parser_key in cases:
+        result = parse_email_attachment(
+            filename=filename,
+            content_type=content_type,
+            raw_content=raw_content,
+        )
+
+        assert result.filename == filename
+        assert result.parser_key == parser_key
+        assert result.parse_status == "parsed"
+        assert result.parse_error_code is None
+        assert result.parse_content == raw_content
 
 
 def test_oversized_text_attachment_is_metadata_only_without_raw_content():
