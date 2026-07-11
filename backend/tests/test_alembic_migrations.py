@@ -279,3 +279,28 @@ def test_revision_identifiers_fit_alembic_version_column():
             f"{len(revision_id)} chars; alembic_version.version_num "
             "holds at most 32"
         )
+
+
+def test_email_model_reconciliation_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0011_email_model_reconciliation.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0011_email_model_reconciliation"' in revision_text
+    assert 'down_revision = "0010_language_agnostic_search"' in revision_text
+    for retired_table_name in (
+        "email_thread_edges",
+        "email_instances",
+        "email_raws",
+        "email_messages",
+        "email_threads",
+        "provider_accounts",
+        "user_accounts",
+    ):
+        assert f"DROP TABLE IF EXISTS {retired_table_name}" in revision_text
+    # Dependents must drop before their FK targets.
+    assert revision_text.index("email_thread_edges") < revision_text.index(
+        "DROP TABLE IF EXISTS email_messages"
+    )
+    assert "Intentionally a no-op" in revision_text
