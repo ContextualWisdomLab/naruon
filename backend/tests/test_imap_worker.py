@@ -113,7 +113,7 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     imap_client.login.assert_awaited_once_with("imap-user@example.com", "imap-secret")
     imap_client.select.assert_awaited_once_with("INBOX")
     imap_client.search.assert_awaited_once_with("ALL")
-    imap_client.fetch.assert_awaited_once_with("1", "(RFC822)")
+    imap_client.fetch.assert_awaited_once_with("1", "(RFC822 FLAGS)")
     imap_client.logout.assert_awaited_once()
 
     process_fetched_email_mock.assert_awaited_once()
@@ -122,6 +122,8 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     assert args[1]["message_id"] == "<imap-1@example.com>"
     assert args[1]["subject"] == "IMAP import"
     assert args[2] == "imap-user"
+    # No \Seen in the FLAGS envelope above -> imported as unread.
+    assert kwargs["is_read"] is False
     assert args[3] == "org-imap"
     assert kwargs["owner_addresses"] == ["imap-user@example.com"]
 
@@ -160,3 +162,18 @@ async def test_imap_worker_requires_credentials_without_sensitive_log_names(
     assert "imap_password" not in caplog.text
     assert "password" not in caplog.text.lower()
     assert "imap-secret" not in caplog.text
+
+
+def test_flags_indicate_seen_parses_seen_flag():
+    from services.imap_worker import flags_indicate_seen
+
+    raw = b"From: a@example.com\r\nSubject: x\r\n\r\nbody"
+    seen = ("OK", [(b"1 (FLAGS (\\Seen) RFC822 {%d}" % len(raw), raw), b")"])
+    unseen = ("OK", [(b"1 (FLAGS (\\Answered) RFC822 {%d}" % len(raw), raw), b")"])
+    no_flags = ("OK", [(b"1 (RFC822 {%d}" % len(raw), raw)])
+
+    assert flags_indicate_seen(seen[1]) is True
+    assert flags_indicate_seen(unseen[1]) is False   # other flags, but not \Seen
+    assert flags_indicate_seen(no_flags[1]) is False  # no FLAGS section -> unread
+    assert flags_indicate_seen([]) is False
+    assert flags_indicate_seen(None) is False
