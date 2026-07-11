@@ -405,7 +405,7 @@ describe("ProjectsPage", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_candidate%3Aalpha/traceability", expect.objectContaining({ headers: expect.any(Object) }));
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_candidate%3Aalpha/evidence/requirement%3Aalpha-payment-retry", expect.objectContaining({ headers: expect.any(Object) }));
     expect(container.textContent).toContain("Project: Alpha Checkout");
-    expect(container.textContent).toContain("프로젝트 지식그래프");
+    expect(container.textContent).toContain("프로젝트 관계 맥락");
     expect(container.textContent).toContain("Traceability Map");
     expect(container.textContent).toContain("Evidence Inspector");
     expect(container.textContent).toContain("문단 citation 경계 확인됨");
