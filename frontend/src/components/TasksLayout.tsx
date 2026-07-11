@@ -326,14 +326,14 @@ export function TasksLayout() {
             <input
               ref={taskSearchInputRef}
               id="task-search-input"
-              type="search"
+              type="text"
               inputMode="search"
               role="searchbox"
               value={taskSearch}
               onChange={(event) => setTaskSearch(event.target.value)}
               placeholder="작업 맥락 검색..."
               aria-label="작업 맥락 검색"
-              className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-9 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:w-64 [&::-webkit-search-cancel-button]:hidden"
+              className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-9 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:w-64"
             />
             {taskSearch.length > 0 && (
               <button
