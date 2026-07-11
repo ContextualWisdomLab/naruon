@@ -1,4 +1,13 @@
 ## [Unreleased]
+### Added
+- **도구 기능 대규모 추가 (naruon#tools)**: 사용자가 직접 사용할 수 있는 새롭고 유용한 5개의 AI/분석 도구를 `backend/api/tools.py`에 구현하고 레지스트리에 등록했습니다.
+  - `email_translator`: 이메일 내용을 대상 언어로 번역
+  - `spam_phishing_detector`: 이메일의 스팸 및 피싱 위험도를 분석
+  - `reply_drafter`: 이전 맥락을 기반으로 답장 초안 자동 생성
+  - `sentiment_analyzer`: 이메일의 전반적인 감정(긍정/부정) 분석
+  - `grammar_checker`: 작성된 이메일 초안의 문법과 철자 교정
+- 각 신규 도구 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
+
 ### 데이터 모델 정합화 (Email Model Reconciliation)
 
 - 이메일 데이터 모델을 단일 소스(`email_records`)로 정합화했습니다 (naruon#975 P0): 어디서도 참조되지 않고 마이그레이션도 없던 병렬 계정 중심 모델 7종(`user_accounts`, `provider_accounts`, `email_raws`, `email_messages`, `email_instances`, `email_threads`, `email_thread_edges`)을 제거하고, 마이그레이션 `0011_email_model_reconciliation`이 dev/test DB의 잔존 테이블을 방어적으로 정리합니다(운영 DB에는 애초에 생성된 적 없음). 재도입 방지 가드 테스트와 결정 기록(`docs/engineering/email-model-reconciliation.md`, JMAP RFC 8620/8621·RFC 5322 근거)을 추가했습니다. 계정/프로바이더 설정 평면은 `tenant_configs`(/api/accounts)·`caldav_accounts`·`webdav_accounts`로 유지되며, P2 멀티계정 identity binding은 병렬 저장소가 아닌 KG 1급 엔티티로 이 기반 위에 구축됩니다.
@@ -2653,7 +2662,6 @@
 - `python scripts/check_compose_logs.py --compose-log-file <captured-log-file>`
 - `docker compose down`
 
-## [Unreleased]
 ### Added
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환

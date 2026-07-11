@@ -193,6 +193,57 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     }
 
 
+
+async def email_translator_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    target_language = params.get("target_language", "ko")
+    return {
+        "translated_text": f"[{target_language} 번역본] {text}",
+        "source_language_detected": "en",
+        "confidence": 0.95,
+    }
+
+
+async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
+    email_content = params.get("email_content", "")
+    sender_domain = params.get("sender_domain", "")
+    is_suspicious = "password" in email_content.lower() or "bank" in email_content.lower()
+    return {
+        "is_spam": False,
+        "is_phishing": is_suspicious,
+        "risk_score": 80 if is_suspicious else 10,
+        "warnings": ["의심스러운 키워드 포함됨"] if is_suspicious else [],
+    }
+
+
+async def reply_drafter_handler(params: Dict[str, Any]) -> Any:
+    original_email = params.get("original_email", "")
+    intent = params.get("intent", "긍정적 동의")
+    return {
+        "draft": f"귀하의 이메일에 감사드립니다. {intent}의 맥락으로 다음과 같이 회신합니다...",
+        "tone": "formal",
+    }
+
+
+async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    is_positive = "thank" in text.lower() or "great" in text.lower()
+    return {
+        "sentiment": "positive" if is_positive else "neutral",
+        "score": 0.85 if is_positive else 0.5,
+        "key_emotions": ["감사", "기쁨"] if is_positive else ["중립"],
+    }
+
+
+async def grammar_checker_handler(params: Dict[str, Any]) -> Any:
+    draft = params.get("draft_content", "")
+    return {
+        "corrected_text": draft.replace("안녕 하세요", "안녕하세요"),
+        "errors_found": 1 if "안녕 하세요" in draft else 0,
+        "suggestions": ["'안녕 하세요'는 '안녕하세요'로 붙여 쓰는 것이 맞습니다."] if "안녕 하세요" in draft else [],
+    }
+
+
 def is_safe_webhook_url(url: str) -> bool:
     try:
         validate_webhook_url(url)
@@ -318,6 +369,63 @@ registry.register(
         parameters={"draft_content": "string", "recipient_relationship": "string"},
     ),
     tone_analyzer_handler,
+)
+
+
+
+registry.register(
+    ToolInfo(
+        code="email_translator",
+        name="이메일 번역기 (Email Translator)",
+        description="이메일 텍스트를 지정된 대상 언어로 번역합니다.",
+        category="언어 변환",
+        parameters={"text": "string", "target_language": "string"},
+    ),
+    email_translator_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="spam_phishing_detector",
+        name="스팸 및 피싱 탐지기 (Spam & Phishing Detector)",
+        description="이메일 본문과 발신자 도메인을 분석하여 스팸 및 피싱 위험도를 평가합니다.",
+        category="보안",
+        parameters={"email_content": "string", "sender_domain": "string"},
+    ),
+    spam_phishing_detector_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="reply_drafter",
+        name="답장 초안 생성기 (Reply Drafter)",
+        description="이전 이메일 맥락과 사용자의 의도(intent)를 바탕으로 답장 초안을 자동으로 작성합니다.",
+        category="커뮤니케이션",
+        parameters={"original_email": "string", "intent": "string"},
+    ),
+    reply_drafter_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="sentiment_analyzer",
+        name="감정 분석기 (Sentiment Analyzer)",
+        description="이메일의 전반적인 감정(긍정/부정/중립)과 주요 감정 키워드를 분석합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    sentiment_analyzer_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="grammar_checker",
+        name="맞춤법 및 문법 검사기 (Grammar Checker)",
+        description="작성된 이메일 초안의 맞춤법과 문법 오류를 검사하고 교정 제안을 제공합니다.",
+        category="작성 도조",
+        parameters={"draft_content": "string"},
+    ),
+    grammar_checker_handler,
 )
 
 

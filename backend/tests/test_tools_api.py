@@ -777,3 +777,71 @@ def test_is_safe_webhook_url_coverage():
     assert is_safe_webhook_url("https://[::1]/admin") is False
     assert is_safe_webhook_url("https://user:pass@example.com/webhook") is False
     assert is_safe_webhook_url("https://example.com/webhook#fragment") is False
+
+
+def test_execute_email_translator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "Hello", "target_language": "ko"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "ko 번역본" in data["result"]["translated_text"]
+
+
+def test_execute_spam_phishing_detector():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/spam_phishing_detector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"email_content": "Update your bank password", "sender_domain": "evil.com"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["is_phishing"] is True
+    assert data["result"]["risk_score"] == 80
+
+
+def test_execute_reply_drafter():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/reply_drafter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"original_email": "Can we meet?", "intent": "긍정적 동의"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "긍정적 동의" in data["result"]["draft"]
+
+
+def test_execute_sentiment_analyzer():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "Thank you so much!"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "positive"
+    assert data["result"]["score"] == 0.85
+
+
+def test_execute_grammar_checker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/grammar_checker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"draft_content": "안녕 하세요 반갑습니다"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "안녕하세요" in data["result"]["corrected_text"]
+    assert data["result"]["errors_found"] == 1
