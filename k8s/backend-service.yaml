@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: backend
+  namespace: naruon-dev
 spec:
   ports:
   - port: 8000

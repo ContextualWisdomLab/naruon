@@ -114,7 +114,7 @@ const TEMPLATE_GROUPS = [
     name: '회의/리포트',
     items: [
       { id: 'meeting', title: '회의록 작성' },
-      { id: 'decision', title: '의사결정 종합' },
+      { id: 'decision', title: '의사결정 핵심 맥락' },
       { id: 'weekly', title: '주간 보고서 작성' },
     ],
   },

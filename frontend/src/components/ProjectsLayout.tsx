@@ -895,10 +895,10 @@ export function ProjectsLayout() {
             ) : null}
 
             {activeSemanticCandidate ? (
-              <section aria-label="프로젝트 지식그래프 상태" className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+              <section aria-label="프로젝트 관계 맥락 상태" className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0">
-                    <h2 className="flex items-center gap-2 font-bold text-lg"><Network className="size-5 text-primary" /> 프로젝트 지식그래프</h2>
+                    <h2 className="flex items-center gap-2 font-bold text-lg"><Network className="size-5 text-primary" /> 프로젝트 관계 맥락</h2>
                     <p className="mt-1 text-sm font-semibold text-muted-foreground">모든 항목은 문단 citation bundle을 기준으로 표시됩니다.</p>
                   </div>
                   <div className="flex min-w-0 flex-col gap-2 md:items-end">
@@ -908,7 +908,7 @@ export function ProjectsLayout() {
                         <p className="font-mono text-lg font-black">{activeSemanticCandidate.source_segment_count}</p>
                       </div>
                       <div className="rounded-lg border border-border bg-background px-3 py-2">
-                        <p className="text-xs font-bold text-muted-foreground">그래프 객체</p>
+                        <p className="text-xs font-bold text-muted-foreground">관계 맥락 객체</p>
                         <p className="font-mono text-lg font-black">{activeSemanticCandidate.object_count}</p>
                       </div>
                     </div>
@@ -1167,7 +1167,7 @@ export function ProjectsLayout() {
                             <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-muted-foreground">{projectObject.citation_bundle.length} citations</span>
                             <span className="font-mono text-xs font-bold text-muted-foreground">{Math.round(projectObject.confidence * 100)}%</span>
                           </div>
-                          <h3 className="line-clamp-2 break-keep text-sm font-bold">{safeText(projectObject.title, '제목 없는 그래프 객체')}</h3>
+                          <h3 className="line-clamp-2 break-keep text-sm font-bold">{safeText(projectObject.title, '제목 없는 관계 맥락 객체')}</h3>
                           <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{safeText(projectObject.summary, '종합 대기')}</p>
                         </button>
                       ))}
@@ -1229,7 +1229,7 @@ export function ProjectsLayout() {
                           </div>
                         </div>
                       ) : (
-                        <p className="mt-4 rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">선택 가능한 지식그래프 객체가 없습니다.</p>
+                        <p className="mt-4 rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">선택 가능한 관계 맥락 객체가 없습니다.</p>
                       )}
                     </aside>
                   </div>
@@ -1331,7 +1331,18 @@ export function ProjectsLayout() {
                 </ol>
               ) : (
                 <div className="p-5">
-                  <p className="rounded-xl border border-dashed border-border p-4 text-sm font-semibold text-muted-foreground">연결된 실행 항목이 아직 없습니다.</p>
+                  <div className="rounded-xl border border-dashed border-border bg-background p-4">
+                    <div role="status" aria-live="polite">
+                      <p className="text-sm font-bold text-foreground">연결된 실행 항목이 아직 없습니다.</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        서명 세션의 작업 API에 프로젝트와 연결된 메일, 문서, 스레드 근거가 기록되면 이 목록에 표시됩니다.
+                      </p>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <a href="/tasks" className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">작업 보드 열기</a>
+                      <a href="/search" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-bold hover:bg-secondary">관련 근거 찾기</a>
+                    </div>
+                  </div>
                 </div>
               )}
             </section>
