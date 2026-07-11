@@ -22,7 +22,11 @@ from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 from zipfile import BadZipFile, ZipFile
 
-from core.env_paths import operator_home
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from core.env_paths import operator_home  # noqa: E402
 
 SESSION_COOKIE_NAME = "naruon_session"
 SUPPORTED_SUFFIXES = {".eml", ".emlx", ".mbox", ".zip"}
