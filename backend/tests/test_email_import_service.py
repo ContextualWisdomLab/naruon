@@ -448,7 +448,10 @@ async def test_import_single_eml_rejects_symlink(tmp_path):
     target_path = tmp_path / "target.txt"
     target_path.write_text("not an eml")
     symlink_path = tmp_path / "message.eml"
-    symlink_path.symlink_to(target_path)
+    try:
+        symlink_path.symlink_to(target_path)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable in this test session: {exc}")
     session = AsyncMock(spec=AsyncSession)
 
     result = await email_import_module._import_single_eml(
