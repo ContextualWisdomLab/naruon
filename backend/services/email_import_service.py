@@ -22,6 +22,7 @@ from db.models import (
     KnowledgeGraphEdgeRecord,
 )
 from services.archive import extract_backup_async
+from services.batch_embedding_service import try_batch_import_embeddings
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
@@ -63,6 +64,20 @@ class EmailImportEmbeddingProvider:
     api_key: str
     base_url: str | None
     embedding_model: str
+
+
+@dataclass(frozen=True)
+class EmailImportBatchContext:
+    """Scope needed to route bulk import embeddings via contextual-orchestrator.
+
+    Carried alongside the embedding provider so ``_generate_import_embeddings``
+    can resolve per-tenant batch settings (Fernet DB), submit the batch to the
+    orchestrator, and record batch jobs.
+    """
+
+    session: AsyncSession
+    user_id: str
+    organization_id: str | None
 
 
 @dataclass
@@ -224,6 +239,7 @@ async def _release_owner_import_quota_lock(
 async def _extract_and_generate_embeddings(
     parsed: EmailData,
     embedding_provider: EmailImportEmbeddingProvider | None,
+    batch_context: "EmailImportBatchContext | None" = None,
 ) -> tuple[list[dict], list[list[float]]]:
     attachment_payloads = list(parsed.get("attachments", []))
     embedding_texts = [str(parsed.get("body") or "")]
@@ -233,6 +249,7 @@ async def _extract_and_generate_embeddings(
     fitted_embeddings = await _generate_import_embeddings(
         embedding_texts,
         embedding_provider=embedding_provider,
+        batch_context=batch_context,
     )
     return attachment_payloads, fitted_embeddings
 
@@ -321,6 +338,14 @@ def _fallback_attachment_parser_key(
 ) -> str:
     if parse_status == "unsupported_content_type":
         return "unsupported_binary"
+    if parse_content_type in {"application/json", "text/json"}:
+        return "json"
+    if parse_content_type in {"text/csv", "application/csv"}:
+        return "csv"
+    if parse_content_type in {"application/xml", "text/xml"}:
+        return "xml"
+    if parse_content_type == "text/calendar":
+        return "calendar"
     if parse_content_type == "text/html":
         return "html"
     if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
@@ -633,10 +658,16 @@ async def _import_single_eml(
     user_id: str,
     organization_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
+    batch_context: "EmailImportBatchContext | None" = None,
 ) -> EmailImportItemResult:
     try:
         content, parsed = await asyncio.to_thread(_read_and_parse_eml, eml_path)
-    except EmailParseError:
+    except EmailParseError as exc:
+        logger.warning(
+            "Email import item failed: reason_code=parse_failed filename=%s error_type=%s",
+            display_filename,
+            type(exc).__name__,
+        )
         return EmailImportItemResult(
             filename=display_filename,
             status="failed",
@@ -670,7 +701,7 @@ async def _import_single_eml(
     )
 
     attachment_payloads, fitted_embeddings = await _extract_and_generate_embeddings(
-        parsed, embedding_provider
+        parsed, embedding_provider, batch_context
     )
 
     email_obj, attachment_count = _build_email_object(
@@ -690,6 +721,10 @@ async def _import_single_eml(
         await session.commit()
     except Exception:
         await session.rollback()
+        logger.warning(
+            "Email import item failed: reason_code=database_commit_failed filename=%s",
+            display_filename,
+        )
         return EmailImportItemResult(
             filename=display_filename,
             status="failed",
@@ -716,9 +751,25 @@ async def _generate_import_embeddings(
     texts: list[str],
     *,
     embedding_provider: EmailImportEmbeddingProvider | None,
+    batch_context: "EmailImportBatchContext | None" = None,
 ) -> list[list[float]]:
     if embedding_provider is None:
         return [_zero_embedding() for _ in texts]
+    if batch_context is not None and texts:
+        # Bulk import embeddings are latency-tolerant: route them through
+        # contextual-orchestrator first. A None result means batch is
+        # unconfigured/unavailable, so we transparently fall through to the
+        # existing per-request path below.
+        batched = await try_batch_import_embeddings(
+            batch_context.session,
+            texts,
+            embedding_provider=embedding_provider,
+            user_id=batch_context.user_id,
+            organization_id=batch_context.organization_id,
+            dimension=EMBEDDING_DIMENSION,
+        )
+        if batched is not None:
+            return batched
     try:
         provider_embeddings = await generate_embeddings(
             texts,
@@ -787,9 +838,14 @@ async def _generate_import_embeddings(
 def _read_eml_bytes(eml_path: Path) -> bytes:
     no_follow_flag = getattr(os, "O_NOFOLLOW", None)
     if no_follow_flag is None:
-        raise EmailParseError(
-            "Email import requires O_NOFOLLOW support (unavailable on this platform)"
-        )
+        try:
+            path_stat = eml_path.lstat()
+            if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISREG(path_stat.st_mode):
+                raise EmailParseError("Failed to read email file")
+            with eml_path.open("rb") as file_handle:
+                return file_handle.read()
+        except OSError as exc:
+            raise EmailParseError("Failed to read email file") from exc
 
     open_flags = os.O_RDONLY | no_follow_flag
     file_descriptor_transferred = False
@@ -887,6 +943,11 @@ async def import_email_uploads(
     lock_acquired = await _acquire_owner_import_quota_lock(
         session, user_id=user_id, organization_id=organization_id
     )
+    batch_context = EmailImportBatchContext(
+        session=session,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
     try:
         result = EmailImportResult()
         existing_email_count = await _owner_email_import_count(
@@ -908,6 +969,11 @@ async def import_email_uploads(
                     upload_dir=upload_dir,
                 )
                 if failure_reason is not None:
+                    logger.warning(
+                        "Email import upload failed: reason_code=%s filename=%s",
+                        failure_reason,
+                        upload_name,
+                    )
                     result.add_item(
                         EmailImportItemResult(
                             filename=upload_name,
@@ -937,6 +1003,7 @@ async def import_email_uploads(
                         user_id=user_id,
                         organization_id=organization_id,
                         embedding_provider=embedding_provider,
+                        batch_context=batch_context,
                     )
                 )
     finally:

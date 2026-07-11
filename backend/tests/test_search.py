@@ -8,27 +8,70 @@ from db.models import LLMProvider
 from db.session import get_db, get_readonly_db
 from main import app
 from services.exceptions import EmbeddingGenerationError
+from services.hybrid_retrieval import FusionSettings
 from services.llm_provider_selection import LOCAL_PROVIDER_API_KEY
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
 
+_CANDIDATE_DATE = datetime.datetime(
+    2026, 4, 27, 10, 0, tzinfo=datetime.timezone.utc
+)
 
-class MockRow:
-    def __init__(self, id, subject, sender, content, score):
-        self.id = id
+
+class MockLexicalRow:
+    def __init__(
+        self,
+        email_id,
+        subject,
+        sender,
+        matched_text,
+        word_similarity_score,
+        result_kind="email_body",
+    ):
+        self.email_id = email_id
         self.source_message_id = "<test@example.com>"
         self.subject = subject
         self.sender = sender
-        self.content = content
-        self.score = score
-        self.date = datetime.datetime(2026, 4, 27, 10, 0, tzinfo=datetime.timezone.utc)
-        self.thread_id = "thread-123"
-        self.reply_count = 2
+        self.date = _CANDIDATE_DATE
+        self.thread_key = "thread-123"
+        self.matched_text = matched_text
+        self.result_kind = result_kind
+        self.word_similarity_score = word_similarity_score
 
 
-class MockResult:
+class MockDenseRow:
+    def __init__(
+        self,
+        email_id,
+        subject,
+        sender,
+        matched_text,
+        cosine_distance,
+        result_kind="email_body",
+    ):
+        self.email_id = email_id
+        self.source_message_id = "<test@example.com>"
+        self.subject = subject
+        self.sender = sender
+        self.date = _CANDIDATE_DATE
+        self.thread_key = "thread-123"
+        self.matched_text = matched_text
+        self.result_kind = result_kind
+        self.cosine_distance = cosine_distance
+
+
+class MockReplyCountRow:
+    def __init__(self, thread_key, reply_count):
+        self.thread_key = thread_key
+        self.reply_count = reply_count
+
+
+class MockRowsResult:
+    def __init__(self, rows):
+        self.rows = rows
+
     def all(self):
-        return [MockRow(1, "Test Subject", "test@test.com", "Test Body", 1.0)]
+        return self.rows
 
 
 class MockTenantConfigResult:
@@ -70,7 +113,25 @@ class MockSession:
             return MockProviderResult(self.providers)
         if "tenant_configs" in statement_text:
             return MockTenantConfigResult(MockTenantConfig())
-        return MockResult()
+        if "count(email_records.id)" in statement_text:
+            return MockRowsResult([MockReplyCountRow("thread-123", 2)])
+        if "word_similarity" in statement_text:
+            return MockRowsResult(
+                [
+                    MockLexicalRow(
+                        1, "Test Subject", "test@test.com", "Test Body", 0.9
+                    )
+                ]
+            )
+        if "<=>" in statement_text:
+            return MockRowsResult(
+                [
+                    MockDenseRow(
+                        1, "Test Subject", "test@test.com", "Test Body", 0.3
+                    )
+                ]
+            )
+        return MockRowsResult([])
 
     async def scalar(self, stmt):
         return MockTenantConfig()
@@ -104,11 +165,6 @@ def test_search_endpoint_success(mock_generate_embeddings, client):
     mock_generate_embeddings.return_value = [[0.1] * 1536]
 
     response = client.post("/api/search", json={"query": "test query"})
-    if response.status_code != 200:
-        import traceback
-
-        traceback.print_exc()
-        print(response.json())
 
     assert response.status_code == 200
     data = response.json()
@@ -120,6 +176,9 @@ def test_search_endpoint_success(mock_generate_embeddings, client):
     assert data["results"][0]["source_message_id"] == "<test@example.com>"
     assert data["results"][0]["thread_id"] == "thread-123"
     assert data["results"][0]["reply_count"] == 2
+    assert data["results"][0]["result_kind"] == "email_body"
+    assert data["results"][0]["evidence_kinds"] == ["email_body"]
+    assert 0.0 <= data["results"][0]["score"] <= 1.0
 
 
 @patch("api.search.generate_embeddings", new_callable=AsyncMock)
@@ -160,19 +219,6 @@ def test_search_endpoint_uses_active_provider_embedding_model(mock_generate_embe
         base_url="http://ollama:11434/v1",
         model="embeddinggemma",
     )
-
-
-def test_search_reply_counts_group_by_coalesced_thread_key():
-    from api.search import build_reply_counts_subquery
-
-    subquery = build_reply_counts_subquery()
-    sql = str(subquery.select()).lower()
-
-    assert "coalesce(nullif(btrim(btrim(email_records.thread_id)" in sql
-    assert "nullif(btrim(btrim(email_records.message_id)" in sql
-    assert "coalesce(email_records.thread_id, email_records.message_id)" not in sql
-    assert "count(email_records.id)" in sql
-    assert "group by coalesce(nullif(btrim(btrim(email_records.thread_id)" in sql
 
 
 def test_thread_group_key_uses_trimmed_thread_then_message_id():
@@ -220,24 +266,33 @@ def test_search_endpoint_query_is_scoped_to_current_user(mock_generate_embedding
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    query_text = str(session.statements[-1]).lower()
-    assert "email_records.user_id" in query_text
-    assert "email_records.organization_id" in query_text
-    query_params = session.statements[-1].compile().params
-    user_scope_params = {
-        value for key, value in query_params.items() if key.startswith("user_id")
-    }
-    organization_scope_params = {
-        value
-        for key, value in query_params.items()
-        if key.startswith("organization_id")
-    }
-    assert user_scope_params == {"testuser"}
-    assert organization_scope_params == {"org-acme"}
+    channel_statements = [
+        stmt
+        for stmt in session.statements
+        if "word_similarity" in str(stmt).lower() or "<=>" in str(stmt).lower()
+    ]
+    assert channel_statements
+    for channel_statement in channel_statements:
+        statement_text = str(channel_statement).lower()
+        assert "email_records.user_id" in statement_text
+        assert "email_records.organization_id" in statement_text
+        query_params = channel_statement.compile().params
+        user_scope_params = {
+            value
+            for key, value in query_params.items()
+            if key.startswith("user_id")
+        }
+        organization_scope_params = {
+            value
+            for key, value in query_params.items()
+            if key.startswith("organization_id")
+        }
+        assert user_scope_params == {"testuser"}
+        assert organization_scope_params == {"org-acme"}
 
 
 @patch("api.search.generate_embeddings", new_callable=AsyncMock)
-def test_search_falls_back_to_full_text_when_embedding_provider_fails(
+def test_search_falls_back_to_lexical_when_embedding_provider_fails(
     mock_generate_embeddings,
 ):
     mock_generate_embeddings.side_effect = EmbeddingGenerationError(
@@ -262,9 +317,49 @@ def test_search_falls_back_to_full_text_when_embedding_provider_fails(
     assert response.status_code == 200
     data = response.json()
     assert len(data["results"]) == 1
-    all_statements = " ".join(str(stmt).lower() for stmt in session.statements)
-    assert "ts_rank_cd" in all_statements
-    assert "<=>" not in all_statements
+    joined_statements = " ".join(
+        str(stmt).lower() for stmt in session.statements
+    )
+    assert "word_similarity" in joined_statements
+    assert "<=>" not in joined_statements
+
+
+def test_search_runs_lexical_only_when_no_provider_is_configured():
+    class NoProviderSession(CapturingMockSession):
+        async def execute(self, stmt):
+            statement_text = str(stmt).lower()
+            if "tenant_configs" in statement_text:
+                self.statements.append(stmt)
+                return MockTenantConfigResult(None)
+            return await super().execute(stmt)
+
+        async def scalar(self, stmt):
+            return None
+
+    session = NoProviderSession()
+
+    async def override_scoped_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_scoped_db
+    app.dependency_overrides[get_readonly_db] = override_scoped_db
+    try:
+        with TestClient(
+            app,
+            headers={"X-User-Id": "testuser", "X-Organization-Id": "org-acme"},
+        ) as client:
+            response = client.post("/api/search", json={"query": "test query"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["results"]) == 1
+    joined_statements = " ".join(
+        str(stmt).lower() for stmt in session.statements
+    )
+    assert "word_similarity" in joined_statements
+    assert "<=>" not in joined_statements
 
 
 @patch("api.search.generate_embeddings", new_callable=AsyncMock)
@@ -311,13 +406,13 @@ def test_search_uses_primary_config_session_and_readonly_search_session(
         "llm_providers" in str(stmt).lower() for stmt in config_session.statements
     )
     assert all(
-        "ts_rank_cd" not in str(stmt).lower() for stmt in config_session.statements
+        "word_similarity" not in str(stmt).lower()
+        for stmt in config_session.statements
     )
-    search_statements = " ".join(
-        str(stmt).lower() for stmt in search_session.statements
+    assert any(
+        "word_similarity" in str(stmt).lower()
+        for stmt in search_session.statements
     )
-    assert "ts_rank_cd" in search_statements  # lexical arms ran on search session
-    assert "thread_counts" in search_statements  # metadata joined reply counts
 
 
 @patch("api.search.generate_embeddings", new_callable=AsyncMock)
@@ -342,128 +437,155 @@ def test_search_pads_local_embedding_dimension_for_vector_search(
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    all_statements = [str(stmt).lower() for stmt in session.statements]
-    assert any("ts_rank_cd" in stmt for stmt in all_statements)
-    assert any("<=>" in stmt for stmt in all_statements)
-
-
-def test_build_reply_counts_subquery_with_user_id():
-    from api.search import build_reply_counts_subquery
-
-    subquery = build_reply_counts_subquery(user_id="user1")
-    sql = str(subquery.select()).lower()
-
-    assert "where email_records.user_id = :user_id_1" in sql
-    assert "group by coalesce" in sql
-
-
-def test_build_reply_counts_subquery_with_user_and_org_id():
-    from api.search import build_reply_counts_subquery
-
-    subquery = build_reply_counts_subquery(user_id="user1", organization_id="org1")
-    sql = str(subquery.select()).lower()
-
-    assert (
-        "where email_records.user_id = :user_id_1 and email_records.organization_id = :organization_id_1"
-        in sql
+    joined_statements = " ".join(
+        str(stmt).lower() for stmt in session.statements
     )
-    assert "group by coalesce" in sql
+    assert "<=>" in joined_statements
 
 
-class _ArmRow:
-    def __init__(self, id, content):
-        self.id = id
-        self.content = content
+def test_search_module_has_no_language_dependent_fts():
+    """G6 regression guard: no to_tsvector language configs in search."""
+    import inspect
+    from pathlib import Path
+
+    from api.search import hybrid_search
+    from services.hybrid_retrieval.retrieval_channels import (
+        build_lexical_email_statement,
+    )
+
+    for module_member in (hybrid_search, build_lexical_email_statement):
+        module_source = Path(inspect.getfile(module_member)).read_text()
+        # Call forms, not prose mentions in docstrings.
+        assert "to_tsvector(" not in module_source
+        assert "plainto_tsquery(" not in module_source
+        assert "ts_rank" not in module_source
 
 
-def test_fuse_candidates_rrf_prefers_multi_arm_hits():
-    from api.search import fuse_candidates
+def test_search_query_is_normalized_to_nfc_before_embedding_and_sql():
+    import unicodedata
 
-    lexical = [_ArmRow(1, "one"), _ArmRow(2, "two")]
-    vector = [_ArmRow(2, "two-vec"), _ArmRow(3, "three")]
+    from services.hybrid_retrieval import normalize_search_text
 
-    scores, contents = fuse_candidates([lexical, vector])
+    decomposed_query = unicodedata.normalize("NFD", "Trần Hưng Đạo 회의")
 
-    # id 2 appears in both arms -> highest fused score.
-    assert max(scores, key=scores.get) == 2
-    # First arm that surfaced the id provides the snippet source.
-    assert contents[2] == "two"
-    assert contents[3] == "three"
+    normalized_query = normalize_search_text("  " + decomposed_query + "  ")
+
+    assert normalized_query == "Trần Hưng Đạo 회의"
+    assert unicodedata.is_normalized("NFC", normalized_query)
 
 
-def test_fuse_candidates_rank_order_within_single_arm():
-    from api.search import fuse_candidates
+def test_build_reply_counts_stmt_scopes_and_groups_by_thread_key():
+    from api.search import build_reply_counts_stmt
 
-    scores, _contents = fuse_candidates([[_ArmRow(1, "a"), _ArmRow(2, "b")]])
+    stmt = build_reply_counts_stmt(
+        ["thread-1", "thread-2"], user_id="user1", organization_id="org1"
+    )
+    sql = str(stmt).lower()
 
-    assert scores[1] > scores[2]
+    assert "email_records.user_id" in sql
+    assert "email_records.organization_id" in sql
+    assert "count(email_records.id)" in sql
+    assert "group by coalesce(nullif(btrim(btrim(email_records.thread_id)" in sql
 
 
-def test_build_search_results_orders_dedupes_and_limits():
-    from api.search import build_search_results
+def _make_fusion_settings(**overrides):
+    return FusionSettings(**overrides)
 
-    scores = {1: 0.9, 2: 0.5, 3: 0.7}
-    contents = {1: "First body", 2: "Second body", 3: "Third body"}
-    metadata = [
-        MockRow(1, "First", "sender@example.com", None, None),
-        MockRow(2, "Second", "sender@example.com", None, None),
-        MockRow(3, "Third", "sender@example.com", None, None),
+
+def test_merge_candidate_rows_accumulates_best_channel_evidence():
+    from api.search import merge_candidate_rows
+
+    fusion_settings = _make_fusion_settings()
+    lexical_rows = [
+        MockLexicalRow(1, "One", "a@example.com", "lexical body", 0.4),
+        MockLexicalRow(2, "Two", "a@example.com", "other body", 0.2),
     ]
+    segment_rows = [
+        MockLexicalRow(
+            1,
+            "One",
+            "a@example.com",
+            "segment evidence",
+            0.9,
+            result_kind="content_segment",
+        )
+    ]
+    dense_rows = [MockDenseRow(1, "One", "a@example.com", "dense body", 0.5)]
 
-    results = build_search_results(scores, contents, metadata, limit=2)
+    candidates = merge_candidate_rows(
+        [
+            ("lexical_email", lexical_rows),
+            ("lexical_content_segment", segment_rows),
+            ("dense_email", dense_rows),
+        ],
+        fusion_settings,
+    )
+
+    assert set(candidates) == {1, 2}
+    strongest_candidate = candidates[1]
+    assert strongest_candidate.best_word_similarity == 0.9
+    assert strongest_candidate.best_cosine_distance == 0.5
+    assert strongest_candidate.evidence_kinds == {
+        "email_body",
+        "content_segment",
+    }
+    assert strongest_candidate.channel_ranks == {
+        "lexical_email": 1,
+        "lexical_content_segment": 1,
+        "dense_email": 1,
+    }
+    # With the default semantic weight (0.7), the dense row's fused
+    # evidence (0.7 * (1 - 0.5/2) = 0.525) outranks the segment row's
+    # lexical-only evidence (0.3 * 0.9 = 0.27), so the dense row
+    # provides the display snippet and result kind.
+    assert strongest_candidate.primary_result_kind == "email_body"
+    assert strongest_candidate.primary_matched_text == "dense body"
+
+
+def test_build_search_result_items_orders_dedupes_and_limits():
+    from api.search import build_search_result_items, merge_candidate_rows
+
+    fusion_settings = _make_fusion_settings()
+    rows = [
+        MockLexicalRow(1, "One", "a@example.com", "body one", 0.9),
+        MockLexicalRow(2, "Two", "a@example.com", "body two", 0.5),
+        MockLexicalRow(3, "Three", "a@example.com", "body three", 0.7),
+        MockLexicalRow(1, "One", "a@example.com", "body one again", 0.2),
+    ]
+    candidates = merge_candidate_rows([("lexical_email", rows)], fusion_settings)
+
+    results = build_search_result_items(
+        candidates, fusion_settings, limit=2, reply_counts_by_thread_key={}
+    )
 
     assert [item.id for item in results] == [1, 3]
-    assert results[0].subject == "First"
-    assert results[0].snippet == "First body"
+    assert results[0].score > results[1].score
+    assert results[0].reply_count == 1
 
 
-def test_build_search_results_truncates_long_snippets():
-    from api.search import build_search_results
+def test_build_search_result_items_truncates_long_snippets():
+    from api.search import build_search_result_items, merge_candidate_rows
 
-    metadata = [MockRow(1, "Long", "sender@example.com", None, None)]
+    fusion_settings = _make_fusion_settings()
+    rows = [MockLexicalRow(1, "Long", "a@example.com", "A" * 300, 0.9)]
+    candidates = merge_candidate_rows([("lexical_email", rows)], fusion_settings)
 
-    results = build_search_results({1: 1.0}, {1: "A" * 300}, metadata, limit=10)
+    results = build_search_result_items(
+        candidates, fusion_settings, limit=10, reply_counts_by_thread_key={}
+    )
 
     assert results[0].snippet == ("A" * 200) + "..."
 
 
-def test_build_search_results_skips_ids_missing_metadata_and_falls_back():
-    from api.search import build_search_results
+def test_build_search_result_items_drops_below_minimum_score():
+    from api.search import build_search_result_items, merge_candidate_rows
 
-    row = MockRow(1, "Fallbacks", "sender@example.com", None, None)
-    row.reply_count = None
+    fusion_settings = _make_fusion_settings()
+    rows = [MockLexicalRow(1, "Weak", "a@example.com", "irrelevant", 0.01)]
+    candidates = merge_candidate_rows([("lexical_email", rows)], fusion_settings)
 
-    results = build_search_results(
-        {1: 0.4, 99: 0.9}, {1: "", 99: "orphan"}, [row], limit=10
+    results = build_search_result_items(
+        candidates, fusion_settings, limit=10, reply_counts_by_thread_key={}
     )
 
-    # id 99 has no metadata row (filtered by owner scope) -> skipped.
-    assert [item.id for item in results] == [1]
-    assert results[0].snippet == ""
-    assert results[0].reply_count == 1
-
-
-def test_lexical_stmt_is_fts_gated_and_vector_stmt_is_pure_ann():
-    from sqlalchemy.dialects import postgresql
-
-    from api.search import build_lexical_email_stmt, build_vector_email_stmt
-    from db.models import Email
-
-    owner = Email.owner_filters("u1", "o1")
-    lexical_sql = str(
-        build_lexical_email_stmt("hello", owner, 20).compile(
-            dialect=postgresql.dialect()
-        )
-    ).lower()
-    assert "@@" in lexical_sql  # index-eligible FTS gate
-    assert "ts_rank_cd" in lexical_sql
-    assert "<=>" not in lexical_sql
-
-    vector_sql = str(
-        build_vector_email_stmt([0.1] * 3, owner, 20).compile(
-            dialect=postgresql.dialect()
-        )
-    ).lower()
-    assert "<=>" in vector_sql  # pure ANN order-by
-    assert "ts_rank_cd" not in vector_sql
-    assert "order by" in vector_sql and "limit" in vector_sql
+    assert results == []
