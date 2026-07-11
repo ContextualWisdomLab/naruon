@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend
+  namespace: naruon-dev
   labels:
     app: backend
 spec:
@@ -38,15 +39,15 @@ spec:
           runAsUser: 10001
           seccompProfile:
             type: RuntimeDefault
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 1000m
-            memory: 1Gi
         ports:
         - containerPort: 8000
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
         volumeMounts:
         - name: backend-tmp
           mountPath: /tmp
