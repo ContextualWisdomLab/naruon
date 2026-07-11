@@ -931,6 +931,9 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "permissions:\n  contents: read" in workflow
     assert "trusted-governance" in workflow
     assert ".base.sha" in workflow
+    assert "TRUSTED_BASE_SHA" in workflow
+    assert "github.event.pull_request.base.sha" in workflow
+    assert "Using event-provided trusted governance base SHA" in workflow
     assert "github.sha" not in workflow
     assert "tarball/${trusted_ref}" in workflow
     assert "gh_api_with_retry" in workflow
