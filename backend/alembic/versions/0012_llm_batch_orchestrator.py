@@ -1,7 +1,7 @@
 """add llm batch orchestrator job/item tables and tenant batch config
 
-Revision ID: 0011_llm_batch_orchestrator
-Revises: 0010_language_agnostic_search
+Revision ID: 0012_llm_batch_orchestrator
+Revises: 0011_email_model_reconciliation
 Create Date: 2026-07-08 00:00:00.000000
 
 Batch-tolerant embeddings route through contextual-orchestrator (the routing /
@@ -14,8 +14,8 @@ resolved from the Fernet DB at runtime, never from ``os.getenv``.
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0011_llm_batch_orchestrator"
-down_revision = "0010_language_agnostic_search"
+revision = "0012_llm_batch_orchestrator"
+down_revision = "0011_email_model_reconciliation"
 branch_labels = None
 depends_on = None
 
