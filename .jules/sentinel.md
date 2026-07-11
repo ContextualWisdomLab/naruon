@@ -100,3 +100,7 @@
 **Vulnerability:** JWT decoding remained allowlisted but static analysis could not prove the accepted algorithm when `jwt.decode(..., algorithms=...)` received module-level variables.
 **Learning:** Security-sensitive decode boundaries should make accepted algorithms obvious to both runtime readers and static scanners.
 **Prevention:** Pass explicit hardcoded lists such as `algorithms=["HS256"]` and `algorithms=["RS256"]` at the decode call sites, and keep header preflight checks aligned with those exact values.
+## 2025-02-20 - Webhook DNS Rebinding SSRF
+**Vulnerability:** The webhook feature (`backend/api/tools.py`) validated that URLs resolved to safe global IP addresses using `validate_webhook_url`, but then created a fresh `httpx.AsyncClient` that performed its own independent DNS resolution at execution time. This Time-of-Check to Time-of-Use (TOCTOU) gap allowed an attacker to rapidly change DNS records after validation but before execution, causing the application to send requests to internal network services (Server-Side Request Forgery).
+**Learning:** Checking hostnames or IPs before use is insufficient if the actual execution engine (HTTP client) resolves the hostname again. The underlying validation and execution must be perfectly coupled.
+**Prevention:** Always pin the underlying HTTP transport to the exact IP addresses that were validated. This was achieved using the `ValidatedHTTPSURLHost` and `build_pinned_https_async_client` components which override the connection layer to use the pre-resolved, safe IPs.
