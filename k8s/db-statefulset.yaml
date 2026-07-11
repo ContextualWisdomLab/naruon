@@ -16,6 +16,8 @@ spec:
         app: postgres-db
     spec:
       securityContext:
+        seccompProfile:
+          type: RuntimeDefault
         runAsNonRoot: true
         runAsUser: 999
         runAsGroup: 999
