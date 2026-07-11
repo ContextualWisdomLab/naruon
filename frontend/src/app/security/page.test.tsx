@@ -108,9 +108,31 @@ const securitySurface = {
 
 function mockSecurityFetch(surface: typeof securitySurface = securitySurface) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    void init;
     if (String(input) === "/api/security/access-surface") {
       return jsonResponse(surface);
+    }
+    if (String(input) === "/api/security/permission-change-intent") {
+      const requestBody = JSON.parse(String(init?.body ?? "{}")) as { decision?: string; resource_type?: string };
+      const reasonByDecision: Record<string, string> = {
+        allow_writeback: "allowed",
+        deny_external_write: "organization_denied",
+        deny_workspace_write: "workspace_denied",
+        deny_region_export: "data_region_denied",
+        deny_missing_consent: "consent_denied",
+      };
+      const reason = reasonByDecision[requestBody.decision ?? ""] ?? "organization_denied";
+      const allowed = requestBody.decision === "allow_writeback";
+      return jsonResponse({
+        decision: requestBody.decision,
+        resource_type: requestBody.resource_type,
+        allowed,
+        reason,
+        evidence_label: "policy_engine_evidence",
+        audit_event: "security.permission_change_intent",
+        provider_write_executed: false,
+        denial_result: allowed ? "approval_required_before_external_write" : "provider_denied_by_policy",
+        observed_at: "2026-05-28T04:05:00Z",
+      });
     }
     throw new Error(`Unhandled fetch: ${String(input)}`);
   });
@@ -126,6 +148,12 @@ async function renderSecurityPage() {
     await Promise.resolve();
   });
   return { container, root };
+}
+
+function setNativeValue(element: HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(element);
+  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  prototypeValueSetter?.call(element, value);
 }
 
 describe("SecurityPage", () => {
@@ -159,6 +187,28 @@ describe("SecurityPage", () => {
     expect(container.textContent).not.toContain("곧 제공됩니다");
     expect(container.textContent).not.toContain("비정상 로그인 시도");
 
+    const permissionDecision = container.querySelector<HTMLSelectElement>("#security-permission-decision");
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("권한 저장"));
+    expect(permissionDecision).not.toBeNull();
+    expect(saveButton).toBeDefined();
+
+    await act(async () => {
+      setNativeValue(permissionDecision!, "deny_external_write");
+      permissionDecision!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("조직 차단 - 외부 쓰기 실행 안 함");
+
+    await act(async () => {
+      saveButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("권한 변경이 저장되었습니다: 외부 쓰기 차단");
+    expect(container.textContent).toContain("서버 감사 이벤트");
+    expect(container.textContent).toContain("security.permission_change_intent");
+    expect(container.textContent).toContain("제공자 쓰기");
+    expect(container.textContent).toContain("실행 안 함");
+
     const accessCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/security/access-surface");
     expect(accessCall).toBeDefined();
     const [, init] = accessCall ?? [];
@@ -181,6 +231,38 @@ describe("SecurityPage", () => {
     ]) {
       expect(requestHeaders[publicHeader]).toBeUndefined();
     }
+
+    const permissionIntentCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/security/permission-change-intent");
+    expect(permissionIntentCall).toBeDefined();
+    const [, permissionIntentInit] = permissionIntentCall ?? [];
+    expect(permissionIntentInit?.credentials).toBe("same-origin");
+    expect(JSON.parse(String(permissionIntentInit?.body))).toEqual({
+      decision: "deny_external_write",
+      resource_type: "provider_secret",
+    });
+
+    await act(async () => {
+      setNativeValue(permissionDecision!, "deny_region_export");
+      permissionDecision!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("리전 차단 - 외부 쓰기 실행 안 함");
+
+    await act(async () => {
+      saveButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("정책 결과");
+    expect(container.textContent).toContain("리전 차단");
+    expect(container.textContent).toContain("데이터 내보내기");
+
+    const permissionIntentCalls = fetchMock.mock.calls.filter(
+      ([input]) => String(input) === "/api/security/permission-change-intent",
+    );
+    expect(JSON.parse(String(permissionIntentCalls.at(-1)?.[1]?.body))).toEqual({
+      decision: "deny_region_export",
+      resource_type: "data_export",
+    });
   });
 
   it("renders audit sharing and policy tabs without inert placeholders", async () => {
