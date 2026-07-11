@@ -4,7 +4,6 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 import services.rag_service as rag_service
-from services.rag_service import GroundedAnswerPayload, answer_from_emails
 
 
 def _context(email_id: int, content: str = "body") -> dict:
@@ -22,7 +21,7 @@ async def test_answer_returns_none_without_context(monkeypatch):
     call = AsyncMock()
     monkeypatch.setattr(rag_service, "_call_llm", call)
 
-    result = await answer_from_emails("question", [], api_key="k")
+    result = await rag_service.answer_from_emails("question", [], api_key="k")
 
     assert result is None
     call.assert_not_awaited()  # no LLM call without retrieved evidence
@@ -34,14 +33,14 @@ async def test_answer_keeps_only_citations_from_retrieved_set(monkeypatch):
         rag_service,
         "_call_llm",
         AsyncMock(
-            return_value=GroundedAnswerPayload(
+            return_value=rag_service.GroundedAnswerPayload(
                 answer="grounded answer",
                 cited_email_ids=[1, 999],  # 999 was never retrieved
             )
         ),
     )
 
-    result = await answer_from_emails(
+    result = await rag_service.answer_from_emails(
         "question", [_context(1), _context(2)], api_key="k", model="gpt-test"
     )
 
@@ -57,12 +56,12 @@ async def test_answer_bounds_context_to_max_emails(monkeypatch):
 
     async def fake_call(**kwargs):
         captured.update(kwargs)
-        return GroundedAnswerPayload(answer="a", cited_email_ids=[])
+        return rag_service.GroundedAnswerPayload(answer="a", cited_email_ids=[])
 
     monkeypatch.setattr(rag_service, "_call_llm", fake_call)
 
     contexts = [_context(i) for i in range(10)]
-    await answer_from_emails("question", contexts, api_key="k")
+    await rag_service.answer_from_emails("question", contexts, api_key="k")
 
     assert captured["emails_json"].count("email_id") == rag_service.MAX_CONTEXT_EMAILS
 
@@ -73,11 +72,11 @@ async def test_answer_truncates_long_content(monkeypatch):
 
     async def fake_call(**kwargs):
         captured.update(kwargs)
-        return GroundedAnswerPayload(answer="a", cited_email_ids=[])
+        return rag_service.GroundedAnswerPayload(answer="a", cited_email_ids=[])
 
     monkeypatch.setattr(rag_service, "_call_llm", fake_call)
 
-    await answer_from_emails(
+    await rag_service.answer_from_emails(
         "question", [_context(1, content="X" * 5000)], api_key="k"
     )
 
@@ -108,10 +107,8 @@ def client():
 def test_answer_endpoint_returns_grounded_answer_with_citations(
     mock_embeddings, mock_answer, client
 ):
-    from services.rag_service import GroundedAnswer
-
     mock_embeddings.return_value = [[0.1] * 1536]
-    mock_answer.return_value = GroundedAnswer(
+    mock_answer.return_value = rag_service.GroundedAnswer(
         answer="그 미팅은 화요일입니다.",
         cited_email_ids=[1],
         provenance="OpenAI (gpt-test)",
