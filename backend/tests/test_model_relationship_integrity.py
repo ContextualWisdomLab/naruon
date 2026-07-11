@@ -10,6 +10,10 @@ agent_run_records -> workflow_definitions).
 
 This guard fails when any foreign-key table pair has no relationship
 in either direction, so new models cannot reintroduce the hazard.
+
+Research grounding and the OSMU spin-off evaluation for this
+model-agnostic guard are in
+docs/engineering/postgres-smoke-evidence-repair.md.
 """
 
 from db.models import Base
