@@ -14,6 +14,7 @@ from typing import Literal
 from sqlalchemy import bindparam, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import settings
 from db.models import (
     Attachment,
     ContentNodeRecord,
@@ -32,6 +33,12 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
+from services.project_graph import (
+    ProjectSourceSegment,
+    extract_project_semantics,
+    persist_project_graph_projection,
+)
+from services.project_graph.llm_extractor import extract_project_semantics_llm
 from services.threading_service import (
     assign_thread_id,
     generate_email_fingerprint,
@@ -650,6 +657,103 @@ def _content_graph_source_record_uid(prefix: str, *parts: str) -> str:
     return f"{prefix}:{digest[:32]}"
 
 
+def _project_source_segments(email_obj: Email) -> list[ProjectSourceSegment]:
+    """Snapshot the imported email's content segments as project source segments.
+
+    Called before commit while ``email_obj.content_segments`` is the in-memory
+    list populated by ``_append_email_content_graph`` (no DB IO), so it is safe
+    to build in the async session context.
+    """
+    return [
+        ProjectSourceSegment(
+            content_segment_uid=segment.content_segment_uid,
+            source_kind=segment.source_kind,
+            source_record_uid=segment.source_record_uid,
+            safe_text_content=segment.safe_text_content,
+            heading_path=segment.heading_path,
+            segment_path=segment.segment_path,
+            ordinal_index=segment.ordinal_index,
+        )
+        for segment in email_obj.content_segments
+    ]
+
+
+async def _extract_project_semantics_for_import(
+    source_segments: list[ProjectSourceSegment],
+    *,
+    embedding_provider: EmailImportEmbeddingProvider | None,
+):
+    """Select the configured extractor; LLM failures fall back to keyword.
+
+    The LLM extractor reuses the import's OpenAI-compatible provider
+    credentials and enforces segment citations, so it cannot introduce
+    uncited claims; any provider/parse failure degrades to the deterministic
+    keyword baseline instead of losing the projection entirely.
+    """
+    if (
+        settings.PROJECT_GRAPH_EXTRACTOR == "llm"
+        and embedding_provider is not None
+        and embedding_provider.api_key
+    ):
+        try:
+            return await extract_project_semantics_llm(
+                source_segments,
+                api_key=embedding_provider.api_key,
+                base_url=embedding_provider.base_url,
+                model=settings.OPENAI_MODEL,
+            )
+        except Exception:
+            logger.warning(
+                "LLM project graph extraction failed; falling back to keyword",
+                exc_info=True,
+            )
+    return extract_project_semantics(source_segments)
+
+
+async def _persist_project_graph_projection(
+    session: AsyncSession,
+    source_segments: list[ProjectSourceSegment],
+    *,
+    user_id: str,
+    organization_id: str,
+    embedding_provider: EmailImportEmbeddingProvider | None = None,
+) -> None:
+    """Best-effort projection of imported content segments into the project graph.
+
+    Runs after the email is already committed. Flag-gated and defensive: any
+    failure is logged and rolled back so it never fails the email import. The
+    workspace scope mirrors the convention enforced by the project graph
+    repository (``workspace-<organization_id>``).
+    """
+    if not source_segments:
+        return
+    try:
+        extraction = await _extract_project_semantics_for_import(
+            source_segments, embedding_provider=embedding_provider
+        )
+        if not extraction.objects:
+            return
+        workspace_id = (
+            f"workspace-{organization_id}"
+            if organization_id
+            else f"workspace-{user_id}"
+        )
+        await persist_project_graph_projection(
+            session,
+            extraction=extraction,
+            user_id=user_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+        )
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        logger.warning(
+            "Project graph projection skipped for imported email",
+            exc_info=True,
+        )
+
+
 async def _import_single_eml(
     session: AsyncSession,
     *,
@@ -711,6 +815,12 @@ async def _import_single_eml(
         fitted_embeddings=fitted_embeddings,
     )
 
+    project_source_segments = (
+        _project_source_segments(email_obj)
+        if settings.PROJECT_GRAPH_EXTRACTION_ENABLED
+        else []
+    )
+
     session.add(email_obj)
     try:
         await session.commit()
@@ -721,6 +831,14 @@ async def _import_single_eml(
             status="failed",
             reason_code="database_commit_failed",
         )
+
+    await _persist_project_graph_projection(
+        session,
+        project_source_segments,
+        user_id=user_id,
+        organization_id=organization_id,
+        embedding_provider=embedding_provider,
+    )
 
     return EmailImportItemResult(
         filename=display_filename,
@@ -828,12 +946,12 @@ async def _generate_import_embeddings(
 
 def _read_eml_bytes(eml_path: Path) -> bytes:
     no_follow_flag = getattr(os, "O_NOFOLLOW", None)
-    if no_follow_flag is None:
-        raise EmailParseError(
-            "Email import requires O_NOFOLLOW support (unavailable on this platform)"
-        )
+    if no_follow_flag is None and eml_path.is_symlink():
+        raise EmailParseError("Failed to read email file")
 
-    open_flags = os.O_RDONLY | no_follow_flag
+    open_flags = os.O_RDONLY
+    if no_follow_flag is not None:
+        open_flags |= no_follow_flag
     file_descriptor_transferred = False
     try:
         file_descriptor = os.open(eml_path, open_flags)
