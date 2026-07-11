@@ -1,9 +1,0 @@
-scan:
-  scanners:
-    - vuln
-    - secret
-    - misconfig
-
-rego:
-  data:
-    - .github/trivy

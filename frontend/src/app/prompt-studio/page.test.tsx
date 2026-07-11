@@ -208,7 +208,7 @@ describe("PromptStudioPage", () => {
     expectNoPublicIdentityHeaders((fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit?])?.[1]?.headers);
 
     act(() => {
-      getButton(page, "데이터 분석 판단 포인트").click();
+      getButton(page, "데이터 분석 인사이트").click();
     });
     expect(page.textContent).not.toContain("맥락 종합 결과");
   });
