@@ -60,11 +60,15 @@ def test_ollama_dockerfile_keeps_pulled_models_available_to_runtime_user():
     assert "for attempt in $(seq 1 60)" in dockerfile
     assert "if ollama list > /dev/null 2>&1" in dockerfile
     assert "cat /tmp/ollama-build.log; exit 1" in dockerfile
-    assert "ollama pull gemma4:e2b-it-qat" in dockerfile
-    assert "ollama pull embeddinggemma" in dockerfile
+    assert "for pull_attempt in $(seq 1 5)" in dockerfile
+    assert "upstream model registry unavailable" in dockerfile
+    assert "retrying in ${sleep_seconds}s" in dockerfile
+    assert 'model="gemma4:e2b-it-qat"' in dockerfile
+    assert 'model="embeddinggemma"' in dockerfile
+    assert 'ollama pull "${model}"' in dockerfile
     assert dockerfile.count("RUN set -eux;") >= 2
-    assert dockerfile.find("ollama pull gemma4:e2b-it-qat") < dockerfile.find(
-        "ollama pull embeddinggemma"
+    assert dockerfile.find('model="gemma4:e2b-it-qat"') < dockerfile.find(
+        'model="embeddinggemma"'
     )
     assert "ollama list | grep -E '^gemma4:e2b-it-qat[[:space:]]'" in dockerfile
     assert (

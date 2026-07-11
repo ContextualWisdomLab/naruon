@@ -20,7 +20,17 @@ RUN set -eux; \
       sleep 1; \
     done; \
     if [ "${server_ready}" != "true" ]; then cat /tmp/ollama-build.log; exit 1; fi; \
-    ollama pull gemma4:e2b-it-qat; \
+    model="gemma4:e2b-it-qat"; \
+    for pull_attempt in $(seq 1 5); do \
+      if ollama pull "${model}"; then break; fi; \
+      if [ "${pull_attempt}" = "5" ]; then \
+        echo "ollama pull ${model} failed after 5 attempts; upstream model registry unavailable" >&2; \
+        exit 1; \
+      fi; \
+      sleep_seconds=$((pull_attempt * 15)); \
+      echo "ollama pull ${model} failed on attempt ${pull_attempt}/5; retrying in ${sleep_seconds}s" >&2; \
+      sleep "${sleep_seconds}"; \
+    done; \
     ollama list | grep -E '^gemma4:e2b-it-qat[[:space:]]'; \
     kill "$server_pid"; \
     wait "$server_pid" 2>/dev/null || true; \
@@ -37,7 +47,17 @@ RUN set -eux; \
       sleep 1; \
     done; \
     if [ "${server_ready}" != "true" ]; then cat /tmp/ollama-build.log; exit 1; fi; \
-    ollama pull embeddinggemma; \
+    model="embeddinggemma"; \
+    for pull_attempt in $(seq 1 5); do \
+      if ollama pull "${model}"; then break; fi; \
+      if [ "${pull_attempt}" = "5" ]; then \
+        echo "ollama pull ${model} failed after 5 attempts; upstream model registry unavailable" >&2; \
+        exit 1; \
+      fi; \
+      sleep_seconds=$((pull_attempt * 15)); \
+      echo "ollama pull ${model} failed on attempt ${pull_attempt}/5; retrying in ${sleep_seconds}s" >&2; \
+      sleep "${sleep_seconds}"; \
+    done; \
     ollama list | grep -E '^embeddinggemma(:|[[:space:]])'; \
     kill "$server_pid"; \
     wait "$server_pid" 2>/dev/null || true; \
