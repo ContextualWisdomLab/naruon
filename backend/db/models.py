@@ -274,6 +274,128 @@ class ProviderWritebackRetryItem(Base):
     )
 
 
+class LlmBatchJob(Base):
+    """A batch-tolerant embedding job routed through contextual-orchestrator.
+
+    naruon-side control-plane record for one bulk, latency-tolerant embedding
+    run (e.g. an email-import batch). The *primary* execution path submits the
+    batch to the ``contextual-orchestrator`` batch API, which owns provider
+    routing, load balancing and cost accounting and forwards the work to
+    ``pg-llm-batch``. naruon keeps this durable audit trail (which path served
+    the batch, the orchestrator's batch id, the reported cost) so batch work is
+    observable even though the routing/cost decisions live in the orchestrator.
+    Modeled on :class:`ProviderWritebackRetryItem` (string uid PK, scope
+    indexes).
+    """
+
+    __tablename__ = "llm_batch_jobs"
+
+    batch_job_uid: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        default=lambda: f"llm_batch_{uuid.uuid4().hex}",
+    )
+    organization_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    job_status: Mapped[str] = mapped_column(
+        String,
+        index=True,
+        default="preparing",
+        nullable=False,
+    )
+    # "orchestrator" (primary) or "local_engine" (offline dev fallback).
+    routing_mode: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    model_name: Mapped[str] = mapped_column(String, nullable=False)
+    endpoint_alias: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The batch id assigned by contextual-orchestrator (None for local runs).
+    orchestrator_batch_uid: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    total_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completed_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    part_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Cost as reported by the orchestrator, in micro-USD (1e-6 USD), or None.
+    cost_micro_usd: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    items: Mapped[list["LlmBatchItem"]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
+    __table_args__ = (
+        Index(
+            "ix_llm_batch_jobs_scope_status",
+            "organization_id",
+            "user_id",
+            "job_status",
+        ),
+    )
+
+
+class LlmBatchItem(Base):
+    """A single input within an :class:`LlmBatchJob`.
+
+    One item per input text, carrying its token count and the partition (batch
+    file part) it was assigned to — reported by the orchestrator on the primary
+    path, or by the ``pg-llm-batch`` accumulator on the local fallback path.
+    """
+
+    __tablename__ = "llm_batch_items"
+
+    batch_item_uid: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        default=lambda: f"llm_batch_item_{uuid.uuid4().hex}",
+    )
+    batch_job_uid: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("llm_batch_jobs.batch_job_uid", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    part_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    item_status: Mapped[str] = mapped_column(
+        String,
+        index=True,
+        default="queued",
+        nullable=False,
+    )
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    job: Mapped["LlmBatchJob"] = relationship(back_populates="items")
+    __table_args__ = (
+        Index(
+            "ix_llm_batch_items_job_sequence",
+            "batch_job_uid",
+            "sequence_no",
+        ),
+    )
+
+
 class Organization(Base):
     __tablename__ = "organization_entities"
 
@@ -1041,6 +1163,37 @@ class TenantConfig(Base):
     google_client_secret: Mapped[str | None] = mapped_column(
         EncryptedString, nullable=True
     )
+
+    # Batch-tolerant embedding routing via contextual-orchestrator. All config
+    # here lives in the Fernet DB, never in os.getenv. The orchestrator is the
+    # routing/cost hub: naruon submits bulk embeddings to it and it forwards to
+    # pg-llm-batch and records cost. The bearer token is a secret so it is stored
+    # EncryptedString (Fernet at rest); the base URL is not a secret but is
+    # SSRF-guarded + allowlisted at call time. batch_local_dsn is an optional
+    # offline-dev fallback DSN for a local pg-llm-batch package (also a secret).
+    batch_embedding_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    batch_orchestrator_base_url: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    batch_orchestrator_token: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
+    batch_orchestrator_endpoint: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    batch_embedding_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_local_dsn: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # Cost-attribution dimensions forwarded to the orchestrator ledger so batch
+    # embedding cost is attributed across the full dimension set the hub expects
+    # (service / team / group / company, on top of the source / organization /
+    # user observability keys). Not secrets, so plain String. company falls back
+    # to organization_id at call time when left unset.
+    batch_attribution_service: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_team: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_group: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_company: Mapped[str | None] = mapped_column(String, nullable=True)
 
     def __repr__(self) -> str:
         return (
