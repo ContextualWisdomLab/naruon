@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 import csv
+import hashlib
 import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from io import StringIO
-from xml.etree.ElementTree import ParseError
 
 from defusedxml import ElementTree as DefusedElementTree
 from defusedxml.common import DefusedXmlException
@@ -589,7 +588,7 @@ def _parse_xml(
 ) -> ParseResult:
     try:
         root = DefusedElementTree.fromstring(content)
-    except (DefusedXmlException, ParseError, TypeError, ValueError):
+    except (DefusedXmlException, DefusedElementTree.ParseError, TypeError, ValueError):
         return _parse_plain_text(context, document_node, strip_html_markup(content))
 
     root_label = _xml_tag_name(str(root.tag))
