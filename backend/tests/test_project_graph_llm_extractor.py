@@ -8,12 +8,6 @@ from unittest.mock import AsyncMock
 import services.email_import_service as import_service
 import services.project_graph.llm_extractor as llm_extractor
 from services.project_graph import ProjectSourceSegment
-from services.project_graph.llm_extractor import (
-    LLM_EXTRACTOR_NAME,
-    ExtractedObjectPayload,
-    ExtractionPayload,
-    extract_project_semantics_llm,
-)
 
 
 def _segment(uid: str, text: str) -> ProjectSourceSegment:
@@ -28,8 +22,10 @@ def _segment(uid: str, text: str) -> ProjectSourceSegment:
     )
 
 
-def _payload(*objects: ExtractedObjectPayload) -> ExtractionPayload:
-    return ExtractionPayload(objects=list(objects))
+def _payload(
+    *objects: llm_extractor.ExtractedObjectPayload,
+) -> llm_extractor.ExtractionPayload:
+    return llm_extractor.ExtractionPayload(objects=list(objects))
 
 
 @pytest.mark.asyncio
@@ -39,7 +35,7 @@ async def test_grounded_objects_are_mapped_with_citations(monkeypatch):
         "_call_llm",
         AsyncMock(
             return_value=_payload(
-                ExtractedObjectPayload(
+                llm_extractor.ExtractedObjectPayload(
                     object_type="requirement",
                     title="Export must be supported",
                     summary="The system must support export.",
@@ -50,7 +46,7 @@ async def test_grounded_objects_are_mapped_with_citations(monkeypatch):
         ),
     )
 
-    result = await extract_project_semantics_llm(
+    result = await llm_extractor.extract_project_semantics_llm(
         [_segment("seg1", "The system must support export.")],
         api_key="key",
         model="gpt-test",
@@ -60,7 +56,7 @@ async def test_grounded_objects_are_mapped_with_citations(monkeypatch):
     obj = result.objects[0]
     assert obj.object_type.value == "requirement"
     assert obj.source_segment_uids == ("seg1",)
-    assert obj.extractor_name == LLM_EXTRACTOR_NAME
+    assert obj.extractor_name == llm_extractor.LLM_EXTRACTOR_NAME
     assert result.edges[0].source_uid == "segment:seg1"
     assert result.edges[0].target_uid == obj.uid
 
@@ -72,14 +68,14 @@ async def test_objects_citing_unknown_segments_are_dropped(monkeypatch):
         "_call_llm",
         AsyncMock(
             return_value=_payload(
-                ExtractedObjectPayload(
+                llm_extractor.ExtractedObjectPayload(
                     object_type="requirement",
                     title="Fabricated",
                     summary="Cites a segment that does not exist.",
                     source_segment_uids=["seg1", "hallucinated"],
                     confidence=0.9,
                 ),
-                ExtractedObjectPayload(
+                llm_extractor.ExtractedObjectPayload(
                     object_type="issue",
                     title="No citation at all",
                     summary="Empty citations.",
@@ -90,7 +86,7 @@ async def test_objects_citing_unknown_segments_are_dropped(monkeypatch):
         ),
     )
 
-    result = await extract_project_semantics_llm(
+    result = await llm_extractor.extract_project_semantics_llm(
         [_segment("seg1", "real text")], api_key="key", model="gpt-test"
     )
 
@@ -105,14 +101,14 @@ async def test_unknown_type_dropped_and_confidence_clamped(monkeypatch):
         "_call_llm",
         AsyncMock(
             return_value=_payload(
-                ExtractedObjectPayload(
+                llm_extractor.ExtractedObjectPayload(
                     object_type="not_a_real_type",
                     title="Bad type",
                     summary="x",
                     source_segment_uids=["seg1"],
                     confidence=0.5,
                 ),
-                ExtractedObjectPayload(
+                llm_extractor.ExtractedObjectPayload(
                     object_type="milestone",
                     title="Overconfident",
                     summary="Due next week.",
@@ -123,7 +119,7 @@ async def test_unknown_type_dropped_and_confidence_clamped(monkeypatch):
         ),
     )
 
-    result = await extract_project_semantics_llm(
+    result = await llm_extractor.extract_project_semantics_llm(
         [_segment("seg1", "milestone text")], api_key="key", model="gpt-test"
     )
 
@@ -137,7 +133,7 @@ async def test_empty_segments_short_circuit_without_llm_call(monkeypatch):
     call = AsyncMock()
     monkeypatch.setattr(llm_extractor, "_call_llm", call)
 
-    result = await extract_project_semantics_llm(
+    result = await llm_extractor.extract_project_semantics_llm(
         [_segment("seg1", "   ")], api_key="key", model="gpt-test"
     )
 

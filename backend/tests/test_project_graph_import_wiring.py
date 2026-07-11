@@ -11,10 +11,6 @@ import pytest
 from unittest.mock import AsyncMock
 
 import services.email_import_service as import_service
-from services.email_import_service import (
-    _persist_project_graph_projection,
-    _project_source_segments,
-)
 
 
 def _segment(uid: str, text: str, ordinal: int = 0):
@@ -34,7 +30,7 @@ def test_project_source_segments_maps_content_segments():
         content_segments=[_segment("seg1", "hello", 0), _segment("seg2", "world", 1)]
     )
 
-    result = _project_source_segments(email_obj)
+    result = import_service._project_source_segments(email_obj)
 
     assert [segment.content_segment_uid for segment in result] == ["seg1", "seg2"]
     assert result[0].safe_text_content == "hello"
@@ -53,7 +49,7 @@ async def test_projection_persists_with_workspace_scope_when_objects_found(monke
         _segment("seg1", "The system must support export. This is a requirement.", 0)
     ]
 
-    await _persist_project_graph_projection(
+    await import_service._persist_project_graph_projection(
         session, segments, user_id="user1", organization_id="org1"
     )
 
@@ -76,7 +72,7 @@ async def test_projection_falls_back_to_user_workspace_without_org(monkeypatch):
     session = AsyncMock()
     segments = [_segment("seg1", "We must deliver the milestone by 2026-01-01.", 0)]
 
-    await _persist_project_graph_projection(
+    await import_service._persist_project_graph_projection(
         session, segments, user_id="user1", organization_id=""
     )
 
@@ -92,7 +88,7 @@ async def test_projection_noop_when_no_segments(monkeypatch):
     )
     session = AsyncMock()
 
-    await _persist_project_graph_projection(
+    await import_service._persist_project_graph_projection(
         session, [], user_id="u", organization_id="o"
     )
 
@@ -110,7 +106,7 @@ async def test_projection_noop_when_no_objects_extracted(monkeypatch):
     # Neutral text with no rule keywords -> extractor yields nothing.
     segments = [_segment("seg1", "hello there, nice weather today", 0)]
 
-    await _persist_project_graph_projection(
+    await import_service._persist_project_graph_projection(
         session, segments, user_id="u", organization_id="o"
     )
 
@@ -128,7 +124,7 @@ async def test_projection_swallows_failure_and_rolls_back(monkeypatch):
     segments = [_segment("seg1", "The system must support export requirement.", 0)]
 
     # Best-effort: a projection failure must not propagate to the import.
-    await _persist_project_graph_projection(
+    await import_service._persist_project_graph_projection(
         session, segments, user_id="u", organization_id="o"
     )
 
