@@ -18,5 +18,8 @@ describe('auth callback return target validation', () => {
     expect(toSafeReturnTo('\\\\evil.com')).toBe('/');
     expect(toSafeReturnTo(' /\t/evil.com')).toBe('/');
     expect(toSafeReturnTo('http://localhost/path')).toBe('/');
+    expect(toSafeReturnTo('/%2fevil.example/phish')).toBe('/');
+    expect(toSafeReturnTo('/%2F%2Fevil.example/phish')).toBe('/');
+    expect(toSafeReturnTo('/%5C%5Cevil.example/phish')).toBe('/');
   });
 });

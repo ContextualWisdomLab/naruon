@@ -12,7 +12,7 @@ from services.hybrid_retrieval import (
     reciprocal_rank_fusion_score,
     theoretical_min_max_normalize,
 )
-from services.hybrid_retrieval.score_fusion import (
+from rankweave import (
     CONVEX_COMBINATION_STRATEGY,
     RECIPROCAL_RANK_STRATEGY,
 )
