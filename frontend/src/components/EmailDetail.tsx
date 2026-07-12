@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Loader2, MessagesSquare } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
-import { SourceDrawer } from "@/components/SourceDrawer";
 import {
   buildThreadUrl,
   buildReplyPayload,
@@ -20,11 +19,6 @@ import {
 } from "@/lib/email-threading";
 import { toMailBodyText, toMailDisplayText } from "@/lib/mail-text";
 import { toConfidencePercent } from "@/lib/confidence";
-import {
-  bucketTextLength,
-  createProductEventId,
-  recordProductEvent,
-} from "@/lib/product-events";
 
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
@@ -59,18 +53,6 @@ type EmailDetailActionCommand = {
   action: string;
 };
 
-function getThreadEventId(email: EmailData) {
-  return email.thread_id || email.message_id || `email-${email.id}`;
-}
-
-function getMessageEventId(email: EmailData) {
-  return email.message_id || `email-${email.id}`;
-}
-
-function nowMs() {
-  return typeof performance !== "undefined" ? performance.now() : Date.now();
-}
-
 export function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
   const [email, setEmail] = useState<EmailData | null>(null);
   const [threadEmails, setThreadEmails] = useState<EmailData[]>([]);
@@ -96,12 +78,9 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [taskStatus, setTaskStatus] = useState<string | null>(null);
-  const [sourceDrawerOpen, setSourceDrawerOpen] = useState(false);
   const threadRequestIdRef = useRef(0);
   const handledActionCommandIdRef = useRef<number | null>(null);
   const currentEmailIdRef = useRef<number | null>(emailId);
-  const contextSynthesisEventKeyRef = useRef<string | null>(null);
-  const activeDraftReplyIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     currentEmailIdRef.current = emailId;
@@ -167,9 +146,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       setIsCreatingTask(false);
       setSyncStatus(null);
       setTaskStatus(null);
-      setSourceDrawerOpen(false);
-      activeDraftReplyIdRef.current = null;
-      contextSynthesisEventKeyRef.current = null;
 
       try {
         const emailJson = await apiClient.get<EmailData>(`/api/emails/${emailId}`);
@@ -184,29 +160,14 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
         });
 
         // Fetch LLM summary in the background
-        const synthesisStartedAt = nowMs();
         apiClient.post<LlmData>('/api/llm/summarize', { email_body: emailJson.body })
           .then((llmJson) => {
             if (!isMounted) return;
             setLlmData(llmJson);
-            recordProductEvent("latency_guardrail_recorded", {
-              surface: "mail_detail",
-              request_trace_id: createProductEventId("synthesis_trace"),
-              operation: "synthesis",
-              duration_ms: Math.round(nowMs() - synthesisStartedAt),
-              status: "success",
-            });
           })
           .catch((llmErr) => {
             console.error("Error generating LLM summary:", llmErr);
             if (isMounted) setLlmError("맥락 종합을 생성하지 못했습니다.");
-            recordProductEvent("latency_guardrail_recorded", {
-              surface: "mail_detail",
-              request_trace_id: createProductEventId("synthesis_trace"),
-              operation: "synthesis",
-              duration_ms: Math.round(nowMs() - synthesisStartedAt),
-              status: "error",
-            });
           });
 
       } catch (err) {
@@ -222,37 +183,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
 
     return () => { isMounted = false; };
   }, [emailId, fetchThread]);
-
-  useEffect(() => {
-    if (!email || !llmData) return;
-
-    const eventKey = `${email.id}:${getThreadEventId(email)}`;
-    if (contextSynthesisEventKeyRef.current === eventKey) return;
-    contextSynthesisEventKeyRef.current = eventKey;
-
-    const confidence = toConfidencePercent(llmData.confidence);
-    const aiOutputId = `mail-synthesis:${getThreadEventId(email)}`;
-    recordProductEvent("context_synthesis_viewed", {
-      surface: "mail_detail",
-      thread_id: getThreadEventId(email),
-      message_id: getMessageEventId(email),
-      ai_output_id: aiOutputId,
-      confidence,
-      source_count: 1,
-      view_state: "loaded",
-    });
-
-    if (confidence !== undefined && confidence < 50) {
-      recordProductEvent("model_quality_guardrail_recorded", {
-        surface: "mail_detail",
-        guardrail_evaluation_id: createProductEventId("quality_guardrail"),
-        ai_output_id: aiOutputId,
-        quality_signal: "low_confidence",
-        confidence,
-        human_feedback_present: false,
-      });
-    }
-  }, [email, llmData]);
 
   const handleTranslate = useCallback(async () => {
     if (!email) return;
@@ -277,59 +207,17 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
     if (!email) return;
     const actionEmailId = email.id;
     const isCurrentEmail = () => currentEmailIdRef.current === actionEmailId;
-    const startedAt = nowMs();
     setIsDrafting(true);
     setDraftError(null);
     setSendStatus(null);
     try {
       const data = await apiClient.post<{ draft: string }>('/api/llm/draft', { email_body: email.body, instruction });
       if (!isCurrentEmail()) return;
-      const nextDraft = data.draft || '';
-      const draftReplyId = createProductEventId("draft_reply");
-      activeDraftReplyIdRef.current = draftReplyId;
-      setDraft(nextDraft);
-      recordProductEvent("draft_reply_generated", {
-        surface: "mail_detail",
-        draft_reply_id: draftReplyId,
-        thread_id: getThreadEventId(email),
-        message_id: getMessageEventId(email),
-        instruction_present: Boolean(instruction.trim()),
-        generation_state: "success",
-      });
-      recordProductEvent("draft_reply_inserted", {
-        surface: "mail_detail",
-        draft_reply_id: draftReplyId,
-        thread_id: getThreadEventId(email),
-        message_id: getMessageEventId(email),
-        insert_source: "generated",
-        character_count_bucket: bucketTextLength(nextDraft),
-      });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("draft_trace"),
-        operation: "draft_reply",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "success",
-      });
+      setDraft(data.draft || '');
     } catch (err) {
       if (!isCurrentEmail()) return;
       console.error("Error drafting reply:", err);
       setDraftError("답장 초안을 생성하지 못했습니다.");
-      recordProductEvent("draft_reply_generated", {
-        surface: "mail_detail",
-        draft_reply_id: createProductEventId("draft_reply"),
-        thread_id: getThreadEventId(email),
-        message_id: getMessageEventId(email),
-        instruction_present: Boolean(instruction.trim()),
-        generation_state: "error",
-      });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("draft_trace"),
-        operation: "draft_reply",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "error",
-      });
     } finally {
       if (isCurrentEmail()) setIsDrafting(false);
     }
@@ -337,9 +225,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
 
   const handleSendReply = async () => {
     if (!email || !draft) return;
-    const startedAt = nowMs();
-    const draftReplyId = activeDraftReplyIdRef.current || createProductEventId("draft_reply");
-    activeDraftReplyIdRef.current = draftReplyId;
     setIsSending(true);
     setSendStatus(null);
     try {
@@ -351,33 +236,10 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
           : '답장을 전송했습니다.',
       });
       setDraft('');
-      activeDraftReplyIdRef.current = null;
-      recordProductEvent("draft_reply_sent", {
-        surface: "mail_detail",
-        draft_reply_id: draftReplyId,
-        thread_id: getThreadEventId(email),
-        message_id: getMessageEventId(email),
-        send_mode: data.simulated ? "simulated" : "provider_send",
-        final_review_duration_ms: Math.round(nowMs() - startedAt),
-      });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("draft_send_trace"),
-        operation: "draft_reply",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "success",
-      });
       await fetchThread(email);
     } catch (err) {
       console.error("Error sending email:", err);
       setSendStatus({ type: 'error', message: '답장 전송에 실패했습니다.' });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("draft_send_trace"),
-        operation: "draft_reply",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "error",
-      });
     } finally {
       setIsSending(false);
     }
@@ -392,7 +254,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
     }
     setIsSyncing(true);
     setSyncStatus(null);
-    const startedAt = nowMs();
     try {
       const intents = await Promise.all(
         llmData.todos.map((summary) =>
@@ -404,35 +265,13 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       );
       if (!isCurrentEmail()) return;
       setSyncStatus({ type: 'success', message: `${intents.length}개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.` });
-      recordProductEvent("calendar_reflected", {
-        surface: "mail_detail",
-        calendar_candidate_id: `mail-calendar:${actionEmailId ?? "unknown"}`,
-        calendar_event_id: intents[0]?.target_source_id ?? null,
-        thread_id: email ? getThreadEventId(email) : null,
-        conflict_state: "none",
-        provider_write_executed: intents.some((intent) => Boolean(intent.provider_write_executed)),
-      });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("calendar_trace"),
-        operation: "calendar_reflection",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "success",
-      });
     } catch {
       if (!isCurrentEmail()) return;
       setSyncStatus({ type: 'error', message: '일정 반영 의도 요청에 실패했습니다.' });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("calendar_trace"),
-        operation: "calendar_reflection",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "error",
-      });
     } finally {
       if (isCurrentEmail()) setIsSyncing(false);
     }
-  }, [email, emailId, llmData]);
+  }, [emailId, llmData]);
 
   const handleCreateTask = useCallback(async () => {
     const actionEmail = email;
@@ -445,7 +284,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
     }
     setIsCreatingTask(true);
     setTaskStatus(null);
-    const startedAt = nowMs();
     try {
       const data = await apiClient.post<CreateTasksFromEmailResponse>('/api/tasks/from-email', {
         source_email_id: actionEmail.message_id,
@@ -454,32 +292,9 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       });
       if (!isCurrentEmail()) return;
       setTaskStatus(`${data.created}개 실행 항목을 티켓형 실행 항목으로 추적합니다.`);
-      recordProductEvent("action_item_created", {
-        surface: "mail_detail",
-        action_item_id: `mail-task:${getMessageEventId(actionEmail)}:${data.created}`,
-        thread_id: getThreadEventId(actionEmail),
-        decision_point_id: `mail-synthesis:${getThreadEventId(actionEmail)}`,
-        assignee_type: "unassigned",
-        due_date_present: false,
-        source_backlink_present: true,
-      });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("task_trace"),
-        operation: "task_creation",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "success",
-      });
     } catch {
       if (!isCurrentEmail()) return;
       setTaskStatus('티켓형 실행 항목 생성에 실패했습니다.');
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("task_trace"),
-        operation: "task_creation",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "error",
-      });
     } finally {
       if (isCurrentEmail()) setIsCreatingTask(false);
     }
@@ -535,39 +350,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
   const confidencePercent = toConfidencePercent(llmData?.confidence);
-
-  const handleOpenSourceDrawer = () => {
-    recordProductEvent("source_chip_opened", {
-      surface: "mail_detail",
-      source_chip_id: `source-chip:${email.id}`,
-      ai_output_id: `mail-synthesis:${getThreadEventId(email)}`,
-      source_id: getMessageEventId(email),
-      source_type: "mail",
-      opened_from: "synthesis_card",
-    });
-    setSourceDrawerOpen(true);
-  };
-
-  const handleOpenOriginalSource = () => {
-    document.getElementById(`msg-${email.id}`)?.scrollIntoView?.({ block: "center" });
-    setSourceDrawerOpen(false);
-  };
-
-  const handleDraftChange = (nextDraft: string) => {
-    if (!draft && nextDraft && !activeDraftReplyIdRef.current) {
-      const draftReplyId = createProductEventId("draft_reply");
-      activeDraftReplyIdRef.current = draftReplyId;
-      recordProductEvent("draft_reply_inserted", {
-        surface: "mail_detail",
-        draft_reply_id: draftReplyId,
-        thread_id: getThreadEventId(email),
-        message_id: getMessageEventId(email),
-        insert_source: "manual",
-        character_count_bucket: bucketTextLength(nextDraft),
-      });
-    }
-    setDraft(nextDraft);
-  };
 
   return (
     <div className="flex h-full flex-col bg-card">
@@ -627,13 +409,9 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
               <div className="flex flex-col gap-2">
                 <p className="text-sm">{llmData.summary}</p>
                 <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleOpenSourceDrawer}
-                    className="flex items-center gap-1 rounded bg-primary/5 px-2 py-1 text-[10px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                  >
+                  <a href={`#msg-${email.id}`} className="text-[10px] text-primary hover:underline flex items-center gap-1 bg-primary/5 px-2 py-1 rounded">
                     근거 원본 보기
-                  </button>
+                  </a>
                 </div>
               </div>
             ) : null}
@@ -796,7 +574,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
               id="reply-draft"
               aria-label="답장 초안"
               value={draft}
-              onChange={(e) => handleDraftChange(e.target.value)}
+              onChange={(e) => setDraft(e.target.value)}
               placeholder="답장 초안을 작성하거나 판단 보조로 초안을 생성하세요..."
               className="min-h-[150px] rounded-2xl border-purple-500/20 bg-background/70"
             />
@@ -812,7 +590,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
               <div className="flex gap-2">
                 {draft && (
                   <Button
-                    onClick={() => { setDraft(''); activeDraftReplyIdRef.current = null; setSendStatus(null); setDraftError(null); }}
+                    onClick={() => { setDraft(''); setSendStatus(null); setDraftError(null); }}
                     variant="ghost"
                     size="sm"
                     className="h-9 rounded-xl"
@@ -835,18 +613,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
           </DecisionPointCard>
         </div>
       </ScrollArea>
-      <SourceDrawer
-        open={sourceDrawerOpen}
-        title="맥락 종합 근거"
-        sourceLabel={safeEmailSubject}
-        sourceType="mail"
-        sourceId={getMessageEventId(email)}
-        summary={llmData?.summary || "선택한 메일 원문과 스레드를 근거로 맥락 종합을 생성합니다."}
-        provenance={llmData?.provenance || "판단 보조 생성"}
-        confidence={confidencePercent}
-        onClose={() => setSourceDrawerOpen(false)}
-        onOpenOriginal={handleOpenOriginalSource}
-      />
     </div>
   );
 }

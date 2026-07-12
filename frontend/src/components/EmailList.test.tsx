@@ -82,7 +82,7 @@ describe("EmailList", () => {
     expect(container.textContent).not.toContain("오늘의 판단 포인트·Q2 출시 계획 및 우선순위 조정");
     expect(container.textContent).toContain("메일 데이터 기반으로 판단 포인트를 표시합니다");
     expect(container.textContent).toContain("(제목 없음)");
-    expect(container.textContent).toContain("안 읽음");
+    expect(container.textContent).toContain("새 메일");
     expect(container.textContent).toContain("3개 메시지");
     expect(selectedThread).not.toBeNull();
     expect(selectedThread?.className).toContain("min-h-20");

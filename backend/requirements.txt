@@ -11,7 +11,6 @@ alembic==1.18.5
 greenlet==3.5.3
 asyncpg==0.31.0
 pgvector==0.4.2
-rankweave==0.1.0  # hybrid-retrieval fusion + query normalization (OSMU spin-off)
 pytest-asyncio==1.4.0
 openai==2.44.0
 langchain-text-splitters==1.1.2

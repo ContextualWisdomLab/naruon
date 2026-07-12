@@ -33,10 +33,8 @@ import {
 } from './data-layout/utils';
 
 
-const DATA_TABS = ['문서 저장소', '수집 파이프라인', '임베딩', '품질 점검'] as const;
-
 export function DataLayout() {
-  const [activeTab, setActiveTab] = useState<(typeof DATA_TABS)[number]>('문서 저장소');
+  const [activeTab, setActiveTab] = useState<'문서 저장소' | '수집 파이프라인' | '임베딩' | '품질 점검'>('문서 저장소');
   
   interface ProjectFolder {
     folder_uid: string;
@@ -324,49 +322,26 @@ export function DataLayout() {
     : null;
 
   return (
-    <div className="flex h-full min-w-0 min-h-0 bg-background text-foreground overflow-x-hidden">
-      {/* Local navigation (LNB): desktop left sidebar for the data domain's areas */}
-      <nav
-        aria-label="데이터 로컬 탐색"
-        className="hidden w-60 shrink-0 flex-col gap-1 border-r border-border bg-card p-4 lg:flex"
-      >
-        <h1 className="mb-2 flex items-center gap-2 px-2 text-lg font-bold">
-          <Database className="size-5 text-primary" aria-hidden="true" />
-          <span>데이터와 파일</span>
+    <div className="flex h-full min-w-0 min-h-0 bg-background text-foreground flex-col overflow-x-hidden">
+      <header className="flex h-20 shrink-0 items-center border-b border-border bg-card px-4 md:px-8 overflow-hidden">
+        <h1 className="text-xl md:text-2xl font-bold flex shrink-0 items-center gap-3">
+          <Database className="size-6 text-primary" /> <span className="sr-only sm:not-sr-only sm:inline">데이터와 파일</span>
         </h1>
-        {DATA_TABS.map((tab) => (
-          <button
-            type="button"
-            key={tab}
-            aria-current={activeTab === tab ? 'page' : undefined}
-            onClick={() => setActiveTab(tab)}
-            className={`rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}
-          >
-            {tab}
-          </button>
-        ))}
-      </nav>
+        <p className="sr-only">중복 반입과 스레드 정리</p>
+        <div className="ml-4 md:ml-8 flex flex-1 min-w-0 gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {['문서 저장소', '수집 파이프라인', '임베딩', '품질 점검'].map((tab) => (
+            <button type="button"
+              key={tab}
+              onClick={() => setActiveTab(tab as '문서 저장소' | '수집 파이프라인' | '임베딩' | '품질 점검')}
+              className={`whitespace-nowrap px-3 md:px-4 py-2 text-sm font-bold rounded-lg transition-colors shrink-0 ${activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </header>
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Mobile local tabs: the LNB collapses to a horizontal tab strip below the desktop breakpoint */}
-        <header className="flex h-16 shrink-0 items-center border-b border-border bg-card px-4 lg:hidden">
-          <h1 className="sr-only">데이터와 파일</h1>
-          <div className="flex flex-1 min-w-0 gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {DATA_TABS.map((tab) => (
-              <button
-                type="button"
-                key={tab}
-                aria-current={activeTab === tab ? 'page' : undefined}
-                onClick={() => setActiveTab(tab)}
-                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition-colors shrink-0 ${activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 pb-[calc(7rem+env(safe-area-inset-bottom))] md:p-8 bg-background">
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 pb-[calc(7rem+env(safe-area-inset-bottom))] md:p-8 bg-background">
         <div className="max-w-5xl mx-auto space-y-8">
           
           {activeTab === '문서 저장소' && (
@@ -436,7 +411,6 @@ export function DataLayout() {
           )}
         </div>
       </main>
-      </div>
     </div>
   );
 }

@@ -29,13 +29,10 @@ async def test_caldav_event_parsing_and_sync():
     session_mock.execute.return_value = execute_res
     
     with patch("services.caldav_service.logger") as logger_mock:
-        synced = await sync_caldav_accounts(session_mock, "user_1")
-
-        assert synced is False
-        logger_mock.warning.assert_called_once()
-        warning_args = logger_mock.warning.call_args.args
-        assert "inbound CalDAV import adapter is not configured" in warning_args[0]
-        logged_url = warning_args[2]
+        await sync_caldav_accounts(session_mock, "user_1")
+        # Should have logged parsing
+        assert logger_mock.info.called
+        logged_url = logger_mock.debug.call_args.args[2]
         assert logged_url == "https://caldav.example.com/calendars"
         assert "secret" not in logged_url
 

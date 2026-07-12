@@ -18,9 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from api.auth import AuthContext, get_auth_context, get_current_user
 from api.security import _webdav_scope_statement
 from core.config import settings
-from cryptography.fernet import Fernet
 from db.models import (
-    get_fernet,
     CalendarWritebackSource,
     ConnectorSignalEvent,
     SecurityAuditEvent,
@@ -59,19 +57,11 @@ class MockAsyncSession:
             connector_events or [],
         ]
         self.execute_calls = 0
-        self.added: list[object] = []
-        self.committed = False
 
     async def execute(self, query):
         result = self.results[self.execute_calls]
         self.execute_calls += 1
         return MockResult(_scope_rows_for_query(query, result))
-
-    def add(self, obj):
-        self.added.append(obj)
-
-    async def commit(self):
-        self.committed = True
 
 
 def _scope_rows_for_query(query, rows):
@@ -423,164 +413,6 @@ def test_access_surface_redacts_sequential_ids_and_credentials(admin_client):
         assert forbidden not in serialized
 
 
-def test_permission_change_intent_records_provider_denial_without_external_write(
-    admin_client,
-    mock_db,
-):
-    response = admin_client.post(
-        "/api/security/permission-change-intent",
-        json={"decision": "deny_external_write", "resource_type": "provider_secret"},
-    )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body == {
-        "decision": "deny_external_write",
-        "resource_type": "provider_secret",
-        "allowed": False,
-        "reason": "organization_denied",
-        "evidence_label": "policy_engine_evidence",
-        "audit_event": "security.permission_change_intent",
-        "provider_write_executed": False,
-        "denial_result": "provider_denied_by_policy",
-        "observed_at": body["observed_at"],
-    }
-    assert body["observed_at"].endswith("Z")
-    assert mock_db.committed is True
-    assert len(mock_db.added) == 1
-    audit_event = mock_db.added[0]
-    assert isinstance(audit_event, SecurityAuditEvent)
-    assert audit_event.event_action == "permission_change_intent"
-    assert audit_event.resource_type == "provider_secret"
-    assert audit_event.actor_user_id == "admin"
-    assert audit_event.actor_role == "tenant_admin"
-    assert audit_event.organization_id == "org-acme"
-    assert audit_event.workspace_id == "workspace-org-acme"
-    assert audit_event.evidence_source == "api.security.permission_change_intent"
-    assert audit_event.detail_text == (
-        "permission_intent=deny_external_write; "
-        "resource_type=provider_secret; "
-        "policy_reason=organization_denied; "
-        "provider_write_executed=false"
-    )
-    assert "sk-" not in response.text
-    assert "credential" not in response.text
-    assert "org-outside-scope" not in response.text
-
-
-@pytest.mark.parametrize(
-    ("request_body", "expected_allowed", "expected_reason", "expected_denial_result"),
-    [
-        (
-            {"decision": "allow_writeback", "resource_type": "webdav_repository"},
-            True,
-            "allowed",
-            "approval_required_before_external_write",
-        ),
-        (
-            {"decision": "deny_workspace_write", "resource_type": "webdav_repository"},
-            False,
-            "workspace_denied",
-            "provider_denied_by_policy",
-        ),
-        (
-            {"decision": "deny_region_export", "resource_type": "data_export"},
-            False,
-            "data_region_denied",
-            "provider_denied_by_policy",
-        ),
-        (
-            {"decision": "deny_missing_consent", "resource_type": "caldav_source"},
-            False,
-            "consent_denied",
-            "provider_denied_by_policy",
-        ),
-    ],
-)
-def test_permission_change_intent_records_policy_variants_without_provider_write(
-    admin_client,
-    mock_db,
-    request_body,
-    expected_allowed,
-    expected_reason,
-    expected_denial_result,
-):
-    response = admin_client.post(
-        "/api/security/permission-change-intent",
-        json=request_body,
-    )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["decision"] == request_body["decision"]
-    assert body["resource_type"] == request_body["resource_type"]
-    assert body["allowed"] is expected_allowed
-    assert body["reason"] == expected_reason
-    assert body["provider_write_executed"] is False
-    assert body["denial_result"] == expected_denial_result
-    assert mock_db.committed is True
-    assert len(mock_db.added) == 1
-    audit_event = mock_db.added[0]
-    assert isinstance(audit_event, SecurityAuditEvent)
-    assert audit_event.event_action == "permission_change_intent"
-    assert audit_event.resource_type == request_body["resource_type"]
-    assert audit_event.detail_text == (
-        f"permission_intent={request_body['decision']}; "
-        f"resource_type={request_body['resource_type']}; "
-        f"policy_reason={expected_reason}; "
-        "provider_write_executed=false"
-    )
-    assert "workspace-outside-scope" not in response.text
-    assert settings.SECONDARY_DATA_REGION not in response.text
-    assert "provider.write" not in response.text
-
-
-def test_permission_change_intent_requires_admin_role(mock_db):
-    async def override_get_db():
-        yield mock_db
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(
-            app,
-            headers={
-                "X-User-Id": "member",
-                "X-User-Role": "member",
-                "X-Organization-Id": "org-acme",
-            },
-        ) as client:
-            response = client.post(
-                "/api/security/permission-change-intent",
-                json={
-                    "decision": "allow_writeback",
-                    "resource_type": "webdav_repository",
-                },
-            )
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-    assert response.status_code == 403
-    assert "Admin role is required" in response.text
-    assert mock_db.added == []
-    assert mock_db.committed is False
-
-
-def test_permission_change_intent_rejects_extra_client_controlled_fields(
-    admin_client,
-):
-    response = admin_client.post(
-        "/api/security/permission-change-intent",
-        json={
-            "decision": "deny_external_write",
-            "resource_type": "provider_secret",
-            "x-user-id": "attacker",
-        },
-    )
-
-    assert response.status_code == 422
-    assert "extra_forbidden" in response.text
-
-
 def test_member_surface_only_returns_owned_sources(mock_db):
     async def override_get_db():
         yield MockAsyncSession(
@@ -684,16 +516,7 @@ def test_access_surface_rejects_hmac_bearer_session_without_authoritative_worksp
 
 
 @pytest.mark.asyncio
-async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
-    monkeypatch,
-):
-    # EncryptedString needs a key for seeding (encrypt) and the API read
-    # (decrypt); monkeypatch restores it on any exit incl. skip.
-    monkeypatch.setattr(
-        settings,
-        "ENCRYPTION_KEY",
-        SecretStr(Fernet.generate_key().decode("ascii")),
-    )
+async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
     user_id = f"security_smoke_user_{uuid.uuid4().hex[:12]}"
     source_uid = f"webdav_src_security_{uuid.uuid4().hex[:18]}"
     caldav_uid = f"caldav_src_security_{uuid.uuid4().hex[:18]}"
@@ -713,8 +536,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                         server_url,
                         username,
                         credentials_encrypted,
-                        writeback_enabled,
-                        created_at
+                        writeback_enabled
                     )
                     VALUES (
                         :source_uid,
@@ -724,8 +546,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                         :server_url,
                         :username,
                         :credentials_encrypted,
-                        :writeback_enabled,
-                        now()
+                        :writeback_enabled
                     )
                     """
                 ),
@@ -736,9 +557,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                     "workspace_id": "workspace-org-acme",
                     "server_url": "https://security-files.example/dav",
                     "username": "security-smoke@example.com",
-                    "credentials_encrypted": get_fernet()
-                    .encrypt(b"security-smoke-webdav-secret")
-                    .decode("ascii"),
+                    "credentials_encrypted": "test-only-placeholder",
                     "writeback_enabled": True,
                 },
             )
@@ -755,8 +574,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                         source_protocol,
                         source_host,
                         writeback_enabled,
-                        etag_value,
-                        created_at
+                        etag_value
                     )
                     VALUES (
                         :source_uid,
@@ -768,8 +586,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                         :source_protocol,
                         :source_host,
                         :writeback_enabled,
-                        :etag_value,
-                        now()
+                        :etag_value
                     )
                     """
                 ),
@@ -795,8 +612,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                         workspace_id,
                         signal_key,
                         state_code,
-                        detail_text,
-                        observed_at
+                        detail_text
                     )
                     VALUES (
                         :event_uid,
@@ -804,8 +620,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                         :workspace_id,
                         :signal_key,
                         :state_code,
-                        :detail_text,
-                        now()
+                        :detail_text
                     )
                     """
                 ),
@@ -831,8 +646,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                         resource_type,
                         resource_uid,
                         evidence_source,
-                        detail_text,
-                        observed_at
+                        detail_text
                     )
                     VALUES (
                         :event_uid,
@@ -844,8 +658,7 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
                         :resource_type,
                         :resource_uid,
                         :evidence_source,
-                        :detail_text,
-                        now()
+                        :detail_text
                     )
                     """
                 ),
@@ -883,33 +696,25 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
         async with session_factory() as session:
             yield session
 
+    previous_secret = settings.AUTH_SESSION_HMAC_SECRET
     original_overrides = dict(app.dependency_overrides)
-
-    # The access surface rejects hmac-verified bearer sessions outright
-    # (_require_authoritative_workspace_scope), so this smoke test
-    # authenticates through an authoritative-verifier AuthContext (the
-    # dataclass default, "override") while keeping the real database
-    # session and the real endpoint logic under test.
-    def override_auth_context() -> AuthContext:
-        return AuthContext(
-            user_id=user_id,
-            role="member",
-            organization_id="org-acme",
-            group_ids=(),
-            workspace_id="workspace-org-acme",
-        )
-
+    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+    token = _signed_session_token(
+        _valid_session_payload(sub=user_id, workspace="workspace-org-acme")
+    )
     app.dependency_overrides[get_db] = override_real_db
-    app.dependency_overrides[get_auth_context] = override_auth_context
+    app.dependency_overrides.pop(get_auth_context, None)
     app.dependency_overrides.pop(get_current_user, None)
     try:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://testserver",
+            headers={"Authorization": f"Bearer {token}"},
         ) as client:
             response = await client.get("/api/security/access-surface")
     finally:
+        settings.AUTH_SESSION_HMAC_SECRET = previous_secret
         app.dependency_overrides.clear()
         app.dependency_overrides.update(original_overrides)
         async with engine.begin() as conn:

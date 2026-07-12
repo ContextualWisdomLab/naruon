@@ -45,19 +45,12 @@ vi.mock("@/components/ui/input", () => ({
 vi.mock("lucide-react", () => ({
   MessagesSquare: () => <svg aria-hidden="true" />,
   AlertCircle: () => <svg aria-hidden="true" />,
-  ExternalLink: () => <svg aria-hidden="true" />,
-  FileText: () => <svg aria-hidden="true" />,
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
-  X: () => <svg aria-hidden="true" />,
 }));
 
 import { EmailDetail } from "./EmailDetail";
-import {
-  clearRecordedProductEvents,
-  getRecordedProductEvents,
-} from "@/lib/product-events";
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -118,7 +111,6 @@ describe("EmailDetail", () => {
     container?.remove();
     container = null;
     vi.unstubAllGlobals();
-    clearRecordedProductEvents();
   });
 
   it("translates email content when the Translate button is clicked", async () => {
@@ -397,89 +389,6 @@ describe("EmailDetail", () => {
     expect(cards.find((card) => card.getAttribute("aria-label") === "답장 초안")?.querySelector('textarea[aria-label="답장 초안"]')).not.toBeNull();
   });
 
-  it("opens an accessible source drawer from the source chip and records source evidence events", async () => {
-    const email: TestEmail = {
-      id: 23,
-      message_id: "<source-drawer@example.com>",
-      thread_id: "source-thread",
-      sender: "source@example.com",
-      recipients: "user@example.com",
-      subject: "Source Drawer",
-      date: "2026-05-19T09:00:00Z",
-      body: "Sensitive source body must stay out of analytics payloads.",
-    };
-
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/23")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/emails/thread/source-thread")) return Promise.resolve(jsonResponse({ thread: [email] }));
-      if (url.endsWith("/api/llm/summarize")) {
-        return Promise.resolve(jsonResponse({
-          summary: "근거 원본을 확인해야 하는 맥락 종합입니다.",
-          todos: ["원본 확인"],
-          confidence: 0.86,
-          provenance: "mail-thread",
-        }));
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<EmailDetail emailId={23} />);
-    });
-    await waitForCondition(() => container?.textContent?.includes("근거 원본을 확인해야 하는 맥락 종합입니다.") ?? false);
-
-    expect(getRecordedProductEvents().some((event) => event.name === "context_synthesis_viewed")).toBe(true);
-
-    const sourceButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent?.includes("근거 원본 보기"),
-    );
-    expect(sourceButton).not.toBeUndefined();
-
-    await act(async () => {
-      sourceButton?.click();
-    });
-
-    const dialog = container.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
-    expect(dialog).not.toBeNull();
-    expect(dialog?.textContent).toContain("맥락 종합 근거");
-    expect(dialog?.textContent).toContain("<source-drawer@example.com>");
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("근거 원본 닫기");
-
-    const sourceEvent = getRecordedProductEvents().find((event) => event.name === "source_chip_opened");
-    expect(sourceEvent?.payload).toMatchObject({
-      surface: "mail_detail",
-      source_chip_id: "source-chip:23",
-      ai_output_id: "mail-synthesis:source-thread",
-      source_id: "<source-drawer@example.com>",
-      source_type: "mail",
-      opened_from: "synthesis_card",
-    });
-    expect(JSON.stringify(getRecordedProductEvents())).not.toContain("Sensitive source body");
-
-    await act(async () => {
-      container?.querySelector<HTMLButtonElement>('button[aria-label="근거 원본 닫기"]')?.click();
-    });
-    await flushAsyncWork();
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
-
-    await act(async () => {
-      sourceButton?.click();
-    });
-    expect(container.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]')).not.toBeNull();
-
-    await act(async () => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    });
-    await flushAsyncWork();
-
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
-  });
-
   it("lets users create tasks from visible execution items in the email detail", async () => {
     const email: TestEmail = {
       id: 14,
@@ -549,11 +458,6 @@ describe("EmailDetail", () => {
 
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain("/api/tasks/from-email");
     expect(actionCard?.textContent).toContain("2개 실행 항목을 티켓형 실행 항목으로 추적합니다.");
-    expect(getRecordedProductEvents().some((event) =>
-      event.name === "action_item_created" &&
-      event.payload.source_backlink_present === true &&
-      event.payload.thread_id === "<tasks@example.com>",
-    )).toBe(true);
   });
 
   it("clears conversation loading when the latest email has no thread", async () => {
@@ -725,10 +629,6 @@ describe("EmailDetail", () => {
 
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain("/api/llm/draft");
     expect(container.querySelector<HTMLTextAreaElement>('#reply-draft')?.value).toBe("초안 답장입니다.");
-    expect(getRecordedProductEvents().map((event) => event.name)).toEqual(
-      expect.arrayContaining(["draft_reply_generated", "draft_reply_inserted"]),
-    );
-    expect(JSON.stringify(getRecordedProductEvents())).not.toContain("초안 답장입니다.");
 
     await act(async () => {
       root?.render(<EmailDetail emailId={7} actionCommand={{ id: 1, action: "reply-draft" }} />);
@@ -855,11 +755,6 @@ describe("EmailDetail", () => {
     expect(container.textContent).not.toContain("Customer CalDAV");
     expect(container.textContent).not.toContain("caldav-primary");
     expect(container.textContent).not.toContain("calendar.writeback_intent.created");
-    expect(getRecordedProductEvents().some((event) =>
-      event.name === "calendar_reflected" &&
-      event.payload.calendar_candidate_id === "mail-calendar:9" &&
-      event.payload.provider_write_executed === false,
-    )).toBe(true);
   });
 
   it("ignores a late draft response after the selected email changes", async () => {
@@ -1214,10 +1109,6 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("실제 메일은 전송되지 않았습니다");
     expect(draftInput?.value).toBe("");
-    expect(getRecordedProductEvents().some((event) =>
-      event.name === "draft_reply_sent" &&
-      event.payload.send_mode === "simulated",
-    )).toBe(true);
   });
 
   it("handles send message failure", async () => {
