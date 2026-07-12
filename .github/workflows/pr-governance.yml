@@ -23,7 +23,7 @@ on:
 
 permissions:
   contents: read
-  checks: read
+  checks: write
   statuses: read
   pull-requests: write
   issues: write
@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   governance:
-    name: metadata-only gate evaluation
+    name: PR governance metadata controller
     runs-on: ubuntu-latest
     if: >-
       ${{

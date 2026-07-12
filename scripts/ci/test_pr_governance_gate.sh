@@ -36,7 +36,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/pulls/42 ]]; then
   exit 0
 fi
 
-if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/* ]] && [[ "$2" != */check-runs ]]; then
+if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/* ]] && [[ "$2" != */check-runs* ]]; then
   printf '2026-05-19T00:00:00Z'
   exit 0
 fi
@@ -64,6 +64,9 @@ if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then
     failure|failed_existing)
       printf '[{"name":"Application CI","state":"FAILURE","link":"https://checks/app-ci"}]'
       ;;
+    self_gate_failed)
+      printf '[{"name":"metadata-only gate evaluation","state":"FAILURE","link":"https://checks/governance"},{"name":"Application CI","state":"SUCCESS","link":"https://checks/app-ci"}]'
+      ;;
     *)
       printf '[{"name":"Application CI","state":"SUCCESS","link":"https://checks/app-ci"}]'
       ;;
@@ -71,7 +74,7 @@ if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then
   exit 0
 fi
 
-if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs ]]; then
+if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
   case "${GH_SCENARIO:-pass}" in
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
@@ -88,10 +91,27 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs ]]; then
     coderabbit_review_skipped)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"neutral","output":{"title":"CodeRabbit","summary":"Review skipped","text":"Review skipped"},"html_url":"https://checks/coderabbit"}]}'
       ;;
+    existing_gate)
+      printf '{"check_runs":[{"id":999,"name":"metadata-only gate evaluation","external_id":"pr-governance:42:0123456789abcdef0123456789abcdef01234567","app":{"slug":"github-actions"},"status":"completed","conclusion":"failure"},{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"success","html_url":"https://checks/coderabbit"}]}'
+      ;;
     *)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"success","html_url":"https://checks/coderabbit"}]}'
       ;;
   esac
+  exit 0
+fi
+
+if [ "$1" = "api" ] && [ "$2" = "--method" ] && [ "$3" = "POST" ] && [[ "$4" == repos/*/check-runs ]]; then
+  if [ "${GH_SCENARIO:-pass}" = "check_publish_failure" ]; then
+    printf 'check publication failed\n' >&2
+    exit 1
+  fi
+  printf '{"id":999}'
+  exit 0
+fi
+
+if [ "$1" = "api" ] && [ "$2" = "--method" ] && [ "$3" = "PATCH" ] && [[ "$4" == repos/*/check-runs/* ]]; then
+  printf '{"id":999}'
   exit 0
 fi
 
@@ -166,7 +186,7 @@ run_gate() {
   TARGET_PR_NUMBER="42" \
   DIRECT_PR_NUMBER="" \
   WORKFLOW_RUN_PR_NUMBER="" \
-    bash "$script" > "$temp_dir/output.txt"
+    bash "$script" > "$temp_dir/output.txt" 2>&1
   local status=$?
   set -e
   printf '%s\n' "$status" > "$temp_dir/status.txt"
@@ -211,6 +231,7 @@ assert_no_comment_or_merge_for_pending_checks() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'Waiting for 1 required check' "$temp_dir/output.txt"
+  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=in_progress' "$temp_dir/gh.log"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
@@ -220,9 +241,10 @@ assert_startup_failure_creates_marker_comment() {
   temp_dir="$(mktemp -d)"
   run_gate startup_failure "$temp_dir"
 
-  assert_exit_code 1 "$temp_dir"
-  assert_in_file 'Required check `Application CI` is STARTUP_FAILURE' "$temp_dir/gh.log"
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file "Required check \`Application CI\` is STARTUP_FAILURE" "$temp_dir/gh.log"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
+  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=failure' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -231,10 +253,11 @@ assert_failed_checks_create_marker_comment() {
   temp_dir="$(mktemp -d)"
   run_gate failed "$temp_dir"
 
-  assert_exit_code 1 "$temp_dir"
+  assert_exit_code 0 "$temp_dir"
   assert_in_file 'PR governance metadata gate is not ready' "$temp_dir/gh.log"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
   assert_in_file 'Application CI' "$temp_dir/gh.log"
+  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=failure' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -243,7 +266,7 @@ assert_existing_marker_comment_is_patched() {
   temp_dir="$(mktemp -d)"
   run_gate failed_existing "$temp_dir"
 
-  assert_exit_code 1 "$temp_dir"
+  assert_exit_code 0 "$temp_dir"
   assert_in_file 'api --method PATCH repos/owner/repo/issues/comments/555' "$temp_dir/gh.log"
   assert_not_in_file 'repos/owner/repo/issues/42/comments -f body' "$temp_dir/gh.log"
 }
@@ -275,7 +298,7 @@ assert_coderabbit_failure_creates_marker_comment() {
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_failed "$temp_dir"
 
-  assert_exit_code 1 "$temp_dir"
+  assert_exit_code 0 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit check has a blocking conclusion' "$temp_dir/gh.log"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
@@ -286,7 +309,7 @@ assert_coderabbit_neutral_without_skip_evidence_blocks() {
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_neutral "$temp_dir"
 
-  assert_exit_code 1 "$temp_dir"
+  assert_exit_code 0 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit check has a blocking conclusion' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
@@ -307,7 +330,7 @@ assert_coderabbit_blocking_issue_comment_blocks() {
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_blocking_comment "$temp_dir"
 
-  assert_exit_code 1 "$temp_dir"
+  assert_exit_code 0 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
@@ -328,7 +351,7 @@ assert_coderabbit_current_review_comment_blocks() {
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_current_review_comment "$temp_dir"
 
-  assert_exit_code 1 "$temp_dir"
+  assert_exit_code 0 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit review comment has blocking warning/failure evidence' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
@@ -349,7 +372,7 @@ assert_changes_requested_creates_marker_comment() {
   temp_dir="$(mktemp -d)"
   run_gate changes_requested "$temp_dir"
 
-  assert_exit_code 1 "$temp_dir"
+  assert_exit_code 0 "$temp_dir"
   assert_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/gh.log"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
@@ -362,6 +385,7 @@ assert_passing_gate_is_metadata_only_without_merge() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=success' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
   assert_not_in_file 'checkout' "$temp_dir/gh.log"
   assert_not_in_file 'dismiss' "$temp_dir/gh.log"
@@ -377,6 +401,50 @@ assert_no_required_checks_waits_without_hard_comment() {
   assert_in_file 'no legacy required status contexts reported' "$temp_dir/output.txt"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_self_gate_failure_does_not_recurse() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate self_gate_failed "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_not_in_file "Required check \`metadata-only gate evaluation\`" "$temp_dir/output.txt"
+  assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
+  assert_in_file 'conclusion=success' "$temp_dir/gh.log"
+}
+
+assert_existing_pr_head_check_is_updated() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate existing_gate "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'api --method PATCH repos/owner/repo/check-runs/999' "$temp_dir/gh.log"
+  assert_not_in_file 'api --method POST repos/owner/repo/check-runs' "$temp_dir/gh.log"
+}
+
+assert_check_publication_failure_fails_closed() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate check_publish_failure "$temp_dir"
+
+  assert_exit_code 1 "$temp_dir"
+  assert_in_file 'check publication failed' "$temp_dir/output.txt"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_workflow_separates_controller_from_required_check() {
+  local workflow="$repo_root/.github/workflows/pr-governance.yml"
+
+  assert_in_file '^  checks: write$' "$workflow"
+  assert_in_file '^    name: PR governance metadata controller$' "$workflow"
+  assert_not_in_file '^    name: metadata-only gate evaluation$' "$workflow"
+}
+
+assert_current_head_check_lookup_uses_maximum_page_size() {
+  assert_in_file 'check-runs?per_page=100' "$repo_root/scripts/ci/pr_governance_gate.sh"
 }
 
 assert_no_comment_or_merge_for_pending_checks
@@ -395,5 +463,10 @@ assert_coderabbit_stale_review_comment_does_not_block
 assert_changes_requested_creates_marker_comment
 assert_passing_gate_is_metadata_only_without_merge
 assert_no_required_checks_waits_without_hard_comment
+assert_self_gate_failure_does_not_recurse
+assert_existing_pr_head_check_is_updated
+assert_check_publication_failure_fails_closed
+assert_workflow_separates_controller_from_required_check
+assert_current_head_check_lookup_uses_maximum_page_size
 
 printf 'test_pr_governance_gate: PASS\n'
