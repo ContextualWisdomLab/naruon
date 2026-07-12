@@ -10,6 +10,7 @@ class ProjectObjectType(str, Enum):
     REQUIREMENT = "requirement"
     FEATURE = "feature"
     ISSUE = "issue"
+    DECISION = "decision"
     MILESTONE = "milestone"
     WBS_ITEM = "wbs_item"
     DELIVERABLE = "deliverable"
