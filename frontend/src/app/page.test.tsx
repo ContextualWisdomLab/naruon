@@ -341,8 +341,8 @@ describe("Home workspace action bridge", () => {
     await flushAsyncWork();
 
     expect(container.querySelector('[aria-label="태블릿 메일 작업공간"]')).not.toBeNull();
-    expect(container.querySelector('details[aria-label="태블릿 맥락 그래프"]')?.textContent).toContain("태블릿 맥락 패널");
-    expect(container.textContent).toContain("맥락 그래프는 필요할 때 펼쳐서 확인합니다.");
+    expect(container.querySelector('details[aria-label="태블릿 관계 맥락"]')?.textContent).toContain("태블릿 맥락 패널");
+    expect(container.textContent).toContain("관계 맥락은 필요할 때 펼쳐서 확인합니다.");
   });
 
   it("opens the saved calendar startup view on mobile without needing a hash", async () => {
