@@ -2679,13 +2679,6 @@
 - `python scripts/check_compose_logs.py --compose-log-file <captured-log-file>`
 - `docker compose down`
 
-## [Unreleased]
-- **Features**: `Tool` 컴포넌트 강화를 위해 새로운 유틸리티 도구들을 추가했습니다.
-  - JSON 유효성 검사 및 포매터 도구 (`json_validator`) 추가.
-  - 지정된 알고리즘을 사용한 해시 생성 도구 (`hash_generator`) 추가.
-  - URL 분석 및 구성 요소 분리 도구 (`url_parser`) 추가.
-- **Testing**: 새로 추가된 도구 및 기존 기능에 대한 테스트를 보강하여 백엔드 `tools.py`의 테스트 커버리지를 100%로 달성했습니다.
-### Added
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환
   - `action_item_extractor_handler`: 실행 항목 및 마감일 추출

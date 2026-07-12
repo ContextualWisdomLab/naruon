@@ -412,11 +412,10 @@ registry.register(
 )
 
 
-
-
-
 async def json_validator_handler(params: Dict[str, Any]) -> Dict[str, Any]:
     json_string = params.get("json_string", "")
+    if json_string is None:
+        json_string = ""
     try:
         parsed = json.loads(json_string)
         formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
@@ -439,7 +438,12 @@ registry.register(
 
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
-    algorithm = params.get("algorithm", "sha256").lower()
+    if text is None:
+        text = ""
+    alg_raw = params.get("algorithm", "sha256")
+    if alg_raw is None:
+        alg_raw = "sha256"
+    algorithm = alg_raw.lower()
 
     if algorithm not in hashlib.algorithms_available:
         raise ValueError(f"Unsupported hash algorithm: {algorithm}")
@@ -463,6 +467,8 @@ registry.register(
 
 async def url_parser_handler(params: Dict[str, Any]) -> Dict[str, str]:
     url = params.get("url", "")
+    if url is None:
+        url = ""
     try:
         parsed = urllib.parse.urlparse(url)
         return {
@@ -474,7 +480,7 @@ async def url_parser_handler(params: Dict[str, Any]) -> Dict[str, str]:
             "fragment": parsed.fragment,
             "hostname": parsed.hostname or "",
         }
-    except Exception as e:
+    except ValueError as e:
         raise ValueError(f"Invalid URL: {e}")
 
 
