@@ -22,6 +22,7 @@ from services.project_graph.project_registration import (
 from services.project_graph.traceability import (
     ProjectEvidence,
     ProjectTraceability,
+    ProjectTraceRelation,
     get_project_evidence,
     get_project_traceability,
 )
@@ -122,6 +123,7 @@ class ProjectEvidenceResponse(BaseModel):
     status_code: str
     confidence: float
     citation_bundle: list[ProjectCitationResponse]
+    relations: list[ProjectTraceRelationResponse]
 
 
 class ProjectPromoteRequest(BaseModel):
@@ -354,6 +356,30 @@ def _candidate_response(candidate: ProjectCandidateSummary) -> ProjectCandidateR
     )
 
 
+def _relation_response(
+    relation: ProjectTraceRelation,
+) -> ProjectTraceRelationResponse:
+    return ProjectTraceRelationResponse(
+        relation_uid=relation.relation_uid,
+        relation_type=relation.relation_type,
+        source=ProjectTraceRelationEndpointResponse(
+            object_uid=relation.source.object_uid,
+            object_type=relation.source.object_type,
+            title=relation.source.title,
+        ),
+        target=ProjectTraceRelationEndpointResponse(
+            object_uid=relation.target.object_uid,
+            object_type=relation.target.object_type,
+            title=relation.target.title,
+        ),
+        confidence=relation.confidence,
+        source_segment_uids=list(relation.source_segment_uids),
+        citation_bundle=[
+            _citation_response(citation) for citation in relation.citation_bundle
+        ],
+    )
+
+
 def _traceability_response(
     traceability: ProjectTraceability,
 ) -> ProjectTraceabilityResponse:
@@ -392,27 +418,7 @@ def _traceability_response(
             for edge in traceability.edges
         ],
         relations=[
-            ProjectTraceRelationResponse(
-                relation_uid=relation.relation_uid,
-                relation_type=relation.relation_type,
-                source=ProjectTraceRelationEndpointResponse(
-                    object_uid=relation.source.object_uid,
-                    object_type=relation.source.object_type,
-                    title=relation.source.title,
-                ),
-                target=ProjectTraceRelationEndpointResponse(
-                    object_uid=relation.target.object_uid,
-                    object_type=relation.target.object_type,
-                    title=relation.target.title,
-                ),
-                confidence=relation.confidence,
-                source_segment_uids=list(relation.source_segment_uids),
-                citation_bundle=[
-                    _citation_response(citation)
-                    for citation in relation.citation_bundle
-                ],
-            )
-            for relation in traceability.relations
+            _relation_response(relation) for relation in traceability.relations
         ],
     )
 
@@ -429,6 +435,7 @@ def _evidence_response(evidence: ProjectEvidence) -> ProjectEvidenceResponse:
         citation_bundle=[
             _citation_response(citation) for citation in evidence.citation_bundle
         ],
+        relations=[_relation_response(relation) for relation in evidence.relations],
     )
 
 
