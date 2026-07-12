@@ -100,3 +100,8 @@
 **Vulnerability:** JWT decoding remained allowlisted but static analysis could not prove the accepted algorithm when `jwt.decode(..., algorithms=...)` received module-level variables.
 **Learning:** Security-sensitive decode boundaries should make accepted algorithms obvious to both runtime readers and static scanners.
 **Prevention:** Pass explicit hardcoded lists such as `algorithms=["HS256"]` and `algorithms=["RS256"]` at the decode call sites, and keep header preflight checks aligned with those exact values.
+
+## 2026-07-12 - [Fix Open Redirect bypass via URL encoding]
+**Vulnerability:** The `toSafeReturnTo` URL checker in `return-target.ts` verified `startsWith("/")` and checked for bad characters like `\` in the raw input string but failed to account for URL-encoded characters (like `/%2F%2F` or `/%5C%5C`). Since browsers will decode these after the redirect and treat them as scheme-relative or external URLs (e.g. `//example.com`), this allows an attacker to bypass origin checks and cause an Open Redirect.
+**Learning:** Relying solely on raw string checks without explicitly decoding the user input allows attackers to sneak bypasses through url-encoding or double-url-encoding payloads that browsers eventually execute.
+**Prevention:** Always parse and `decodeURIComponent` untrusted redirect inputs, and re-apply path boundary validations (like rejecting `//` and `/\`) on the decoded result before approving the path for redirection.

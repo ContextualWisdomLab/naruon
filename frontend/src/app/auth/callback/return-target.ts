@@ -13,8 +13,23 @@ export function toSafeReturnTo(returnTo: string | null | undefined) {
       return "/";
     }
 
+    let decoded = candidate;
+    try {
+      decoded = decodeURIComponent(candidate);
+    } catch {
+      return "/";
+    }
+
+    if (/[\u0000-\u001f\u007f\\]/.test(decoded)) {
+      return "/";
+    }
+
     // Reject paths that did not start local before URL normalization.
     if (!candidate.startsWith("/")) {
+      return "/";
+    }
+
+    if (decoded.startsWith("//") || decoded.startsWith("/\\")) {
       return "/";
     }
 
