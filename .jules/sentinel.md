@@ -102,6 +102,11 @@
 **Prevention:** Pass explicit hardcoded lists such as `algorithms=["HS256"]` and `algorithms=["RS256"]` at the decode call sites, and keep header preflight checks aligned with those exact values.
 
 ## 2026-07-12 - [Fix Open Redirect bypass via URL encoding]
-**Vulnerability:** The `toSafeReturnTo` URL checker in `return-target.ts` verified `startsWith("/")` and checked for bad characters like `\` in the raw input string but failed to account for URL-encoded characters (like `/%2F%2F` or `/%5C%5C`). Since browsers will decode these after the redirect and treat them as scheme-relative or external URLs (e.g. `//example.com`), this allows an attacker to bypass origin checks and cause an Open Redirect.
-**Learning:** Relying solely on raw string checks without explicitly decoding the user input allows attackers to sneak bypasses through url-encoding or double-url-encoding payloads that browsers eventually execute.
-**Prevention:** Always parse and `decodeURIComponent` untrusted redirect inputs, and re-apply path boundary validations (like rejecting `//` and `/\`) on the decoded result before approving the path for redirection.
+**Vulnerability:** The `toSafeReturnTo` URL checker in `frontend/src/app/auth/callback/return-target.ts` validated raw path strings but did not prove the decoded path stayed same-origin. URL-encoded payloads such as `/%2F%2Fexample.com` or `/%5C%5Cexample.com` could be decoded by the browser into scheme-relative or backslash-prefixed external redirects.
+**Learning:** Open-redirect checks must validate the value that the browser will navigate to, not only the raw parameter. Encoded and double-encoded path boundaries can bypass simple `startsWith("/")`, `//`, or backslash checks.
+**Prevention:** Decode untrusted redirect targets with `decodeURIComponent`, fail closed on decode errors, and re-apply same-origin path validation to the decoded value before navigation.
+
+## 2025-02-20 - Webhook DNS Rebinding SSRF
+**Vulnerability:** The webhook feature (`backend/api/tools.py`) validated that URLs resolved to safe global IP addresses using `validate_webhook_url`, but then created a fresh `httpx.AsyncClient` that performed its own independent DNS resolution at execution time. This Time-of-Check to Time-of-Use (TOCTOU) gap allowed an attacker to rapidly change DNS records after validation but before execution, causing the application to send requests to internal network services (Server-Side Request Forgery).
+**Learning:** Checking hostnames or IPs before use is insufficient if the actual execution engine (HTTP client) resolves the hostname again. The underlying validation and execution must be perfectly coupled.
+**Prevention:** Always pin the underlying HTTP transport to the exact IP addresses that were validated. This was achieved using the `ValidatedHTTPSURLHost` and `build_pinned_https_async_client` components which override the connection layer to use the pre-resolved, safe IPs.
