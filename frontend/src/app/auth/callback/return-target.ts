@@ -13,7 +13,7 @@ export function toSafeReturnTo(returnTo: string | null | undefined) {
       return "/";
     }
 
-    let decoded = candidate;
+    let decoded: string;
     try {
       decoded = decodeURIComponent(candidate);
     } catch {
