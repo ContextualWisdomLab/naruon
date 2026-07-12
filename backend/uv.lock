@@ -1006,6 +1006,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "python-multipart" },
+    { name = "rankweave" },
     { name = "setuptools" },
     { name = "sqlalchemy" },
     { name = "starlette" },
@@ -1051,6 +1052,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "==2.14.2" },
     { name = "pyjwt", specifier = "==2.13.0" },
     { name = "python-multipart", specifier = "==0.0.32" },
+    { name = "rankweave", specifier = "==0.1.0" },
     { name = "setuptools", specifier = "==82.0.1" },
     { name = "sqlalchemy", specifier = "==2.0.51" },
     { name = "starlette", specifier = "==1.3.1" },
@@ -1711,6 +1713,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/da/92/1446574745d74df0c92e6aa4a7b0b3130706a4142b2d1a5869f2eaa423c6/pyyaml-6.0.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:16249ee61e95f858e83976573de0f5b2893b3677ba71c9dd36b9cf8be9ac6d65", size = 829923, upload-time = "2025-09-25T21:32:54.537Z" },
     { url = "https://files.pythonhosted.org/packages/f0/7a/1c7270340330e575b92f397352af856a8c06f230aa3e76f86b39d01b416a/pyyaml-6.0.3-cp314-cp314t-win_amd64.whl", hash = "sha256:4ad1906908f2f5ae4e5a8ddfce73c320c2a1429ec52eafd27138b7f1cbe341c9", size = 174062, upload-time = "2025-09-25T21:32:55.767Z" },
     { url = "https://files.pythonhosted.org/packages/f1/12/de94a39c2ef588c7e6455cfbe7343d3b2dc9d6b6b2f40c4c6565744c873d/pyyaml-6.0.3-cp314-cp314t-win_arm64.whl", hash = "sha256:ebc55a14a21cb14062aa4162f906cd962b28e2e9ea38f9b4391244cd8de4ae0b", size = 149341, upload-time = "2025-09-25T21:32:56.828Z" },
+]
+
+[[package]]
+name = "rankweave"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/aa/91/9710d0f2230278441dc9a9834921494f2afb92e12caa4b6f236fd8b25b6b/rankweave-0.1.0.tar.gz", hash = "sha256:841d4cabd4f96bb67575f9500f9af08030efc04c065c0c2de9ac7b45535b20c8", size = 12424417, upload-time = "2026-07-12T04:01:14.466Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dc/21/949661a1ab5e8034b66f40cd72764a0ce9694b2b48b66af02e9db61ea6d8/rankweave-0.1.0-py3-none-any.whl", hash = "sha256:bbc9a1da237bfdfc376150ec55a94628e808499778a03f3beb1ab8c238c0bd75", size = 12466, upload-time = "2026-07-12T04:01:12.428Z" },
 ]
 
 [[package]]

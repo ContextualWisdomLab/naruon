@@ -96,10 +96,22 @@ class Settings(BaseSettings):
     # Best-effort projection of imported-email content segments into the project
     # semantic graph. Off by default; failure never affects email import.
     PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
-    # Which extractor projects segments into the graph: "keyword"
-    # (deterministic baseline) or "llm" (grounded extraction with enforced
-    # segment citations; falls back to keyword on any failure).
+    # Which extractor projects segments into the graph, resolved through the
+    # named+versioned KG extractor seam (services/project_graph/extractor_registry):
+    #   "keyword"      — deterministic baseline (the structural fallback),
+    #   "llm"          — grounded LLM extraction (enforced segment citations),
+    #   "orchestrator" — the same grounded LLM extraction routed through the
+    #                    contextual-orchestrator gateway (see below).
+    # Every selection falls back to "keyword" on any failure, so rule-based
+    # extraction stays fallback/reference only.
     PROJECT_GRAPH_EXTRACTOR: str = "keyword"
+    # OpenAI-compatible base URL of the contextual-orchestrator LLM gateway that
+    # grounded extraction is routed through when PROJECT_GRAPH_EXTRACTOR is
+    # "orchestrator". Must be HTTPS and exact-host allowlisted by
+    # ALLOWED_LLM_BASE_URL_HOSTS (enforced by build_llm_provider_http_client);
+    # unset routing fails closed to the deterministic keyword extractor. The
+    # provider API key remains the tenant's Fernet-encrypted credential.
+    PROJECT_GRAPH_ORCHESTRATOR_BASE_URL: str | None = None
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (
@@ -114,6 +126,11 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
+
+    # Clearfolio document-viewer integration (operator-configured in-cluster
+    # Service base URL, e.g. http://clearfolio:8080). Integration is disabled
+    # while unset — the 미리보기 surface stays hidden.
+    CLEARFOLIO_BASE_URL: str | None = None
 
     # Hybrid search fusion (see services/hybrid_retrieval/score_fusion.py;
     # defaults grounded in Bruch, Gai & Ingber 2023 and Cormack et al. 2009)
