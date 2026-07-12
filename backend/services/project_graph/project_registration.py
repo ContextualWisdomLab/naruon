@@ -133,6 +133,41 @@ class ProjectTraceRelation:
 
 
 @dataclass(frozen=True, slots=True)
+class ProjectRelationTypeSummary:
+    """Aggregate shape of one relation type across a project's graph.
+
+    Folds every :class:`ProjectTraceRelation` of a single ``relation_type`` into
+    counts plus the distinct, sorted object types the relation connects on each
+    side. ``grounded_relation_count`` counts only relations that carry a
+    citation bundle, so the aggregate never claims grounding it does not have.
+    """
+
+    relation_type: str
+    relation_count: int
+    grounded_relation_count: int
+    source_object_types: tuple[str, ...]
+    target_object_types: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectRelationSummary:
+    """A project's typed-relation distribution — the KG's shape at a glance.
+
+    Derived purely from the same object-to-object relations exposed by
+    :class:`ProjectTraceability`, but folded into per-type counts so a consumer
+    can render *how* dense and *how* grounded a project's knowledge graph is
+    without fetching and walking every relation and its citations. ``relation_types``
+    is ordered by ``relation_count`` descending with a ``relation_type``-ascending
+    tie-break, so the ordering is deterministic across runs.
+    """
+
+    project_uid: str
+    relation_count: int
+    grounded_relation_count: int
+    relation_types: tuple[ProjectRelationTypeSummary, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectTraceability:
     project_uid: str
     candidate: ProjectCandidateSummary
@@ -255,6 +290,39 @@ async def get_project_traceability(
         edges=trace_edges,
         relations=_trace_relations(trace_edges, trace_objects),
     )
+
+
+async def get_project_relation_summary(
+    session: AsyncSession,
+    *,
+    scope: ProjectGraphQueryScope,
+    project_uid: str,
+) -> ProjectRelationSummary:
+    """Aggregate a project's typed object-to-object relations by relation type.
+
+    Loads the same graph as :func:`get_project_traceability` but only resolves
+    the citations reachable from edges (the objects' own citation bundles are
+    not needed for the summary), then folds the projected relations into a
+    per-type distribution via :func:`_relation_summary`. Backward compatible and
+    read-only: it introduces no new persistence and reuses the settled relation
+    projection.
+    """
+    group = await _get_candidate_group(
+        session,
+        scope=scope,
+        project_uid=project_uid,
+    )
+    object_uids = tuple(record.object_uid for record in group.records)
+    edges = await _load_project_edges(session, scope=scope, object_uids=object_uids)
+    segment_map = await _load_citation_map(
+        session,
+        _edge_segment_uids(edges),
+        scope=scope,
+    )
+    trace_objects = tuple(_trace_object(record, segment_map) for record in group.records)
+    trace_edges = tuple(_trace_edge(edge, segment_map) for edge in edges)
+    relations = _trace_relations(trace_edges, trace_objects)
+    return _relation_summary(group.project_uid, relations)
 
 
 async def get_project_evidence(
@@ -680,6 +748,50 @@ def _incident_relations(
         for relation in relations
         if relation.source.object_uid == object_uid
         or relation.target.object_uid == object_uid
+    )
+
+
+def _relation_summary(
+    project_uid: str,
+    relations: tuple[ProjectTraceRelation, ...],
+) -> ProjectRelationSummary:
+    """Fold typed relations into a per-type distribution (pure aggregation).
+
+    Groups by ``relation_type`` and, per group, counts relations, counts those
+    that are grounded (a non-empty citation bundle), and collects the distinct
+    sorted object types on each endpoint. The per-type list is ordered by
+    ``relation_count`` descending with a ``relation_type``-ascending tie-break so
+    the result is deterministic regardless of relation iteration order.
+    """
+    grouped: dict[str, list[ProjectTraceRelation]] = {}
+    for relation in relations:
+        grouped.setdefault(relation.relation_type, []).append(relation)
+    type_summaries = [
+        ProjectRelationTypeSummary(
+            relation_type=relation_type,
+            relation_count=len(group_relations),
+            grounded_relation_count=sum(
+                1 for relation in group_relations if relation.citation_bundle
+            ),
+            source_object_types=tuple(
+                sorted({relation.source.object_type for relation in group_relations})
+            ),
+            target_object_types=tuple(
+                sorted({relation.target.object_type for relation in group_relations})
+            ),
+        )
+        for relation_type, group_relations in grouped.items()
+    ]
+    type_summaries.sort(
+        key=lambda summary: (-summary.relation_count, summary.relation_type)
+    )
+    return ProjectRelationSummary(
+        project_uid=project_uid,
+        relation_count=len(relations),
+        grounded_relation_count=sum(
+            1 for relation in relations if relation.citation_bundle
+        ),
+        relation_types=tuple(type_summaries),
     )
 
 
