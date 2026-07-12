@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.env_paths import ENV_FILE_PATHS, operator_env_file_paths
 from core.runtime_secrets import (
     validate_auth_session_hmac_secret_value,
 )
@@ -63,6 +64,15 @@ def parse_allowed_cors_origins(raw_origins: str) -> list[str]:
 class Settings(BaseSettings):
     DATABASE_URL: str
     READONLY_DATABASE_URL: str | None = None
+    # Connection-pool tuning. Sizing values default to None (SQLAlchemy
+    # defaults) so behavior is unchanged until an operator sets them.
+    # pre_ping detects dead connections at checkout; recycle avoids
+    # server-side idle timeouts killing pooled connections.
+    DB_POOL_SIZE: int | None = None
+    DB_MAX_OVERFLOW: int | None = None
+    DB_POOL_TIMEOUT_SECONDS: int | None = None
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    DB_POOL_PRE_PING: bool = True
     DEBUG: bool = False
     RUNTIME_ENVIRONMENT: str = "production"
     AUTH_SESSION_HMAC_SECRET: SecretStr | None = None
@@ -76,8 +86,20 @@ class Settings(BaseSettings):
     ALLOWED_POP3_PORTS: str = "995"
     ALLOWED_LLM_BASE_URL_HOSTS: str = ""
     ALLOW_LOCAL_LLM_PROVIDERS: bool = False
+    # Host allowlist for the scopeweave promotion target. The per-workspace
+    # base URL and PAT themselves live encrypted in the database
+    # (scopeweave_promotion_target); this setting only pins which hosts an
+    # operator is permitted to promote work items to (SSRF host allowlist).
+    ALLOWED_SCOPEWEAVE_HOSTS: str = ""
     ALLOWED_CORS_ORIGINS: str = ""
     ENABLE_PROMETHEUS_METRICS: bool = False
+    # Best-effort projection of imported-email content segments into the project
+    # semantic graph. Off by default; failure never affects email import.
+    PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
+    # Which extractor projects segments into the graph: "keyword"
+    # (deterministic baseline) or "llm" (grounded extraction with enforced
+    # segment citations; falls back to keyword on any failure).
+    PROJECT_GRAPH_EXTRACTOR: str = "keyword"
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (
@@ -93,6 +115,19 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
 
+    # Clearfolio document-viewer integration (operator-configured in-cluster
+    # Service base URL, e.g. http://clearfolio:8080). Integration is disabled
+    # while unset — the 미리보기 surface stays hidden.
+    CLEARFOLIO_BASE_URL: str | None = None
+
+    # Hybrid search fusion (see services/hybrid_retrieval/score_fusion.py;
+    # defaults grounded in Bruch, Gai & Ingber 2023 and Cormack et al. 2009)
+    SEARCH_FUSION_STRATEGY: str = "convex_combination"
+    SEARCH_FUSION_SEMANTIC_WEIGHT: float = 0.7
+    SEARCH_RRF_RANK_CONSTANT: int = 60
+    SEARCH_CHANNEL_CANDIDATE_LIMIT: int = 50
+    SEARCH_MINIMUM_FUSED_SCORE: float = 0.05
+
     # OIDC Settings
     OIDC_ISSUER_URL: str | None = None
     OIDC_CLIENT_ID: str | None = None
@@ -100,10 +135,14 @@ class Settings(BaseSettings):
     ALLOWED_OIDC_HOSTS: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=("~/.env", "../.env", ".env"),
+        env_file=ENV_FILE_PATHS,
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    def __init__(self, **values: Any) -> None:
+        values.setdefault("_env_file", operator_env_file_paths())
+        super().__init__(**values)
 
     @field_validator("READONLY_DATABASE_URL", mode="before")
     @classmethod

@@ -156,7 +156,23 @@ class LimitAwareMockSession(MockSession):
 
         limit_clause = getattr(query, "_limit_clause", None)
         limit_value = getattr(limit_clause, "value", None)
-        self.last_limit_value = limit_value
+        if limit_value is not None:
+            self.last_limit_value = limit_value
+
+        if "ranked_thread_heads" in str(query):
+            # Emulate the SQL window query: newest head row per thread,
+            # ordered by date desc, LIMIT applied to heads (not raw rows).
+            heads: dict[str, object] = {}
+            for item in sorted(
+                self.items, key=lambda email: email.date, reverse=True
+            ):
+                key = item.thread_id or item.message_id
+                heads.setdefault(key, item)
+            rows = list(heads.values())
+            if limit_value:
+                rows = rows[:limit_value]
+            return MockResult(rows)
+
         rows = self.items[:limit_value] if limit_value else self.items
         return MockResult(rows)
 
@@ -412,6 +428,65 @@ async def test_get_emails_returns_exact_distinct_threads_beyond_overfetch_window
     data = response.json()["emails"]
     assert [item["thread_id"] for item in data] == ["hot-thread", "second-thread"]
     assert data[0]["reply_count"] == 6
+
+
+@pytest.mark.asyncio
+async def test_get_emails_excludes_backfill_rows_outside_selected_thread_heads(
+    client: AsyncClient, db_session
+):
+    # The message-backfill query is scoped by thread lookup values on
+    # PostgreSQL, but get_emails still defensively drops any returned row
+    # whose canonical thread key is not among the selected heads. Emulate a
+    # backend that returns a row from a thread outside the winnowed page
+    # (here the older thread, which is excluded because limit=1 keeps only the
+    # newest head) and assert it never inflates or leaks into the response.
+    head_root = Email(
+        id=1,
+        user_id="testuser",
+        message_id="winnow-head-root",
+        thread_id="winnow-head-thread",
+        sender="head@example.com",
+        recipients="user@example.com",
+        subject="Head thread root",
+        date=datetime.datetime(2026, 4, 27, 10, 0, tzinfo=datetime.timezone.utc),
+        body="Head root body",
+    )
+    head_reply = Email(
+        id=2,
+        user_id="testuser",
+        message_id="winnow-head-reply",
+        thread_id="winnow-head-thread",
+        sender="head@example.com",
+        recipients="user@example.com",
+        subject="Re: Head thread root",
+        date=datetime.datetime(2026, 4, 27, 12, 0, tzinfo=datetime.timezone.utc),
+        body="Head reply body",
+    )
+    orphan = Email(
+        id=3,
+        user_id="testuser",
+        message_id="winnow-orphan-root",
+        thread_id="winnow-orphan-thread",
+        sender="orphan@example.com",
+        recipients="user@example.com",
+        subject="Orphan thread",
+        date=datetime.datetime(2026, 4, 27, 8, 0, tzinfo=datetime.timezone.utc),
+        body="Orphan body",
+    )
+    db_session.items = [head_reply, head_root, orphan]
+
+    from db.session import get_db
+
+    app.dependency_overrides[get_db] = lambda: LimitAwareMockSession(db_session.items)
+
+    response = await client.get("/api/emails?limit=1")
+
+    assert response.status_code == 200
+    data = response.json()["emails"]
+    # Only the newest thread survives the limit=1 head selection, and the
+    # orphan thread returned by the backfill is discarded rather than merged.
+    assert [item["thread_id"] for item in data] == ["winnow-head-thread"]
+    assert data[0]["reply_count"] == 2
 
 
 @pytest.mark.asyncio

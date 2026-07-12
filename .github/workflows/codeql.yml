@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  security-events: read
 
 jobs:
   analyze:
@@ -17,7 +18,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-      security-events: write
+      security-events: read
     strategy:
       fail-fast: false
       matrix:
@@ -49,9 +50,9 @@ jobs:
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
           category: "/language:${{ matrix.language }}"
-          # Default-branch (push) scanning only. PR CodeQL and the code_scanning
-          # ruleset merge gate are delegated to the central
-          # ContextualWisdomLab/.github codeql-pr.yml, which uploads PR-head and
-          # merge-preview SARIF. Keeping a PR trigger here double-uploaded the same
-          # /language:<lang> category and duplicated the check contexts.
-          upload: always
+          # This repository uses GitHub CodeQL default setup for code scanning
+          # uploads, and PR CodeQL is delegated to the central
+          # ContextualWisdomLab/.github codeql-pr.yml. Keep this workflow as
+          # push-only CI evidence without duplicate SARIF upload or duplicate
+          # PR check contexts.
+          upload: never

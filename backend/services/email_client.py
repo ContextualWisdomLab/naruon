@@ -412,13 +412,38 @@ class _PinnedImplicitTlsSMTP(aiosmtplib.SMTP):
 
     def __init__(self, *, tls_server_hostname: str, **kwargs):
         self._tls_server_hostname = tls_server_hostname
-        if (
-            kwargs.get("sock") is not None
-            and kwargs.get("use_tls")
-            and kwargs.get("hostname") is None
-        ):
-            kwargs["hostname"] = tls_server_hostname
+        # Keep socket-backed clients from falling back to aiosmtplib's
+        # hostname="localhost" default. The socket is already connected to the
+        # validated address; SNI is supplied separately during TLS setup.
+        if kwargs.get("sock") is not None:
+            kwargs.setdefault("port", None)
+            kwargs.setdefault("socket_path", None)
+            if kwargs.get("use_tls") and kwargs.get("hostname") is None:
+                kwargs["hostname"] = tls_server_hostname
+            else:
+                kwargs.setdefault("hostname", None)
         super().__init__(**kwargs)
+
+    def _validate_config(self) -> None:
+        try:
+            super()._validate_config()
+        except ValueError as exc:
+            if (
+                self.sock is None
+                or not self.use_tls
+                or self.hostname != self._tls_server_hostname
+                or "socket option is not compatible with hostname" not in str(exc)
+            ):
+                raise
+            # aiosmtplib 3.x rejects hostname with sock, while 5.x requires it
+            # for socket-backed TLS. Validate 3.x config with the hostname
+            # hidden, then restore it for SNI and diagnostics.
+            hostname = self.hostname
+            self.hostname = None
+            try:
+                super()._validate_config()
+            finally:
+                self.hostname = hostname
 
     async def _create_connection(self, timeout: float | None):
         loop = asyncio.get_running_loop()

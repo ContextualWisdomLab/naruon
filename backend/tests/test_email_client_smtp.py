@@ -662,6 +662,7 @@ def test_implicit_tls_smtp_client_keeps_original_tls_hostname():
 
         assert client.sock is smtp_socket
         assert client.use_tls is True
+        assert client.hostname == "smtp.example.com"
         assert getattr(client, "_tls_server_hostname") == "smtp.example.com"
     finally:
         smtp_socket.close()
