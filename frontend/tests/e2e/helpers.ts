@@ -155,7 +155,7 @@ const aiHubSurface = {
     },
     {
       summary_key: 'ai_providers',
-      label_text: 'AI 에이전트',
+      label_text: '판단 보조',
       value_text: '1/1',
       detail_text: 'active organization providers',
       state_code: 'ready',
