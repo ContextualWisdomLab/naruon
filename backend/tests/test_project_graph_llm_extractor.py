@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import services.email_import_service as import_service
 import services.project_graph.extractor_registry as extractor_registry
 import services.project_graph.llm_extractor as llm_extractor
-from services.project_graph import ProjectSourceSegment
+from services.project_graph import ProjectObjectType, ProjectSourceSegment
 
 
 def _segment(uid: str, text: str) -> ProjectSourceSegment:
@@ -60,6 +60,43 @@ async def test_grounded_objects_are_mapped_with_citations(monkeypatch):
     assert obj.extractor_name == llm_extractor.LLM_EXTRACTOR_NAME
     assert result.edges[0].source_uid == "segment:seg1"
     assert result.edges[0].target_uid == obj.uid
+
+
+@pytest.mark.asyncio
+async def test_decision_typed_objects_are_grounded(monkeypatch):
+    # The DECISION entity is admitted through the same enum-derived allow-list as
+    # every other object type, so the LLM extractor grounds it with no bespoke
+    # wiring — a decision point cited to a real segment survives; its evidence
+    # edge is emitted like any other grounded object's.
+    monkeypatch.setattr(
+        llm_extractor,
+        "_call_llm",
+        AsyncMock(
+            return_value=_payload(
+                llm_extractor.ExtractedObjectPayload(
+                    object_type="decision",
+                    title="Adopt Stripe as the payment gateway",
+                    summary="The steering committee approved Stripe.",
+                    source_segment_uids=["seg1"],
+                    confidence=0.85,
+                )
+            )
+        ),
+    )
+
+    result = await llm_extractor.extract_project_semantics_llm(
+        [_segment("seg1", "The steering committee approved Stripe as the gateway.")],
+        api_key="key",
+        model="gpt-test",
+    )
+
+    assert len(result.objects) == 1
+    decision = result.objects[0]
+    assert decision.object_type is ProjectObjectType.DECISION
+    assert decision.object_type.value == "decision"
+    assert decision.source_segment_uids == ("seg1",)
+    assert result.edges[0].source_uid == "segment:seg1"
+    assert result.edges[0].target_uid == decision.uid
 
 
 @pytest.mark.asyncio
