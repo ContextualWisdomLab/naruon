@@ -117,6 +117,15 @@ def test_schema_backfill_adds_email_indexes(monkeypatch):
         for statement in statements
     )
     assert any(
+        "create index if not exists ix_emails_owner_date" in statement
+        and "user_id, organization_id, date" in statement
+        for statement in statements
+    )
+    assert any(
+        "drop index if exists ix_emails_message_id" in statement
+        for statement in statements
+    )
+    assert any(
         "drop index if exists ix_email_records_message_id" in statement
         for statement in statements
     )
@@ -552,6 +561,19 @@ def test_tenant_config_model_declares_owner_scope_unique_index():
     assert "user_id" in expression_text
     assert "coalesce" in expression_text
     assert "organization_id" in expression_text
+
+
+def test_email_model_declares_owner_date_index():
+    indexes = {index.name: index for index in Email.__table__.indexes}
+
+    owner_date_index = indexes["ix_emails_owner_date"]
+
+    assert owner_date_index.unique is False
+    assert [column.name for column in owner_date_index.columns] == [
+        "user_id",
+        "organization_id",
+        "date",
+    ]
 
 
 def test_ticket_task_reply_sla_unique_index_is_bootstrapped():
