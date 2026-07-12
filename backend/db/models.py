@@ -96,7 +96,8 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.datetime.utcnow
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
     user_id: Mapped[str] = mapped_column(String, index=True)
     action: Mapped[str] = mapped_column(String)
@@ -164,8 +165,100 @@ class LLMProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.datetime.utcnow,
-        onupdate=datetime.datetime.utcnow,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+
+class ScopeweavePromotionTarget(Base):
+    """Per-workspace scopeweave instance the promote action pushes work items to.
+
+    The ``base_url`` is validated against ``ALLOWED_SCOPEWEAVE_HOSTS`` at runtime
+    and the personal access token is stored Fernet-encrypted, mirroring how
+    ``LLMProvider`` keeps its ``api_key``. Config is resolved from the database
+    at request time (never from ``os.getenv``).
+    """
+
+    __tablename__ = "scopeweave_promotion_target"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "workspace_id",
+            name="uq_scopeweave_promotion_target_scope",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    base_url: Mapped[str] = mapped_column(String, nullable=False)
+    access_token: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
+class ScopeweavePromotionLink(Base):
+    """Mapping of a naruon project-graph object to its scopeweave work item.
+
+    One row per promoted ``object_uid`` within a workspace; re-promoting updates
+    the same row so the citation-carrying link between naruon evidence and the
+    scopeweave work item stays stable and idempotent.
+    """
+
+    __tablename__ = "scopeweave_promotion_link"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "object_uid",
+            name="uq_scopeweave_promotion_link_object",
+        ),
+        Index(
+            "ix_scopeweave_promotion_link_scope",
+            "organization_id",
+            "workspace_id",
+            "project_uid",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    project_uid: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    object_uid: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    object_type: Mapped[str] = mapped_column(String, nullable=False)
+    scopeweave_work_item_id: Mapped[str] = mapped_column(String, nullable=False)
+    scopeweave_work_item_url: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    promoted_confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    citation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    promoted_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
     )
 
 
@@ -219,8 +312,8 @@ class WorkspaceRunnerConfig(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.datetime.utcnow,
-        onupdate=datetime.datetime.utcnow,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
 
 
@@ -309,6 +402,128 @@ class ProviderWritebackRetryItem(Base):
             "ix_provider_writeback_retry_items_source_action",
             "source_uid",
             "command_action",
+        ),
+    )
+
+
+class LlmBatchJob(Base):
+    """A batch-tolerant embedding job routed through contextual-orchestrator.
+
+    naruon-side control-plane record for one bulk, latency-tolerant embedding
+    run (e.g. an email-import batch). The *primary* execution path submits the
+    batch to the ``contextual-orchestrator`` batch API, which owns provider
+    routing, load balancing and cost accounting and forwards the work to
+    ``pg-llm-batch``. naruon keeps this durable audit trail (which path served
+    the batch, the orchestrator's batch id, the reported cost) so batch work is
+    observable even though the routing/cost decisions live in the orchestrator.
+    Modeled on :class:`ProviderWritebackRetryItem` (string uid PK, scope
+    indexes).
+    """
+
+    __tablename__ = "llm_batch_jobs"
+
+    batch_job_uid: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        default=lambda: f"llm_batch_{uuid.uuid4().hex}",
+    )
+    organization_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    job_status: Mapped[str] = mapped_column(
+        String,
+        index=True,
+        default="preparing",
+        nullable=False,
+    )
+    # "orchestrator" (primary) or "local_engine" (offline dev fallback).
+    routing_mode: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    model_name: Mapped[str] = mapped_column(String, nullable=False)
+    endpoint_alias: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The batch id assigned by contextual-orchestrator (None for local runs).
+    orchestrator_batch_uid: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    total_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completed_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    part_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Cost as reported by the orchestrator, in micro-USD (1e-6 USD), or None.
+    cost_micro_usd: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    items: Mapped[list["LlmBatchItem"]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
+    __table_args__ = (
+        Index(
+            "ix_llm_batch_jobs_scope_status",
+            "organization_id",
+            "user_id",
+            "job_status",
+        ),
+    )
+
+
+class LlmBatchItem(Base):
+    """A single input within an :class:`LlmBatchJob`.
+
+    One item per input text, carrying its token count and the partition (batch
+    file part) it was assigned to — reported by the orchestrator on the primary
+    path, or by the ``pg-llm-batch`` accumulator on the local fallback path.
+    """
+
+    __tablename__ = "llm_batch_items"
+
+    batch_item_uid: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        default=lambda: f"llm_batch_item_{uuid.uuid4().hex}",
+    )
+    batch_job_uid: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("llm_batch_jobs.batch_job_uid", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    part_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    item_status: Mapped[str] = mapped_column(
+        String,
+        index=True,
+        default="queued",
+        nullable=False,
+    )
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    job: Mapped["LlmBatchJob"] = relationship(back_populates="items")
+    __table_args__ = (
+        Index(
+            "ix_llm_batch_items_job_sequence",
+            "batch_job_uid",
+            "sequence_no",
         ),
     )
 
@@ -456,6 +671,10 @@ class WorkflowDefinition(Base):
         nullable=False,
     )
 
+    agent_run_records: Mapped[list["AgentRunRecord"]] = relationship(
+        back_populates="workflow_definition"
+    )
+
 
 class AgentRunRecord(Base):
     __tablename__ = "agent_run_records"
@@ -506,6 +725,10 @@ class AgentRunRecord(Base):
     )
     result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    workflow_definition: Mapped["WorkflowDefinition"] = relationship(
+        back_populates="agent_run_records"
+    )
+
 
 class Email(Base):
     __tablename__ = "email_records"
@@ -554,6 +777,8 @@ class Email(Base):
     references: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
     body: Mapped[str] = mapped_column(Text)
+    # IMAP \Seen read state; defaults read so historical/file imports don't nag.
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
     attachments: Mapped[list["Attachment"]] = relationship(
@@ -1081,6 +1306,37 @@ class TenantConfig(Base):
         EncryptedString, nullable=True
     )
 
+    # Batch-tolerant embedding routing via contextual-orchestrator. All config
+    # here lives in the Fernet DB, never in os.getenv. The orchestrator is the
+    # routing/cost hub: naruon submits bulk embeddings to it and it forwards to
+    # pg-llm-batch and records cost. The bearer token is a secret so it is stored
+    # EncryptedString (Fernet at rest); the base URL is not a secret but is
+    # SSRF-guarded + allowlisted at call time. batch_local_dsn is an optional
+    # offline-dev fallback DSN for a local pg-llm-batch package (also a secret).
+    batch_embedding_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    batch_orchestrator_base_url: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    batch_orchestrator_token: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
+    batch_orchestrator_endpoint: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    batch_embedding_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_local_dsn: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # Cost-attribution dimensions forwarded to the orchestrator ledger so batch
+    # embedding cost is attributed across the full dimension set the hub expects
+    # (service / team / group / company, on top of the source / organization /
+    # user observability keys). Not secrets, so plain String. company falls back
+    # to organization_id at call time when left unset.
+    batch_attribution_service: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_team: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_group: Mapped[str | None] = mapped_column(String, nullable=True)
+    batch_attribution_company: Mapped[str | None] = mapped_column(String, nullable=True)
+
     def __repr__(self) -> str:
         return (
             f"<TenantConfig(id={self.id}, user_id='{self.user_id}', "
@@ -1258,92 +1514,8 @@ class Workspace(Base):
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
 
-class User(Base):
-    __tablename__ = "user_accounts"
-
-    user_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"user_{uuid.uuid4().hex}")
-    user_name: Mapped[str] = mapped_column(String, nullable=False)
-    user_email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
-    role_code: Mapped[str] = mapped_column(String, default="member")
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-class Account(Base):
-    __tablename__ = "provider_accounts"
-
-    account_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"account_{uuid.uuid4().hex}")
-    user_id: Mapped[str] = mapped_column(String, ForeignKey("user_accounts.user_id"), index=True, nullable=False)
-    account_type: Mapped[str] = mapped_column(String, nullable=False)
-    account_status: Mapped[str] = mapped_column(String, default="active")
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-class EmailRaw(Base):
-    __tablename__ = "email_raws"
-
-    raw_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"raw_{uuid.uuid4().hex}")
-    provider_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    account_id: Mapped[str] = mapped_column(String, ForeignKey("provider_accounts.account_id"), index=True, nullable=False)
-    raw_content: Mapped[str] = mapped_column(Text, nullable=False)
-    ingested_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-class EmailMessage(Base):
-    __tablename__ = "email_messages"
-
-    message_uid: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"msg_{uuid.uuid4().hex}")
-    rfc_message_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    canonical_hash: Mapped[str] = mapped_column(String, nullable=False)
-    message_subject: Mapped[str] = mapped_column(String, nullable=True)
-    message_body: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-class EmailInstance(Base):
-    __tablename__ = "email_instances"
-
-    instance_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"inst_{uuid.uuid4().hex}")
-    message_uid: Mapped[str] = mapped_column(String, ForeignKey("email_messages.message_uid"), index=True, nullable=False)
-    account_id: Mapped[str] = mapped_column(String, ForeignKey("provider_accounts.account_id"), index=True, nullable=False)
-    folder_name: Mapped[str] = mapped_column(String, nullable=False)
-    label_names: Mapped[str] = mapped_column(String, nullable=True)
-    instance_status: Mapped[str] = mapped_column(String, default="unread")
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-class EmailThread(Base):
-    __tablename__ = "email_threads"
-
-    thread_uid: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"thread_{uuid.uuid4().hex}")
-    thread_subject: Mapped[str] = mapped_column(String, nullable=True)
-    participant_summary: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-class EmailThreadEdge(Base):
-    __tablename__ = "email_thread_edges"
-
-    edge_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"edge_{uuid.uuid4().hex}")
-    thread_uid: Mapped[str] = mapped_column(String, ForeignKey("email_threads.thread_uid"), index=True, nullable=False)
-    parent_message_uid: Mapped[str] = mapped_column(String, ForeignKey("email_messages.message_uid"), index=True, nullable=False)
-    child_message_uid: Mapped[str] = mapped_column(String, ForeignKey("email_messages.message_uid"), index=True, nullable=False)
-    edge_type: Mapped[str] = mapped_column(String, nullable=False)
-    confidence_score: Mapped[float] = mapped_column(default=1.0)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    workspace_documents: Mapped[list["Document"]] = relationship(
+        back_populates="workspace_entity"
     )
 
 class Document(Base):
@@ -1358,4 +1530,8 @@ class Document(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    workspace_entity: Mapped["Workspace"] = relationship(
+        back_populates="workspace_documents"
     )

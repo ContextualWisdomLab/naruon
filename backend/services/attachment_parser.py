@@ -45,11 +45,40 @@ _PARSER_MANIFEST = (
         parse_status="parsed",
     ),
     AttachmentParserDescriptor(
+<<<<<<< HEAD
         parser_key="pdf",
         display_name="PDF documents (NewsDOM recognition)",
         content_types=("application/pdf",),
         extensions=(".pdf",),
         parse_status="pdf_dom_recognition_pending",
+=======
+        parser_key="json",
+        display_name="JSON attachments",
+        content_types=("application/json", "text/json"),
+        extensions=(".json",),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="csv",
+        display_name="CSV attachments",
+        content_types=("text/csv", "application/csv"),
+        extensions=(".csv",),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="xml",
+        display_name="XML attachments",
+        content_types=("application/xml", "text/xml"),
+        extensions=(".xml",),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="calendar",
+        display_name="iCalendar attachments",
+        content_types=("text/calendar",),
+        extensions=(".ics", ".ifb"),
+        parse_status="parsed",
+>>>>>>> origin/develop
     ),
     AttachmentParserDescriptor(
         parser_key="unsupported_binary",

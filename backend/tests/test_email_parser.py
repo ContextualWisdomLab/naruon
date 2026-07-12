@@ -175,6 +175,29 @@ Content-Disposition: attachment; filename="plan.md"
 
 Ship graph
 --mixed-boundary
+Content-Type: application/json; charset="utf-8"
+Content-Disposition: attachment; filename="status.json"
+
+{"project":"Launch"}
+--mixed-boundary
+Content-Type: text/csv; charset="utf-8"
+Content-Disposition: attachment; filename="status.csv"
+
+name,status
+Launch,Ready
+--mixed-boundary
+Content-Type: application/xml; charset="utf-8"
+Content-Disposition: attachment; filename="status.xml"
+
+<root>Launch</root>
+--mixed-boundary
+Content-Type: text/calendar; charset="utf-8"
+Content-Disposition: attachment; filename="invite.ics"
+
+BEGIN:VCALENDAR
+SUMMARY:Launch
+END:VCALENDAR
+--mixed-boundary
 Content-Type: application/pdf
 Content-Disposition: attachment; filename="contract.pdf"
 Content-Transfer-Encoding: base64
@@ -206,6 +229,46 @@ JVBERi0xLjcK
                 "parse_content": "# Plan\n\nShip graph",
                 "parse_content_type": "text/markdown",
                 "parser_key": "markdown",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "status.json",
+                "content": '{"project":"Launch"}',
+                "content_type": "application/json",
+                "parse_content": '{"project":"Launch"}',
+                "parse_content_type": "application/json",
+                "parser_key": "json",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "status.csv",
+                "content": "name,status Launch,Ready",
+                "content_type": "text/csv",
+                "parse_content": "name,status\nLaunch,Ready",
+                "parse_content_type": "text/csv",
+                "parser_key": "csv",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "status.xml",
+                "content": "Launch",
+                "content_type": "application/xml",
+                "parse_content": "<root>Launch</root>",
+                "parse_content_type": "application/xml",
+                "parser_key": "xml",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            },
+            {
+                "filename": "invite.ics",
+                "content": "BEGIN:VCALENDAR SUMMARY:Launch END:VCALENDAR",
+                "content_type": "text/calendar",
+                "parse_content": "BEGIN:VCALENDAR\nSUMMARY:Launch\nEND:VCALENDAR",
+                "parse_content_type": "text/calendar",
+                "parser_key": "calendar",
                 "parse_status": "parsed",
                 "parse_error_code": None,
             },

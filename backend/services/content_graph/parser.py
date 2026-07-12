@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import csv
 import hashlib
+import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from io import StringIO
+
+from defusedxml import ElementTree as DefusedElementTree
+from defusedxml.common import DefusedXmlException
 
 from services.text_safety import strip_html_markup
 
@@ -38,6 +44,21 @@ _SUPPORTED_MARKDOWN_TYPES = {
     "text/markdown",
     "text/x-markdown",
     "application/markdown",
+}
+_SUPPORTED_JSON_TYPES = {
+    "application/json",
+    "text/json",
+}
+_SUPPORTED_CSV_TYPES = {
+    "text/csv",
+    "application/csv",
+}
+_SUPPORTED_XML_TYPES = {
+    "application/xml",
+    "text/xml",
+}
+_SUPPORTED_CALENDAR_TYPES = {
+    "text/calendar",
 }
 
 
@@ -299,6 +320,14 @@ def parse_content(
         return _parse_html(context, document_node, content)
     if normalized_type in _SUPPORTED_MARKDOWN_TYPES:
         return _parse_markdown(context, document_node, content)
+    if normalized_type in _SUPPORTED_JSON_TYPES or normalized_type.endswith("+json"):
+        return _parse_json(context, document_node, content)
+    if normalized_type in _SUPPORTED_CSV_TYPES:
+        return _parse_csv(context, document_node, content)
+    if normalized_type in _SUPPORTED_XML_TYPES or normalized_type.endswith("+xml"):
+        return _parse_xml(context, document_node, content)
+    if normalized_type in _SUPPORTED_CALENDAR_TYPES:
+        return _parse_calendar(context, document_node, content)
     if normalized_type == "text/plain":
         return _parse_plain_text(context, document_node, content)
     return _parse_plain_text(context, document_node, strip_html_markup(content))
@@ -488,6 +517,302 @@ def _parse_html(
     return context.result()
 
 
+def _parse_json(
+    context: _BuildContext,
+    document_node: ContentNode,
+    content: str,
+) -> ParseResult:
+    try:
+        payload = json.loads(content)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return _parse_plain_text(context, document_node, content)
+
+    root_kind = "json_array" if isinstance(payload, list) else "json_object"
+    if not isinstance(payload, (dict, list)):
+        root_kind = "json_value"
+    root_node = context.add_node(
+        parent_node_uid=document_node.content_node_uid,
+        node_kind=root_kind,
+        node_path="/document[1]/json[1]",
+        ordinal_index=1,
+        display_label="$",
+    )
+    _append_json_value(
+        context=context,
+        value=payload,
+        parent_node=root_node,
+        parent_path=root_node.node_path,
+        label="$",
+        heading_parts=[],
+    )
+    return context.result()
+
+
+def _append_json_value(
+    *,
+    context: _BuildContext,
+    value: object,
+    parent_node: ContentNode,
+    parent_path: str,
+    label: str,
+    heading_parts: list[str],
+) -> None:
+    if isinstance(value, dict):
+        for index, (key, child_value) in enumerate(value.items(), start=1):
+            safe_key = _safe_label(str(key), fallback=f"field_{index}")
+            child_node = context.add_node(
+                parent_node_uid=parent_node.content_node_uid,
+                node_kind=(
+                    "json_array"
+                    if isinstance(child_value, list)
+                    else "json_object"
+                    if isinstance(child_value, dict)
+                    else "json_value"
+                ),
+                node_path=f"{parent_path}/member[{index}]",
+                ordinal_index=index,
+                display_label=safe_key,
+            )
+            _append_json_value(
+                context=context,
+                value=child_value,
+                parent_node=child_node,
+                parent_path=child_node.node_path,
+                label=safe_key,
+                heading_parts=[*heading_parts, safe_key],
+            )
+        return
+
+    if isinstance(value, list):
+        for index, child_value in enumerate(value, start=1):
+            safe_label = f"{label}[{index}]"
+            child_node = context.add_node(
+                parent_node_uid=parent_node.content_node_uid,
+                node_kind=(
+                    "json_array"
+                    if isinstance(child_value, list)
+                    else "json_object"
+                    if isinstance(child_value, dict)
+                    else "json_value"
+                ),
+                node_path=f"{parent_path}/item[{index}]",
+                ordinal_index=index,
+                display_label=safe_label,
+            )
+            _append_json_value(
+                context=context,
+                value=child_value,
+                parent_node=child_node,
+                parent_path=child_node.node_path,
+                label=safe_label,
+                heading_parts=[*heading_parts, safe_label],
+            )
+        return
+
+    safe_value = _safe_text(_json_scalar_text(value))
+    if not safe_value:
+        return
+    safe_label = _safe_label(label, fallback="value")
+    safe_text = f"{safe_label}: {safe_value}" if safe_label != "$" else safe_value
+    context.add_segment(
+        content_node_uid=parent_node.content_node_uid,
+        segment_kind="json_value",
+        segment_path=parent_path,
+        heading_path=_join_heading_path(heading_parts),
+        safe_text_content=safe_text,
+    )
+
+
+def _parse_csv(
+    context: _BuildContext,
+    document_node: ContentNode,
+    content: str,
+) -> ParseResult:
+    reader = csv.reader(StringIO(_normalize_newlines(content)))
+    rows = [[_safe_text(cell) for cell in row] for row in reader]
+    rows = [row for row in rows if any(cell for cell in row)]
+    if not rows:
+        return context.result()
+
+    table_node = context.add_node(
+        parent_node_uid=document_node.content_node_uid,
+        node_kind="table",
+        node_path="/document[1]/table[1]",
+        ordinal_index=1,
+    )
+    headers = rows[0] if len(rows) > 1 else []
+    for row_index, row in enumerate(rows, start=1):
+        node_kind = "table_header" if row_index == 1 and headers else "table_row"
+        segment_kind = "table_header" if node_kind == "table_header" else "table_row"
+        row_node = context.add_node(
+            parent_node_uid=table_node.content_node_uid,
+            node_kind=node_kind,
+            node_path=f"{table_node.node_path}/row[{row_index}]",
+            ordinal_index=row_index,
+            safe_text_content=_csv_row_text(row, headers if row_index > 1 else []),
+        )
+        context.add_segment(
+            content_node_uid=row_node.content_node_uid,
+            segment_kind=segment_kind,
+            segment_path=row_node.node_path,
+            heading_path=None,
+            safe_text_content=row_node.safe_text_content,
+        )
+    return context.result()
+
+
+def _parse_xml(
+    context: _BuildContext,
+    document_node: ContentNode,
+    content: str,
+) -> ParseResult:
+    try:
+        root = DefusedElementTree.fromstring(content)
+    except (DefusedXmlException, DefusedElementTree.ParseError, TypeError, ValueError):
+        return _parse_plain_text(context, document_node, strip_html_markup(content))
+
+    root_label = _xml_tag_name(str(root.tag))
+    root_node = context.add_node(
+        parent_node_uid=document_node.content_node_uid,
+        node_kind="xml_element",
+        node_path="/document[1]/xml[1]",
+        ordinal_index=1,
+        display_label=root_label,
+        safe_text_content=_safe_text(root.text or ""),
+    )
+    _append_xml_text_segment(context, root_node, [root_label])
+    _append_xml_children(
+        context=context,
+        parent_node=root_node,
+        parent_path=root_node.node_path,
+        parent_headings=[root_label],
+        elements=list(root),
+    )
+    return context.result()
+
+
+def _append_xml_children(
+    *,
+    context: _BuildContext,
+    parent_node: ContentNode,
+    parent_path: str,
+    parent_headings: list[str],
+    elements: list,
+) -> None:
+    counts: defaultdict[str, int] = defaultdict(int)
+    for element in elements:
+        tag_label = _xml_tag_name(str(element.tag))
+        counts[tag_label] += 1
+        ordinal_index = counts[tag_label]
+        node = context.add_node(
+            parent_node_uid=parent_node.content_node_uid,
+            node_kind="xml_element",
+            node_path=f"{parent_path}/{tag_label}[{ordinal_index}]",
+            ordinal_index=ordinal_index,
+            display_label=tag_label,
+            safe_text_content=_safe_text(element.text or ""),
+        )
+        headings = [*parent_headings, tag_label]
+        _append_xml_text_segment(context, node, headings)
+        _append_xml_children(
+            context=context,
+            parent_node=node,
+            parent_path=node.node_path,
+            parent_headings=headings,
+            elements=list(element),
+        )
+
+
+def _append_xml_text_segment(
+    context: _BuildContext,
+    node: ContentNode,
+    heading_parts: list[str],
+) -> None:
+    if not node.safe_text_content:
+        return
+    context.add_segment(
+        content_node_uid=node.content_node_uid,
+        segment_kind="xml_text",
+        segment_path=f"{node.node_path}/text[1]",
+        heading_path=_join_heading_path(heading_parts),
+        safe_text_content=node.safe_text_content,
+    )
+
+
+def _parse_calendar(
+    context: _BuildContext,
+    document_node: ContentNode,
+    content: str,
+) -> ParseResult:
+    calendar_node = context.add_node(
+        parent_node_uid=document_node.content_node_uid,
+        node_kind="calendar",
+        node_path="/document[1]/calendar[1]",
+        ordinal_index=1,
+        display_label="VCALENDAR",
+    )
+    component_stack: list[ContentNode] = [calendar_node]
+    component_path_stack = [calendar_node.node_path]
+    component_counts: defaultdict[str, int] = defaultdict(int)
+    property_index = 0
+
+    for raw_line in _unfold_calendar_lines(content):
+        if ":" not in raw_line:
+            continue
+        property_name_with_params, raw_value = raw_line.split(":", 1)
+        property_name = _safe_label(
+            property_name_with_params.split(";", 1)[0].upper(),
+            fallback="PROPERTY",
+        )
+        if property_name == "BEGIN":
+            component_label = _safe_label(raw_value.upper(), fallback="COMPONENT")
+            component_counts[component_label] += 1
+            ordinal_index = component_counts[component_label]
+            parent_node = component_stack[-1]
+            parent_path = component_path_stack[-1]
+            component_node = context.add_node(
+                parent_node_uid=parent_node.content_node_uid,
+                node_kind="calendar_component",
+                node_path=(
+                    f"{parent_path}/{component_label.lower()}[{ordinal_index}]"
+                ),
+                ordinal_index=ordinal_index,
+                display_label=component_label,
+            )
+            component_stack.append(component_node)
+            component_path_stack.append(component_node.node_path)
+            continue
+        if property_name == "END":
+            if len(component_stack) > 1:
+                component_stack.pop()
+                component_path_stack.pop()
+            continue
+
+        safe_value = _safe_text(raw_value)
+        if not safe_value:
+            continue
+        property_index += 1
+        parent_node = component_stack[-1]
+        parent_path = component_path_stack[-1]
+        property_node = context.add_node(
+            parent_node_uid=parent_node.content_node_uid,
+            node_kind="calendar_property",
+            node_path=f"{parent_path}/property[{property_index}]",
+            ordinal_index=property_index,
+            display_label=property_name,
+            safe_text_content=f"{property_name}: {safe_value}",
+        )
+        context.add_segment(
+            content_node_uid=property_node.content_node_uid,
+            segment_kind="calendar_property",
+            segment_path=property_node.node_path,
+            heading_path=parent_node.display_label,
+            safe_text_content=property_node.safe_text_content,
+        )
+
+    return context.result()
+
+
 def _add_document_node(context: _BuildContext, display_name: str) -> ContentNode:
     return context.add_node(
         parent_node_uid=None,
@@ -533,6 +858,44 @@ def _normalize_content_type(content_type: str | None) -> str:
 
 def _join_heading_path(headings: list[str]) -> str | None:
     return " > ".join(headings) if headings else None
+
+
+def _json_scalar_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _csv_row_text(row: list[str], headers: list[str]) -> str:
+    if not headers:
+        return ", ".join(cell for cell in row if cell)
+    pairs = []
+    for index, cell in enumerate(row):
+        header = headers[index] if index < len(headers) and headers[index] else None
+        pairs.append(f"{header or f'column_{index + 1}'}={cell}")
+    return "; ".join(pairs)
+
+
+def _xml_tag_name(tag: str) -> str:
+    local_name = tag.rsplit("}", maxsplit=1)[-1]
+    return _safe_label(local_name, fallback="element")
+
+
+def _safe_label(value: str, *, fallback: str) -> str:
+    safe_value = _safe_text(value)
+    return safe_value or fallback
+
+
+def _unfold_calendar_lines(content: str) -> list[str]:
+    unfolded: list[str] = []
+    for line in _normalize_newlines(content).split("\n"):
+        if not line:
+            continue
+        if line.startswith((" ", "\t")) and unfolded:
+            unfolded[-1] += line[1:]
+            continue
+        unfolded.append(line)
+    return unfolded
 
 
 def _hash_text(value: str) -> str:
