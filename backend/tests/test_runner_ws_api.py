@@ -201,19 +201,15 @@ def test_runner_ws_rejects_missing_auth():
 
 
 def test_runner_ws_route_uses_signed_session_dependency():
-    route = next(
-        (
-            route
-            for route in app.routes
-            if isinstance(route, APIWebSocketRoute)
+    for route, dependencies in _iter_app_routes(app.routes):
+        if (
+            isinstance(route, APIWebSocketRoute)
             and route.path == "/ws/runner/{token}"
-        ),
-        None,
-    )
-
-    assert route is not None, "Runner WebSocket route is not registered"
-    dependencies = {dependency.dependency for dependency in route.dependencies}
-    assert get_auth_context in dependencies
+        ):
+            dependency_callables = {dependency.dependency for dependency in dependencies}
+            assert get_auth_context in dependency_callables
+            return
+    assert False, "WS route /ws/runner/{token} not found or missing get_auth_context dependency"
 
 
 def test_runner_ws_accepts_signed_session_and_registered_token(monkeypatch):

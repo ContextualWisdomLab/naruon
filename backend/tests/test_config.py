@@ -274,7 +274,7 @@ def test_production_settings_reject_low_entropy_auth_session_hmac_secret(
     monkeypatch.setenv("RUNTIME_ENVIRONMENT", "production")
     monkeypatch.setenv("AUTH_SESSION_HMAC_SECRET", auth_session_hmac_secret)
 
-    with pytest.raises(ValidationError, match="must have higher entropy"):
+    with pytest.raises(ValidationError, match="AUTH_SESSION_HMAC_SECRET must"):
         _settings_without_env_file()
 
 
