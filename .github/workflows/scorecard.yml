@@ -5,10 +5,7 @@ on:
     branches:
       - develop
       - master
-<<<<<<< HEAD
-=======
       - "release/**"
->>>>>>> origin/develop
   push:
     branches:
       - develop
