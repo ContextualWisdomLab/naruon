@@ -29,6 +29,9 @@ from services.project_graph import (
     ProjectCitation,
     ProjectCorrection,
     ProjectEvidence,
+    ProjectGraphNotFoundError,
+    ProjectRelationSummary,
+    ProjectRelationTypeSummary,
     ProjectSourceSegment,
     ProjectTraceEdge,
     ProjectTraceObject,
@@ -783,6 +786,195 @@ async def test_project_evidence_surfaces_incident_object_relation(
         )
         assert unrelated_response.status_code == 200
         assert unrelated_response.json()["relations"] == []
+
+
+@pytest.mark.asyncio
+async def test_project_relation_summary_endpoint_serializes_distribution(
+    dev_auth_dependency_overrides,
+    monkeypatch,
+):
+    captured = {}
+
+    summary = ProjectRelationSummary(
+        project_uid="project_candidate:test",
+        relation_count=3,
+        grounded_relation_count=2,
+        relation_types=(
+            ProjectRelationTypeSummary(
+                relation_type="implements",
+                relation_count=2,
+                grounded_relation_count=1,
+                source_object_types=("feature",),
+                target_object_types=("requirement",),
+            ),
+            ProjectRelationTypeSummary(
+                relation_type="blocks",
+                relation_count=1,
+                grounded_relation_count=1,
+                source_object_types=("issue",),
+                target_object_types=("milestone",),
+            ),
+        ),
+    )
+
+    async def fake_get_project_relation_summary(session, *, scope, project_uid):
+        captured["project_uid"] = project_uid
+        captured["scope"] = scope
+        return summary
+
+    async def override_get_db():
+        yield object()
+
+    monkeypatch.setattr(
+        projects_api,
+        "get_project_relation_summary",
+        fake_get_project_relation_summary,
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with _client(
+            user_id="reviewer",
+            organization_id="org-acme",
+        ) as client:
+            response = await client.get(
+                "/api/projects/project_candidate:test/relations/summary"
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert captured["project_uid"] == "project_candidate:test"
+    assert body["project_uid"] == "project_candidate:test"
+    assert body["relation_count"] == 3
+    assert body["grounded_relation_count"] == 2
+    # Count-descending order is preserved through serialization.
+    assert [item["relation_type"] for item in body["relation_types"]] == [
+        "implements",
+        "blocks",
+    ]
+    implements = body["relation_types"][0]
+    assert implements["relation_count"] == 2
+    assert implements["grounded_relation_count"] == 1
+    assert implements["source_object_types"] == ["feature"]
+    assert implements["target_object_types"] == ["requirement"]
+
+
+@pytest.mark.asyncio
+async def test_project_relation_summary_endpoint_returns_404_when_missing(
+    dev_auth_dependency_overrides,
+    monkeypatch,
+):
+    async def fake_get_project_relation_summary(session, *, scope, project_uid):
+        raise ProjectGraphNotFoundError("Project candidate not found")
+
+    async def override_get_db():
+        yield object()
+
+    monkeypatch.setattr(
+        projects_api,
+        "get_project_relation_summary",
+        fake_get_project_relation_summary,
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with _client(
+            user_id="reviewer",
+            organization_id="org-acme",
+        ) as client:
+            response = await client.get(
+                "/api/projects/project_candidate:missing/relations/summary"
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Project candidate not found"
+
+
+@pytest.mark.asyncio
+async def test_project_relation_summary_aggregates_typed_relation(
+    dev_auth_dependency_overrides,
+    project_graph_api_db_override,
+    project_graph_api_sessionmaker,
+):
+    user_id = f"project-api-relsum-{uuid.uuid4().hex}"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
+    async with project_graph_api_sessionmaker() as session:
+        seeded = await _seed_projection(
+            session,
+            user_id=user_id,
+            organization_id=organization_id,
+        )
+
+    async with _client(user_id=user_id, organization_id=organization_id) as client:
+        before = await client.get(
+            f"/api/projects/{seeded['candidate_uid']}/relations/summary"
+        )
+        assert before.status_code == 200
+        before_body = before.json()
+        # The deterministic seed extractor only emits segment-evidence edges, so
+        # the relation summary starts empty (no object-to-object relations).
+        assert before_body["project_uid"] == seeded["candidate_uid"]
+        assert before_body["relation_count"] == 0
+        assert before_body["grounded_relation_count"] == 0
+        assert before_body["relation_types"] == []
+
+    async with project_graph_api_sessionmaker() as session:
+        objects = (
+            (
+                await session.execute(
+                    select(ProjectGraphObjectRecord)
+                    .where(ProjectGraphObjectRecord.user_id == user_id)
+                    .where(ProjectGraphObjectRecord.object_type != "project_candidate")
+                    .order_by(ProjectGraphObjectRecord.object_uid.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(objects) >= 2
+        source_object, target_object = objects[0], objects[1]
+        segment = await session.scalar(
+            select(ContentSegmentRecord).where(
+                ContentSegmentRecord.content_segment_uid == seeded["segment_uid"]
+            )
+        )
+        assert segment is not None
+        session.add(
+            ProjectGraphEdgeRecord(
+                edge_uid=f"project_edge:test-{uuid.uuid4().hex[:16]}",
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=f"workspace-{organization_id}",
+                source_uid=source_object.object_uid,
+                target_uid=target_object.object_uid,
+                edge_type="implements",
+                confidence=0.86,
+                source_segment_uids=[seeded["segment_uid"]],
+                source_object=source_object,
+                target_object=target_object,
+                primary_content_segment_id=segment.content_segment_id,
+            )
+        )
+        await session.commit()
+
+    async with _client(user_id=user_id, organization_id=organization_id) as client:
+        after = await client.get(
+            f"/api/projects/{seeded['candidate_uid']}/relations/summary"
+        )
+        assert after.status_code == 200
+        after_body = after.json()
+        assert after_body["relation_count"] == 1
+        # Grounded: the relation carries the endpoint citation, not a bare edge.
+        assert after_body["grounded_relation_count"] == 1
+        assert len(after_body["relation_types"]) == 1
+        implements = after_body["relation_types"][0]
+        assert implements["relation_type"] == "implements"
+        assert implements["relation_count"] == 1
+        assert implements["grounded_relation_count"] == 1
+        assert implements["source_object_types"] == [source_object.object_type]
+        assert implements["target_object_types"] == [target_object.object_type]
 
 
 async def _seed_projection(
