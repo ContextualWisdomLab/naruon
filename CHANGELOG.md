@@ -4,6 +4,11 @@
   - 지정된 알고리즘을 사용한 해시 생성 도구 (`hash_generator`) 추가.
   - URL 분석 및 구성 요소 분리 도구 (`url_parser`) 추가.
 - **Testing**: 새로 추가된 도구 및 기존 기능에 대한 테스트를 보강하여 백엔드 `tools.py`의 테스트 커버리지를 100%로 달성했습니다.
+- **Features**: `Tool` 컴포넌트 강화를 위해 새로운 유틸리티 도구들을 추가했습니다.
+  - JSON 유효성 검사 및 포매터 도구 (`json_validator`) 추가.
+  - 지정된 알고리즘을 사용한 해시 생성 도구 (`hash_generator`) 추가.
+  - URL 분석 및 구성 요소 분리 도구 (`url_parser`) 추가.
+- **Testing**: 새로 추가된 도구 및 기존 기능에 대한 테스트를 보강하여 백엔드 `tools.py`의 테스트 커버리지를 100%로 달성했습니다.
 ### 지식그래프 추출기 seam (KG Extractor Seam)
 
 - 시맨틱 프로젝트 그래프 추출을 하드코딩된 `if/else` 대신 이름·버전이 있는 안정적인 pluggable seam으로 전환했습니다 (naruon#975 P0 keystone bullet — "make the dense KG real *behind a stable extractor seam*"). `backend/services/project_graph/extractor_registry.py`에 `KgExtractor` 계약(name + version + `extract`), 셀렉터(`PROJECT_GRAPH_EXTRACTOR`)로 키잉되는 `KgExtractorRegistry`, 그리고 fallback 체인을 해소하는 `run_extraction`을 추가했습니다. 체인의 **마지막 원소는 항상 결정론적 keyword 추출기**이므로 "rule-based extraction is fallback/reference only"가 분기 실수 여지 없이 구조적으로 보장됩니다 — LLM 추출기가 자격증명이 없거나(orchestrator 엔드포인트 미설정 포함) 요청에 실패하면 `ExtractorUnavailableError`(또는 임의 예외)로 체인 하위로 degrade 하며 projection을 잃지 않습니다. 새 추출기(플랫폼 플랜 §7.2의 `kg.extractor` 확장점을 쓰는 향후 플러그인 포함)는 코어 ingest 수정 없이 셀렉터로 등록됩니다.
