@@ -738,6 +738,15 @@ def _zero_embedding() -> list[float]:
     return [0.0] * EMBEDDING_DIMENSION
 
 
+def _file_identity(file_stat: os.stat_result) -> tuple[int, int] | None:
+    """Return a stable device/inode identity when the platform exposes one."""
+    device = getattr(file_stat, "st_dev", 0)
+    inode = getattr(file_stat, "st_ino", 0)
+    if not device or not inode:
+        return None
+    return int(device), int(inode)
+
+
 async def _generate_import_embeddings(
     texts: list[str],
     *,
@@ -829,9 +838,7 @@ async def _generate_import_embeddings(
 def _read_eml_bytes(eml_path: Path) -> bytes:
     no_follow_flag = getattr(os, "O_NOFOLLOW", None)
     if no_follow_flag is None:
-        raise EmailParseError(
-            "Email import requires O_NOFOLLOW support (unavailable on this platform)"
-        )
+        return _read_eml_bytes_without_no_follow(eml_path)
 
     open_flags = os.O_RDONLY | no_follow_flag
     file_descriptor_transferred = False
@@ -853,6 +860,31 @@ def _read_eml_bytes(eml_path: Path) -> bytes:
     finally:
         if not file_descriptor_transferred:
             os.close(file_descriptor)
+
+
+def _read_eml_bytes_without_no_follow(eml_path: Path) -> bytes:
+    """Read an EML file safely on platforms without ``O_NOFOLLOW``."""
+    try:
+        pre_open_stat = eml_path.lstat()
+        if stat.S_ISLNK(pre_open_stat.st_mode) or not stat.S_ISREG(
+            pre_open_stat.st_mode
+        ):
+            raise EmailParseError("Failed to read email file")
+        with eml_path.open("rb") as file_handle:
+            post_open_stat = os.fstat(file_handle.fileno())
+            if not stat.S_ISREG(post_open_stat.st_mode):
+                raise EmailParseError("Failed to read email file")
+            pre_open_identity = _file_identity(pre_open_stat)
+            post_open_identity = _file_identity(post_open_stat)
+            if (
+                pre_open_identity is not None
+                and post_open_identity is not None
+                and pre_open_identity != post_open_identity
+            ):
+                raise EmailParseError("Failed to read email file")
+            return file_handle.read()
+    except OSError as exc:
+        raise EmailParseError("Failed to read email file") from exc
 
 
 async def _eml_paths_for_upload(

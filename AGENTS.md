@@ -1,5 +1,102 @@
 # AGENTS.md
 
+<!-- BEGIN cwl-agent-guidance -->
+## Agent guidance (CWL governance)
+
+This section applies to every agent (Claude, Codex, Cursor, opencode, …) working
+in this repo.
+
+### Security Scan gate
+
+- Every PR runs the central **Security Scan** required gate: `osv-scan` +
+  `dependency-review` (diff-scoped) and `trivy-fs` (repo-wide, CRITICAL/HIGH,
+  fixable only). It runs on every PR base branch, **including stacked PRs**.
+- A failing **`trivy-fs` is a REAL finding, not a flake.** Read the job log — it
+  prints each finding's rule id / severity / file — or open the run's SARIF
+  results. Then **remediate**: bump the vulnerable dependency (this repo pins
+  Python deps in `requirements-*.txt`), fix the `Dockerfile` /
+  `docker-compose.*.yml` / `k8s/*.yaml` misconfig, or add a narrow, documented
+  `.trivyignore` / `.trivyignore.yaml` entry for a genuine false positive. Never
+  weaken, `continue-on-error`, or disable the gate.
+- **Worked example (currently blocking PRs here):** KSV-0118 (`runAsNonRoot`
+  unset) and KSV-0014 (`readOnlyRootFilesystem` unset), both HIGH k8s
+  misconfigs, fire on `k8s/*.yaml` because the Deployments/StatefulSet have no
+  `securityContext`. Fix by adding the container `securityContext`
+  (`runAsNonRoot: true`, `readOnlyRootFilesystem: true`, plus writable volume
+  mounts as needed) — do not ignore it.
+- A local `trivy` scan with a stale DB misses findings: run
+  `trivy --download-db-only` first, and scan the **merge ref**, not just the PR
+  head.
+- The org `code_scanning` ruleset is intentionally **CodeQL-only** (multiple
+  code-scanning tools can't converge on one PR ref). Gating is enforced by the
+  Security Scan **job result**, not by that rule — do **not** add Trivy,
+  Scorecard, or other tools to the `code_scanning` rule.
+
+### Code exploration
+
+- This repo has no `.codegraph/` index, so use normal search (grep/find/ripgrep).
+  If a `.codegraph/` index is later added at the repo root, prefer CodeGraph
+  (`codegraph explore "<query>"`, or the code-review-graph MCP tools) before
+  grep/find when understanding or locating code — it surfaces callers, callees,
+  and impact that text search misses.
+
+### Config & secrets (KV, not env)
+
+- **Org rule:** do **not** read config/secrets via `os.getenv()` / raw
+  environment variables at runtime. Read them from a KV / credential registry.
+  Org Actions secrets (e.g. `OPENAI_API_KEY`) flow **into** the KV via a
+  bootstrap/CI step; runtime reads from the KV — env is only transport into the
+  KV, never the runtime source. The reference implementation is
+  xtrmLLMBatchPython's pgcrypto-encrypted Postgres credential registry
+  (`get_credential(name)`); reuse that pattern (a DB-backed KV is fine) unless a
+  dedicated KV is adopted.
+- **Applies here:** this service authenticates to external systems (OpenAI, plus
+  SMTP/IMAP/POP3 mail) and holds signing/encryption secrets, so new config and
+  credentials belong in the registry, not scattered `os.getenv` reads.
+- **Already aligned — keep it this way:** per-tenant provider and mail
+  credentials (OpenAI keys, mailbox passwords) are stored in the DB-backed,
+  Fernet-encrypted tenant credential store and read from there at runtime (see
+  `backend/services/llm_provider_selection.py`, `backend/api/tenant_config.py`),
+  not from environment variables. Add any new tenant/app secret to that store.
+- **Known deviation to migrate:** the bootstrap keys `ENCRYPTION_KEY` and
+  `AUTH_SESSION_HMAC_SECRET` are still read from the environment at runtime via
+  pydantic-settings (`backend/core/config.py`). Treat these as the root-of-trust
+  that unlocks the registry and keep env strictly as bootstrap transport; do not
+  add further `os.getenv` secret reads, and migrate toward the KV pattern as it
+  is adopted.
+
+### This repo's role in the ecosystem
+
+- **This repo (naruon) is the ECOSYSTEM HUB:** email/PIM that DOM-decomposes
+  emails and files (PDF via the newsdom-api sidecar) into a persisted
+  content-graph + project-graph knowledge graph in Postgres, and composes the
+  ecosystem services below.
+- The org is an ecosystem around **naruon** (the hub: email/PIM that
+  DOM-decomposes emails/files into a persisted knowledge graph). Its components
+  are each a **standalone program that must ALSO work as a git submodule**,
+  grown separately and together: **waf-ids-ai-soc** = WAF/IDS/AI SOC/LB/APIM;
+  **clearfolio** = document viewer; **pg-erd-cloud** = ERD tool;
+  **contextual-orchestrator** = LLM cost/perf/upstream-LB gateway (beyond
+  LiteLLM); **codec-carver** = STT/omni-modal speech-video codec;
+  **fast-mlsirm** = LLM-as-a-Judge calibration + evaluation-item quality (uses
+  aFIPC FIPC + kaefa item-fit); **feelanet-adfs** = passwordless SSO
+  (OIDC/SCIM/ADFS/LDAP/FIDO2/OAuth2.1, eliminate passwords); **newsdom-api** =
+  PDF→DOM sidecar; **semantic-data-portal** = upper ontology/catalog/governance
+  plane with its own graph engine.
+
+### Research grounding (attach paper PDFs)
+
+- **Org rule:** substantive feature or process PRs should find the relevant
+  academic papers and **commit their PDFs into the PR** (e.g. a `docs/papers/`
+  or `references/` directory) with full citations, **respecting copyright** —
+  attach the PDF only when redistribution is permissible; otherwise cite, link,
+  and summarize instead.
+- **Example for this repo's domain:** a PR touching the content/project
+  knowledge-graph pipeline (DOM decomposition, entity/relation extraction,
+  grounded graph retrieval) should ground itself in the relevant layout-analysis
+  and knowledge-graph / grounded-retrieval literature.
+<!-- END cwl-agent-guidance -->
+
 ## Release governance defaults
 
 - GitHub Actions used by governed workflows must be pinned to full commit SHAs

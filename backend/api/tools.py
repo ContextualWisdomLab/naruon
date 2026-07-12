@@ -8,10 +8,12 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from core.url_validation import (
+    ValidatedHTTPSURLHost,
     _normalize_host,
     _reject_unsafe_ip_literal,
     _resolve_global_addresses,
 )
+from services.llm_provider_urls import build_pinned_https_async_client
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -251,7 +253,7 @@ def is_safe_webhook_url(url: str) -> bool:
     return True
 
 
-def validate_webhook_url(url: str) -> None:
+def validate_webhook_url_details(url: str) -> ValidatedHTTPSURLHost:
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme.lower() != "https":
         raise ValueError("Webhook URL must use https")
@@ -270,18 +272,38 @@ def validate_webhook_url(url: str) -> None:
         port = parsed.port or 443
     except ValueError as exc:
         raise ValueError("Webhook URL port must be valid") from exc
-    _resolve_global_addresses("Webhook URL", hostname, port)
+    addresses = _resolve_global_addresses("Webhook URL", hostname, port)
+
+    normalized_netloc = hostname if parsed.port is None else f"{hostname}:{port}"
+    normalized_url = parsed._replace(netloc=normalized_netloc).geturl()
+
+    return ValidatedHTTPSURLHost(
+        normalized_url=normalized_url,
+        hostname=hostname,
+        port=port,
+        addresses=addresses,
+    )
+
+
+def validate_webhook_url(url: str) -> None:
+    validate_webhook_url_details(url)
 
 
 def make_webhook_handler(webhook_url: str) -> ToolHandler:
-    validate_webhook_url(webhook_url)
+    validate_webhook_url_details(webhook_url)
 
     async def handler(params: Dict[str, Any]) -> Any:
-        validate_webhook_url(webhook_url)
-        async with httpx.AsyncClient() as client:
+        validated = validate_webhook_url_details(webhook_url)
+        client = build_pinned_https_async_client(
+            normalized_url=validated.normalized_url,
+            hostname=validated.hostname,
+            port=validated.port,
+            addresses=validated.addresses,
+        )
+        async with client:
             try:
                 response = await client.post(
-                    webhook_url, json={"parameters": params}, timeout=10.0
+                    validated.normalized_url, json={"parameters": params}, timeout=10.0
                 )
                 response.raise_for_status()
                 return response.json()

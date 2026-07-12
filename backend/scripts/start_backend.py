@@ -51,11 +51,21 @@ def _read_env_file(path: Path) -> dict[str, str]:
     return values
 
 
+def _expand_env_file_path(env_file: str) -> Path:
+    """Expand startup env-file paths, honoring operator-provided HOME."""
+    if not env_file.startswith("~/"):
+        return Path(env_file).expanduser()
+    operator_home = os.environ.get("HOME")
+    if operator_home:
+        return Path(operator_home) / env_file[2:]
+    return Path(env_file).expanduser()
+
+
 def _runtime_values() -> tuple[dict[str, str], list[Path]]:
     values: dict[str, str] = {}
     checked_paths: list[Path] = []
     for env_file in ENV_FILE_PATHS:
-        path = Path(env_file).expanduser()
+        path = _expand_env_file_path(env_file)
         checked_paths.append(path)
         values.update(_read_env_file(path))
     values.update({key: value for key, value in os.environ.items() if value})

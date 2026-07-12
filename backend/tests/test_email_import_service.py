@@ -15,6 +15,13 @@ from services.email_import_service import (
 )
 
 
+def _symlink_or_skip(target: Path, link: Path) -> None:
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation unavailable in this environment: {exc}")
+
+
 @pytest.mark.parametrize(
     "input_name,expected",
     [
@@ -448,7 +455,7 @@ async def test_import_single_eml_rejects_symlink(tmp_path):
     target_path = tmp_path / "target.txt"
     target_path.write_text("not an eml")
     symlink_path = tmp_path / "message.eml"
-    symlink_path.symlink_to(target_path)
+    _symlink_or_skip(target_path, symlink_path)
     session = AsyncMock(spec=AsyncSession)
 
     result = await email_import_module._import_single_eml(

@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -17,6 +19,23 @@ DEFAULT_ORIGIN_PORTS = {
     "http": 80,
     "https": 443,
 }
+
+ENV_FILE_PATHS = ("~/.env", "../.env", ".env")
+
+
+def _expand_env_file_path(env_file: str) -> str:
+    """Expand operator-home env paths consistently across platforms."""
+    if not env_file.startswith("~/"):
+        return env_file
+    operator_home = os.environ.get("HOME")
+    if operator_home:
+        return str(Path(operator_home) / env_file[2:])
+    return env_file
+
+
+def _env_file_paths() -> tuple[str, ...]:
+    """Return env files searched for runtime settings."""
+    return tuple(_expand_env_file_path(path) for path in ENV_FILE_PATHS)
 
 
 def canonical_origin(scheme: str, hostname: str, port: int | None) -> str:
@@ -113,10 +132,15 @@ class Settings(BaseSettings):
     ALLOWED_OIDC_HOSTS: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=("~/.env", "../.env", ".env"),
+        env_file=ENV_FILE_PATHS,
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    def __init__(self, **values: Any) -> None:
+        if "_env_file" not in values:
+            values["_env_file"] = _env_file_paths()
+        super().__init__(**values)
 
     @field_validator("READONLY_DATABASE_URL", mode="before")
     @classmethod

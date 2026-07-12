@@ -192,6 +192,14 @@ def _matches_queries(
     return False
 
 
+def _operator_home() -> Path:
+    """Return the operator home directory, honoring HOME in test/smoke shells."""
+    configured_home = os.environ.get("HOME")
+    if configured_home:
+        return Path(configured_home)
+    return Path.home()
+
+
 def _selected_upload_files(
     mail_dir: Path,
     queries: list[str],
@@ -279,7 +287,12 @@ def _selected_upload_files(
         final_dir = Path(
             os.environ.get(
                 "NARUON_PRIVATE_MAIL_CACHE",
-                str(Path.home() / ".cache" / "naruon" / "private-mail-upload-cache"),
+                str(
+                    _operator_home()
+                    / ".cache"
+                    / "naruon"
+                    / "private-mail-upload-cache"
+                ),
             )
         )
         final_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
