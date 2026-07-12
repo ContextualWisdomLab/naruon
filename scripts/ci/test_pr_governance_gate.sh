@@ -438,7 +438,12 @@ assert_check_publication_failure_fails_closed() {
 assert_workflow_separates_controller_from_required_check() {
   local workflow="$repo_root/.github/workflows/pr-governance.yml"
 
-  assert_in_file '^  checks: write$' "$workflow"
+	assert_in_file '^  checks: read$' "$workflow"
+	assert_in_file '^      checks: write$' "$workflow"
+	assert_in_file '^  pull-requests: read$' "$workflow"
+	assert_in_file '^      pull-requests: write$' "$workflow"
+	assert_in_file '^  issues: read$' "$workflow"
+	assert_in_file '^      issues: write$' "$workflow"
   assert_in_file '^    name: PR governance metadata controller$' "$workflow"
   assert_not_in_file '^    name: metadata-only gate evaluation$' "$workflow"
 }
