@@ -39,6 +39,7 @@ def test_extract_project_semantics_covers_project_management_domains():
         ProjectObjectType.INFRA_REQUIREMENT,
         ProjectObjectType.REPORT_DELTA,
         ProjectObjectType.WIKI_PROJECTION,
+        ProjectObjectType.DECISION,
     } <= object_types
     assert result.extractor_name == EXTRACTOR_NAME
     assert result.extractor_version == EXTRACTOR_VERSION
@@ -77,6 +78,61 @@ def test_milestone_extraction_records_date_evidence():
     assert milestones
     assert any("2026-07-15" in item.attributes["dates"] for item in milestones)
     assert any("date" in item.attributes["matched_terms"] for item in milestones)
+
+
+def test_decision_extraction_recognizes_resolved_approvals():
+    result = extract_project_semantics([
+        ProjectSourceSegment(
+            content_segment_uid="seg-decision-approved",
+            source_kind="email_body",
+            source_record_uid="<decision@example.com>",
+            safe_text_content=(
+                "의사결정: 결제 게이트웨이로 Stripe 채택을 결정했습니다. "
+                "경영진 결재 완료. Decision approved and signed-off."
+            ),
+            heading_path="Decisions",
+            segment_path="/document[1]/paragraph[1]",
+            ordinal_index=1,
+        )
+    ])
+
+    decisions = [
+        semantic_object
+        for semantic_object in result.objects
+        if semantic_object.object_type is ProjectObjectType.DECISION
+    ]
+
+    assert decisions
+    decision = decisions[0]
+    assert decision.source_segment_uids == ("seg-decision-approved",)
+    assert decision.title.startswith("Decision:")
+    assert 0.0 < decision.confidence <= 1.0
+    # The decided-state keywords that grounded the object are recorded verbatim,
+    # so the assertion never overstates why the segment is a decision.
+    assert "결정" in decision.attributes["matched_terms"]
+    assert "approved" in decision.attributes["matched_terms"]
+
+
+def test_decision_is_distinct_from_open_approval_issue():
+    # An *open* approval ("승인 필요" / "approval-needed") is an ISSUE, not a
+    # resolved DECISION — the two must not collapse into each other.
+    result = extract_project_semantics([
+        ProjectSourceSegment(
+            content_segment_uid="seg-open-approval",
+            source_kind="email_body",
+            source_record_uid="<open@example.com>",
+            safe_text_content="Blocker: PG사 승인 지연으로 승인 필요 상태입니다.",
+            heading_path="Risks",
+            segment_path="/document[1]/paragraph[2]",
+            ordinal_index=2,
+        )
+    ])
+
+    object_types = {
+        semantic_object.object_type for semantic_object in result.objects
+    }
+    assert ProjectObjectType.ISSUE in object_types
+    assert ProjectObjectType.DECISION not in object_types
 
 
 def test_short_ascii_keywords_require_token_boundary():
