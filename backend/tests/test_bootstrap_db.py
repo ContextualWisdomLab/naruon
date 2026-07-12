@@ -763,12 +763,12 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 {"user_id": smoke_user_id},
             )
             await conn.execute(
-                text("DELETE FROM emails WHERE user_id = :user_id"),
+                text("DELETE FROM email_records WHERE user_id = :user_id"),
                 {"user_id": smoke_user_id},
             )
             email_result = await conn.execute(
                 text("""
-                    INSERT INTO emails (
+                    INSERT INTO email_records (
                         user_id, organization_id, message_id, sender, recipients,
                         subject, "date", body
                     )
@@ -850,7 +850,7 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 {"user_id": smoke_user_id},
             )
             await conn.execute(
-                text("DELETE FROM emails WHERE user_id = :user_id"),
+                text("DELETE FROM email_records WHERE user_id = :user_id"),
                 {"user_id": smoke_user_id},
             )
     except (

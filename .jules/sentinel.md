@@ -100,6 +100,7 @@
 **Vulnerability:** JWT decoding remained allowlisted but static analysis could not prove the accepted algorithm when `jwt.decode(..., algorithms=...)` received module-level variables.
 **Learning:** Security-sensitive decode boundaries should make accepted algorithms obvious to both runtime readers and static scanners.
 **Prevention:** Pass explicit hardcoded lists such as `algorithms=["HS256"]` and `algorithms=["RS256"]` at the decode call sites, and keep header preflight checks aligned with those exact values.
+<<<<<<< HEAD
 
 ## 2024-05-24 - Fix Open Redirect via URL-encoded characters
 **Vulnerability:** Open Redirect in `toSafeReturnTo` allowed bypassing path validation using URL-encoded characters like `/%5c%5c`.
@@ -115,3 +116,10 @@
 **Vulnerability:** CI governance tests (`test_release_governance.py`) failed because `.github/workflows/dependency-review.yml` was missing and some workflows were missing `pull_request` triggers.
 **Learning:** PRs that introduce CI changes must still satisfy overarching repository governance tests that assert the presence and exact pinning of required security scanners (e.g. scorecard, trivy, dependency review).
 **Prevention:** Ensure required workflows exist (`dependency-review.yml`) with strictly pinned exact SHAs and proper `pull_request` triggers when enforcing CI governance tests.
+=======
+## 2026-07-07 - URL-Encoded Open Redirect Bypass
+
+**Vulnerability:** The `toSafeReturnTo` function in `frontend/src/app/auth/callback/page.tsx` validated paths to ensure they didn't start with double-slashes (`//`) or backslashes to prevent open redirects. However, attackers could bypass this validation by URL-encoding the payload (e.g. `/%5C%5Cexample.com` or `/%2fexample.com`).
+**Learning:** Checking for traversal or open redirect payloads directly on raw URLs is insufficient, as the browser will decode and redirect to the encoded malicious payload anyway.
+**Prevention:** Always decode the URI component (`decodeURIComponent`) and validate the decoded string to ensure that encoded bypass payloads are caught.
+>>>>>>> origin/develop

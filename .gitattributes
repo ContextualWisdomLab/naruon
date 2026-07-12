@@ -1,0 +1,3 @@
+*.pdf binary
+docs/research/non-pdf-dom-evidence/standards/*.txt -whitespace
+docs/research/language-agnostic-hybrid-retrieval/standards/*.html -whitespace

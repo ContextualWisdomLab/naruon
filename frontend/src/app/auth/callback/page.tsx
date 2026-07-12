@@ -2,6 +2,7 @@
 
 import { completeOidcRedirect } from '@/lib/oidc-session';
 import { useEffect, useState } from 'react';
+<<<<<<< HEAD
 
 export function toSafeReturnTo(returnTo: string | null | undefined) {
   try {
@@ -39,6 +40,9 @@ export function toSafeReturnTo(returnTo: string | null | undefined) {
     return '/';
   }
 }
+=======
+import { toSafeReturnTo } from './return-target';
+>>>>>>> origin/develop
 
 export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
