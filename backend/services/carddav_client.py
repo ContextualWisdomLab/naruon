@@ -10,15 +10,12 @@ same way ``LocalDavAdapters`` guards its writes.
 from __future__ import annotations
 
 import ipaddress
-import logging
 import socket
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
-
-logger = logging.getLogger(__name__)
 
 _ADDRESSBOOK_PROPFIND = (
     '<?xml version="1.0" encoding="utf-8"?>'

@@ -2,11 +2,11 @@ import socket
 
 import pytest
 
-import services.carddav_discovery as discovery
 from services.carddav_discovery import (
     CarddavDiscoveryResult,
     discover_carddav,
     discover_carddav_base_url,
+    socket as discovery_socket,
 )
 
 PUBLIC_IP = "93.184.216.34"
@@ -19,7 +19,7 @@ def force_global_dns(monkeypatch):
     def fake_getaddrinfo(host, port, *args, **kwargs):
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (PUBLIC_IP, port))]
 
-    monkeypatch.setattr(discovery.socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(discovery_socket, "getaddrinfo", fake_getaddrinfo)
 
 
 class FakeResponse:

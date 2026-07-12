@@ -3,7 +3,6 @@ import socket
 import pytest
 
 import services.carddav_client as carddav_client
-from services.carddav_client import CardDavClient
 
 PUBLIC_IP = "93.184.216.34"
 
@@ -55,7 +54,7 @@ def _factory(response, sink=None):
 @pytest.mark.asyncio
 async def test_list_address_books_reports_reachable_on_207():
     sink = []
-    client = CardDavClient(
+    client = carddav_client.CardDavClient(
         "https://dav.example.com/carddav/",
         username="user@example.com",
         password="secret",
@@ -72,7 +71,7 @@ async def test_list_address_books_reports_reachable_on_207():
 
 @pytest.mark.asyncio
 async def test_list_address_books_reachable_on_401():
-    client = CardDavClient(
+    client = carddav_client.CardDavClient(
         "https://dav.example.com/carddav/",
         http_client_factory=_factory(FakeResponse(401)),
     )
@@ -82,7 +81,7 @@ async def test_list_address_books_reachable_on_401():
 
 @pytest.mark.asyncio
 async def test_list_address_books_unreachable_on_500():
-    client = CardDavClient(
+    client = carddav_client.CardDavClient(
         "https://dav.example.com/carddav/",
         http_client_factory=_factory(FakeResponse(500)),
     )
@@ -93,7 +92,7 @@ async def test_list_address_books_unreachable_on_500():
 @pytest.mark.asyncio
 async def test_put_vcard_returns_status_and_targets_relative_path():
     sink = []
-    client = CardDavClient(
+    client = carddav_client.CardDavClient(
         "https://dav.example.com/carddav/",
         http_client_factory=_factory(FakeResponse(201), sink),
     )
@@ -105,9 +104,9 @@ async def test_put_vcard_returns_status_and_targets_relative_path():
 
 def test_private_base_url_rejected():
     with pytest.raises(ValueError):
-        CardDavClient("https://10.0.0.5/carddav/")
+        carddav_client.CardDavClient("https://10.0.0.5/carddav/")
 
 
 def test_non_https_base_url_rejected():
     with pytest.raises(ValueError):
-        CardDavClient("http://dav.example.com/carddav/")
+        carddav_client.CardDavClient("http://dav.example.com/carddav/")
