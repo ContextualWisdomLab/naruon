@@ -17,6 +17,13 @@ import { apiClient } from '@/lib/api-client';
 
 type SecurityTab = '보안 대시보드' | '접근 권한' | '감사 로그' | '외부 공유' | '정책';
 type ScopeKind = 'organization' | 'personal';
+type PermissionDraftDecision =
+  | 'allow_writeback'
+  | 'deny_external_write'
+  | 'deny_workspace_write'
+  | 'deny_region_export'
+  | 'deny_missing_consent';
+type PermissionResourceType = 'caldav_source' | 'carddav_source' | 'data_export' | 'webdav_repository' | 'provider_secret';
 
 type PolicyDecisionSummary = {
   resource_label: string;
@@ -77,11 +84,68 @@ type SecurityAccessSurface = {
   policy_order: PolicyOrderStep[];
 };
 
+type PermissionChangeIntentResponse = {
+  decision: PermissionDraftDecision;
+  resource_type: PermissionResourceType;
+  allowed: boolean;
+  reason: string;
+  evidence_label: string;
+  audit_event: 'security.permission_change_intent';
+  provider_write_executed: false;
+  denial_result: 'approval_required_before_external_write' | 'provider_denied_by_policy';
+  observed_at: string;
+};
+
 const tabs: SecurityTab[] = ['보안 대시보드', '접근 권한', '감사 로그', '외부 공유', '정책'];
+
+const permissionDraftOptions = [
+  {
+    value: 'allow_writeback',
+    label: '쓰기 허용 검토',
+    description: '고객 소유 원본에 대한 쓰기 의도를 승인 검토 상태로 둡니다.',
+    result: '허용 - 승인 전 외부 쓰기 실행 안 함',
+    resourceType: 'webdav_repository',
+  },
+  {
+    value: 'deny_external_write',
+    label: '외부 쓰기 차단',
+    description: '교차 조직 또는 승인되지 않은 원본 쓰기를 deny 결과로 저장합니다.',
+    result: '조직 차단 - 외부 쓰기 실행 안 함',
+    resourceType: 'provider_secret',
+  },
+  {
+    value: 'deny_workspace_write',
+    label: '워크스페이스 밖 쓰기 차단',
+    description: '서명 세션의 워크스페이스 밖 리소스 쓰기를 deny 결과로 저장합니다.',
+    result: '워크스페이스 차단 - 외부 쓰기 실행 안 함',
+    resourceType: 'webdav_repository',
+  },
+  {
+    value: 'deny_region_export',
+    label: '리전 외부 내보내기 차단',
+    description: '허용 리전을 벗어난 데이터 export 쓰기를 deny 결과로 저장합니다.',
+    result: '리전 차단 - 외부 쓰기 실행 안 함',
+    resourceType: 'data_export',
+  },
+  {
+    value: 'deny_missing_consent',
+    label: '동의 없는 CalDAV 쓰기 차단',
+    description: '필수 provider write consent가 없는 CalDAV 쓰기를 deny 결과로 저장합니다.',
+    result: '동의 차단 - 외부 쓰기 실행 안 함',
+    resourceType: 'caldav_source',
+  },
+] satisfies {
+  value: PermissionDraftDecision;
+  label: string;
+  description: string;
+  result: string;
+  resourceType: PermissionResourceType;
+}[];
 
 const reasonLabels: Record<string, string> = {
   allowed: '허용',
   organization_denied: '조직 차단',
+  workspace_denied: '워크스페이스 차단',
   data_region_denied: '리전 차단',
   consent_denied: '동의 차단',
   ownership_denied: '소유권 차단',
@@ -98,6 +162,8 @@ function sourceTypeLabel(sourceType: GovernanceSource['source_type'] | string) {
       return 'CalDAV 일정 원본';
     case 'carddav_source':
       return 'CardDAV 연락처 원본';
+    case 'data_export':
+      return '데이터 내보내기';
     case 'webdav_repository':
       return 'WebDAV 저장소';
     case 'provider_secret':
@@ -357,6 +423,32 @@ function DashboardTab({ data }: { data: SecurityAccessSurface }) {
 }
 
 function AccessTab({ data }: { data: SecurityAccessSurface }) {
+  const [permissionDraft, setPermissionDraft] = useState<PermissionDraftDecision>('allow_writeback');
+  const [permissionSaveStatus, setPermissionSaveStatus] = useState<string | null>(null);
+  const [permissionSaveError, setPermissionSaveError] = useState<string | null>(null);
+  const [permissionSaving, setPermissionSaving] = useState(false);
+  const [permissionIntentResult, setPermissionIntentResult] = useState<PermissionChangeIntentResponse | null>(null);
+  const selectedPermissionDraft = permissionDraftOptions.find((option) => option.value === permissionDraft) ?? permissionDraftOptions[0];
+
+  const handlePermissionSave = async () => {
+    setPermissionSaving(true);
+    setPermissionSaveStatus(null);
+    setPermissionSaveError(null);
+    setPermissionIntentResult(null);
+    try {
+      const result = await apiClient.post<PermissionChangeIntentResponse>('/api/security/permission-change-intent', {
+        decision: permissionDraft,
+        resource_type: selectedPermissionDraft.resourceType,
+      });
+      setPermissionIntentResult(result);
+      setPermissionSaveStatus(`권한 변경이 저장되었습니다: ${selectedPermissionDraft.label}`);
+    } catch {
+      setPermissionSaveError('권한 변경 저장 실패: 서버 감사 이벤트가 기록되지 않았습니다.');
+    } finally {
+      setPermissionSaving(false);
+    }
+  };
+
   return (
     <section aria-label="접근 권한 소스 거버넌스" className="space-y-5">
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
@@ -451,6 +543,80 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
           </>
         )}
       </div>
+
+      <section aria-label="보안 권한 편집" className="rounded-lg border border-border bg-card p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold">권한 편집</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              signed-session 스코프에서 외부 쓰기 권한 초안과 deny 결과를 저장합니다.
+            </p>
+          </div>
+          <span className="rounded-md bg-secondary px-2 py-1 text-xs font-bold text-muted-foreground">
+            외부 쓰기 실행 안 함
+          </span>
+        </div>
+        <label className="mt-4 grid gap-2 text-sm font-bold" htmlFor="security-permission-decision">
+          권한 판정 변경
+          <select
+            id="security-permission-decision"
+            aria-label="권한 판정 변경"
+            value={permissionDraft}
+            onChange={(event) => {
+              setPermissionDraft(event.target.value as PermissionDraftDecision);
+              setPermissionSaveStatus(null);
+              setPermissionSaveError(null);
+              setPermissionIntentResult(null);
+            }}
+            className="min-h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            {permissionDraftOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <p className="mt-2 text-xs font-semibold text-muted-foreground">{selectedPermissionDraft.description}</p>
+        <div className="mt-4 rounded-lg border border-border bg-background p-3 text-sm">
+          <p className="text-xs font-bold text-muted-foreground">denial result</p>
+          <p className="mt-1 font-bold">{selectedPermissionDraft.result}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { void handlePermissionSave(); }}
+          disabled={permissionSaving}
+          aria-busy={permissionSaving}
+          className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {permissionDraft === 'allow_writeback' ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}
+          {permissionSaving ? '권한 저장 중' : '권한 저장'}
+        </button>
+        {permissionSaveStatus ? (
+          <p role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{permissionSaveStatus}</p>
+        ) : null}
+        {permissionSaveError ? (
+          <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{permissionSaveError}</p>
+        ) : null}
+        {permissionIntentResult ? (
+          <div aria-label="권한 저장 서버 근거" className="mt-3 grid gap-2 rounded-lg border border-border bg-background p-3 text-xs">
+            <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
+              <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">서버 감사 이벤트</span>
+              <span className="break-all font-mono font-semibold sm:text-right">{permissionIntentResult.audit_event}</span>
+            </div>
+            <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
+              <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">정책 결과</span>
+              <span className="font-semibold sm:text-right">{reasonLabel(permissionIntentResult.reason)}</span>
+            </div>
+            <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
+              <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">리소스</span>
+              <span className="font-semibold sm:text-right">{sourceTypeLabel(permissionIntentResult.resource_type)}</span>
+            </div>
+            <div className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
+              <span className="shrink-0 whitespace-nowrap font-bold text-muted-foreground">제공자 쓰기</span>
+              <span className="font-semibold sm:text-right">실행 안 함</span>
+            </div>
+          </div>
+        ) : null}
+      </section>
     </section>
   );
 }
@@ -685,31 +851,57 @@ export function SecurityLayout() {
   }, [activeTab, data, error, loading]);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden bg-background text-foreground">
-      <header className="flex h-20 shrink-0 items-center overflow-hidden border-b border-border bg-card px-4 md:px-8">
-        <h1 className="flex shrink-0 items-center gap-3 text-xl font-bold md:text-2xl">
-          <ShieldCheck className="size-6 text-primary" />
-          <span className="hidden sm:inline">보안과 관리자</span>
+    <div className="flex h-full min-h-0 min-w-0 overflow-x-hidden bg-background text-foreground">
+      {/* Local navigation (LNB): desktop left sidebar for the security domain's areas */}
+      <nav
+        aria-label="보안 로컬 탐색"
+        className="hidden w-60 shrink-0 flex-col gap-1 border-r border-border bg-card p-4 lg:flex"
+      >
+        <h1 className="mb-2 flex items-center gap-2 px-2 text-lg font-bold">
+          <ShieldCheck className="size-5 text-primary" aria-hidden="true" />
+          <span>보안과 관리자</span>
         </h1>
-        <p className="sr-only">관리자 경계</p>
-        <div className="ml-4 flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1 md:ml-8">
-          {tabs.map((tab) => (
-            <button type="button"
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition-colors md:px-4 ${
-                activeTab === tab
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-secondary'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </header>
+        {tabs.map((tab) => (
+          <button
+            type="button"
+            key={tab}
+            aria-current={activeTab === tab ? 'page' : undefined}
+            onClick={() => setActiveTab(tab)}
+            className={`rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+              activeTab === tab
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-secondary'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </nav>
 
-      <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Mobile local tabs: the LNB collapses to a horizontal tab strip below the desktop breakpoint */}
+        <header className="flex h-16 shrink-0 items-center overflow-hidden border-b border-border bg-card px-4 lg:hidden">
+          <h1 className="sr-only">보안과 관리자</h1>
+          <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+            {tabs.map((tab) => (
+              <button
+                type="button"
+                key={tab}
+                aria-current={activeTab === tab ? 'page' : undefined}
+                onClick={() => setActiveTab(tab)}
+                className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition-colors ${
+                  activeTab === tab
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-secondary'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
         <div className="mx-auto max-w-6xl space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -758,6 +950,7 @@ export function SecurityLayout() {
           {content}
         </div>
       </main>
+      </div>
     </div>
   );
 }
