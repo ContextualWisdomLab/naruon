@@ -35,10 +35,12 @@ from services.embedding import (
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
 from services.project_graph import (
     ProjectSourceSegment,
-    extract_project_semantics,
     persist_project_graph_projection,
 )
-from services.project_graph.llm_extractor import extract_project_semantics_llm
+from services.project_graph.extractor_registry import (
+    KgExtractorContext,
+    run_extraction,
+)
 from services.threading_service import (
     assign_thread_id,
     generate_email_fingerprint,
@@ -683,31 +685,27 @@ async def _extract_project_semantics_for_import(
     *,
     embedding_provider: EmailImportEmbeddingProvider | None,
 ):
-    """Select the configured extractor; LLM failures fall back to keyword.
+    """Project segments into the graph via the configured extractor seam.
 
-    The LLM extractor reuses the import's OpenAI-compatible provider
-    credentials and enforces segment citations, so it cannot introduce
-    uncited claims; any provider/parse failure degrades to the deterministic
-    keyword baseline instead of losing the projection entirely.
+    Resolution goes through the named+versioned KG extractor registry
+    (``services.project_graph.extractor_registry``) keyed by
+    ``settings.PROJECT_GRAPH_EXTRACTOR``. The LLM extractors reuse the import's
+    OpenAI-compatible provider credentials and enforce segment citations, so
+    they cannot introduce uncited claims; a missing credential, an unconfigured
+    orchestrator endpoint, or any provider/parse failure degrades down the chain
+    to the deterministic keyword baseline instead of losing the projection.
     """
-    if (
-        settings.PROJECT_GRAPH_EXTRACTOR == "llm"
-        and embedding_provider is not None
-        and embedding_provider.api_key
-    ):
-        try:
-            return await extract_project_semantics_llm(
-                source_segments,
-                api_key=embedding_provider.api_key,
-                base_url=embedding_provider.base_url,
-                model=settings.OPENAI_MODEL,
-            )
-        except Exception:
-            logger.warning(
-                "LLM project graph extraction failed; falling back to keyword",
-                exc_info=True,
-            )
-    return extract_project_semantics(source_segments)
+    context = KgExtractorContext(
+        api_key=embedding_provider.api_key if embedding_provider else None,
+        base_url=embedding_provider.base_url if embedding_provider else None,
+        model=settings.OPENAI_MODEL,
+        orchestrator_base_url=settings.PROJECT_GRAPH_ORCHESTRATOR_BASE_URL,
+    )
+    return await run_extraction(
+        source_segments,
+        selector=settings.PROJECT_GRAPH_EXTRACTOR,
+        context=context,
+    )
 
 
 async def _persist_project_graph_projection(
