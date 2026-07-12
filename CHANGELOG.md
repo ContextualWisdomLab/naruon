@@ -1,4 +1,8 @@
 ## [Unreleased]
+### OSMU 분리 (rankweave)
+
+- hybrid retrieval의 점수 융합·질의 정규화 프리미티브를 독립 패키지 `rankweave`(PyPI, Apache-2.0)로 분리하고 naruon이 이를 의존성으로 소비하도록 배선했습니다: `backend/services/hybrid_retrieval`의 로컬 `score_fusion.py`·`query_normalization.py`를 삭제하고 해시 고정된 `rankweave==0.1.0`을 `requirements.txt`/`requirements-hashes.txt`에 추가했으며, 패키지 `__init__`은 동일한 8개 심볼을 `rankweave`에서 재수출하는 naruon 측 seam으로 유지됩니다(동작 무변경 — 융합 테스트 26건 통과, `retrieval_channels` 등 기존 소비자는 `services.hybrid_retrieval`에서 계속 import). rankweave는 standalone 제품이자 submodule/의존성으로 재사용 가능한 OSMU("따로, 또 같이") 산출물입니다.
+
 ### 기능 추가 (Features)
 - `text_analyzer`, `base64_encoder`, `base64_decoder` 등의 실용적인 유틸리티 도구들을 추가했습니다.
 
