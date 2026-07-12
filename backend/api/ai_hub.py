@@ -16,6 +16,7 @@ from db.models import (
     WorkflowDefinition,
 )
 from db.session import get_db
+from services.ai_grounding_eval import load_grounding_metrics
 from services.llm_provider_readiness import (
     is_llm_provider_configured,
     llm_provider_model_label,
@@ -505,6 +506,32 @@ async def get_ai_hub_surface(
         len(audit_events),
     )
 
+    grounding = await load_grounding_metrics(
+        db,
+        user_id=auth_context.user_id,
+        organization_id=auth_context.organization_id,
+        workspace_id=auth_context.workspace_id,
+    )
+    evaluation_metrics = _evaluation_metrics(
+        len(prompt_cards),
+        len(providers),
+        active_provider_count,
+        len(audit_events),
+    )
+    # Real AI-quality signal alongside the configuration-count metrics: how much
+    # extracted structure is bound to source evidence, and how often humans corrected it.
+    evaluation_metrics.append(
+        AiHubEvaluationMetric(
+            metric_key="extraction_grounding",
+            metric_label="추출 근거 결속률",
+            score_value=grounding.as_score(),
+            trend_text=(
+                f"{grounding.grounded_objects}/{grounding.total_objects} objects cite source"
+                f" · {grounding.correction_count} human corrections"
+            ),
+        )
+    )
+
     return AiHubSurfaceResponse(
         summary_cards=_summary_cards(
             len(prompt_cards),
@@ -517,11 +544,6 @@ async def get_ai_hub_surface(
         prompt_cards=prompt_cards,
         workflow_cards=workflow_cards,
         agent_cards=agent_cards,
-        evaluation_metrics=_evaluation_metrics(
-            len(prompt_cards),
-            len(providers),
-            active_provider_count,
-            len(audit_events),
-        ),
+        evaluation_metrics=evaluation_metrics,
         run_events=run_events,
     )
