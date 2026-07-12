@@ -115,6 +115,11 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
 
+    # Clearfolio document-viewer integration (operator-configured in-cluster
+    # Service base URL, e.g. http://clearfolio:8080). Integration is disabled
+    # while unset — the 미리보기 surface stays hidden.
+    CLEARFOLIO_BASE_URL: str | None = None
+
     # Hybrid search fusion (see services/hybrid_retrieval/score_fusion.py;
     # defaults grounded in Bruch, Gai & Ingber 2023 and Cormack et al. 2009)
     SEARCH_FUSION_STRATEGY: str = "convex_combination"

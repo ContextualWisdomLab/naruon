@@ -48,6 +48,12 @@ class MockResult:
     def scalars(self):
         return MockScalars(self._rows)
 
+    def all(self):
+        return self._rows
+
+    def scalar_one(self):
+        return self._rows[0] if self._rows else 0
+
 
 class MockSession:
     def __init__(self):
