@@ -34,8 +34,14 @@ export function toSafeReturnTo(returnTo: string | null | undefined) {
     }
 
     const safePath = url.pathname + url.search + url.hash;
+    const decodedSafePath = decodeURIComponent(safePath);
 
-    if (!safePath.startsWith("/") || safePath.startsWith("//")) {
+    if (
+      !safePath.startsWith("/") ||
+      safePath.startsWith("//") ||
+      decodedSafePath.startsWith("//") ||
+      /[\u0000-\u001f\u007f\\]/.test(decodedSafePath)
+    ) {
       return "/";
     }
 

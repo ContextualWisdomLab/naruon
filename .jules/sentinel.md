@@ -105,3 +105,9 @@
 **Vulnerability:** The `toSafeReturnTo` URL checker in `return-target.ts` verified `startsWith("/")` and checked for bad characters like `\` in the raw input string but failed to account for URL-encoded characters (like `/%2F%2F` or `/%5C%5C`). Since browsers will decode these after the redirect and treat them as scheme-relative or external URLs (e.g. `//example.com`), this allows an attacker to bypass origin checks and cause an Open Redirect.
 **Learning:** Relying solely on raw string checks without explicitly decoding the user input allows attackers to sneak bypasses through url-encoding or double-url-encoding payloads that browsers eventually execute.
 **Prevention:** Always parse and `decodeURIComponent` untrusted redirect inputs, and re-apply path boundary validations (like rejecting `//` and `/\`) on the decoded result before approving the path for redirection.
+
+## 2026-07-07 - URL-Encoded Open Redirect Bypass
+
+**Vulnerability:** The `toSafeReturnTo` function in `frontend/src/app/auth/callback/page.tsx` validated paths to ensure they didn't start with double-slashes (`//`) or backslashes to prevent open redirects. However, attackers could bypass this validation by URL-encoding the payload (e.g. `/%5C%5Cexample.com` or `/%2fexample.com`).
+**Learning:** Checking for traversal or open redirect payloads directly on raw URLs is insufficient, as the browser will decode and redirect to the encoded malicious payload anyway.
+**Prevention:** Always decode the URI component (`decodeURIComponent`) and validate the decoded string to ensure that encoded bypass payloads are caught.

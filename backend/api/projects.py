@@ -89,11 +89,28 @@ class ProjectTraceEdgeResponse(BaseModel):
     citation_bundle: list[ProjectCitationResponse]
 
 
+class ProjectTraceRelationEndpointResponse(BaseModel):
+    object_uid: str
+    object_type: str
+    title: str
+
+
+class ProjectTraceRelationResponse(BaseModel):
+    relation_uid: str
+    relation_type: str
+    source: ProjectTraceRelationEndpointResponse
+    target: ProjectTraceRelationEndpointResponse
+    confidence: float
+    source_segment_uids: list[str]
+    citation_bundle: list[ProjectCitationResponse]
+
+
 class ProjectTraceabilityResponse(BaseModel):
     project_uid: str
     candidate: ProjectCandidateResponse
     objects: list[ProjectTraceObjectResponse]
     edges: list[ProjectTraceEdgeResponse]
+    relations: list[ProjectTraceRelationResponse]
 
 
 class ProjectEvidenceResponse(BaseModel):
@@ -373,6 +390,29 @@ def _traceability_response(
                 ],
             )
             for edge in traceability.edges
+        ],
+        relations=[
+            ProjectTraceRelationResponse(
+                relation_uid=relation.relation_uid,
+                relation_type=relation.relation_type,
+                source=ProjectTraceRelationEndpointResponse(
+                    object_uid=relation.source.object_uid,
+                    object_type=relation.source.object_type,
+                    title=relation.source.title,
+                ),
+                target=ProjectTraceRelationEndpointResponse(
+                    object_uid=relation.target.object_uid,
+                    object_type=relation.target.object_type,
+                    title=relation.target.title,
+                ),
+                confidence=relation.confidence,
+                source_segment_uids=list(relation.source_segment_uids),
+                citation_bundle=[
+                    _citation_response(citation)
+                    for citation in relation.citation_bundle
+                ],
+            )
+            for relation in traceability.relations
         ],
     )
 

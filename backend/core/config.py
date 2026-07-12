@@ -96,10 +96,22 @@ class Settings(BaseSettings):
     # Best-effort projection of imported-email content segments into the project
     # semantic graph. Off by default; failure never affects email import.
     PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
-    # Which extractor projects segments into the graph: "keyword"
-    # (deterministic baseline) or "llm" (grounded extraction with enforced
-    # segment citations; falls back to keyword on any failure).
+    # Which extractor projects segments into the graph, resolved through the
+    # named+versioned KG extractor seam (services/project_graph/extractor_registry):
+    #   "keyword"      — deterministic baseline (the structural fallback),
+    #   "llm"          — grounded LLM extraction (enforced segment citations),
+    #   "orchestrator" — the same grounded LLM extraction routed through the
+    #                    contextual-orchestrator gateway (see below).
+    # Every selection falls back to "keyword" on any failure, so rule-based
+    # extraction stays fallback/reference only.
     PROJECT_GRAPH_EXTRACTOR: str = "keyword"
+    # OpenAI-compatible base URL of the contextual-orchestrator LLM gateway that
+    # grounded extraction is routed through when PROJECT_GRAPH_EXTRACTOR is
+    # "orchestrator". Must be HTTPS and exact-host allowlisted by
+    # ALLOWED_LLM_BASE_URL_HOSTS (enforced by build_llm_provider_http_client);
+    # unset routing fails closed to the deterministic keyword extractor. The
+    # provider API key remains the tenant's Fernet-encrypted credential.
+    PROJECT_GRAPH_ORCHESTRATOR_BASE_URL: str | None = None
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (
