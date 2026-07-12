@@ -29,12 +29,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # No-op: a merge revision only unifies the migration graph. Both parent
-    # branches already applied their schema changes, so there is nothing to do.
-    pass
+    """No-op: this merge revision only unifies the two alembic heads.
+
+    Both parent branches already applied their own schema changes, so a merge
+    revision carries no operations of its own -- there is nothing to run here.
+    """
 
 
 def downgrade() -> None:
-    # No-op: this revision adds no schema; splitting the graph back into two
-    # heads is intentionally unsupported, so there is nothing to reverse.
-    pass
+    """No-op: a merge revision adds no schema, so there is nothing to reverse.
+
+    Splitting the unified graph back into two heads is intentionally
+    unsupported.
+    """
