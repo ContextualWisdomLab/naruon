@@ -107,30 +107,18 @@ def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
     preventing log injection vulnerabilities.
     """
     import logging
-    from fastapi.testclient import TestClient
-    from main import app
 
     caplog.set_level(logging.INFO)
-    # URL encode the payload so httpx doesn't reject it; FastAPI will decode it back to the raw control chars
-    malicious_path = "user123/projects/test%1B%5B31minjected%0A%0D"
-    with TestClient(app) as client:
-        # Pass raw path to simulate actual request if unquote fails; wait, TestClient accepts raw URL strings but they are parsed.
-        # Use simple printable characters for request, and we'll manually call the handler to verify logging logic
-        pass
+    malicious_path = "user123/projects/test\x1b[31minjected\n\r"
 
     # Since HTTP clients block raw control chars and starlette unquotes but might reject it before reaching our route,
     # we test the handler directly to ensure the logger is using repr().
-    from api.dav import _ensure_dav_owner_scope
-
-    # We can invoke the route logic through the actual function or simply check the string formatting manually,
-    # but since this is an integration test, we can use the app but pass standard requests. Wait, the logger logic
-    # itself is the core fix. Let's just mock the request and call dav_handler directly.
     import asyncio
     from fastapi import Request
 
     scope = {
         "type": "http",
-        "method": "PROPFIND",
+        "method": "OPTIONS",
         "headers": [],
     }
 
@@ -139,9 +127,8 @@ def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
         from api.auth import AuthContext
         auth_ctx = AuthContext(user_id="user123", organization_id="org1", role="user", group_ids=[], workspace_id="ws1")
 
-        # pass raw unquoted path with escape sequences
         from api.dav import dav_handler
-        await dav_handler(request=req, path="user123/projects/test\x1b[31minjected\n\r", auth_context=auth_ctx)
+        await dav_handler(request=req, path=malicious_path, auth_context=auth_ctx)
 
     asyncio.run(run_handler())
 
