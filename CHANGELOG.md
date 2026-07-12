@@ -2,6 +2,10 @@
 ### 기능 추가 (Features)
 - `text_analyzer`, `base64_encoder`, `base64_decoder` 등의 실용적인 유틸리티 도구들을 추가했습니다.
 
+### 테스트/품질 (PostgreSQL Smoke Evidence)
+
+- 실제 PostgreSQL에서 상시 실패하던 `@pytest.mark.postgres` smoke 계열 14건을 복구해 전체 백엔드 스위트가 실 DB 기준으로 통과하도록 했습니다 (naruon#1041). 3개 유형: (a) `agent_run_records`↔`workflow_definitions`, `workspace_documents`↔`workspace_entities`에 누락된 `relationship()`를 추가해 same-flush parent/child INSERT의 FK 순서 위반을 해소하고, 모든 FK 쌍에 relationship을 강제하는 가드 테스트(`tests/test_model_relationship_integrity.py`)를 추가했습니다. (b) 스키마와 어긋난 raw-SQL 시드(`emails`→`email_records`, 잘못된 `RETURNING` 컬럼, 누락된 NOT NULL 컬럼, asyncpg UNION 파라미터 정수 캐스팅, `EncryptedString` 암호화 시드)를 정정했습니다. (c) 동작 실패(테넌트 설정 org 스코프 누락, 추출기 requirement+feature 2객체 반영, org-scoped 카운트에 유니크 org 사용, `datetime.utcnow` deprecation, 엔진 dispose 누락으로 인한 ResourceWarning)를 수정했습니다. 세 유형은 각각 flaky-test 연구의 명명된 근본 원인(Test Order Dependency 59%·Infrastructure 28%; Gruber et al. 2021 arXiv:2101.09077, Rasheed et al. 2022 arXiv:2212.00908)에 대응하며, 근거·표준·OSMU 평가를 `docs/engineering/postgres-smoke-evidence-repair.md`에 기록하고 재발 방지 안티패턴을 `AGENTS.md`에 추가했습니다.
+
 ### 데이터 모델 정합화 (Email Model Reconciliation)
 
 - 이메일 데이터 모델을 단일 소스(`email_records`)로 정합화했습니다 (naruon#975 P0): 어디서도 참조되지 않고 마이그레이션도 없던 병렬 계정 중심 모델 7종(`user_accounts`, `provider_accounts`, `email_raws`, `email_messages`, `email_instances`, `email_threads`, `email_thread_edges`)을 제거하고, 마이그레이션 `0011_email_model_reconciliation`이 dev/test DB의 잔존 테이블을 방어적으로 정리합니다(운영 DB에는 애초에 생성된 적 없음). 재도입 방지 가드 테스트와 결정 기록(`docs/engineering/email-model-reconciliation.md`, JMAP RFC 8620/8621·RFC 5322 근거)을 추가했습니다. 계정/프로바이더 설정 평면은 `tenant_configs`(/api/accounts)·`caldav_accounts`·`webdav_accounts`로 유지되며, P2 멀티계정 identity binding은 병렬 저장소가 아닌 KG 1급 엔티티로 이 기반 위에 구축됩니다.

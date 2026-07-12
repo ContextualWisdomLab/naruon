@@ -58,8 +58,8 @@ async def test_project_graph_projection_persists_source_cited_objects_and_edges(
     project_graph_sessionmaker,
 ):
     user_id = f"project-user-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
-    workspace_id = "workspace-org-acme"
+    organization_id = f"org-projection-{uuid.uuid4().hex[:12]}"
+    workspace_id = f"workspace-{organization_id}"
     async with project_graph_sessionmaker() as session:
         segment = await _seed_source_segment(
             session,
@@ -77,10 +77,23 @@ async def test_project_graph_projection_persists_source_cited_objects_and_edges(
         )
         await session.commit()
 
-        assert len(result.objects) == 1
-        assert len(result.edges) == 1
-        persisted_object = result.objects[0]
-        persisted_edge = result.edges[0]
+        # The deterministic reference extractor emits a REQUIREMENT and a
+        # FEATURE for the seeded sentence; assert on the requirement and
+        # its evidence edge specifically.
+        assert len(result.objects) == 2
+        assert len(result.edges) == 2
+        assert sorted(obj.object_type for obj in result.objects) == [
+            "feature",
+            "requirement",
+        ]
+        persisted_object = next(
+            obj for obj in result.objects if obj.object_type == "requirement"
+        )
+        persisted_edge = next(
+            edge
+            for edge in result.edges
+            if edge.target_object_id == persisted_object.project_graph_object_id
+        )
         assert persisted_object.user_id == user_id
         assert persisted_object.organization_id == organization_id
         assert persisted_object.workspace_id == workspace_id
@@ -170,8 +183,8 @@ async def test_project_graph_projection_upserts_existing_records(
     project_graph_sessionmaker,
 ):
     user_id = f"project-user-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
-    workspace_id = "workspace-org-acme"
+    organization_id = f"org-projection-{uuid.uuid4().hex[:12]}"
+    workspace_id = f"workspace-{organization_id}"
     async with project_graph_sessionmaker() as session:
         segment = await _seed_source_segment(
             session,
@@ -207,16 +220,20 @@ async def test_project_graph_projection_upserts_existing_records(
                 ProjectGraphEdgeRecord.user_id == user_id
             )
         )
-        persisted_object = await session.scalar(
-            select(ProjectGraphObjectRecord).where(
-                ProjectGraphObjectRecord.user_id == user_id
+        persisted_objects = (
+            await session.scalars(
+                select(ProjectGraphObjectRecord).where(
+                    ProjectGraphObjectRecord.user_id == user_id
+                )
             )
-        )
+        ).all()
 
-        assert object_count == 1
-        assert edge_count == 1
-        assert persisted_object is not None
-        assert persisted_object.status_code == "confirmed"
+        # Re-running the projection upserts the same two extracted
+        # objects (requirement + feature) instead of duplicating them.
+        assert object_count == 2
+        assert edge_count == 2
+        assert persisted_objects
+        assert {obj.status_code for obj in persisted_objects} == {"confirmed"}
 
 
 @pytest.mark.asyncio
@@ -224,8 +241,8 @@ async def test_project_graph_correction_records_before_after_and_updates_project
     project_graph_sessionmaker,
 ):
     user_id = f"project-user-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
-    workspace_id = "workspace-org-acme"
+    organization_id = f"org-projection-{uuid.uuid4().hex[:12]}"
+    workspace_id = f"workspace-{organization_id}"
     async with project_graph_sessionmaker() as session:
         segment = await _seed_source_segment(
             session,
@@ -279,11 +296,12 @@ async def test_project_graph_correction_records_before_after_and_updates_project
 async def test_project_graph_projection_rejects_cross_scope_source_segments(
     project_graph_sessionmaker,
 ):
+    organization_id = f"org-projection-{uuid.uuid4().hex[:12]}"
     async with project_graph_sessionmaker() as session:
         segment = await _seed_source_segment(
             session,
             user_id=f"project-user-{uuid.uuid4().hex}",
-            organization_id="org-acme",
+            organization_id=organization_id,
         )
         extraction = extract_project_semantics([_source_segment(segment)])
 
@@ -292,8 +310,8 @@ async def test_project_graph_projection_rejects_cross_scope_source_segments(
                 session,
                 extraction=extraction,
                 user_id="different-user",
-                organization_id="org-acme",
-                workspace_id="workspace-org-acme",
+                organization_id=organization_id,
+                workspace_id=f"workspace-{organization_id}",
             )
 
 
