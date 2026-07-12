@@ -104,7 +104,12 @@ class KgExtractor(Protocol):
         segments: list[ProjectSourceSegment],
         *,
         context: KgExtractorContext,
-    ) -> ProjectSemanticExtractionResult: ...
+    ) -> ProjectSemanticExtractionResult:
+        # Structural contract only; concrete extractors override this. The
+        # Protocol method is never invoked directly (no implementation calls
+        # super().extract), so raising here is unreachable at runtime and only
+        # documents that the method is abstract.
+        raise NotImplementedError
 
 
 class DeterministicKeywordExtractor:

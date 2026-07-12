@@ -19,7 +19,6 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-import services.project_graph.extractor_registry as registry_module
 from services.project_graph.extractor_registry import (
     DETERMINISTIC_EXTRACTOR_NAME,
     LLM_EXTRACTOR_NAME,
@@ -38,6 +37,11 @@ from services.project_graph.extractor_registry import (
 )
 from services.project_graph.models import ProjectSourceSegment
 
+# The extraction cores are imported into the registry module namespace, so
+# tests patch them by dotted path there (keeps a single import style for the
+# module under test — no module-alias import alongside the ``from`` import).
+_REGISTRY_MODULE = "services.project_graph.extractor_registry"
+
 
 def _segment(uid: str = "seg1", text: str = "The system must support export.") -> ProjectSourceSegment:
     return ProjectSourceSegment(
@@ -53,6 +57,12 @@ def _segment(uid: str = "seg1", text: str = "The system must support export.") -
 
 def _llm_context() -> KgExtractorContext:
     return KgExtractorContext(api_key="key", base_url=None, model="gpt-test")
+
+
+def _patch_cores(monkeypatch, *, llm, keyword):
+    """Patch the two extraction cores where the registry imports them."""
+    monkeypatch.setattr(f"{_REGISTRY_MODULE}.extract_project_semantics_llm", llm)
+    monkeypatch.setattr(f"{_REGISTRY_MODULE}.extract_project_semantics", keyword)
 
 
 # --- Contract / registry shape ---------------------------------------------
@@ -133,8 +143,7 @@ async def test_run_extraction_uses_primary_on_success(monkeypatch):
     sentinel = object()
     llm_mock = AsyncMock(return_value=sentinel)
     keyword_mock = Mock(return_value=object())
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", llm_mock)
-    monkeypatch.setattr(registry_module, "extract_project_semantics", keyword_mock)
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
 
     result = await run_extraction(
         [_segment()], selector=SELECTOR_LLM, context=_llm_context()
@@ -148,13 +157,10 @@ async def test_run_extraction_uses_primary_on_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_extraction_falls_back_when_llm_raises(monkeypatch):
     keyword_sentinel = object()
-    monkeypatch.setattr(
-        registry_module,
-        "extract_project_semantics_llm",
-        AsyncMock(side_effect=RuntimeError("provider down")),
-    )
-    monkeypatch.setattr(
-        registry_module, "extract_project_semantics", Mock(return_value=keyword_sentinel)
+    _patch_cores(
+        monkeypatch,
+        llm=AsyncMock(side_effect=RuntimeError("provider down")),
+        keyword=Mock(return_value=keyword_sentinel),
     )
 
     result = await run_extraction(
@@ -168,9 +174,8 @@ async def test_run_extraction_falls_back_when_llm_raises(monkeypatch):
 async def test_run_extraction_falls_back_when_credentials_missing(monkeypatch):
     keyword_sentinel = object()
     llm_mock = AsyncMock()
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", llm_mock)
-    monkeypatch.setattr(
-        registry_module, "extract_project_semantics", Mock(return_value=keyword_sentinel)
+    _patch_cores(
+        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
     )
 
     # No api_key/model -> the LLM extractor is unavailable and the chain
@@ -187,9 +192,8 @@ async def test_run_extraction_falls_back_when_credentials_missing(monkeypatch):
 async def test_keyword_selector_never_calls_llm(monkeypatch):
     keyword_sentinel = object()
     llm_mock = AsyncMock()
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", llm_mock)
-    monkeypatch.setattr(
-        registry_module, "extract_project_semantics", Mock(return_value=keyword_sentinel)
+    _patch_cores(
+        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
     )
 
     result = await run_extraction(
@@ -207,8 +211,7 @@ async def test_keyword_selector_never_calls_llm(monkeypatch):
 async def test_orchestrator_routing_targets_the_orchestrator_base_url(monkeypatch):
     sentinel = object()
     llm_mock = AsyncMock(return_value=sentinel)
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", llm_mock)
-    monkeypatch.setattr(registry_module, "extract_project_semantics", Mock())
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=Mock())
 
     context = KgExtractorContext(
         api_key="key",
@@ -231,9 +234,8 @@ async def test_orchestrator_routing_targets_the_orchestrator_base_url(monkeypatc
 async def test_orchestrator_routing_falls_back_when_unconfigured(monkeypatch):
     keyword_sentinel = object()
     llm_mock = AsyncMock()
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", llm_mock)
-    monkeypatch.setattr(
-        registry_module, "extract_project_semantics", Mock(return_value=keyword_sentinel)
+    _patch_cores(
+        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
     )
 
     # orchestrator selector but no orchestrator_base_url resolved -> unavailable,
@@ -250,8 +252,7 @@ async def test_orchestrator_routing_falls_back_when_unconfigured(monkeypatch):
 @pytest.mark.asyncio
 async def test_direct_llm_routing_uses_provider_base_url(monkeypatch):
     llm_mock = AsyncMock(return_value=object())
-    monkeypatch.setattr(registry_module, "extract_project_semantics_llm", llm_mock)
-    monkeypatch.setattr(registry_module, "extract_project_semantics", Mock())
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=Mock())
 
     context = KgExtractorContext(
         api_key="key",
@@ -269,17 +270,13 @@ async def test_direct_llm_routing_uses_provider_base_url(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_deterministic_extractor_ignores_llm_context():
+async def test_deterministic_extractor_ignores_llm_context(monkeypatch):
     sentinel = object()
+    monkeypatch.setattr(
+        f"{_REGISTRY_MODULE}.extract_project_semantics", Mock(return_value=sentinel)
+    )
     extractor = DeterministicKeywordExtractor()
-    import services.project_graph.extractor_registry as mod
-
-    original = mod.extract_project_semantics
-    mod.extract_project_semantics = Mock(return_value=sentinel)
-    try:
-        result = await extractor.extract([_segment()], context=KgExtractorContext())
-    finally:
-        mod.extract_project_semantics = original
+    result = await extractor.extract([_segment()], context=KgExtractorContext())
     assert result is sentinel
 
 
