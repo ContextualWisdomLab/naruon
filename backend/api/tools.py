@@ -207,7 +207,6 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
 
 async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     email_content = params.get("email_content", "")
-    sender_domain = params.get("sender_domain", "")
     is_suspicious = "password" in email_content.lower() or "bank" in email_content.lower()
     return {
         "is_spam": False,
@@ -218,7 +217,6 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
 
 
 async def reply_drafter_handler(params: Dict[str, Any]) -> Any:
-    original_email = params.get("original_email", "")
     intent = params.get("intent", "긍정적 동의")
     return {
         "draft": f"귀하의 이메일에 감사드립니다. {intent}의 맥락으로 다음과 같이 회신합니다...",
