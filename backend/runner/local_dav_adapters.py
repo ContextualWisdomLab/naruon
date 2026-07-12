@@ -2,11 +2,15 @@ import ipaddress
 import socket
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Literal
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import httpx
 
 from runner.utils.dispatch import dispatch_error
+
+
+_MAX_TARGET_PATH_LENGTH = 4096
+_MAX_URL_DECODE_ROUNDS = 4
 
 
 @dataclass(frozen=True)
@@ -129,11 +133,38 @@ class LocalDavAdapters:
         return None
 
     def _safe_target_path(self, raw_path: Any) -> str | None:
-        if not isinstance(raw_path, str):
+        """Return one canonical DAV path or reject encoded traversal/control data."""
+        if (
+            not isinstance(raw_path, str)
+            or not raw_path
+            or len(raw_path) > _MAX_TARGET_PATH_LENGTH
+        ):
             return None
-        if not raw_path.startswith("/") or "\\" in raw_path or "://" in raw_path:
+
+        decoded_path = raw_path
+        try:
+            for _ in range(_MAX_URL_DECODE_ROUNDS):
+                next_path = unquote(decoded_path, errors="strict")
+                if next_path == decoded_path:
+                    break
+                decoded_path = next_path
+            else:
+                if unquote(decoded_path, errors="strict") != decoded_path:
+                    return None
+        except UnicodeDecodeError:
             return None
-        segments = [segment for segment in raw_path.split("/") if segment]
+
+        if (
+            not decoded_path.startswith("/")
+            or "\\" in decoded_path
+            or "://" in decoded_path
+            or any(
+                ord(character) < 32 or ord(character) == 127
+                for character in decoded_path
+            )
+        ):
+            return None
+        segments = [segment for segment in decoded_path.split("/") if segment]
         if not segments or any(segment in {".", ".."} for segment in segments):
             return None
         return "/" + "/".join(quote(segment, safe="@:$&'()*+,;=-._~") for segment in segments)

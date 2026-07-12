@@ -1,5 +1,6 @@
 import socket
 
+import httpx
 import pytest
 
 from runner.local_dav_adapters import LocalDavAdapters, LocalDavSourceConfig
@@ -165,8 +166,29 @@ async def test_webdav_adapter_reports_provider_conflict_without_write_success():
     }
 
 
+@pytest.mark.parametrize(
+    "target_path",
+    [
+        None,
+        "",
+        "/",
+        "/" + "a" * 4096,
+        "/Naruon/../Secrets/task.md",
+        "/Naruon/%2e%2e/Secrets/task.md",
+        "/Naruon/%252e%252e/Secrets/task.md",
+        "/Naruon/..%2fSecrets/task.md",
+        "/Naruon/%2e%2e%5cSecrets/task.md",
+        "/Naruon/%00/Secrets/task.md",
+        "/Naruon/%7f/Secrets/task.md",
+        "/Naruon/%FF/Secrets/task.md",
+        "/Naruon/%25252525252e%25252525252e/Secrets/task.md",
+        "/%68%74%74%70%3A%2F%2Fevil.example/file",
+    ],
+)
 @pytest.mark.asyncio
-async def test_webdav_adapter_rejects_path_traversal_before_network_request():
+async def test_webdav_adapter_rejects_path_traversal_before_network_request(
+    target_path: object,
+):
     fake_client = FakeDavClient(FakeDavResponse(204))
     adapters = LocalDavAdapters(
         [
@@ -183,7 +205,7 @@ async def test_webdav_adapter_rejects_path_traversal_before_network_request():
     result = await adapters.write_webdav(
         {
             "source_id": "webdav_src_1",
-            "target_path": "/Naruon/../Secrets/task.md",
+            "target_path": target_path,
             "content": "# Note\n",
             "if_match": "etag-before-write",
         }
@@ -196,6 +218,28 @@ async def test_webdav_adapter_rejects_path_traversal_before_network_request():
         "provider_write_executed": False,
     }
     assert fake_client.requests == []
+
+
+@pytest.mark.parametrize(
+    ("target_path", "expected_path"),
+    [
+        ("/Naruon/Notes/task.md", "/Naruon/Notes/task.md"),
+        ("/Naruon/Notes/meeting%20notes.md", "/Naruon/Notes/meeting%20notes.md"),
+        (
+            "/Naruon/Notes/meeting%25252520notes.md",
+            "/Naruon/Notes/meeting%20notes.md",
+        ),
+        ("/Naruon//Notes///task.md", "/Naruon/Notes/task.md"),
+        ("/Naruon/노트.md", "/Naruon/%EB%85%B8%ED%8A%B8.md"),
+    ],
+)
+def test_webdav_adapter_canonicalizes_safe_target_path(
+    target_path: str,
+    expected_path: str,
+):
+    adapters = LocalDavAdapters([])
+
+    assert adapters._safe_target_path(target_path) == expected_path
 
 
 @pytest.mark.asyncio
@@ -367,3 +411,155 @@ async def test_webdav_adapter_rejects_invalid_port_before_dns_lookup(monkeypatch
         "provider_write_executed": False,
     }
     assert fake_client.requests == []
+
+
+def test_webdav_adapter_default_client_disables_redirects(monkeypatch):
+    captured = {}
+
+    def fake_async_client(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        "runner.local_dav_adapters.httpx.AsyncClient",
+        fake_async_client,
+    )
+
+    assert LocalDavAdapters([])._default_http_client() is not None
+    assert captured == {"follow_redirects": False, "timeout": 60}
+
+
+@pytest.mark.asyncio
+async def test_webdav_adapter_rejects_source_and_payload_errors():
+    fake_client = FakeDavClient(FakeDavResponse(204))
+
+    missing_source = LocalDavAdapters([], http_client_factory=lambda: fake_client)
+    result = await missing_source.write_webdav({})
+    assert result["error_code"] == "source_not_configured"
+
+    disabled = LocalDavAdapters(
+        [LocalDavSourceConfig("dav", "webdav", "https://dav.example.com")],
+        http_client_factory=lambda: fake_client,
+    )
+    result = await disabled.write_webdav({"source_id": "dav"})
+    assert result["error_code"] == "source_writeback_disabled"
+
+    wrong_protocol = LocalDavAdapters(
+        [
+            LocalDavSourceConfig(
+                "dav", "caldav", "https://dav.example.com", writeback_enabled=True
+            )
+        ],
+        http_client_factory=lambda: fake_client,
+    )
+    result = await wrong_protocol.write_webdav({"source_id": "dav"})
+    assert result["error_code"] == "source_not_configured"
+
+    enabled = LocalDavAdapters(
+        [
+            LocalDavSourceConfig(
+                "dav", "webdav", "https://dav.example.com", writeback_enabled=True
+            )
+        ],
+        http_client_factory=lambda: fake_client,
+    )
+    base_payload = {
+        "source_id": "dav",
+        "target_path": "/Naruon/file.bin",
+        "if_match": "etag",
+    }
+    result = await enabled.write_webdav({**base_payload, "content": object()})
+    assert result["error_code"] == "invalid_payload"
+
+    result = await enabled.write_webdav({**base_payload, "content": b"binary"})
+    assert result["status"] == "success"
+    assert fake_client.requests[-1]["content"] == b"binary"
+
+
+@pytest.mark.asyncio
+async def test_webdav_adapter_reports_http_transport_failure():
+    class FailingDavClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def put(self, *_args, **_kwargs):
+            raise httpx.ConnectError("provider unavailable")
+
+    adapters = LocalDavAdapters(
+        [
+            LocalDavSourceConfig(
+                "dav", "webdav", "https://dav.example.com", writeback_enabled=True
+            )
+        ],
+        http_client_factory=FailingDavClient,
+    )
+
+    result = await adapters.write_webdav(
+        {
+            "source_id": "dav",
+            "target_path": "/Naruon/file.md",
+            "content": "note",
+            "if_match": "etag",
+        }
+    )
+
+    assert result["error_code"] == "provider_request_failed"
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://dav.example.com",
+        "https:///missing-host",
+        "https://user@dav.example.com",
+        "https://user:secret@dav.example.com",
+        "https://dav.example.com?query=1",
+        "https://dav.example.com#fragment",
+    ],
+)
+def test_webdav_adapter_rejects_malformed_source_urls(base_url):
+    with pytest.raises(ValueError, match="invalid_source_url"):
+        LocalDavAdapters([])._target_url(base_url, "/Naruon/file.md")
+
+
+def test_webdav_adapter_validates_literal_ip_and_dns_results(monkeypatch):
+    adapters = LocalDavAdapters([])
+    assert adapters._target_url(
+        "https://93.184.216.34/dav", "/Naruon/file.md"
+    ) == "https://93.184.216.34/dav/Naruon/file.md"
+
+    monkeypatch.setattr(
+        "runner.local_dav_adapters.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [],
+    )
+    with pytest.raises(ValueError, match="invalid_source_url"):
+        adapters._target_url("https://empty.example", "/Naruon/file.md")
+
+    monkeypatch.setattr(
+        "runner.local_dav_adapters.socket.getaddrinfo",
+        lambda host, port, **_kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("not-an-ip", port))
+        ],
+    )
+    with pytest.raises(ValueError, match="invalid_source_url"):
+        adapters._target_url("https://invalid.example", "/Naruon/file.md")
+
+
+def test_webdav_adapter_maps_success_without_etag_and_provider_failure():
+    adapters = LocalDavAdapters([])
+
+    assert adapters._result_from_response(FakeDavResponse(200)) == {
+        "status": "success",
+        "provider_write_executed": True,
+        "provider_status": 200,
+    }
+    assert adapters._result_from_response(FakeDavResponse(500)) == {
+        "status": "error",
+        "error": "provider_write_failed",
+        "error_code": "provider_write_failed",
+        "provider_write_executed": False,
+        "provider_status": 500,
+    }
