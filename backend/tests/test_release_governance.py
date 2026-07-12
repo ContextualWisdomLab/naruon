@@ -305,15 +305,11 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"
     )
-    # NOTE: .github/workflows/dependency-review.yml was intentionally removed in
-    # PR #926 ("stop duplicating central Security Scan on PRs"). Dependency review
-    # now runs via the org-level required "Security Scan" workflow, so this repo no
-    # longer ships its own per-repo copy. The per-repo hardening/pinning assertions
-    # below therefore only cover the workflows that remain in this repository.
     hardened_workflows = [
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
         ".github/workflows/codeql.yml",
+        ".github/workflows/dependency-review.yml",
         ".github/workflows/docker-publish.yml",
         ".github/workflows/mail-smoke.yml",
         ".github/workflows/pr-governance.yml",
@@ -325,6 +321,32 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         workflow = read_repo_text(workflow_path)
         assert harden_runner_ref in workflow
         assert "egress-policy: audit" in workflow
+
+    dependency_review_workflow = read_repo_text(
+        ".github/workflows/dependency-review.yml"
+    )
+    assert (
+        "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0"
+        in dependency_review_workflow
+    )
+    assert "BASE_REF: ${{ github.base_ref || github.ref_name }}" in (
+        dependency_review_workflow
+    )
+    assert "HEAD_REF: ${{ github.head_ref || github.ref_name }}" in (
+        dependency_review_workflow
+    )
+    log_dependency_review_step = dependency_review_workflow.split(
+        "- name: Log dependency review policy", 1
+    )[1].split("- name: Review dependency changes", 1)[0]
+    log_dependency_review_script = log_dependency_review_step.split("run: |", 1)[1]
+    assert "${{ github.base_ref || github.ref_name }}" not in (
+        log_dependency_review_script
+    )
+    assert "${{ github.head_ref || github.ref_name }}" not in (
+        log_dependency_review_script
+    )
+    assert 'printf \'Base ref: %s\\n\' "$BASE_REF"' in log_dependency_review_script
+    assert 'printf \'Head ref: %s\\n\' "$HEAD_REF"' in log_dependency_review_script
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -426,14 +448,7 @@ def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> 
     trivy_workflow = read_repo_text(".github/workflows/trivy.yml")
 
     for workflow in (scorecard_workflow, trivy_workflow):
-        # PR #926 ("stop duplicating central Security Scan on PRs") removed the
-        # per-repo `pull_request:` triggers from scorecard.yml and trivy.yml.
-        # PR-time scorecard/trivy coverage is now provided by the org-level
-        # required "Security Scan" workflow, so the per-repo copies only run on
-        # push to the release branches. Assert the migration stays in place: the
-        # push triggers remain and no per-repo `pull_request:` trigger is
-        # re-introduced (which would re-duplicate the central scan).
-        assert "pull_request:" not in workflow
+        assert "pull_request:" in workflow
         assert "push:" in workflow
         assert "- develop" in workflow
         assert "- master" in workflow
