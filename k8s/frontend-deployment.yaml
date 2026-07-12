@@ -17,7 +17,6 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-registry
-      # Image runs as the non-root `node` user (frontend/Dockerfile `USER node`).
       securityContext:
         runAsNonRoot: true
         seccompProfile:

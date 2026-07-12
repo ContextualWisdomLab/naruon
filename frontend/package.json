@@ -5,7 +5,7 @@
   "packageManager": "pnpm@11.5.3",
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

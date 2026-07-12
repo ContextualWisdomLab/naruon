@@ -10,7 +10,6 @@ import asyncpg
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -20,7 +19,6 @@ import api.data as data_api
 from api.auth import get_auth_context, get_current_user
 from core.config import settings
 from db.models import (
-    get_fernet,
     Attachment,
     Base,
     ConnectorSignalEvent,
@@ -2787,7 +2785,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :user_id, :organization_id, :message_id, :thread_id,
                 :fingerprint, :sender, :recipients, :subject, now(), :body
             )
-            RETURNING id
+            RETURNING content_node_id
             """
         ),
         {
@@ -2813,7 +2811,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :user_id, :organization_id, :message_id, :sender,
                 :recipients, :subject, now(), :body
             )
-            RETURNING id
+            RETURNING content_node_id
             """
         ),
         {
@@ -2872,7 +2870,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :source_record_uid, 'paragraph', '/document[1]/paragraph[1]',
                 1, 'segmented body text', :content_hash, now()
             )
-            RETURNING content_node_id
+            RETURNING id
             """
         ),
         {
@@ -2895,7 +2893,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :source_record_uid, 'paragraph', '/document[1]/paragraph[1]',
                 1, 'rival segmented body text', :content_hash, now()
             )
-            RETURNING content_node_id
+            RETURNING id
             """
         ),
         {
@@ -2954,8 +2952,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 ordinal_index, created_at
             )
             SELECT
-                :first_edge_uid, CAST(:first_email_id AS INTEGER),
-                CAST(:first_node_id AS INTEGER),
+                :first_edge_uid, :first_email_id, :first_node_id,
                 first_segment.content_segment_id,
                 'email_body', :first_source_record_uid, 'node_has_segment',
                 '/document[1]/paragraph[1]/has/smoke', 1, now()
@@ -2963,8 +2960,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
             WHERE first_segment.content_segment_uid = :first_segment_uid
             UNION ALL
             SELECT
-                :rival_edge_uid, CAST(:rival_email_id AS INTEGER),
-                CAST(:rival_node_id AS INTEGER),
+                :rival_edge_uid, :rival_email_id, :rival_node_id,
                 rival_segment.content_segment_id,
                 'email_body', :rival_source_record_uid, 'node_has_segment',
                 '/document[1]/paragraph[1]/has/rival', 1, now()
@@ -3020,25 +3016,21 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
             INSERT INTO email_attachments (
                 email_id, filename, content,
-                content_type, parse_status, parse_content_type,
-                parser_key, parse_error_code
+                content_type, parse_status, parse_error_code
             )
             VALUES
             (
                 :first_email_id, 'ready.txt', 'ready attachment',
-                'text/plain', 'parsed', 'text/plain',
-                'plain_text', NULL
+                'text/plain', 'parsed', NULL
             ),
             (
                 :second_email_id, 'blank.txt', '',
                 'application/pdf', 'unsupported_content_type',
-                'application/pdf', 'plain_text',
                 'unsupported_content_type'
             ),
             (
                 :rival_email_id, 'rival.txt', 'rival attachment',
-                'text/plain', 'parsed', 'text/plain',
-                'plain_text', NULL
+                'text/plain', 'parsed', NULL
             )
             """
         ),
@@ -3061,13 +3053,13 @@ async def _seed_smoke_test_data(conn, ids: dict):
             (
                 :webdav_uid, :user_id, :organization_id, :workspace_id,
                 'https://data-files.example/dav', 'data@example.com',
-                :webdav_credentials, true, now()
+                'encrypted-data-secret', true, now()
             ),
             (
                 :rival_webdav_uid, :rival_user_id, :rival_organization_id,
                 :rival_workspace_id,
                 'https://rival-files.example/dav', 'rival@example.com',
-                :rival_webdav_credentials, true, now()
+                'encrypted-rival-secret', true, now()
             )
             """
         ),
@@ -3076,16 +3068,10 @@ async def _seed_smoke_test_data(conn, ids: dict):
             "user_id": ids["user_id"],
             "organization_id": ids["organization_id"],
             "workspace_id": ids["workspace_id"],
-            "webdav_credentials": get_fernet()
-            .encrypt(b"data-smoke-webdav-secret")
-            .decode("ascii"),
             "rival_webdav_uid": ids["rival_webdav_uid"],
             "rival_user_id": ids["rival_user_id"],
             "rival_organization_id": ids["rival_organization_id"],
             "rival_workspace_id": ids["rival_workspace_id"],
-            "rival_webdav_credentials": get_fernet()
-            .encrypt(b"data-rival-webdav-secret")
-            .decode("ascii"),
         },
     )
     await conn.execute(
@@ -3225,20 +3211,10 @@ async def _teardown_smoke_test_data(conn, ids: dict):
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
-async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope(
-    monkeypatch,
-):
+async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     database_url = getattr(settings, "DATABASE_URL", None)
     if not database_url:
         pytest.skip("PostgreSQL smoke path unavailable: DATABASE_URL is not set")
-
-    # EncryptedString needs a key for both seeding (encrypt) and the API
-    # read (decrypt); monkeypatch restores it on any exit incl. skip.
-    monkeypatch.setattr(
-        settings,
-        "ENCRYPTION_KEY",
-        SecretStr(Fernet.generate_key().decode("ascii")),
-    )
 
     user_id = f"data_smoke_user_{uuid.uuid4().hex[:12]}"
     organization_id = f"data_smoke_org_{uuid.uuid4().hex[:12]}"

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, access, writeFile } from "node:fs/promises";
+import { mkdir, access } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -97,30 +97,6 @@ export function fullProductScreenshotName(routeSpec, viewportSpec, viewportCount
 
 function log(message) {
   process.stdout.write(`${message}\n`);
-}
-
-async function captureSmokeScreenshot(page, screenshotPath, label) {
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      await page.screenshot({ path: screenshotPath, fullPage: false });
-      return screenshotPath;
-    } catch (error) {
-      if (attempt < 2) {
-        await page.waitForTimeout(250);
-        continue;
-      }
-      const diagnosticPath = screenshotPath.replace(/\.png$/u, ".screenshot-failed.txt");
-      const reason = error instanceof Error ? error.message : String(error);
-      await writeFile(
-        diagnosticPath,
-        `screenshot_failed label=${label}\nreason=${reason}\n`,
-        "utf-8",
-      );
-      log(`Screenshot capture failed for ${label}: ${reason}`);
-      return diagnosticPath;
-    }
-  }
-  return screenshotPath;
 }
 
 async function isServerReady(url) {
@@ -1497,13 +1473,9 @@ async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
   const interactionEvidence = await runCriticalInteractionSmoke(page, routeSpec, viewportSpec);
   const accessibilityEvidence = await runAccessibilitySmoke(page, routeSpec);
   const screenshotPath = path.join(screenshotDir, fullProductScreenshotName(routeSpec, viewportSpec, viewportCount));
-  const screenshotArtifact = await captureSmokeScreenshot(
-    page,
-    screenshotPath,
-    `${viewportSpec.name}:${routeSpec.path}`,
-  );
+  await page.screenshot({ path: screenshotPath, fullPage: false });
   await page.close();
-  return { screenshotPath: screenshotArtifact, interactionEvidence, accessibilityEvidence };
+  return { screenshotPath, interactionEvidence, accessibilityEvidence };
 }
 
 async function main() {

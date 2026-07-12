@@ -184,34 +184,6 @@ package/checkout remains only as an optional offline-dev fallback, gated behind
 orchestrator-unavailable and an explicit local DSN; naruon does not vendor a
 gitlink for that fallback in this PR.
 
-## Semantic project-graph extractor seam
-
-Semantic extraction — turning grounded content segments into cited
-`project_graph_objects`/`_edges` — goes through a stable, named + versioned
-extractor seam rather than a hardcoded branch in the import pipeline.
-[`backend/services/project_graph/extractor_registry.py`](backend/services/project_graph/extractor_registry.py)
-defines the `KgExtractor` contract (name + version + `extract`), a
-`KgExtractorRegistry` keyed by the `PROJECT_GRAPH_EXTRACTOR` selector, and
-`run_extraction`, which resolves an ordered fallback chain. The chain's terminal
-element is **always** the deterministic keyword extractor, so "rule-based
-extraction is fallback/reference only" is guaranteed structurally — an LLM
-extractor that lacks credentials, targets an unconfigured orchestrator endpoint,
-or fails at request time raises `ExtractorUnavailableError` (or any exception)
-and the runner degrades down the chain instead of losing the projection. New
-extractors (including future plugins on the platform plan's `kg.extractor`
-extension point) register a selector without editing ingest.
-
-Routing LLM extraction through **contextual-orchestrator** is modelled as a
-transport concern: the orchestrator is an OpenAI-compatible gateway, so the
-`orchestrator` selector reuses the identical grounded LLM extractor
-(`extract_project_semantics_llm`, which enforces segment citations) but points
-its SSRF-allowlisted client (`build_llm_provider_http_client`) at
-`PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` instead of the raw provider. The provider
-API key stays the tenant's Fernet-encrypted credential, and the orchestrator base
-URL must be HTTPS and exact-host allowlisted by `ALLOWED_LLM_BASE_URL_HOSTS`;
-an unset or rejected endpoint fails closed to the deterministic extractor. Design
-and grounding: [`docs/architecture/kg-extractor-seam.md`](docs/architecture/kg-extractor-seam.md).
-
 ## CI security boundary
 
 OpenCode Review, Strix Security Scan, and PR Review Merge Scheduler are supplied

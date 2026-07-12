@@ -2,7 +2,7 @@ from collections import defaultdict
 from threading import Lock
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from db.session import get_db
 from db.models import Email
 from pydantic import BaseModel, EmailStr, Field
@@ -42,7 +42,6 @@ from services.llm_provider_selection import resolve_runtime_llm_provider
 from services.text_safety import strip_html_markup
 import logging
 from api.auth import AuthContext, get_auth_context
-from api.search import thread_group_key as sql_thread_group_key
 from services.tenant_config_scope import get_scoped_tenant_config
 
 logger = logging.getLogger(__name__)
@@ -158,8 +157,6 @@ def _email_list_item(
         thread_id=thread_id,
         reply_count=reply_count,
         is_self_sent=is_self_sent,
-        # default column value is applied at flush; coalesce unflushed None -> read
-        is_read=email.is_read if email.is_read is not None else True,
         requires_reply=requires_reply,
     )
 
@@ -191,7 +188,6 @@ class EmailListItem(BaseModel):
     reply_count: int | None = None
     has_draft: bool = False
     is_self_sent: bool = False
-    is_read: bool = True
     requires_reply: bool = False
     schedule_conflict: bool = False
 
@@ -277,76 +273,37 @@ async def get_emails(
         auth_context.organization_id,
     )
     user_addresses = configured_email_addresses(tenant_config)
-    is_sent_folder = folder == "sent"
-    owner_filters = Email.owner_filters(
-        auth_context.user_id, auth_context.organization_id
-    )
-
-    # Thread winnowing happens in SQL: one newest head row per thread via a
-    # window function, so accuracy no longer degrades with mailbox size the
-    # way the previous fixed 2000-row in-memory window did. The sent folder
-    # filters app-side on parsed sender addresses, so it over-fetches a
-    # bounded multiple of the page instead.
-    head_candidate_limit = limit * 5 if is_sent_folder else limit
-    thread_rank = (
-        func.row_number()
-        .over(
-            partition_by=sql_thread_group_key(),
-            order_by=(Email.date.desc(), Email.id.desc()),
-        )
-        .label("thread_rank")
-    )
-    ranked_heads = (
-        select(Email.id.label("head_id"), thread_rank)
-        .where(*owner_filters)
-        .subquery("ranked_thread_heads")
-    )
+    candidate_window = min(max(limit * 10, 200), 2000)
     result = await db.execute(
         select(Email)
-        .join(ranked_heads, ranked_heads.c.head_id == Email.id)
-        .where(ranked_heads.c.thread_rank == 1)
+        .where(*Email.owner_filters(auth_context.user_id, auth_context.organization_id))
         .order_by(Email.date.desc())
-        .limit(head_candidate_limit)
+        .limit(candidate_window)
     )
-    head_emails = list(result.scalars().all())
+    emails = list(result.scalars().all())
 
-    # Defensive app-side dedupe: a no-op on PostgreSQL (SQL already returns
-    # one head per thread) but keeps behavior exact if a backend ever returns
-    # duplicates for the window query.
+
     grouped = {}
-    for email in head_emails:
-        group_key = canonical_thread_key(email)
-        if group_key not in grouped:
-            grouped[group_key] = email
 
     reply_counts = defaultdict(int)
     thread_messages = defaultdict(list)
     has_sent_message = {}
 
-    if grouped:
-        thread_lookup: set[str] = set()
-        for group_key in grouped:
-            thread_lookup.update(thread_lookup_values(group_key))
-        messages_result = await db.execute(
-            select(Email)
-            .where(
-                *owner_filters,
-                or_(
-                    Email.thread_id.in_(thread_lookup),
-                    Email.message_id.in_(thread_lookup),
-                ),
-            )
-            .order_by(Email.date.desc())
-        )
-        for email in messages_result.scalars().all():
-            group_key = canonical_thread_key(email)
-            if group_key not in grouped:
-                continue
-            thread_messages[group_key].append(email)
-            reply_counts[group_key] += 1
-            if is_sent_folder and group_key not in has_sent_message:
-                if message_is_from_user(email, user_addresses):
-                    has_sent_message[group_key] = True
+    is_sent_folder = folder == "sent"
+
+    for email in emails:
+        group_key = canonical_thread_key(email)
+
+        thread_messages[group_key].append(email)
+        reply_counts[group_key] += 1
+
+        # ⚡ Bolt: Store the first encountered email (newest) per thread
+        if group_key not in grouped:
+            grouped[group_key] = email
+
+        if is_sent_folder and group_key not in has_sent_message:
+            if message_is_from_user(email, user_addresses):
+                has_sent_message[group_key] = True
 
     if is_sent_folder:
         visible_groups = [

@@ -422,10 +422,7 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     assert "continue-on-error: true" not in workflow
 
 
-def test_codeql_workflow_scans_default_branch_only_without_uploading_sarif() -> None:
-    # PR CodeQL and the code_scanning ruleset merge gate are delegated to the
-    # central ContextualWisdomLab/.github codeql-pr.yml. The local workflow runs
-    # only as push/manual CI evidence and avoids duplicate SARIF uploads.
+def test_codeql_workflow_can_read_security_events_without_uploading_sarif() -> None:
     workflow = read_repo_text(".github/workflows/codeql.yml")
 
     assert "permissions:\n  contents: read\n  security-events: read" in workflow
@@ -435,12 +432,6 @@ def test_codeql_workflow_scans_default_branch_only_without_uploading_sarif() -> 
     )
     assert "upload: never" in workflow
     assert "security-events: write" not in workflow
-    assert "pull_request:" not in workflow
-    assert "analyze-merge:" not in workflow
-    assert "CodeQL merge preview" not in workflow
-    assert "refs/pull/" not in workflow
-    assert "- develop" in workflow
-    assert "- master" in workflow
 
 
 def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> None:

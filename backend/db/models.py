@@ -96,8 +96,7 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        DateTime(timezone=True), default=datetime.datetime.utcnow
     )
     user_id: Mapped[str] = mapped_column(String, index=True)
     action: Mapped[str] = mapped_column(String)
@@ -165,8 +164,8 @@ class LLMProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
     )
 
 
@@ -273,8 +272,8 @@ class WorkspaceRunnerConfig(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
     )
 
 
@@ -632,10 +631,6 @@ class WorkflowDefinition(Base):
         nullable=False,
     )
 
-    agent_run_records: Mapped[list["AgentRunRecord"]] = relationship(
-        back_populates="workflow_definition"
-    )
-
 
 class AgentRunRecord(Base):
     __tablename__ = "agent_run_records"
@@ -686,10 +681,6 @@ class AgentRunRecord(Base):
     )
     result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    workflow_definition: Mapped["WorkflowDefinition"] = relationship(
-        back_populates="agent_run_records"
-    )
-
 
 class Email(Base):
     __tablename__ = "email_records"
@@ -738,8 +729,6 @@ class Email(Base):
     references: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
     body: Mapped[str] = mapped_column(Text)
-    # IMAP \Seen read state; defaults read so historical/file imports don't nag.
-    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
     attachments: Mapped[list["Attachment"]] = relationship(
@@ -1475,10 +1464,6 @@ class Workspace(Base):
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
 
-    workspace_documents: Mapped[list["Document"]] = relationship(
-        back_populates="workspace_entity"
-    )
-
 class Document(Base):
     __tablename__ = "workspace_documents"
 
@@ -1491,8 +1476,4 @@ class Document(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-    workspace_entity: Mapped["Workspace"] = relationship(
-        back_populates="workspace_documents"
     )

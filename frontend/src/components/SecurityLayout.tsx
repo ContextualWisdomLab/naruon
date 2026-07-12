@@ -851,57 +851,31 @@ export function SecurityLayout() {
   }, [activeTab, data, error, loading]);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 overflow-x-hidden bg-background text-foreground">
-      {/* Local navigation (LNB): desktop left sidebar for the security domain's areas */}
-      <nav
-        aria-label="보안 로컬 탐색"
-        className="hidden w-60 shrink-0 flex-col gap-1 border-r border-border bg-card p-4 lg:flex"
-      >
-        <h1 className="mb-2 flex items-center gap-2 px-2 text-lg font-bold">
-          <ShieldCheck className="size-5 text-primary" aria-hidden="true" />
-          <span>보안과 관리자</span>
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden bg-background text-foreground">
+      <header className="flex h-20 shrink-0 items-center overflow-hidden border-b border-border bg-card px-4 md:px-8">
+        <h1 className="flex shrink-0 items-center gap-3 text-xl font-bold md:text-2xl">
+          <ShieldCheck className="size-6 text-primary" />
+          <span className="hidden sm:inline">보안과 관리자</span>
         </h1>
-        {tabs.map((tab) => (
-          <button
-            type="button"
-            key={tab}
-            aria-current={activeTab === tab ? 'page' : undefined}
-            onClick={() => setActiveTab(tab)}
-            className={`rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-              activeTab === tab
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-secondary'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </nav>
+        <p className="sr-only">관리자 경계</p>
+        <div className="ml-4 flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1 md:ml-8">
+          {tabs.map((tab) => (
+            <button type="button"
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition-colors md:px-4 ${
+                activeTab === tab
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-secondary'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </header>
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Mobile local tabs: the LNB collapses to a horizontal tab strip below the desktop breakpoint */}
-        <header className="flex h-16 shrink-0 items-center overflow-hidden border-b border-border bg-card px-4 lg:hidden">
-          <h1 className="sr-only">보안과 관리자</h1>
-          <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
-            {tabs.map((tab) => (
-              <button
-                type="button"
-                key={tab}
-                aria-current={activeTab === tab ? 'page' : undefined}
-                onClick={() => setActiveTab(tab)}
-                className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition-colors ${
-                  activeTab === tab
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-secondary'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
+      <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
         <div className="mx-auto max-w-6xl space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -950,7 +924,6 @@ export function SecurityLayout() {
           {content}
         </div>
       </main>
-      </div>
     </div>
   );
 }

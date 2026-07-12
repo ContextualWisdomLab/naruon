@@ -16,8 +16,6 @@ spec:
       labels:
         app: postgres-db
     spec:
-      # Official postgres-derived images support arbitrary non-root UIDs when
-      # writable data, socket, and temp directories are mounted explicitly.
       securityContext:
         fsGroup: 10001
         runAsNonRoot: true
@@ -59,8 +57,6 @@ spec:
               key: password
         - name: POSTGRES_DB
           value: ai_email
-        # Keep data in a subdirectory of the mounted volume so the PVC root
-        # (which may carry lost+found) is not used as PGDATA directly.
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
         ports:

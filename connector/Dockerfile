@@ -17,6 +17,6 @@ RUN useradd --system --create-home --home-dir /home/connector --shell /usr/sbin/
 USER connector
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import connector; from connector.main import DEFAULT_WS_URL; assert DEFAULT_WS_URL.startswith('wss://')"
+    CMD python -c "from connector.main import DEFAULT_WS_URL; assert DEFAULT_WS_URL.startswith('wss://')"
 
 CMD ["python", "-m", "connector.main"]
