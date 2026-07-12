@@ -435,6 +435,7 @@ registry.register(
     ),
     base64_decoder_handler,
 )
+<<<<<<< HEAD
 
 
 registry.register(
@@ -492,6 +493,8 @@ registry.register(
     grammar_checker_handler,
 )
 
+=======
+>>>>>>> origin/develop
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:

@@ -29,6 +29,11 @@ from services.project_graph import (
     ProjectCitation,
     ProjectCorrection,
     ProjectSourceSegment,
+    ProjectTraceEdge,
+    ProjectTraceObject,
+    ProjectTraceRelation,
+    ProjectTraceRelationEndpoint,
+    ProjectTraceability,
     extract_project_semantics,
     persist_project_graph_projection,
 )
@@ -171,6 +176,151 @@ async def test_project_correction_endpoint_commits_and_returns_audit_trail(
     assert body["after_json"]["status_code"] == "approved"
 
 
+@pytest.mark.asyncio
+async def test_project_traceability_endpoint_serializes_typed_relations(
+    dev_auth_dependency_overrides,
+    monkeypatch,
+):
+    captured = {}
+
+    def _citation() -> ProjectCitation:
+        return ProjectCitation(
+            content_segment_uid="seg-rel",
+            source_kind="email_body",
+            source_record_uid="<launch@example.com>",
+            heading_path="Requirements",
+            segment_path="/document[1]/paragraph[1]",
+            ordinal_index=1,
+            safe_text_excerpt="feature implements the retry requirement",
+        )
+
+    feature = ProjectTraceObject(
+        object_uid="feature:aaa",
+        object_type="feature",
+        title="Feature: checkout retry",
+        summary="retry the failed card authorization",
+        status_code="candidate",
+        confidence=0.82,
+        source_segment_uids=("seg-rel",),
+        citation_bundle=(_citation(),),
+        attributes={},
+    )
+    requirement = ProjectTraceObject(
+        object_uid="requirement:bbb",
+        object_type="requirement",
+        title="Requirement: retry guidance",
+        summary="show retry guidance on auth failure",
+        status_code="candidate",
+        confidence=0.9,
+        source_segment_uids=("seg-rel",),
+        citation_bundle=(_citation(),),
+        attributes={},
+    )
+    evidence_edge = ProjectTraceEdge(
+        edge_uid="project_edge:ev",
+        source_uid="segment:seg-rel",
+        target_uid="requirement:bbb",
+        edge_type="segment_evidences_project_object",
+        confidence=0.9,
+        source_segment_uids=("seg-rel",),
+        citation_bundle=(_citation(),),
+    )
+    relation_edge = ProjectTraceEdge(
+        edge_uid="project_edge:rel",
+        source_uid="feature:aaa",
+        target_uid="requirement:bbb",
+        edge_type="implements",
+        confidence=0.88,
+        source_segment_uids=("seg-rel",),
+        citation_bundle=(_citation(),),
+    )
+    relation = ProjectTraceRelation(
+        relation_uid="project_edge:rel",
+        relation_type="implements",
+        source=ProjectTraceRelationEndpoint(
+            object_uid="feature:aaa",
+            object_type="feature",
+            title="Feature: checkout retry",
+        ),
+        target=ProjectTraceRelationEndpoint(
+            object_uid="requirement:bbb",
+            object_type="requirement",
+            title="Requirement: retry guidance",
+        ),
+        confidence=0.88,
+        source_segment_uids=("seg-rel",),
+        citation_bundle=(_citation(),),
+    )
+    candidate = ProjectCandidateSummary(
+        candidate_uid="project_candidate:test",
+        project_uid="project_candidate:test",
+        title="Project: checkout",
+        status_code="candidate",
+        score=0.9,
+        object_count=2,
+        requirement_count=1,
+        issue_count=0,
+        milestone_count=0,
+        deliverable_count=0,
+        participant_count=0,
+        source_segment_count=1,
+        representative_object_uids=("feature:aaa",),
+        citation_bundle=(_citation(),),
+        updated_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    async def fake_get_project_traceability(session, *, scope, project_uid):
+        captured["project_uid"] = project_uid
+        return ProjectTraceability(
+            project_uid=project_uid,
+            candidate=candidate,
+            objects=(feature, requirement),
+            edges=(evidence_edge, relation_edge),
+            relations=(relation,),
+        )
+
+    async def override_get_db():
+        yield object()
+
+    monkeypatch.setattr(
+        projects_api,
+        "get_project_traceability",
+        fake_get_project_traceability,
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with _client(
+            user_id="reviewer",
+            organization_id="org-acme",
+        ) as client:
+            response = await client.get(
+                "/api/projects/project_candidate:test/traceability"
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert captured["project_uid"] == "project_candidate:test"
+    # Raw edges stay unchanged (backward compatible): both edge kinds present.
+    assert {edge["edge_type"] for edge in body["edges"]} == {
+        "segment_evidences_project_object",
+        "implements",
+    }
+    # Relations expose only the typed object-to-object edge with both endpoints
+    # resolved, so a consumer can render *why* the objects connect.
+    assert len(body["relations"]) == 1
+    surfaced = body["relations"][0]
+    assert surfaced["relation_uid"] == "project_edge:rel"
+    assert surfaced["relation_type"] == "implements"
+    assert surfaced["source"]["object_type"] == "feature"
+    assert surfaced["source"]["title"] == "Feature: checkout retry"
+    assert surfaced["target"]["object_type"] == "requirement"
+    assert surfaced["target"]["object_uid"] == "requirement:bbb"
+    assert surfaced["confidence"] == 0.88
+    assert surfaced["citation_bundle"][0]["content_segment_uid"] == "seg-rel"
+
+
 @pytest_asyncio.fixture(scope="function")
 async def project_graph_api_sessionmaker():
     engine = create_async_engine(settings.DATABASE_URL)
@@ -209,7 +359,7 @@ async def test_project_graph_api_exposes_candidates_traceability_and_corrections
     project_graph_api_sessionmaker,
 ):
     user_id = f"project-api-user-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
     async with project_graph_api_sessionmaker() as session:
         await _seed_projection(
             session,
@@ -302,7 +452,7 @@ async def test_project_graph_api_enforces_member_scope_and_allows_org_admin(
 ):
     owner_id = f"project-api-owner-{uuid.uuid4().hex}"
     other_user_id = f"project-api-other-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
     async with project_graph_api_sessionmaker() as session:
         await _seed_projection(
             session,
@@ -337,7 +487,7 @@ async def test_project_graph_api_returns_404_when_evidence_segment_is_stale(
     project_graph_api_sessionmaker,
 ):
     user_id = f"project-api-stale-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
     async with project_graph_api_sessionmaker() as session:
         seeded = await _seed_projection(
             session,
@@ -361,6 +511,91 @@ async def test_project_graph_api_returns_404_when_evidence_segment_is_stale(
         )
         assert response.status_code == 404
         assert response.json()["detail"] == "Project graph source evidence not found"
+
+
+@pytest.mark.asyncio
+async def test_project_traceability_surfaces_typed_object_to_object_relation(
+    dev_auth_dependency_overrides,
+    project_graph_api_db_override,
+    project_graph_api_sessionmaker,
+):
+    user_id = f"project-api-rel-{uuid.uuid4().hex}"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
+    async with project_graph_api_sessionmaker() as session:
+        seeded = await _seed_projection(
+            session,
+            user_id=user_id,
+            organization_id=organization_id,
+        )
+
+    async with _client(user_id=user_id, organization_id=organization_id) as client:
+        before = await client.get(
+            f"/api/projects/{seeded['candidate_uid']}/traceability"
+        )
+        assert before.status_code == 200
+        before_body = before.json()
+        # The deterministic seed extractor only emits segment-evidence edges, so
+        # no evidence edge may leak into relations.
+        assert before_body["edges"]
+        assert before_body["relations"] == []
+
+    async with project_graph_api_sessionmaker() as session:
+        objects = (
+            (
+                await session.execute(
+                    select(ProjectGraphObjectRecord)
+                    .where(ProjectGraphObjectRecord.user_id == user_id)
+                    .where(ProjectGraphObjectRecord.object_type != "project_candidate")
+                    .order_by(ProjectGraphObjectRecord.object_uid.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(objects) >= 2
+        source_object, target_object = objects[0], objects[1]
+        segment = await session.scalar(
+            select(ContentSegmentRecord).where(
+                ContentSegmentRecord.content_segment_uid == seeded["segment_uid"]
+            )
+        )
+        assert segment is not None
+        session.add(
+            ProjectGraphEdgeRecord(
+                edge_uid=f"project_edge:test-{uuid.uuid4().hex[:16]}",
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=f"workspace-{organization_id}",
+                source_uid=source_object.object_uid,
+                target_uid=target_object.object_uid,
+                edge_type="implements",
+                confidence=0.86,
+                source_segment_uids=[seeded["segment_uid"]],
+                source_object=source_object,
+                target_object=target_object,
+                primary_content_segment_id=segment.content_segment_id,
+            )
+        )
+        await session.commit()
+
+    async with _client(user_id=user_id, organization_id=organization_id) as client:
+        after = await client.get(
+            f"/api/projects/{seeded['candidate_uid']}/traceability"
+        )
+        assert after.status_code == 200
+        relations = after.json()["relations"]
+        assert len(relations) == 1
+        relation = relations[0]
+        assert relation["relation_type"] == "implements"
+        assert relation["source"]["object_uid"] == source_object.object_uid
+        assert relation["source"]["object_type"] == source_object.object_type
+        assert relation["target"]["object_uid"] == target_object.object_uid
+        assert relation["confidence"] == 0.86
+        # Grounded: the relation carries the endpoint citation, not a bare edge.
+        assert relation["citation_bundle"]
+        assert relation["citation_bundle"][0]["content_segment_uid"] == (
+            seeded["segment_uid"]
+        )
 
 
 async def _seed_projection(

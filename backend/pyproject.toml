@@ -16,6 +16,7 @@ dependencies = [
   "greenlet==3.5.3",
   "asyncpg==0.31.0",
   "pgvector==0.4.2",
+  "rankweave==0.1.0",
   "openai==2.44.0",
   "langchain-text-splitters==1.1.2",
   "tiktoken==0.13.0",
