@@ -882,7 +882,6 @@ def test_is_safe_webhook_url_coverage():
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
-    import json
 
     res = await mock_handler({"test": "data"})
     assert (
@@ -908,7 +907,6 @@ def test_validate_webhook_url_details_invalid_port():
 @pytest.mark.asyncio
 async def test_json_validator_handler_valid():
     from api.tools import json_validator_handler
-    import json
 
     res = await json_validator_handler({"json_string": '{"key":"value"}'})
     assert res["is_valid"] is True
