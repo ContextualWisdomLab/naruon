@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core.env_paths import ENV_FILE_PATHS, operator_env_file_paths
 from core.runtime_secrets import (
+    DEFAULT_ENCRYPTION_KEY_ID,
     validate_auth_session_hmac_secret_value,
 )
 from core.url_validation import (
@@ -77,6 +78,8 @@ class Settings(BaseSettings):
     RUNTIME_ENVIRONMENT: str = "production"
     AUTH_SESSION_HMAC_SECRET: SecretStr | None = None
     ENCRYPTION_KEY: SecretStr | None = None
+    ENCRYPTION_KEY_ID: str = DEFAULT_ENCRYPTION_KEY_ID
+    ENCRYPTION_PREVIOUS_KEYS: SecretStr | None = None
     CONTROL_PLANE_DOMAIN: str = "naruon.net"
     ALLOWED_SMTP_HOSTS: str = ""
     ALLOWED_SMTP_PORTS: str = "465,587"
@@ -126,6 +129,12 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
+
+    # Codec Carver audio-conversion integration (operator-configured in-cluster
+    # Service base URL, e.g. http://codec-carver:8000). Converts recording
+    # attachments to FLAC/Opus for STT / omni-modal input. Disabled while unset.
+    CODEC_CARVER_BASE_URL: str | None = None
+    CODEC_CARVER_API_KEY: SecretStr | None = None
 
     # Clearfolio document-viewer integration (operator-configured in-cluster
     # Service base URL, e.g. http://clearfolio:8080). Integration is disabled
