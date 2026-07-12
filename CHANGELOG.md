@@ -14,6 +14,7 @@
 
 ### 프로젝트 그래프 (Project Graph Traceability)
 - 프로젝트 traceability 읽기 모델/API에 유형화된 객체↔객체 **관계(relations)** 뷰를 추가했습니다 (P0 dense-KG, naruon#1051 기반). LLM 추출기가 `project_graph_edges`에 적재하는 관계(예: feature *implements* requirement, issue *blocks* milestone)를, 두 끝점이 모두 프로젝트 객체로 해석될 때에 한해 `relation_type` + 양쪽 끝점(`object_uid`/`object_type`/`title`) + 인용(`citation_bundle`)이 인라인된 `ProjectTraceRelation`으로 비정규화해 노출합니다. 소비자가 edge↔object를 재조인하지 않고도 객체가 *왜* 연결되는지 근거와 함께 렌더할 수 있습니다(CP-1 synthesis). segment-evidence 엣지(`segment:<uid>` source)는 source 끝점이 객체로 해석되지 않으므로 구조적으로 relations에서 제외되며, 기존 raw `edges` 컬렉션은 하위호환을 위해 변경 없이 유지됩니다. `GET /api/projects/{project_uid}/traceability` 응답에 `relations` 필드를 추가했습니다.
+- 프로젝트 **근거(evidence) 읽기 모델/API**에도 유형화된 관계를 per-object 단위로 확장했습니다 (P0 dense-KG, naruon#1053 후속). 단일 객체를 드릴다운하는 `GET /api/projects/{project_uid}/evidence/{object_uid}` 응답에, 그 객체가 끝점(source 또는 target)인 typed 관계만 필터링해 노출하는 `relations` 필드를 추가했습니다(양방향 inbound/outbound, 양쪽 끝점 해석 + `citation_bundle` 인라인). #1053의 traceability 전역 `relations`를 재조인하지 않고도 한 객체가 *왜* 다른 객체와 연결되는지 근거와 함께 볼 수 있습니다(Evidence Inspector 드릴다운의 그래프 legibility). #1053의 관계 projection 기계(`_trace_relations`)를 재사용하는 순수 projection이라 스키마/마이그레이션 변경 없음, opaque 객체/엣지 uid만 노출, 기존 `citation_bundle` 등 응답 필드는 하위호환 유지. TDD: `_incident_relations` 순수 필터 단위 테스트(inbound/outbound/양방향/무관 객체), mocked API 직렬화 테스트, 그리고 typed 관계 엣지를 seed 해 source(outbound)·target(inbound)·제3객체(관계 없음) evidence를 검증하는 real-PostgreSQL smoke 테스트를 추가했습니다.
 
 ### 테스트/품질 (PostgreSQL Smoke Evidence)
 
