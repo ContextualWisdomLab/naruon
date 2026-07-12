@@ -4,10 +4,10 @@ from urllib.parse import urlsplit
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.env_paths import ENV_FILE_PATHS, operator_env_file_paths
 from core.runtime_secrets import (
     validate_auth_session_hmac_secret_value,
 )
-from core.env_paths import ENV_FILE_PATHS, operator_env_file_paths
 from core.url_validation import (
     parse_allowed_hosts,
     validate_https_url_host_details,
@@ -114,6 +114,11 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
+
+    # Clearfolio document-viewer integration (operator-configured in-cluster
+    # Service base URL, e.g. http://clearfolio:8080). Integration is disabled
+    # while unset — the 미리보기 surface stays hidden.
+    CLEARFOLIO_BASE_URL: str | None = None
 
     # Hybrid search fusion (see services/hybrid_retrieval/score_fusion.py;
     # defaults grounded in Bruch, Gai & Ingber 2023 and Cormack et al. 2009)
