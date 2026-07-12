@@ -44,14 +44,11 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
         "plain_text",
         "html",
         "markdown",
-<<<<<<< HEAD
-        "pdf",
-=======
         "json",
         "csv",
         "xml",
         "calendar",
->>>>>>> origin/develop
+        "pdf",
         "unsupported_binary",
     } <= parser_keys
     markdown_descriptor = next(
