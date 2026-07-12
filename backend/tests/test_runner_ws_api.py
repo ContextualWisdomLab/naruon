@@ -7,13 +7,12 @@ import time
 
 import pytest
 from fastapi import WebSocketException, status
-from fastapi.routing import APIWebSocketRoute
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from starlette.websockets import WebSocketDisconnect
 
 from api import runner_ws
-from api.auth import AuthContext, get_auth_context
+from api.auth import AuthContext
 from core.config import settings
 from main import app
 
@@ -96,7 +95,7 @@ def _valid_session_headers() -> dict[str, str]:
             "iss": "naruon-control-plane",
             "aud": "naruon-api",
             "sub": "alice",
-            "role": "organization_admin",
+            "role": "member",
             "org": "org-acme",
             "groups": ["group-1"],
             "workspace": "workspace-org-acme",
@@ -109,7 +108,7 @@ def _valid_session_headers() -> dict[str, str]:
 def _auth_context() -> AuthContext:
     return AuthContext(
         user_id="alice",
-        role="organization_admin",
+        role="member",
         organization_id="org-acme",
         group_ids=("group-1",),
         workspace_id="workspace-org-acme",
@@ -174,19 +173,12 @@ def test_runner_ws_rejects_missing_auth():
 
 
 def test_runner_ws_route_uses_signed_session_dependency():
-    route = next(
-        (
-            route
-            for route in app.routes
-            if isinstance(route, APIWebSocketRoute)
-            and route.path == "/ws/runner/{token}"
-        ),
-        None,
-    )
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/runner/nrn_registered-token"):
+                pass
 
-    assert route is not None, "Runner WebSocket route is not registered"
-    dependencies = {dependency.dependency for dependency in route.dependencies}
-    assert get_auth_context in dependencies
+    assert exc.value.status_code == 401
 
 
 def test_runner_ws_accepts_signed_session_and_registered_token(monkeypatch):

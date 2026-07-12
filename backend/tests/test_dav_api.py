@@ -1,16 +1,48 @@
 import defusedxml.ElementTree as ET
 
-from fastapi.routing import APIRoute
+import pytest
 from fastapi.testclient import TestClient
 
-from api.auth import get_auth_context
 from main import app
+from services.webdav_service import webdav_service
 
 AUTH_HEADERS = {
     "X-User-Id": "user123",
     "X-User-Role": "organization_admin",
     "X-Organization-Id": "org-acme",
 }
+
+
+@pytest.fixture
+def stub_dav_project_folders(monkeypatch):
+    async def fake_project_folders(db, user_id, organization_id, folder_uid=None):
+        assert user_id == "user123"
+        assert organization_id == "org-acme"
+        if folder_uid is None:
+            return [
+                {
+                    "folder_uid": "demo",
+                    "project_name": "demo",
+                    "webdav_path": "/projects/demo",
+                    "owner_user_id": user_id,
+                    "organization_id": organization_id,
+                }
+            ]
+        return [
+            {
+                "folder_uid": folder_uid,
+                "project_name": folder_uid,
+                "webdav_path": f"/projects/{folder_uid}",
+                "owner_user_id": user_id,
+                "organization_id": organization_id,
+            }
+        ]
+
+    monkeypatch.setattr(
+        webdav_service,
+        "get_project_folders_from_db",
+        fake_project_folders,
+    )
 
 
 def test_dav_rejects_missing_auth():
@@ -20,19 +52,13 @@ def test_dav_rejects_missing_auth():
 
 
 def test_dav_route_uses_signed_session_dependency():
-    route = next(
-        (
-            route
-            for route in app.routes
-            if isinstance(route, APIRoute)
-            and route.path == "/dav/{path:path}"
-        ),
-        None,
-    )
+    with TestClient(app) as client:
+        response = client.options(
+            "/dav/user123/projects/",
+            headers={"Authorization": "Bearer not-a-signed-session"},
+        )
 
-    assert route is not None, "DAV route is not registered"
-    dependencies = {dependency.dependency for dependency in route.dependencies}
-    assert get_auth_context in dependencies
+    assert response.status_code == 401
 
 
 def test_dav_options(dev_auth_dependency_overrides):
@@ -68,7 +94,7 @@ def test_dav_rejects_ownerless_options_before_capability_discovery(
         assert response.json()["detail"] == "DAV path must include an owner user"
 
 
-def test_dav_propfind(dev_auth_dependency_overrides):
+def test_dav_propfind(dev_auth_dependency_overrides, stub_dav_project_folders):
     with TestClient(app) as client:
         response = client.request(
             "PROPFIND", "/dav/user123/projects/", headers=AUTH_HEADERS
@@ -79,7 +105,10 @@ def test_dav_propfind(dev_auth_dependency_overrides):
         assert root.find(".//{DAV:}collection") is not None
 
 
-def test_dav_propfind_escapes_path_values(dev_auth_dependency_overrides):
+def test_dav_propfind_escapes_path_values(
+    dev_auth_dependency_overrides,
+    stub_dav_project_folders,
+):
     with TestClient(app) as client:
         response = client.request(
             "PROPFIND", "/dav/user123/projects/x%26y%3Cz%3E", headers=AUTH_HEADERS
