@@ -746,8 +746,7 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed: Simulated HTTP Error"
-                    in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
                 )
 
     finally:
@@ -878,3 +877,88 @@ def test_is_safe_webhook_url_coverage():
     assert is_safe_webhook_url("https://[::1]/admin") is False
     assert is_safe_webhook_url("https://user:pass@example.com/webhook") is False
     assert is_safe_webhook_url("https://example.com/webhook#fragment") is False
+
+
+@pytest.mark.asyncio
+async def test_mock_handler():
+    from api.tools import mock_handler
+    import json
+
+    res = await mock_handler({"test": "data"})
+    assert (
+        res
+        == f"Mock execution successful with params: {json.dumps({'test': 'data'}, ensure_ascii=False, sort_keys=True)}"
+    )
+
+
+def test_validate_webhook_url_details_no_hostname():
+    from api.tools import validate_webhook_url_details
+
+    with pytest.raises(ValueError, match="Webhook URL must include a host"):
+        validate_webhook_url_details("https:///?query=1")
+
+
+def test_validate_webhook_url_details_invalid_port():
+    from api.tools import validate_webhook_url_details
+
+    with pytest.raises(ValueError, match="Webhook URL port must be valid"):
+        validate_webhook_url_details("https://example.com:99999999999")
+
+
+@pytest.mark.asyncio
+async def test_json_validator_handler_valid():
+    from api.tools import json_validator_handler
+    import json
+
+    res = await json_validator_handler({"json_string": '{"key":"value"}'})
+    assert res["is_valid"] is True
+    assert json.loads(res["formatted_json"]) == {"key": "value"}
+    assert res["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_json_validator_handler_invalid():
+    from api.tools import json_validator_handler
+
+    res = await json_validator_handler({"json_string": '{"key":"value"'})
+    assert res["is_valid"] is False
+    assert res["formatted_json"] is None
+    assert res["error"] is not None
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler
+    import hashlib
+
+    res = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
+    assert res["hash"] == hashlib.md5(b"hello").hexdigest()
+    assert res["algorithm"] == "md5"
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler_invalid_alg():
+    from api.tools import hash_generator_handler
+
+    with pytest.raises(ValueError, match="Unsupported hash algorithm: invalid_alg"):
+        await hash_generator_handler({"text": "hello", "algorithm": "invalid_alg"})
+
+
+@pytest.mark.asyncio
+async def test_url_parser_handler():
+    from api.tools import url_parser_handler
+
+    res = await url_parser_handler({"url": "https://example.com/path?q=1#frag"})
+    assert res["scheme"] == "https"
+    assert res["netloc"] == "example.com"
+    assert res["path"] == "/path"
+    assert res["query"] == "q=1"
+    assert res["fragment"] == "frag"
+
+
+@pytest.mark.asyncio
+async def test_url_parser_handler_invalid():
+    from api.tools import url_parser_handler
+
+    with pytest.raises(ValueError, match="Invalid URL"):
+        await url_parser_handler({"url": "http://[::1"})

@@ -1,3 +1,4 @@
+import hashlib
 import base64
 import inspect
 import json
@@ -138,6 +139,7 @@ registry = ToolRegistry()
 
 
 # Initialize default tools
+
 
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
@@ -343,6 +345,7 @@ registry.register(
     tone_analyzer_handler,
 )
 
+
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -354,6 +357,7 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
+
 
 registry.register(
     ToolInfo(
@@ -406,6 +410,85 @@ registry.register(
     ),
     base64_decoder_handler,
 )
+
+
+
+
+
+async def json_validator_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    json_string = params.get("json_string", "")
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"is_valid": True, "formatted_json": formatted, "error": None}
+    except json.JSONDecodeError as e:
+        return {"is_valid": False, "formatted_json": None, "error": str(e)}
+
+
+registry.register(
+    ToolInfo(
+        code="json_validator",
+        name="JSON 검증 및 포매터 (JSON Validator)",
+        description="JSON 문자열의 유효성을 검증하고 들여쓰기가 적용된 형태로 포매팅합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_validator_handler,
+)
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    if algorithm not in hashlib.algorithms_available:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    h = hashlib.new(algorithm)
+    h.update(text.encode("utf-8"))
+    return {"hash": h.hexdigest(), "algorithm": algorithm}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트를 지정된 알고리즘(예: sha256, md5 등)으로 해싱합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def url_parser_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    url = params.get("url", "")
+    try:
+        parsed = urllib.parse.urlparse(url)
+        return {
+            "scheme": parsed.scheme,
+            "netloc": parsed.netloc,
+            "path": parsed.path,
+            "params": parsed.params,
+            "query": parsed.query,
+            "fragment": parsed.fragment,
+            "hostname": parsed.hostname or "",
+        }
+    except Exception as e:
+        raise ValueError(f"Invalid URL: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="url_parser",
+        name="URL 파서 (URL Parser)",
+        description="URL 문자열을 분석하여 구성 요소(스킴, 호스트, 경로, 쿼리 등)로 분리합니다.",
+        category="유틸리티",
+        parameters={"url": "string"},
+    ),
+    url_parser_handler,
+)
+
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
