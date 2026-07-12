@@ -15,6 +15,7 @@ from services.project_graph.project_registration import (
     ProjectCitation,
     ProjectTraceEdge,
     ProjectTraceObject,
+    _incident_relations,
     _trace_relations,
 )
 
@@ -164,3 +165,66 @@ def test_trace_relations_preserves_edge_order_and_multiplicity():
         "implements",
         "refines",
     ]
+
+
+def _relations_fixture() -> tuple:
+    """A feature→requirement→milestone chain projected to typed relations."""
+    feature = _trace_object("feature:aaa", "feature", "Feature: checkout retry")
+    requirement = _trace_object(
+        "requirement:bbb", "requirement", "Requirement: retry guidance"
+    )
+    milestone = _trace_object("milestone:ddd", "milestone", "Milestone: 2026-08-01")
+    edges = (
+        _edge(
+            edge_uid="project_edge:1",
+            source_uid=feature.object_uid,
+            target_uid=requirement.object_uid,
+            edge_type="implements",
+        ),
+        _edge(
+            edge_uid="project_edge:2",
+            source_uid=requirement.object_uid,
+            target_uid=milestone.object_uid,
+            edge_type="refines",
+        ),
+    )
+    return _trace_relations(edges, (feature, requirement, milestone))
+
+
+def test_incident_relations_includes_outbound_edge():
+    relations = _relations_fixture()
+
+    # The feature is the *source* of the implements relation (outbound).
+    incident = _incident_relations(relations, "feature:aaa")
+
+    assert [relation.relation_uid for relation in incident] == ["project_edge:1"]
+
+
+def test_incident_relations_includes_inbound_edge():
+    relations = _relations_fixture()
+
+    # The milestone is the *target* of the refines relation (inbound).
+    incident = _incident_relations(relations, "milestone:ddd")
+
+    assert [relation.relation_uid for relation in incident] == ["project_edge:2"]
+
+
+def test_incident_relations_includes_both_directions_in_edge_order():
+    relations = _relations_fixture()
+
+    # The requirement is a target (implements) and a source (refines): both
+    # surface, and the projected edge order is preserved.
+    incident = _incident_relations(relations, "requirement:bbb")
+
+    assert [relation.relation_uid for relation in incident] == [
+        "project_edge:1",
+        "project_edge:2",
+    ]
+
+
+def test_incident_relations_excludes_unrelated_object():
+    relations = _relations_fixture()
+
+    incident = _incident_relations(relations, "issue:not-an-endpoint")
+
+    assert incident == ()
