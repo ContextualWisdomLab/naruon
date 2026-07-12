@@ -12,6 +12,9 @@
 ### 기능 추가 (Features)
 - `text_analyzer`, `base64_encoder`, `base64_decoder` 등의 실용적인 유틸리티 도구들을 추가했습니다.
 
+### 프로젝트 그래프 (Project Graph Traceability)
+- 프로젝트 traceability 읽기 모델/API에 유형화된 객체↔객체 **관계(relations)** 뷰를 추가했습니다 (P0 dense-KG, naruon#1051 기반). LLM 추출기가 `project_graph_edges`에 적재하는 관계(예: feature *implements* requirement, issue *blocks* milestone)를, 두 끝점이 모두 프로젝트 객체로 해석될 때에 한해 `relation_type` + 양쪽 끝점(`object_uid`/`object_type`/`title`) + 인용(`citation_bundle`)이 인라인된 `ProjectTraceRelation`으로 비정규화해 노출합니다. 소비자가 edge↔object를 재조인하지 않고도 객체가 *왜* 연결되는지 근거와 함께 렌더할 수 있습니다(CP-1 synthesis). segment-evidence 엣지(`segment:<uid>` source)는 source 끝점이 객체로 해석되지 않으므로 구조적으로 relations에서 제외되며, 기존 raw `edges` 컬렉션은 하위호환을 위해 변경 없이 유지됩니다. `GET /api/projects/{project_uid}/traceability` 응답에 `relations` 필드를 추가했습니다.
+
 ### 테스트/품질 (PostgreSQL Smoke Evidence)
 
 - 실제 PostgreSQL에서 상시 실패하던 `@pytest.mark.postgres` smoke 계열 14건을 복구해 전체 백엔드 스위트가 실 DB 기준으로 통과하도록 했습니다 (naruon#1041). 3개 유형: (a) `agent_run_records`↔`workflow_definitions`, `workspace_documents`↔`workspace_entities`에 누락된 `relationship()`를 추가해 same-flush parent/child INSERT의 FK 순서 위반을 해소하고, 모든 FK 쌍에 relationship을 강제하는 가드 테스트(`tests/test_model_relationship_integrity.py`)를 추가했습니다. (b) 스키마와 어긋난 raw-SQL 시드(`emails`→`email_records`, 잘못된 `RETURNING` 컬럼, 누락된 NOT NULL 컬럼, asyncpg UNION 파라미터 정수 캐스팅, `EncryptedString` 암호화 시드)를 정정했습니다. (c) 동작 실패(테넌트 설정 org 스코프 누락, 추출기 requirement+feature 2객체 반영, org-scoped 카운트에 유니크 org 사용, `datetime.utcnow` deprecation, 엔진 dispose 누락으로 인한 ResourceWarning)를 수정했습니다. 세 유형은 각각 flaky-test 연구의 명명된 근본 원인(Test Order Dependency 59%·Infrastructure 28%; Gruber et al. 2021 arXiv:2101.09077, Rasheed et al. 2022 arXiv:2212.00908)에 대응하며, 근거·표준·OSMU 평가를 `docs/engineering/postgres-smoke-evidence-repair.md`에 기록하고 재발 방지 안티패턴을 `AGENTS.md`에 추가했습니다.
