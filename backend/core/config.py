@@ -1,11 +1,10 @@
-import os
-from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlsplit
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.env_paths import ENV_FILE_PATHS, operator_env_file_paths
 from core.runtime_secrets import (
     validate_auth_session_hmac_secret_value,
 )
@@ -19,23 +18,6 @@ DEFAULT_ORIGIN_PORTS = {
     "http": 80,
     "https": 443,
 }
-
-ENV_FILE_PATHS = ("~/.env", "../.env", ".env")
-
-
-def _expand_env_file_path(env_file: str) -> str:
-    """Expand operator-home env paths consistently across platforms."""
-    if not env_file.startswith("~/"):
-        return env_file
-    operator_home = os.environ.get("HOME")
-    if operator_home:
-        return str(Path(operator_home) / env_file[2:])
-    return env_file
-
-
-def _env_file_paths() -> tuple[str, ...]:
-    """Return env files searched for runtime settings."""
-    return tuple(_expand_env_file_path(path) for path in ENV_FILE_PATHS)
 
 
 def canonical_origin(scheme: str, hostname: str, port: int | None) -> str:
@@ -82,6 +64,15 @@ def parse_allowed_cors_origins(raw_origins: str) -> list[str]:
 class Settings(BaseSettings):
     DATABASE_URL: str
     READONLY_DATABASE_URL: str | None = None
+    # Connection-pool tuning. Sizing values default to None (SQLAlchemy
+    # defaults) so behavior is unchanged until an operator sets them.
+    # pre_ping detects dead connections at checkout; recycle avoids
+    # server-side idle timeouts killing pooled connections.
+    DB_POOL_SIZE: int | None = None
+    DB_MAX_OVERFLOW: int | None = None
+    DB_POOL_TIMEOUT_SECONDS: int | None = None
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    DB_POOL_PRE_PING: bool = True
     DEBUG: bool = False
     RUNTIME_ENVIRONMENT: str = "production"
     AUTH_SESSION_HMAC_SECRET: SecretStr | None = None
@@ -102,6 +93,25 @@ class Settings(BaseSettings):
     ALLOWED_SCOPEWEAVE_HOSTS: str = ""
     ALLOWED_CORS_ORIGINS: str = ""
     ENABLE_PROMETHEUS_METRICS: bool = False
+    # Best-effort projection of imported-email content segments into the project
+    # semantic graph. Off by default; failure never affects email import.
+    PROJECT_GRAPH_EXTRACTION_ENABLED: bool = False
+    # Which extractor projects segments into the graph, resolved through the
+    # named+versioned KG extractor seam (services/project_graph/extractor_registry):
+    #   "keyword"      — deterministic baseline (the structural fallback),
+    #   "llm"          — grounded LLM extraction (enforced segment citations),
+    #   "orchestrator" — the same grounded LLM extraction routed through the
+    #                    contextual-orchestrator gateway (see below).
+    # Every selection falls back to "keyword" on any failure, so rule-based
+    # extraction stays fallback/reference only.
+    PROJECT_GRAPH_EXTRACTOR: str = "keyword"
+    # OpenAI-compatible base URL of the contextual-orchestrator LLM gateway that
+    # grounded extraction is routed through when PROJECT_GRAPH_EXTRACTOR is
+    # "orchestrator". Must be HTTPS and exact-host allowlisted by
+    # ALLOWED_LLM_BASE_URL_HOSTS (enforced by build_llm_provider_http_client);
+    # unset routing fails closed to the deterministic keyword extractor. The
+    # provider API key remains the tenant's Fernet-encrypted credential.
+    PROJECT_GRAPH_ORCHESTRATOR_BASE_URL: str | None = None
     DATA_REGION: str = "kr"
     SECONDARY_DATA_REGION: str = "eu"
     SECURITY_CONTENT_SECURITY_POLICY: str = (
@@ -116,6 +126,11 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MODEL: str = "gpt-4o"
+
+    # Clearfolio document-viewer integration (operator-configured in-cluster
+    # Service base URL, e.g. http://clearfolio:8080). Integration is disabled
+    # while unset — the 미리보기 surface stays hidden.
+    CLEARFOLIO_BASE_URL: str | None = None
 
     # Hybrid search fusion (see services/hybrid_retrieval/score_fusion.py;
     # defaults grounded in Bruch, Gai & Ingber 2023 and Cormack et al. 2009)
@@ -138,8 +153,7 @@ class Settings(BaseSettings):
     )
 
     def __init__(self, **values: Any) -> None:
-        if "_env_file" not in values:
-            values["_env_file"] = _env_file_paths()
+        values.setdefault("_env_file", operator_env_file_paths())
         super().__init__(**values)
 
     @field_validator("READONLY_DATABASE_URL", mode="before")

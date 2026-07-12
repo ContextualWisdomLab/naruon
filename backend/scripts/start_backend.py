@@ -10,6 +10,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from core.env_paths import ENV_FILE_PATHS, expand_operator_path  # noqa: E402
 from core.runtime_secrets import validate_auth_session_hmac_secret_value  # noqa: E402
 from core.url_validation import (  # noqa: E402
     parse_allowed_hosts,
@@ -19,7 +20,6 @@ from core.url_validation import (  # noqa: E402
 
 DEFAULT_SERVER_HOST = "127.0.0.1"
 DEFAULT_SERVER_PORT = 8000
-ENV_FILE_PATHS = ("~/.env", "../.env", ".env")
 REQUIRED_SETTINGS = ("DATABASE_URL", "AUTH_SESSION_HMAC_SECRET")
 OIDC_SETTINGS = ("OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_JWKS_URL")
 
@@ -51,21 +51,11 @@ def _read_env_file(path: Path) -> dict[str, str]:
     return values
 
 
-def _expand_env_file_path(env_file: str) -> Path:
-    """Expand startup env-file paths, honoring operator-provided HOME."""
-    if not env_file.startswith("~/"):
-        return Path(env_file).expanduser()
-    operator_home = os.environ.get("HOME")
-    if operator_home:
-        return Path(operator_home) / env_file[2:]
-    return Path(env_file).expanduser()
-
-
 def _runtime_values() -> tuple[dict[str, str], list[Path]]:
     values: dict[str, str] = {}
     checked_paths: list[Path] = []
     for env_file in ENV_FILE_PATHS:
-        path = _expand_env_file_path(env_file)
+        path = expand_operator_path(env_file)
         checked_paths.append(path)
         values.update(_read_env_file(path))
     values.update({key: value for key, value in os.environ.items() if value})

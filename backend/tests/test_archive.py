@@ -14,8 +14,8 @@ from services.exceptions import (
 def _symlink_or_skip(target, link) -> None:
     try:
         os.symlink(target, link)
-    except (OSError, NotImplementedError) as exc:
-        pytest.skip(f"symlink creation unavailable in this environment: {exc}")
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable in this test session: {exc}")
 
 
 def test_extract_backup_success(tmp_path):

@@ -198,6 +198,7 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
 
 
 async def email_translator_handler(params: Dict[str, Any]) -> Any:
+    """Translate email text into the requested target language."""
     text = params.get("text", "")
     target_language = params.get("target_language", "ko")
     return {
@@ -208,8 +209,10 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
 
 
 async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
+    """Score an email body for simple spam and phishing risk indicators."""
     email_content = params.get("email_content", "")
-    is_suspicious = "password" in email_content.lower() or "bank" in email_content.lower()
+    normalized_content = email_content.lower()
+    is_suspicious = "password" in normalized_content or "bank" in normalized_content
     return {
         "is_spam": False,
         "is_phishing": is_suspicious,
@@ -219,6 +222,7 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
 
 
 async def reply_drafter_handler(params: Dict[str, Any]) -> Any:
+    """Draft a formal reply using the operator's requested intent."""
     intent = params.get("intent", "긍정적 동의")
     return {
         "draft": f"귀하의 이메일에 감사드립니다. {intent}의 맥락으로 다음과 같이 회신합니다...",
@@ -227,6 +231,7 @@ async def reply_drafter_handler(params: Dict[str, Any]) -> Any:
 
 
 async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
+    """Classify email text sentiment for the tools API."""
     text = params.get("text", "")
     is_positive = "thank" in text.lower() or "great" in text.lower()
     return {
@@ -237,11 +242,17 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
 
 
 async def grammar_checker_handler(params: Dict[str, Any]) -> Any:
+    """Return a lightweight Korean spacing correction for draft email text."""
     draft = params.get("draft_content", "")
+    has_spacing_error = "안녕 하세요" in draft
     return {
         "corrected_text": draft.replace("안녕 하세요", "안녕하세요"),
-        "errors_found": 1 if "안녕 하세요" in draft else 0,
-        "suggestions": ["'안녕 하세요'는 '안녕하세요'로 붙여 쓰는 것이 맞습니다."] if "안녕 하세요" in draft else [],
+        "errors_found": 1 if has_spacing_error else 0,
+        "suggestions": (
+            ["'안녕 하세요'는 '안녕하세요'로 붙여 쓰는 것이 맞습니다."]
+            if has_spacing_error
+            else []
+        ),
     }
 
 
@@ -506,7 +517,7 @@ registry.register(
         code="grammar_checker",
         name="맞춤법 및 문법 검사기 (Grammar Checker)",
         description="작성된 이메일 초안의 맞춤법과 문법 오류를 검사하고 교정 제안을 제공합니다.",
-        category="작성 도조",
+        category="작성 도구",
         parameters={"draft_content": "string"},
     ),
     grammar_checker_handler,

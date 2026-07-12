@@ -22,6 +22,12 @@ from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 from zipfile import BadZipFile, ZipFile
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from core.env_paths import operator_home  # noqa: E402
+
 SESSION_COOKIE_NAME = "naruon_session"
 SUPPORTED_SUFFIXES = {".eml", ".emlx", ".mbox", ".zip"}
 MATCH_SEPARATORS = str.maketrans("", "", " \t\r\n-_./\\()[]{}:;·ㆍ")
@@ -192,14 +198,6 @@ def _matches_queries(
     return False
 
 
-def _operator_home() -> Path:
-    """Return the operator home directory, honoring HOME in test/smoke shells."""
-    configured_home = os.environ.get("HOME")
-    if configured_home:
-        return Path(configured_home)
-    return Path.home()
-
-
 def _selected_upload_files(
     mail_dir: Path,
     queries: list[str],
@@ -288,7 +286,7 @@ def _selected_upload_files(
             os.environ.get(
                 "NARUON_PRIVATE_MAIL_CACHE",
                 str(
-                    _operator_home()
+                    operator_home()
                     / ".cache"
                     / "naruon"
                     / "private-mail-upload-cache"

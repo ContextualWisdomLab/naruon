@@ -561,6 +561,45 @@ in this repo.
   signal events before the UI claims durable heartbeat evidence. Do not expose
   runner registration tokens, path tokens, or raw provider credentials in event
   ids, details, logs, Settings mocks, or E2E fixtures.
+- A `ForeignKey` column alone does NOT guarantee SQLAlchemy flush ordering.
+  The unit of work orders cross-mapper INSERTs only through
+  `relationship()`-derived dependencies, so a parent+child pair added in one
+  `session.add_all([...]); commit()` without a relationship can emit the child
+  INSERT first and raise `ForeignKeyViolationError` on real PostgreSQL (SQLite
+  and mocked sessions hide it). Every FK table pair must have a `relationship()`
+  in at least one direction; `tests/test_model_relationship_integrity.py` guards
+  this. Do not "fix" the symptom by flushing parents manually in one seeding
+  helper while leaving the model relationship missing.
+- `@pytest.mark.postgres` smoke tests exercise the real schema, so raw-SQL
+  seeding must match the live models exactly: use the current table names
+  (`email_records`, not `emails`), the correct `RETURNING` column per table,
+  and include every `NOT NULL` column the ORM default would have filled
+  (`created_at`, `observed_at`, `parse_content_type`, `parser_key`). Under
+  asyncpg, `INSERT ... SELECT`/`UNION` parameters default to `text`, so cast
+  integer FK params explicitly (`CAST(:email_id AS INTEGER)`).
+- Postgres smoke seeding of `EncryptedString` columns
+  (`credentials_encrypted`, provider `api_key`, runner tokens) must set a
+  Fernet `ENCRYPTION_KEY` for the test (monkeypatch `settings.ENCRYPTION_KEY`)
+  and store `get_fernet().encrypt(...)` output, never plaintext placeholders —
+  the API read path decrypts and fails closed without a key.
+- Org-scoped listing endpoints accumulate rows across smoke runs on a shared
+  database. Smoke tests that assert an exact count must use a unique
+  `organization_id` per run (e.g. `f"org-...-{uuid.uuid4().hex[:12]}"`), not a
+  hardcoded `"org-acme"`, or the count drifts as history builds up.
+- Every `create_async_engine` in a test must be `await engine.dispose()`d on all
+  paths (including skips). A leaked pooled connection surfaces later as a GC
+  `ResourceWarning`, which fails an unrelated downstream test under CI's
+  `PYTHONWARNINGS=error`.
+- Model column defaults must be timezone-aware: use
+  `default=lambda: datetime.datetime.now(datetime.timezone.utc)`, never the
+  deprecated `datetime.datetime.utcnow`, whose `DeprecationWarning` is fatal
+  under `PYTHONWARNINGS=error`.
+- Provider-backed AI Hub agent cards and the security access surface are
+  admin/authoritative-verifier gated; HMAC bearer sessions cannot carry
+  tenant-admin roles or satisfy `_require_authoritative_workspace_scope`. Smoke
+  tests must assert the deny-first boundary (member persona sees no agent cards)
+  or authenticate through an authoritative-verifier `AuthContext` override —
+  do not weaken the endpoint to make the test pass.
 
 ## Development environment and tooling defaults
 
