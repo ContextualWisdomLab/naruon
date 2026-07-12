@@ -885,12 +885,20 @@ def test_execute_email_translator():
         response = client.post(
             "/api/tools/email_translator/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "Hello", "target_language": "ko"}},
+            json={
+                "parameters": {
+                    "text": "Hello, thank you for the meeting.",
+                    "target_language": "ko",
+                }
+            },
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert "ko 번역본" in data["result"]["translated_text"]
+    assert "안녕하세요" in data["result"]["translated_text"]
+    assert "감사합니다" in data["result"]["translated_text"]
+    assert "회의" in data["result"]["translated_text"]
+    assert data["result"]["source_language_detected"] == "en"
 
 
 def test_execute_spam_phishing_detector():
@@ -898,13 +906,20 @@ def test_execute_spam_phishing_detector():
         response = client.post(
             "/api/tools/spam_phishing_detector/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"email_content": "Update your bank password", "sender_domain": "evil.com"}},
+            json={
+                "parameters": {
+                    "email_content": "Urgent: update your bank password now",
+                    "sender_domain": "secure-bank-login.ru",
+                }
+            },
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["is_phishing"] is True
-    assert data["result"]["risk_score"] == 80
+    assert data["result"]["is_spam"] is True
+    assert data["result"]["risk_score"] >= 90
+    assert any("sender domain" in warning for warning in data["result"]["warnings"])
 
 
 def test_execute_reply_drafter():
@@ -912,12 +927,18 @@ def test_execute_reply_drafter():
         response = client.post(
             "/api/tools/reply_drafter/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"original_email": "Can we meet?", "intent": "긍정적 동의"}},
+            json={
+                "parameters": {
+                    "original_email": "Can we meet tomorrow at 2pm?",
+                    "intent": "긍정적 동의",
+                }
+            },
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
     assert "긍정적 동의" in data["result"]["draft"]
+    assert "tomorrow at 2pm" in data["result"]["draft"]
 
 
 def test_execute_sentiment_analyzer():
@@ -925,13 +946,14 @@ def test_execute_sentiment_analyzer():
         response = client.post(
             "/api/tools/sentiment_analyzer/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "Thank you so much!"}},
+            json={"parameters": {"text": "I am disappointed about this urgent issue."}},
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["result"]["sentiment"] == "positive"
-    assert data["result"]["score"] == 0.85
+    assert data["result"]["sentiment"] == "negative"
+    assert data["result"]["score"] < 0.5
+    assert "불만" in data["result"]["key_emotions"]
 
 
 def test_execute_grammar_checker():
@@ -939,13 +961,19 @@ def test_execute_grammar_checker():
         response = client.post(
             "/api/tools/grammar_checker/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"draft_content": "안녕 하세요 반갑습니다"}},
+            json={
+                "parameters": {
+                    "draft_content": "안녕 하세요. 확인 부탁 드립니다. 감사 합니다."
+                }
+            },
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
     assert "안녕하세요" in data["result"]["corrected_text"]
-    assert data["result"]["errors_found"] == 1
+    assert "확인 부탁드립니다" in data["result"]["corrected_text"]
+    assert "감사합니다" in data["result"]["corrected_text"]
+    assert data["result"]["errors_found"] == 3
 
 
 @pytest.mark.asyncio
