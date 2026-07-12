@@ -384,7 +384,7 @@ function citationSourceLabel(citation: ProjectCitation) {
   return citation.source_kind;
 }
 
-function buildAutomationBrief(objects: ProjectTraceObject[]): AutomationBrief {
+function buildAutomationBrief(groupedObjects: Map<string, ProjectTraceObject[]>): AutomationBrief {
   const domains = [
     {
       key: 'wbs',
@@ -417,7 +417,7 @@ function buildAutomationBrief(objects: ProjectTraceObject[]): AutomationBrief {
       objectTypes: ['requirement', 'feature', 'deliverable'],
     },
   ].map((domain) => {
-    const matchingObjects = objects.filter((projectObject) => domain.objectTypes.includes(projectObject.object_type));
+    const matchingObjects = domain.objectTypes.flatMap((type) => groupedObjects.get(type) ?? []);
     return {
       ...domain,
       count: matchingObjects.length,
@@ -440,18 +440,14 @@ function buildAutomationBrief(objects: ProjectTraceObject[]): AutomationBrief {
   };
 }
 
-function findFirstObject(objects: ProjectTraceObject[], objectTypes: string[]) {
-  return objects.find((projectObject) => objectTypes.includes(projectObject.object_type));
-}
-
 function buildDraft(
-  objects: ProjectTraceObject[],
+  groupedObjects: Map<string, ProjectTraceObject[]>,
   key: string,
   label: string,
   objectTypes: string[],
   fallbackSummary: string,
 ): ProjectReportDraft {
-  const matchingObjects = objects.filter((projectObject) => objectTypes.includes(projectObject.object_type));
+  const matchingObjects = objectTypes.flatMap((type) => groupedObjects.get(type) ?? []);
   const primaryObject = matchingObjects[0];
   return {
     key,
@@ -463,18 +459,18 @@ function buildDraft(
   };
 }
 
-function buildProjectReportDraftLayer(objects: ProjectTraceObject[]): ProjectReportDraftLayer {
-  const issueObject = findFirstObject(objects, ['issue']);
-  const milestoneObject = findFirstObject(objects, ['milestone']);
+function buildProjectReportDraftLayer(groupedObjects: Map<string, ProjectTraceObject[]>): ProjectReportDraftLayer {
+  const issueObject = groupedObjects.get('issue')?.[0];
+  const milestoneObject = groupedObjects.get('milestone')?.[0];
   const weeklyDraft = buildDraft(
-    objects,
+    groupedObjects,
     'weekly',
     '주간 보고 초안',
     ['report_delta', 'milestone', 'deliverable', 'issue'],
     '주간 보고에 반영할 변화와 리스크 근거가 아직 없습니다.',
   );
   const dailyDraft = buildDraft(
-    objects,
+    groupedObjects,
     'daily',
     '일일 보고 초안',
     ['issue', 'requirement', 'wbs_item'],
@@ -497,12 +493,12 @@ function buildProjectReportDraftLayer(objects: ProjectTraceObject[]): ProjectRep
     metrics: [
       { key: 'report', label: 'Report readiness', value: readyDraftCount },
       { key: 'risk', label: 'Risk action coverage', value: issueObject ? 1 : 0 },
-      { key: 'status', label: 'Status update ready', value: objects.length > 0 ? 1 : 0 },
+      { key: 'status', label: 'Status update ready', value: groupedObjects.size > 0 ? 1 : 0 },
     ],
   };
 }
 
-function buildProjectControlReadinessLayer(objects: ProjectTraceObject[]): ProjectControlReadinessLayer {
+function buildProjectControlReadinessLayer(groupedObjects: Map<string, ProjectTraceObject[]>): ProjectControlReadinessLayer {
   const items = [
     {
       key: 'acceptance',
@@ -535,7 +531,7 @@ function buildProjectControlReadinessLayer(objects: ProjectTraceObject[]): Proje
       objectTypes: ['participant', 'issue', 'wbs_item'],
     },
   ].map((item) => {
-    const matchingObjects = objects.filter((projectObject) => item.objectTypes.includes(projectObject.object_type));
+    const matchingObjects = item.objectTypes.flatMap((type) => groupedObjects.get(type) ?? []);
     return {
       ...item,
       count: matchingObjects.length,
@@ -548,7 +544,7 @@ function buildProjectControlReadinessLayer(objects: ProjectTraceObject[]): Proje
   const acceptanceReady = items.find((item) => item.key === 'acceptance')?.count ? 1 : 0;
   const actionReady = items.find((item) => item.key === 'ownerAction')?.count ? 1 : 0;
   const scopeReady = items.find((item) => item.key === 'scope')?.count ? 1 : 0;
-  const riskReady = objects.some((projectObject) => projectObject.object_type === 'issue') ? 1 : 0;
+  const riskReady = groupedObjects.has('issue') ? 1 : 0;
   return {
     items,
     readyItemCount,
@@ -652,9 +648,22 @@ export function ProjectsLayout() {
   const selectedEvidenceOption = projectEvidenceSourceOptions.find((option) => option.value === evidenceSource) ?? projectEvidenceSourceOptions[0];
   const savedEvidenceNote = safeText(evidenceDraft, '근거 메모 없음');
   const currentTraceability = traceability?.project_uid === activeSemanticCandidate?.project_uid ? traceability : null;
-  const automationBrief = useMemo(() => buildAutomationBrief(currentTraceability?.objects ?? []), [currentTraceability]);
-  const reportDraftLayer = useMemo(() => buildProjectReportDraftLayer(currentTraceability?.objects ?? []), [currentTraceability]);
-  const controlReadinessLayer = useMemo(() => buildProjectControlReadinessLayer(currentTraceability?.objects ?? []), [currentTraceability]);
+  const currentObjects = useMemo(() => currentTraceability?.objects ?? [], [currentTraceability?.objects]);
+  const groupedObjects = useMemo(() => {
+    const grouped = new Map<string, ProjectTraceObject[]>();
+    for (const projectObject of currentObjects) {
+      const objectsForType = grouped.get(projectObject.object_type);
+      if (objectsForType) {
+        objectsForType.push(projectObject);
+      } else {
+        grouped.set(projectObject.object_type, [projectObject]);
+      }
+    }
+    return grouped;
+  }, [currentObjects]);
+  const automationBrief = useMemo(() => buildAutomationBrief(groupedObjects), [groupedObjects]);
+  const reportDraftLayer = useMemo(() => buildProjectReportDraftLayer(groupedObjects), [groupedObjects]);
+  const controlReadinessLayer = useMemo(() => buildProjectControlReadinessLayer(groupedObjects), [groupedObjects]);
   const traceLoading = Boolean(activeSemanticCandidate && !currentTraceability && traceFailureProjectUid !== activeSemanticCandidate.project_uid);
   const selectedTraceObject = currentTraceability?.objects.find((item) => item.object_uid === selectedObjectUid) ?? currentTraceability?.objects[0] ?? null;
   const selectedEvidenceProjectUid = activeSemanticCandidate?.project_uid ?? null;
