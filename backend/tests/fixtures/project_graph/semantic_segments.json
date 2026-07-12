@@ -115,5 +115,14 @@
     "heading_path": "Wiki",
     "segment_path": "/document[1]/paragraph[13]",
     "ordinal_index": 13
+  },
+  {
+    "content_segment_uid": "seg-decision",
+    "source_kind": "email_body",
+    "source_record_uid": "email-alpha-6",
+    "safe_text_content": "의사결정: 결제 게이트웨이로 Stripe 채택을 결정했습니다. 경영진 결재 완료. Decision approved and signed-off.",
+    "heading_path": "Decisions",
+    "segment_path": "/document[1]/paragraph[14]",
+    "ordinal_index": 14
   }
 ]
