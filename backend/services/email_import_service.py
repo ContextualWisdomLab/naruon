@@ -14,7 +14,6 @@ from typing import Literal
 from sqlalchemy import bindparam, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import settings
 from db.models import (
     Attachment,
     ContentNodeRecord,
@@ -23,7 +22,6 @@ from db.models import (
     KnowledgeGraphEdgeRecord,
 )
 from services.archive import extract_backup_async
-from services.batch_embedding_service import try_batch_import_embeddings
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
@@ -33,14 +31,6 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
-from services.project_graph import (
-    ProjectSourceSegment,
-    persist_project_graph_projection,
-)
-from services.project_graph.extractor_registry import (
-    KgExtractorContext,
-    run_extraction,
-)
 from services.threading_service import (
     assign_thread_id,
     generate_email_fingerprint,
@@ -73,20 +63,6 @@ class EmailImportEmbeddingProvider:
     api_key: str
     base_url: str | None
     embedding_model: str
-
-
-@dataclass(frozen=True)
-class EmailImportBatchContext:
-    """Scope needed to route bulk import embeddings via contextual-orchestrator.
-
-    Carried alongside the embedding provider so ``_generate_import_embeddings``
-    can resolve per-tenant batch settings (Fernet DB), submit the batch to the
-    orchestrator, and record batch jobs.
-    """
-
-    session: AsyncSession
-    user_id: str
-    organization_id: str | None
 
 
 @dataclass
@@ -248,7 +224,6 @@ async def _release_owner_import_quota_lock(
 async def _extract_and_generate_embeddings(
     parsed: EmailData,
     embedding_provider: EmailImportEmbeddingProvider | None,
-    batch_context: "EmailImportBatchContext | None" = None,
 ) -> tuple[list[dict], list[list[float]]]:
     attachment_payloads = list(parsed.get("attachments", []))
     embedding_texts = [str(parsed.get("body") or "")]
@@ -258,7 +233,6 @@ async def _extract_and_generate_embeddings(
     fitted_embeddings = await _generate_import_embeddings(
         embedding_texts,
         embedding_provider=embedding_provider,
-        batch_context=batch_context,
     )
     return attachment_payloads, fitted_embeddings
 
@@ -347,14 +321,6 @@ def _fallback_attachment_parser_key(
 ) -> str:
     if parse_status == "unsupported_content_type":
         return "unsupported_binary"
-    if parse_content_type in {"application/json", "text/json"}:
-        return "json"
-    if parse_content_type in {"text/csv", "application/csv"}:
-        return "csv"
-    if parse_content_type in {"application/xml", "text/xml"}:
-        return "xml"
-    if parse_content_type == "text/calendar":
-        return "calendar"
     if parse_content_type == "text/html":
         return "html"
     if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
@@ -659,99 +625,6 @@ def _content_graph_source_record_uid(prefix: str, *parts: str) -> str:
     return f"{prefix}:{digest[:32]}"
 
 
-def _project_source_segments(email_obj: Email) -> list[ProjectSourceSegment]:
-    """Snapshot the imported email's content segments as project source segments.
-
-    Called before commit while ``email_obj.content_segments`` is the in-memory
-    list populated by ``_append_email_content_graph`` (no DB IO), so it is safe
-    to build in the async session context.
-    """
-    return [
-        ProjectSourceSegment(
-            content_segment_uid=segment.content_segment_uid,
-            source_kind=segment.source_kind,
-            source_record_uid=segment.source_record_uid,
-            safe_text_content=segment.safe_text_content,
-            heading_path=segment.heading_path,
-            segment_path=segment.segment_path,
-            ordinal_index=segment.ordinal_index,
-        )
-        for segment in email_obj.content_segments
-    ]
-
-
-async def _extract_project_semantics_for_import(
-    source_segments: list[ProjectSourceSegment],
-    *,
-    embedding_provider: EmailImportEmbeddingProvider | None,
-):
-    """Project segments into the graph via the configured extractor seam.
-
-    Resolution goes through the named+versioned KG extractor registry
-    (``services.project_graph.extractor_registry``) keyed by
-    ``settings.PROJECT_GRAPH_EXTRACTOR``. The LLM extractors reuse the import's
-    OpenAI-compatible provider credentials and enforce segment citations, so
-    they cannot introduce uncited claims; a missing credential, an unconfigured
-    orchestrator endpoint, or any provider/parse failure degrades down the chain
-    to the deterministic keyword baseline instead of losing the projection.
-    """
-    context = KgExtractorContext(
-        api_key=embedding_provider.api_key if embedding_provider else None,
-        base_url=embedding_provider.base_url if embedding_provider else None,
-        model=settings.OPENAI_MODEL,
-        orchestrator_base_url=settings.PROJECT_GRAPH_ORCHESTRATOR_BASE_URL,
-    )
-    return await run_extraction(
-        source_segments,
-        selector=settings.PROJECT_GRAPH_EXTRACTOR,
-        context=context,
-    )
-
-
-async def _persist_project_graph_projection(
-    session: AsyncSession,
-    source_segments: list[ProjectSourceSegment],
-    *,
-    user_id: str,
-    organization_id: str,
-    embedding_provider: EmailImportEmbeddingProvider | None = None,
-) -> None:
-    """Best-effort projection of imported content segments into the project graph.
-
-    Runs after the email is already committed. Flag-gated and defensive: any
-    failure is logged and rolled back so it never fails the email import. The
-    workspace scope mirrors the convention enforced by the project graph
-    repository (``workspace-<organization_id>``).
-    """
-    if not source_segments:
-        return
-    try:
-        extraction = await _extract_project_semantics_for_import(
-            source_segments, embedding_provider=embedding_provider
-        )
-        if not extraction.objects:
-            return
-        workspace_id = (
-            f"workspace-{organization_id}"
-            if organization_id
-            else f"workspace-{user_id}"
-        )
-        await persist_project_graph_projection(
-            session,
-            extraction=extraction,
-            user_id=user_id,
-            organization_id=organization_id,
-            workspace_id=workspace_id,
-        )
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        logger.warning(
-            "Project graph projection skipped for imported email",
-            exc_info=True,
-        )
-
-
 async def _import_single_eml(
     session: AsyncSession,
     *,
@@ -760,16 +633,10 @@ async def _import_single_eml(
     user_id: str,
     organization_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
-    batch_context: "EmailImportBatchContext | None" = None,
 ) -> EmailImportItemResult:
     try:
         content, parsed = await asyncio.to_thread(_read_and_parse_eml, eml_path)
-    except EmailParseError as exc:
-        logger.warning(
-            "Email import item failed: reason_code=parse_failed filename=%s error_type=%s",
-            display_filename,
-            type(exc).__name__,
-        )
+    except EmailParseError:
         return EmailImportItemResult(
             filename=display_filename,
             status="failed",
@@ -803,7 +670,7 @@ async def _import_single_eml(
     )
 
     attachment_payloads, fitted_embeddings = await _extract_and_generate_embeddings(
-        parsed, embedding_provider, batch_context
+        parsed, embedding_provider
     )
 
     email_obj, attachment_count = _build_email_object(
@@ -818,34 +685,16 @@ async def _import_single_eml(
         fitted_embeddings=fitted_embeddings,
     )
 
-    project_source_segments = (
-        _project_source_segments(email_obj)
-        if settings.PROJECT_GRAPH_EXTRACTION_ENABLED
-        else []
-    )
-
     session.add(email_obj)
     try:
         await session.commit()
     except Exception:
         await session.rollback()
-        logger.warning(
-            "Email import item failed: reason_code=database_commit_failed filename=%s",
-            display_filename,
-        )
         return EmailImportItemResult(
             filename=display_filename,
             status="failed",
             reason_code="database_commit_failed",
         )
-
-    await _persist_project_graph_projection(
-        session,
-        project_source_segments,
-        user_id=user_id,
-        organization_id=organization_id,
-        embedding_provider=embedding_provider,
-    )
 
     return EmailImportItemResult(
         filename=display_filename,
@@ -867,25 +716,9 @@ async def _generate_import_embeddings(
     texts: list[str],
     *,
     embedding_provider: EmailImportEmbeddingProvider | None,
-    batch_context: "EmailImportBatchContext | None" = None,
 ) -> list[list[float]]:
     if embedding_provider is None:
         return [_zero_embedding() for _ in texts]
-    if batch_context is not None and texts:
-        # Bulk import embeddings are latency-tolerant: route them through
-        # contextual-orchestrator first. A None result means batch is
-        # unconfigured/unavailable, so we transparently fall through to the
-        # existing per-request path below.
-        batched = await try_batch_import_embeddings(
-            batch_context.session,
-            texts,
-            embedding_provider=embedding_provider,
-            user_id=batch_context.user_id,
-            organization_id=batch_context.organization_id,
-            dimension=EMBEDDING_DIMENSION,
-        )
-        if batched is not None:
-            return batched
     try:
         provider_embeddings = await generate_embeddings(
             texts,
@@ -953,18 +786,12 @@ async def _generate_import_embeddings(
 
 def _read_eml_bytes(eml_path: Path) -> bytes:
     no_follow_flag = getattr(os, "O_NOFOLLOW", None)
-    path_stat = None
     if no_follow_flag is None:
-        try:
-            path_stat = eml_path.lstat()
-        except OSError as exc:
-            raise EmailParseError("Failed to read email file") from exc
-        if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISREG(path_stat.st_mode):
-            raise EmailParseError("Failed to read email file")
+        raise EmailParseError(
+            "Email import requires O_NOFOLLOW support (unavailable on this platform)"
+        )
 
-    open_flags = os.O_RDONLY
-    if no_follow_flag is not None:
-        open_flags |= no_follow_flag
+    open_flags = os.O_RDONLY | no_follow_flag
     file_descriptor_transferred = False
     try:
         file_descriptor = os.open(eml_path, open_flags)
@@ -974,11 +801,6 @@ def _read_eml_bytes(eml_path: Path) -> bytes:
     try:
         file_stat = os.fstat(file_descriptor)
         if not stat.S_ISREG(file_stat.st_mode):
-            raise EmailParseError("Failed to read email file")
-        if path_stat is not None and (
-            getattr(file_stat, "st_ino", None) != getattr(path_stat, "st_ino", None)
-            or getattr(file_stat, "st_dev", None) != getattr(path_stat, "st_dev", None)
-        ):
             raise EmailParseError("Failed to read email file")
         file_handle = os.fdopen(file_descriptor, "rb")
         file_descriptor_transferred = True
@@ -1065,11 +887,6 @@ async def import_email_uploads(
     lock_acquired = await _acquire_owner_import_quota_lock(
         session, user_id=user_id, organization_id=organization_id
     )
-    batch_context = EmailImportBatchContext(
-        session=session,
-        user_id=user_id,
-        organization_id=organization_id,
-    )
     try:
         result = EmailImportResult()
         existing_email_count = await _owner_email_import_count(
@@ -1091,11 +908,6 @@ async def import_email_uploads(
                     upload_dir=upload_dir,
                 )
                 if failure_reason is not None:
-                    logger.warning(
-                        "Email import upload failed: reason_code=%s filename=%s",
-                        failure_reason,
-                        upload_name,
-                    )
                     result.add_item(
                         EmailImportItemResult(
                             filename=upload_name,
@@ -1125,7 +937,6 @@ async def import_email_uploads(
                         user_id=user_id,
                         organization_id=organization_id,
                         embedding_provider=embedding_provider,
-                        batch_context=batch_context,
                     )
                 )
     finally:

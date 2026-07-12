@@ -962,8 +962,7 @@ async def test_calendar_writeback_intent_real_postgres_smoke():
                         source_protocol,
                         source_host,
                         writeback_enabled,
-                        etag_value,
-                        created_at
+                        etag_value
                     )
                     VALUES (
                         :source_uid,
@@ -975,8 +974,7 @@ async def test_calendar_writeback_intent_real_postgres_smoke():
                         :source_protocol,
                         :source_host,
                         :writeback_enabled,
-                        :etag_value,
-                        now()
+                        :etag_value
                     )
                     """
                 ),

@@ -103,42 +103,11 @@ class ProjectTraceEdge:
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectTraceRelationEndpoint:
-    object_uid: str
-    object_type: str
-    title: str
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectTraceRelation:
-    """A typed object-to-object relation with both endpoints resolved.
-
-    Derived from the persisted graph edges, but — unlike a raw
-    :class:`ProjectTraceEdge` — a relation only exists when BOTH endpoints
-    resolve to project objects in the traceability group, and it inlines each
-    endpoint's ``object_type`` and ``title``. That lets a consumer render *why*
-    two objects connect (a feature *implements* a requirement, an issue
-    *blocks* a milestone) with citations, without re-joining edges to objects.
-    Segment-evidence edges (``segment:<uid>`` sources) are structurally excluded
-    because their source never resolves to an object.
-    """
-
-    relation_uid: str
-    relation_type: str
-    source: ProjectTraceRelationEndpoint
-    target: ProjectTraceRelationEndpoint
-    confidence: float
-    source_segment_uids: tuple[str, ...]
-    citation_bundle: tuple[ProjectCitation, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class ProjectTraceability:
     project_uid: str
     candidate: ProjectCandidateSummary
     objects: tuple[ProjectTraceObject, ...]
     edges: tuple[ProjectTraceEdge, ...]
-    relations: tuple[ProjectTraceRelation, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,14 +209,11 @@ async def get_project_traceability(
     source_uids = _record_segment_uids(group.records) + _edge_segment_uids(edges)
     segment_map = await _load_citation_map(session, source_uids, scope=scope)
     candidate = _candidate_summary(group, segment_map=segment_map)
-    trace_objects = tuple(_trace_object(record, segment_map) for record in group.records)
-    trace_edges = tuple(_trace_edge(edge, segment_map) for edge in edges)
     return ProjectTraceability(
         project_uid=group.project_uid,
         candidate=candidate,
-        objects=trace_objects,
-        edges=trace_edges,
-        relations=_trace_relations(trace_edges, trace_objects),
+        objects=tuple(_trace_object(record, segment_map) for record in group.records),
+        edges=tuple(_trace_edge(edge, segment_map) for edge in edges),
     )
 
 
@@ -603,48 +569,6 @@ def _trace_edge(
         source_segment_uids=tuple(edge.source_segment_uids),
         citation_bundle=_citation_bundle(tuple(edge.source_segment_uids), segment_map),
     )
-
-
-def _relation_endpoint(
-    trace_object: ProjectTraceObject,
-) -> ProjectTraceRelationEndpoint:
-    return ProjectTraceRelationEndpoint(
-        object_uid=trace_object.object_uid,
-        object_type=trace_object.object_type,
-        title=trace_object.title,
-    )
-
-
-def _trace_relations(
-    edges: tuple[ProjectTraceEdge, ...],
-    objects: tuple[ProjectTraceObject, ...],
-) -> tuple[ProjectTraceRelation, ...]:
-    """Project the loaded edges onto typed object-to-object relations.
-
-    An edge becomes a relation only when both of its endpoints resolve to
-    project objects in this traceability group. Segment-evidence edges
-    (``segment:<uid>`` source) never resolve on the source side, so they are
-    excluded and the raw ``edges`` collection stays the place to read them.
-    """
-    objects_by_uid = {trace_object.object_uid: trace_object for trace_object in objects}
-    relations: list[ProjectTraceRelation] = []
-    for edge in edges:
-        source_object = objects_by_uid.get(edge.source_uid)
-        target_object = objects_by_uid.get(edge.target_uid)
-        if source_object is None or target_object is None:
-            continue
-        relations.append(
-            ProjectTraceRelation(
-                relation_uid=edge.edge_uid,
-                relation_type=edge.edge_type,
-                source=_relation_endpoint(source_object),
-                target=_relation_endpoint(target_object),
-                confidence=edge.confidence,
-                source_segment_uids=edge.source_segment_uids,
-                citation_bundle=edge.citation_bundle,
-            )
-        )
-    return tuple(relations)
 
 
 def _correction_response(

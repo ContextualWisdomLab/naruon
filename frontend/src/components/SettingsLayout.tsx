@@ -881,7 +881,7 @@ export function SettingsLayout() {
                   <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                     <h3 className="font-bold text-lg mb-4">시작 화면 설정</h3>
                     <p className="text-sm text-muted-foreground mb-4">로그인 시 처음 보여질 메인 화면을 선택하세요.</p>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="grid grid-cols-3 gap-4">
                       {[
                         { label: '홈', value: 'dashboard', desc: '오늘의 맥락 종합과 실행 항목' },
                         { label: '메일', value: 'email', desc: '인박스 중심으로 확인' },
@@ -1041,9 +1041,9 @@ export function SettingsLayout() {
                       </div>
                       <div className="space-y-2">
                         <label htmlFor="commercial-api-key" className="text-sm font-bold text-muted-foreground">API Key</label>
-                        <input id="commercial-api-key" ref={commercialApiKeyInputRef} type="password" onChange={() => setModelProviderStatus(null)} placeholder="저장 시에만 전송" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                        <input id="commercial-api-key" ref={commercialApiKeyInputRef} type="password" autoComplete="new-password" onChange={() => setModelProviderStatus(null)} placeholder="저장 시에만 전송" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                       </div>
-                      <button type="submit" disabled={commercialModelSaving || modelProvidersLoading} aria-busy={commercialModelSaving || modelProvidersLoading} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60">
+                      <button type="submit" disabled={commercialModelSaving || modelProvidersLoading} aria-busy={commercialModelSaving || modelProvidersLoading} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                         {commercialModelSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
                         {commercialModelSaving ? '등록 중' : '상용 모델 추가'}
                       </button>
@@ -1090,9 +1090,9 @@ export function SettingsLayout() {
                       </div>
                       <div className="space-y-2">
                         <label htmlFor="local-api-key" className="text-sm font-bold text-muted-foreground">로컬 API 키 대체값</label>
-                        <input id="local-api-key" ref={localApiKeyInputRef} type="password" onChange={() => setModelProviderStatus(null)} placeholder="필요한 경우에만 입력" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                        <input id="local-api-key" ref={localApiKeyInputRef} type="password" autoComplete="new-password" onChange={() => setModelProviderStatus(null)} placeholder="필요한 경우에만 입력" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                       </div>
-                      <button type="submit" disabled={localModelSaving || modelProvidersLoading} aria-busy={localModelSaving || modelProvidersLoading} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">
+                      <button type="submit" disabled={localModelSaving || modelProvidersLoading} aria-busy={localModelSaving || modelProvidersLoading} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                         {localModelSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Cpu className="size-4" aria-hidden="true" />}
                         {localModelSaving ? '등록 중' : 'Gemma4 로컬 모델 등록'}
                       </button>
@@ -1159,7 +1159,7 @@ export function SettingsLayout() {
                       onClick={handleEmbeddingModelSave}
                       disabled={!selectedEmbeddingProvider || embeddingSaving}
                       aria-busy={embeddingSaving}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       {embeddingSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Network className="size-4" aria-hidden="true" />}
                       {embeddingSaving ? '저장 중' : '임베딩 모델 저장'}
@@ -1305,7 +1305,7 @@ export function SettingsLayout() {
                       aria-disabled={accountSaving || !accountReady}
                       aria-busy={accountSaving}
                       title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                       {accountSaving ? '저장 중' : '계정 설정 저장'}
@@ -1328,7 +1328,7 @@ export function SettingsLayout() {
                       </div>
                       <div className="space-y-2">
                         <label htmlFor="smtp-password" className="text-sm font-bold text-muted-foreground">SMTP secret</label>
-                        <input id="smtp-password" ref={smtpPasswordInputRef} name="smtp_password" type="password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_smtp_password ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                        <input id="smtp-password" ref={smtpPasswordInputRef} name="smtp_password" type="password" autoComplete="new-password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_smtp_password ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                       </div>
                     </section>
 
@@ -1347,7 +1347,7 @@ export function SettingsLayout() {
                       </div>
                       <div className="space-y-2">
                         <label htmlFor="imap-password" className="text-sm font-bold text-muted-foreground">IMAP secret</label>
-                        <input id="imap-password" ref={imapPasswordInputRef} name="imap_password" type="password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_imap_password ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                        <input id="imap-password" ref={imapPasswordInputRef} name="imap_password" type="password" autoComplete="new-password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_imap_password ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                       </div>
                     </section>
 
@@ -1366,7 +1366,7 @@ export function SettingsLayout() {
                       </div>
                       <div className="space-y-2">
                         <label htmlFor="pop3-password" className="text-sm font-bold text-muted-foreground">POP3 secret</label>
-                        <input id="pop3-password" ref={pop3PasswordInputRef} name="pop3_password" type="password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_pop3_password ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                        <input id="pop3-password" ref={pop3PasswordInputRef} name="pop3_password" type="password" autoComplete="new-password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_pop3_password ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                       </div>
                     </section>
 
@@ -1377,7 +1377,7 @@ export function SettingsLayout() {
                       </div>
                       <div className="space-y-2">
                         <label htmlFor="oauth-client-secret" className="text-sm font-bold text-muted-foreground">OAuth client secret</label>
-                        <input id="oauth-client-secret" ref={oauthClientSecretInputRef} name="oauth_client_secret" type="password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_oauth_client_secret ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
+                        <input id="oauth-client-secret" ref={oauthClientSecretInputRef} name="oauth_client_secret" type="password" autoComplete="new-password" onChange={() => setAccountStatus(null)} placeholder={accountConfig?.has_oauth_client_secret ? '저장된 secret 유지' : '새 secret 입력'} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                       </div>
                       <div className="space-y-2 sm:col-span-2">
                         <label htmlFor="oauth-redirect-uri" className="text-sm font-bold text-muted-foreground">OAuth redirect URI</label>
@@ -1441,7 +1441,7 @@ export function SettingsLayout() {
                       aria-disabled={runnerRotating}
                       aria-busy={runnerRotating}
                       title={runnerRotating ? "등록 토큰을 회전 중입니다" : "등록 토큰을 회전합니다"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} />
                       {runnerRotating ? '회전 중' : '등록 토큰 회전'}
@@ -1619,7 +1619,7 @@ export function SettingsLayout() {
                         onClick={handleOidcLogin}
                         disabled={!oidcBrowserConfig}
                         title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
                         OIDC 로그인
                       </button>
@@ -1628,7 +1628,7 @@ export function SettingsLayout() {
                         onClick={handleOidcLogout}
                         disabled={!oidcSessionClaims.userId}
                         title={!oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
                         로그아웃
                       </button>

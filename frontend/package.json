@@ -5,13 +5,11 @@
   "packageManager": "pnpm@11.5.3",
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "full:smoke": "node scripts/full-product-ui-smoke.mjs",
-    "pilot:smoke": "node scripts/pilot-ui-smoke.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

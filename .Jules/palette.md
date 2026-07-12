@@ -16,6 +16,3 @@
 ## 2026-06-25 - Explicit Loading Feedback for Intent Generation
 **Learning:** In deeply nested data-action layouts (like DataLayout's document and thread intent generation), missing explicit loading spinners and text changes (e.g., from "실행" to "처리 중") leaves users guessing if the button click registered. `disabled` alone is insufficient feedback for intent-checking actions which often take several seconds.
 **Action:** When adding asynchronous intent check actions (like WebDAV or thread validations), always combine `disabled={isLoading}`, `aria-busy={isLoading}`, a `Loader2` spinner, and a dynamic text label (e.g. `isLoading ? '점검 중' : '점검'`) to give immediate, unambiguous feedback.
-## 2026-06-25 - Use semantic type="search" with custom clear buttons
-**Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
-**Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.

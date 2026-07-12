@@ -25,12 +25,6 @@ from services.project_graph.traceability import (
     get_project_evidence,
     get_project_traceability,
 )
-from services.scopeweave_client import ScopeweaveConfigError, ScopeweavePushError
-from services.scopeweave_promotion import (
-    ScopeweaveNotConfiguredError,
-    ScopeweavePromotionOutcome,
-    promote_project_object,
-)
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -89,28 +83,11 @@ class ProjectTraceEdgeResponse(BaseModel):
     citation_bundle: list[ProjectCitationResponse]
 
 
-class ProjectTraceRelationEndpointResponse(BaseModel):
-    object_uid: str
-    object_type: str
-    title: str
-
-
-class ProjectTraceRelationResponse(BaseModel):
-    relation_uid: str
-    relation_type: str
-    source: ProjectTraceRelationEndpointResponse
-    target: ProjectTraceRelationEndpointResponse
-    confidence: float
-    source_segment_uids: list[str]
-    citation_bundle: list[ProjectCitationResponse]
-
-
 class ProjectTraceabilityResponse(BaseModel):
     project_uid: str
     candidate: ProjectCandidateResponse
     objects: list[ProjectTraceObjectResponse]
     edges: list[ProjectTraceEdgeResponse]
-    relations: list[ProjectTraceRelationResponse]
 
 
 class ProjectEvidenceResponse(BaseModel):
@@ -122,23 +99,6 @@ class ProjectEvidenceResponse(BaseModel):
     status_code: str
     confidence: float
     citation_bundle: list[ProjectCitationResponse]
-
-
-class ProjectPromoteRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    object_uid: str = Field(min_length=1, max_length=160)
-
-
-class ProjectPromoteResponse(BaseModel):
-    project_uid: str
-    object_uid: str
-    object_type: str
-    scopeweave_work_item_id: str
-    scopeweave_work_item_url: str | None
-    promoted_confidence: float
-    citation_count: int
-    created: bool
 
 
 class ProjectCorrectionRequest(BaseModel):
@@ -289,37 +249,6 @@ async def apply_project_correction_endpoint(
     return _correction_response(correction)
 
 
-@router.post(
-    "/{project_uid}/promote",
-    response_model=ProjectPromoteResponse,
-)
-async def promote_project_object_endpoint(
-    project_uid: str,
-    request: ProjectPromoteRequest,
-    auth_context: AuthContext = Depends(get_auth_context),
-    db: AsyncSession = Depends(get_db),
-):
-    try:
-        outcome = await promote_project_object(
-            db,
-            scope=_project_scope(auth_context),
-            project_uid=project_uid,
-            object_uid=request.object_uid,
-            actor_user_id=auth_context.user_id,
-        )
-        await db.commit()
-    except ProjectGraphNotFoundError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ScopeweaveNotConfiguredError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except (ScopeweaveConfigError, ScopeweavePushError) as exc:
-        await db.rollback()
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return _promote_response(outcome)
-
-
 def _citation_response(citation: ProjectCitation) -> ProjectCitationResponse:
     return ProjectCitationResponse(
         content_segment_uid=citation.content_segment_uid,
@@ -391,29 +320,6 @@ def _traceability_response(
             )
             for edge in traceability.edges
         ],
-        relations=[
-            ProjectTraceRelationResponse(
-                relation_uid=relation.relation_uid,
-                relation_type=relation.relation_type,
-                source=ProjectTraceRelationEndpointResponse(
-                    object_uid=relation.source.object_uid,
-                    object_type=relation.source.object_type,
-                    title=relation.source.title,
-                ),
-                target=ProjectTraceRelationEndpointResponse(
-                    object_uid=relation.target.object_uid,
-                    object_type=relation.target.object_type,
-                    title=relation.target.title,
-                ),
-                confidence=relation.confidence,
-                source_segment_uids=list(relation.source_segment_uids),
-                citation_bundle=[
-                    _citation_response(citation)
-                    for citation in relation.citation_bundle
-                ],
-            )
-            for relation in traceability.relations
-        ],
     )
 
 
@@ -429,21 +335,6 @@ def _evidence_response(evidence: ProjectEvidence) -> ProjectEvidenceResponse:
         citation_bundle=[
             _citation_response(citation) for citation in evidence.citation_bundle
         ],
-    )
-
-
-def _promote_response(
-    outcome: ScopeweavePromotionOutcome,
-) -> ProjectPromoteResponse:
-    return ProjectPromoteResponse(
-        project_uid=outcome.project_uid,
-        object_uid=outcome.object_uid,
-        object_type=outcome.object_type,
-        scopeweave_work_item_id=outcome.scopeweave_work_item_id,
-        scopeweave_work_item_url=outcome.scopeweave_work_item_url,
-        promoted_confidence=outcome.promoted_confidence,
-        citation_count=outcome.citation_count,
-        created=outcome.created,
     )
 
 

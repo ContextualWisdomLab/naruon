@@ -1,6 +1,6 @@
 """add attachment parser audit metadata
 
-Revision ID: 0008_attachment_parser_audit
+Revision ID: 0008_attachment_parser_audit_metadata
 Revises: 0007_attachment_parse_metadata
 Create Date: 2026-07-02 00:00:00.000000
 """
@@ -8,7 +8,7 @@ Create Date: 2026-07-02 00:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0008_attachment_parser_audit"
+revision = "0008_attachment_parser_audit_metadata"
 down_revision = "0007_attachment_parse_metadata"
 
 _ATTACHMENT_TABLE = "email_attachments"

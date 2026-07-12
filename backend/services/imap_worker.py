@@ -26,7 +26,6 @@ async def process_fetched_email(
     user_id: str,
     organization_id: str | None,
     owner_addresses: Iterable[str] | None = None,
-    is_read: bool = True,
 ):
     subject = email_data.get("subject", "")
     date_obj = email_data.get("date")
@@ -88,7 +87,6 @@ async def process_fetched_email(
         subject=subject,
         date=persisted_date,
         body=email_data.get("body", ""),
-        is_read=is_read,
         embedding=[0.0] * 1536,
     )
 
@@ -100,23 +98,6 @@ async def process_fetched_email(
 
 logger = logging.getLogger(__name__)
 MAX_IMAP_FETCH_MESSAGES = 10
-
-
-def flags_indicate_seen(fetch_data) -> bool:
-    """True when an IMAP FETCH response's FLAGS envelope contains ``\\Seen``.
-
-    Defensive by design: a message is only reported read when an explicit
-    ``FLAGS (... \\Seen ...)`` section is present, so a parse miss falls back to
-    unread rather than silently marking mail read.
-    """
-    for item in fetch_data or []:
-        parts = item if isinstance(item, (tuple, list)) else (item,)
-        for part in parts:
-            raw = part if isinstance(part, bytes) else str(part).encode("utf-8", "replace")
-            upper = raw.upper()
-            if b"FLAGS" in upper and b"\\SEEN" in upper:
-                return True
-    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,17 +266,15 @@ class ImapSyncWorker:
             if search_resp != "OK":
                 raise RuntimeError("IMAP message search failed")
 
-            messages: list[tuple[bytes, bool]] = []
+            messages: list[bytes] = []
             message_numbers = self._message_numbers_from_search(search_data)
             for message_number in message_numbers[-MAX_IMAP_FETCH_MESSAGES:]:
                 fetch_resp, fetch_data = await imap_client.fetch(
-                    message_number, "(RFC822 FLAGS)"
+                    message_number, "(RFC822)"
                 )
                 if fetch_resp != "OK":
                     continue
-                is_read = flags_indicate_seen(fetch_data)
-                for raw in self._extract_rfc822_messages(fetch_data):
-                    messages.append((raw, is_read))
+                messages.extend(self._extract_rfc822_messages(fetch_data))
             return messages
         finally:
             try:
@@ -309,7 +288,7 @@ class ImapSyncWorker:
                 )
 
     async def _import_messages(
-        self, config: TenantConfig, messages: list[tuple[bytes, bool]]
+        self, config: TenantConfig, messages: list[bytes]
     ) -> int:
         if not messages:
             return 0
@@ -318,7 +297,7 @@ class ImapSyncWorker:
         owner_addresses = [config.imap_username] if config.imap_username else None
         async with AsyncSessionLocal() as session:
             try:
-                for raw_message, is_read in messages:
+                for raw_message in messages:
                     try:
                         email_data = parse_eml_bytes(raw_message)
                     except EmailParseError:
@@ -333,7 +312,6 @@ class ImapSyncWorker:
                         config.user_id,
                         config.organization_id,
                         owner_addresses=owner_addresses,
-                        is_read=is_read,
                     )
                     imported_count += 1
                 await session.commit()

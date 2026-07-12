@@ -18,7 +18,7 @@ logger = logging.getLogger("naruon.connector")
 
 
 class ConnectorConfigError(ValueError):
-    """Raised when required connector runtime configuration is missing."""
+    pass
 
 
 def _required_env(environ: Mapping[str, str], name: str) -> str:

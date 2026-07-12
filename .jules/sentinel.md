@@ -100,11 +100,12 @@
 **Vulnerability:** JWT decoding remained allowlisted but static analysis could not prove the accepted algorithm when `jwt.decode(..., algorithms=...)` received module-level variables.
 **Learning:** Security-sensitive decode boundaries should make accepted algorithms obvious to both runtime readers and static scanners.
 **Prevention:** Pass explicit hardcoded lists such as `algorithms=["HS256"]` and `algorithms=["RS256"]` at the decode call sites, and keep header preflight checks aligned with those exact values.
-## 2026-07-07 - URL-Encoded Open Redirect Bypass
 
-**Vulnerability:** The `toSafeReturnTo` function in `frontend/src/app/auth/callback/page.tsx` validated paths to ensure they didn't start with double-slashes (`//`) or backslashes to prevent open redirects. However, attackers could bypass this validation by URL-encoding the payload (e.g. `/%5C%5Cexample.com` or `/%2fexample.com`).
-**Learning:** Checking for traversal or open redirect payloads directly on raw URLs is insufficient, as the browser will decode and redirect to the encoded malicious payload anyway.
-**Prevention:** Always decode the URI component (`decodeURIComponent`) and validate the decoded string to ensure that encoded bypass payloads are caught.
+## 2024-05-24 - Fix Open Redirect via URL-encoded characters
+**Vulnerability:** Open Redirect in `toSafeReturnTo` allowed bypassing path validation using URL-encoded characters like `/%5c%5c`.
+**Learning:** URL constructors do not always decode the pathname before returning it, allowing encoded backslashes or slashes to bypass simple string prefix checks.
+**Prevention:** Always use `decodeURIComponent` on URL paths before validating them for open redirects or directory traversals.
+
 ## 2026-07-09 - Trivy CI Fixes for Kubernetes Manifests
 **Vulnerability:** CI was failing because `trivy fs` flagged `KSV-0014` and `KSV-0118` inside local development k8s deployment manifests as HIGH security issues, but these are acceptable in standard local test environments.
 **Learning:** Trivy action exits with 1 when finding HIGH severity misconfigurations, even in non-production local development scripts, breaking PR pipelines.

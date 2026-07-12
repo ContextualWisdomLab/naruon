@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend
-  namespace: naruon-dev
   labels:
     app: backend
 spec:
@@ -17,41 +16,12 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-registry
-      # Image runs as the non-root `appuser` (Dockerfile `USER appuser`).
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-      volumes:
-        - name: backend-tmp
-          emptyDir: {}
       containers:
       - name: backend
-        image: ghcr.io/contextualwisdomlab/ai_email_client-backend:REPLACE_ME_VERSION
+        image: ghcr.io/seongho-bae/ai_email_client-backend:REPLACE_ME_VERSION
         imagePullPolicy: IfNotPresent
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - ALL
-          readOnlyRootFilesystem: true
-          runAsGroup: 10001
-          runAsNonRoot: true
-          runAsUser: 10001
-          seccompProfile:
-            type: RuntimeDefault
         ports:
         - containerPort: 8000
-        resources:
-          requests:
-            cpu: 250m
-            memory: 512Mi
-          limits:
-            cpu: "1"
-            memory: 1Gi
-        volumeMounts:
-        - name: backend-tmp
-          mountPath: /tmp
         env:
         - name: DATABASE_URL
           valueFrom:

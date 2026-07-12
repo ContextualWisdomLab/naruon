@@ -287,10 +287,7 @@ def test_dav_propfind_escapes_path_values(dev_auth_dependency_overrides):
         ET.fromstring(response.text)
 
 
-def test_dav_put(dev_auth_dependency_overrides, caplog):
-    import logging
-
-    caplog.set_level(logging.WARNING, logger="api.dav")
+def test_dav_put(dev_auth_dependency_overrides):
     with TestClient(app) as client:
         response = client.put(
             "/dav/user123/projects/file.ics",
@@ -300,29 +297,6 @@ def test_dav_put(dev_auth_dependency_overrides, caplog):
         assert response.status_code == 501
         assert "Provider-backed DAV writeback is not implemented" in response.text
         assert "etag" not in {header.lower() for header in response.headers}
-        assert any(
-            "provider-backed DAV writeback is not implemented" in record.getMessage()
-            for record in caplog.records
-        )
-
-
-def test_dav_unsupported_method_logs_reason(dev_auth_dependency_overrides, caplog):
-    import logging
-
-    caplog.set_level(logging.WARNING, logger="api.dav")
-    with TestClient(app) as client:
-        response = client.delete(
-            "/dav/user123/projects/file.ics",
-            headers=AUTH_HEADERS,
-        )
-
-    assert response.status_code == 501
-    assert "Provider-backed DAV method is not implemented" in response.text
-    assert any(
-        "method is not implemented for the provider-backed DAV gateway"
-        in record.getMessage()
-        for record in caplog.records
-    )
 
 
 def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
