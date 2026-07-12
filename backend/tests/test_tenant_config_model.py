@@ -1,51 +1,52 @@
-import base64
-import os
-
 import pytest
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
-from db.models import EncryptedString, TenantConfig, get_fernet
+from db.models import EncryptedString, TenantConfig, get_encryption_keyring, get_fernet
 from core.config import settings
 
-TEST_OPENAI_KEY = os.environ.get("TEST_OPENAI_KEY", "dummy-openai-key")
-TEST_IMAP_PASSWORD = os.environ.get("TEST_IMAP_PASSWORD", "dummy-imap-password")
-TEST_POP3_PASSWORD = os.environ.get("TEST_POP3_PASSWORD", "dummy-pop3-password")
-TEST_SMTP_PASSWORD = os.environ.get("TEST_SMTP_PASSWORD", "dummy-smtp-password")
+TEST_OPENAI_KEY = "test_key2"  # noqa: S105
+TEST_IMAP_PASSWORD = "imap-secret"  # noqa: S105
+TEST_POP3_PASSWORD = "pop3-secret"  # noqa: S105
+TEST_SMTP_PASSWORD = "smtp-secret"  # noqa: S105
 
 
 @pytest.fixture(autouse=True)
 def mock_debug():
     old_debug = settings.DEBUG
     old_encryption_key = settings.ENCRYPTION_KEY
+    old_encryption_key_id = settings.ENCRYPTION_KEY_ID
+    old_previous_keys = settings.ENCRYPTION_PREVIOUS_KEYS
     settings.DEBUG = True
+    settings.ENCRYPTION_KEY_ID = "test-active"
     settings.ENCRYPTION_KEY = SecretStr(Fernet.generate_key().decode("ascii"))
+    settings.ENCRYPTION_PREVIOUS_KEYS = None
     yield
     settings.DEBUG = old_debug
     settings.ENCRYPTION_KEY = old_encryption_key
+    settings.ENCRYPTION_KEY_ID = old_encryption_key_id
+    settings.ENCRYPTION_PREVIOUS_KEYS = old_previous_keys
 
 
 @pytest.fixture
 def db_session():
     engine = create_engine("sqlite:///:memory:")
     TenantConfig.__table__.create(engine)
-    try:
-        with Session(engine) as session:
-            yield session
-    finally:
-        engine.dispose()
+    with Session(engine) as session:
+        yield session
+    engine.dispose()
 
 
 def test_tenant_config_model_exists():
     config = TenantConfig(
         user_id="test_user",
         organization_id="org_acme",
-        openai_api_key=TEST_OPENAI_KEY,
+        openai_api_key="test_key",
     )
     assert config.user_id == "test_user"
     assert config.organization_id == "org_acme"
-    assert config.openai_api_key == TEST_OPENAI_KEY
+    assert config.openai_api_key == "test_key"
 
 
 def test_tenant_config_allows_same_user_in_different_organizations(db_session):
@@ -89,13 +90,65 @@ def test_get_fernet_rejects_non_fernet_key_without_derivation():
         get_fernet()
 
 
-def test_get_fernet_rejects_base64_key_with_wrong_decoded_length():
-    settings.ENCRYPTION_KEY = SecretStr(
-        base64.urlsafe_b64encode(b"too-short-for-fernet").decode("ascii")
+def test_encryption_keyring_rejects_duplicate_previous_key_id():
+    settings.ENCRYPTION_PREVIOUS_KEYS = SecretStr(
+        f"test-active={Fernet.generate_key().decode('ascii')}"
     )
 
-    with pytest.raises(RuntimeError, match="valid Fernet key"):
-        get_fernet()
+    with pytest.raises(RuntimeError, match="must not repeat key identifiers"):
+        get_encryption_keyring()
+
+
+def test_encrypted_string_prefixes_active_key_id():
+    settings.ENCRYPTION_KEY_ID = "tenant-secrets-2026-06"
+    encrypted_string = EncryptedString()
+
+    encrypted_value = encrypted_string.process_bind_param(TEST_SMTP_PASSWORD, None)
+
+    assert encrypted_value.startswith("fernet:v1:tenant-secrets-2026-06:")
+    assert encrypted_string.process_result_value(encrypted_value, None) == (
+        TEST_SMTP_PASSWORD
+    )
+
+
+def test_encrypted_string_decrypts_rotated_versioned_key():
+    old_key = Fernet.generate_key().decode("ascii")
+    new_key = Fernet.generate_key().decode("ascii")
+    encrypted_string = EncryptedString()
+    settings.ENCRYPTION_KEY_ID = "tenant-secrets-2026-05"
+    settings.ENCRYPTION_KEY = SecretStr(old_key)
+
+    encrypted_value = encrypted_string.process_bind_param(TEST_POP3_PASSWORD, None)
+
+    settings.ENCRYPTION_KEY_ID = "tenant-secrets-2026-06"
+    settings.ENCRYPTION_KEY = SecretStr(new_key)
+    settings.ENCRYPTION_PREVIOUS_KEYS = SecretStr(f"tenant-secrets-2026-05={old_key}")
+
+    assert encrypted_string.process_result_value(encrypted_value, None) == (
+        TEST_POP3_PASSWORD
+    )
+    assert encrypted_string.process_bind_param(TEST_IMAP_PASSWORD, None).startswith(
+        "fernet:v1:tenant-secrets-2026-06:"
+    )
+
+
+def test_encrypted_string_decrypts_legacy_ciphertext_with_previous_key():
+    old_key = Fernet.generate_key().decode("ascii")
+    new_key = Fernet.generate_key().decode("ascii")
+    encrypted_string = EncryptedString()
+    settings.ENCRYPTION_KEY_ID = "tenant-secrets-2026-05"
+    settings.ENCRYPTION_KEY = SecretStr(old_key)
+    legacy_ciphertext = get_fernet().encrypt(TEST_IMAP_PASSWORD.encode("utf-8")).decode(
+        "utf-8"
+    )
+
+    settings.ENCRYPTION_KEY_ID = "tenant-secrets-2026-06"
+    settings.ENCRYPTION_KEY = SecretStr(new_key)
+    settings.ENCRYPTION_PREVIOUS_KEYS = SecretStr(f"tenant-secrets-2026-05={old_key}")
+
+    assert encrypted_string.process_result_value(legacy_ciphertext, None) == (
+        TEST_IMAP_PASSWORD
+    )
 
 
 def test_encrypted_string_returns_none_on_tampered_ciphertext():
@@ -143,20 +196,24 @@ def test_tenant_config_model_encryption(db_session):
 
     # Verify that the value in the database is actually encrypted
     result = db_session.execute(
-        text("SELECT openai_api_key FROM tenant_configs WHERE user_id='test_user2'")
+        text("SELECT openai_api_key FROM tenant_configs WHERE user_id = :user_id"),
+        {"user_id": "test_user2"},
     ).scalar()
-    assert result != TEST_OPENAI_KEY
+    assert result != "test_key2"
     assert result is not None
     assert isinstance(result, str)
 
     imap_pw = db_session.execute(
-        text("SELECT imap_password FROM tenant_configs WHERE user_id='test_user2'")
+        text("SELECT imap_password FROM tenant_configs WHERE user_id = :user_id"),
+        {"user_id": "test_user2"},
     ).scalar()
     smtp_pw = db_session.execute(
-        text("SELECT smtp_password FROM tenant_configs WHERE user_id='test_user2'")
+        text("SELECT smtp_password FROM tenant_configs WHERE user_id = :user_id"),
+        {"user_id": "test_user2"},
     ).scalar()
     pop3_pw = db_session.execute(
-        text("SELECT pop3_password FROM tenant_configs WHERE user_id='test_user2'")
+        text("SELECT pop3_password FROM tenant_configs WHERE user_id = :user_id"),
+        {"user_id": "test_user2"},
     ).scalar()
     assert imap_pw != TEST_IMAP_PASSWORD
     assert smtp_pw != TEST_SMTP_PASSWORD
