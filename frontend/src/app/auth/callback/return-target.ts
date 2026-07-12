@@ -13,6 +13,8 @@ export function toSafeReturnTo(returnTo: string | null | undefined) {
       return "/";
     }
 
+    // Security check: Decode candidate explicitly to prevent bypass of prefix checks
+    // using URL-encoded sequences (e.g. /%5C%5C or /%2F%2F) that browsers evaluate as scheme-relative
     let decoded: string;
     try {
       decoded = decodeURIComponent(candidate);
@@ -29,6 +31,7 @@ export function toSafeReturnTo(returnTo: string | null | undefined) {
       return "/";
     }
 
+    // Reject decoded variants of protocol-relative payloads
     if (decoded.startsWith("//") || decoded.startsWith("/\\")) {
       return "/";
     }
