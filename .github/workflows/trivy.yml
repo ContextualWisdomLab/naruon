@@ -38,9 +38,8 @@ jobs:
           scan-ref: .
           format: sarif
           output: trivy-results.sarif
-          severity: CRITICAL,HIGH
+          severity: MEDIUM,HIGH,CRITICAL
           ignore-unfixed: true
-          trivyignores: .trivyignore
 
       - name: Upload Trivy SARIF
         if: ${{ always() }}
