@@ -141,6 +141,243 @@ async def test_empty_segments_short_circuit_without_llm_call(monkeypatch):
     assert result.objects == ()
 
 
+def _object(
+    *,
+    object_type: str,
+    title: str,
+    summary: str,
+    segment_uids: list[str],
+    confidence: float,
+    local_key: str,
+) -> "llm_extractor.ExtractedObjectPayload":
+    return llm_extractor.ExtractedObjectPayload(
+        object_type=object_type,
+        title=title,
+        summary=summary,
+        source_segment_uids=segment_uids,
+        confidence=confidence,
+        local_key=local_key,
+    )
+
+
+def _relation(
+    *,
+    source_local_key: str,
+    target_local_key: str,
+    relation_type: str,
+    confidence: float,
+) -> "llm_extractor.ExtractedRelationPayload":
+    return llm_extractor.ExtractedRelationPayload(
+        source_local_key=source_local_key,
+        target_local_key=target_local_key,
+        relation_type=relation_type,
+        confidence=confidence,
+    )
+
+
+def _two_grounded_objects() -> list["llm_extractor.ExtractedObjectPayload"]:
+    return [
+        _object(
+            object_type="feature",
+            title="Card-decline retry banner",
+            summary="Show a retry banner when a card is declined.",
+            segment_uids=["seg1"],
+            confidence=0.8,
+            local_key="feat-a",
+        ),
+        _object(
+            object_type="requirement",
+            title="Card declines must be handled",
+            summary="The checkout must handle card declines gracefully.",
+            segment_uids=["seg2"],
+            confidence=0.9,
+            local_key="req-b",
+        ),
+    ]
+
+
+def _two_grounded_segments() -> list[ProjectSourceSegment]:
+    return [
+        _segment("seg1", "Show a retry banner when a card is declined."),
+        _segment("seg2", "The checkout must handle card declines gracefully."),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_grounded_relations_link_extracted_objects(monkeypatch):
+    monkeypatch.setattr(
+        llm_extractor,
+        "_call_llm",
+        AsyncMock(
+            return_value=llm_extractor.ExtractionPayload(
+                objects=_two_grounded_objects(),
+                relations=[
+                    _relation(
+                        source_local_key="feat-a",
+                        target_local_key="req-b",
+                        relation_type="implements",
+                        confidence=0.72,
+                    )
+                ],
+            )
+        ),
+    )
+
+    result = await llm_extractor.extract_project_semantics_llm(
+        _two_grounded_segments(), api_key="key", model="gpt-test"
+    )
+
+    feature = next(o for o in result.objects if o.object_type.value == "feature")
+    requirement = next(o for o in result.objects if o.object_type.value == "requirement")
+    relation_edges = [
+        edge for edge in result.edges if edge.edge_type == "implements"
+    ]
+    assert len(relation_edges) == 1
+    relation_edge = relation_edges[0]
+    assert relation_edge.source_uid == feature.uid
+    assert relation_edge.target_uid == requirement.uid
+    # The object-to-object edge is grounded in the union of both endpoints'
+    # cited segments, so it never introduces an uncited segment reference.
+    assert set(relation_edge.source_segment_uids) == {"seg1", "seg2"}
+    assert 0.0 <= relation_edge.confidence <= 1.0
+    # Segment evidence edges are still emitted alongside the relation edges.
+    assert any(
+        edge.edge_type == "segment_evidences_project_object"
+        for edge in result.edges
+    )
+
+
+@pytest.mark.asyncio
+async def test_relations_with_unknown_type_are_dropped(monkeypatch):
+    monkeypatch.setattr(
+        llm_extractor,
+        "_call_llm",
+        AsyncMock(
+            return_value=llm_extractor.ExtractionPayload(
+                objects=_two_grounded_objects(),
+                relations=[
+                    _relation(
+                        source_local_key="feat-a",
+                        target_local_key="req-b",
+                        relation_type="frobnicates",
+                        confidence=0.9,
+                    )
+                ],
+            )
+        ),
+    )
+
+    result = await llm_extractor.extract_project_semantics_llm(
+        _two_grounded_segments(), api_key="key", model="gpt-test"
+    )
+
+    assert all(
+        edge.edge_type == "segment_evidences_project_object"
+        for edge in result.edges
+    )
+
+
+@pytest.mark.asyncio
+async def test_relations_to_ungrounded_objects_are_dropped(monkeypatch):
+    monkeypatch.setattr(
+        llm_extractor,
+        "_call_llm",
+        AsyncMock(
+            return_value=llm_extractor.ExtractionPayload(
+                objects=[
+                    _object(
+                        object_type="feature",
+                        title="Grounded feature",
+                        summary="Grounded in seg1.",
+                        segment_uids=["seg1"],
+                        confidence=0.8,
+                        local_key="feat-a",
+                    ),
+                    _object(
+                        object_type="issue",
+                        title="Ungrounded issue",
+                        summary="Cites a hallucinated segment.",
+                        segment_uids=["hallucinated"],
+                        confidence=0.9,
+                        local_key="issue-x",
+                    ),
+                ],
+                relations=[
+                    _relation(
+                        source_local_key="feat-a",
+                        target_local_key="issue-x",
+                        relation_type="blocks",
+                        confidence=0.9,
+                    ),
+                    _relation(
+                        source_local_key="feat-a",
+                        target_local_key="ghost-key",
+                        relation_type="depends_on",
+                        confidence=0.9,
+                    ),
+                ],
+            )
+        ),
+    )
+
+    result = await llm_extractor.extract_project_semantics_llm(
+        [_segment("seg1", "Grounded in seg1.")], api_key="key", model="gpt-test"
+    )
+
+    # The ungrounded object is dropped, so any relation touching it (or an
+    # unknown key) cannot resolve to two grounded objects and is dropped too.
+    assert len(result.objects) == 1
+    assert all(
+        edge.edge_type == "segment_evidences_project_object"
+        for edge in result.edges
+    )
+
+
+@pytest.mark.asyncio
+async def test_self_loop_and_duplicate_relations_are_dropped(monkeypatch):
+    monkeypatch.setattr(
+        llm_extractor,
+        "_call_llm",
+        AsyncMock(
+            return_value=llm_extractor.ExtractionPayload(
+                objects=_two_grounded_objects(),
+                relations=[
+                    _relation(
+                        source_local_key="feat-a",
+                        target_local_key="feat-a",
+                        relation_type="depends_on",
+                        confidence=0.9,
+                    ),
+                    _relation(
+                        source_local_key="feat-a",
+                        target_local_key="req-b",
+                        relation_type="implements",
+                        confidence=0.7,
+                    ),
+                    _relation(
+                        source_local_key="feat-a",
+                        target_local_key="req-b",
+                        relation_type="implements",
+                        confidence=0.4,
+                    ),
+                ],
+            )
+        ),
+    )
+
+    result = await llm_extractor.extract_project_semantics_llm(
+        _two_grounded_segments(), api_key="key", model="gpt-test"
+    )
+
+    relation_edges = [
+        edge
+        for edge in result.edges
+        if edge.edge_type != "segment_evidences_project_object"
+    ]
+    assert len(relation_edges) == 1
+    assert relation_edges[0].edge_type == "implements"
+
+
 @pytest.mark.asyncio
 async def test_import_selection_uses_llm_when_configured(monkeypatch):
     llm_mock = AsyncMock(return_value="llm-result")
