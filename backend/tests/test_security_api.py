@@ -18,7 +18,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from api.auth import AuthContext, get_auth_context, get_current_user
 from api.security import _webdav_scope_statement
 from core.config import settings
+from cryptography.fernet import Fernet
 from db.models import (
+    get_fernet,
     CalendarWritebackSource,
     ConnectorSignalEvent,
     SecurityAuditEvent,
@@ -682,7 +684,16 @@ def test_access_surface_rejects_hmac_bearer_session_without_authoritative_worksp
 
 
 @pytest.mark.asyncio
-async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
+async def test_access_surface_real_postgres_smoke_uses_scoped_sources(
+    monkeypatch,
+):
+    # EncryptedString needs a key for seeding (encrypt) and the API read
+    # (decrypt); monkeypatch restores it on any exit incl. skip.
+    monkeypatch.setattr(
+        settings,
+        "ENCRYPTION_KEY",
+        SecretStr(Fernet.generate_key().decode("ascii")),
+    )
     user_id = f"security_smoke_user_{uuid.uuid4().hex[:12]}"
     source_uid = f"webdav_src_security_{uuid.uuid4().hex[:18]}"
     caldav_uid = f"caldav_src_security_{uuid.uuid4().hex[:18]}"
@@ -702,7 +713,8 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                         server_url,
                         username,
                         credentials_encrypted,
-                        writeback_enabled
+                        writeback_enabled,
+                        created_at
                     )
                     VALUES (
                         :source_uid,
@@ -712,7 +724,8 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                         :server_url,
                         :username,
                         :credentials_encrypted,
-                        :writeback_enabled
+                        :writeback_enabled,
+                        now()
                     )
                     """
                 ),
@@ -723,7 +736,9 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                     "workspace_id": "workspace-org-acme",
                     "server_url": "https://security-files.example/dav",
                     "username": "security-smoke@example.com",
-                    "credentials_encrypted": "test-only-placeholder",
+                    "credentials_encrypted": get_fernet()
+                    .encrypt(b"security-smoke-webdav-secret")
+                    .decode("ascii"),
                     "writeback_enabled": True,
                 },
             )
@@ -740,7 +755,8 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                         source_protocol,
                         source_host,
                         writeback_enabled,
-                        etag_value
+                        etag_value,
+                        created_at
                     )
                     VALUES (
                         :source_uid,
@@ -752,7 +768,8 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                         :source_protocol,
                         :source_host,
                         :writeback_enabled,
-                        :etag_value
+                        :etag_value,
+                        now()
                     )
                     """
                 ),
@@ -778,7 +795,8 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                         workspace_id,
                         signal_key,
                         state_code,
-                        detail_text
+                        detail_text,
+                        observed_at
                     )
                     VALUES (
                         :event_uid,
@@ -786,7 +804,8 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                         :workspace_id,
                         :signal_key,
                         :state_code,
-                        :detail_text
+                        :detail_text,
+                        now()
                     )
                     """
                 ),
@@ -812,7 +831,8 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                         resource_type,
                         resource_uid,
                         evidence_source,
-                        detail_text
+                        detail_text,
+                        observed_at
                     )
                     VALUES (
                         :event_uid,
@@ -824,7 +844,8 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
                         :resource_type,
                         :resource_uid,
                         :evidence_source,
-                        :detail_text
+                        :detail_text,
+                        now()
                     )
                     """
                 ),
@@ -862,25 +883,33 @@ async def test_access_surface_real_postgres_smoke_uses_scoped_sources():
         async with session_factory() as session:
             yield session
 
-    previous_secret = settings.AUTH_SESSION_HMAC_SECRET
     original_overrides = dict(app.dependency_overrides)
-    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
-    token = _signed_session_token(
-        _valid_session_payload(sub=user_id, workspace="workspace-org-acme")
-    )
+
+    # The access surface rejects hmac-verified bearer sessions outright
+    # (_require_authoritative_workspace_scope), so this smoke test
+    # authenticates through an authoritative-verifier AuthContext (the
+    # dataclass default, "override") while keeping the real database
+    # session and the real endpoint logic under test.
+    def override_auth_context() -> AuthContext:
+        return AuthContext(
+            user_id=user_id,
+            role="member",
+            organization_id="org-acme",
+            group_ids=(),
+            workspace_id="workspace-org-acme",
+        )
+
     app.dependency_overrides[get_db] = override_real_db
-    app.dependency_overrides.pop(get_auth_context, None)
+    app.dependency_overrides[get_auth_context] = override_auth_context
     app.dependency_overrides.pop(get_current_user, None)
     try:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://testserver",
-            headers={"Authorization": f"Bearer {token}"},
         ) as client:
             response = await client.get("/api/security/access-surface")
     finally:
-        settings.AUTH_SESSION_HMAC_SECRET = previous_secret
         app.dependency_overrides.clear()
         app.dependency_overrides.update(original_overrides)
         async with engine.begin() as conn:

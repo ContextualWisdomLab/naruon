@@ -96,7 +96,8 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.datetime.utcnow
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
     user_id: Mapped[str] = mapped_column(String, index=True)
     action: Mapped[str] = mapped_column(String)
@@ -164,8 +165,8 @@ class LLMProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.datetime.utcnow,
-        onupdate=datetime.datetime.utcnow,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
 
 
@@ -272,8 +273,8 @@ class WorkspaceRunnerConfig(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.datetime.utcnow,
-        onupdate=datetime.datetime.utcnow,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
 
 
@@ -631,6 +632,10 @@ class WorkflowDefinition(Base):
         nullable=False,
     )
 
+    agent_run_records: Mapped[list["AgentRunRecord"]] = relationship(
+        back_populates="workflow_definition"
+    )
+
 
 class AgentRunRecord(Base):
     __tablename__ = "agent_run_records"
@@ -680,6 +685,10 @@ class AgentRunRecord(Base):
         DateTime(timezone=True), nullable=True
     )
     result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    workflow_definition: Mapped["WorkflowDefinition"] = relationship(
+        back_populates="agent_run_records"
+    )
 
 
 class Email(Base):
@@ -1466,6 +1475,10 @@ class Workspace(Base):
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
     )
 
+    workspace_documents: Mapped[list["Document"]] = relationship(
+        back_populates="workspace_entity"
+    )
+
 class Document(Base):
     __tablename__ = "workspace_documents"
 
@@ -1478,4 +1491,8 @@ class Document(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    workspace_entity: Mapped["Workspace"] = relationship(
+        back_populates="workspace_documents"
     )

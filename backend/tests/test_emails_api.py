@@ -1449,6 +1449,7 @@ async def _seed_reply_tracking_smoke_data(Session, user_id, organization_id, now
         session.add(
             TenantConfig(
                 user_id=user_id,
+                organization_id=organization_id,
                 smtp_username="Smoke User <reply-smoke@example.com>",
                 imap_username=None,
             )

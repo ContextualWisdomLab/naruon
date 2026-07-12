@@ -209,7 +209,7 @@ async def test_project_graph_api_exposes_candidates_traceability_and_corrections
     project_graph_api_sessionmaker,
 ):
     user_id = f"project-api-user-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
     async with project_graph_api_sessionmaker() as session:
         await _seed_projection(
             session,
@@ -302,7 +302,7 @@ async def test_project_graph_api_enforces_member_scope_and_allows_org_admin(
 ):
     owner_id = f"project-api-owner-{uuid.uuid4().hex}"
     other_user_id = f"project-api-other-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
     async with project_graph_api_sessionmaker() as session:
         await _seed_projection(
             session,
@@ -337,7 +337,7 @@ async def test_project_graph_api_returns_404_when_evidence_segment_is_stale(
     project_graph_api_sessionmaker,
 ):
     user_id = f"project-api-stale-{uuid.uuid4().hex}"
-    organization_id = "org-acme"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
     async with project_graph_api_sessionmaker() as session:
         seeded = await _seed_projection(
             session,
