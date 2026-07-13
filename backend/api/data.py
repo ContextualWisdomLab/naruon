@@ -1,10 +1,12 @@
+import base64
+import binascii
 from datetime import datetime, timezone
 import hashlib
 import json
 import re
 from typing import Literal, NamedTuple
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.engine import Row
@@ -28,12 +30,20 @@ from db.models import (
 )
 from db.session import get_db
 from services.attachment_parser import get_attachment_parser_manifest
+from services.newsdom_pdf_recognition import (
+    PDF_DOM_RECOGNITION_PENDING_STATUS,
+)
 from services.ontology_service import ontology_service
 from services.webdav_service import webdav_service
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 DATA_VECTOR_DIMENSIONS = 1536
+# Upper bound for the binary PDF DOM recognition upload variant. Kept in step
+# with the NewsDOM sidecar's own MAX_PARSE_UPLOAD_BYTES (20 MiB): accepting more
+# would let a caller stash a pending document the configured sidecar will always
+# reject while the base64 copy inflates the database.
+_MAX_PDF_DOM_UPLOAD_BYTES = 20 * 1024 * 1024
 ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
     "email_attachments.content_type, "
     "email_attachments.parse_content_type, "
@@ -2304,6 +2314,16 @@ def _materialized_document_target_path(document: Document) -> str:
     return f"/Naruon/Data/{filename}"
 
 
+# Document statuses whose stored content is not yet materializable parsed text
+# (it may be a base64 binary payload awaiting a recognition/conversion worker).
+_NON_MATERIALIZABLE_DOCUMENT_STATUSES = frozenset(
+    {
+        PDF_DOM_RECOGNITION_PENDING_STATUS,
+        "hwp_conversion_pending",
+    }
+)
+
+
 def _materialized_document_content(document: Document) -> str:
     return (document.document_content or "").strip()
 
@@ -2621,7 +2641,11 @@ def _document_repository_assets(documents: list[Document]) -> list[DataRepositor
     assets: list[DataRepositoryAsset] = []
     for document in documents:
         content_chars = _document_content_chars(document)
-        pending_statuses = {"embedding_pending", "hwp_conversion_pending"}
+        pending_statuses = {
+            "embedding_pending",
+            "hwp_conversion_pending",
+            PDF_DOM_RECOGNITION_PENDING_STATUS,
+        }
         state_code: RepositoryAssetState = (
             "needs_attention"
             if content_chars <= 0 or document.document_status in pending_statuses
@@ -3143,6 +3167,7 @@ async def upload_data_document(
 ) -> DataDocumentActionResponse:
     document = Document(
         workspace_id=auth_context.workspace_id,
+        organization_id=auth_context.organization_id,
         document_name=_safe_display_text(request.document_name, "workspace document"),
         document_type=_safe_document_type(request.document_type),
         document_content=request.document_content,
@@ -3218,6 +3243,105 @@ async def create_document_hwp_conversion_intent(
 
 
 @router.post(
+    "/documents/{document_id}/pdf-dom-recognition-intent",
+    response_model=DataDocumentActionResponse,
+)
+async def create_document_pdf_dom_recognition_intent(
+    document_id: str,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataDocumentActionResponse:
+    document = await _get_workspace_document(db, auth_context, document_id)
+    if (document.document_type or "").strip().lower() != "pdf":
+        raise HTTPException(
+            status_code=415,
+            detail="PDF DOM recognition is only available for PDF documents.",
+        )
+    try:
+        decode_pending_pdf_document_bytes(document)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Stored PDF payload is not valid for DOM recognition.",
+        ) from exc
+    document.organization_id = auth_context.organization_id
+    document.document_status = PDF_DOM_RECOGNITION_PENDING_STATUS
+    await db.commit()
+    await db.refresh(document)
+    return _document_response(
+        document,
+        audit_event="data.document.pdf_dom_recognition_intent",
+        message=(
+            "PDF DOM recognition intent recorded; the NewsDOM sidecar worker "
+            "will land the structured DOM. No provider write executed."
+        ),
+    )
+
+
+@router.post(
+    "/documents/pdf-dom-recognition",
+    response_model=DataDocumentActionResponse,
+)
+async def upload_document_for_pdf_dom_recognition(
+    file: UploadFile = File(...),
+    # Declared as multipart form data (not a query parameter) so a client
+    # sending document_name alongside the file is honored.
+    document_name: str | None = Form(None),
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataDocumentActionResponse:
+    """Binary upload variant: accept a PDF, stash it pending, and defer the
+    heavy NewsDOM recognition to the worker."""
+    raw = await file.read(_MAX_PDF_DOM_UPLOAD_BYTES + 1)
+    if len(raw) > _MAX_PDF_DOM_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="PDF upload is too large.")
+    if not raw[:5] == b"%PDF-":
+        raise HTTPException(
+            status_code=415,
+            detail="Only application/pdf uploads are supported for DOM recognition.",
+        )
+    document = Document(
+        workspace_id=auth_context.workspace_id,
+        organization_id=auth_context.organization_id,
+        document_name=_safe_display_text(
+            document_name or file.filename, "workspace document"
+        ),
+        document_type="pdf",
+        document_content=base64.b64encode(raw).decode("ascii"),
+        document_status=PDF_DOM_RECOGNITION_PENDING_STATUS,
+    )
+    db.add(document)
+    await db.commit()
+    await db.refresh(document)
+    return _document_response(
+        document,
+        audit_event="data.document.pdf_dom_recognition_upload",
+        message=(
+            "PDF stored pending NewsDOM DOM recognition; the worker will parse "
+            "it into the content graph. No provider write executed."
+        ),
+    )
+
+
+def decode_pending_pdf_document_bytes(document: Document) -> bytes:
+    """Decode the base64 PDF payload stashed by the binary upload variant.
+
+    Used by the recognition worker before calling the NewsDOM sidecar.
+    """
+    try:
+        payload = base64.b64decode(
+            (document.document_content or "").encode("ascii"), validate=True
+        )
+    except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
+        raise ValueError("Pending PDF document payload is not valid base64") from exc
+    if len(payload) > _MAX_PDF_DOM_UPLOAD_BYTES:
+        raise ValueError("Pending PDF document exceeds the upload size limit")
+    if not payload.startswith(b"%PDF-"):
+        raise ValueError("Pending PDF document payload is not a PDF")
+    return payload
+
+
+@router.post(
     "/documents/{document_id}/webdav-materialization-intent",
     response_model=DataDocumentWebdavMaterializationResponse,
 )
@@ -3228,6 +3352,19 @@ async def create_document_webdav_materialization_intent(
     db: AsyncSession = Depends(get_db),
 ) -> DataDocumentWebdavMaterializationResponse:
     document = await _get_workspace_document(db, auth_context, document_id)
+    if document.document_status in _NON_MATERIALIZABLE_DOCUMENT_STATUSES:
+        # A document whose recognition/conversion is still pending holds a
+        # non-text payload (e.g. the base64 PDF stashed for the NewsDOM worker).
+        # Materializing it as Markdown would write that raw payload to the
+        # customer's WebDAV target. Refuse until recognition has landed real
+        # parsed text.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Workspace document is still pending recognition; "
+                "no materializable content yet."
+            ),
+        )
     if not _materialized_document_content(document):
         raise HTTPException(
             status_code=422,
