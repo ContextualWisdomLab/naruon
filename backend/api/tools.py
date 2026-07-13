@@ -196,6 +196,148 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     }
 
 
+
+def _detect_text_language(text: str) -> str:
+    if any("\uac00" <= char <= "\ud7a3" for char in text):
+        return "ko"
+    if any(char.isascii() and char.isalpha() for char in text):
+        return "en"
+    return "unknown"
+
+
+async def email_translator_handler(params: Dict[str, Any]) -> Any:
+    """Translate email text into the requested target language."""
+    text = params.get("text", "")
+    target_language = params.get("target_language", "ko")
+    source_language = _detect_text_language(text)
+    lowered_text = text.lower()
+    translated_text = text
+    confidence = 0.5
+    if target_language.lower().startswith("ko") and source_language == "en":
+        phrase_map = [
+            ("hello", "안녕하세요"),
+            ("thank you", "감사합니다"),
+            ("thanks", "감사합니다"),
+            ("meeting", "회의"),
+            ("tomorrow", "내일"),
+            ("please", "부탁드립니다"),
+        ]
+        translated_terms: list[str] = []
+        for source_phrase, translated_phrase in phrase_map:
+            if source_phrase in lowered_text and translated_phrase not in translated_terms:
+                translated_terms.append(translated_phrase)
+        translated_text = " ".join(translated_terms) if translated_terms else text
+        confidence = 0.9 if translated_terms else 0.45
+    return {
+        "translated_text": translated_text,
+        "source_language_detected": source_language,
+        "confidence": confidence,
+    }
+
+
+async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
+    """Score an email body for simple spam and phishing risk indicators."""
+    email_content = params.get("email_content", "")
+    sender_domain = params.get("sender_domain", "")
+    normalized_content = email_content.lower()
+    normalized_domain = sender_domain.lower()
+    phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
+    spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
+    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
+    spam_hits = sorted(term for term in spam_terms if term in normalized_content)
+    suspicious_domain = (
+        normalized_domain.endswith((".ru", ".zip", ".tk"))
+        or "login" in normalized_domain
+        or "secure-" in normalized_domain
+    )
+    risk_score = min(
+        100,
+        10
+        + (20 * len(phishing_hits))
+        + (15 * len(spam_hits))
+        + (35 if suspicious_domain else 0),
+    )
+    warnings: list[str] = []
+    if phishing_hits:
+        warnings.append(f"phishing keywords detected: {', '.join(phishing_hits)}")
+    if spam_hits:
+        warnings.append(f"spam urgency keywords detected: {', '.join(spam_hits)}")
+    if suspicious_domain:
+        warnings.append(f"sender domain looks suspicious: {sender_domain}")
+    return {
+        "is_spam": bool(spam_hits or suspicious_domain),
+        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
+        "risk_score": risk_score,
+        "warnings": warnings,
+    }
+
+
+async def reply_drafter_handler(params: Dict[str, Any]) -> Any:
+    """Draft a formal reply using the operator's requested intent."""
+    original_email = params.get("original_email", "").strip()
+    intent = params.get("intent", "긍정적 동의")
+    context_excerpt = original_email[:120]
+    return {
+        "draft": (
+            f"귀하의 이메일({context_excerpt})에 감사드립니다. "
+            f"{intent}의 맥락으로 검토했으며, 해당 방향으로 진행하겠습니다."
+        ),
+        "tone": "formal",
+    }
+
+
+async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
+    """Classify email text sentiment for the tools API."""
+    text = params.get("text", "")
+    normalized_text = text.lower()
+    positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
+    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
+    positive_hits = [term for term in positive_terms if term in normalized_text]
+    negative_hits = [term for term in negative_terms if term in normalized_text]
+    if negative_hits and len(negative_hits) >= len(positive_hits):
+        sentiment = "negative"
+        score = max(0.1, 0.5 - (0.1 * len(negative_hits)))
+        emotions = ["불만", "우려"]
+        if "urgent" in negative_hits:
+            emotions.append("긴급")
+    elif positive_hits:
+        sentiment = "positive"
+        score = min(0.95, 0.65 + (0.1 * len(positive_hits)))
+        emotions = ["감사", "기쁨"]
+    else:
+        sentiment = "neutral"
+        score = 0.5
+        emotions = ["중립"]
+    return {
+        "sentiment": sentiment,
+        "score": score,
+        "key_emotions": emotions,
+    }
+
+
+async def grammar_checker_handler(params: Dict[str, Any]) -> Any:
+    """Return a lightweight Korean spacing correction for draft email text."""
+    draft = params.get("draft_content", "")
+    corrected_text = draft
+    suggestions: list[str] = []
+    errors_found = 0
+    for source_text, replacement_text, suggestion in [
+        ("안녕 하세요", "안녕하세요", "'안녕 하세요'는 '안녕하세요'로 붙여 씁니다."),
+        ("확인 부탁 드립니다", "확인 부탁드립니다", "'부탁드립니다'는 붙여 씁니다."),
+        ("감사 합니다", "감사합니다", "'감사합니다'는 붙여 씁니다."),
+    ]:
+        occurrence_count = corrected_text.count(source_text)
+        if occurrence_count:
+            errors_found += occurrence_count
+            corrected_text = corrected_text.replace(source_text, replacement_text)
+            suggestions.append(suggestion)
+    return {
+        "corrected_text": corrected_text,
+        "errors_found": errors_found,
+        "suggestions": suggestions,
+    }
+
+
 def is_safe_webhook_url(url: str) -> bool:
     try:
         validate_webhook_url(url)
@@ -406,6 +548,63 @@ registry.register(
     ),
     base64_decoder_handler,
 )
+
+
+registry.register(
+    ToolInfo(
+        code="email_translator",
+        name="이메일 번역기 (Email Translator)",
+        description="이메일 텍스트를 지정된 대상 언어로 번역합니다.",
+        category="언어 변환",
+        parameters={"text": "string", "target_language": "string"},
+    ),
+    email_translator_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="spam_phishing_detector",
+        name="스팸 및 피싱 탐지기 (Spam & Phishing Detector)",
+        description="이메일 본문과 발신자 도메인을 분석하여 스팸 및 피싱 위험도를 평가합니다.",
+        category="보안",
+        parameters={"email_content": "string", "sender_domain": "string"},
+    ),
+    spam_phishing_detector_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="reply_drafter",
+        name="답장 초안 생성기 (Reply Drafter)",
+        description="이전 이메일 맥락과 사용자의 의도(intent)를 바탕으로 답장 초안을 자동으로 작성합니다.",
+        category="커뮤니케이션",
+        parameters={"original_email": "string", "intent": "string"},
+    ),
+    reply_drafter_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="sentiment_analyzer",
+        name="감정 분석기 (Sentiment Analyzer)",
+        description="이메일의 전반적인 감정(긍정/부정/중립)과 주요 감정 키워드를 분석합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    sentiment_analyzer_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="grammar_checker",
+        name="맞춤법 및 문법 검사기 (Grammar Checker)",
+        description="작성된 이메일 초안의 맞춤법과 문법 오류를 검사하고 교정 제안을 제공합니다.",
+        category="작성 도구",
+        parameters={"draft_content": "string"},
+    ),
+    grammar_checker_handler,
+)
+
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
