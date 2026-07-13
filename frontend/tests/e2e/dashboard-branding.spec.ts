@@ -415,7 +415,7 @@ test('renders Security governance access audit sharing and policy with signed AP
   await expect(page.getByText('곧 제공됩니다')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('security-governance-desktop-access.png'), fullPage: false });
 
-  await page.getByRole('button', { name: '감사 로그' }).click();
+  await page.getByRole('tab', { name: '감사 로그' }).click();
   await expect(page.getByText('서버 감사 로그')).toBeVisible();
   await expect(page.getByText('보안 설정 변경이 서버 감사 근거로 기록되었습니다.')).toBeVisible();
   await expect(page.getByText('서버 관측 이벤트')).toBeVisible();
@@ -424,10 +424,10 @@ test('renders Security governance access audit sharing and policy with signed AP
   await expect(page.getByText('connector_evt_heartbeat')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('security-governance-desktop-audit.png'), fullPage: false });
 
-  await page.getByRole('button', { name: '외부 공유' }).click();
+  await page.getByRole('tab', { name: '외부 공유' }).click();
   await expect(page.getByText('WebDAV 저장소 쓰기 경계')).toBeVisible();
   await expect(page.getByText('외부 쓰기 실행 안 함').first()).toBeVisible();
-  await page.getByRole('button', { name: '정책' }).click();
+  await page.getByRole('tab', { name: '정책' }).click();
   await expect(page.getByText('차단 우선 정책 순서')).toBeVisible();
   await expect(page.getByText('교차 조직 제공자 secret')).toBeVisible();
   const desktopOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -437,7 +437,7 @@ test('renders Security governance access audit sharing and policy with signed AP
   await page.setViewportSize({ width: 768, height: 1024 });
   await page.goto('/security');
   await expect(page.getByText('원본 연결 RBAC / ABAC')).toBeVisible();
-  await page.getByRole('button', { name: '정책' }).click();
+  await page.getByRole('tab', { name: '정책' }).click();
   await expect(page.getByText('ABAC 차단 후 RBAC 허용')).toBeVisible();
   const tabletOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(tabletOverflow).toBeLessThanOrEqual(1);
@@ -529,13 +529,13 @@ test('renders Data quality surface across viewports with signed API headers', as
   await page.screenshot({ path: testInfo.outputPath('data-quality-desktop-repository-assets.png'), fullPage: false });
   await expect(page.getByText('outbound connector heartbeat received')).toBeVisible();
   await expect(page.getByText('connector_evt_data_quality')).toHaveCount(0);
-  await page.getByRole('button', { name: '수집 파이프라인' }).click();
+  await page.getByRole('tab', { name: '수집 파이프라인' }).click();
   await expect(page.getByText('4 emails and 3 attachments')).toBeVisible();
   await expect(page.getByText('원본 근거 연결됨').first()).toBeVisible();
   await expect(page.getByText(/준비 중/)).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('data-quality-desktop-pipeline.png'), fullPage: false });
 
-  await page.getByRole('button', { name: '임베딩' }).click();
+  await page.getByRole('tab', { name: '임베딩' }).click();
   await expect(page.getByText('text-embedding-3-small').first()).toBeVisible();
   await expect(page.getByText('Email vectors')).toBeVisible();
   await expect(page.getByText('1,536').first()).toBeVisible();
@@ -543,7 +543,7 @@ test('renders Data quality surface across viewports with signed API headers', as
   await expect(page.getByText('28,401')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('data-quality-desktop-embedding.png'), fullPage: false });
 
-  await page.getByRole('button', { name: '품질 점검' }).click();
+  await page.getByRole('tab', { name: '품질 점검' }).click();
   await expect(page.getByText('Thread id integrity').first()).toBeVisible();
   await expect(page.getByText('Some scoped emails need canonical thread ids.')).toBeVisible();
   await expect(page.getByText('23건')).toHaveCount(0);
@@ -556,7 +556,7 @@ test('renders Data quality surface across viewports with signed API headers', as
   await expect(page.getByText('감사 근거 기록됨')).toBeVisible();
   await expect(page.getByText('data.quality_surface.viewed')).toHaveCount(0);
   await expect(page.getByText(/준비 중/)).toHaveCount(0);
-  await page.getByRole('button', { name: '수집 파이프라인' }).click();
+  await page.getByRole('tab', { name: '수집 파이프라인' }).click();
   await expect(page.getByText('Connector observability')).toBeVisible();
   const tabletOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(tabletOverflow).toBeLessThanOrEqual(1);
@@ -566,7 +566,7 @@ test('renders Data quality surface across viewports with signed API headers', as
   await page.goto('/data');
   await expect(page.getByText('감사 근거 기록됨')).toBeVisible();
   await expect(page.getByText('data.quality_surface.viewed')).toHaveCount(0);
-  await page.getByRole('button', { name: '품질 점검' }).click();
+  await page.getByRole('tab', { name: '품질 점검' }).click();
   const mobileQualityCard = page.locator('article', { hasText: 'Dedupe fingerprint' }).first();
   await mobileQualityCard.scrollIntoViewIfNeeded();
   await expect(mobileQualityCard).toBeVisible();

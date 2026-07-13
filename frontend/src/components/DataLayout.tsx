@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useMemo, type ChangeEvent } from 'react';
+import { useCallback, useState, useEffect, useMemo, type ChangeEvent, type KeyboardEvent } from 'react';
 import { Database } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
@@ -34,9 +34,18 @@ import {
 
 
 const DATA_TABS = ['문서 저장소', '수집 파이프라인', '임베딩', '품질 점검'] as const;
+type DataTab = (typeof DATA_TABS)[number];
+
+function dataTabId(tab: DataTab) {
+  return `data-tab-${DATA_TABS.indexOf(tab)}`;
+}
+
+function dataTabPanelId(tab: DataTab) {
+  return `data-panel-${DATA_TABS.indexOf(tab)}`;
+}
 
 export function DataLayout() {
-  const [activeTab, setActiveTab] = useState<(typeof DATA_TABS)[number]>('문서 저장소');
+  const [activeTab, setActiveTab] = useState<DataTab>('문서 저장소');
   
   interface ProjectFolder {
     folder_uid: string;
@@ -323,6 +332,36 @@ export function DataLayout() {
     ? selectedRepositoryAsset
     : null;
 
+  const handleDataTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: DataTab) => {
+    const currentIndex = DATA_TABS.indexOf(tab);
+    let nextIndex = currentIndex;
+
+    switch (event.key) {
+      case 'ArrowDown':
+      case 'ArrowRight':
+        nextIndex = (currentIndex + 1) % DATA_TABS.length;
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        nextIndex = (currentIndex - 1 + DATA_TABS.length) % DATA_TABS.length;
+        break;
+      case 'Home':
+        nextIndex = 0;
+        break;
+      case 'End':
+        nextIndex = DATA_TABS.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    setActiveTab(DATA_TABS[nextIndex]);
+    event.currentTarget.parentElement
+      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+      [nextIndex]?.focus();
+  };
+
   return (
     <div className="flex h-full min-w-0 min-h-0 bg-background text-foreground overflow-x-hidden">
       {/* Local navigation (LNB): desktop left sidebar for the data domain's areas */}
@@ -334,31 +373,43 @@ export function DataLayout() {
           <Database className="size-5 text-primary" aria-hidden="true" />
           <span>데이터와 파일</span>
         </h1>
-        {DATA_TABS.map((tab) => (
-          <button
-            type="button"
-            key={tab}
-            aria-current={activeTab === tab ? 'page' : undefined}
-            onClick={() => setActiveTab(tab)}
-            className={`rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}
-          >
-            {tab}
-          </button>
-        ))}
+        <div role="tablist" aria-label="데이터 보기" aria-orientation="vertical" className="flex flex-col gap-1">
+          {DATA_TABS.map((tab) => (
+            <button
+              id={dataTabId(tab)}
+              type="button"
+              key={tab}
+              role="tab"
+              aria-controls={dataTabPanelId(tab)}
+              aria-selected={activeTab === tab}
+              tabIndex={activeTab === tab ? 0 : -1}
+              onClick={() => setActiveTab(tab)}
+              onKeyDown={(event) => handleDataTabKeyDown(event, tab)}
+              className={`rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Mobile local tabs: the LNB collapses to a horizontal tab strip below the desktop breakpoint */}
         <header className="flex h-16 shrink-0 items-center border-b border-border bg-card px-4 lg:hidden">
           <h1 className="sr-only">데이터와 파일</h1>
-          <div className="flex flex-1 min-w-0 gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div role="tablist" aria-label="데이터 보기" className="flex flex-1 min-w-0 gap-2 overflow-x-auto pb-1 scrollbar-hide">
             {DATA_TABS.map((tab) => (
               <button
+                id={`mobile-${dataTabId(tab)}`}
                 type="button"
                 key={tab}
-                aria-current={activeTab === tab ? 'page' : undefined}
+                role="tab"
+                aria-controls={dataTabPanelId(tab)}
+                aria-selected={activeTab === tab}
+                tabIndex={activeTab === tab ? 0 : -1}
                 onClick={() => setActiveTab(tab)}
-                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition-colors shrink-0 ${activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}
+                onKeyDown={(event) => handleDataTabKeyDown(event, tab)}
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${activeTab === tab ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`}
               >
                 {tab}
               </button>
@@ -367,7 +418,12 @@ export function DataLayout() {
         </header>
 
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 pb-[calc(7rem+env(safe-area-inset-bottom))] md:p-8 bg-background">
-        <div className="max-w-5xl mx-auto space-y-8">
+        <div
+          id={dataTabPanelId(activeTab)}
+          role="tabpanel"
+          aria-labelledby={dataTabId(activeTab)}
+          className="max-w-5xl mx-auto space-y-8"
+        >
           
           {activeTab === '문서 저장소' && (
             <DocumentRepositoryTab
