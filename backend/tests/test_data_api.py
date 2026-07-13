@@ -2769,6 +2769,85 @@ def test_data_document_webdav_materialization_rejects_empty_document(mock_db):
     )
 
 
+def test_data_document_webdav_materialization_rejects_pending_pdf(mock_db):
+    # A PDF still pending NewsDOM recognition holds a base64 payload in
+    # document_content; materializing it would write that binary as Markdown.
+    mock_db.documents.append(
+        Document(
+            document_id="doc_pending",
+            workspace_id="workspace-org-acme",
+            document_name="contract.pdf",
+            document_type="pdf",
+            document_content="JVBERi0xLjcK",  # base64 %PDF-1.7\n
+            document_status="pdf_dom_recognition_pending",
+            created_at=_now(),
+        )
+    )
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/documents/doc_pending/webdav-materialization-intent",
+            json={
+                "target_source_id": "webdav_src_primary",
+                "execute_provider": True,
+            },
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 409, response.text
+    assert "pending recognition" in response.json()["detail"]
+
+
+def test_data_pdf_dom_recognition_intent_rejects_non_pdf_document(mock_db):
+    mock_db.documents.append(
+        Document(
+            document_id="doc_text",
+            workspace_id="workspace-org-acme",
+            document_name="notes.md",
+            document_type="text/markdown",
+            document_content="# Notes",
+            document_status="uploaded",
+            created_at=_now(),
+        )
+    )
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/documents/doc_text/pdf-dom-recognition-intent",
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 415, response.text
+    # A PDF document is accepted.
+    mock_db.documents.append(
+        Document(
+            document_id="doc_pdf",
+            workspace_id="workspace-org-acme",
+            document_name="contract.pdf",
+            document_type="pdf",
+            document_content="JVBERi0xLjcK",
+            document_status="uploaded",
+            created_at=_now(),
+        )
+    )
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        ok = client.post(
+            "/api/data/documents/doc_pdf/pdf-dom-recognition-intent",
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["document_status"] == "pdf_dom_recognition_pending"
+
+
 async def _seed_smoke_test_data(conn, ids: dict):
     await conn.execute(text("SELECT 1"))
     await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

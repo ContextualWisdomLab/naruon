@@ -44,6 +44,14 @@ class NewsdomRequestError(RuntimeError):
     """Raised when the NewsDOM sidecar cannot fulfil a parse request."""
 
 
+class NewsdomEmptyRecognitionError(NewsdomRequestError):
+    """Raised when a 200 sidecar response carries no usable recognized text.
+
+    Treated as a retryable recognition failure so the caller records an error
+    status instead of marking the source ``parsed`` with empty content.
+    """
+
+
 @dataclass(frozen=True)
 class ValidatedNewsdomBaseURL:
     normalized_url: str

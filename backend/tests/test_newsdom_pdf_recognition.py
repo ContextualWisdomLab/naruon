@@ -248,6 +248,30 @@ async def test_recognize_attachment_pdf_lands_text_and_content_graph():
     assert email.content_segments
 
 
+@pytest.mark.asyncio
+async def test_recognize_pdf_dom_rejects_empty_sidecar_response():
+    from services.newsdom_client import NewsdomEmptyRecognitionError
+
+    async def empty_request(**_kwargs):
+        return {"pages": []}
+
+    with pytest.raises(NewsdomEmptyRecognitionError):
+        await recognize_pdf_dom(
+            config=NewsdomRuntimeConfig(
+                base_url="https://newsdom.example.com",
+                api_token=None,
+                request_language="auto",
+                recognition_mode="auto",
+                provider_name="primary",
+            ),
+            pdf_bytes=b"%PDF-1.7 fake",
+            filename="news.pdf",
+            source_kind="attachment",
+            source_record_uid="att-1",
+            request_fn=empty_request,
+        )
+
+
 def test_apply_recognition_to_attachment_is_pure_mapping():
     email = Email()
     attachment = Attachment(filename="news.pdf")

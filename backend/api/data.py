@@ -6,7 +6,7 @@ import json
 import re
 from typing import Literal, NamedTuple
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.engine import Row
@@ -39,8 +39,11 @@ from services.webdav_service import webdav_service
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 DATA_VECTOR_DIMENSIONS = 1536
-# Upper bound for the binary PDF DOM recognition upload variant.
-_MAX_PDF_DOM_UPLOAD_BYTES = 50 * 1024 * 1024
+# Upper bound for the binary PDF DOM recognition upload variant. Kept in step
+# with the NewsDOM sidecar's own MAX_PARSE_UPLOAD_BYTES (20 MiB): accepting more
+# would let a caller stash a pending document the configured sidecar will always
+# reject while the base64 copy inflates the database.
+_MAX_PDF_DOM_UPLOAD_BYTES = 20 * 1024 * 1024
 ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
     "email_attachments.content_type, "
     "email_attachments.parse_content_type, "
@@ -2311,6 +2314,16 @@ def _materialized_document_target_path(document: Document) -> str:
     return f"/Naruon/Data/{filename}"
 
 
+# Document statuses whose stored content is not yet materializable parsed text
+# (it may be a base64 binary payload awaiting a recognition/conversion worker).
+_NON_MATERIALIZABLE_DOCUMENT_STATUSES = frozenset(
+    {
+        PDF_DOM_RECOGNITION_PENDING_STATUS,
+        "hwp_conversion_pending",
+    }
+)
+
+
 def _materialized_document_content(document: Document) -> str:
     return (document.document_content or "").strip()
 
@@ -3238,6 +3251,11 @@ async def create_document_pdf_dom_recognition_intent(
     db: AsyncSession = Depends(get_db),
 ) -> DataDocumentActionResponse:
     document = await _get_workspace_document(db, auth_context, document_id)
+    if (document.document_type or "").strip().lower() != "pdf":
+        raise HTTPException(
+            status_code=415,
+            detail="PDF DOM recognition is only available for PDF documents.",
+        )
     document.document_status = PDF_DOM_RECOGNITION_PENDING_STATUS
     await db.commit()
     await db.refresh(document)
@@ -3257,7 +3275,9 @@ async def create_document_pdf_dom_recognition_intent(
 )
 async def upload_document_for_pdf_dom_recognition(
     file: UploadFile = File(...),
-    document_name: str | None = None,
+    # Declared as multipart form data (not a query parameter) so a client
+    # sending document_name alongside the file is honored.
+    document_name: str | None = Form(None),
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> DataDocumentActionResponse:
@@ -3273,6 +3293,7 @@ async def upload_document_for_pdf_dom_recognition(
         )
     document = Document(
         workspace_id=auth_context.workspace_id,
+        organization_id=auth_context.organization_id,
         document_name=_safe_display_text(
             document_name or file.filename, "workspace document"
         ),
@@ -3317,6 +3338,19 @@ async def create_document_webdav_materialization_intent(
     db: AsyncSession = Depends(get_db),
 ) -> DataDocumentWebdavMaterializationResponse:
     document = await _get_workspace_document(db, auth_context, document_id)
+    if document.document_status in _NON_MATERIALIZABLE_DOCUMENT_STATUSES:
+        # A document whose recognition/conversion is still pending holds a
+        # non-text payload (e.g. the base64 PDF stashed for the NewsDOM worker).
+        # Materializing it as Markdown would write that raw payload to the
+        # customer's WebDAV target. Refuse until recognition has landed real
+        # parsed text.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Workspace document is still pending recognition; "
+                "no materializable content yet."
+            ),
+        )
     if not _materialized_document_content(document):
         raise HTTPException(
             status_code=422,

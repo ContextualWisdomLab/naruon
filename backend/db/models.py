@@ -304,7 +304,9 @@ class NewsdomProvider(Base):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    newsdom_provider_id: Mapped[int] = mapped_column(
+        "newsdom_provider_id", primary_key=True
+    )
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     organization_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     provider_name: Mapped[str] = mapped_column(String, index=True, nullable=False)
@@ -1546,6 +1548,10 @@ class Document(Base):
 
     document_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"doc_{uuid.uuid4().hex}")
     workspace_id: Mapped[str] = mapped_column(String, ForeignKey("workspace_entities.workspace_id"), index=True, nullable=False)
+    # Owning organization (nullable for personal-scope docs). Persisted so the
+    # NewsDOM recognition worker can resolve the org's provider without joining
+    # through the (org-less) workspace entity.
+    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     document_name: Mapped[str] = mapped_column(String, nullable=False)
     document_type: Mapped[str] = mapped_column(String, nullable=False)
     document_content: Mapped[str] = mapped_column(Text, nullable=True)

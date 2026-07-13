@@ -155,22 +155,26 @@ def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
 
 
 def test_pdf_attachment_is_deferred_pending_newsdom_recognition():
+    from services.attachment_parser import decode_deferred_attachment_payload
+
+    raw = b"%PDF-1.7 raw bytes"
     result = parse_email_attachment(
         filename="contract.pdf",
         content_type="application/pdf",
-        raw_content=b"%PDF-1.7 raw bytes",
+        raw_content=raw,
     )
 
     assert result.filename == "contract.pdf"
     assert result.content_type == "application/pdf"
     # Heavy OCR/MinerU recognition is deferred to the worker: nothing is parsed
-    # inline, and the attachment carries the pending status.
-    assert result.content == ""
+    # inline, and the attachment carries the pending status. The raw bytes are
+    # retained as a base64 payload so the worker can recognize them later.
     assert result.parse_content == ""
     assert result.parse_content_type == "application/pdf"
     assert result.parser_key == "pdf"
     assert result.parse_status == "pdf_dom_recognition_pending"
     assert result.parse_error_code is None
+    assert decode_deferred_attachment_payload(result.content) == raw
 
 
 def test_pdf_extension_with_generic_content_type_is_deferred_pending():

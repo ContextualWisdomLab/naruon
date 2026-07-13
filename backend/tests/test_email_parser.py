@@ -274,12 +274,13 @@ JVBERi0xLjcK
             },
             {
                 "filename": "contract.pdf",
-                "content": "",
+                # Deferred to the NewsDOM worker: the raw PDF bytes are retained
+                # as a base64 payload (round-trips the fixture's %PDF-1.7\n) so
+                # the worker can recognize them later.
+                "content": "JVBERi0xLjcK",
                 "content_type": "application/pdf",
                 "parse_content": "",
                 "parse_content_type": "application/pdf",
-                # PDFs are deferred to the NewsDOM recognition worker rather than
-                # parsed inline, so they arrive pending (not unsupported).
                 "parser_key": "pdf",
                 "parse_status": "pdf_dom_recognition_pending",
                 "parse_error_code": None,

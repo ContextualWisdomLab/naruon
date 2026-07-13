@@ -1,3 +1,5 @@
+import base64
+import binascii
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -144,11 +146,15 @@ def parse_email_attachment(
     deferred_descriptor = _DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE.get(parse_content_type)
     if deferred_descriptor is not None:
         # Heavy recognition (OCR/MinerU via the NewsDOM sidecar) must not run
-        # inline during import — mark the attachment pending and let the worker
-        # populate parse_content + the content graph.
+        # inline during import. Retain the raw bytes as a base64 payload in
+        # ``content`` (mirroring the document-upload path's document_content) so
+        # the worker can decode and recognize them later; mark the attachment
+        # pending. The pending status gates display, and the worker overwrites
+        # ``content`` with the recognized text on success. Without this the
+        # source bytes were discarded and recognition was impossible.
         return AttachmentParseResult(
             filename=safe_filename,
-            content="",
+            content=_encode_deferred_payload(raw_content),
             content_type=normalized_content_type,
             parse_content="",
             parse_content_type=parse_content_type,
@@ -227,6 +233,31 @@ def _safe_filename(filename: str | None) -> str:
     if display_filename in {"", ".", ".."}:
         return "attachment"
     return display_filename
+
+
+def _encode_deferred_payload(raw_content: Any) -> str:
+    """Base64-encode the raw attachment bytes retained for deferred recognition."""
+    if isinstance(raw_content, bytes):
+        payload = raw_content
+    elif isinstance(raw_content, str):
+        payload = raw_content.encode("utf-8", errors="surrogatepass")
+    elif raw_content is None:
+        return ""
+    else:
+        payload = str(raw_content).encode("utf-8", errors="surrogatepass")
+    return base64.b64encode(payload).decode("ascii")
+
+
+def decode_deferred_attachment_payload(content: str | None) -> bytes:
+    """Decode the base64 payload retained on a pending attachment's content.
+
+    Raises ``ValueError`` when the stored payload is not valid base64, so the
+    recognition worker can record an error status instead of crashing.
+    """
+    try:
+        return base64.b64decode((content or "").encode("ascii"), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Pending attachment payload is not valid base64") from exc
 
 
 def _coerce_text(raw_content: Any) -> str:

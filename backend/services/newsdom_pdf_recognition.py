@@ -26,11 +26,17 @@ from db.models import NewsdomProvider
 from services.content_graph import ParseResult, PdfDomSection, parse_pdf_dom
 from services.newsdom_client import (
     NewsdomConfigurationError,
+    NewsdomEmptyRecognitionError,
     request_pdf_dom,
 )
 
 PDF_DOM_RECOGNITION_PENDING_STATUS = "pdf_dom_recognition_pending"
 PDF_DOM_RECOGNITION_PARSED_STATUS = "parsed"
+# Terminal-but-retryable failure: the sidecar was reached (or the payload was
+# unusable) and recognition did not produce landable content. Distinct from the
+# pending status so a stuck/empty recognition is visible instead of masquerading
+# as either parsed or perpetually pending.
+PDF_DOM_RECOGNITION_FAILED_STATUS = "pdf_dom_recognition_failed"
 PDF_PARSER_KEY = "pdf"
 PDF_PARSE_CONTENT_TYPE = "text/plain"
 
@@ -90,7 +96,10 @@ async def get_active_newsdom_provider(
             NewsdomProvider.organization_id == organization_id,
             NewsdomProvider.is_active.is_(True),
         )
-        .order_by(desc(NewsdomProvider.updated_at), desc(NewsdomProvider.id))
+        .order_by(
+            desc(NewsdomProvider.updated_at),
+            desc(NewsdomProvider.newsdom_provider_id),
+        )
         .limit(1)
     )
     return result.scalars().first()
@@ -213,9 +222,17 @@ async def recognize_pdf_dom(
         language=config.request_language,
         mode=config.recognition_mode,
     )
-    return build_recognition_records(
+    records = build_recognition_records(
         payload,
         source_kind=source_kind,
         source_record_uid=source_record_uid,
         display_name=display_name,
     )
+    # A 200 response with no recognized sections/text is a recognition failure,
+    # not a parsed document: refuse to land empty content as "parsed" so the
+    # caller records a retryable error instead of a false-positive success.
+    if not records.parse_text.strip() and not records.parse_result.segments:
+        raise NewsdomEmptyRecognitionError(
+            "NewsDOM sidecar returned no recognizable text for the PDF"
+        )
+    return records
