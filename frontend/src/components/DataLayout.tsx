@@ -334,7 +334,7 @@ export function DataLayout() {
 
   const handleDataTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: DataTab) => {
     const currentIndex = DATA_TABS.indexOf(tab);
-    let nextIndex = currentIndex;
+    let nextIndex: number;
 
     switch (event.key) {
       case 'ArrowDown':

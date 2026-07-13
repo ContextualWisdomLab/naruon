@@ -849,7 +849,7 @@ export function SecurityLayout() {
 
   const handleSecurityTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: SecurityTab) => {
     const currentIndex = tabs.indexOf(tab);
-    let nextIndex = currentIndex;
+    let nextIndex: number;
 
     switch (event.key) {
       case 'ArrowDown':
