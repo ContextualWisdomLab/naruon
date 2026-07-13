@@ -94,6 +94,45 @@ describe("CalendarPage", () => {
     expect(container.querySelector('button[aria-label="닫기"]')).not.toBeNull();
   });
 
+  it("exposes the calendar view switcher as a keyboard-navigable tablist", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(calendarSourceList)));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<CalendarPage />);
+    });
+    await flushAsyncWork();
+
+    const tablist = container.querySelector<HTMLElement>('[role="tablist"][aria-label="일정 보기 방식"]');
+    expect(tablist).not.toBeNull();
+    const tabs = Array.from(tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["월간 캘린더", "주간 캘린더", "일정 상세", "회의 조율", "일정 후보"]);
+
+    const monthlyTab = tabs[0];
+    expect(monthlyTab?.getAttribute("aria-selected")).toBe("true");
+    expect(monthlyTab?.tabIndex).toBe(0);
+    expect(monthlyTab?.getAttribute("aria-controls")).toBe("calendar-view-panel");
+    const panel = container.querySelector<HTMLElement>('#calendar-view-panel[role="tabpanel"]');
+    expect(panel?.getAttribute("aria-labelledby")).toBe(monthlyTab?.id);
+    for (const tab of tabs.slice(1)) {
+      expect(tab.getAttribute("aria-selected")).toBe("false");
+      expect(tab.tabIndex).toBe(-1);
+    }
+
+    act(() => {
+      monthlyTab?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    const weeklyTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab) => tab.textContent === "주간 캘린더");
+    expect(weeklyTab?.getAttribute("aria-selected")).toBe("true");
+    expect(weeklyTab?.tabIndex).toBe(0);
+    expect(container.querySelector<HTMLElement>('#calendar-view-panel[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(weeklyTab?.id);
+  });
+
   it("filters rendered calendar events when a calendar visibility checkbox changes", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(calendarSourceList)));
     container = document.createElement("div");
