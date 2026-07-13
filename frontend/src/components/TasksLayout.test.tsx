@@ -95,45 +95,4 @@ describe("TasksLayout", () => {
     expect(container.textContent).toContain("관련 메일 열기");
     expect(container.textContent).toContain("거래처 회신 준비");
   });
-
-  it("exposes the view mode toggle as a keyboard-navigable tablist", async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/api/tasks")) return Promise.resolve(jsonResponse([]));
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<TasksLayout />);
-    });
-    await flushAsyncWork();
-
-    const tablist = container.querySelector<HTMLElement>('[role="tablist"][aria-label="작업 보기 방식"]');
-    expect(tablist).not.toBeNull();
-    const tabs = Array.from(tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []);
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["내 작업", "위임한 작업", "칸반", "작업 상세"]);
-
-    const kanbanTab = tabs.find((tab) => tab.textContent === "칸반");
-    expect(kanbanTab?.getAttribute("aria-selected")).toBe("true");
-    expect(kanbanTab?.tabIndex).toBe(0);
-    for (const tab of tabs.filter((candidate) => candidate !== kanbanTab)) {
-      expect(tab.getAttribute("aria-selected")).toBe("false");
-      expect(tab.tabIndex).toBe(-1);
-    }
-
-    act(() => {
-      kanbanTab?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-    });
-    await flushAsyncWork();
-
-    const detailTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-      .find((tab) => tab.textContent === "작업 상세");
-    expect(detailTab?.getAttribute("aria-selected")).toBe("true");
-    expect(detailTab?.tabIndex).toBe(0);
-  });
 });

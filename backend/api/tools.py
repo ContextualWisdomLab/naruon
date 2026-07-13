@@ -1,4 +1,3 @@
-import hashlib
 import base64
 import inspect
 import json
@@ -139,7 +138,6 @@ registry = ToolRegistry()
 
 
 # Initialize default tools
-
 
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
@@ -487,7 +485,6 @@ registry.register(
     tone_analyzer_handler,
 )
 
-
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -499,7 +496,6 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
-
 
 registry.register(
     ToolInfo(
@@ -554,61 +550,45 @@ registry.register(
 )
 
 
+
 async def json_validator_handler(params: Dict[str, Any]) -> Dict[str, Any]:
-    json_string = params.get("json_string", "")
+    json_string = params.get("json_string")
     if json_string is None:
-        json_string = ""
+        return {"is_valid": False, "formatted_json": None, "error": "json_string must not be None"}
     try:
         parsed = json.loads(json_string)
-        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
-        return {"is_valid": True, "formatted_json": formatted, "error": None}
+        return {
+            "is_valid": True,
+            "formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False),
+            "error": None,
+        }
     except json.JSONDecodeError as e:
         return {"is_valid": False, "formatted_json": None, "error": str(e)}
 
 
-registry.register(
-    ToolInfo(
-        code="json_validator",
-        name="JSON 검증 및 포매터 (JSON Validator)",
-        description="JSON 문자열의 유효성을 검증하고 들여쓰기가 적용된 형태로 포매팅합니다.",
-        category="유틸리티",
-        parameters={"json_string": "string"},
-    ),
-    json_validator_handler,
-)
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    import hashlib
+    text = params.get("text")
+    algorithm = params.get("algorithm", "sha256").lower()
 
-
-async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
     if text is None:
         text = ""
-    alg_raw = params.get("algorithm", "sha256")
-    if alg_raw is None:
-        alg_raw = "sha256"
-    algorithm = alg_raw.lower()
 
     if algorithm not in hashlib.algorithms_available:
         raise ValueError(f"Unsupported hash algorithm: {algorithm}")
 
-    h = hashlib.new(algorithm)
-    h.update(text.encode("utf-8"))
-    return {"hash": h.hexdigest(), "algorithm": algorithm}
+    hasher = hashlib.new(algorithm)
+    hasher.update(text.encode("utf-8"))
+
+    return {
+        "hash": hasher.hexdigest(),
+        "algorithm": algorithm,
+    }
 
 
-registry.register(
-    ToolInfo(
-        code="hash_generator",
-        name="해시 생성기 (Hash Generator)",
-        description="텍스트를 지정된 알고리즘(예: sha256, md5 등)으로 해싱합니다.",
-        category="보안",
-        parameters={"text": "string", "algorithm": "string"},
-    ),
-    hash_generator_handler,
-)
-
-
-async def url_parser_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    url = params.get("url", "")
+async def url_parser_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    import urllib.parse
+    url = params.get("url")
     if url is None:
         url = ""
     try:
@@ -628,6 +608,30 @@ async def url_parser_handler(params: Dict[str, Any]) -> Dict[str, str]:
 
 registry.register(
     ToolInfo(
+        code="json_validator",
+        name="JSON 검증기 (JSON Validator)",
+        description="입력된 문자열이 유효한 JSON 형식인지 검증하고, 보기 좋게 포맷팅합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_validator_handler,
+)
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="주어진 텍스트를 지정된 해시 알고리즘(예: sha256, md5)으로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+registry.register(
+    ToolInfo(
         code="url_parser",
         name="URL 파서 (URL Parser)",
         description="URL 문자열을 분석하여 구성 요소(스킴, 호스트, 경로, 쿼리 등)로 분리합니다.",
@@ -638,13 +642,12 @@ registry.register(
 )
 
 
-
 registry.register(
     ToolInfo(
         code="email_translator",
-        name="이메일 번역기",
-        description="이메일 텍스트를 대상 언어로 번역합니다.",
-        category="번역",
+        name="이메일 번역기 (Email Translator)",
+        description="이메일 텍스트를 지정된 대상 언어로 번역합니다.",
+        category="언어 변환",
         parameters={"text": "string", "target_language": "string"},
     ),
     email_translator_handler,
@@ -653,8 +656,8 @@ registry.register(
 registry.register(
     ToolInfo(
         code="spam_phishing_detector",
-        name="스팸/피싱 감지기",
-        description="이메일 본문에서 스팸 및 피싱 위험 요소를 평가합니다.",
+        name="스팸 및 피싱 탐지기 (Spam & Phishing Detector)",
+        description="이메일 본문과 발신자 도메인을 분석하여 스팸 및 피싱 위험도를 평가합니다.",
         category="보안",
         parameters={"email_content": "string", "sender_domain": "string"},
     ),
@@ -664,9 +667,9 @@ registry.register(
 registry.register(
     ToolInfo(
         code="reply_drafter",
-        name="답장 초안 작성기",
-        description="지정된 의도를 바탕으로 이메일 답장 초안을 작성합니다.",
-        category="작성",
+        name="답장 초안 생성기 (Reply Drafter)",
+        description="이전 이메일 맥락과 사용자의 의도(intent)를 바탕으로 답장 초안을 자동으로 작성합니다.",
+        category="커뮤니케이션",
         parameters={"original_email": "string", "intent": "string"},
     ),
     reply_drafter_handler,
@@ -675,9 +678,9 @@ registry.register(
 registry.register(
     ToolInfo(
         code="sentiment_analyzer",
-        name="감정 분석기",
-        description="이메일 텍스트의 감정과 핵심 정서를 분석합니다.",
-        category="분석",
+        name="감정 분석기 (Sentiment Analyzer)",
+        description="이메일의 전반적인 감정(긍정/부정/중립)과 주요 감정 키워드를 분석합니다.",
+        category="이메일 분석",
         parameters={"text": "string"},
     ),
     sentiment_analyzer_handler,
@@ -686,9 +689,9 @@ registry.register(
 registry.register(
     ToolInfo(
         code="grammar_checker",
-        name="맞춤법/문법 검사기",
-        description="이메일 초안의 맞춤법 및 문법을 검사하고 교정합니다.",
-        category="작성",
+        name="맞춤법 및 문법 검사기 (Grammar Checker)",
+        description="작성된 이메일 초안의 맞춤법과 문법 오류를 검사하고 교정 제안을 제공합니다.",
+        category="작성 도구",
         parameters={"draft_content": "string"},
     ),
     grammar_checker_handler,

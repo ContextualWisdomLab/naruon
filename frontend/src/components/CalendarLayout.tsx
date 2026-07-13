@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -27,15 +27,8 @@ import { CalendarWritebackSection } from './calendar/CalendarWritebackSection';
 
 
 
-const CALENDAR_VIEW_MODES = ['월간 캘린더', '주간 캘린더', '일정 상세', '회의 조율', '일정 후보'] as const;
-type CalendarViewMode = (typeof CALENDAR_VIEW_MODES)[number];
-
-function calendarViewTabId(mode: CalendarViewMode) {
-  return `calendar-view-tab-${CALENDAR_VIEW_MODES.indexOf(mode)}`;
-}
-
 export function CalendarLayout() {
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('월간 캘린더');
+  const [viewMode, setViewMode] = useState<'월간 캘린더' | '주간 캘린더' | '일정 상세' | '회의 조율' | '일정 후보'>('월간 캘린더');
   const [writebackStatus, setWritebackStatus] = useState<WritebackStatus>('idle');
   const [writebackResult, setWritebackResult] = useState<CalendarWritebackIntentResponse | null>(null);
   const [writebackSources, setWritebackSources] = useState<CalendarWritebackSource[]>([]);
@@ -142,21 +135,6 @@ export function CalendarLayout() {
   const isWritebackActionDisabled = isWritebackLoading || !isSourceRegistryReady;
   const isProviderExecutionDisabled = isWritebackActionDisabled || !selectedWritebackSource?.etag;
 
-  const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: CalendarViewMode) => {
-    const currentIndex = CALENDAR_VIEW_MODES.indexOf(mode);
-    const lastIndex = CALENDAR_VIEW_MODES.length - 1;
-    let nextIndex: number;
-    if (event.key === 'ArrowRight') nextIndex = currentIndex === lastIndex ? 0 : currentIndex + 1;
-    else if (event.key === 'ArrowLeft') nextIndex = currentIndex === 0 ? lastIndex : currentIndex - 1;
-    else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = lastIndex;
-    else return;
-    event.preventDefault();
-    const nextMode = CALENDAR_VIEW_MODES[nextIndex];
-    setViewMode(nextMode);
-    document.getElementById(calendarViewTabId(nextMode))?.focus();
-  };
-
   return (
     <div className="flex h-full min-h-0 bg-background text-foreground">
       {/* Left Sidebar - Calendar List */}
@@ -178,17 +156,12 @@ export function CalendarLayout() {
             <h2 className="text-sm font-bold text-muted-foreground lg:ml-2">2026년 5월</h2>
           </div>
           <div className="flex w-full min-w-0 items-center gap-3">
-            <div role="tablist" aria-label="일정 보기 방식" className="flex min-w-0 overflow-x-auto rounded-md border border-border">
-              {CALENDAR_VIEW_MODES.map((mode) => (
+            <div className="flex min-w-0 overflow-x-auto rounded-md border border-border">
+              {['월간 캘린더', '주간 캘린더', '일정 상세', '회의 조율', '일정 후보'].map((mode) => (
                 <button type="button"
                   key={mode}
-                  id={calendarViewTabId(mode)}
-                  role="tab"
-                  aria-selected={viewMode === mode}
-                  aria-controls={viewMode === mode ? 'calendar-view-panel' : undefined}
-                  tabIndex={viewMode === mode ? 0 : -1}
-                  onClick={() => setViewMode(mode)}
-                  onKeyDown={(event) => handleViewModeKeyDown(event, mode)}
+                  aria-pressed={viewMode === mode}
+                  onClick={() => setViewMode(mode as '월간 캘린더' | '주간 캘린더' | '일정 상세' | '회의 조율' | '일정 후보')}
                   className={`shrink-0 px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background ${viewMode === mode ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-secondary'}`}
                 >
                   {mode}
@@ -217,13 +190,11 @@ export function CalendarLayout() {
             writebackResult={writebackResult}
           />
 
-          <div id="calendar-view-panel" role="tabpanel" aria-labelledby={calendarViewTabId(viewMode)}>
-            {viewMode === '월간 캘린더' && <CalendarMonthView visibleMonthEvents={visibleMonthEvents} />}
-            {viewMode === '주간 캘린더' && <CalendarWeekView visibleWeekEvents={visibleWeekEvents} />}
-            {viewMode === '일정 상세' && <CalendarDetailView selectedDetailEvent={selectedDetailEvent} />}
-            {viewMode === '회의 조율' && <CalendarCoordinationView />}
-            {viewMode === '일정 후보' && <CalendarCandidateView visibleCandidateEvents={visibleCandidateEvents} />}
-          </div>
+          {viewMode === '월간 캘린더' && <CalendarMonthView visibleMonthEvents={visibleMonthEvents} />}
+          {viewMode === '주간 캘린더' && <CalendarWeekView visibleWeekEvents={visibleWeekEvents} />}
+          {viewMode === '일정 상세' && <CalendarDetailView selectedDetailEvent={selectedDetailEvent} />}
+          {viewMode === '회의 조율' && <CalendarCoordinationView />}
+          {viewMode === '일정 후보' && <CalendarCandidateView visibleCandidateEvents={visibleCandidateEvents} />}
         </div>
       </main>
 

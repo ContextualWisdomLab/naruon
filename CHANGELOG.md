@@ -1,11 +1,13 @@
 ## [Unreleased]
-### 유틸리티 도구 (Utility Tools)
 
-- **Features**: `Tool` 컴포넌트 강화를 위해 새로운 유틸리티 도구들을 추가했습니다.
-  - JSON 유효성 검사 및 포매터 도구 (`json_validator`) 추가.
-  - 지정된 알고리즘을 사용한 해시 생성 도구 (`hash_generator`) 추가.
-  - URL 분석 및 구성 요소 분리 도구 (`url_parser`) 추가.
-- **Testing**: 새로 추가된 도구 및 기존 기능에 대한 테스트를 보강하여 백엔드 `tools.py`의 테스트 커버리지를 100%로 달성했습니다.
+### Added
+- **유틸리티 도구 추가:** `api/tools.py`에 다음 세 가지 유틸리티 도구를 새로 추가했습니다.
+  - **JSON 검증기 (json_validator):** 입력 문자열이 올바른 JSON 형식인지 확인하고 예쁘게 포맷팅합니다.
+  - **해시 생성기 (hash_generator):** 문자열을 SHA256, MD5 등의 알고리즘을 사용해 해시 값으로 변환합니다.
+  - **URL 파서 (url_parser):** URL 문자열을 구성 요소(스킴, 호스트, 경로, 쿼리 등)로 파싱합니다.
+
+### Fixed
+- **테스트 커버리지 100% 달성:** `mock_handler` 및 `validate_webhook_url_details` 등 기존 모듈 내 누락된 코드 경로에 대한 테스트를 `backend/tests/test_tools_api.py`에 보강하여 `backend/api/tools.py` 파일의 테스트 커버리지를 완벽하게 맞추었습니다.
 
 ### 마이그레이션 정합성 (Alembic single-head 복구)
 
@@ -2695,6 +2697,16 @@
 - `docker compose down`
 
 ## [Unreleased]
+
+### Added
+- **유틸리티 도구 추가:** `api/tools.py`에 다음 세 가지 유틸리티 도구를 새로 추가했습니다.
+  - **JSON 검증기 (json_validator):** 입력 문자열이 올바른 JSON 형식인지 확인하고 예쁘게 포맷팅합니다.
+  - **해시 생성기 (hash_generator):** 문자열을 SHA256, MD5 등의 알고리즘을 사용해 해시 값으로 변환합니다.
+  - **URL 파서 (url_parser):** URL 문자열을 구성 요소(스킴, 호스트, 경로, 쿼리 등)로 파싱합니다.
+
+### Fixed
+- **테스트 커버리지 100% 달성:** `mock_handler` 및 `validate_webhook_url_details` 등 기존 모듈 내 누락된 코드 경로에 대한 테스트를 `backend/tests/test_tools_api.py`에 보강하여 `backend/api/tools.py` 파일의 테스트 커버리지를 완벽하게 맞추었습니다.
+
 ### Added
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환

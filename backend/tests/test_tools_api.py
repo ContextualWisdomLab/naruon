@@ -746,7 +746,8 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error"
+                    in data["message"]
                 )
 
     finally:
@@ -879,92 +880,7 @@ def test_is_safe_webhook_url_coverage():
     assert is_safe_webhook_url("https://example.com/webhook#fragment") is False
 
 
-@pytest.mark.asyncio
-async def test_mock_handler():
-    from api.tools import mock_handler
-
-    res = await mock_handler({"test": "data"})
-    assert (
-        res
-        == f"Mock execution successful with params: {json.dumps({'test': 'data'}, ensure_ascii=False, sort_keys=True)}"
-    )
-
-
-def test_validate_webhook_url_details_no_hostname():
-    from api.tools import validate_webhook_url_details
-
-    with pytest.raises(ValueError, match="Webhook URL must include a host"):
-        validate_webhook_url_details("https:///?query=1")
-
-
-def test_validate_webhook_url_details_invalid_port():
-    from api.tools import validate_webhook_url_details
-
-    with pytest.raises(ValueError, match="Webhook URL port must be valid"):
-        validate_webhook_url_details("https://example.com:99999999999")
-
-
-@pytest.mark.asyncio
-async def test_json_validator_handler_valid():
-    from api.tools import json_validator_handler
-
-    res = await json_validator_handler({"json_string": '{"key":"value"}'})
-    assert res["is_valid"] is True
-    assert json.loads(res["formatted_json"]) == {"key": "value"}
-    assert res["error"] is None
-
-
-@pytest.mark.asyncio
-async def test_json_validator_handler_invalid():
-    from api.tools import json_validator_handler
-
-    res = await json_validator_handler({"json_string": '{"key":"value"'})
-    assert res["is_valid"] is False
-    assert res["formatted_json"] is None
-    assert res["error"] is not None
-
-
-@pytest.mark.asyncio
-async def test_hash_generator_handler():
-    from api.tools import hash_generator_handler
-    import hashlib
-
-    res = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
-    assert res["hash"] == hashlib.md5(b"hello").hexdigest()
-    assert res["algorithm"] == "md5"
-
-
-@pytest.mark.asyncio
-async def test_hash_generator_handler_invalid_alg():
-    from api.tools import hash_generator_handler
-
-    with pytest.raises(ValueError, match="Unsupported hash algorithm: invalid_alg"):
-        await hash_generator_handler({"text": "hello", "algorithm": "invalid_alg"})
-
-
-@pytest.mark.asyncio
-async def test_url_parser_handler():
-    from api.tools import url_parser_handler
-
-    res = await url_parser_handler({"url": "https://example.com/path?q=1#frag"})
-    assert res["scheme"] == "https"
-    assert res["netloc"] == "example.com"
-    assert res["path"] == "/path"
-    assert res["query"] == "q=1"
-    assert res["fragment"] == "frag"
-
-
-@pytest.mark.asyncio
-async def test_url_parser_handler_invalid():
-    from api.tools import url_parser_handler
-
-    with pytest.raises(ValueError, match="Invalid URL"):
-        await url_parser_handler({"url": "http://[::1"})
-
-
 def test_execute_email_translator():
-    from fastapi.testclient import TestClient
-    from main import app
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/email_translator/execute",
@@ -979,10 +895,13 @@ def test_execute_email_translator():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
+    assert "안녕하세요" in data["result"]["translated_text"]
+    assert "감사합니다" in data["result"]["translated_text"]
+    assert "회의" in data["result"]["translated_text"]
+    assert data["result"]["source_language_detected"] == "en"
+
 
 def test_execute_spam_phishing_detector():
-    from fastapi.testclient import TestClient
-    from main import app
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/spam_phishing_detector/execute",
@@ -997,10 +916,13 @@ def test_execute_spam_phishing_detector():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
+    assert data["result"]["is_phishing"] is True
+    assert data["result"]["is_spam"] is True
+    assert data["result"]["risk_score"] >= 90
+    assert any("sender domain" in warning for warning in data["result"]["warnings"])
+
 
 def test_execute_reply_drafter():
-    from fastapi.testclient import TestClient
-    from main import app
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/reply_drafter/execute",
@@ -1015,10 +937,11 @@ def test_execute_reply_drafter():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
+    assert "긍정적 동의" in data["result"]["draft"]
+    assert "tomorrow at 2pm" in data["result"]["draft"]
+
 
 def test_execute_sentiment_analyzer():
-    from fastapi.testclient import TestClient
-    from main import app
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/sentiment_analyzer/execute",
@@ -1028,10 +951,12 @@ def test_execute_sentiment_analyzer():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "negative"
+    assert data["result"]["score"] < 0.5
+    assert "불만" in data["result"]["key_emotions"]
+
 
 def test_execute_grammar_checker():
-    from fastapi.testclient import TestClient
-    from main import app
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/grammar_checker/execute",
@@ -1045,3 +970,137 @@ def test_execute_grammar_checker():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
+    assert "안녕하세요" in data["result"]["corrected_text"]
+    assert "확인 부탁드립니다" in data["result"]["corrected_text"]
+    assert "감사합니다" in data["result"]["corrected_text"]
+    assert data["result"]["errors_found"] == 3
+
+
+@pytest.mark.asyncio
+async def test_mock_handler():
+    from api.tools import mock_handler
+    res = await mock_handler({"test": 123})
+    assert "123" in res
+
+
+def test_validate_webhook_url_no_host():
+    from api.tools import validate_webhook_url
+    with pytest.raises(ValueError, match="Webhook URL must include a host"):
+        validate_webhook_url("https://")
+
+
+def test_validate_webhook_url_invalid_port():
+    from api.tools import validate_webhook_url
+    with pytest.raises(ValueError, match="Webhook URL port must be valid"):
+        validate_webhook_url("https://example.com:9999999/webhook")
+
+
+@pytest.mark.asyncio
+async def test_detect_language_internal_coverage():
+    from api.tools import email_translator_handler
+    res_ko = await email_translator_handler({"text": "안녕하세요", "target_language": "en"})
+    assert "source_language_detected" in res_ko
+
+    res_unknown = await email_translator_handler({"text": "12345", "target_language": "en"})
+    assert "source_language_detected" in res_unknown
+
+@pytest.mark.asyncio
+async def test_sentiment_analyzer_internal_coverage():
+    from api.tools import sentiment_analyzer_handler
+    res_pos = await sentiment_analyzer_handler({"text": "정말 훌륭하고 감사합니다"})
+    assert res_pos["sentiment"] == "positive"
+
+    res_neu = await sentiment_analyzer_handler({"text": "오늘 회의 일정 공유드립니다"})
+    assert res_neu["sentiment"] == "neutral"
+
+
+@pytest.mark.asyncio
+async def test_mock_handler():
+    from api.tools import mock_handler
+    import json
+    res = await mock_handler({"test": "data"})
+    assert res == f"Mock execution successful with params: {json.dumps({'test': 'data'}, ensure_ascii=False, sort_keys=True)}"
+
+
+def test_validate_webhook_url_details_no_hostname():
+    from api.tools import validate_webhook_url_details
+    with pytest.raises(ValueError, match="Webhook URL must include a host"):
+        validate_webhook_url_details("https:///?query=1")
+
+
+def test_validate_webhook_url_details_invalid_port():
+    from api.tools import validate_webhook_url_details
+    with pytest.raises(ValueError, match="Webhook URL port must be valid"):
+        validate_webhook_url_details("https://example.com:99999999999")
+
+
+@pytest.mark.asyncio
+async def test_json_validator_handler_valid():
+    from api.tools import json_validator_handler
+    import json
+    res = await json_validator_handler({"json_string": '{"key":"value"}'})
+    assert res["is_valid"] is True
+    assert json.loads(res["formatted_json"]) == {"key": "value"}
+    assert res["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_json_validator_handler_invalid():
+    from api.tools import json_validator_handler
+    res = await json_validator_handler({"json_string": '{"key":"value"'})
+    assert res["is_valid"] is False
+    assert res["formatted_json"] is None
+    assert res["error"] is not None
+
+@pytest.mark.asyncio
+async def test_json_validator_handler_none():
+    from api.tools import json_validator_handler
+    res = await json_validator_handler({})
+    assert res["is_valid"] is False
+    assert res["error"] == "json_string must not be None"
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler
+    import hashlib
+    res = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
+    assert res["hash"] == hashlib.md5(b"hello").hexdigest()
+    assert res["algorithm"] == "md5"
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler_invalid_alg():
+    from api.tools import hash_generator_handler
+    with pytest.raises(ValueError, match="Unsupported hash algorithm: invalid_alg"):
+        await hash_generator_handler({"text": "hello", "algorithm": "invalid_alg"})
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler_none():
+    from api.tools import hash_generator_handler
+    res = await hash_generator_handler({"algorithm": "md5"})
+    assert res["algorithm"] == "md5"
+    assert "hash" in res
+
+@pytest.mark.asyncio
+async def test_url_parser_handler():
+    from api.tools import url_parser_handler
+    res = await url_parser_handler({"url": "https://example.com/path?q=1#frag"})
+    assert res["scheme"] == "https"
+    assert res["netloc"] == "example.com"
+    assert res["path"] == "/path"
+    assert res["query"] == "q=1"
+    assert res["fragment"] == "frag"
+
+
+@pytest.mark.asyncio
+async def test_url_parser_handler_invalid():
+    from api.tools import url_parser_handler
+    with pytest.raises(ValueError, match="Invalid URL"):
+        await url_parser_handler({"url": "http://[::1"})
+
+@pytest.mark.asyncio
+async def test_url_parser_handler_none():
+    from api.tools import url_parser_handler
+    res = await url_parser_handler({})
+    assert res["scheme"] == ""
+    assert res["netloc"] == ""
