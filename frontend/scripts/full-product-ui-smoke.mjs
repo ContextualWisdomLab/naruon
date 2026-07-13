@@ -1177,7 +1177,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("If-Match 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "중복 메일 스레드 의도 점검", exact: true }).click();
     await page.getByText("Message-ID 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "품질 점검", exact: true }).click();
+    await page.getByRole("tab", { name: "품질 점검", exact: true }).click();
     await page.getByRole("heading", { name: "Thread id integrity", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("data:create-embedding-regeneration-intent"),
