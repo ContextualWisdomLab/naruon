@@ -878,3 +878,118 @@ def test_is_safe_webhook_url_coverage():
     assert is_safe_webhook_url("https://[::1]/admin") is False
     assert is_safe_webhook_url("https://user:pass@example.com/webhook") is False
     assert is_safe_webhook_url("https://example.com/webhook#fragment") is False
+
+
+def test_execute_email_translator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Hello, thank you for the meeting.",
+                    "target_language": "ko",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "안녕하세요" in data["result"]["translated_text"]
+    assert "감사합니다" in data["result"]["translated_text"]
+    assert "회의" in data["result"]["translated_text"]
+    assert data["result"]["source_language_detected"] == "en"
+
+
+def test_execute_spam_phishing_detector():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/spam_phishing_detector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "Urgent: update your bank password now",
+                    "sender_domain": "secure-bank-login.ru",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["is_phishing"] is True
+    assert data["result"]["is_spam"] is True
+    assert data["result"]["risk_score"] >= 90
+    assert any("sender domain" in warning for warning in data["result"]["warnings"])
+
+
+def test_execute_reply_drafter():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/reply_drafter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "original_email": "Can we meet tomorrow at 2pm?",
+                    "intent": "긍정적 동의",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "긍정적 동의" in data["result"]["draft"]
+    assert "tomorrow at 2pm" in data["result"]["draft"]
+
+
+def test_execute_sentiment_analyzer():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "I am disappointed about this urgent issue."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "negative"
+    assert data["result"]["score"] < 0.5
+    assert "불만" in data["result"]["key_emotions"]
+
+
+def test_execute_grammar_checker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/grammar_checker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "draft_content": "안녕 하세요. 확인 부탁 드립니다. 감사 합니다."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "안녕하세요" in data["result"]["corrected_text"]
+    assert "확인 부탁드립니다" in data["result"]["corrected_text"]
+    assert "감사합니다" in data["result"]["corrected_text"]
+    assert data["result"]["errors_found"] == 3
+
+
+@pytest.mark.asyncio
+async def test_mock_handler():
+    from api.tools import mock_handler
+    res = await mock_handler({"test": 123})
+    assert "123" in res
+
+
+def test_validate_webhook_url_no_host():
+    from api.tools import validate_webhook_url
+    with pytest.raises(ValueError, match="Webhook URL must include a host"):
+        validate_webhook_url("https://")
+
+
+def test_validate_webhook_url_invalid_port():
+    from api.tools import validate_webhook_url
+    with pytest.raises(ValueError, match="Webhook URL port must be valid"):
+        validate_webhook_url("https://example.com:9999999/webhook")
