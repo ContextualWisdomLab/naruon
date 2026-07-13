@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Inside Actions, ignore PATH entries prepended via GITHUB_PATH by earlier
+# steps so gh/jq/coreutils resolve from the runner's system directories only.
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+fi
+
 COMMENT_MARKER='<!-- pr-governance:metadata-gate -->'
 CHECK_NAME='metadata-only gate evaluation'
 REVIEW_BOT_LOGIN_PATTERN='coderabbit|github-code-quality'
@@ -9,6 +15,12 @@ PR_NUMBER="${DIRECT_PR_NUMBER:-${TARGET_PR_NUMBER:-${WORKFLOW_RUN_PR_NUMBER:-${C
 if [ -z "$PR_NUMBER" ]; then
   printf 'No pull request number is available for event %s; nothing to evaluate.\n' "${EVENT_NAME:-unknown}"
   exit 0
+fi
+if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+  # Do not echo the value: a crafted PR number could smuggle workflow commands
+  # into the run log.
+  printf 'Pull request number is not a positive integer; refusing to evaluate.\n'
+  exit 1
 fi
 
 OWNER="${GITHUB_REPOSITORY%/*}"
@@ -25,6 +37,22 @@ cleanup_temp_files() {
 }
 
 trap cleanup_temp_files EXIT
+
+publish_gate_error_check() {
+  # Fail closed: replace any previously published gate result so a transient
+  # evaluation error cannot leave a stale success pinned to the head.
+  [ -n "${HEAD_SHA:-}" ] || return 0
+  if [ -z "${CHECK_RUNS:-}" ]; then
+    CHECK_RUNS='{"check_runs":[]}'
+  fi
+  publish_gate_check \
+    completed \
+    failure \
+    'PR governance metadata gate errored' \
+    "Gate evaluation failed unexpectedly for PR ${PR_NUMBER}; see the workflow run log." || true
+}
+
+trap publish_gate_error_check ERR
 
 add_blocker() {
   BLOCKERS+=("$1")
@@ -66,10 +94,10 @@ publish_gate_check() {
   local conclusion="$2"
   local title="$3"
   local summary="$4"
-  local external_id existing_check_id
+  local external_id existing_check existing_check_id existing_check_status
 
   external_id="pr-governance:${PR_NUMBER}:${HEAD_SHA}"
-  existing_check_id="$(printf '%s' "$CHECK_RUNS" | jq -r \
+  existing_check="$(printf '%s' "$CHECK_RUNS" | jq -r \
     --arg name "$CHECK_NAME" \
     --arg external_id "$external_id" '
       [.check_runs[]
@@ -77,8 +105,18 @@ publish_gate_check() {
         | select(.external_id == $external_id)
         | select(.app.slug == "github-actions")]
       | last
-      | .id // empty
+      | if . == null then empty else "\(.id) \(.status)" end
     ')"
+  existing_check_id="${existing_check%% *}"
+  existing_check_status="${existing_check##* }"
+
+  # The check-runs API silently refuses to move a completed check-run back to a
+  # non-completed status (PATCH returns 200 but the run stays completed), which
+  # leaves a stale failure pinned to the head. Publish non-completed states as a
+  # fresh check-run instead; required-check evaluation follows the newest run.
+  if [ "$status" != "completed" ] && [ "$existing_check_status" = "completed" ]; then
+    existing_check_id=""
+  fi
 
   # shellcheck disable=SC2016  # Markdown backticks are literal.
   printf 'Publishing `%s` as %s on PR head %s.\n' "$CHECK_NAME" "$status" "$HEAD_SHA"
@@ -163,16 +201,24 @@ if ! REQUIRED_CHECKS="$(gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --
   if printf '%s' "$PR_CHECKS_ERROR" | grep -qi 'no required checks reported'; then
     add_waiting "Ruleset-governed branch: no legacy required status contexts reported for ${HEAD_REF_OID}; relying on ruleset workflows and code-scanning gates."
   else
-    add_blocker "Required check metadata could not be read: ${PR_CHECKS_ERROR}."
+    # Raw CLI diagnostics stay in the run log (indented so they cannot be
+    # parsed as workflow commands); the published blocker stays generic.
+    printf 'gh pr checks failed:\n'
+    printf '%s\n' "$PR_CHECKS_ERROR" | sed 's/^/    /'
+    add_blocker 'Required check metadata could not be read; see the workflow run log.'
   fi
 else
+  # Fail closed: any state outside the explicit pass and pending lists is a
+  # blocker, so unrecognized or errored states cannot slip through as success.
   while IFS= read -r item; do
     [ -n "$item" ] && add_blocker "$item"
   done < <(printf '%s' "$REQUIRED_CHECKS" | jq -r --arg check_name "$CHECK_NAME" '
     .[]
     | select(.name != $check_name)
-    | select((.state | ascii_upcase) as $state | ["FAILED", "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"] | index($state))
-    | "Required check `\(.name)` is \(.state) on the current head: \(.link // "no link")"
+    | (.state | ascii_upcase) as $state
+    | select(["SUCCESS", "PASS", "SKIPPED", "NEUTRAL"] | index($state) | not)
+    | select(["PENDING", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING", "EXPECTED"] | index($state) | not)
+    | "Required check `\(.name | gsub("[`\\r\\n]"; " "))` is \($state) on the current head."
   ')
 
   PENDING_REQUIRED_COUNT="$(printf '%s' "$REQUIRED_CHECKS" | jq --arg check_name "$CHECK_NAME" '[.[] | select(.name != $check_name) | select((.state | ascii_upcase) as $state | ["PENDING", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING", "EXPECTED"] | index($state))] | length')"
@@ -181,6 +227,7 @@ else
   fi
 fi
 
+CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potential issue|actionable comment|actionable comments'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
   [.check_runs[]
@@ -191,15 +238,24 @@ CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
       )]'
 )"
 CODERABBIT_COUNT="$(printf '%s' "$CODERABBIT_MATCHES" | jq 'length')"
-if [ "$CODERABBIT_COUNT" != "0" ]; then
+if [ "$CODERABBIT_COUNT" = "0" ]; then
+  # The CodeRabbit app is not installed in this org, so absent evidence must not
+  # hold the gate open; CodeRabbit gating applies only once it reports on this head.
+  printf 'No CodeRabbit evidence on %s; skipping CodeRabbit gating.\n' "$HEAD_REF_OID"
+else
   CODERABBIT_PENDING="$(printf '%s' "$CODERABBIT_MATCHES" | jq '[.[] | select(.status != "completed")] | length')"
-  CODERABBIT_FAILED="$(printf '%s' "$CODERABBIT_MATCHES" | jq '
+  CODERABBIT_FAILED="$(printf '%s' "$CODERABBIT_MATCHES" | jq --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
     [.[]
       | select(.status == "completed")
       | select((.conclusion // "") as $conclusion
         | if $conclusion == "success" or $conclusion == "skipped" then false
           elif $conclusion == "neutral" then
-            ([.output.title, .output.summary, .output.text] | map(. // "") | join("\n") | test("Review skipped"; "i") | not)
+            # Skip evidence only counts when the output carries no blocking
+            # language alongside it.
+            (([.output.title, .output.summary, .output.text] | map(. // "") | join("\n")) as $neutral_output
+              | (($neutral_output | test("Review skipped"; "i"))
+                 and (($neutral_output | test($pattern; "i")) | not))
+              | not)
           else true
           end)]
     | length'
@@ -211,9 +267,10 @@ if [ "$CODERABBIT_COUNT" != "0" ]; then
   fi
 fi
 
-CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potential issue|actionable comment|actionable comments'
 if ! ISSUE_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" 2>"$ISSUE_COMMENTS_ERROR_FILE")"; then
-  add_blocker "CodeRabbit issue comments could not be read: $(<"$ISSUE_COMMENTS_ERROR_FILE")."
+  printf 'issue comment lookup failed:\n'
+  printf '%s\n' "$(<"$ISSUE_COMMENTS_ERROR_FILE")" | sed 's/^/    /'
+  add_blocker 'PR issue comments could not be read; see the workflow run log.'
 else
   CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s --arg head_sha "$HEAD_SHA" --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
     [.[][]
@@ -228,7 +285,9 @@ else
 fi
 
 if ! REVIEW_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/comments" 2>"$REVIEW_COMMENTS_ERROR_FILE")"; then
-  add_blocker "CodeRabbit review comments could not be read: $(<"$REVIEW_COMMENTS_ERROR_FILE")."
+  printf 'review comment lookup failed:\n'
+  printf '%s\n' "$(<"$REVIEW_COMMENTS_ERROR_FILE")" | sed 's/^/    /'
+  add_blocker 'PR review comments could not be read; see the workflow run log.'
 else
   CODERABBIT_REVIEW_BLOCKERS="$(printf '%s' "$REVIEW_COMMENTS_JSON" | jq -s --arg head_sha "$HEAD_SHA" --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
     [.[][]
