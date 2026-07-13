@@ -10,10 +10,14 @@ CodeRabbit/robot-review evidence. Human review is not awaited by default.
 - Application CI must run backend pytest and frontend test/lint/build checks on
   pull requests to `master` and `release/**`, while release-branch pushes must
   not create duplicate check noise; push checks are scoped to `master`.
-- The CodeRabbit robot-review gate is satisfied by current-head CodeRabbit
-  evidence only when current-head blocking findings, warnings, and failures are
-  fixed, rebutted with evidence, or superseded. Authoritative current-head
-  `Review skipped` evidence satisfies the robot-review gate when applicable.
+- The CodeRabbit robot-review gate is evidence-conditional: it applies only
+  when the current head has CodeRabbit check-run evidence. When no CodeRabbit
+  evidence exists on the head (the app is not installed in the org or has not
+  reported), the gate proceeds without waiting for it. When evidence exists, it
+  satisfies the gate only when current-head blocking findings, warnings, and
+  failures are fixed, rebutted with evidence, or superseded. Authoritative
+  current-head `Review skipped` evidence satisfies the robot-review gate when
+  applicable.
 - PR Governance automation is metadata-only: it must not checkout pull request
   code, clone the head branch, dismiss reviews, enable auto-merge, or use admin
   merge. It may read PR/check/review-thread metadata and post blocker comments;

@@ -65,10 +65,10 @@ publish_gate_check() {
   local conclusion="$2"
   local title="$3"
   local summary="$4"
-  local external_id existing_check_id
+  local external_id existing_check existing_check_id existing_check_status
 
   external_id="pr-governance:${PR_NUMBER}:${HEAD_SHA}"
-  existing_check_id="$(printf '%s' "$CHECK_RUNS" | jq -r \
+  existing_check="$(printf '%s' "$CHECK_RUNS" | jq -r \
     --arg name "$CHECK_NAME" \
     --arg external_id "$external_id" '
       [.check_runs[]
@@ -76,8 +76,18 @@ publish_gate_check() {
         | select(.external_id == $external_id)
         | select(.app.slug == "github-actions")]
       | last
-      | .id // empty
+      | if . == null then empty else "\(.id) \(.status)" end
     ')"
+  existing_check_id="${existing_check%% *}"
+  existing_check_status="${existing_check##* }"
+
+  # The check-runs API silently refuses to move a completed check-run back to a
+  # non-completed status (PATCH returns 200 but the run stays completed), which
+  # leaves a stale failure pinned to the head. Publish non-completed states as a
+  # fresh check-run instead; required-check evaluation follows the newest run.
+  if [ "$status" != "completed" ] && [ "$existing_check_status" = "completed" ]; then
+    existing_check_id=""
+  fi
 
   # shellcheck disable=SC2016  # Markdown backticks are literal.
   printf 'Publishing `%s` as %s on PR head %s.\n' "$CHECK_NAME" "$status" "$HEAD_SHA"
@@ -187,7 +197,9 @@ CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
 )"
 CODERABBIT_COUNT="$(printf '%s' "$CODERABBIT_MATCHES" | jq 'length')"
 if [ "$CODERABBIT_COUNT" = "0" ]; then
-  add_waiting "Waiting for current-head CodeRabbit evidence on ${HEAD_REF_OID}."
+  # The CodeRabbit app is not installed in this org, so absent evidence must not
+  # hold the gate open; CodeRabbit gating applies only once it reports on this head.
+  printf 'No CodeRabbit evidence on %s; skipping CodeRabbit gating.\n' "$HEAD_REF_OID"
 else
   CODERABBIT_PENDING="$(printf '%s' "$CODERABBIT_MATCHES" | jq '[.[] | select(.status != "completed")] | length')"
   CODERABBIT_FAILED="$(printf '%s' "$CODERABBIT_MATCHES" | jq '

@@ -184,9 +184,17 @@ in this repo.
 - Pending/queued checks and pending CodeRabbit evidence are wait states, not hard
   failures. Hard blockers should be reported through the idempotent
   `<!-- pr-governance:metadata-gate -->` comment path.
-- Missing current-head CodeRabbit evidence is a wait state until bounded polling
-  or authoritative skip/review evidence resolves it; do not post a hard blocker
-  only because the current head has not been reviewed yet.
+- CodeRabbit gating is evidence-conditional: when the current head has no
+  CodeRabbit check-run evidence at all (the app is not installed in the org or
+  has not reported), the metadata gate proceeds without waiting for it. Once
+  evidence exists, pending evidence is a wait state and blocking evidence is a
+  blocker; never post a hard blocker only because the current head has not been
+  reviewed yet.
+- The GitHub check-runs API silently refuses to move a completed check-run back
+  to a non-completed status (the PATCH returns 200 but the run stays
+  completed), which pins a stale failure to the head. Gate publishers must
+  create a fresh check-run for completed→non-completed transitions instead of
+  patching the completed one.
 - OpenCode Agent approvals must be gated on current-head GitHub Checks. If a
   completed check run or status context failed, or the check rollup cannot be
   verified, the OpenCode review must request changes or explain the verification

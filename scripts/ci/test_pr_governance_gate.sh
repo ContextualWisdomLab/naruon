@@ -52,7 +52,7 @@ if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then
     exit 1
   fi
   case "${GH_SCENARIO:-pass}" in
-    pending)
+    pending|existing_gate_pending)
       printf '[{"name":"Application CI","state":"IN_PROGRESS","link":"https://checks/app-ci"}]'
       ;;
     startup_failure)
@@ -91,7 +91,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_review_skipped)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"neutral","output":{"title":"CodeRabbit","summary":"Review skipped","text":"Review skipped"},"html_url":"https://checks/coderabbit"}]}'
       ;;
-    existing_gate)
+    existing_gate|existing_gate_pending)
       printf '{"check_runs":[{"id":999,"name":"metadata-only gate evaluation","external_id":"pr-governance:42:0123456789abcdef0123456789abcdef01234567","app":{"slug":"github-actions"},"status":"completed","conclusion":"failure"},{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"success","html_url":"https://checks/coderabbit"}]}'
       ;;
     *)
@@ -282,15 +282,28 @@ assert_coderabbit_pending_waits_without_hard_comment() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
-assert_missing_coderabbit_waits_without_hard_comment() {
+assert_missing_coderabbit_evidence_does_not_gate() {
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate missing_coderabbit "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_not_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=success' "$temp_dir/gh.log"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_completed_gate_check_is_republished_as_new_run() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate existing_gate_pending "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Waiting for 1 required check' "$temp_dir/output.txt"
+  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=in_progress' "$temp_dir/gh.log"
+  assert_not_in_file 'api --method PATCH repos/owner/repo/check-runs/999' "$temp_dir/gh.log"
 }
 
 assert_coderabbit_failure_creates_marker_comment() {
@@ -457,7 +470,8 @@ assert_startup_failure_creates_marker_comment
 assert_failed_checks_create_marker_comment
 assert_existing_marker_comment_is_patched
 assert_coderabbit_pending_waits_without_hard_comment
-assert_missing_coderabbit_waits_without_hard_comment
+assert_missing_coderabbit_evidence_does_not_gate
+assert_completed_gate_check_is_republished_as_new_run
 assert_coderabbit_failure_creates_marker_comment
 assert_coderabbit_neutral_without_skip_evidence_blocks
 assert_coderabbit_review_skipped_neutral_is_ready_without_merge
