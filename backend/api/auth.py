@@ -285,8 +285,8 @@ def _reject_non_id_token_payload(payload: dict[str, Any]) -> None:
     token_use/scope/scp claims, and tokens for other clients name that client
     in azp (OIDC Core 3.1.3.7).
     """
-    token_use = payload.get("token_use")
-    if token_use is not None and token_use != "id":
+    usage_claim = payload.get("token_use")
+    if usage_claim is not None and usage_claim != "id":
         raise _authentication_error()
     if "scope" in payload or "scp" in payload:
         raise _authentication_error()
