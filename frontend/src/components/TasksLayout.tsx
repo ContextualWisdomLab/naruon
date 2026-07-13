@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Plus, Search, Filter, User, CalendarDays, Inbox, AlertCircle, X } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
@@ -152,8 +152,15 @@ function getKnowledgeRetryLabel(intent: KnowledgeMaterializationIntent) {
   return '실행 요청 없음';
 }
 
+const TASK_VIEW_MODES = ['내 작업', '위임한 작업', '칸반', '작업 상세'] as const;
+type TaskViewMode = (typeof TASK_VIEW_MODES)[number];
+
+function taskViewTabId(mode: TaskViewMode) {
+  return `tasks-view-tab-${TASK_VIEW_MODES.indexOf(mode)}`;
+}
+
 export function TasksLayout() {
-  const [viewMode, setViewMode] = useState<'내 작업' | '위임한 작업' | '칸반' | '작업 상세'>('칸반');
+  const [viewMode, setViewMode] = useState<TaskViewMode>('칸반');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [ticketTasks, setTicketTasks] = useState<TicketTask[]>([]);
   const [ticketStatus, setTicketStatus] = useState<TicketStatus>('loading');
@@ -282,12 +289,12 @@ export function TasksLayout() {
     );
   }, [filteredTicketTasks]);
 
-  const currentColumns = [
+  const currentColumns = useMemo(() => [
     { id: 'open' as const, title: '접수', count: liveBoardCounts.open, color: 'bg-blue-100 text-blue-700' },
     { id: 'in_progress' as const, title: '진행', count: liveBoardCounts.in_progress, color: 'bg-orange-100 text-orange-700' },
     { id: 'blocked' as const, title: '검토 필요', count: liveBoardCounts.blocked, color: 'bg-red-100 text-red-700' },
     { id: 'done' as const, title: '완료', count: liveBoardCounts.done, color: 'bg-green-100 text-green-700' },
-  ];
+  ], [liveBoardCounts.blocked, liveBoardCounts.done, liveBoardCounts.in_progress, liveBoardCounts.open]);
 
   const selectedTask = useMemo(
     () => ticketTasks.find((task) => task.id === selectedTaskId) ?? null,
@@ -299,6 +306,82 @@ export function TasksLayout() {
     [ticketTasks],
   );
 
+  // ⚡ Bolt: Wrap Kanban columns in useMemo to prevent O(N) re-renders
+  // 🎯 Why: Mapping over potentially large lists of tasks by status blocks the main thread during unrelated state updates.
+  const kanbanBoard = useMemo(() => (
+    <div className="flex min-h-[560px] gap-6">
+      {currentColumns.map((col) => (
+        <div
+          key={col.id}
+          className="flex h-full w-80 flex-col rounded-xl bg-card border border-border shadow-sm shrink-0"
+        >
+          <div className="flex items-center justify-between border-b border-border p-4">
+            <div className="flex items-center gap-2">
+              <h2 className="font-bold text-sm">{col.title}</h2>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${col.color}`}>{col.count}</span>
+            </div>
+            <span aria-label={`${col.title} 원본 작업 수`} className="text-xs font-bold text-muted-foreground">{col.count}건</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {tasksByStatus[col.id].length > 0 ? tasksByStatus[col.id].map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}
+                className="w-full rounded-lg border border-border bg-background p-3 text-left shadow-sm transition-all hover:border-primary/50 hover:shadow-md"
+              >
+                <div className="flex flex-wrap gap-1 mb-2">
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">{getTaskSourceLabel(task.source_type)}</span>
+                  <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-secondary-foreground">{taskPriorityLabels[task.priority]}</span>
+                </div>
+                <h3 className="font-bold text-sm text-foreground leading-snug">{safeTaskTitle(task.title)}</h3>
+                <div className="mt-3 flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1" title="업데이트">
+                      <CalendarDays className="size-3.5" />
+                      <span>{formatTaskTimestamp(task.updated_at)}</span>
+                    </div>
+                    <div className="flex items-center gap-1" title="작업 출처">
+                      {task.status === 'blocked' ? <AlertCircle className="size-3.5" /> : <Inbox className="size-3.5" />}
+                      <span>{getTaskEvidenceLabel(task)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center size-6 rounded-full bg-primary/10 text-primary" title="서명 세션 작업">
+                    <User className="size-3.5" />
+                  </div>
+                </div>
+              </button>
+            )) : (
+              <p className="rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">
+                {taskSearch || priorityFilter !== 'all' ? '필터에 맞는 작업이 없습니다.' : '이 상태의 연결 작업이 없습니다.'}
+              </p>
+            )}
+          </div>
+          <div className="p-3 border-t border-border">
+            <a href="/mail" className="flex w-full items-center justify-center gap-2 rounded-md py-1.5 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+              <Plus className="size-4" /> 관련 메일에서 생성
+            </a>
+          </div>
+        </div>
+      ))}
+    </div>
+  ), [currentColumns, tasksByStatus, taskSearch, priorityFilter, setSelectedTaskId, setViewMode]);
+
+  const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: TaskViewMode) => {
+    const currentIndex = TASK_VIEW_MODES.indexOf(mode);
+    const lastIndex = TASK_VIEW_MODES.length - 1;
+    let nextIndex: number;
+    if (event.key === 'ArrowRight') nextIndex = currentIndex === lastIndex ? 0 : currentIndex + 1;
+    else if (event.key === 'ArrowLeft') nextIndex = currentIndex === 0 ? lastIndex : currentIndex - 1;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = lastIndex;
+    else return;
+    event.preventDefault();
+    const nextMode = TASK_VIEW_MODES[nextIndex];
+    setViewMode(nextMode);
+    document.getElementById(taskViewTabId(nextMode))?.focus();
+  };
+
   return (
     <div className="flex h-full min-h-0 bg-background text-foreground flex-col">
       {/* Top Header */}
@@ -306,12 +389,16 @@ export function TasksLayout() {
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center lg:gap-6">
           <h1 className="text-xl font-bold">실행 항목 추적</h1>
           <p className="sr-only">리소스 배정 검토 회의</p>
-          <div className="flex max-w-full overflow-x-auto rounded-md border border-border">
-            {['내 작업', '위임한 작업', '칸반', '작업 상세'].map((mode) => (
+          <div role="tablist" aria-label="작업 보기 방식" className="flex max-w-full overflow-x-auto rounded-md border border-border">
+            {TASK_VIEW_MODES.map((mode) => (
               <button type="button"
                 key={mode}
-                aria-pressed={viewMode === mode}
-                onClick={() => setViewMode(mode as '내 작업' | '위임한 작업' | '칸반' | '작업 상세')}
+                id={taskViewTabId(mode)}
+                role="tab"
+                aria-selected={viewMode === mode}
+                tabIndex={viewMode === mode ? 0 : -1}
+                onClick={() => setViewMode(mode)}
+                onKeyDown={(event) => handleViewModeKeyDown(event, mode)}
                 className={`shrink-0 px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background ${viewMode === mode ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-secondary'}`}
               >
                 {mode}
@@ -593,64 +680,7 @@ export function TasksLayout() {
           ) : null}
         </section>
 
-        {viewMode === '칸반' && (
-          <div className="flex min-h-[560px] gap-6">
-            {currentColumns.map((col) => (
-              <div
-                key={col.id}
-                className="flex h-full w-80 flex-col rounded-xl bg-card border border-border shadow-sm shrink-0"
-              >
-                <div className="flex items-center justify-between border-b border-border p-4">
-                  <div className="flex items-center gap-2">
-                    <h2 className="font-bold text-sm">{col.title}</h2>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${col.color}`}>{col.count}</span>
-                  </div>
-                  <span aria-label={`${col.title} 원본 작업 수`} className="text-xs font-bold text-muted-foreground">{col.count}건</span>
-                </div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                  {tasksByStatus[col.id].length > 0 ? tasksByStatus[col.id].map((task) => (
-                    <button
-                      key={task.id}
-                      type="button"
-                      onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}
-                      className="w-full rounded-lg border border-border bg-background p-3 text-left shadow-sm transition-all hover:border-primary/50 hover:shadow-md"
-                    >
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">{getTaskSourceLabel(task.source_type)}</span>
-                        <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-secondary-foreground">{taskPriorityLabels[task.priority]}</span>
-                      </div>
-                      <h3 className="font-bold text-sm text-foreground leading-snug">{safeTaskTitle(task.title)}</h3>
-                      <div className="mt-3 flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-1" title="업데이트">
-                            <CalendarDays className="size-3.5" />
-                            <span>{formatTaskTimestamp(task.updated_at)}</span>
-                          </div>
-                          <div className="flex items-center gap-1" title="작업 출처">
-                            {task.status === 'blocked' ? <AlertCircle className="size-3.5" /> : <Inbox className="size-3.5" />}
-                            <span>{getTaskEvidenceLabel(task)}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-center size-6 rounded-full bg-primary/10 text-primary" title="서명 세션 작업">
-                          <User className="size-3.5" />
-                        </div>
-                      </div>
-                    </button>
-                  )) : (
-                    <p className="rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">
-                      {taskSearch || priorityFilter !== 'all' ? '필터에 맞는 작업이 없습니다.' : '이 상태의 연결 작업이 없습니다.'}
-                    </p>
-                  )}
-                </div>
-                <div className="p-3 border-t border-border">
-                  <a href="/mail" className="flex w-full items-center justify-center gap-2 rounded-md py-1.5 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-                    <Plus className="size-4" /> 관련 메일에서 생성
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {viewMode === '칸반' && kanbanBoard}
         {viewMode === '내 작업' && (
           <div className="space-y-4 max-w-4xl mx-auto">
             <h2 className="font-bold text-lg mb-4">내 작업</h2>

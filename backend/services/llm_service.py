@@ -7,6 +7,8 @@ from urllib.parse import urlsplit, urlunsplit
 from openai import AsyncOpenAI
 from core.config import settings
 from core.exceptions import LLMServiceError
+from services.circuit_breaker import provider_circuit_breaker
+from services.retry import retry_transient
 from pydantic import BaseModel, Field
 from services.llm_provider_urls import build_llm_provider_http_client
 
@@ -57,7 +59,10 @@ async def extract_action_items_and_summary(
     )
     selected_model = model or settings.OPENAI_MODEL
     try:
-        response = await client.beta.chat.completions.parse(
+        response = await provider_circuit_breaker.call(
+            validated_base_url or "openai-default",
+            lambda: retry_transient(
+            lambda: client.beta.chat.completions.parse(
             model=selected_model,
             messages=[
                 {
@@ -71,6 +76,9 @@ async def extract_action_items_and_summary(
                 {"role": "user", "content": email_body},
             ],
             response_format=ExtractionResult,
+            ),
+            operation_name="summary extraction",
+            ),
         )
     except Exception as e:
         logger.error(f"Error calling LLM API for extraction: {e}")
@@ -127,10 +135,16 @@ async def translate_email_body(
         http_client=http_client,
     )
     try:
-        response = await client.chat.completions.create(
-            model=selected_model,
-            messages=messages,
-            temperature=0.3,
+        response = await provider_circuit_breaker.call(
+            validated_base_url or "openai-default",
+            lambda: retry_transient(
+                lambda: client.chat.completions.create(
+                    model=selected_model,
+                    messages=messages,
+                    temperature=0.3,
+                ),
+                operation_name="translation",
+            ),
         )
     except Exception as e:
         logger.error(f"Error calling LLM API for translation: {e}")
@@ -186,9 +200,15 @@ async def draft_reply(
         http_client=http_client,
     )
     try:
-        response = await client.chat.completions.create(
-            model=selected_model,
-            messages=messages,
+        response = await provider_circuit_breaker.call(
+            validated_base_url or "openai-default",
+            lambda: retry_transient(
+                lambda: client.chat.completions.create(
+                    model=selected_model,
+                    messages=messages,
+                ),
+                operation_name="reply drafting",
+            ),
         )
     except Exception as e:
         logger.error(f"Error calling LLM API for drafting: {e}")

@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 import { describe, expect, it } from 'vitest';
-import { toSafeReturnTo } from './page';
+import { toSafeReturnTo } from './return-target';
 
 describe('auth callback return target validation', () => {
   it('allows local callback return paths', () => {
@@ -18,5 +18,8 @@ describe('auth callback return target validation', () => {
     expect(toSafeReturnTo('\\\\evil.com')).toBe('/');
     expect(toSafeReturnTo(' /\t/evil.com')).toBe('/');
     expect(toSafeReturnTo('http://localhost/path')).toBe('/');
+    expect(toSafeReturnTo('/%2fevil.example/phish')).toBe('/');
+    expect(toSafeReturnTo('/%2F%2Fevil.example/phish')).toBe('/');
+    expect(toSafeReturnTo('/%5C%5Cevil.example/phish')).toBe('/');
   });
 });

@@ -81,7 +81,8 @@ def validate_auth_session_hmac_secret_value(secret: str) -> None:
         raise ValueError("AUTH_SESSION_HMAC_SECRET must not contain placeholder terms")
     if len(set(secret)) < MIN_AUTH_SESSION_HMAC_SECRET_UNIQUE_CHARS:
         raise ValueError(
-            "AUTH_SESSION_HMAC_SECRET must contain at least 12 distinct characters"
+            "AUTH_SESSION_HMAC_SECRET must have higher entropy and contain at least "
+            "12 distinct characters"
         )
     if _character_class_count(secret) < MIN_AUTH_SESSION_HMAC_SECRET_CHARACTER_CLASSES:
         raise ValueError(

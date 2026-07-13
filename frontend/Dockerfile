@@ -1,4 +1,4 @@
-FROM node:26-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc
+FROM node:26-slim@sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09
 
 ARG OCI_IMAGE_CREATED=""
 ARG OCI_IMAGE_AUTHORS="Seongho Bae"
@@ -63,6 +63,9 @@ RUN chown -R node:node /app
 USER node
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || '3000')).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"
 
 # Render injects $PORT at runtime
 CMD sh -c "exec ./node_modules/.bin/next start --hostname 0.0.0.0 --port ${PORT:-3000}"

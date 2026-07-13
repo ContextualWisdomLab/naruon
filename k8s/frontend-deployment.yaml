@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
+  namespace: naruon-dev
   labels:
     app: frontend
 spec:
@@ -14,25 +15,47 @@ spec:
       labels:
         app: frontend
     spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
       imagePullSecrets:
         - name: ghcr-registry
+      # Image runs as the non-root `node` user (frontend/Dockerfile `USER node`).
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: frontend-tmp
+          emptyDir: {}
+        - name: frontend-next-cache
+          emptyDir: {}
       containers:
       - name: frontend
-        image: ghcr.io/seongho-bae/ai_email_client-frontend:REPLACE_ME_VERSION
-
+        image: ghcr.io/contextualwisdomlab/ai_email_client-frontend:REPLACE_ME_VERSION
+        imagePullPolicy: Always
         securityContext:
-          readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
               - ALL
-        imagePullPolicy: Always
+          readOnlyRootFilesystem: true
+          runAsGroup: 10001
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
         ports:
         - containerPort: 3000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: frontend-tmp
+          mountPath: /tmp
+        - name: frontend-next-cache
+          mountPath: /app/.next/cache
         env:
           - name: BACKEND_INTERNAL_URL
             value: "http://backend:8000"

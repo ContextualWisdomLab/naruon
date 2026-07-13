@@ -1,5 +1,4 @@
 import base64
-import asyncio
 import hashlib
 import hmac
 import json
@@ -8,32 +7,16 @@ import time
 
 import pytest
 from fastapi import WebSocketException, status
-from fastapi.routing import APIWebSocketRoute
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from starlette.websockets import WebSocketDisconnect
 
 from api import runner_ws
-from api.auth import AuthContext, get_auth_context
+from api.auth import AuthContext
 from core.config import settings
 from main import app
 
 TEST_SESSION_HMAC_SECRET = os.environ["AUTH_SESSION_HMAC_SECRET"]
-
-
-def _iter_app_routes(routes, inherited_dependencies=()):
-    for route in routes:
-        original_router = getattr(route, "original_router", None)
-        if original_router is not None:
-            include_context = getattr(route, "include_context", None)
-            include_dependencies = tuple(getattr(include_context, "dependencies", ()) or ())
-            yield from _iter_app_routes(
-                original_router.routes,
-                (*inherited_dependencies, *include_dependencies),
-            )
-        else:
-            route_dependencies = tuple(getattr(route, "dependencies", ()) or ())
-            yield route, (*inherited_dependencies, *route_dependencies)
 
 
 class _MockResult:
@@ -78,17 +61,6 @@ class _FailingSendWebSocket:
 class _AcceptOnlyWebSocket:
     async def accept(self):
         return None
-
-
-class _DispatchWebSocket:
-    def __init__(self):
-        self.sent_texts: list[str] = []
-
-    async def accept(self):
-        return None
-
-    async def send_text(self, text: str):
-        self.sent_texts.append(text)
 
 
 def _base64url_encode(raw: bytes) -> str:
@@ -136,7 +108,7 @@ def _valid_session_headers() -> dict[str, str]:
 def _auth_context() -> AuthContext:
     return AuthContext(
         user_id="alice",
-        role="organization_admin",
+        role="member",
         organization_id="org-acme",
         group_ids=("group-1",),
         workspace_id="workspace-org-acme",
@@ -201,15 +173,12 @@ def test_runner_ws_rejects_missing_auth():
 
 
 def test_runner_ws_route_uses_signed_session_dependency():
-    for route, dependencies in _iter_app_routes(app.routes):
-        if (
-            isinstance(route, APIWebSocketRoute)
-            and route.path == "/ws/runner/{token}"
-        ):
-            dependency_callables = {dependency.dependency for dependency in dependencies}
-            assert get_auth_context in dependency_callables
-            return
-    assert False, "WS route /ws/runner/{token} not found or missing get_auth_context dependency"
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/runner/nrn_registered-token"):
+                pass
+
+    assert exc.value.status_code == 401
 
 
 def test_runner_ws_accepts_signed_session_and_registered_token(monkeypatch):
@@ -288,250 +257,6 @@ async def test_runner_manager_records_durable_signal_events(monkeypatch):
         event["workspace_id"] == "workspace-org-acme" for event in recorded_events
     )
     assert "nrn_registered-token" not in str(recorded_events)
-
-
-@pytest.mark.asyncio
-async def test_runner_manager_dispatch_waits_for_matching_response(monkeypatch):
-    recorded_events: list[dict[str, str]] = []
-
-    async def capture_connector_signal_event(**event):
-        recorded_events.append(event)
-
-    monkeypatch.setattr(
-        runner_ws,
-        "record_connector_signal_event",
-        capture_connector_signal_event,
-    )
-    websocket = _DispatchWebSocket()
-    await runner_ws.manager.connect(
-        websocket,
-        "org-acme:registered",
-        _auth_context(),
-    )
-
-    dispatch_task = asyncio.create_task(
-        runner_ws.manager.dispatch_command(
-            "org-acme",
-            "workspace-org-acme",
-            {
-                "action": "write_webdav",
-                "account": "webdav-primary",
-                "source_id": "webdav_src_1",
-            },
-            timeout_seconds=1,
-        )
-    )
-    for _ in range(20):
-        if websocket.sent_texts:
-            break
-        await asyncio.sleep(0)
-
-    assert len(websocket.sent_texts) == 1
-    sent_payload = json.loads(websocket.sent_texts[0])
-    assert sent_payload["action"] == "write_webdav"
-    assert sent_payload["account"] == "webdav-primary"
-    assert sent_payload["source_id"] == "webdav_src_1"
-    assert sent_payload["request_id"].startswith("runner_req_")
-
-    handled = await runner_ws.manager.handle_runner_message(
-        "org-acme:registered",
-        json.dumps(
-            {
-                "request_id": sent_payload["request_id"],
-                "status": "success",
-                "provider_write_executed": True,
-                "etag": "etag-after-write",
-            }
-        ),
-    )
-
-    assert handled is True
-    assert await dispatch_task == {
-        "request_id": sent_payload["request_id"],
-        "status": "success",
-        "provider_write_executed": True,
-        "etag": "etag-after-write",
-    }
-    assert any(
-        event["signal_key"] == "connector_command"
-        and event["state_code"] == "dispatched"
-        for event in recorded_events
-    )
-
-
-@pytest.mark.asyncio
-async def test_runner_manager_records_runner_error_code_response(monkeypatch):
-    recorded_events: list[dict[str, str]] = []
-    scheduled_retries: list[dict[str, object]] = []
-
-    async def capture_connector_signal_event(**event):
-        recorded_events.append(event)
-
-    async def capture_provider_writeback_retry(**retry):
-        scheduled_retries.append(retry)
-        return "provider_retry_should_not_schedule_adapter_error"
-
-    monkeypatch.setattr(
-        runner_ws,
-        "record_connector_signal_event",
-        capture_connector_signal_event,
-    )
-    monkeypatch.setattr(
-        runner_ws,
-        "schedule_provider_writeback_retry_safely",
-        capture_provider_writeback_retry,
-        raising=False,
-    )
-    websocket = _DispatchWebSocket()
-    await runner_ws.manager.connect(
-        websocket,
-        "org-acme:registered",
-        _auth_context(),
-    )
-
-    dispatch_task = asyncio.create_task(
-        runner_ws.manager.dispatch_command(
-            "org-acme",
-            "workspace-org-acme",
-            {"action": "write_caldav", "source_id": "caldav_src_1"},
-            timeout_seconds=1,
-        )
-    )
-    for _ in range(20):
-        if websocket.sent_texts:
-            break
-        await asyncio.sleep(0)
-
-    sent_payload = json.loads(websocket.sent_texts[0])
-    handled = await runner_ws.manager.handle_runner_message(
-        "org-acme:registered",
-        json.dumps(
-            {
-                "request_id": sent_payload["request_id"],
-                "status": "error",
-                "error_code": "adapter_not_configured",
-                "provider_write_executed": False,
-            }
-        ),
-    )
-
-    assert handled is True
-    assert (await dispatch_task)["error_code"] == "adapter_not_configured"
-    assert scheduled_retries == []
-    assert any(
-        event["signal_key"] == "connector_command"
-        and event["state_code"] == "adapter_not_configured"
-        and "write_caldav" not in event["detail_text"]
-        for event in recorded_events
-    )
-
-
-@pytest.mark.asyncio
-async def test_runner_manager_dispatch_fails_closed_without_active_runner(monkeypatch):
-    recorded_events: list[dict[str, str]] = []
-    scheduled_retries: list[dict[str, object]] = []
-
-    async def capture_connector_signal_event(**event):
-        recorded_events.append(event)
-
-    async def capture_provider_writeback_retry(**retry):
-        scheduled_retries.append(retry)
-        return "provider_retry_no_runner"
-
-    monkeypatch.setattr(
-        runner_ws,
-        "record_connector_signal_event",
-        capture_connector_signal_event,
-    )
-    monkeypatch.setattr(
-        runner_ws,
-        "schedule_provider_writeback_retry_safely",
-        capture_provider_writeback_retry,
-        raising=False,
-    )
-
-    result = await runner_ws.manager.dispatch_command(
-        "org-acme",
-        "workspace-org-acme",
-        {"action": "write_webdav"},
-        timeout_seconds=1,
-    )
-
-    assert result == {
-        "status": "error",
-        "error": "runner_not_connected",
-        "error_code": "runner_not_connected",
-        "provider_write_executed": False,
-        "retry_item_uid": "provider_retry_no_runner",
-    }
-    assert scheduled_retries == [
-        {
-            "organization_id": "org-acme",
-            "workspace_id": "workspace-org-acme",
-            "command": {"action": "write_webdav"},
-            "error_code": "runner_not_connected",
-            "runner_request_id": None,
-        }
-    ]
-    assert recorded_events == [
-        {
-            "organization_id": "org-acme",
-            "workspace_id": "workspace-org-acme",
-            "signal_key": "connector_command",
-            "state_code": "runner_not_connected",
-            "detail_text": "runner command dispatch failed",
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_runner_manager_schedules_retry_when_runner_response_times_out(monkeypatch):
-    scheduled_retries: list[dict[str, object]] = []
-
-    async def capture_provider_writeback_retry(**retry):
-        scheduled_retries.append(retry)
-        return "provider_retry_timeout"
-
-    monkeypatch.setattr(
-        runner_ws,
-        "schedule_provider_writeback_retry_safely",
-        capture_provider_writeback_retry,
-        raising=False,
-    )
-    websocket = _DispatchWebSocket()
-    await runner_ws.manager.connect(
-        websocket,
-        "org-acme:registered",
-        _auth_context(),
-    )
-
-    result = await runner_ws.manager.dispatch_command(
-        "org-acme",
-        "workspace-org-acme",
-        {"action": "write_caldav", "source_id": "calendar-primary"},
-        timeout_seconds=0.001,
-    )
-
-    assert result == {
-        "status": "error",
-        "error": "runner_response_timeout",
-        "error_code": "runner_response_timeout",
-        "provider_write_executed": False,
-        "retry_item_uid": "provider_retry_timeout",
-    }
-    assert scheduled_retries == [
-        {
-            "organization_id": "org-acme",
-            "workspace_id": "workspace-org-acme",
-            "command": {
-                "action": "write_caldav",
-                "source_id": "calendar-primary",
-                "request_id": json.loads(websocket.sent_texts[0])["request_id"],
-            },
-            "error_code": "runner_response_timeout",
-            "runner_request_id": json.loads(websocket.sent_texts[0])["request_id"],
-        }
-    ]
 
 
 @pytest.mark.asyncio

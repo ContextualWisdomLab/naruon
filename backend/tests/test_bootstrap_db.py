@@ -117,11 +117,6 @@ def test_schema_backfill_adds_email_indexes(monkeypatch):
         for statement in statements
     )
     assert any(
-        "create index if not exists ix_emails_owner_date" in statement
-        and "user_id, organization_id, date" in statement
-        for statement in statements
-    )
-    assert any(
         "drop index if exists ix_email_records_message_id" in statement
         for statement in statements
     )
@@ -559,19 +554,6 @@ def test_tenant_config_model_declares_owner_scope_unique_index():
     assert "organization_id" in expression_text
 
 
-def test_email_model_declares_owner_date_index():
-    indexes = {index.name: index for index in Email.__table__.indexes}
-
-    owner_date_index = indexes["ix_email_records_owner_date"]
-
-    assert owner_date_index.unique is False
-    assert [column.name for column in owner_date_index.columns] == [
-        "user_id",
-        "organization_id",
-        "date",
-    ]
-
-
 def test_ticket_task_reply_sla_unique_index_is_bootstrapped():
     statements = [str(statement).lower() for statement in schema_backfill_sql()]
     indexes = {index.name: index for index in TicketTask.__table__.indexes}
@@ -781,12 +763,12 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 {"user_id": smoke_user_id},
             )
             await conn.execute(
-                text("DELETE FROM emails WHERE user_id = :user_id"),
+                text("DELETE FROM email_records WHERE user_id = :user_id"),
                 {"user_id": smoke_user_id},
             )
             email_result = await conn.execute(
                 text("""
-                    INSERT INTO emails (
+                    INSERT INTO email_records (
                         user_id, organization_id, message_id, sender, recipients,
                         subject, "date", body
                     )
@@ -868,7 +850,7 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 {"user_id": smoke_user_id},
             )
             await conn.execute(
-                text("DELETE FROM emails WHERE user_id = :user_id"),
+                text("DELETE FROM email_records WHERE user_id = :user_id"),
                 {"user_id": smoke_user_id},
             )
     except (

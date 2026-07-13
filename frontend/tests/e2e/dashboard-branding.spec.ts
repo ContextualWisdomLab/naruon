@@ -281,7 +281,7 @@ for (const destination of [
   { path: '/calendar', heading: '일정 관리', marker: { text: '고객 원본 일정 반영 의도' } },
   { path: '/tasks', heading: '실행 항목 추적', marker: { name: '리소스 배정 검토 회의' } },
   { path: '/data', heading: '데이터와 파일', marker: { text: '중복 메일 스레드 정리 의도' } },
-  { path: '/search', heading: '맥락 검색', marker: { name: '관계 그래프와 타임라인' } },
+  { path: '/search', heading: '맥락 검색', marker: { name: '관계 맥락과 타임라인' } },
   { path: '/security', heading: '보안과 관리자', marker: { text: '원본 연결 RBAC / ABAC' } },
   { path: '/projects', heading: '프로젝트 워크스페이스', marker: { name: '의사결정 로그' } },
   { path: '/ai-hub', heading: 'AI 허브', marker: { name: '실행 항목' } },
@@ -415,7 +415,7 @@ test('renders Security governance access audit sharing and policy with signed AP
   await expect(page.getByText('곧 제공됩니다')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('security-governance-desktop-access.png'), fullPage: false });
 
-  await page.getByRole('button', { name: '감사 로그' }).click();
+  await page.getByRole('tab', { name: '감사 로그' }).click();
   await expect(page.getByText('서버 감사 로그')).toBeVisible();
   await expect(page.getByText('보안 설정 변경이 서버 감사 근거로 기록되었습니다.')).toBeVisible();
   await expect(page.getByText('서버 관측 이벤트')).toBeVisible();
@@ -424,10 +424,10 @@ test('renders Security governance access audit sharing and policy with signed AP
   await expect(page.getByText('connector_evt_heartbeat')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('security-governance-desktop-audit.png'), fullPage: false });
 
-  await page.getByRole('button', { name: '외부 공유' }).click();
+  await page.getByRole('tab', { name: '외부 공유' }).click();
   await expect(page.getByText('WebDAV 저장소 쓰기 경계')).toBeVisible();
   await expect(page.getByText('외부 쓰기 실행 안 함').first()).toBeVisible();
-  await page.getByRole('button', { name: '정책' }).click();
+  await page.getByRole('tab', { name: '정책' }).click();
   await expect(page.getByText('차단 우선 정책 순서')).toBeVisible();
   await expect(page.getByText('교차 조직 제공자 secret')).toBeVisible();
   const desktopOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -437,7 +437,7 @@ test('renders Security governance access audit sharing and policy with signed AP
   await page.setViewportSize({ width: 768, height: 1024 });
   await page.goto('/security');
   await expect(page.getByText('원본 연결 RBAC / ABAC')).toBeVisible();
-  await page.getByRole('button', { name: '정책' }).click();
+  await page.getByRole('tab', { name: '정책' }).click();
   await expect(page.getByText('ABAC 차단 후 RBAC 허용')).toBeVisible();
   const tabletOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(tabletOverflow).toBeLessThanOrEqual(1);
@@ -529,13 +529,13 @@ test('renders Data quality surface across viewports with signed API headers', as
   await page.screenshot({ path: testInfo.outputPath('data-quality-desktop-repository-assets.png'), fullPage: false });
   await expect(page.getByText('outbound connector heartbeat received')).toBeVisible();
   await expect(page.getByText('connector_evt_data_quality')).toHaveCount(0);
-  await page.getByRole('button', { name: '수집 파이프라인' }).click();
+  await page.getByRole('tab', { name: '수집 파이프라인' }).click();
   await expect(page.getByText('4 emails and 3 attachments')).toBeVisible();
   await expect(page.getByText('원본 근거 연결됨').first()).toBeVisible();
   await expect(page.getByText(/준비 중/)).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('data-quality-desktop-pipeline.png'), fullPage: false });
 
-  await page.getByRole('button', { name: '임베딩' }).click();
+  await page.getByRole('tab', { name: '임베딩' }).click();
   await expect(page.getByText('text-embedding-3-small').first()).toBeVisible();
   await expect(page.getByText('Email vectors')).toBeVisible();
   await expect(page.getByText('1,536').first()).toBeVisible();
@@ -543,7 +543,7 @@ test('renders Data quality surface across viewports with signed API headers', as
   await expect(page.getByText('28,401')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('data-quality-desktop-embedding.png'), fullPage: false });
 
-  await page.getByRole('button', { name: '품질 점검' }).click();
+  await page.getByRole('tab', { name: '품질 점검' }).click();
   await expect(page.getByText('Thread id integrity').first()).toBeVisible();
   await expect(page.getByText('Some scoped emails need canonical thread ids.')).toBeVisible();
   await expect(page.getByText('23건')).toHaveCount(0);
@@ -556,7 +556,7 @@ test('renders Data quality surface across viewports with signed API headers', as
   await expect(page.getByText('감사 근거 기록됨')).toBeVisible();
   await expect(page.getByText('data.quality_surface.viewed')).toHaveCount(0);
   await expect(page.getByText(/준비 중/)).toHaveCount(0);
-  await page.getByRole('button', { name: '수집 파이프라인' }).click();
+  await page.getByRole('tab', { name: '수집 파이프라인' }).click();
   await expect(page.getByText('Connector observability')).toBeVisible();
   const tabletOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(tabletOverflow).toBeLessThanOrEqual(1);
@@ -566,7 +566,7 @@ test('renders Data quality surface across viewports with signed API headers', as
   await page.goto('/data');
   await expect(page.getByText('감사 근거 기록됨')).toBeVisible();
   await expect(page.getByText('data.quality_surface.viewed')).toHaveCount(0);
-  await page.getByRole('button', { name: '품질 점검' }).click();
+  await page.getByRole('tab', { name: '품질 점검' }).click();
   const mobileQualityCard = page.locator('article', { hasText: 'Dedupe fingerprint' }).first();
   await mobileQualityCard.scrollIntoViewIfNeeded();
   await expect(mobileQualityCard).toBeVisible();
@@ -1380,7 +1380,7 @@ test('renders API-backed context search sender DAG and reply tracking', async ({
   await expect(page.getByRole('heading', { name: 'Q2 출시 계획 및 우선순위 조정' }).first()).toBeVisible();
   await expect(page.getByText('thread-q2').first()).toBeVisible();
   await expect(page.getByText('답장 2건').first()).toBeVisible();
-  await expect(page.getByText('관계 그래프와 타임라인')).toBeVisible();
+  await expect(page.getByText('관계 맥락과 타임라인')).toBeVisible();
   await expect(page.getByText('발신자 DAG (Ontology)')).toBeVisible();
   await expect(page.getByText('track_reply_and_tasks')).toBeVisible();
   await expect(page.getByText('source=<q2@example.com> / thread=thread-q2')).toBeVisible();
