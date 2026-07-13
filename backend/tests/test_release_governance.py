@@ -163,7 +163,7 @@ def test_backend_runtime_toolchain_uses_image_scan_clean_security_pins() -> None
     assert "asyncpg==0.31.0" in requirements
     assert "tiktoken==0.13.0" in requirements
     assert "protobuf==7.35.1" in requirements
-    assert "setuptools==82.0.1" in requirements
+    assert "setuptools==83.0.0" in requirements
     assert "wheel==0.47.0" in requirements
     assert "opentelemetry-api==1.43.0" in requirements
     assert "opentelemetry-instrumentation-fastapi==0.64b0" in requirements
