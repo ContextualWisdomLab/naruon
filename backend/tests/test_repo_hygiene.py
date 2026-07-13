@@ -131,6 +131,10 @@ def test_infra_compose_services_use_read_only_hardening_anchor():
         "keycloak",
     ):
         assert f"  {service}:\n    <<: *service-hardening" in compose
+        service_block = compose.split(f"  {service}:", 1)[1].split("\n\n  ", 1)[0]
+        assert "security_opt:" in service_block
+        assert "- no-new-privileges:true" in service_block
+        assert "read_only: true" in service_block
 
 
 def test_screenshot_utility_allows_only_local_static_routes():
@@ -141,6 +145,10 @@ def test_screenshot_utility_allows_only_local_static_routes():
     assert "ALLOWED_ROUTES.has(route)" in screenshot_script
     assert "new URL(route, SCREENSHOT_ORIGIN)" in screenshot_script
     assert "url.origin !== SCREENSHOT_ORIGIN" in screenshot_script
+    assert "routeUrl enforces a fixed loopback origin" in screenshot_script
+    assert "nosemgrep: javascript.playwright.security.audit.playwright-goto-injection" in (
+        screenshot_script
+    )
     assert "console.error('Failed to capture route'" in screenshot_script
     assert "http://localhost:3000${route}" not in screenshot_script
     assert "console.error(`Failed to capture ${route}:`" not in screenshot_script
