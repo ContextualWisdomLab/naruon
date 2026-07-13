@@ -47,7 +47,7 @@
 **Action:** Verify internal form inputs use explicit `label htmlFor`/`id` pairs, decorative icons are `aria-hidden`, and async buttons expose disabled loading states with visible spinner feedback.
 
 ## 2026-06-19 - Global search clear button without native WebKit controls
-**Learning:** Header-level global search should use the same custom clear-button pattern as the Search page: `type="text"`, `inputMode="search"`, and `role="searchbox"` avoid native WebKit clear controls while preserving search semantics.
+**Learning:** Header-level global search should use the same custom clear-button pattern as the Search page. The `type="text"` + `inputMode="search"` + `role="searchbox"` combination is a legacy fallback only; current components follow the canonical `type="search"` plus `[&::-webkit-search-cancel-button]:hidden` rule below.
 **Action:** Keep custom clear buttons in the same wrapper as the search input, label the clear action as `검색어 지우기`, and refocus the input after clearing.
 ## 2026-06-21 - Accessible Dynamic Empty and Error States
 **Learning:** For dynamic, client-side rendered UI components (like graph visualizations or data panels), rendering an empty state or error state message in a standard `div` will not be announced by screen readers when the state suddenly transitions (e.g., from loading to empty).
