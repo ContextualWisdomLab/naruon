@@ -957,6 +957,8 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "CHECK_RUN_PR_NUMBER" in workflow
     assert "headRefOid" in gate_script
     assert "mergeStateStatus" in gate_script
+    assert "Merge state lookup attempt" in gate_script
+    assert "Merge state is still UNKNOWN after 4 attempts" in gate_script
     assert "gh pr checks" in gate_script and "--required" in gate_script
     assert "no required checks reported" in gate_script
     assert "no legacy required status contexts reported" in gate_script

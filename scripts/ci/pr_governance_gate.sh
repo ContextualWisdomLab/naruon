@@ -66,6 +66,24 @@ add_waiting() {
   WAITING+=("$1")
 }
 
+read_pr_metadata_with_merge_state_retry() {
+  local attempt retry_delay
+
+  for attempt in 1 2 3 4; do
+    PR_JSON="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json number,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup)"
+    MERGE_STATE="$(printf '%s' "$PR_JSON" | jq -r '.mergeStateStatus')"
+    if [ "$MERGE_STATE" != "UNKNOWN" ]; then
+      return 0
+    fi
+    if [ "$attempt" -lt 4 ]; then
+      retry_delay=$((PR_GOVERNANCE_RETRY_SLEEP_SECONDS * attempt))
+      printf 'Merge state lookup attempt %s of 4 returned UNKNOWN; retrying in %s second(s).\n' \
+        "$attempt" "$retry_delay"
+      sleep "$retry_delay"
+    fi
+  done
+}
+
 join_items() {
   local item
   for item in "$@"; do
@@ -166,10 +184,17 @@ publish_gate_check() {
   fi
 }
 
-PR_JSON="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json number,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup)"
+PR_GOVERNANCE_RETRY_SLEEP_SECONDS="${PR_GOVERNANCE_RETRY_SLEEP_SECONDS:-3}"
+if ! [[ "$PR_GOVERNANCE_RETRY_SLEEP_SECONDS" =~ ^[0-9]+$ ]] || [ "$PR_GOVERNANCE_RETRY_SLEEP_SECONDS" -gt 30 ]; then
+  printf 'PR governance retry sleep must be an integer between 0 and 30 seconds.\n' >&2
+  exit 1
+fi
+
+PR_JSON=''
+MERGE_STATE='UNKNOWN'
+read_pr_metadata_with_merge_state_retry
 HEAD_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
 HEAD_REF_OID="$HEAD_SHA" # headRefOid equivalent for REST metadata paths.
-MERGE_STATE="$(printf '%s' "$PR_JSON" | jq -r '.mergeStateStatus')"
 IS_DRAFT="$(printf '%s' "$PR_JSON" | jq -r '.isDraft')"
 REVIEW_DECISION="$(printf '%s' "$PR_JSON" | jq -r '.reviewDecision // ""')"
 
@@ -181,8 +206,12 @@ if [ "$MERGE_STATE" = "BEHIND" ]; then
   add_blocker 'Branch is BEHIND the base branch; update the branch and re-run checks.'
 fi
 
-if [ "$MERGE_STATE" = "DIRTY" ] || [ "$MERGE_STATE" = "UNKNOWN" ]; then
-  add_blocker "Merge state is ${MERGE_STATE}; resolve conflicts or refresh mergeability."
+if [ "$MERGE_STATE" = "DIRTY" ]; then
+  add_blocker 'Merge state is DIRTY; resolve conflicts before merge.'
+fi
+
+if [ "$MERGE_STATE" = "UNKNOWN" ]; then
+  add_waiting "Merge state is still UNKNOWN after 4 attempts on ${HEAD_REF_OID}; waiting for GitHub to refresh mergeability."
 fi
 
 if [ "$REVIEW_DECISION" = "CHANGES_REQUESTED" ]; then

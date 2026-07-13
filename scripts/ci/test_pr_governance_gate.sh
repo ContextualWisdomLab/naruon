@@ -20,6 +20,19 @@ if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
     changes_requested)
       printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"CHANGES_REQUESTED","statusCheckRollup":[]}'
       ;;
+    transient_unknown)
+      count_file="$GH_STATE_DIR/pr-view-count"
+      count="$(cat "$count_file" 2>/dev/null || printf '0')"
+      printf '%s\n' "$((count + 1))" > "$count_file"
+      if [ "$count" -eq 0 ]; then
+        printf '{"number":42,"isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}'
+      else
+        printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}'
+      fi
+      ;;
+    persistent_unknown)
+      printf '{"number":42,"isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}'
+      ;;
     *)
       printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}'
       ;;
@@ -45,6 +58,10 @@ if [ "$1" = "api" ] && [ "$2" = "graphql" ]; then
   if [ "${GH_SCENARIO:-pass}" = "graphql_error" ]; then
     printf 'GraphQL request failed\n' >&2
     exit 1
+  fi
+  if [ "${GH_SCENARIO:-pass}" = "persistent_unknown" ]; then
+    printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"UNKNOWN","reviewThreads":{"nodes":[]}}}}}' "$head_sha"
+    exit 0
   fi
   printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"CLEAN","reviewThreads":{"nodes":[]}}}}}' "$head_sha"
   exit 0
@@ -217,7 +234,9 @@ run_gate() {
   make_fake_gh "$temp_dir/bin"
   set +e
   GH_LOG="$temp_dir/gh.log" \
+  GH_STATE_DIR="$temp_dir" \
   GH_SCENARIO="$scenario" \
+  PR_GOVERNANCE_RETRY_SLEEP_SECONDS="0" \
   PATH="$temp_dir/bin:$PATH" \
   GITHUB_REPOSITORY="owner/repo" \
   GH_TOKEN="fake" \
@@ -273,6 +292,32 @@ assert_no_comment_or_merge_for_pending_checks() {
   assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=in_progress' "$temp_dir/gh.log"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_transient_unknown_merge_state_is_retried() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate transient_unknown "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Merge state lookup attempt 1 of 4 returned UNKNOWN' "$temp_dir/output.txt"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_in_file 'conclusion=success' "$temp_dir/gh.log"
+  assert_not_in_file 'Merge state is UNKNOWN; resolve conflicts' "$temp_dir/gh.log"
+  assert_not_in_file 'conclusion=failure' "$temp_dir/gh.log"
+}
+
+assert_persistent_unknown_merge_state_waits_without_false_failure() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate persistent_unknown "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Merge state lookup attempt 3 of 4 returned UNKNOWN' "$temp_dir/output.txt"
+  assert_in_file 'Merge state is still UNKNOWN after 4 attempts' "$temp_dir/output.txt"
+  assert_in_file 'status=in_progress' "$temp_dir/gh.log"
+  assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
+  assert_not_in_file 'conclusion=failure' "$temp_dir/gh.log"
 }
 
 assert_startup_failure_creates_marker_comment() {
@@ -623,6 +668,8 @@ assert_current_head_check_lookup_uses_maximum_page_size() {
 }
 
 assert_no_comment_or_merge_for_pending_checks
+assert_transient_unknown_merge_state_is_retried
+assert_persistent_unknown_merge_state_waits_without_false_failure
 assert_startup_failure_creates_marker_comment
 assert_failed_checks_create_marker_comment
 assert_existing_marker_comment_is_patched
