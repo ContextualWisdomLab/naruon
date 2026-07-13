@@ -52,7 +52,7 @@ services:
     read_only: true
     image: grafana/grafana:latest
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is not set}
     tmpfs:
       - /tmp
       - /var/lib/grafana

@@ -16,6 +16,7 @@ const SCREENSHOT_ROUTES = [
   '/settings',
 ];
 const ALLOWED_ROUTES = new Set(SCREENSHOT_ROUTES);
+const NAVIGATION_OPTIONS = { waitUntil: 'load', timeout: 30000 };
 
 function routeUrl(route) {
   if (!ALLOWED_ROUTES.has(route)) {
@@ -28,6 +29,33 @@ function routeUrl(route) {
   return url.toString();
 }
 
+async function navigateToRoute(page, route) {
+  switch (route) {
+    case '/':
+      return page.goto('http://127.0.0.1:3000/', NAVIGATION_OPTIONS);
+    case '/mail':
+      return page.goto('http://127.0.0.1:3000/mail', NAVIGATION_OPTIONS);
+    case '/calendar':
+      return page.goto('http://127.0.0.1:3000/calendar', NAVIGATION_OPTIONS);
+    case '/tasks':
+      return page.goto('http://127.0.0.1:3000/tasks', NAVIGATION_OPTIONS);
+    case '/projects':
+      return page.goto('http://127.0.0.1:3000/projects', NAVIGATION_OPTIONS);
+    case '/search':
+      return page.goto('http://127.0.0.1:3000/search', NAVIGATION_OPTIONS);
+    case '/data':
+      return page.goto('http://127.0.0.1:3000/data', NAVIGATION_OPTIONS);
+    case '/ai-hub':
+      return page.goto('http://127.0.0.1:3000/ai-hub', NAVIGATION_OPTIONS);
+    case '/security':
+      return page.goto('http://127.0.0.1:3000/security', NAVIGATION_OPTIONS);
+    case '/settings':
+      return page.goto('http://127.0.0.1:3000/settings', NAVIGATION_OPTIONS);
+    default:
+      throw new Error(`Unsupported screenshot route: ${route}`);
+  }
+}
+
 (async () => {
   if (!fs.existsSync('test-results')) {
     fs.mkdirSync('test-results');
@@ -36,11 +64,10 @@ function routeUrl(route) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 1024 } });
 
   for (const route of SCREENSHOT_ROUTES) {
-    const url = routeUrl(route);
+    routeUrl(route);
     console.log('Taking screenshot for route', route);
     try {
-      // routeUrl only returns fixed localhost paths from SCREENSHOT_ROUTES.
-      await page.goto(url, { waitUntil: 'load', timeout: 30000 }); // nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection
+      await navigateToRoute(page, route);
       await page.waitForTimeout(2000);
       const name = route === '/' ? 'home' : route.slice(1);
       await page.screenshot({ path: `test-results/${name}-screenshot.png`, fullPage: true });
