@@ -71,7 +71,7 @@ read_pr_metadata_with_merge_state_retry() {
   local attempt retry_delay
 
   for attempt in 1 2 3 4; do
-    PR_JSON="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json number,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup)"
+    PR_JSON="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json number,state,headRefOid,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup)"
     PR_STATE="$(printf '%s' "$PR_JSON" | jq -r '.state // "OPEN"')"
     MERGE_STATE="$(printf '%s' "$PR_JSON" | jq -r '.mergeStateStatus')"
     if [ "$PR_STATE" != "OPEN" ] || [ "$MERGE_STATE" != "UNKNOWN" ]; then
@@ -84,6 +84,26 @@ read_pr_metadata_with_merge_state_retry() {
       sleep "$retry_delay"
     fi
   done
+}
+
+pr_snapshot_is_current() {
+  local latest_pr_json latest_pr_state latest_head_sha
+
+  latest_pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+  latest_pr_state="$(printf '%s' "$latest_pr_json" | jq -r '.state // "unknown"')"
+  latest_head_sha="$(printf '%s' "$latest_pr_json" | jq -r '.head.sha // ""')"
+
+  if [ "$latest_pr_state" != "open" ]; then
+    printf 'PR state became %s during gate evaluation; skipping stale gate publication.\n' \
+      "$(printf '%s' "$latest_pr_state" | tr '[:lower:]' '[:upper:]')"
+    return 1
+  fi
+  if [ "$latest_head_sha" != "$HEAD_SHA" ]; then
+    printf 'PR head changed during gate evaluation from %s to %s; skipping stale gate publication.\n' \
+      "$HEAD_SHA" "${latest_head_sha:-unknown}"
+    return 1
+  fi
+  return 0
 }
 
 join_items() {
@@ -226,7 +246,11 @@ case "$PR_STATE" in
     exit 1
     ;;
 esac
-HEAD_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
+HEAD_SHA="$(printf '%s' "$PR_JSON" | jq -r '.headRefOid // ""')"
+if ! [[ "$HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  printf 'GitHub returned an invalid PR head SHA; refusing to evaluate.\n' >&2
+  exit 1
+fi
 HEAD_REF_OID="$HEAD_SHA" # headRefOid equivalent for REST metadata paths.
 IS_DRAFT="$(printf '%s' "$PR_JSON" | jq -r '.isDraft')"
 REVIEW_DECISION="$(printf '%s' "$PR_JSON" | jq -r '.reviewDecision // ""')"
@@ -385,6 +409,10 @@ else
   if [ "$CODERABBIT_REVIEW_BLOCKERS" != "0" ]; then
     add_blocker "Current-head CodeRabbit review comment has blocking warning/failure evidence on ${HEAD_REF_OID}."
   fi
+fi
+
+if ! pr_snapshot_is_current; then
+  exit 0
 fi
 
 if [ "${#BLOCKERS[@]}" -gt 0 ]; then

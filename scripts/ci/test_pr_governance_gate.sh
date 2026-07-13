@@ -18,16 +18,16 @@ args="$*"
 if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
   case "${GH_SCENARIO:-pass}" in
     changes_requested)
-      printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"CHANGES_REQUESTED","statusCheckRollup":[]}'
+      printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"CHANGES_REQUESTED","statusCheckRollup":[]}' "$head_sha"
       ;;
     transient_unknown)
       count_file="$GH_STATE_DIR/pr-view-count"
       count="$(cat "$count_file" 2>/dev/null || printf '0')"
       printf '%s\n' "$((count + 1))" > "$count_file"
       if [ "$count" -eq 0 ]; then
-        printf '{"number":42,"isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}'
+        printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
       else
-        printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}'
+        printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
       fi
       ;;
     merged_during_unknown)
@@ -35,16 +35,16 @@ if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
       count="$(cat "$count_file" 2>/dev/null || printf '0')"
       printf '%s\n' "$((count + 1))" > "$count_file"
       if [ "$count" -eq 0 ]; then
-        printf '{"number":42,"state":"OPEN","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}'
+        printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
       else
-        printf '{"number":42,"state":"MERGED","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"APPROVED","statusCheckRollup":[]}'
+        printf '{"number":42,"state":"MERGED","headRefOid":"%s","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"APPROVED","statusCheckRollup":[]}' "$head_sha"
       fi
       ;;
     persistent_unknown)
-      printf '{"number":42,"isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}'
+      printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
       ;;
     *)
-      printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}'
+      printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
       ;;
   esac
   exit 0
@@ -54,7 +54,14 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/pulls/42 ]]; then
   if [[ "$args" == *".base.sha"* ]]; then
     printf 'abcdefabcdefabcdefabcdefabcdefabcdefabcd'
   else
-    printf '%s' "$head_sha"
+    latest_head_sha="$head_sha"
+    latest_state="open"
+    if [ "${GH_SCENARIO:-pass}" = "head_changed_during_evaluation" ]; then
+      latest_head_sha="fedcba9876543210fedcba9876543210fedcba98"
+    elif [ "${GH_SCENARIO:-pass}" = "closed_during_evaluation" ]; then
+      latest_state="closed"
+    fi
+    printf '{"state":"%s","head":{"sha":"%s"}}' "$latest_state" "$latest_head_sha"
   fi
   exit 0
 fi
@@ -344,7 +351,34 @@ assert_pr_merged_during_unknown_retry_exits_without_stale_gate() {
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'PR state became MERGED during merge-state refresh' "$temp_dir/output.txt"
   assert_not_in_file 'check-runs' "$temp_dir/gh.log"
-  assert_not_in_file 'issues/42/comments' "$temp_dir/gh.log"
+  assert_not_in_file 'issues/42/comments -f body=' "$temp_dir/gh.log"
+  assert_not_in_file '--method PATCH repos/owner/repo/issues/comments' "$temp_dir/gh.log"
+}
+
+assert_head_change_during_evaluation_skips_stale_publication() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate head_changed_during_evaluation "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'PR head changed during gate evaluation from 0123456789abcdef0123456789abcdef01234567 to fedcba9876543210fedcba9876543210fedcba98' "$temp_dir/output.txt"
+  assert_not_in_file '--method POST repos/owner/repo/check-runs' "$temp_dir/gh.log"
+  assert_not_in_file '--method PATCH repos/owner/repo/check-runs' "$temp_dir/gh.log"
+  assert_not_in_file 'issues/42/comments -f body=' "$temp_dir/gh.log"
+  assert_not_in_file '--method PATCH repos/owner/repo/issues/comments' "$temp_dir/gh.log"
+}
+
+assert_closed_during_evaluation_skips_stale_publication() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate closed_during_evaluation "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'PR state became CLOSED during gate evaluation; skipping stale gate publication' "$temp_dir/output.txt"
+  assert_not_in_file '--method POST repos/owner/repo/check-runs' "$temp_dir/gh.log"
+  assert_not_in_file '--method PATCH repos/owner/repo/check-runs' "$temp_dir/gh.log"
+  assert_not_in_file 'issues/42/comments -f body=' "$temp_dir/gh.log"
+  assert_not_in_file '--method PATCH repos/owner/repo/issues/comments' "$temp_dir/gh.log"
 }
 
 assert_startup_failure_creates_marker_comment() {
@@ -730,6 +764,8 @@ assert_no_comment_or_merge_for_pending_checks
 assert_transient_unknown_merge_state_is_retried
 assert_persistent_unknown_merge_state_waits_without_false_failure
 assert_pr_merged_during_unknown_retry_exits_without_stale_gate
+assert_head_change_during_evaluation_skips_stale_publication
+assert_closed_during_evaluation_skips_stale_publication
 assert_startup_failure_creates_marker_comment
 assert_failed_checks_create_marker_comment
 assert_existing_marker_comment_is_patched
