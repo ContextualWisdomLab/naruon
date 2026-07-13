@@ -2,7 +2,6 @@ import base64
 
 import pytest
 
-import services.attachment_parser as attachment_parser
 from services.attachment_parser import (
     MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
     MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
@@ -250,7 +249,9 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
     with pytest.raises(ValueError, match="not a PDF"):
         decode_deferred_attachment_payload(non_pdf)
 
-    monkeypatch.setattr(attachment_parser, "MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 5)
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 5
+    )
     oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
     with pytest.raises(ValueError, match="size limit"):
         decode_deferred_attachment_payload(oversized)
