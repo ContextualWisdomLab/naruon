@@ -30,6 +30,37 @@ services:
     ports:
       - "11434:11434"
 
+  # NewsDOM PDF DOM recognition sidecar, built from a commit-pinned git
+  # context (no submodule: the PR-scope security gate fails closed on gitlink
+  # entries, and a URL context keeps the default checkout self-contained).
+  # Optional: the backend degrades gracefully (PDFs stay pending) when this
+  # service is absent or unconfigured.
+  #
+  # Gated behind the "newsdom" profile so the default `docker compose build`
+  # / `config` path (e.g. the coverage-evidence CI gate) never builds the
+  # sidecar. Bring it up intentionally with:
+  #   docker compose --profile newsdom up
+  # (or COMPOSE_PROFILES=newsdom).
+  newsdom:
+    profiles:
+      - newsdom
+    build:
+      # Commit-pinned for reproducible builds; bump deliberately.
+      context: https://github.com/ContextualWisdomLab/newsdom-api.git#6558a4238b1614c39f7e96a961815747ac4d49ef
+      dockerfile: Dockerfile
+    # No host `ports` mapping: the sidecar has no authentication on /parse, so
+    # it must stay on the internal compose network only. The backend reaches it
+    # via the service name (ALLOWED_NEWSDOM_HOSTS: newsdom). Do not publish it
+    # to the host.
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   backend:
     build:
       context: .
@@ -41,6 +72,11 @@ services:
       DEBUG: "false"
       ALLOW_LOCAL_LLM_PROVIDERS: "true"
       ALLOWED_LLM_BASE_URL_HOSTS: ollama
+      # NewsDOM sidecar allowlist. The actual base_url + bearer token are
+      # configured per-organization in the database (NewsdomProvider), NOT here;
+      # this only authorizes the container hostname for the SSRF-safe client.
+      ALLOW_LOCAL_NEWSDOM_PROVIDERS: "true"
+      ALLOWED_NEWSDOM_HOSTS: newsdom
       AUTH_SESSION_HMAC_SECRET: ${AUTH_SESSION_HMAC_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       OPENAI_API_KEY: ollama
@@ -52,6 +88,14 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      # Optional sidecar (see the "newsdom" profile above). required: false so
+      # that when the profile is inactive the dependency is dropped from the
+      # graph instead of failing config/build; the backend degrades gracefully
+      # (PDFs stay pending). When the profile is active, the backend still waits
+      # for the sidecar to start.
+      newsdom:
+        condition: service_started
+        required: false
     ports:
       - "8000:8000"
     command:
