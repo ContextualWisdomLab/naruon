@@ -143,27 +143,27 @@ def test_screenshot_utility_allows_only_local_static_routes():
     screenshot_script = (REPO_ROOT / "frontend" / "screenshot.cjs").read_text()
 
     assert "SCREENSHOT_ORIGIN = 'http://127.0.0.1:3000'" in screenshot_script
-    assert "const ALLOWED_ROUTES = new Set(SCREENSHOT_ROUTES);" in screenshot_script
-    assert "ALLOWED_ROUTES.has(route)" in screenshot_script
-    assert "new URL(route, SCREENSHOT_ORIGIN)" in screenshot_script
-    assert "url.origin !== SCREENSHOT_ORIGIN" in screenshot_script
-    assert "async function navigateToRoute(page, route)" in screenshot_script
-    assert "page.goto(url" not in screenshot_script
+    assert "async function gotoScreenshotRoute(page, route)" in screenshot_script
+    assert "switch (route)" in screenshot_script
+    for route, url in {
+        "/": "http://127.0.0.1:3000/",
+        "/mail": "http://127.0.0.1:3000/mail",
+        "/calendar": "http://127.0.0.1:3000/calendar",
+        "/tasks": "http://127.0.0.1:3000/tasks",
+        "/projects": "http://127.0.0.1:3000/projects",
+        "/search": "http://127.0.0.1:3000/search",
+        "/data": "http://127.0.0.1:3000/data",
+        "/ai-hub": "http://127.0.0.1:3000/ai-hub",
+        "/security": "http://127.0.0.1:3000/security",
+        "/settings": "http://127.0.0.1:3000/settings",
+    }.items():
+        assert f"case '{route}':" in screenshot_script
+        assert f"page.goto('{url}', GOTO_OPTIONS)" in screenshot_script
+    assert "Unsupported screenshot route" in screenshot_script
     assert "nosemgrep" not in screenshot_script
-    for route in (
-        "",
-        "mail",
-        "calendar",
-        "tasks",
-        "projects",
-        "search",
-        "data",
-        "ai-hub",
-        "security",
-        "settings",
-    ):
-        assert f"page.goto('http://127.0.0.1:3000/{route}'" in screenshot_script
     assert "console.error('Failed to capture route'" in screenshot_script
+    assert "page.goto(url" not in screenshot_script
+    assert "new URL(" not in screenshot_script
     assert "http://localhost:3000${route}" not in screenshot_script
     assert "console.error(`Failed to capture ${route}:`" not in screenshot_script
 
