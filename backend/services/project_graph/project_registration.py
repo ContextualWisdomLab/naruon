@@ -17,13 +17,7 @@ from db.models import (
     ProjectGraphObjectRecord,
 )
 
-from .models import ProjectObjectType
 from .projection import apply_project_graph_correction
-
-# Canonical value of the typed decision-point entity (added in #1058). The
-# decision-focused read model keys off this so it never drifts from the
-# extractor's ProjectObjectType.DECISION member.
-DECISION_OBJECT_TYPE: str = ProjectObjectType.DECISION.value
 
 PROJECT_OBJECT_SCORE_WEIGHTS: Mapping[str, float] = {
     "project_candidate": 0.26,
@@ -201,46 +195,6 @@ class ProjectEvidence:
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectDecisionRecord:
-    """One ``decision``-typed knowledge-graph object with grounding and relations.
-
-    A decision point (a resolved approval / chosen option) extracted into the
-    graph as a ``decision`` object since #1058. It carries its own citation
-    bundle (grounded, never asserted) and the typed object-to-object relations
-    incident to it — inbound and outbound — so a consumer can render *what was
-    decided* and *why it connects* to the requirements, features, or issues it
-    resolves without re-walking the whole traceability graph.
-    """
-
-    object_uid: str
-    title: str
-    summary: str
-    status_code: str
-    confidence: float
-    citation_bundle: tuple[ProjectCitation, ...]
-    relations: tuple[ProjectTraceRelation, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectDecisionView:
-    """The ``decision``-typed slice of a project's knowledge graph.
-
-    Folds a project's decision objects into a focused, grounded view: every
-    decision with its citations and incident relations, plus
-    ``grounded_decision_count`` so the aggregate never claims grounding it does
-    not have. Derived from the same objects and relations exposed by
-    :class:`ProjectTraceability`, filtered to decisions — read-only and
-    backward compatible. ``decisions`` preserves the upstream object load order,
-    so the result is deterministic across runs.
-    """
-
-    project_uid: str
-    decision_count: int
-    grounded_decision_count: int
-    decisions: tuple[ProjectDecisionRecord, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class ProjectCorrection:
     correction_uid: str
     object_uid: str
@@ -369,39 +323,6 @@ async def get_project_relation_summary(
     trace_edges = tuple(_trace_edge(edge, segment_map) for edge in edges)
     relations = _trace_relations(trace_edges, trace_objects)
     return _relation_summary(group.project_uid, relations)
-
-
-async def get_project_decisions(
-    session: AsyncSession,
-    *,
-    scope: ProjectGraphQueryScope,
-    project_uid: str,
-) -> ProjectDecisionView:
-    """Return the ``decision``-typed slice of a project's knowledge graph.
-
-    Loads the same objects and edges as :func:`get_project_traceability`,
-    projects the typed object-to-object relations, then folds only the
-    ``decision``-typed objects into a :class:`ProjectDecisionView` via
-    :func:`_decision_view`. Read-only and backward compatible: it adds no
-    persistence and reuses the settled object, relation, and citation
-    projections, so every surfaced decision stays grounded in its citations.
-    """
-    group = await _get_candidate_group(
-        session,
-        scope=scope,
-        project_uid=project_uid,
-    )
-    object_uids = tuple(record.object_uid for record in group.records)
-    edges = await _load_project_edges(session, scope=scope, object_uids=object_uids)
-    segment_map = await _load_citation_map(
-        session,
-        _record_segment_uids(group.records) + _edge_segment_uids(edges),
-        scope=scope,
-    )
-    trace_objects = tuple(_trace_object(record, segment_map) for record in group.records)
-    trace_edges = tuple(_trace_edge(edge, segment_map) for edge in edges)
-    relations = _trace_relations(trace_edges, trace_objects)
-    return _decision_view(group.project_uid, trace_objects, relations)
 
 
 async def get_project_evidence(
@@ -871,43 +792,6 @@ def _relation_summary(
             1 for relation in relations if relation.citation_bundle
         ),
         relation_types=tuple(type_summaries),
-    )
-
-
-def _decision_view(
-    project_uid: str,
-    objects: tuple[ProjectTraceObject, ...],
-    relations: tuple[ProjectTraceRelation, ...],
-) -> ProjectDecisionView:
-    """Fold the decision-typed objects of a project into a grounded view.
-
-    Selects objects whose ``object_type`` is the canonical
-    :data:`DECISION_OBJECT_TYPE`, pairs each with its incident relations
-    (:func:`_incident_relations`, both inbound and outbound), and counts those
-    grounded by a non-empty citation bundle. Pure — no database — so it is
-    unit-testable, and it preserves the ``objects`` iteration order so the
-    result is deterministic in the upstream object load order.
-    """
-    decisions = tuple(
-        ProjectDecisionRecord(
-            object_uid=trace_object.object_uid,
-            title=trace_object.title,
-            summary=trace_object.summary,
-            status_code=trace_object.status_code,
-            confidence=trace_object.confidence,
-            citation_bundle=trace_object.citation_bundle,
-            relations=_incident_relations(relations, trace_object.object_uid),
-        )
-        for trace_object in objects
-        if trace_object.object_type == DECISION_OBJECT_TYPE
-    )
-    return ProjectDecisionView(
-        project_uid=project_uid,
-        decision_count=len(decisions),
-        grounded_decision_count=sum(
-            1 for decision in decisions if decision.citation_bundle
-        ),
-        decisions=decisions,
     )
 
 

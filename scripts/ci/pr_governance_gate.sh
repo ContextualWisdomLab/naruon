@@ -2,7 +2,6 @@
 set -euo pipefail
 
 COMMENT_MARKER='<!-- pr-governance:metadata-gate -->'
-CHECK_NAME='metadata-only gate evaluation'
 
 PR_NUMBER="${DIRECT_PR_NUMBER:-${TARGET_PR_NUMBER:-${WORKFLOW_RUN_PR_NUMBER:-${CHECK_RUN_PR_NUMBER:-}}}}"
 if [ -z "$PR_NUMBER" ]; then
@@ -17,7 +16,6 @@ WAITING=()
 PR_CHECKS_ERROR_FILE="$(mktemp)"
 ISSUE_COMMENTS_ERROR_FILE="$(mktemp)"
 REVIEW_COMMENTS_ERROR_FILE="$(mktemp)"
-RUN_DETAILS_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID:-unknown}"
 
 cleanup_temp_files() {
   rm -f "$PR_CHECKS_ERROR_FILE" "$ISSUE_COMMENTS_ERROR_FILE" "$REVIEW_COMMENTS_ERROR_FILE"
@@ -43,7 +41,6 @@ join_items() {
 post_or_update_blocker_comment() {
   local head_ref_oid="$1"
   local body existing_comment_id
-  # shellcheck disable=SC2016  # Markdown backticks are literal.
   body="$(printf '%s\nPR governance metadata gate is not ready for `%s`:\n\n%s' \
     "$COMMENT_MARKER" \
     "$head_ref_oid" \
@@ -57,69 +54,6 @@ post_or_update_blocker_comment() {
     gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing_comment_id}" -f body="$body"
   else
     gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body"
-  fi
-}
-
-publish_gate_check() {
-  local status="$1"
-  local conclusion="$2"
-  local title="$3"
-  local summary="$4"
-  local external_id existing_check_id
-
-  external_id="pr-governance:${PR_NUMBER}:${HEAD_SHA}"
-  existing_check_id="$(printf '%s' "$CHECK_RUNS" | jq -r \
-    --arg name "$CHECK_NAME" \
-    --arg external_id "$external_id" '
-      [.check_runs[]
-        | select(.name == $name)
-        | select(.external_id == $external_id)
-        | select(.app.slug == "github-actions")]
-      | last
-      | .id // empty
-    ')"
-
-  # shellcheck disable=SC2016  # Markdown backticks are literal.
-  printf 'Publishing `%s` as %s on PR head %s.\n' "$CHECK_NAME" "$status" "$HEAD_SHA"
-  if [ -n "$existing_check_id" ]; then
-    if [ "$status" = "completed" ]; then
-      gh api --method PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${existing_check_id}" \
-        -f name="$CHECK_NAME" \
-        -f status="$status" \
-        -f conclusion="$conclusion" \
-        -f details_url="$RUN_DETAILS_URL" \
-        -f 'output[title]'="$title" \
-        -f 'output[summary]'="$summary"
-    else
-      gh api --method PATCH "repos/${GITHUB_REPOSITORY}/check-runs/${existing_check_id}" \
-        -f name="$CHECK_NAME" \
-        -f status="$status" \
-        -f details_url="$RUN_DETAILS_URL" \
-        -f 'output[title]'="$title" \
-        -f 'output[summary]'="$summary"
-    fi
-    return
-  fi
-
-  if [ "$status" = "completed" ]; then
-    gh api --method POST "repos/${GITHUB_REPOSITORY}/check-runs" \
-      -f name="$CHECK_NAME" \
-      -f head_sha="$HEAD_SHA" \
-      -f status="$status" \
-      -f conclusion="$conclusion" \
-      -f external_id="$external_id" \
-      -f details_url="$RUN_DETAILS_URL" \
-      -f 'output[title]'="$title" \
-      -f 'output[summary]'="$summary"
-  else
-    gh api --method POST "repos/${GITHUB_REPOSITORY}/check-runs" \
-      -f name="$CHECK_NAME" \
-      -f head_sha="$HEAD_SHA" \
-      -f status="$status" \
-      -f external_id="$external_id" \
-      -f details_url="$RUN_DETAILS_URL" \
-      -f 'output[title]'="$title" \
-      -f 'output[summary]'="$summary"
   fi
 }
 
@@ -146,7 +80,6 @@ if [ "$REVIEW_DECISION" = "CHANGES_REQUESTED" ]; then
   add_blocker 'Review decision is CHANGES_REQUESTED; address requested changes before merge.'
 fi
 
-# shellcheck disable=SC2016  # GraphQL variables must remain literal.
 THREADS_JSON="$(gh api graphql \
   -F owner="$OWNER" \
   -F repo="$REPO" \
@@ -167,20 +100,19 @@ if ! REQUIRED_CHECKS="$(gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --
 else
   while IFS= read -r item; do
     [ -n "$item" ] && add_blocker "$item"
-  done < <(printf '%s' "$REQUIRED_CHECKS" | jq -r --arg check_name "$CHECK_NAME" '
+  done < <(printf '%s' "$REQUIRED_CHECKS" | jq -r '
     .[]
-    | select(.name != $check_name)
     | select((.state | ascii_upcase) as $state | ["FAILED", "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"] | index($state))
     | "Required check `\(.name)` is \(.state) on the current head: \(.link // "no link")"
   ')
 
-  PENDING_REQUIRED_COUNT="$(printf '%s' "$REQUIRED_CHECKS" | jq --arg check_name "$CHECK_NAME" '[.[] | select(.name != $check_name) | select((.state | ascii_upcase) as $state | ["PENDING", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING", "EXPECTED"] | index($state))] | length')"
+  PENDING_REQUIRED_COUNT="$(printf '%s' "$REQUIRED_CHECKS" | jq '[.[] | select((.state | ascii_upcase) as $state | ["PENDING", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING", "EXPECTED"] | index($state))] | length')"
   if [ "$PENDING_REQUIRED_COUNT" != "0" ]; then
     add_waiting "Waiting for ${PENDING_REQUIRED_COUNT} required check(s) to finish on ${HEAD_REF_OID}."
   fi
 fi
 
-CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
+CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs")"
 CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
   [.check_runs[]
     | select(.app.slug == "coderabbitai" or (.name | test("CodeRabbit|coderabbit"; "i")))]'
@@ -240,32 +172,13 @@ else
 fi
 
 if [ "${#BLOCKERS[@]}" -gt 0 ]; then
-  BLOCKER_SUMMARY="$(join_items "${BLOCKERS[@]}")"
-  printf 'PR governance blockers for %s on %s:\n%s\n' "$PR_NUMBER" "$HEAD_REF_OID" "$BLOCKER_SUMMARY"
   post_or_update_blocker_comment "$HEAD_REF_OID"
-  publish_gate_check \
-    completed \
-    failure \
-    'PR governance metadata gate blocked' \
-    "$BLOCKER_SUMMARY"
-  exit 0
+  exit 1
 fi
 
 if [ "${#WAITING[@]}" -gt 0 ]; then
-  WAITING_SUMMARY="$(join_items "${WAITING[@]}")"
-  printf '%s\n' "$WAITING_SUMMARY"
-  publish_gate_check \
-    in_progress \
-    '' \
-    'PR governance metadata gate is waiting' \
-    "$WAITING_SUMMARY"
+  join_items "${WAITING[@]}"
   exit 0
 fi
 
-# shellcheck disable=SC2016  # Markdown backticks are literal.
 printf 'PR governance metadata gate is ready for `%s` on `%s`.\n' "$PR_NUMBER" "$HEAD_REF_OID"
-publish_gate_check \
-  completed \
-  success \
-  'PR governance metadata gate is ready' \
-  "All current-head governance requirements passed for PR ${PR_NUMBER} on ${HEAD_REF_OID}."

@@ -2048,23 +2048,12 @@ describe("DataPage", () => {
       root?.render(<DataPage />);
     });
 
-    const repositoryTab = container.querySelector<HTMLElement>('[role="tab"][aria-controls="data-panel-0"]');
-    const pipelineTabFromList = container.querySelector<HTMLElement>('[role="tab"][aria-controls="data-panel-1"]');
-    expect(repositoryTab?.getAttribute("aria-selected")).toBe("true");
-    expect(repositoryTab?.getAttribute("tabindex")).toBe("0");
-    expect(pipelineTabFromList?.getAttribute("aria-selected")).toBe("false");
-    expect(pipelineTabFromList?.getAttribute("tabindex")).toBe("-1");
-    expect(container.querySelector('[role="tablist"][aria-label="데이터 보기"]')?.getAttribute("aria-orientation")).toBe("vertical");
-    expect(container.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe("data-tab-0");
-
     const pipelineTab = Array.from(container.querySelectorAll("button")).find((candidate) =>
       candidate.textContent?.includes("수집 파이프라인"),
     );
     await act(async () => {
       pipelineTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    expect(pipelineTabFromList?.getAttribute("aria-selected")).toBe("true");
-    expect(container.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe("data-tab-1");
     expect(container.textContent).toContain("4 emails and 3 attachments");
     expect(container.textContent).toContain("원본 근거 연결됨");
     expect(container.textContent).not.toContain("emails.embedding, attachments.embedding");

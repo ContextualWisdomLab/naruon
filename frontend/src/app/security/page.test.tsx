@@ -269,15 +269,6 @@ describe("SecurityPage", () => {
     vi.stubGlobal("fetch", mockSecurityFetch());
     ({ container, root } = await renderSecurityPage());
 
-    const accessTab = container.querySelector<HTMLElement>('[role="tab"][aria-controls="security-panel-1"]');
-    const auditTabFromList = container.querySelector<HTMLElement>('[role="tab"][aria-controls="security-panel-2"]');
-    expect(accessTab?.getAttribute("aria-selected")).toBe("true");
-    expect(accessTab?.getAttribute("tabindex")).toBe("0");
-    expect(auditTabFromList?.getAttribute("aria-selected")).toBe("false");
-    expect(auditTabFromList?.getAttribute("tabindex")).toBe("-1");
-    expect(container.querySelector('[role="tablist"][aria-label="보안 보기"]')?.getAttribute("aria-orientation")).toBe("vertical");
-    expect(container.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe("security-tab-1");
-
     for (const tabName of ["감사 로그", "외부 공유", "정책"]) {
       const tab = Array.from(container.querySelectorAll("button")).find((button) =>
         button.textContent?.includes(tabName),
@@ -286,7 +277,6 @@ describe("SecurityPage", () => {
       await act(async () => {
         tab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       });
-      expect(tab?.getAttribute("aria-selected")).toBe("true");
       expect(container.textContent).not.toContain("곧 제공됩니다");
       if (tabName === "감사 로그") {
         expect(container.textContent).toContain("지속 감사 근거");

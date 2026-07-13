@@ -8,19 +8,14 @@ the model cannot introduce uncited (fabricated) domain claims into the graph.
 
 Beyond objects, this extractor also densifies the project knowledge graph with
 typed **object-to-object relations** (a feature *implements* a requirement, an
-issue *blocks* a milestone, a decision *supersedes* a prior decision, …).
-Relations are held to the same grounding discipline: they may only connect two
-objects that survived object grounding, their ``relation_type`` must come from a
-controlled vocabulary (:data:`ALLOWED_RELATION_TYPES`), self-loops and duplicates
-are dropped, and each relation edge is evidenced by the union of its endpoints'
-cited segments — so a relation can never smuggle in an uncited segment reference.
-The vocabulary carries decision-centric relations (``resolves``, ``decided_by``,
-``supersedes``) so the DECISION entity introduced in #1058 — and the decision
-read model that surfaces it (#1061) — can express *how* a decision connects to
-the issues it settles, the requirements it settles, and the prior decisions it
-replaces, instead of collapsing every such link into the generic ``relates_to``.
-The deterministic keyword extractor stays the reference/fallback stopgap and is
-left unchanged; the dense inter-object graph is a capability of the real LLM
+issue *blocks* a milestone, …). Relations are held to the same grounding
+discipline: they may only connect two objects that survived object grounding,
+their ``relation_type`` must come from a controlled vocabulary
+(:data:`ALLOWED_RELATION_TYPES`), self-loops and duplicates are dropped, and
+each relation edge is evidenced by the union of its endpoints' cited segments —
+so a relation can never smuggle in an uncited segment reference. The
+deterministic keyword extractor stays the reference/fallback stopgap and is left
+unchanged; the dense inter-object graph is a capability of the real LLM
 extractor behind the extractor seam.
 """
 
@@ -47,7 +42,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 LLM_EXTRACTOR_NAME = "llm_grounded_project_graph"
-LLM_EXTRACTOR_VERSION = "2026.07.13.1"
+LLM_EXTRACTOR_VERSION = "2026.07.12.1"
 
 _MAX_SEGMENTS_PER_REQUEST = 40
 _MAX_SEGMENT_TEXT_CHARS = 2000
@@ -68,12 +63,6 @@ ALLOWED_RELATION_TYPES: frozenset[str] = frozenset(
         "delivers",
         "owns",
         "relates_to",
-        # Decision-centric relations (see module docstring): a decision resolves
-        # an issue, a requirement/feature is decided_by a decision, and a newer
-        # decision supersedes the prior one it replaces.
-        "resolves",
-        "decided_by",
-        "supersedes",
     }
 )
 
@@ -116,12 +105,6 @@ def _system_instruction() -> str:
         "Optionally return relations that connect two objects you extracted, "
         "using their local_key values in source_local_key and target_local_key. "
         f"Allowed relation_type values: {allowed_relations}. "
-        "Orient decision relations by their direction: use resolves from a "
-        "decision to the issue it settles, decided_by from a requirement or "
-        "feature to the decision that settled it, and supersedes from a newer "
-        "decision to the prior decision it replaces. Only assert these when the "
-        "cited segment text explicitly states the settlement or replacement; "
-        "never infer them from mere ordering or co-mention. "
         "A relation must connect two distinct objects both grounded in the "
         "segments; do not relate an object to itself. "
         "Do not invent segment uids, facts, names, dates, or policies that "
