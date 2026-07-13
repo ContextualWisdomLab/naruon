@@ -6,3 +6,7 @@
 ## 2026-07-11 - O(N) Array Mapping Blocked Main Thread in Kanban Board
 **Learning:** When long arrays (like tasks sorted into Kanban columns) are mapped inline directly in the React return function, unrelated parent state changes (e.g., search or filter input) trigger full recalculation of the list and React VDOM reconciliation. This blocks the main thread during simple inputs.
 **Action:** Use `useMemo` to wrap expensive multi-column mapping operations that render lists of components, using specific dependencies, preventing rendering bottlenecks when other unrelated state variables are updated.
+
+## 2024-05-24 - Memoizing inline array maps
+**Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
+**Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
