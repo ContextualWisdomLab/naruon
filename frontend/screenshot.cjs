@@ -39,6 +39,8 @@ function routeUrl(route) {
     const url = routeUrl(route);
     console.log('Taking screenshot for route', route);
     try {
+      // nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection
+      // routeUrl only returns fixed localhost paths from SCREENSHOT_ROUTES.
       await page.goto(url, { waitUntil: 'load', timeout: 30000 });
       await page.waitForTimeout(2000);
       const name = route === '/' ? 'home' : route.slice(1);
