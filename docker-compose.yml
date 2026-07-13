@@ -30,22 +30,23 @@ services:
     ports:
       - "11434:11434"
 
-  # NewsDOM PDF DOM recognition sidecar, built from the pinned
-  # vendor/newsdom-api submodule. Optional: the backend degrades gracefully
-  # (PDFs stay pending) when this service is absent or unconfigured.
+  # NewsDOM PDF DOM recognition sidecar, built from a commit-pinned git
+  # context (no submodule: the PR-scope security gate fails closed on gitlink
+  # entries, and a URL context keeps the default checkout self-contained).
+  # Optional: the backend degrades gracefully (PDFs stay pending) when this
+  # service is absent or unconfigured.
   #
   # Gated behind the "newsdom" profile so the default `docker compose build`
-  # / `config` path (e.g. the coverage-evidence CI gate) never tries to build
-  # from vendor/newsdom-api, which is a submodule that is not checked out in
-  # every environment. Bring the sidecar up intentionally with:
+  # / `config` path (e.g. the coverage-evidence CI gate) never builds the
+  # sidecar. Bring it up intentionally with:
   #   docker compose --profile newsdom up
-  # (or COMPOSE_PROFILES=newsdom). The submodule must be checked out first:
-  #   git submodule update --init vendor/newsdom-api
+  # (or COMPOSE_PROFILES=newsdom).
   newsdom:
     profiles:
       - newsdom
     build:
-      context: ./vendor/newsdom-api
+      # Commit-pinned for reproducible builds; bump deliberately.
+      context: https://github.com/ContextualWisdomLab/newsdom-api.git#6558a4238b1614c39f7e96a961815747ac4d49ef
       dockerfile: Dockerfile
     ports:
       - "8100:8000"
