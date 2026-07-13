@@ -17,9 +17,6 @@ on:
       pr_number:
         description: Pull request number to evaluate
         required: true
-      base_sha:
-        description: Trusted base commit SHA for manual recovery runs
-        required: false
 
 permissions:
   contents: read
@@ -61,116 +58,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TRUSTED_PR_NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || '' }}
-          TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.workflow_run.pull_requests[0].base.sha || github.event.check_run.pull_requests[0].base.sha || github.event.inputs.base_sha || '' }}
         run: |
           set -euo pipefail
 
-          extract_json_value() {
-            local json_file="$1"
-            local jq_filter="$2"
-            python3 - "$json_file" "$jq_filter" <<'PY'
-          import json
-          import sys
-
-          json_path = sys.argv[1]
-          filter_expr = sys.argv[2]
-          try:
-              raw = open(json_path, "r", encoding="utf-8").read()
-          except OSError as exc:
-              print(f"unable to read response body: {exc}", file=sys.stderr)
-              sys.exit(1)
-          if not raw.strip():
-              print("empty response body", file=sys.stderr)
-              sys.exit(1)
-          try:
-              value = json.loads(raw)
-          except json.JSONDecodeError as exc:
-              print(f"invalid JSON response body: {exc}", file=sys.stderr)
-              sys.exit(1)
-          if not filter_expr.startswith("."):
-              print(f"unsupported jq filter for guarded parsing: {filter_expr}", file=sys.stderr)
-              sys.exit(1)
-          try:
-              for part in filter(None, filter_expr[1:].split(".")):
-                  value = value[part]
-          except (KeyError, TypeError) as exc:
-              print(f"filter {filter_expr} did not match response: {exc}", file=sys.stderr)
-              sys.exit(1)
-          if value in (None, ""):
-              print(f"filter {filter_expr} produced an empty value", file=sys.stderr)
-              sys.exit(1)
-          print(value)
-          PY
-          }
-
           gh_api_with_retry() {
-            local attempt output_file error_file parsed parse_reason rc jq_filter endpoint
-            local -a api_args=()
-            jq_filter=""
-            endpoint=""
-            while [ "$#" -gt 0 ]; do
-              if [ "$1" = "--jq" ]; then
-                if [ "$#" -lt 2 ]; then
-                  echo "::error::gh_api_with_retry requires a filter after --jq." >&2
-                  return 2
-                fi
-                jq_filter="$2"
-                shift 2
-                continue
-              fi
-              if [ -z "$endpoint" ]; then
-                endpoint="$1"
-              fi
-              api_args+=("$1")
-              shift
-            done
+            local attempt output_file rc
             output_file="$(mktemp)"
-            error_file="$(mktemp)"
             for attempt in 1 2 3 4; do
               rc=0
-              if [ -n "$jq_filter" ]; then
-                gh api "${api_args[@]}" > "$output_file" || rc=$?
-              else
-                gh api "${api_args[@]}" > "$output_file" || rc=$?
-              fi
+              gh api "$@" > "$output_file" || rc=$?
               if [ "$rc" -eq 0 ]; then
-                if [ -n "$jq_filter" ]; then
-                  if parsed="$(extract_json_value "$output_file" "$jq_filter" 2>"$error_file")"; then
-                    printf '%s\n' "$parsed"
-                    rm -f "$output_file" "$error_file"
-                    return 0
-                  fi
-                  parse_reason="$(cat "$error_file")"
-                  rc=65
-                else
-                  cat "$output_file"
-                  rm -f "$output_file" "$error_file"
-                  return 0
-                fi
+                cat "$output_file"
+                rm -f "$output_file"
+                return 0
               fi
               if [ "$attempt" -lt 4 ]; then
-                if [ "$rc" -eq 65 ]; then
-                  echo "GitHub API request attempt ${attempt} for ${endpoint} returned invalid JSON for ${jq_filter}: ${parse_reason}; retrying." >&2
-                else
-                  echo "GitHub API request attempt ${attempt} for ${endpoint} failed with exit ${rc}; retrying." >&2
-                fi
+                echo "GitHub API request attempt ${attempt} did not complete; retrying." >&2
                 sleep $((attempt * 3))
               fi
             done
-            if [ -n "$jq_filter" ]; then
-              echo "::error::GitHub API request did not produce valid JSON after 4 attempts: gh api ${api_args[*]} --jq ${jq_filter}" >&2
-            else
-              echo "::error::GitHub API request did not complete after 4 attempts: gh api ${api_args[*]}" >&2
-            fi
-            rm -f "$output_file" "$error_file"
+            echo "::error::GitHub API request did not complete after 4 attempts: gh api $*" >&2
+            rm -f "$output_file"
             return "$rc"
           }
 
-          trusted_ref=""
-          if [[ "${TRUSTED_BASE_SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
-            trusted_ref="$TRUSTED_BASE_SHA"
-            echo "Using event-provided trusted governance base SHA ${trusted_ref}."
-          elif [ -n "$TRUSTED_PR_NUMBER" ]; then
+          if [ -n "$TRUSTED_PR_NUMBER" ]; then
             trusted_ref="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}/pulls/${TRUSTED_PR_NUMBER}" --jq '.base.sha')"
           else
             default_branch="$(gh_api_with_retry "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')"

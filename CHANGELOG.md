@@ -1,51 +1,4 @@
 ## [Unreleased]
-### 마이그레이션 정합성 (Alembic single-head 복구)
-
-- Alembic 마이그레이션 그래프의 head가 둘로 갈라져(`0011_email_read_state` — `email_records.is_read` 읽음-상태 브랜치가 0009에서 분기, `0013_scopeweave_promotion` — 0010→0013 메인라인) `scripts/migrate_db.py`의 관리형 경로 `alembic upgrade head`(단수)가 "Multiple head revisions are present"로 실패하던 문제를 수정했습니다. 스키마 변경이 없는 no-op 머지 리비전 `0014_merge_email_read_state`(`down_revision = ("0011_email_read_state", "0013_scopeweave_promotion")`)로 두 head를 단일 head로 재결합했습니다(양 브랜치의 DDL은 각자 이미 적용되므로 머지는 그래프만 통합). 재발 방지 가드로 `tests/test_alembic_migrations.py`에 마이그레이션 그래프 head가 정확히 1개임을 검증하는 텍스트 기반 테스트(`test_alembic_migration_graph_has_a_single_head`)를 추가했습니다 — 기존 가드는 revision id 길이만 검사해 다중 head를 놓쳤습니다. 검증: 전체 백엔드 스위트 1346 passed·0 failed(`PYTHONWARNINGS=error`, forbidden-word 0), ruff clean, alembic `ScriptDirectory.get_heads()` == 1.
-
-### 지식그래프 추출기 seam (KG Extractor Seam)
-
-- 시맨틱 프로젝트 그래프 추출을 하드코딩된 `if/else` 대신 이름·버전이 있는 안정적인 pluggable seam으로 전환했습니다 (naruon#975 P0 keystone bullet — "make the dense KG real *behind a stable extractor seam*"). `backend/services/project_graph/extractor_registry.py`에 `KgExtractor` 계약(name + version + `extract`), 셀렉터(`PROJECT_GRAPH_EXTRACTOR`)로 키잉되는 `KgExtractorRegistry`, 그리고 fallback 체인을 해소하는 `run_extraction`을 추가했습니다. 체인의 **마지막 원소는 항상 결정론적 keyword 추출기**이므로 "rule-based extraction is fallback/reference only"가 분기 실수 여지 없이 구조적으로 보장됩니다 — LLM 추출기가 자격증명이 없거나(orchestrator 엔드포인트 미설정 포함) 요청에 실패하면 `ExtractorUnavailableError`(또는 임의 예외)로 체인 하위로 degrade 하며 projection을 잃지 않습니다. 새 추출기(플랫폼 플랜 §7.2의 `kg.extractor` 확장점을 쓰는 향후 플러그인 포함)는 코어 ingest 수정 없이 셀렉터로 등록됩니다.
-- **LLM 추출을 contextual-orchestrator로 라우팅**하는 경로를 seam의 1급 변형(`orchestrator` 셀렉터)으로 추가했습니다. orchestrator는 OpenAI 호환 게이트웨이이므로, 동일한 grounded LLM 추출기(`extract_project_semantics_llm`, 세그먼트 인용 강제)를 그대로 쓰되 SSRF 가드 클라이언트(`build_llm_provider_http_client`)의 base_url을 원 프로바이더 대신 `PROJECT_GRAPH_ORCHESTRATOR_BASE_URL`(HTTPS + `ALLOWED_LLM_BASE_URL_HOSTS` 정확 호스트 허용목록)로 향하게 합니다. 프로바이더 API 키는 테넌트 Fernet 자격증명 그대로이며, 엔드포인트 미설정/거부 시 결정론적 추출기로 fail-closed 합니다.
-- ingest 셀렉터(`email_import_service._extract_project_semantics_for_import`)를 레지스트리 기반으로 리팩터링(하드코딩 분기 제거)하고, 설계·근거를 `docs/architecture/kg-extractor-seam.md`와 `ARCHITECTURE.md`(Semantic project-graph extractor seam)에 기록했습니다. 근거: 플랫폼 플랜 §7.2/§7.3/§8.2, LLM+KG 구축 서베이(Pan et al. 2306.08302, IEEE TKDE 2024). 테스트: `tests/test_project_graph_extractor_registry.py`(신규 22건) + `tests/test_project_graph_llm_extractor.py`의 import 셀렉터 테스트 재작성(orchestrator 라우팅/fallback 포함). 전체 백엔드 스위트 1339 passed·0 failed(`PYTHONWARNINGS=error`, forbidden-word 0), ruff clean. 동작 기본값 무변경(`PROJECT_GRAPH_EXTRACTION_ENABLED=false`, `PROJECT_GRAPH_EXTRACTOR=keyword`).
-
-### OSMU 분리 (rankweave)
-
-- hybrid retrieval의 점수 융합·질의 정규화 프리미티브를 독립 패키지 `rankweave`(PyPI, Apache-2.0)로 분리하고 naruon이 이를 의존성으로 소비하도록 배선했습니다: `backend/services/hybrid_retrieval`의 로컬 `score_fusion.py`·`query_normalization.py`를 삭제하고 해시 고정된 `rankweave==0.1.0`을 `requirements.txt`/`requirements-hashes.txt`에 추가했으며, 패키지 `__init__`은 동일한 8개 심볼을 `rankweave`에서 재수출하는 naruon 측 seam으로 유지됩니다(동작 무변경 — 융합 테스트 26건 통과, `retrieval_channels` 등 기존 소비자는 `services.hybrid_retrieval`에서 계속 import). rankweave는 standalone 제품이자 submodule/의존성으로 재사용 가능한 OSMU("따로, 또 같이") 산출물입니다.
-
-### 기능 추가 (Features)
-- **도구 기능 대규모 추가 (naruon#tools)**: 사용자가 직접 사용할 수 있는 새롭고 유용한 5개의 AI/분석 도구를 `backend/api/tools.py`에 구현하고 레지스트리에 등록했습니다.
-  - `email_translator`: 이메일 내용을 대상 언어로 번역
-  - `spam_phishing_detector`: 이메일의 스팸 및 피싱 위험도를 분석
-  - `reply_drafter`: 이전 맥락을 기반으로 답장 초안 자동 생성
-  - `sentiment_analyzer`: 이메일의 전반적인 감정(긍정/부정) 분석
-  - `grammar_checker`: 작성된 이메일 초안의 문법과 철자 교정
-- 각 신규 도구 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
-- `text_analyzer`, `base64_encoder`, `base64_decoder` 등의 실용적인 유틸리티 도구들을 추가했습니다.
-
-### 프로젝트 그래프 (Project Graph Traceability)
-- 프로젝트 traceability 읽기 모델/API에 유형화된 객체↔객체 **관계(relations)** 뷰를 추가했습니다 (P0 dense-KG, naruon#1051 기반). LLM 추출기가 `project_graph_edges`에 적재하는 관계(예: feature *implements* requirement, issue *blocks* milestone)를, 두 끝점이 모두 프로젝트 객체로 해석될 때에 한해 `relation_type` + 양쪽 끝점(`object_uid`/`object_type`/`title`) + 인용(`citation_bundle`)이 인라인된 `ProjectTraceRelation`으로 비정규화해 노출합니다. 소비자가 edge↔object를 재조인하지 않고도 객체가 *왜* 연결되는지 근거와 함께 렌더할 수 있습니다(CP-1 synthesis). segment-evidence 엣지(`segment:<uid>` source)는 source 끝점이 객체로 해석되지 않으므로 구조적으로 relations에서 제외되며, 기존 raw `edges` 컬렉션은 하위호환을 위해 변경 없이 유지됩니다. `GET /api/projects/{project_uid}/traceability` 응답에 `relations` 필드를 추가했습니다.
-- 프로젝트 **근거(evidence) 읽기 모델/API**에도 유형화된 관계를 per-object 단위로 확장했습니다 (P0 dense-KG, naruon#1053 후속). 단일 객체를 드릴다운하는 `GET /api/projects/{project_uid}/evidence/{object_uid}` 응답에, 그 객체가 끝점(source 또는 target)인 typed 관계만 필터링해 노출하는 `relations` 필드를 추가했습니다(양방향 inbound/outbound, 양쪽 끝점 해석 + `citation_bundle` 인라인). #1053의 traceability 전역 `relations`를 재조인하지 않고도 한 객체가 *왜* 다른 객체와 연결되는지 근거와 함께 볼 수 있습니다(Evidence Inspector 드릴다운의 그래프 legibility). #1053의 관계 projection 기계(`_trace_relations`)를 재사용하는 순수 projection이라 스키마/마이그레이션 변경 없음, opaque 객체/엣지 uid만 노출, 기존 `citation_bundle` 등 응답 필드는 하위호환 유지. TDD: `_incident_relations` 순수 필터 단위 테스트(inbound/outbound/양방향/무관 객체), mocked API 직렬화 테스트, 그리고 typed 관계 엣지를 seed 해 source(outbound)·target(inbound)·제3객체(관계 없음) evidence를 검증하는 real-PostgreSQL smoke 테스트를 추가했습니다.
-- 프로젝트 그래프에 **의사결정(decision) 전용 읽기 모델/API**를 추가했습니다 (P0 dense-KG §8, naruon#1058의 `ProjectObjectType.DECISION` 엔티티 기반, #1053/#1055/#1057 읽기 모델 라인 후속). `GET /api/projects/{project_uid}/decisions`는 프로젝트의 `decision` 유형 객체(해소된 승인·확정된 선택지)만 골라, 각 결정을 자신의 인용(`citation_bundle`)과 그 결정에 인접한 typed 관계(inbound/outbound, 양쪽 끝점 해석 + 인용 인라인)와 함께 노출하고, 집계로 `decision_count`·`grounded_decision_count`(인용을 가진 결정만 grounded 로 계수 — 근거 없는 grounding 주장 없음)를 제공합니다. traceability 전체 그래프를 가져와 클라이언트가 직접 필터링할 필요 없이 "무엇이 결정되었고 어떤 요구사항/기능/이슈와 *왜* 연결되는지"를 근거와 함께 볼 수 있습니다(프론트엔드 `DecisionPointCard` 배선 준비). #1053/#1055의 정착된 projection(`_trace_object`/`_trace_relations`/`_incident_relations`/`_citation_bundle`)을 재사용하는 순수 `_decision_view` folding이라 신규 지속성·스키마·마이그레이션 없음, opaque 객체/엣지 uid만 노출, 객체 로드 순서 보존으로 결정론적. 기존 응답 계약은 전부 하위호환 유지. TDD: `_decision_view` 순수 단위 테스트(decision 필터·양방향 인접 관계·인용 기반 grounded 계수·로드 순서 보존·빈 케이스), mocked API 직렬화/404 테스트, 그리고 결정론적 시드("…확정…")가 산출한 grounded decision과 `resolves` 인접 관계를 검증하는 real-PostgreSQL smoke 테스트를 추가했습니다.
-
-### 테스트/품질 (PostgreSQL Smoke Evidence)
-
-- 실제 PostgreSQL에서 상시 실패하던 `@pytest.mark.postgres` smoke 계열 14건을 복구해 전체 백엔드 스위트가 실 DB 기준으로 통과하도록 했습니다 (naruon#1041). 3개 유형: (a) `agent_run_records`↔`workflow_definitions`, `workspace_documents`↔`workspace_entities`에 누락된 `relationship()`를 추가해 same-flush parent/child INSERT의 FK 순서 위반을 해소하고, 모든 FK 쌍에 relationship을 강제하는 가드 테스트(`tests/test_model_relationship_integrity.py`)를 추가했습니다. (b) 스키마와 어긋난 raw-SQL 시드(`emails`→`email_records`, 잘못된 `RETURNING` 컬럼, 누락된 NOT NULL 컬럼, asyncpg UNION 파라미터 정수 캐스팅, `EncryptedString` 암호화 시드)를 정정했습니다. (c) 동작 실패(테넌트 설정 org 스코프 누락, 추출기 requirement+feature 2객체 반영, org-scoped 카운트에 유니크 org 사용, `datetime.utcnow` deprecation, 엔진 dispose 누락으로 인한 ResourceWarning)를 수정했습니다. 세 유형은 각각 flaky-test 연구의 명명된 근본 원인(Test Order Dependency 59%·Infrastructure 28%; Gruber et al. 2021 arXiv:2101.09077, Rasheed et al. 2022 arXiv:2212.00908)에 대응하며, 근거·표준·OSMU 평가를 `docs/engineering/postgres-smoke-evidence-repair.md`에 기록하고 재발 방지 안티패턴을 `AGENTS.md`에 추가했습니다.
-
-### 데이터 모델 정합화 (Email Model Reconciliation)
-
-- 이메일 데이터 모델을 단일 소스(`email_records`)로 정합화했습니다 (naruon#975 P0): 어디서도 참조되지 않고 마이그레이션도 없던 병렬 계정 중심 모델 7종(`user_accounts`, `provider_accounts`, `email_raws`, `email_messages`, `email_instances`, `email_threads`, `email_thread_edges`)을 제거하고, 마이그레이션 `0011_email_model_reconciliation`이 dev/test DB의 잔존 테이블을 방어적으로 정리합니다(운영 DB에는 애초에 생성된 적 없음). 재도입 방지 가드 테스트와 결정 기록(`docs/engineering/email-model-reconciliation.md`, JMAP RFC 8620/8621·RFC 5322 근거)을 추가했습니다. 계정/프로바이더 설정 평면은 `tenant_configs`(/api/accounts)·`caldav_accounts`·`webdav_accounts`로 유지되며, P2 멀티계정 identity binding은 병렬 저장소가 아닌 KG 1급 엔티티로 이 기반 위에 구축됩니다.
-
-### 검색 (Context Search)
-
-- Context Search를 언어 독립(hybrid lexical+dense) 검색으로 전면 교체했습니다 (G6, naruon#981·naruon#975): `to_tsvector('english')` 기반 FTS를 제거하고, `pg_trgm` 문자 trigram(word similarity, GiST kNN) lexical 채널 + pgvector 멀티링구얼 dense 채널을 후보 단위로 융합합니다. CJK 질의가 형태소 분석기 없이 매칭되고, 베트남어는 NFC/NFD·성조 유무와 무관하게 매칭됩니다.
-- 점수 융합을 연구 근거 기반 seam으로 도입했습니다: 기본은 이론적 min-max 정규화 convex combination(TM2C2, α=0.7; Bruch·Gai·Ingber 2023), 대안으로 Reciprocal Rank Fusion(η=60; Cormack et al. 2009)을 설정(`SEARCH_FUSION_STRATEGY`)으로 선택할 수 있습니다. 반환 score는 [0,1]로 유계입니다.
-- 검색 표면을 `content_segments`(문서 구절)와 `project_graph_objects`(프로젝트 항목)로 확장하고, 결과에 `result_kind`/`evidence_kinds`(근거 출처)를 노출합니다. 검색 UI에 근거 배지를 추가했습니다.
-- LLM 프로바이더가 없거나 임베딩 생성이 실패해도 400 대신 lexical 전용으로 degrade 합니다.
-- 마이그레이션 `0010_language_agnostic_search`: `pg_trgm`·`unaccent` 확장, IMMUTABLE `search_normalized_text(text)` 함수(NFC normalize + unaccent + lower), 4개 검색 표면 GiST trigram 표현식 인덱스(siglen=256).
-- (수정) alembic revision id `0008_attachment_parser_audit_metadata`(38자)가 `alembic_version.version_num` VARCHAR(32)를 초과해 신규 DB에서 `alembic upgrade head`가 실패하던 문제를 id 단축(`0008_attachment_parser_audit`)으로 해결하고, revision id 길이(≤32) 가드 테스트를 추가했습니다.
-- 설계·연구 근거 기록: `docs/engineering/language-agnostic-hybrid-retrieval.md`.
-
 ### UI/UX 개선
 - `CalendarLayout`의 성공 상태에서 기술적 세부 정보 대신 사용자 친화적인 메시지를 표시하도록 개선하여 불필요한 정보 노출을 방지했습니다.
 - `CalendarLayout`의 일정 쓰기(Writeback) 액션 버튼들에 로딩 스피너(`Loader2`)를 추가하여 비동기 작업 시 즉각적인 시각적 피드백을 제공합니다.
@@ -67,7 +20,6 @@
 - `thread_group_key`가 `thread_id`와 `message_id`를 trim한 뒤 `coalesce`하는 SQL 표현식을 생성하는지 직접 검증하는 단위 테스트를 추가했습니다.
 - `process_search_results`가 중복 제거, limit, snippet truncation, `None` fallback을 안정적으로 처리하는지 검증하는 단위 테스트를 추가했습니다.
 - `build_reply_counts_subquery`가 `user_id`와 `organization_id` 필터를 SQLAlchemy 쿼리에 올바르게 적용하는지 검증하는 단위 테스트를 추가했습니다.
-- 도구 API 백엔드 테스트가 기본 도구 실행, CRUD, webhook, 파라미터 검증 경로를 검증하도록 보강했습니다.
 
 ### 테스트 개선 (Testing)
 
@@ -88,15 +40,12 @@
 - **알고리즘 혼동 취약점(CRITICAL) 방지:** JWT 디코딩 시 정적 분석 도구가 알고리즘 allowlist를 명확히 확인할 수 있도록 `algorithms` 인자를 하드코딩된 문자열 리스트로 지정했습니다.
 - (백엔드) 버전 정보를 읽어올 때 `VERSION` 파일이 없는 경우, 에러 메시지에서 애플리케이션의 내부 디렉토리 경로가 노출되는 취약점(Information Disclosure)을 수정했습니다.
 - LLM provider 전용 HTTP transport가 검증된 base URL의 scheme/host/port와 `Host` 헤더를 전송 직전에 고정하도록 보강해 임의 요청 URL 또는 헤더 주입을 통한 SSRF 우회를 차단했습니다.
-- 도구 webhook URL 등록 시 localhost, 사설망, link-local, 내부 도메인을 차단해 SSRF 우회를 방지했습니다.
 - release governance 테스트 계약에서 부분 실행 경로 기반 `subprocess.run` 경로를 제거해 테스트 보안 점검이 절대 경로 기반 실행 계약과 어긋나지 않도록 정리했습니다.
 - **CRLF 인젝션 방지:** 이메일 전송 API(`POST /api/emails/send`)의 `subject`, `to`, `in_reply_to`, `references` 파라미터에서 개행 문자(`\r`, `\n`)를 차단하는 엄격한 Pydantic 검증 로직을 추가하여 SMTP 명령 인젝션 취약점을 해결했습니다.
 - **이중 확장자 검증:** 이메일 파일 업로드 API(`POST /api/emails/import-files`)에서 `.exe.eml` 등 악성 이중 확장자 파일이 업로드되는 것을 방지하도록 확장자 검증 로직을 강화했습니다.
 
 ### 추가
 
-- 도구 레지스트리에 생성, 조회, 수정, 삭제 API와 외부 webhook 실행 경로를 추가했습니다.
-- 기본 도구 mock 실행을 이메일 스레드 요약, 실행 항목 추출, 발신자 관계 분석, 일정 후보 추천, 답장 어조 교정 핸들러로 대체했습니다.
 - 백엔드에 다국어 이메일 본문을 번역할 수 있는 LLM 기반 `POST /api/llm/translate` 엔드포인트를 추가했습니다.
 - 프론트엔드의 이메일 상세 정보 뷰(`EmailDetail.tsx`)에 메일 원문을 한국어로 번역하는 '번역' 액션 버튼 및 번역 결과 UI를 추가했습니다.
 
@@ -2685,21 +2634,3 @@
 - `POSTGRES_PASSWORD=change-me-local-only docker compose up -d --build`
 - `python scripts/check_compose_logs.py --compose-log-file <captured-log-file>`
 - `docker compose down`
-
-## [Unreleased]
-### Added
-- `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
-  - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환
-  - `action_item_extractor_handler`: 실행 항목 및 마감일 추출
-  - `sender_dag_analytics_handler`: 발신자 관계 및 중요도 분석
-  - `meeting_candidate_finder_handler`: 일정 후보 추천
-  - `tone_analyzer_handler`: 작성 중인 답장 어조 교정
-- 각 신규 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
-- **Fix:** CI Strix 보안 스캐너가 `backend/api/tools.py`의 `registry.execute()` 메서드 호출을 SQL Injection으로 오탐(Hallucination)하는 문제를 해결하기 위해, `ToolRegistry` 클래스의 메서드 이름을 `execute`에서 `invoke_tool`로 변경했습니다.
-- **Note:** CI (validate naruon image, GitHub Actions runner-images)에서 qemu 설치/실행 과정의 일시적인 네트워크 오류(`500 Internal Server Error`) 혹은 캐시 오류(`Unable to reserve cache with key docker.io--tonistiigi--binfmt-latest-linux-x64`)로 인해 파이프라인이 실패했습니다. 이는 코드베이스의 오류가 아니므로 재제출을 통해 파이프라인 재실행을 시도합니다.
-- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 그대로 재제출하여 파이프라인 재실행을 시도합니다.
-- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 그대로 재제출하여 파이프라인 재실행을 시도합니다.
-- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 다시 한 번 재제출하여 파이프라인 정상 실행을 기대합니다.
-- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 그대로 재제출하여 파이프라인 재실행을 시도합니다.
-- **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 반복되는 외부 인프라 타임아웃 문제를 해결하기 위해, 마지막으로 재제출을 시도합니다.
-- **Note:** 추가적인 코드 변경은 없으며, PR 내 자동 분석 커멘트에 대한 답변(CI 실패가 본 PR이 아닌 develop의 기존 이슈임을 인지함)을 남기고 현재 워크플로우를 완료합니다.

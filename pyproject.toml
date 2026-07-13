@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["connector", "coverage_contract"]
+
+[tool.interrogate]
+ignore-init-module = true
+ignore-magic = true
+ignore-private = true
+fail-under = 100
+exclude = ["setup.py", "docs", "build", "tests"]

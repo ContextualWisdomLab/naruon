@@ -11,7 +11,6 @@ alembic==1.18.5
 greenlet==3.5.3
 asyncpg==0.31.0
 pgvector==0.4.2
-rankweave==0.1.0  # hybrid-retrieval fusion + query normalization (OSMU spin-off)
 pytest-asyncio==1.4.0
 openai==2.44.0
 langchain-text-splitters==1.1.2
@@ -35,7 +34,3 @@ PyJWT==2.13.0  # latest verified 2026-06-12; do not downgrade to 2.8.0
 icalendar==7.2.0
 ruff==0.15.20
 defusedxml==0.7.1
-# Optional: the Noema general agent (services/noema_agent.py) uses pydantic-ai
-# (MIT). It is intentionally NOT in the hashed runtime set — install it
-# separately via backend/requirements-agent.txt to enable the agent. The agent
-# degrades to a no-op notice when the package is absent.

@@ -22,10 +22,6 @@ from db.models import (
     ProjectGraphObjectRecord,
 )
 from services.project_graph import (
-    ProjectObjectType,
-    ProjectSemanticEdge,
-    ProjectSemanticExtractionResult,
-    ProjectSemanticObject,
     ProjectSourceSegment,
     apply_project_graph_correction,
     extract_project_semantics,
@@ -58,8 +54,8 @@ async def test_project_graph_projection_persists_source_cited_objects_and_edges(
     project_graph_sessionmaker,
 ):
     user_id = f"project-user-{uuid.uuid4().hex}"
-    organization_id = f"org-projection-{uuid.uuid4().hex[:12]}"
-    workspace_id = f"workspace-{organization_id}"
+    organization_id = "org-acme"
+    workspace_id = "workspace-org-acme"
     async with project_graph_sessionmaker() as session:
         segment = await _seed_source_segment(
             session,
@@ -77,23 +73,10 @@ async def test_project_graph_projection_persists_source_cited_objects_and_edges(
         )
         await session.commit()
 
-        # The deterministic reference extractor emits a REQUIREMENT and a
-        # FEATURE for the seeded sentence; assert on the requirement and
-        # its evidence edge specifically.
-        assert len(result.objects) == 2
-        assert len(result.edges) == 2
-        assert sorted(obj.object_type for obj in result.objects) == [
-            "feature",
-            "requirement",
-        ]
-        persisted_object = next(
-            obj for obj in result.objects if obj.object_type == "requirement"
-        )
-        persisted_edge = next(
-            edge
-            for edge in result.edges
-            if edge.target_object_id == persisted_object.project_graph_object_id
-        )
+        assert len(result.objects) == 1
+        assert len(result.edges) == 1
+        persisted_object = result.objects[0]
+        persisted_edge = result.edges[0]
         assert persisted_object.user_id == user_id
         assert persisted_object.organization_id == organization_id
         assert persisted_object.workspace_id == workspace_id
@@ -108,83 +91,12 @@ async def test_project_graph_projection_persists_source_cited_objects_and_edges(
 
 
 @pytest.mark.asyncio
-async def test_project_graph_projection_persists_object_to_object_edges(
+async def test_project_graph_projection_upserts_existing_records(
     project_graph_sessionmaker,
 ):
     user_id = f"project-user-{uuid.uuid4().hex}"
     organization_id = "org-acme"
     workspace_id = "workspace-org-acme"
-    async with project_graph_sessionmaker() as session:
-        segment = await _seed_source_segment(
-            session,
-            user_id=user_id,
-            organization_id=organization_id,
-        )
-        segment_uid = segment.content_segment_uid
-        feature = ProjectSemanticObject(
-            uid=f"feature:{uuid.uuid4().hex[:16]}",
-            object_type=ProjectObjectType.FEATURE,
-            title="Feature: retry banner",
-            summary="Show a retry banner on card decline.",
-            source_segment_uids=(segment_uid,),
-            confidence=0.8,
-            extractor_name="llm_grounded_project_graph",
-            extractor_version="test",
-        )
-        requirement = ProjectSemanticObject(
-            uid=f"requirement:{uuid.uuid4().hex[:16]}",
-            object_type=ProjectObjectType.REQUIREMENT,
-            title="Requirement: handle card declines",
-            summary="The checkout must handle card declines.",
-            source_segment_uids=(segment_uid,),
-            confidence=0.9,
-            extractor_name="llm_grounded_project_graph",
-            extractor_version="test",
-        )
-        relation_edge = ProjectSemanticEdge(
-            source_uid=feature.uid,
-            target_uid=requirement.uid,
-            edge_type="implements",
-            confidence=0.7,
-            source_segment_uids=(segment_uid,),
-        )
-        extraction = ProjectSemanticExtractionResult(
-            objects=(feature, requirement),
-            edges=(relation_edge,),
-            extractor_name="llm_grounded_project_graph",
-            extractor_version="test",
-        )
-
-        result = await persist_project_graph_projection(
-            session,
-            extraction=extraction,
-            user_id=user_id,
-            organization_id=organization_id,
-            workspace_id=workspace_id,
-        )
-        await session.commit()
-
-        assert len(result.objects) == 2
-        assert len(result.edges) == 1
-        persisted_edge = result.edges[0]
-        object_ids = {obj.project_graph_object_id for obj in result.objects}
-        # The object-to-object edge wires both endpoints to persisted objects,
-        # so the graph carries a real inter-object relationship (not just
-        # segment evidence).
-        assert persisted_edge.edge_type == "implements"
-        assert persisted_edge.source_object_id in object_ids
-        assert persisted_edge.target_object_id in object_ids
-        assert persisted_edge.source_object_id != persisted_edge.target_object_id
-        assert persisted_edge.source_segment_uids == [segment_uid]
-
-
-@pytest.mark.asyncio
-async def test_project_graph_projection_upserts_existing_records(
-    project_graph_sessionmaker,
-):
-    user_id = f"project-user-{uuid.uuid4().hex}"
-    organization_id = f"org-projection-{uuid.uuid4().hex[:12]}"
-    workspace_id = f"workspace-{organization_id}"
     async with project_graph_sessionmaker() as session:
         segment = await _seed_source_segment(
             session,
@@ -220,20 +132,16 @@ async def test_project_graph_projection_upserts_existing_records(
                 ProjectGraphEdgeRecord.user_id == user_id
             )
         )
-        persisted_objects = (
-            await session.scalars(
-                select(ProjectGraphObjectRecord).where(
-                    ProjectGraphObjectRecord.user_id == user_id
-                )
+        persisted_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.user_id == user_id
             )
-        ).all()
+        )
 
-        # Re-running the projection upserts the same two extracted
-        # objects (requirement + feature) instead of duplicating them.
-        assert object_count == 2
-        assert edge_count == 2
-        assert persisted_objects
-        assert {obj.status_code for obj in persisted_objects} == {"confirmed"}
+        assert object_count == 1
+        assert edge_count == 1
+        assert persisted_object is not None
+        assert persisted_object.status_code == "confirmed"
 
 
 @pytest.mark.asyncio
@@ -241,8 +149,8 @@ async def test_project_graph_correction_records_before_after_and_updates_project
     project_graph_sessionmaker,
 ):
     user_id = f"project-user-{uuid.uuid4().hex}"
-    organization_id = f"org-projection-{uuid.uuid4().hex[:12]}"
-    workspace_id = f"workspace-{organization_id}"
+    organization_id = "org-acme"
+    workspace_id = "workspace-org-acme"
     async with project_graph_sessionmaker() as session:
         segment = await _seed_source_segment(
             session,
@@ -296,12 +204,11 @@ async def test_project_graph_correction_records_before_after_and_updates_project
 async def test_project_graph_projection_rejects_cross_scope_source_segments(
     project_graph_sessionmaker,
 ):
-    organization_id = f"org-projection-{uuid.uuid4().hex[:12]}"
     async with project_graph_sessionmaker() as session:
         segment = await _seed_source_segment(
             session,
             user_id=f"project-user-{uuid.uuid4().hex}",
-            organization_id=organization_id,
+            organization_id="org-acme",
         )
         extraction = extract_project_semantics([_source_segment(segment)])
 
@@ -310,8 +217,8 @@ async def test_project_graph_projection_rejects_cross_scope_source_segments(
                 session,
                 extraction=extraction,
                 user_id="different-user",
-                organization_id=organization_id,
-                workspace_id=f"workspace-{organization_id}",
+                organization_id="org-acme",
+                workspace_id="workspace-org-acme",
             )
 
 

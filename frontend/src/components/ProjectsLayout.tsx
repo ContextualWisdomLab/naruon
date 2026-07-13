@@ -5,19 +5,10 @@ import { CalendarDays, CheckCircle2, Clock, FileText, FolderOpen, GitBranch, Lis
 
 import { apiClient } from '@/lib/api-client';
 import { toSafeReactText } from '@/lib/safe-text';
-import {
-  buildAutomationBrief,
-  buildProjectControlReadinessLayer,
-  buildProjectReportDraftLayer,
-  groupProjectTraceObjects,
-  type ProjectCitation,
-  type ProjectTraceObject,
-} from './project-trace-readiness';
 
 type ProjectViewMode = '프로젝트 상세' | '마일스톤' | '의사결정 로그';
 type TaskStatus = 'open' | 'in_progress' | 'blocked' | 'done';
 type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
-type ProjectEvidenceSource = 'webdav_folder' | 'thread' | 'document';
 
 interface ProjectFolder {
   folder_uid: string;
@@ -37,6 +28,16 @@ interface TicketTask {
   related_thread_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface ProjectCitation {
+  content_segment_uid: string;
+  source_kind: string;
+  source_record_uid: string;
+  heading_path: string | null;
+  segment_path: string | null;
+  ordinal_index: number;
+  safe_text_excerpt: string;
 }
 
 interface ProjectCandidate {
@@ -59,6 +60,18 @@ interface ProjectCandidate {
 
 interface ProjectCandidateListResponse {
   candidates: ProjectCandidate[];
+}
+
+interface ProjectTraceObject {
+  object_uid: string;
+  object_type: string;
+  title: string;
+  summary: string;
+  status_code: string;
+  confidence: number;
+  source_segment_uids: string[];
+  citation_bundle: ProjectCitation[];
+  attributes: Record<string, unknown>;
 }
 
 interface ProjectTraceEdge {
@@ -116,6 +129,68 @@ interface ProjectAccessScope {
   organizationId: string | null;
 }
 
+interface AutomationBriefMetric {
+  key: string;
+  label: string;
+  value: number;
+}
+
+interface AutomationBriefDomain {
+  key: string;
+  label: string;
+  description: string;
+  objectTypes: string[];
+  count: number;
+  citationCount: number;
+  primaryTitle: string;
+}
+
+interface AutomationBrief {
+  domains: AutomationBriefDomain[];
+  metrics: AutomationBriefMetric[];
+  readyDomainCount: number;
+  totalDomainCount: number;
+}
+
+interface ProjectReportDraft {
+  key: string;
+  label: string;
+  summary: string;
+  sourceTitle: string;
+  sourceCount: number;
+  citationCount: number;
+}
+
+interface ProjectReportDraftLayer {
+  drafts: ProjectReportDraft[];
+  metrics: AutomationBriefMetric[];
+  readyDraftCount: number;
+  totalDraftCount: number;
+  statusUpdate: string;
+  riskAction: string;
+  reviewerAction: string;
+}
+
+interface ProjectControlReadinessItem {
+  key: string;
+  label: string;
+  description: string;
+  objectTypes: string[];
+  count: number;
+  citationCount: number;
+  primaryTitle: string;
+}
+
+interface ProjectControlReadinessLayer {
+  items: ProjectControlReadinessItem[];
+  metrics: AutomationBriefMetric[];
+  readyItemCount: number;
+  totalItemCount: number;
+  missingEvidenceCount: number;
+  summary: string;
+  reviewerAction: string;
+}
+
 const projectStatusClass = {
   '완료': 'bg-emerald-100 text-emerald-700',
   '진행 중': 'bg-blue-100 text-blue-700',
@@ -143,12 +218,6 @@ const priorityLabel: Record<TaskPriority, string> = {
   normal: '보통',
   low: '낮음',
 };
-
-const projectEvidenceSourceOptions = [
-  { value: 'webdav_folder', label: 'WebDAV 폴더', description: '고객 소유 저장소 경계 기준' },
-  { value: 'thread', label: '스레드 근거', description: '메일 스레드 의사결정 기준' },
-  { value: 'document', label: '문서 근거', description: '문서 저장소 승인 기록 기준' },
-] satisfies { value: ProjectEvidenceSource; label: string; description: string }[];
 
 function safeText(value: string | null | undefined, fallback = '') {
   return toSafeReactText(value, fallback).trim() || fallback;
@@ -308,6 +377,189 @@ function citationSourceLabel(citation: ProjectCitation) {
   return citation.source_kind;
 }
 
+function buildAutomationBrief(objects: ProjectTraceObject[]): AutomationBrief {
+  const domains = [
+    {
+      key: 'wbs',
+      label: 'WBS / 일정',
+      description: 'Waterfall·Agile 실행 단위를 일정과 WBS로 묶습니다.',
+      objectTypes: ['wbs_item', 'milestone'],
+    },
+    {
+      key: 'report',
+      label: '보고 자동 생성',
+      description: '주간·일일 보고 초안에 들어갈 변화와 리스크를 모읍니다.',
+      objectTypes: ['report_delta'],
+    },
+    {
+      key: 'wiki',
+      label: '프로젝트 위키',
+      description: 'LLM Wiki 스타일 프로젝트 지식 페이지 후보를 표시합니다.',
+      objectTypes: ['wiki_projection'],
+    },
+    {
+      key: 'data',
+      label: '데이터·ERD·인프라',
+      description: '데이터 요건, ERD 후보, 인프라 요건을 같은 근거 체인으로 묶습니다.',
+      objectTypes: ['data_requirement', 'erd_candidate', 'infra_requirement'],
+    },
+    {
+      key: 'deliverable',
+      label: '산출물 준비도',
+      description: '요구사항에서 산출물까지 추적 가능한 납품 후보를 계산합니다.',
+      objectTypes: ['requirement', 'feature', 'deliverable'],
+    },
+  ].map((domain) => {
+    const matchingObjects = objects.filter((projectObject) => domain.objectTypes.includes(projectObject.object_type));
+    return {
+      ...domain,
+      count: matchingObjects.length,
+      citationCount: matchingObjects.reduce((total, projectObject) => total + projectObject.citation_bundle.length, 0),
+      primaryTitle: safeText(matchingObjects[0]?.title, '근거 객체 대기'),
+    };
+  });
+  const readyDomainCount = domains.filter((domain) => domain.count > 0).length;
+  const reportReadyCount = domains.find((domain) => domain.key === 'report')?.count ?? 0;
+  const wikiReadyCount = domains.find((domain) => domain.key === 'wiki')?.count ?? 0;
+  return {
+    domains,
+    readyDomainCount,
+    totalDomainCount: domains.length,
+    metrics: [
+      { key: 'coverage', label: 'Automation coverage', value: readyDomainCount },
+      { key: 'report', label: 'Report ready signals', value: reportReadyCount },
+      { key: 'wiki', label: 'Wiki ready signals', value: wikiReadyCount },
+    ],
+  };
+}
+
+function findFirstObject(objects: ProjectTraceObject[], objectTypes: string[]) {
+  return objects.find((projectObject) => objectTypes.includes(projectObject.object_type));
+}
+
+function buildDraft(
+  objects: ProjectTraceObject[],
+  key: string,
+  label: string,
+  objectTypes: string[],
+  fallbackSummary: string,
+): ProjectReportDraft {
+  const matchingObjects = objects.filter((projectObject) => objectTypes.includes(projectObject.object_type));
+  const primaryObject = matchingObjects[0];
+  return {
+    key,
+    label,
+    summary: safeText(primaryObject?.summary, fallbackSummary),
+    sourceTitle: safeText(primaryObject?.title, '근거 객체 대기'),
+    sourceCount: matchingObjects.length,
+    citationCount: matchingObjects.reduce((total, projectObject) => total + projectObject.citation_bundle.length, 0),
+  };
+}
+
+function buildProjectReportDraftLayer(objects: ProjectTraceObject[]): ProjectReportDraftLayer {
+  const issueObject = findFirstObject(objects, ['issue']);
+  const milestoneObject = findFirstObject(objects, ['milestone']);
+  const weeklyDraft = buildDraft(
+    objects,
+    'weekly',
+    '주간 보고 초안',
+    ['report_delta', 'milestone', 'deliverable', 'issue'],
+    '주간 보고에 반영할 변화와 리스크 근거가 아직 없습니다.',
+  );
+  const dailyDraft = buildDraft(
+    objects,
+    'daily',
+    '일일 보고 초안',
+    ['issue', 'requirement', 'wbs_item'],
+    '일일 보고에 반영할 실행 항목 근거가 아직 없습니다.',
+  );
+  const readyDraftCount = [weeklyDraft, dailyDraft].filter((draft) => draft.sourceCount > 0).length;
+  const riskAction = issueObject
+    ? `다음 액션: ${safeText(issueObject.title, '이슈 근거')} 확인`
+    : '다음 액션: 리스크 근거 대기';
+  const statusUpdate = issueObject
+    ? `상태 자동 업데이트: ${safeText(issueObject.title, '이슈')} 검토 필요`
+    : `상태 자동 업데이트: ${safeText(milestoneObject?.title, '보고 근거')} 기준 진행 중`;
+  return {
+    drafts: [weeklyDraft, dailyDraft],
+    readyDraftCount,
+    totalDraftCount: 2,
+    statusUpdate,
+    riskAction,
+    reviewerAction: `검토자 액션: ${readyDraftCount}개 보고 초안 근거 확인`,
+    metrics: [
+      { key: 'report', label: 'Report readiness', value: readyDraftCount },
+      { key: 'risk', label: 'Risk action coverage', value: issueObject ? 1 : 0 },
+      { key: 'status', label: 'Status update ready', value: objects.length > 0 ? 1 : 0 },
+    ],
+  };
+}
+
+function buildProjectControlReadinessLayer(objects: ProjectTraceObject[]): ProjectControlReadinessLayer {
+  const items = [
+    {
+      key: 'acceptance',
+      label: 'Acceptance coverage',
+      description: '요구사항, 기능, 산출물이 인수 기준으로 이어지는지 확인합니다.',
+      objectTypes: ['requirement', 'feature', 'deliverable'],
+    },
+    {
+      key: 'schedule',
+      label: 'Schedule confidence',
+      description: '마일스톤과 WBS 근거가 일정 추적에 충분한지 확인합니다.',
+      objectTypes: ['milestone', 'wbs_item'],
+    },
+    {
+      key: 'scope',
+      label: 'Scope clarity',
+      description: '요구사항과 위키 후보가 프로젝트 범위를 설명하는지 확인합니다.',
+      objectTypes: ['requirement', 'feature', 'wiki_projection'],
+    },
+    {
+      key: 'dataInfra',
+      label: 'Data/infra readiness',
+      description: '데이터 요건, ERD 후보, 인프라 요건이 함께 잡혔는지 확인합니다.',
+      objectTypes: ['data_requirement', 'erd_candidate', 'infra_requirement'],
+    },
+    {
+      key: 'ownerAction',
+      label: 'Owner/action readiness',
+      description: '담당자, 이슈, WBS 근거가 다음 액션으로 이어지는지 확인합니다.',
+      objectTypes: ['participant', 'issue', 'wbs_item'],
+    },
+  ].map((item) => {
+    const matchingObjects = objects.filter((projectObject) => item.objectTypes.includes(projectObject.object_type));
+    return {
+      ...item,
+      count: matchingObjects.length,
+      citationCount: matchingObjects.reduce((total, projectObject) => total + projectObject.citation_bundle.length, 0),
+      primaryTitle: safeText(matchingObjects[0]?.title, '근거 객체 대기'),
+    };
+  });
+  const readyItemCount = items.filter((item) => item.count > 0 && item.citationCount > 0).length;
+  const missingEvidenceCount = items.length - readyItemCount;
+  const acceptanceReady = items.find((item) => item.key === 'acceptance')?.count ? 1 : 0;
+  const actionReady = items.find((item) => item.key === 'ownerAction')?.count ? 1 : 0;
+  const scopeReady = items.find((item) => item.key === 'scope')?.count ? 1 : 0;
+  const riskReady = objects.some((projectObject) => projectObject.object_type === 'issue') ? 1 : 0;
+  return {
+    items,
+    readyItemCount,
+    totalItemCount: items.length,
+    missingEvidenceCount,
+    summary: `실행 준비 요약: ${readyItemCount}개 컨트롤이 문단 근거로 준비됨`,
+    reviewerAction: missingEvidenceCount > 0
+      ? `검토자 액션: ${missingEvidenceCount}개 컨트롤 근거 보강`
+      : '검토자 액션: 누락 근거 없음, 인수 검토 가능',
+    metrics: [
+      { key: 'score', label: 'Control readiness score', value: Math.round((readyItemCount / items.length) * 100) },
+      { key: 'missing', label: 'Missing evidence count', value: missingEvidenceCount },
+      { key: 'acceptanceAction', label: 'Acceptance-to-action coverage', value: acceptanceReady && actionReady ? 1 : 0 },
+      { key: 'scopeRisk', label: 'Scope-risk balance', value: scopeReady && riskReady ? 1 : 0 },
+    ],
+  };
+}
+
 export function ProjectsLayout() {
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [tasks, setTasks] = useState<TicketTask[]>([]);
@@ -331,9 +583,6 @@ export function ProjectsLayout() {
     userId: null,
     organizationId: null,
   });
-  const [evidenceDraft, setEvidenceDraft] = useState('WebDAV 프로젝트 폴더를 작업 경계로 사용합니다.');
-  const [evidenceSource, setEvidenceSource] = useState<ProjectEvidenceSource>('webdav_folder');
-  const [evidenceSaveStatus, setEvidenceSaveStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,14 +639,10 @@ export function ProjectsLayout() {
   const projectEvidenceLabel = getProjectEvidenceLabel(activeProject.evidence);
   const projectBoundaryLabel = getProjectBoundaryLabel(activeProject);
   const workspaceScopeLabel = getWorkspaceScopeLabel(projectScope);
-  const selectedEvidenceOption = projectEvidenceSourceOptions.find((option) => option.value === evidenceSource) ?? projectEvidenceSourceOptions[0];
-  const savedEvidenceNote = safeText(evidenceDraft, '근거 메모 없음');
   const currentTraceability = traceability?.project_uid === activeSemanticCandidate?.project_uid ? traceability : null;
-  const currentObjects = useMemo(() => currentTraceability?.objects ?? [], [currentTraceability?.objects]);
-  const groupedObjects = useMemo(() => groupProjectTraceObjects(currentObjects), [currentObjects]);
-  const automationBrief = useMemo(() => buildAutomationBrief(groupedObjects), [groupedObjects]);
-  const reportDraftLayer = useMemo(() => buildProjectReportDraftLayer(groupedObjects), [groupedObjects]);
-  const controlReadinessLayer = useMemo(() => buildProjectControlReadinessLayer(groupedObjects), [groupedObjects]);
+  const automationBrief = useMemo(() => buildAutomationBrief(currentTraceability?.objects ?? []), [currentTraceability]);
+  const reportDraftLayer = useMemo(() => buildProjectReportDraftLayer(currentTraceability?.objects ?? []), [currentTraceability]);
+  const controlReadinessLayer = useMemo(() => buildProjectControlReadinessLayer(currentTraceability?.objects ?? []), [currentTraceability]);
   const traceLoading = Boolean(activeSemanticCandidate && !currentTraceability && traceFailureProjectUid !== activeSemanticCandidate.project_uid);
   const selectedTraceObject = currentTraceability?.objects.find((item) => item.object_uid === selectedObjectUid) ?? currentTraceability?.objects[0] ?? null;
   const selectedEvidenceProjectUid = activeSemanticCandidate?.project_uid ?? null;
@@ -458,10 +703,6 @@ export function ProjectsLayout() {
       cancelled = true;
     };
   }, [selectedEvidenceKey, selectedEvidenceObjectUid, selectedEvidenceProjectUid]);
-
-  function saveProjectEvidence() {
-    setEvidenceSaveStatus(`프로젝트 근거가 저장되었습니다: ${selectedEvidenceOption.label}`);
-  }
 
   async function handleConfirmCandidate() {
     if (!activeSemanticCandidate || confirmSubmitting) return;
@@ -638,10 +879,10 @@ export function ProjectsLayout() {
             ) : null}
 
             {activeSemanticCandidate ? (
-              <section aria-label="프로젝트 관계 맥락 상태" className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+              <section aria-label="프로젝트 지식그래프 상태" className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0">
-                    <h2 className="flex items-center gap-2 font-bold text-lg"><Network className="size-5 text-primary" /> 프로젝트 관계 맥락</h2>
+                    <h2 className="flex items-center gap-2 font-bold text-lg"><Network className="size-5 text-primary" /> 프로젝트 지식그래프</h2>
                     <p className="mt-1 text-sm font-semibold text-muted-foreground">모든 항목은 문단 citation bundle을 기준으로 표시됩니다.</p>
                   </div>
                   <div className="flex min-w-0 flex-col gap-2 md:items-end">
@@ -651,7 +892,7 @@ export function ProjectsLayout() {
                         <p className="font-mono text-lg font-black">{activeSemanticCandidate.source_segment_count}</p>
                       </div>
                       <div className="rounded-lg border border-border bg-background px-3 py-2">
-                        <p className="text-xs font-bold text-muted-foreground">관계 맥락 객체</p>
+                        <p className="text-xs font-bold text-muted-foreground">그래프 객체</p>
                         <p className="font-mono text-lg font-black">{activeSemanticCandidate.object_count}</p>
                       </div>
                     </div>
@@ -910,8 +1151,8 @@ export function ProjectsLayout() {
                             <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-muted-foreground">{projectObject.citation_bundle.length} citations</span>
                             <span className="font-mono text-xs font-bold text-muted-foreground">{Math.round(projectObject.confidence * 100)}%</span>
                           </div>
-                          <h3 className="line-clamp-2 break-keep text-sm font-bold">{safeText(projectObject.title, '제목 없는 관계 맥락 객체')}</h3>
-                          <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{safeText(projectObject.summary, '종합 대기')}</p>
+                          <h3 className="line-clamp-2 break-keep text-sm font-bold">{safeText(projectObject.title, '제목 없는 그래프 객체')}</h3>
+                          <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{safeText(projectObject.summary, '요약 대기')}</p>
                         </button>
                       ))}
                     </div>
@@ -972,7 +1213,7 @@ export function ProjectsLayout() {
                           </div>
                         </div>
                       ) : (
-                        <p className="mt-4 rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">선택 가능한 관계 맥락 객체가 없습니다.</p>
+                        <p className="mt-4 rounded-lg border border-dashed border-border p-3 text-sm font-semibold text-muted-foreground">선택 가능한 지식그래프 객체가 없습니다.</p>
                       )}
                     </aside>
                   </div>
@@ -1074,18 +1315,7 @@ export function ProjectsLayout() {
                 </ol>
               ) : (
                 <div className="p-5">
-                  <div className="rounded-xl border border-dashed border-border bg-background p-4">
-                    <div role="status" aria-live="polite">
-                      <p className="text-sm font-bold text-foreground">연결된 실행 항목이 아직 없습니다.</p>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        서명 세션의 작업 API에 프로젝트와 연결된 메일, 문서, 스레드 근거가 기록되면 이 목록에 표시됩니다.
-                      </p>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <a href="/tasks" className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">작업 보드 열기</a>
-                      <a href="/search" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-bold hover:bg-secondary">관련 근거 찾기</a>
-                    </div>
-                  </div>
+                  <p className="rounded-xl border border-dashed border-border p-4 text-sm font-semibold text-muted-foreground">연결된 실행 항목이 아직 없습니다.</p>
                 </div>
               )}
             </section>
@@ -1129,57 +1359,6 @@ export function ProjectsLayout() {
                   <dd className="mt-1 text-xs font-semibold text-muted-foreground">{projectBoundaryLabel}</dd>
                 </div>
               </dl>
-            </section>
-
-            <section aria-label="프로젝트 근거 편집" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-bold text-base">근거 편집</h2>
-                  <p className="mt-1 text-xs font-semibold text-muted-foreground">판매 심사용 판단 근거와 연결 원본을 저장합니다.</p>
-                </div>
-                <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">{selectedEvidenceOption.label}</span>
-              </div>
-              <label className="grid gap-2 text-sm font-bold" htmlFor="project-evidence-note">
-                프로젝트 근거 메모
-                <textarea
-                  id="project-evidence-note"
-                  aria-label="프로젝트 근거 메모"
-                  value={evidenceDraft}
-                  onChange={(event) => {
-                    setEvidenceDraft(event.target.value);
-                    setEvidenceSaveStatus(null);
-                  }}
-                  className="min-h-24 resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm font-semibold leading-6 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                />
-              </label>
-              <label className="mt-4 grid gap-2 text-sm font-bold" htmlFor="project-evidence-source">
-                연결 원본 변경
-                <select
-                  id="project-evidence-source"
-                  aria-label="연결 원본 변경"
-                  value={evidenceSource}
-                  onChange={(event) => {
-                    setEvidenceSource(event.target.value as ProjectEvidenceSource);
-                    setEvidenceSaveStatus(null);
-                  }}
-                  className="min-h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                >
-                  {projectEvidenceSourceOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <p className="mt-2 text-xs font-semibold text-muted-foreground">{selectedEvidenceOption.description}</p>
-              <div className="mt-4 rounded-lg border border-border bg-background p-3 text-xs font-semibold leading-5 text-muted-foreground">
-                <span className="block font-bold text-foreground">저장 대상 근거</span>
-                {savedEvidenceNote}
-              </div>
-              <button type="button" onClick={saveProjectEvidence} className="mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-                <CheckCircle2 className="size-4" /> 근거 저장
-              </button>
-              {evidenceSaveStatus ? (
-                <p role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{evidenceSaveStatus}</p>
-              ) : null}
             </section>
 
             <section aria-label="연결된 자원" className="rounded-2xl border border-border bg-card p-5 shadow-sm">

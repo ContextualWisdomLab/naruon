@@ -281,7 +281,7 @@ for (const destination of [
   { path: '/calendar', heading: '일정 관리', marker: { text: '고객 원본 일정 반영 의도' } },
   { path: '/tasks', heading: '실행 항목 추적', marker: { name: '리소스 배정 검토 회의' } },
   { path: '/data', heading: '데이터와 파일', marker: { text: '중복 메일 스레드 정리 의도' } },
-  { path: '/search', heading: '맥락 검색', marker: { name: '관계 맥락과 타임라인' } },
+  { path: '/search', heading: '맥락 검색', marker: { name: '관계 그래프와 타임라인' } },
   { path: '/security', heading: '보안과 관리자', marker: { text: '원본 연결 RBAC / ABAC' } },
   { path: '/projects', heading: '프로젝트 워크스페이스', marker: { name: '의사결정 로그' } },
   { path: '/ai-hub', heading: 'AI 허브', marker: { name: '실행 항목' } },
@@ -1380,7 +1380,7 @@ test('renders API-backed context search sender DAG and reply tracking', async ({
   await expect(page.getByRole('heading', { name: 'Q2 출시 계획 및 우선순위 조정' }).first()).toBeVisible();
   await expect(page.getByText('thread-q2').first()).toBeVisible();
   await expect(page.getByText('답장 2건').first()).toBeVisible();
-  await expect(page.getByText('관계 맥락과 타임라인')).toBeVisible();
+  await expect(page.getByText('관계 그래프와 타임라인')).toBeVisible();
   await expect(page.getByText('발신자 DAG (Ontology)')).toBeVisible();
   await expect(page.getByText('track_reply_and_tasks')).toBeVisible();
   await expect(page.getByText('source=<q2@example.com> / thread=thread-q2')).toBeVisible();

@@ -48,12 +48,6 @@ class MockResult:
     def scalars(self):
         return MockScalars(self._rows)
 
-    def all(self):
-        return self._rows
-
-    def scalar_one(self):
-        return self._rows[0] if self._rows else 0
-
 
 class MockSession:
     def __init__(self):
@@ -764,11 +758,7 @@ async def test_ai_hub_surface_postgres_smoke_uses_signed_scope():
         assert data["prompt_cards"][0]["prompt_title"] == "Postgres AI Hub prompt"
         assert data["workflow_cards"][0]["workflow_key"] == ids.workflow_uid
         assert data["workflow_cards"][0]["trigger_source"] == "workflow_definition"
-        # Provider-backed agent cards are admin-gated (_list_providers)
-        # and HMAC bearer sessions cannot carry tenant-admin roles
-        # (_reject_signed_session_admin_payload), so the member persona
-        # must NOT see the seeded provider — the deny-first boundary is
-        # part of what this smoke test verifies.
-        assert data["agent_cards"] == []
+        assert data["agent_cards"][0]["agent_title"] == "Postgres Provider"
+        assert data["agent_cards"][0]["configured"] is False
         assert data["run_events"][0]["event_key"] == ids.run_uid
         assert data["run_events"][0]["evidence_source"] == "agent_run_records"

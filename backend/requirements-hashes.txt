@@ -1327,10 +1327,6 @@ pyyaml==6.0.3 \
     --hash=sha256:fa160448684b4e94d80416c0fa4aac48967a969efe22931448d853ada8baf926 \
     --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0
     # via langchain-core
-rankweave==0.1.0 \
-    --hash=sha256:bbc9a1da237bfdfc376150ec55a94628e808499778a03f3beb1ab8c238c0bd75 \
-    --hash=sha256:841d4cabd4f96bb67575f9500f9af08030efc04c065c0c2de9ac7b45535b20c8
-    # via -r requirements.txt
 regex==2026.6.28 \
     --hash=sha256:03376d60b6a11aecb88a79fa2be06b40faa01c6693bc31ef69435cd4818b9463 \
     --hash=sha256:0ab0d5344311fc8e8667078942056c3b9c9b4a4b1cc99f2eb8a5af54554f4acc \

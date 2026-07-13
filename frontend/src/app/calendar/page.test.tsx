@@ -11,7 +11,6 @@ vi.mock("lucide-react", () => ({
   CalendarDays: () => <svg aria-hidden="true" />,
   CheckCircle2: () => <svg aria-hidden="true" />,
   Clock: () => <svg aria-hidden="true" />,
-  Loader2: () => <svg aria-hidden="true" />,
   Users: () => <svg aria-hidden="true" />,
   Video: () => <svg aria-hidden="true" />,
   Plus: () => <svg aria-hidden="true" />,
@@ -398,7 +397,6 @@ describe("CalendarPage", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe("/api/calendar/writeback-intent");
     expect(button?.getAttribute("aria-busy")).toBe("true");
-    expect(button?.textContent).toContain("처리 중");
     expect(container.textContent).toContain("일정 반영 의도 요청 중입니다.");
   });
 
