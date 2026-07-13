@@ -20,10 +20,12 @@ from services.project_graph.project_registration import (
     list_project_candidates,
 )
 from services.project_graph.traceability import (
+    ProjectDecisionView,
     ProjectEvidence,
     ProjectRelationSummary,
     ProjectTraceability,
     ProjectTraceRelation,
+    get_project_decisions,
     get_project_evidence,
     get_project_relation_summary,
     get_project_traceability,
@@ -141,6 +143,23 @@ class ProjectEvidenceResponse(BaseModel):
     confidence: float
     citation_bundle: list[ProjectCitationResponse]
     relations: list[ProjectTraceRelationResponse]
+
+
+class ProjectDecisionRecordResponse(BaseModel):
+    object_uid: str
+    title: str
+    summary: str
+    status_code: str
+    confidence: float
+    citation_bundle: list[ProjectCitationResponse]
+    relations: list[ProjectTraceRelationResponse]
+
+
+class ProjectDecisionViewResponse(BaseModel):
+    project_uid: str
+    decision_count: int
+    grounded_decision_count: int
+    decisions: list[ProjectDecisionRecordResponse]
 
 
 class ProjectPromoteRequest(BaseModel):
@@ -270,6 +289,26 @@ async def get_project_relation_summary_endpoint(
     except ProjectGraphNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _relation_summary_response(summary)
+
+
+@router.get(
+    "/{project_uid}/decisions",
+    response_model=ProjectDecisionViewResponse,
+)
+async def get_project_decisions_endpoint(
+    project_uid: str,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        decisions = await get_project_decisions(
+            db,
+            scope=_project_scope(auth_context),
+            project_uid=project_uid,
+        )
+    except ProjectGraphNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _decision_view_response(decisions)
 
 
 @router.get(
@@ -476,6 +515,33 @@ def _relation_summary_response(
                 target_object_types=list(relation_type.target_object_types),
             )
             for relation_type in summary.relation_types
+        ],
+    )
+
+
+def _decision_view_response(
+    view: ProjectDecisionView,
+) -> ProjectDecisionViewResponse:
+    return ProjectDecisionViewResponse(
+        project_uid=view.project_uid,
+        decision_count=view.decision_count,
+        grounded_decision_count=view.grounded_decision_count,
+        decisions=[
+            ProjectDecisionRecordResponse(
+                object_uid=decision.object_uid,
+                title=decision.title,
+                summary=decision.summary,
+                status_code=decision.status_code,
+                confidence=decision.confidence,
+                citation_bundle=[
+                    _citation_response(citation)
+                    for citation in decision.citation_bundle
+                ],
+                relations=[
+                    _relation_response(relation) for relation in decision.relations
+                ],
+            )
+            for decision in view.decisions
         ],
     )
 
