@@ -181,15 +181,17 @@ in this repo.
 - Follow `docs/development/merge-gate-policy.md` for PR gate interpretation.
 - PR Governance must stay metadata-only: no PR-head checkout, no admin merge, no
   review dismissal, and no security-check suppression.
-- Pending/queued checks and pending CodeRabbit evidence are wait states, not hard
-  failures. Hard blockers should be reported through the idempotent
+- Pending/queued checks, pending CodeRabbit evidence, and a missing structured
+  OpenCode fallback approval are wait states, not hard failures. Hard blockers
+  should be reported through the idempotent
   `<!-- pr-governance:metadata-gate -->` comment path.
-- CodeRabbit gating is evidence-conditional: when the current head has no
-  CodeRabbit check-run evidence at all (the app is not installed in the org or
-  has not reported), the metadata gate proceeds without waiting for it. Once
-  evidence exists, pending evidence is a wait state and blocking evidence is a
-  blocker; never post a hard blocker only because the current head has not been
-  reviewed yet.
+- CodeRabbit gating is evidence-preferred. When the current head has CodeRabbit
+  check-run evidence, pending evidence is a wait state and blocking evidence is
+  a blocker. When no CodeRabbit check-run exists, require an exact-current-head
+  `APPROVED` review from the `opencode-agent` GitHub App whose body names the
+  head SHA and contains structured adversarial validation with `status=passed`
+  and at least two falsified probes. Reject stale-head, `github-actions`, and
+  insufficient-probe approvals.
 - The GitHub check-runs API silently refuses to move a completed check-run back
   to a non-completed status (the PATCH returns 200 but the run stays
   completed), which pins a stale failure to the head. Gate publishers must

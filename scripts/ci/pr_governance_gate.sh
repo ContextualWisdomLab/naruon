@@ -29,10 +29,15 @@ WAITING=()
 PR_CHECKS_ERROR_FILE="$(mktemp)"
 ISSUE_COMMENTS_ERROR_FILE="$(mktemp)"
 REVIEW_COMMENTS_ERROR_FILE="$(mktemp)"
+OPENCODE_REVIEWS_ERROR_FILE="$(mktemp)"
 RUN_DETAILS_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID:-unknown}"
 
 cleanup_temp_files() {
-  rm -f "$PR_CHECKS_ERROR_FILE" "$ISSUE_COMMENTS_ERROR_FILE" "$REVIEW_COMMENTS_ERROR_FILE"
+  rm -f \
+    "$PR_CHECKS_ERROR_FILE" \
+    "$ISSUE_COMMENTS_ERROR_FILE" \
+    "$REVIEW_COMMENTS_ERROR_FILE" \
+    "$OPENCODE_REVIEWS_ERROR_FILE"
 }
 
 trap cleanup_temp_files EXIT
@@ -234,9 +239,29 @@ CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
 )"
 CODERABBIT_COUNT="$(printf '%s' "$CODERABBIT_MATCHES" | jq 'length')"
 if [ "$CODERABBIT_COUNT" = "0" ]; then
-  # The CodeRabbit app is not installed in this org, so absent evidence must not
-  # hold the gate open; CodeRabbit gating applies only once it reports on this head.
-  printf 'No CodeRabbit evidence on %s; skipping CodeRabbit gating.\n' "$HEAD_REF_OID"
+  if ! OPENCODE_REVIEWS_JSON="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" 2>"$OPENCODE_REVIEWS_ERROR_FILE")"; then
+    printf 'OpenCode review lookup failed:\n'
+    printf '%s\n' "$(<"$OPENCODE_REVIEWS_ERROR_FILE")" | sed 's/^/    /'
+    add_blocker 'OpenCode adversarial review evidence could not be read; see the workflow run log.'
+  else
+    OPENCODE_ADVERSARIAL_APPROVAL_COUNT="$(printf '%s' "$OPENCODE_REVIEWS_JSON" | jq --arg head_sha "$HEAD_SHA" '
+      [.[][]
+        | select(((.user.login // "") | ascii_downcase) as $login
+          | $login == "opencode-agent" or $login == "opencode-agent[bot]")
+        | select((.state // "" | ascii_upcase) == "APPROVED")
+        | select((.commit_id // "") == $head_sha)
+        | select((.body // "") | contains("Head SHA: `" + $head_sha + "`"))
+        | select((.body // "") | contains("## Adversarial validation"))
+        | select((.body // "") | test("\\\"status\\\"\\s*:\\s*\\\"passed\\\""))
+        | select([(.body // "") | scan("\\\"outcome\\\"\\s*:\\s*\\\"falsified\\\"")] | length >= 2)]
+      | length'
+    )"
+    if [ "$OPENCODE_ADVERSARIAL_APPROVAL_COUNT" = "0" ]; then
+      add_waiting "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval on ${HEAD_REF_OID}."
+    else
+      printf 'CodeRabbit check is absent; accepted current-head OpenCode App adversarial approval on %s.\n' "$HEAD_REF_OID"
+    fi
+  fi
 else
   CODERABBIT_PENDING="$(printf '%s' "$CODERABBIT_MATCHES" | jq '[.[] | select(.status != "completed")] | length')"
   CODERABBIT_FAILED="$(printf '%s' "$CODERABBIT_MATCHES" | jq --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
