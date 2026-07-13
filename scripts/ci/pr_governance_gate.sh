@@ -70,9 +70,10 @@ read_pr_metadata_with_merge_state_retry() {
   local attempt retry_delay
 
   for attempt in 1 2 3 4; do
-    PR_JSON="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json number,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup)"
+    PR_JSON="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json number,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup)"
+    PR_STATE="$(printf '%s' "$PR_JSON" | jq -r '.state // "OPEN"')"
     MERGE_STATE="$(printf '%s' "$PR_JSON" | jq -r '.mergeStateStatus')"
-    if [ "$MERGE_STATE" != "UNKNOWN" ]; then
+    if [ "$PR_STATE" != "OPEN" ] || [ "$MERGE_STATE" != "UNKNOWN" ]; then
       return 0
     fi
     if [ "$attempt" -lt 4 ]; then
@@ -191,8 +192,21 @@ if ! [[ "$PR_GOVERNANCE_RETRY_SLEEP_SECONDS" =~ ^[0-9]+$ ]] || [ "$PR_GOVERNANCE
 fi
 
 PR_JSON=''
+PR_STATE='OPEN'
 MERGE_STATE='UNKNOWN'
 read_pr_metadata_with_merge_state_retry
+case "$PR_STATE" in
+  OPEN)
+    ;;
+  CLOSED | MERGED)
+    printf 'PR state became %s during merge-state refresh; no gate status is required.\n' "$PR_STATE"
+    exit 0
+    ;;
+  *)
+    printf 'GitHub returned an unrecognized PR state; refusing to evaluate.\n' >&2
+    exit 1
+    ;;
+esac
 HEAD_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
 HEAD_REF_OID="$HEAD_SHA" # headRefOid equivalent for REST metadata paths.
 IS_DRAFT="$(printf '%s' "$PR_JSON" | jq -r '.isDraft')"

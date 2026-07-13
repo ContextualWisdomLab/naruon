@@ -30,6 +30,16 @@ if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
         printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}'
       fi
       ;;
+    merged_during_unknown)
+      count_file="$GH_STATE_DIR/pr-view-count"
+      count="$(cat "$count_file" 2>/dev/null || printf '0')"
+      printf '%s\n' "$((count + 1))" > "$count_file"
+      if [ "$count" -eq 0 ]; then
+        printf '{"number":42,"state":"OPEN","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}'
+      else
+        printf '{"number":42,"state":"MERGED","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"APPROVED","statusCheckRollup":[]}'
+      fi
+      ;;
     persistent_unknown)
       printf '{"number":42,"isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}'
       ;;
@@ -318,6 +328,17 @@ assert_persistent_unknown_merge_state_waits_without_false_failure() {
   assert_in_file 'status=in_progress' "$temp_dir/gh.log"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file 'conclusion=failure' "$temp_dir/gh.log"
+}
+
+assert_pr_merged_during_unknown_retry_exits_without_stale_gate() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate merged_during_unknown "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'PR state became MERGED during merge-state refresh' "$temp_dir/output.txt"
+  assert_not_in_file 'check-runs' "$temp_dir/gh.log"
+  assert_not_in_file 'issues/42/comments' "$temp_dir/gh.log"
 }
 
 assert_startup_failure_creates_marker_comment() {
@@ -670,6 +691,7 @@ assert_current_head_check_lookup_uses_maximum_page_size() {
 assert_no_comment_or_merge_for_pending_checks
 assert_transient_unknown_merge_state_is_retried
 assert_persistent_unknown_merge_state_waits_without_false_failure
+assert_pr_merged_during_unknown_retry_exits_without_stale_gate
 assert_startup_failure_creates_marker_comment
 assert_failed_checks_create_marker_comment
 assert_existing_marker_comment_is_patched
