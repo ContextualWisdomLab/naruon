@@ -109,3 +109,8 @@
 **Vulnerability:** The webhook feature (`backend/api/tools.py`) validated that URLs resolved to safe global IP addresses using `validate_webhook_url`, but then created a fresh `httpx.AsyncClient` that performed its own independent DNS resolution at execution time. This Time-of-Check to Time-of-Use (TOCTOU) gap allowed an attacker to rapidly change DNS records after validation but before execution, causing the application to send requests to internal network services (Server-Side Request Forgery).
 **Learning:** Checking hostnames or IPs before use is insufficient if the actual execution engine (HTTP client) resolves the hostname again. The underlying validation and execution must be perfectly coupled.
 **Prevention:** Always pin the underlying HTTP transport to the exact IP addresses that were validated. This was achieved using the `ValidatedHTTPSURLHost` and `build_pinned_https_async_client` components which override the connection layer to use the pre-resolved, safe IPs.
+
+## 2026-06-30 - XSS Vulnerability in DataLayout Component
+**Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
+**Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
+**Prevention:** To prevent XSS vulnerabilities and satisfy penetration testing gates (like Strix), always explicitly wrap user-controlled string variables rendered in the UI with `toSafeReactText()` (e.g., `{toSafeReactText(asset.display_name)}`).
