@@ -155,7 +155,8 @@ JWT_DECODE_REQUIRED_CLAIMS = ("exp", "iss", "aud")
 # token: Keycloak sets the body claim typ="Bearer"; RFC 9068 sets the header
 # typ "at+jwt". ID tokens (Keycloak typ="ID") and unmarked material are rejected.
 # ponytail: extend these sets if a non-Keycloak/non-RFC9068 IdP is onboarded.
-OIDC_ACCESS_TOKEN_HEADER_TYPE = "at+jwt"
+# Bandit B105 is inapplicable: this is RFC 9068's public typ identifier.
+OIDC_ACCESS_TOKEN_HEADER_TYPE = "at+jwt"  # nosec B105
 OIDC_ACCESS_TOKEN_BODY_TYPES = frozenset({"bearer"})
 MIN_SESSION_SECRET_BYTES = 32
 MAX_SIGNED_SESSION_EXPIRATION_SECONDS = 12 * 60 * 60
