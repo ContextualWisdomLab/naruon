@@ -232,6 +232,13 @@ def _oidc_unverified_header(token: str) -> dict[str, Any]:
     _reject_unsupported_critical_headers(header)
     if header.get("alg") != "RS256":
         raise _authentication_error()
+    # RFC 9068 access tokens declare "at+jwt"; only ID-token material ("JWT",
+    # or an absent typ from IdPs that omit it) may become an API session.
+    token_type = header.get("typ")
+    if token_type is not None and (
+        not isinstance(token_type, str) or token_type.strip().upper() != "JWT"
+    ):
+        raise _authentication_error()
     key_id = header.get("kid")
     if not isinstance(key_id, str) or not key_id.strip():
         raise _authentication_error()
@@ -263,8 +270,29 @@ def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:
             raise _authentication_error()
         if not isinstance(payload, dict):
             raise _authentication_error()
+        _reject_non_id_token_payload(payload)
         return payload
     raise _authentication_error()
+
+
+def _reject_non_id_token_payload(payload: dict[str, Any]) -> None:
+    """Reject same-issuer OIDC material that is not an ID token for this client.
+
+    The enterprise IdP mints naruon session claims directly into the ID token,
+    so the ID token is the intended API bearer credential. Access tokens and
+    tokens minted for other clients can share this issuer and carry this API's
+    client_id in aud; their claim shapes distinguish them: access tokens carry
+    token_use/scope/scp claims, and tokens for other clients name that client
+    in azp (OIDC Core 3.1.3.7).
+    """
+    token_use = payload.get("token_use")
+    if token_use is not None and token_use != "id":
+        raise _authentication_error()
+    if "scope" in payload or "scp" in payload:
+        raise _authentication_error()
+    authorized_party = payload.get("azp")
+    if authorized_party is not None and authorized_party != settings.OIDC_CLIENT_ID:
+        raise _authentication_error()
 
 
 def _reject_unsupported_critical_headers(header: dict[str, Any]) -> None:

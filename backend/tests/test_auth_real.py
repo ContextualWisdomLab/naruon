@@ -1051,6 +1051,134 @@ async def test_oidc_session_accepts_tuple_audience(monkeypatch):
     assert context.user_id == "alice"
 
 
+def _oidc_test_settings():
+    settings.OIDC_ISSUER_URL = "https://login.example.test/realms/naruon"
+    settings.OIDC_CLIENT_ID = "naruon-api"
+    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+
+
+def _restore_oidc_settings(previous):
+    (
+        settings.OIDC_ISSUER_URL,
+        settings.OIDC_CLIENT_ID,
+        settings.AUTH_SESSION_HMAC_SECRET,
+    ) = previous
+
+
+def _snapshot_oidc_settings():
+    return (
+        settings.OIDC_ISSUER_URL,
+        settings.OIDC_CLIENT_ID,
+        settings.AUTH_SESSION_HMAC_SECRET,
+    )
+
+
+def _oidc_id_token_payload(**overrides):
+    payload = {
+        "iss": "https://login.example.test/realms/naruon",
+        "aud": "naruon-api",
+        "sub": "alice",
+        "role": "member",
+        "org": "org-acme",
+        "groups": ["group-1", "group-2"],
+        "workspace": "workspace-org-acme",
+        "exp": int(time.time()) + 300,
+    }
+    payload.update(overrides)
+    return payload
+
+
+class _OidcMockKey:
+    key_id = "test-key"
+    key = "public_key"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("token_type", ["at+jwt", 123])
+async def test_oidc_rejects_access_token_typ_header(monkeypatch, token_type):
+    import jwt
+
+    previous = _snapshot_oidc_settings()
+    _oidc_test_settings()
+    monkeypatch.setattr("api.auth.jwks_client", object())
+    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (_OidcMockKey(),))
+    monkeypatch.setattr(jwt, "decode", lambda *a, **k: _oidc_id_token_payload())
+
+    token = _signed_session_token(
+        _valid_session_payload(),
+        header={"alg": "RS256", "typ": token_type, "kid": "test-key"},
+    )
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await get_auth_context(authorization=f"Bearer {token}")
+    finally:
+        _restore_oidc_settings(previous)
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload_overrides",
+    [
+        {"token_use": "access"},
+        {"scope": "openid api.read"},
+        {"scp": ["api.read"]},
+        {"azp": "other-client"},
+    ],
+)
+async def test_oidc_rejects_non_id_token_claim_shapes(monkeypatch, payload_overrides):
+    import jwt
+
+    previous = _snapshot_oidc_settings()
+    _oidc_test_settings()
+    monkeypatch.setattr("api.auth.jwks_client", object())
+    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (_OidcMockKey(),))
+    monkeypatch.setattr(
+        jwt, "decode", lambda *a, **k: _oidc_id_token_payload(**payload_overrides)
+    )
+
+    token = _signed_session_token(
+        _valid_session_payload(),
+        header={"alg": "RS256", "typ": "JWT", "kid": "test-key"},
+    )
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await get_auth_context(authorization=f"Bearer {token}")
+    finally:
+        _restore_oidc_settings(previous)
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_oidc_accepts_id_token_with_matching_azp_and_token_use(monkeypatch):
+    import jwt
+
+    previous = _snapshot_oidc_settings()
+    _oidc_test_settings()
+    monkeypatch.setattr("api.auth.jwks_client", object())
+    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (_OidcMockKey(),))
+    monkeypatch.setattr(
+        jwt,
+        "decode",
+        lambda *a, **k: _oidc_id_token_payload(token_use="id", azp="naruon-api"),
+    )
+
+    # No typ header: IdPs that omit typ still mint valid ID tokens.
+    token = _signed_session_token(
+        _valid_session_payload(),
+        header={"alg": "RS256", "kid": "test-key"},
+    )
+    try:
+        context = await get_auth_context(authorization=f"Bearer {token}")
+    finally:
+        _restore_oidc_settings(previous)
+
+    assert context.session_verifier == "oidc"
+    assert context.user_id == "alice"
+
+
 @pytest.mark.asyncio
 async def test_oidc_session_rejects_missing_client_id_after_decode(monkeypatch):
     import jwt
