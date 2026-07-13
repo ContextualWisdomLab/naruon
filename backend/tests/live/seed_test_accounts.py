@@ -191,7 +191,11 @@ async def _seed_account(session, spec: LiveAccountSpec) -> dict[str, object]:
 
     from db.models import CaldavAccount, CarddavAccount, TenantConfig, WebdavAccount
 
-    seeded: dict[str, object] = {"user_id": spec.user_id, "protocols": []}
+    seeded: dict[str, object] = {
+        "user_id": spec.user_id,
+        "account_index": spec.index,
+        "protocols": [],
+    }
     protocols: list[str] = seeded["protocols"]  # type: ignore[assignment]
 
     # --- Mail: TenantConfig (one row per account scope) -------------------
@@ -248,8 +252,11 @@ async def _seed_account(session, spec: LiveAccountSpec) -> dict[str, object]:
         seeded["carddav_discovery_source"] = discovery_source
         protocols.append("carddav")
     elif spec.carddav_needs_discovery:
+        # Required-but-failed discovery is a seeding failure, not a skip: a
+        # run that never reaches a CardDAV endpoint must not report coverage.
+        seeded["carddav_discovery_failed"] = True
         logger.info(
-            "CardDAV auto-discovery found no endpoint for account %s; skipping.",
+            "CardDAV auto-discovery found no endpoint for account %s.",
             spec.index,
         )
 
@@ -304,6 +311,8 @@ async def _upsert_dav(
         account.discovery_source = discovery_source
     if hasattr(account, "account_index"):
         account.account_index = spec.index
+    if hasattr(account, "workspace_id"):
+        account.workspace_id = spec.workspace_id
 
 
 async def seed_test_accounts(

@@ -35,6 +35,90 @@ def test_connector_module_entrypoint_fails_closed_without_required_env(monkeypat
     assert exc.value.code == 2
 
 
+def test_connector_scope_defaults_to_personal_scope():
+    organization_id, user_ids = connector_main._connector_scope({})
+    assert organization_id is None
+    assert user_ids is None
+
+
+def test_connector_scope_reads_organization_and_user_allowlist():
+    organization_id, user_ids = connector_main._connector_scope(
+        {
+            "NARUON_CONNECTOR_ORGANIZATION_ID": " org-7 ",
+            "NARUON_CONNECTOR_USER_IDS": "alice, bob ,",
+        }
+    )
+    assert organization_id == "org-7"
+    assert user_ids == frozenset({"alice", "bob"})
+
+
+def test_connector_scope_empty_user_allowlist_loads_nothing():
+    # An explicit-but-empty allowlist is a real restriction, not "load all".
+    _organization_id, user_ids = connector_main._connector_scope(
+        {"NARUON_CONNECTOR_USER_IDS": "   ,  , "}
+    )
+    assert user_ids == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_amain_fails_closed_when_db_handlers_cannot_load(monkeypatch):
+    async def boom(_environ):
+        raise ConnectionRefusedError("db down")
+
+    connect_spy = AsyncMock()
+    monkeypatch.setattr(connector_main, "_load_seeded_handlers", boom)
+    monkeypatch.setattr(
+        connector_main,
+        "build_connector",
+        lambda *a, **k: type("C", (), {"connect": connect_spy})(),
+    )
+
+    code = await connector_main.amain(
+        {
+            "NARUON_REGISTRATION_TOKEN": "runner-token",
+            "NARUON_SESSION_TOKEN": "session-token",
+            "DATABASE_URL": "postgresql+asyncpg://x/y",
+        }
+    )
+    assert code == 3
+    connect_spy.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_amain_starts_without_adapters_when_no_database_url(monkeypatch):
+    captured = {}
+
+    def fake_build(environ, *, handlers=None):
+        captured["handlers"] = handlers
+        connector = type("C", (), {"connect": AsyncMock()})()
+        return connector
+
+    monkeypatch.setattr(connector_main, "build_connector", fake_build)
+    code = await connector_main.amain(
+        {
+            "NARUON_REGISTRATION_TOKEN": "runner-token",
+            "NARUON_SESSION_TOKEN": "session-token",
+        }
+    )
+    assert code == 0
+    assert captured["handlers"] is None
+
+
+@pytest.mark.asyncio
+async def test_amain_requires_tokens_before_db_work(monkeypatch):
+    called = False
+
+    async def tripwire(_environ):
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setattr(connector_main, "_load_seeded_handlers", tripwire)
+    with pytest.raises(connector_main.ConnectorConfigError):
+        await connector_main.amain({"DATABASE_URL": "postgresql+asyncpg://x/y"})
+    assert called is False
+
+
 def test_connector_builds_default_runner_ws_url_without_token_bearer_mixup():
     connector = connector_main.build_connector(
         {

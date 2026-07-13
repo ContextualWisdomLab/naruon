@@ -51,14 +51,41 @@ def build_connector(
     )
 
 
-async def _load_seeded_handlers() -> dict[str, object]:
+def _connector_scope(
+    environ: Mapping[str, str],
+) -> tuple[str | None, frozenset[str] | None]:
+    """Return the (organization_id, user-id allowlist) this runner may serve.
+
+    ``NARUON_CONNECTOR_ORGANIZATION_ID`` selects the organization scope; when
+    unset the runner serves only personal-scope rows (``organization_id IS
+    NULL``). ``NARUON_CONNECTOR_USER_IDS`` (comma-separated) further restricts
+    loading to an explicit user allowlist; when set but empty it loads nothing.
+    """
+    organization_id = (
+        environ.get("NARUON_CONNECTOR_ORGANIZATION_ID") or ""
+    ).strip() or None
+    raw_user_ids = (environ.get("NARUON_CONNECTOR_USER_IDS") or "").strip()
+    user_ids: frozenset[str] | None = None
+    if raw_user_ids:
+        user_ids = frozenset(
+            user_id.strip() for user_id in raw_user_ids.split(",") if user_id.strip()
+        )
+    return organization_id, user_ids
+
+
+async def _load_seeded_handlers(
+    environ: Mapping[str, str] = os.environ,
+) -> dict[str, object]:
     """Construct local protocol handlers from the seeded DB accounts.
 
     The connector reads mail/DAV credentials from the database at runtime (the
-    KV path) -- never from ``os.getenv``. This builds ``LocalMailAdapters`` and
-    ``LocalDavAdapters`` from the seeded ``tenant_configs`` /
-    ``caldav_accounts`` / ``carddav_accounts`` / ``webdav_accounts`` rows and
-    returns the handler callables to wire into the connector.
+    KV path) -- never from ``os.getenv``. Loading is bound to the runner's
+    configured scope (see ``_connector_scope``): a shared multi-tenant database
+    never hands this runner another tenant's credentials. Legacy
+    ``caldav_accounts`` rows carry no organization column, so they load only
+    for personal-scope runners. Every DAV source is keyed by its opaque
+    ``source_uid``, so gateway payloads select accounts by unguessable scoped
+    identifiers rather than raw user ids.
     """
     from sqlalchemy import select
 
@@ -72,11 +99,29 @@ async def _load_seeded_handlers() -> dict[str, object]:
     from runner.local_dav_adapters import LocalDavAdapters, LocalDavSourceConfig
     from runner.local_mail_adapters import LocalMailAccountConfig, LocalMailAdapters
 
+    organization_id, user_ids = _connector_scope(environ)
+
+    def _scoped(statement, model, *, has_organization_column: bool = True):
+        if has_organization_column:
+            if organization_id is None:
+                statement = statement.where(model.organization_id.is_(None))
+            else:
+                statement = statement.where(
+                    model.organization_id == organization_id
+                )
+        if user_ids is not None:
+            statement = statement.where(model.user_id.in_(sorted(user_ids)))
+        return statement
+
     mail_accounts: list[LocalMailAccountConfig] = []
     dav_sources: list[LocalDavSourceConfig] = []
 
     async with AsyncSessionLocal() as session:
-        tenant_rows = (await session.execute(select(TenantConfig))).scalars().all()
+        tenant_rows = (
+            (await session.execute(_scoped(select(TenantConfig), TenantConfig)))
+            .scalars()
+            .all()
+        )
         for row in tenant_rows:
             mail_accounts.append(
                 LocalMailAccountConfig(
@@ -94,27 +139,52 @@ async def _load_seeded_handlers() -> dict[str, object]:
                 )
             )
 
-        for caldav in (await session.execute(select(CaldavAccount))).scalars().all():
-            dav_sources.append(
-                LocalDavSourceConfig(
-                    source_id=f"caldav_{caldav.user_id}",
-                    protocol="caldav",
-                    base_url=caldav.server_url,
-                    username=caldav.username,
-                    password=caldav.credentials_encrypted,
+        if organization_id is None:
+            caldav_rows = (
+                (
+                    await session.execute(
+                        _scoped(
+                            select(CaldavAccount),
+                            CaldavAccount,
+                            has_organization_column=False,
+                        )
+                    )
                 )
+                .scalars()
+                .all()
             )
-        for carddav in (await session.execute(select(CarddavAccount))).scalars().all():
+            for caldav in caldav_rows:
+                dav_sources.append(
+                    LocalDavSourceConfig(
+                        source_id=f"caldav_{caldav.user_id}",
+                        protocol="caldav",
+                        base_url=caldav.server_url,
+                        username=caldav.username,
+                        password=caldav.credentials_encrypted,
+                    )
+                )
+        carddav_rows = (
+            (await session.execute(_scoped(select(CarddavAccount), CarddavAccount)))
+            .scalars()
+            .all()
+        )
+        for carddav in carddav_rows:
             dav_sources.append(
                 LocalDavSourceConfig(
-                    source_id=f"carddav_{carddav.user_id}",
+                    source_id=carddav.source_uid,
                     protocol="carddav",
                     base_url=carddav.server_url,
                     username=carddav.username,
                     password=carddav.credentials_encrypted,
+                    writeback_enabled=bool(carddav.writeback_enabled),
                 )
             )
-        for webdav in (await session.execute(select(WebdavAccount))).scalars().all():
+        webdav_rows = (
+            (await session.execute(_scoped(select(WebdavAccount), WebdavAccount)))
+            .scalars()
+            .all()
+        )
+        for webdav in webdav_rows:
             dav_sources.append(
                 LocalDavSourceConfig(
                     source_id=webdav.source_uid,
@@ -138,14 +208,27 @@ async def _load_seeded_handlers() -> dict[str, object]:
 
 
 async def amain(environ: Mapping[str, str] = os.environ) -> int:
-    try:
-        handlers = await _load_seeded_handlers()
-    except Exception as exc:  # noqa: BLE001 - fail open to a handler-less connector
-        logger.warning(
-            "Could not load seeded DB handlers (%s); starting without local adapters.",
-            type(exc).__name__,
+    # Validate required connector configuration before any database work, so a
+    # misconfigured connector fails closed on config (exit 2) rather than
+    # attempting a DB load it has no tokens to use.
+    _required_env(environ, "NARUON_REGISTRATION_TOKEN")
+    _required_env(environ, "NARUON_SESSION_TOKEN")
+
+    handlers: dict[str, object] | None = None
+    if (environ.get("DATABASE_URL") or "").strip():
+        try:
+            handlers = await _load_seeded_handlers(environ)
+        except Exception as exc:  # noqa: BLE001 - a configured DB must load, or we stop
+            logger.error(
+                "Failed to load seeded DB handlers (%s); refusing to start a "
+                "connector that would report healthy without its adapters.",
+                type(exc).__name__,
+            )
+            return 3
+    else:
+        logger.info(
+            "DATABASE_URL is not configured; starting without local adapters."
         )
-        handlers = None
     connector = build_connector(environ, handlers=handlers)
     await connector.connect()
     return 0

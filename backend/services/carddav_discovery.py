@@ -4,16 +4,21 @@ Resolution order for an email address or bare domain:
 
 1. ``https://<domain>/.well-known/carddav`` -- follow the well-known redirect
    to the context path advertised by the provider.
-2. DNS SRV ``_carddavs._tcp.<domain>`` (TLS), then ``_carddav._tcp.<domain>``
-   as a fallback, combined with the TXT ``path`` hint when present.
+2. DNS SRV ``_carddavs._tcp.<domain>`` (TLS), combined with the RFC 6764
+   Section 6 TXT ``path`` hint when present. Plain ``_carddav._tcp`` records
+   advertise a non-TLS service; contacting one would send credentials in the
+   clear, so they are detected and refused rather than silently upgraded.
 
 Every candidate host is SSRF-guarded exactly like the existing DAV code: the
 scheme must be https, userinfo/query/fragment are rejected, and the host must
 resolve to globally-routable addresses (no localhost / private / link-local).
+The well-known probe is DNS-pinned via ``pinned_request_target`` so validation
+and connection use the same resolution.
 
 The helper is fully injectable for tests: pass ``http_client_factory`` (an
-httpx-style async client) and ``srv_resolver`` (returns SRV records) to avoid
-real network or DNS. DNS SRV support is best-effort -- if no resolver is
+httpx-style async client), ``srv_resolver`` (returns SRV records ordered per
+RFC 2782 priority/weight), and ``txt_resolver`` (returns TXT record strings)
+to avoid real network or DNS. DNS support is best-effort -- if no resolver is
 supplied and ``dnspython`` is not installed, only the well-known probe runs.
 """
 
@@ -33,13 +38,16 @@ logger = logging.getLogger(__name__)
 # Injected SRV resolver contract: given a DNS name it returns an iterable of
 # (target_host, port) tuples ordered by preference, or an empty iterable.
 SrvResolver = Callable[[str], list[tuple[str, int]]]
+# Injected TXT resolver contract: given a DNS name it returns the TXT record
+# character strings (one joined string per record), or an empty iterable.
+TxtResolver = Callable[[str], list[str]]
 HttpClientFactory = Callable[[], Any]
 
 
 @dataclass(frozen=True)
 class CarddavDiscoveryResult:
     base_url: str
-    discovery_source: str  # "well_known" | "srv" | "srv_secure" | "provided"
+    discovery_source: str  # "well_known" | "srv_secure" | "provided"
 
 
 def _extract_domain(email_or_domain: str) -> str | None:
@@ -115,8 +123,9 @@ def _safe_https_base_url(candidate: str) -> str | None:
 
 def _default_http_client() -> httpx.AsyncClient:
     # follow_redirects is False so we inspect the Location ourselves and can
-    # re-validate every hop against the SSRF guard.
-    return httpx.AsyncClient(follow_redirects=False, timeout=15)
+    # re-validate every hop against the SSRF guard; trust_env=False keeps
+    # runner proxy environment variables from rerouting the probe.
+    return httpx.AsyncClient(follow_redirects=False, timeout=15, trust_env=False)
 
 
 async def _probe_well_known(
@@ -131,7 +140,7 @@ async def _probe_well_known(
     try:
         async with http_client_factory() as client:
             response = await _request_well_known(client, well_known)
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
         return None
     if response is None:
         return None
@@ -160,7 +169,11 @@ async def _request_well_known(client: Any, url: str):
 
 
 def _default_srv_resolver(name: str) -> list[tuple[str, int]]:
-    """Best-effort SRV resolution via dnspython when available."""
+    """Best-effort SRV resolution via dnspython when available.
+
+    Records are ordered by RFC 2782 preference: ascending priority, then
+    descending weight (a deterministic stand-in for weighted selection).
+    """
     try:
         import dns.resolver  # type: ignore
     except Exception:
@@ -181,9 +194,54 @@ def _default_srv_resolver(name: str) -> list[tuple[str, int]]:
     return results
 
 
-def _srv_base_url(host: str, port: int) -> str | None:
+def _default_txt_resolver(name: str) -> list[str]:
+    """Best-effort TXT resolution via dnspython when available."""
+    try:
+        import dns.resolver  # type: ignore
+    except Exception:
+        return []
+    try:
+        answers = dns.resolver.resolve(name, "TXT")
+    except Exception:
+        return []
+    records: list[str] = []
+    for record in answers:
+        strings = getattr(record, "strings", None)
+        if strings:
+            records.append(
+                b"".join(bytes(part) for part in strings).decode("utf-8", "replace")
+            )
+        else:
+            records.append(str(record).strip('"'))
+    return records
+
+
+def _txt_context_path(records: list[str]) -> str | None:
+    """Extract and validate the RFC 6764 Section 6 TXT ``path`` hint."""
+    for record in records:
+        for part in record.split(";"):
+            key, _, value = part.strip().partition("=")
+            if key.strip().lower() != "path":
+                continue
+            path = value.strip()
+            if (
+                path.startswith("/")
+                and "://" not in path
+                and "\\" not in path
+                and "?" not in path
+                and "#" not in path
+                and all(
+                    segment not in {".", ".."} for segment in path.split("/")
+                )
+                and all(ord(ch) >= 32 and ord(ch) != 127 for ch in path)
+            ):
+                return path
+    return None
+
+
+def _srv_base_url(host: str, port: int, path: str = "/") -> str | None:
     netloc = host if port == 443 else f"{host}:{port}"
-    return _safe_https_base_url(f"https://{netloc}/")
+    return _safe_https_base_url(f"https://{netloc}{path}")
 
 
 async def discover_carddav(
@@ -191,6 +249,7 @@ async def discover_carddav(
     *,
     http_client_factory: HttpClientFactory | None = None,
     srv_resolver: SrvResolver | None = None,
+    txt_resolver: TxtResolver | None = None,
 ) -> CarddavDiscoveryResult | None:
     """Resolve a CardDAV base URL for ``email_or_domain`` or return None."""
     domain = _extract_domain(email_or_domain)
@@ -199,30 +258,50 @@ async def discover_carddav(
 
     http_client_factory = http_client_factory or _default_http_client
     srv_resolver = srv_resolver or _default_srv_resolver
+    txt_resolver = txt_resolver or _default_txt_resolver
 
     base_url = await _probe_well_known(domain, http_client_factory)
     if base_url is not None:
         logger.info("Discovered CardDAV base URL via well-known for %s", domain)
         return CarddavDiscoveryResult(base_url=base_url, discovery_source="well_known")
 
-    # SRV: prefer the TLS service record, then the plain record.
-    for service, source in (
-        (f"_carddavs._tcp.{domain}", "srv_secure"),
-        (f"_carddav._tcp.{domain}", "srv"),
-    ):
+    # SRV: only the TLS service record is used; combine it with the TXT
+    # context path so providers hosted below "/" resolve correctly.
+    secure_service = f"_carddavs._tcp.{domain}"
+    try:
+        records = list(srv_resolver(secure_service) or [])
+    except Exception:  # noqa: BLE001 - resolver failures must not crash seeding
+        records = []
+    context_path = "/"
+    if records:
         try:
-            records = srv_resolver(service)
+            txt_records = list(txt_resolver(secure_service) or [])
         except Exception:  # noqa: BLE001 - resolver failures must not crash seeding
-            records = []
-        for host, port in records or []:
-            candidate = _srv_base_url(host, port)
-            if candidate is not None:
-                logger.info(
-                    "Discovered CardDAV base URL via %s for %s", service, domain
-                )
-                return CarddavDiscoveryResult(
-                    base_url=candidate, discovery_source=source
-                )
+            txt_records = []
+        context_path = _txt_context_path(txt_records) or "/"
+    for host, port in records:
+        candidate = _srv_base_url(host, port, context_path)
+        if candidate is not None:
+            logger.info(
+                "Discovered CardDAV base URL via %s for %s", secure_service, domain
+            )
+            return CarddavDiscoveryResult(
+                base_url=candidate, discovery_source="srv_secure"
+            )
+
+    # RFC 6764 also defines plain `_carddav._tcp`; using it would mean either
+    # sending credentials without TLS or contacting a TLS port the provider
+    # never advertised, so its presence is reported and refused.
+    try:
+        plain_records = list(srv_resolver(f"_carddav._tcp.{domain}") or [])
+    except Exception:  # noqa: BLE001 - resolver failures must not crash seeding
+        plain_records = []
+    if plain_records:
+        logger.info(
+            "Refusing non-TLS _carddav._tcp record for %s; only _carddavs "
+            "(TLS) discovery is supported.",
+            domain,
+        )
 
     logger.info("No CardDAV base URL could be discovered for %s", domain)
     return None
@@ -233,12 +312,14 @@ async def discover_carddav_base_url(
     *,
     http_client_factory: HttpClientFactory | None = None,
     srv_resolver: SrvResolver | None = None,
+    txt_resolver: TxtResolver | None = None,
 ) -> str | None:
     """Convenience wrapper returning only the discovered base URL (or None)."""
     result = await discover_carddav(
         email_or_domain,
         http_client_factory=http_client_factory,
         srv_resolver=srv_resolver,
+        txt_resolver=txt_resolver,
     )
     return result.base_url if result is not None else None
 

@@ -197,8 +197,11 @@ async def _check_carddav(spec: LiveAccountSpec) -> ProtocolResult:
     if base_url is None:
         base_url = await discover_carddav_base_url(spec.email)
     if base_url is None:
+        # CardDAV was configured (explicit address or discovery requested) but
+        # no endpoint resolved. That is a failure, not a skip -- skipping here
+        # would let the run report CardDAV coverage it never exercised.
         return ProtocolResult(
-            "carddav", spec.index, False, skipped=True, detail="no discovery"
+            "carddav", spec.index, False, skipped=False, detail="no discovery"
         )
     client = CardDavClient(
         base_url,
@@ -248,15 +251,47 @@ async def run_smoke(environ: dict[str, str] | None = None) -> SmokeReport:
     return report
 
 
+class SmokeError(RuntimeError):
+    """A seeding/verification failure that must fail the smoke run closed."""
+
+
 async def seed_and_smoke(environ: dict[str, str] | None = None) -> SmokeReport:
-    """Seed the accounts, then run the smoke checks against the live providers."""
+    """Seed the accounts, then run the smoke checks against the live providers.
+
+    Fails closed: a seed exception, an empty seed (no accounts / no protocols),
+    or a required CardDAV discovery that produced no endpoint raises
+    ``SmokeError`` instead of yielding a green run that proved nothing about the
+    DB-backed path.
+    """
     from tests.live.seed_test_accounts import seed_test_accounts
 
     environ = environ if environ is not None else dict(os.environ)
     try:
-        await seed_test_accounts(environ)
-    except Exception as exc:  # noqa: BLE001 - DB may be unavailable in some runs
-        logger.warning("Seeding step skipped/failed: %s", type(exc).__name__)
+        summaries = await seed_test_accounts(environ)
+    except Exception as exc:  # noqa: BLE001 - surface as a hard smoke failure
+        raise SmokeError(f"seed failed: {type(exc).__name__}: {exc}") from exc
+
+    if not summaries:
+        raise SmokeError(
+            "no NARUON_TEST_EMAIL{N} accounts were seeded; nothing to verify."
+        )
+    seeded_protocols = sum(
+        len(summary.get("protocols") or []) for summary in summaries
+    )
+    if seeded_protocols == 0:
+        raise SmokeError(
+            "seeding produced no configured protocols; check the secrets."
+        )
+    discovery_failures = [
+        summary["user_id"]
+        for summary in summaries
+        if summary.get("carddav_discovery_failed")
+    ]
+    if discovery_failures:
+        raise SmokeError(
+            "required CardDAV discovery found no endpoint for: "
+            + ", ".join(str(user_id) for user_id in discovery_failures)
+        )
     return await run_smoke(environ)
 
 
@@ -266,7 +301,12 @@ def main() -> int:
         print("Live smoke disabled (set NARUON_LIVE_SMOKE=1 to run). Nothing to do.")
         return 0
 
-    report = asyncio.run(seed_and_smoke())
+    try:
+        report = asyncio.run(seed_and_smoke())
+    except SmokeError as exc:
+        print(f"Mail smoke test FAILED: {exc}")
+        return 1
+
     for result in report.results:
         state = "SKIP" if result.skipped else ("OK" if result.reachable else "FAIL")
         print(
@@ -278,6 +318,11 @@ def main() -> int:
         print(
             f"Mail smoke test FAILED: {len(report.failures)} unreachable protocol(s)"
         )
+        return 1
+    if not report.reached:
+        # Every configured protocol was skipped -- nothing was actually
+        # exercised, so this is not a pass.
+        print("Mail smoke test FAILED: no protocol was reachable-tested.")
         return 1
     print(
         f"Mail smoke test passed "

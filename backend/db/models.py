@@ -1398,18 +1398,29 @@ class CaldavAccount(Base):
 class CarddavAccount(Base):
     __tablename__ = "carddav_accounts"
 
-    id: Mapped[int] = mapped_column("account_id", primary_key=True)
+    account_id: Mapped[int] = mapped_column("account_id", primary_key=True)
+    source_uid: Mapped[str] = mapped_column(
+        String,
+        unique=True,
+        index=True,
+        default=lambda: f"carddav_src_{uuid.uuid4().hex}",
+        nullable=False,
+    )
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     server_url: Mapped[str] = mapped_column(String, nullable=False)
     # New tables use two-word snake_case column names; the Python attribute
-    # stays `username` for symmetry with the legacy CaldavAccount mapper.
+    # stays `username` for symmetry with the WebdavAccount mapper.
     username: Mapped[str] = mapped_column("account_username", String, nullable=False)
     credentials_encrypted: Mapped[str] = mapped_column(EncryptedString, nullable=False)
     discovery_source: Mapped[str | None] = mapped_column(String, nullable=True)
     account_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    writeback_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
     )
 
 

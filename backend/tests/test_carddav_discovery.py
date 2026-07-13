@@ -98,7 +98,33 @@ async def test_srv_secure_fallback_when_well_known_missing():
 
 
 @pytest.mark.asyncio
-async def test_srv_plain_fallback_with_custom_port():
+async def test_srv_secure_with_custom_port_and_txt_path():
+    response = FakeResponse(404)
+
+    def resolver(name):
+        if name == "_carddavs._tcp.example.com":
+            return [("dav.example.com", 8443)]
+        return []
+
+    def txt_resolver(name):
+        if name == "_carddavs._tcp.example.com":
+            return ['path=/dav/addressbooks']
+        return []
+
+    result = await discover_carddav(
+        "example.com",
+        http_client_factory=_factory(response),
+        srv_resolver=resolver,
+        txt_resolver=txt_resolver,
+    )
+    assert result is not None
+    assert result.discovery_source == "srv_secure"
+    assert result.base_url == "https://dav.example.com:8443/dav/addressbooks"
+
+
+@pytest.mark.asyncio
+async def test_plain_carddav_srv_is_refused_not_upgraded():
+    # A non-TLS _carddav._tcp record must NOT be silently contacted over TLS.
     response = FakeResponse(404)
 
     def resolver(name):
@@ -111,9 +137,30 @@ async def test_srv_plain_fallback_with_custom_port():
         http_client_factory=_factory(response),
         srv_resolver=resolver,
     )
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_malformed_txt_path_is_ignored():
+    response = FakeResponse(404)
+
+    def resolver(name):
+        if name == "_carddavs._tcp.example.com":
+            return [("dav.example.com", 443)]
+        return []
+
+    def txt_resolver(name):
+        # Traversal and absolute-URL path hints are rejected -> fall back to "/".
+        return ["path=../escape", "path=https://evil.example/x"]
+
+    result = await discover_carddav(
+        "example.com",
+        http_client_factory=_factory(response),
+        srv_resolver=resolver,
+        txt_resolver=txt_resolver,
+    )
     assert result is not None
-    assert result.discovery_source == "srv"
-    assert result.base_url == "https://dav.example.com:8443/"
+    assert result.base_url == "https://dav.example.com/"
 
 
 @pytest.mark.asyncio

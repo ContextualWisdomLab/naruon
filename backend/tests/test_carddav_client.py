@@ -98,8 +98,79 @@ async def test_put_vcard_returns_status_and_targets_relative_path():
     )
     status = await client.put_vcard("contact.vcf", "BEGIN:VCARD\nEND:VCARD")
     assert status == 201
+    _method, url, kwargs = sink[0].calls[0]
+    # The request is DNS-pinned to the validated address, with the original
+    # authority preserved in the Host header and SNI extension.
+    assert url == f"https://{PUBLIC_IP}/carddav/contact.vcf"
+    assert kwargs["headers"]["Host"] == "dav.example.com"
+    assert kwargs["extensions"]["sni_hostname"] == "dav.example.com"
+
+
+@pytest.mark.asyncio
+async def test_list_address_books_is_dns_pinned_with_sni():
+    sink = []
+    client = carddav_client.CardDavClient(
+        "https://dav.example.com/carddav/",
+        http_client_factory=_factory(FakeResponse(207), sink),
+    )
+    await client.list_address_books()
+    _method, url, kwargs = sink[0].calls[0]
+    assert url == f"https://{PUBLIC_IP}/carddav/"
+    assert kwargs["headers"]["Host"] == "dav.example.com"
+    assert kwargs["extensions"]["sni_hostname"] == "dav.example.com"
+
+
+def test_default_http_client_disables_trust_env():
+    client = carddav_client._default_http_client()
+    try:
+        assert client.trust_env is False
+    finally:
+        # Close the underlying transport without awaiting (no requests issued).
+        client._transport = None
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    [
+        "../other.vcf",
+        "../../bob/contact.vcf",
+        "https://other.example/contact.vcf",
+        "//other.example/contact.vcf",
+        "%2e%2e/other.vcf",
+        "contact.vcf?x=1",
+        "a\\b.vcf",
+    ],
+)
+@pytest.mark.asyncio
+async def test_put_vcard_rejects_path_escape(bad_path):
+    client = carddav_client.CardDavClient(
+        "https://dav.example.com/carddav/",
+        http_client_factory=_factory(FakeResponse(201)),
+    )
+    with pytest.raises(ValueError):
+        await client.put_vcard(bad_path, "BEGIN:VCARD\nEND:VCARD")
+
+
+@pytest.mark.asyncio
+async def test_put_vcard_allows_nested_relative_path():
+    sink = []
+    client = carddav_client.CardDavClient(
+        "https://dav.example.com/carddav/",
+        http_client_factory=_factory(FakeResponse(201), sink),
+    )
+    status = await client.put_vcard("books/default/contact.vcf", "BEGIN:VCARD")
+    assert status == 201
     _method, url, _kwargs = sink[0].calls[0]
-    assert url == "https://dav.example.com/carddav/contact.vcf"
+    assert url == f"https://{PUBLIC_IP}/carddav/books/default/contact.vcf"
+
+
+def test_pinned_request_target_rejects_private_resolution(monkeypatch):
+    def private_getaddrinfo(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.9", port))]
+
+    monkeypatch.setattr(carddav_client.socket, "getaddrinfo", private_getaddrinfo)
+    with pytest.raises(ValueError):
+        carddav_client.pinned_request_target("https://dav.example.com/carddav/")
 
 
 def test_private_base_url_rejected():

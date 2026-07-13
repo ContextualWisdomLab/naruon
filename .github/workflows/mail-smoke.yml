@@ -10,10 +10,24 @@ jobs:
   smoke:
     runs-on: [self-hosted, mail-egress]
     steps:
-      - name: Harden the runner (Audit all outbound calls)
+      - name: Harden the runner (block egress to an allowlist)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
-          egress-policy: audit
+          # Block outbound egress; only the destinations needed to install
+          # pinned deps and reach the internal mail/DAV servers are allowed.
+          # A compromised dependency or checked-out change cannot exfiltrate
+          # the seeded credentials past this boundary.
+          egress-policy: block
+          disable-sudo: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            ${{ vars.MAIL_SMOKE_ALLOWED_ENDPOINTS }}
 
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
@@ -29,15 +43,20 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
 
-      - name: Seed live-test accounts into the DB (the KV path)
-        # NARUON_TEST_*1 is read from the environment ONLY here, at seed time
-        # (bootstrap transport), and written into the Fernet-encrypted, DB-backed
-        # credential store. The app/connector then reads the accounts from the DB
-        # at runtime -- never via os.getenv.
+      - name: Seed live-test accounts and verify reachability (the KV path)
+        # The NARUON_TEST_*1 secrets are read ONLY in this step, at seed time
+        # (bootstrap transport), and written into the Fernet-encrypted,
+        # DB-backed credential store. seed_and_smoke() then runs the smoke
+        # checks in the same fail-closed process: it aborts on a seed error, an
+        # empty seed, or a required-but-undiscoverable CardDAV endpoint, so the
+        # run cannot report green without exercising the seeded DB path. The
+        # database bootstrap secrets and the live credentials are scoped to this
+        # single step -- no other step in this workflow receives them.
         run: |
           cd backend
-          python -m tests.live.seed_test_accounts
+          python tests/live/mail_smoke_test.py
         env:
+          NARUON_LIVE_SMOKE: "1"
           # Bootstrap root-of-trust (pre-existing repo/org secrets).
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
@@ -50,34 +69,6 @@ jobs:
           NARUON_TEST_SMTP_ADDR1: ${{ secrets.NARUON_TEST_SMTP_ADDR1 }}
           NARUON_TEST_CALDAV_ADDR1: ${{ secrets.NARUON_TEST_CALDAV_ADDR1 }}
           NARUON_TEST_CARDDAV_ADDR1: ${{ secrets.NARUON_TEST_CARDDAV_ADDR1 }}
-          # --- Account 2 placeholder (uncomment + add secrets, zero code change) ---
-          # NARUON_TEST_EMAIL2: ${{ secrets.NARUON_TEST_EMAIL2 }}
-          # NARUON_TEST_PASSWORD2: ${{ secrets.NARUON_TEST_PASSWORD2 }}
-          # NARUON_TEST_IMAP_ADDR2: ${{ secrets.NARUON_TEST_IMAP_ADDR2 }}
-          # NARUON_TEST_POP3_ADDR2: ${{ secrets.NARUON_TEST_POP3_ADDR2 }}
-          # NARUON_TEST_SMTP_ADDR2: ${{ secrets.NARUON_TEST_SMTP_ADDR2 }}
-          # NARUON_TEST_CALDAV_ADDR2: ${{ secrets.NARUON_TEST_CALDAV_ADDR2 }}
-          # NARUON_TEST_CARDDAV_ADDR2: ${{ secrets.NARUON_TEST_CARDDAV_ADDR2 }}
-
-      - name: Verify live mail + DAV reachability (real smoke)
-        run: |
-          echo "Connecting to internal mail/DAV servers..."
-          # 실제 사내망 메일/DAV 서버의 연결성 검증 스크립트 실행
-          cd backend
-          python tests/live/mail_smoke_test.py
-        env:
-          NARUON_LIVE_SMOKE: "1"
-          # Account 1 live-test credentials.
-          NARUON_TEST_EMAIL1: ${{ secrets.NARUON_TEST_EMAIL1 }}
-          NARUON_TEST_PASSWORD1: ${{ secrets.NARUON_TEST_PASSWORD1 }}
-          NARUON_TEST_IMAP_ADDR1: ${{ secrets.NARUON_TEST_IMAP_ADDR1 }}
-          NARUON_TEST_POP3_ADDR1: ${{ secrets.NARUON_TEST_POP3_ADDR1 }}
-          NARUON_TEST_SMTP_ADDR1: ${{ secrets.NARUON_TEST_SMTP_ADDR1 }}
-          NARUON_TEST_CALDAV_ADDR1: ${{ secrets.NARUON_TEST_CALDAV_ADDR1 }}
-          NARUON_TEST_CARDDAV_ADDR1: ${{ secrets.NARUON_TEST_CARDDAV_ADDR1 }}
-          # Legacy connectivity hints (kept for backward compatibility).
-          SMTP_HOST: ${{ secrets.INTERNAL_SMTP_HOST }}
-          IMAP_HOST: ${{ secrets.INTERNAL_IMAP_HOST }}
           # --- Account 2 placeholder (uncomment + add secrets, zero code change) ---
           # NARUON_TEST_EMAIL2: ${{ secrets.NARUON_TEST_EMAIL2 }}
           # NARUON_TEST_PASSWORD2: ${{ secrets.NARUON_TEST_PASSWORD2 }}

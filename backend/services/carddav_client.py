@@ -5,6 +5,16 @@ to connect, PROPFIND for address books, and PUT a vCard for smoke testing.
 SSL/TLS is implicit (https over 443 unless the URL carries an explicit port),
 and every request target is SSRF-guarded against private/link-local hosts, the
 same way ``LocalDavAdapters`` guards its writes.
+
+Two properties bind the guard to the actual connection instead of a hostname
+snapshot:
+
+- Requests are DNS-pinned: the hostname is resolved once, every address is
+  validated as globally routable, and the request connects to that validated
+  address (with SNI/Host preserved for TLS verification), so a rebinding
+  between validation and connect cannot redirect credentials.
+- Clients are built with ``trust_env=False`` so ambient ``HTTPS_PROXY`` /
+  ``ALL_PROXY`` configuration on the runner cannot reroute requests.
 """
 
 from __future__ import annotations
@@ -13,7 +23,7 @@ import ipaddress
 import socket
 from dataclasses import dataclass
 from typing import Any, Callable
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import httpx
 
@@ -23,6 +33,9 @@ _ADDRESSBOOK_PROPFIND = (
     "<D:prop><D:resourcetype/><D:displayname/>"
     "<C:addressbook-home-set/></D:prop></D:propfind>"
 )
+
+_MAX_VCARD_PATH_LENGTH = 4096
+_MAX_URL_DECODE_ROUNDS = 4
 
 
 @dataclass(frozen=True)
@@ -41,7 +54,8 @@ def _validate_global_address(address: str) -> None:
         raise ValueError("invalid_carddav_url")
 
 
-def _validate_global_host(hostname: str, port: int) -> None:
+def _resolved_global_addresses(hostname: str, port: int) -> list[str]:
+    """Resolve a hostname once and require every address to be global."""
     if hostname == "localhost" or hostname.endswith(".localhost"):
         raise ValueError("invalid_carddav_url")
     try:
@@ -50,16 +64,21 @@ def _validate_global_host(hostname: str, port: int) -> None:
         pass
     else:
         _validate_global_address(hostname)
-        return
+        return [hostname]
     try:
         address_infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
     except OSError as exc:
         raise ValueError("invalid_carddav_url") from exc
-    addresses = {str(info[4][0]) for info in address_infos}
+    addresses = [str(info[4][0]) for info in address_infos]
     if not addresses:
         raise ValueError("invalid_carddav_url")
-    for address in addresses:
+    for address in dict.fromkeys(addresses):
         _validate_global_address(address)
+    return addresses
+
+
+def _validate_global_host(hostname: str, port: int) -> None:
+    _resolved_global_addresses(hostname, port)
 
 
 def _validated_base_url(base_url: str) -> str:
@@ -83,8 +102,86 @@ def _validated_base_url(base_url: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
 
+def pinned_request_target(url: str) -> tuple[str, dict[str, str], dict[str, Any]]:
+    """Pin a validated URL to one resolved global address (anti-rebinding).
+
+    Returns ``(pinned_url, headers, extensions)``: the URL rewritten to a
+    validated literal address, a ``Host`` header carrying the original
+    authority, and the ``sni_hostname`` extension so TLS still negotiates and
+    verifies against the original hostname. Using the same resolution for
+    validation and connection closes the validate-then-reconnect DNS window.
+    """
+    parsed = urlsplit(url)
+    hostname = parsed.hostname or ""
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("invalid_carddav_url") from exc
+    addresses = _resolved_global_addresses(hostname, port or 443)
+    address = next(
+        (candidate for candidate in addresses if ":" not in candidate),
+        addresses[0],
+    )
+    literal = f"[{address}]" if ":" in address else address
+    netloc = literal if port is None else f"{literal}:{port}"
+    pinned = urlunsplit(
+        (parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment)
+    )
+    return pinned, {"Host": parsed.netloc}, {"sni_hostname": hostname}
+
+
+def _safe_vcard_path(raw_path: Any) -> str | None:
+    """Canonicalize a caller-supplied vCard path or reject traversal/URL input.
+
+    Mirrors ``LocalDavAdapters._safe_target_path``: multi-round decode, then
+    reject absolute URLs, backslashes, query/fragment, control characters, and
+    dot segments, so the composed target can never leave the configured
+    address-book subtree or change host.
+    """
+    if (
+        not isinstance(raw_path, str)
+        or not raw_path
+        or len(raw_path) > _MAX_VCARD_PATH_LENGTH
+    ):
+        return None
+
+    decoded_path = raw_path
+    try:
+        for _ in range(_MAX_URL_DECODE_ROUNDS):
+            next_path = unquote(decoded_path, errors="strict")
+            if next_path == decoded_path:
+                break
+            decoded_path = next_path
+        else:
+            if unquote(decoded_path, errors="strict") != decoded_path:
+                return None
+    except UnicodeDecodeError:
+        return None
+
+    if (
+        "\\" in decoded_path
+        or "://" in decoded_path
+        or "?" in decoded_path
+        or "#" in decoded_path
+        or decoded_path.startswith("//")
+        or any(
+            ord(character) < 32 or ord(character) == 127
+            for character in decoded_path
+        )
+    ):
+        return None
+    segments = [segment for segment in decoded_path.split("/") if segment]
+    if not segments or any(segment in {".", ".."} for segment in segments):
+        return None
+    return "/".join(
+        quote(segment, safe="@:$&'()*+,;=-._~") for segment in segments
+    )
+
+
 def _default_http_client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(follow_redirects=False, timeout=30)
+    # trust_env=False keeps runner proxy environment variables from rerouting
+    # credentialed CardDAV requests.
+    return httpx.AsyncClient(follow_redirects=False, timeout=30, trust_env=False)
 
 
 class CardDavClient:
@@ -116,15 +213,17 @@ class CardDavClient:
         """PROPFIND Depth:1 for address books; returns a reachability result."""
         headers = {"Depth": "1", "Content-Type": "application/xml; charset=utf-8"}
         try:
+            target, pinned_headers, extensions = pinned_request_target(self._base_url)
             async with self._http_client_factory() as client:
                 response = await client.request(
                     "PROPFIND",
-                    self._base_url,
-                    headers=headers,
+                    target,
+                    headers={**headers, **pinned_headers},
                     content=_ADDRESSBOOK_PROPFIND.encode("utf-8"),
                     auth=self._auth(),
+                    extensions=extensions,
                 )
-        except httpx.HTTPError:
+        except (httpx.HTTPError, ValueError):
             return CarddavProbeResult(
                 reachable=False, status_code=None, base_url=self._base_url
             )
@@ -145,11 +244,15 @@ class CardDavClient:
         if_match: str | None = None,
     ) -> int:
         """PUT a vCard beneath the base URL; returns the provider status code."""
-        target = urljoin(self._base_url.rstrip("/") + "/", relative_path.lstrip("/"))
-        # Re-validate the composed URL to keep the SSRF guard on redirects/joins.
-        _validated_base_url(target)
+        safe_path = _safe_vcard_path(relative_path)
+        if safe_path is None:
+            raise ValueError("invalid_carddav_path")
+        composed = self._base_url.rstrip("/") + "/" + safe_path
+        # Re-validate the composed URL to keep the SSRF guard on joins.
+        _validated_base_url(composed)
+        target, pinned_headers, extensions = pinned_request_target(composed)
         content = vcard.encode("utf-8") if isinstance(vcard, str) else vcard
-        headers = {"Content-Type": "text/vcard; charset=utf-8"}
+        headers = {"Content-Type": "text/vcard; charset=utf-8", **pinned_headers}
         if if_match is not None:
             headers["If-Match"] = if_match
         async with self._http_client_factory() as client:
@@ -158,8 +261,9 @@ class CardDavClient:
                 content=content,
                 headers=headers,
                 auth=self._auth(),
+                extensions=extensions,
             )
         return int(response.status_code)
 
 
-__all__ = ["CardDavClient", "CarddavProbeResult"]
+__all__ = ["CardDavClient", "CarddavProbeResult", "pinned_request_target"]
