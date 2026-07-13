@@ -79,7 +79,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit)
+    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -96,6 +96,27 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
       ;;
     *)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"success","html_url":"https://checks/coderabbit"}]}'
+      ;;
+  esac
+  exit 0
+fi
+
+if [ "$1" = "api" ] && [[ "$args" == *repos/*/pulls/42/reviews* ]]; then
+  case "${GH_SCENARIO:-pass}" in
+    missing_coderabbit_with_adversarial_approval)
+      printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `%s`"}]]' "$head_sha" "$head_sha"
+      ;;
+    missing_coderabbit_stale_approval)
+      printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `old-head`"}]]' "$head_sha"
+      ;;
+    missing_coderabbit_actions_approval)
+      printf '[[{"user":{"login":"github-actions[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `%s`"}]]' "$head_sha" "$head_sha"
+      ;;
+    missing_coderabbit_one_probe)
+      printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `%s`"}]]' "$head_sha" "$head_sha"
+      ;;
+    *)
+      printf '[]'
       ;;
   esac
   exit 0
@@ -288,9 +309,36 @@ assert_missing_coderabbit_waits_without_hard_comment() {
   run_gate missing_coderabbit "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_in_file 'Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval' "$temp_dir/output.txt"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate missing_coderabbit_with_adversarial_approval "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_in_file 'conclusion=success' "$temp_dir/gh.log"
+}
+
+assert_missing_coderabbit_rejects_non_authoritative_opencode_evidence() {
+  local scenario temp_dir
+  for scenario in \
+    missing_coderabbit_stale_approval \
+    missing_coderabbit_actions_approval \
+    missing_coderabbit_one_probe; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval' "$temp_dir/output.txt"
+    assert_not_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
+    assert_in_file 'status=in_progress' "$temp_dir/gh.log"
+  done
 }
 
 assert_coderabbit_failure_creates_marker_comment() {
@@ -444,6 +492,8 @@ assert_workflow_separates_controller_from_required_check() {
 	assert_in_file '^      pull-requests: write$' "$workflow"
 	assert_in_file '^  issues: read$' "$workflow"
 	assert_in_file '^      issues: write$' "$workflow"
+  assert_in_file '^  pull_request_review:$' "$workflow"
+  assert_in_file "github.event_name == 'pull_request_review'" "$workflow"
   assert_in_file '^    name: PR governance metadata controller$' "$workflow"
   assert_not_in_file '^    name: metadata-only gate evaluation$' "$workflow"
 }
@@ -458,6 +508,8 @@ assert_failed_checks_create_marker_comment
 assert_existing_marker_comment_is_patched
 assert_coderabbit_pending_waits_without_hard_comment
 assert_missing_coderabbit_waits_without_hard_comment
+assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval
+assert_missing_coderabbit_rejects_non_authoritative_opencode_evidence
 assert_coderabbit_failure_creates_marker_comment
 assert_coderabbit_neutral_without_skip_evidence_blocks
 assert_coderabbit_review_skipped_neutral_is_ready_without_merge
