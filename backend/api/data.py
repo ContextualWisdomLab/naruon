@@ -3167,6 +3167,7 @@ async def upload_data_document(
 ) -> DataDocumentActionResponse:
     document = Document(
         workspace_id=auth_context.workspace_id,
+        organization_id=auth_context.organization_id,
         document_name=_safe_display_text(request.document_name, "workspace document"),
         document_type=_safe_document_type(request.document_type),
         document_content=request.document_content,
@@ -3256,6 +3257,14 @@ async def create_document_pdf_dom_recognition_intent(
             status_code=415,
             detail="PDF DOM recognition is only available for PDF documents.",
         )
+    try:
+        decode_pending_pdf_document_bytes(document)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Stored PDF payload is not valid for DOM recognition.",
+        ) from exc
+    document.organization_id = auth_context.organization_id
     document.document_status = PDF_DOM_RECOGNITION_PENDING_STATUS
     await db.commit()
     await db.refresh(document)
@@ -3320,11 +3329,16 @@ def decode_pending_pdf_document_bytes(document: Document) -> bytes:
     Used by the recognition worker before calling the NewsDOM sidecar.
     """
     try:
-        return base64.b64decode(
+        payload = base64.b64decode(
             (document.document_content or "").encode("ascii"), validate=True
         )
-    except (binascii.Error, ValueError) as exc:
+    except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
         raise ValueError("Pending PDF document payload is not valid base64") from exc
+    if len(payload) > _MAX_PDF_DOM_UPLOAD_BYTES:
+        raise ValueError("Pending PDF document exceeds the upload size limit")
+    if not payload.startswith(b"%PDF-"):
+        raise ValueError("Pending PDF document payload is not a PDF")
+    return payload
 
 
 @router.post(

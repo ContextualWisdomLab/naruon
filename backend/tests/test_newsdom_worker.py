@@ -82,7 +82,7 @@ async def test_attachment_recognized_when_configured():
     )
     assert result == RESULT_RECOGNIZED
     assert attachment.parse_status == "parsed"
-    assert "Headline" in attachment.parse_content
+    assert "Headline" in attachment.content
     assert attachment.content_segments
 
 

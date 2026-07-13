@@ -1,5 +1,12 @@
+import base64
+
+import pytest
+
+import services.attachment_parser as attachment_parser
 from services.attachment_parser import (
+    MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
     MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
+    decode_deferred_attachment_payload,
     get_attachment_parser_manifest,
     parse_email_attachment,
 )
@@ -155,8 +162,6 @@ def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
 
 
 def test_pdf_attachment_is_deferred_pending_newsdom_recognition():
-    from services.attachment_parser import decode_deferred_attachment_payload
-
     raw = b"%PDF-1.7 raw bytes"
     result = parse_email_attachment(
         filename="contract.pdf",
@@ -187,3 +192,65 @@ def test_pdf_extension_with_generic_content_type_is_deferred_pending():
     assert result.parse_content_type == "application/pdf"
     assert result.parser_key == "pdf"
     assert result.parse_status == "pdf_dom_recognition_pending"
+
+
+def test_invalid_pdf_payload_is_rejected_before_deferred_recognition():
+    result = parse_email_attachment(
+        filename="not-a-pdf.pdf",
+        content_type="application/pdf",
+        raw_content=b"plain text with a PDF content type",
+    )
+
+    assert result.content == ""
+    assert result.parse_status == "invalid_pdf_payload"
+    assert result.parse_error_code == "invalid_pdf_payload"
+
+
+def test_oversized_pdf_payload_is_not_retained():
+    result = parse_email_attachment(
+        filename="huge.pdf",
+        content_type="application/pdf",
+        raw_content=b"%PDF-" + b"A" * MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
+    )
+
+    assert result.content == ""
+    assert result.parse_status == "parse_size_limit_exceeded"
+    assert result.parse_error_code == "parse_size_limit_exceeded"
+
+
+@pytest.mark.parametrize(
+    "raw_content",
+    ["plain text", None, 12345],
+)
+def test_non_binary_pdf_inputs_are_rejected(raw_content):
+    result = parse_email_attachment(
+        filename="not-a-pdf.pdf",
+        content_type="application/pdf",
+        raw_content=raw_content,
+    )
+
+    assert result.parse_status == "invalid_pdf_payload"
+    assert result.parse_error_code == "invalid_pdf_payload"
+
+
+def test_string_pdf_input_round_trips_as_deferred_bytes():
+    result = parse_email_attachment(
+        filename="string.pdf",
+        content_type="application/pdf",
+        raw_content="%PDF-1.7 string fixture",
+    )
+
+    assert decode_deferred_attachment_payload(result.content) == (
+        b"%PDF-1.7 string fixture"
+    )
+
+
+def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch):
+    non_pdf = base64.b64encode(b"not a PDF").decode("ascii")
+    with pytest.raises(ValueError, match="not a PDF"):
+        decode_deferred_attachment_payload(non_pdf)
+
+    monkeypatch.setattr(attachment_parser, "MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 5)
+    oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
+    with pytest.raises(ValueError, match="size limit"):
+        decode_deferred_attachment_payload(oversized)

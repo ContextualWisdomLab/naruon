@@ -240,7 +240,7 @@ async def test_recognize_attachment_pdf_lands_text_and_content_graph():
 
     assert attachment.parse_status == "parsed"
     assert attachment.parser_key == "pdf"
-    assert "First Headline" in attachment.parse_content
+    assert "First Headline" in attachment.content
     # Content graph landed on both the email and the attachment.
     assert any(n.node_kind == "section" for n in attachment.content_nodes)
     assert any(n.node_kind == "document" for n in email.content_nodes)

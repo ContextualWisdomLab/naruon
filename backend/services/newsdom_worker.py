@@ -3,7 +3,7 @@
 Attachments and workspace documents whose PDF recognition was deferred at
 import time are processed here: the sidecar is called (via
 :mod:`services.newsdom_pdf_recognition`) and the returned tree is landed into
-``parse_content`` (for embeddings) and, for attachments, the
+the persisted attachment/document content and, for attachments, the
 ``content_nodes`` / ``content_segments`` graph.
 
 The apply functions are deliberately session-free so they can be unit tested
@@ -65,6 +65,7 @@ def _append_parse_result_to_attachment(
     attachment: Attachment,
     parse_result: ParseResult,
 ) -> None:
+    """Append recognized graph records to an email and its attachment."""
     node_records_by_uid: dict[str, ContentNodeRecord] = {}
     for parsed_node in parse_result.nodes:
         node_record = ContentNodeRecord(
@@ -110,7 +111,6 @@ def apply_recognition_to_attachment(
     records: PdfDomRecognitionRecords,
 ) -> None:
     """Land recognized PDF DOM records onto an attachment (text + graph)."""
-    attachment.parse_content = records.parse_text
     attachment.content = records.parse_text
     attachment.parse_content_type = PDF_PARSE_CONTENT_TYPE
     attachment.parser_key = PDF_PARSER_KEY
@@ -143,6 +143,7 @@ async def recognize_attachment_pdf(
     source_record_uid: str,
     request_fn: ParseRequestFn = request_pdf_dom,
 ) -> PdfDomRecognitionRecords:
+    """Recognize a PDF and land its text and graph on an attachment."""
     records = await recognize_pdf_dom(
         config=config,
         pdf_bytes=pdf_bytes,
@@ -163,6 +164,7 @@ async def recognize_document_pdf(
     config: NewsdomRuntimeConfig | None,
     request_fn: ParseRequestFn = request_pdf_dom,
 ) -> PdfDomRecognitionRecords:
+    """Recognize a PDF and land its text on a workspace document."""
     records = await recognize_pdf_dom(
         config=config,
         pdf_bytes=pdf_bytes,
@@ -208,7 +210,7 @@ async def process_pending_attachment(
     Returns ``RESULT_RECOGNIZED`` on success, ``RESULT_PENDING`` when no active
     provider is configured yet (left pending to retry later), or
     ``RESULT_FAILED`` when the payload or the sidecar response is unusable (a
-    retryable failure status is recorded — never a false ``parsed``).
+    visible failure status is recorded - never a false ``parsed``).
     """
     email = attachment.email
     if email is None:
@@ -217,9 +219,14 @@ async def process_pending_attachment(
         return RESULT_FAILED
     try:
         pdf_bytes = decode_deferred_attachment_payload(attachment.content)
-    except ValueError:
+    except ValueError as exc:
         attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         attachment.parse_error_code = "invalid_pending_payload"
+        logger.warning(
+            "NewsDOM attachment %s rejected before recognition: %s",
+            getattr(attachment, "id", "?"),
+            exc,
+        )
         return RESULT_FAILED
 
     config = await config_resolver(session, email.organization_id)
@@ -238,9 +245,14 @@ async def process_pending_attachment(
         )
     except NewsdomConfigurationError:
         return RESULT_PENDING
-    except (NewsdomRequestError, ValueError):
+    except (NewsdomRequestError, ValueError) as exc:
         attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         attachment.parse_error_code = "recognition_failed"
+        logger.warning(
+            "NewsDOM attachment %s recognition failed: %s",
+            getattr(attachment, "id", "?"),
+            exc,
+        )
         return RESULT_FAILED
     return RESULT_RECOGNIZED
 
@@ -257,8 +269,13 @@ async def process_pending_document(
 
     try:
         pdf_bytes = decode_pending_pdf_document_bytes(document)
-    except ValueError:
+    except ValueError as exc:
         document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
+        logger.warning(
+            "NewsDOM document %s rejected before recognition: %s",
+            getattr(document, "document_id", "?"),
+            exc,
+        )
         return RESULT_FAILED
 
     config = await config_resolver(session, document.organization_id)
@@ -274,13 +291,19 @@ async def process_pending_document(
         )
     except NewsdomConfigurationError:
         return RESULT_PENDING
-    except (NewsdomRequestError, ValueError):
+    except (NewsdomRequestError, ValueError) as exc:
         document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
+        logger.warning(
+            "NewsDOM document %s recognition failed: %s",
+            getattr(document, "document_id", "?"),
+            exc,
+        )
         return RESULT_FAILED
     return RESULT_RECOGNIZED
 
 
 def _session_uses_postgresql(session: AsyncSession) -> bool:
+    """Return whether advisory-lock SQL is supported by the session bind."""
     try:
         bind = session.get_bind()
     except Exception:
@@ -305,6 +328,7 @@ async def _try_acquire_sweep_lease(session: AsyncSession) -> bool | None:
 
 
 async def _release_sweep_lease(session: AsyncSession) -> None:
+    """Release the PostgreSQL advisory lock for a recognition sweep."""
     await session.scalar(
         select(
             func.pg_advisory_unlock(
@@ -334,6 +358,7 @@ class NewsdomRecognitionWorker:
         request_fn: ParseRequestFn = request_pdf_dom,
         config_resolver: ConfigResolver = resolve_newsdom_config_from_db,
     ):
+        """Configure the sweep cadence, batch size, and injectable adapters."""
         self.interval_seconds = interval_seconds
         self.batch_limit = batch_limit
         self._request_fn = request_fn
@@ -342,6 +367,7 @@ class NewsdomRecognitionWorker:
         self._is_running = False
 
     async def start(self) -> None:
+        """Start the recognition loop once."""
         if self._is_running:
             logger.warning("NewsdomRecognitionWorker is already running.")
             return
@@ -350,6 +376,7 @@ class NewsdomRecognitionWorker:
         logger.info("NewsdomRecognitionWorker started.")
 
     async def stop(self) -> None:
+        """Cancel and await the active recognition loop."""
         if not self._is_running:
             return
         self._is_running = False
@@ -362,6 +389,7 @@ class NewsdomRecognitionWorker:
         logger.info("NewsdomRecognitionWorker stopped.")
 
     async def _run_loop(self) -> None:
+        """Run jittered recognition sweeps until stopped."""
         try:
             await asyncio.sleep(
                 _sysrand.uniform(
@@ -385,6 +413,7 @@ class NewsdomRecognitionWorker:
                     break
 
     async def _sweep(self) -> None:
+        """Process one leased attachment and document sweep."""
         async with AsyncSessionLocal() as session:
             lease = await _try_acquire_sweep_lease(session)
             if lease is False:
@@ -401,6 +430,7 @@ class NewsdomRecognitionWorker:
                     await _release_sweep_lease(session)
 
     async def _sweep_attachments(self, session: AsyncSession) -> None:
+        """Process a bounded batch of pending PDF attachments."""
         rows = (
             (
                 await session.execute(
@@ -439,6 +469,7 @@ class NewsdomRecognitionWorker:
                 )
 
     async def _sweep_documents(self, session: AsyncSession) -> None:
+        """Process a bounded batch of pending workspace PDF documents."""
         rows = (
             (
                 await session.execute(
