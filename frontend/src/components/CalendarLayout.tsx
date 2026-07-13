@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
 
-import { CalendarWritebackIntentResponse, CalendarWritebackSource, WritebackStatus } from './calendar/types';
+import type { CalendarWritebackActionKey, CalendarWritebackIntentResponse, CalendarWritebackSource, WritebackStatus } from './calendar/types';
 import { calendarDefinitions, calendarMonthEvents, calendarWeekEvents, calendarCandidateEvents } from './calendar/constants';
 import { buildInitialCalendarVisibility, isCustomerOwnedWritableSource, getApiErrorStatus } from './calendar/helpers';
 import { CalendarMonthView } from './calendar/CalendarMonthView';
@@ -41,6 +41,7 @@ export function CalendarLayout() {
   const [writebackSources, setWritebackSources] = useState<CalendarWritebackSource[]>([]);
   const [sourceLoadStatus, setSourceLoadStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [pendingWritebackAction, setPendingWritebackAction] = useState<CalendarWritebackActionKey | null>(null);
   const [calendarVisibility, setCalendarVisibility] = useState<Record<string, boolean>>(() => buildInitialCalendarVisibility());
 
   const visibleCalendarIds = useMemo(() => {
@@ -111,6 +112,7 @@ export function CalendarLayout() {
       setWritebackStatus('no_source');
       return;
     }
+    setPendingWritebackAction(executeProvider ? 'execute' : action);
     setWritebackStatus('loading');
     setWritebackResult(null);
     try {
@@ -135,6 +137,8 @@ export function CalendarLayout() {
       } else {
         setWritebackStatus('error');
       }
+    } finally {
+      setPendingWritebackAction(null);
     }
   }, [isSourceRegistryReady, selectedWritebackSource, sourceLoadStatus]);
 
@@ -206,7 +210,7 @@ export function CalendarLayout() {
           <CalendarWritebackSection
             requestWritebackIntent={requestWritebackIntent}
             isWritebackActionDisabled={isWritebackActionDisabled}
-            isWritebackLoading={isWritebackLoading}
+            pendingWritebackAction={pendingWritebackAction}
             isProviderExecutionDisabled={isProviderExecutionDisabled}
             writebackSources={writebackSources}
             selectedWritebackSource={selectedWritebackSource}
