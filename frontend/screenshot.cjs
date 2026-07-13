@@ -40,7 +40,8 @@ function routeUrl(route) {
     console.log('Taking screenshot for route', route);
     try {
       // routeUrl enforces a fixed loopback origin and an exact route allowlist.
-      await page.goto(url, { waitUntil: 'load', timeout: 30000 }); // nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection
+      // nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection
+      await page.goto(url, { waitUntil: 'load', timeout: 30000 });
       await page.waitForTimeout(2000);
       const name = route === '/' ? 'home' : route.slice(1);
       await page.screenshot({ path: `test-results/${name}-screenshot.png`, fullPage: true });

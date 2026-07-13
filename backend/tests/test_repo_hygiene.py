@@ -146,8 +146,10 @@ def test_screenshot_utility_allows_only_local_static_routes():
     assert "new URL(route, SCREENSHOT_ORIGIN)" in screenshot_script
     assert "url.origin !== SCREENSHOT_ORIGIN" in screenshot_script
     assert "routeUrl enforces a fixed loopback origin" in screenshot_script
-    assert "nosemgrep: javascript.playwright.security.audit.playwright-goto-injection" in (
-        screenshot_script
+    assert (
+        "// nosemgrep: javascript.playwright.security.audit.playwright-goto-injection."
+        "playwright-goto-injection\n      await page.goto(url"
+        in screenshot_script
     )
     assert "console.error('Failed to capture route'" in screenshot_script
     assert "http://localhost:3000${route}" not in screenshot_script
