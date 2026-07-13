@@ -232,6 +232,12 @@ async def process_pending_attachment(
     config = await config_resolver(session, email.organization_id)
     if config is None:
         # Degrade gracefully: no active NewsDOM provider for this org yet.
+        logger.info(
+            "NewsDOM attachment %s remains pending: no active provider for "
+            "organization %s.",
+            getattr(attachment, "id", "?"),
+            email.organization_id or "personal-scope",
+        )
         return RESULT_PENDING
 
     try:
@@ -243,7 +249,13 @@ async def process_pending_attachment(
             source_record_uid=f"attachment-{attachment.id}",
             request_fn=request_fn,
         )
-    except NewsdomConfigurationError:
+    except NewsdomConfigurationError as exc:
+        logger.warning(
+            "NewsDOM attachment %s remains pending: provider configuration "
+            "was rejected: %s",
+            getattr(attachment, "id", "?"),
+            exc,
+        )
         return RESULT_PENDING
     except (NewsdomRequestError, ValueError) as exc:
         attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
@@ -280,6 +292,12 @@ async def process_pending_document(
 
     config = await config_resolver(session, document.organization_id)
     if config is None:
+        logger.info(
+            "NewsDOM document %s remains pending: no active provider for "
+            "organization %s.",
+            getattr(document, "document_id", "?"),
+            document.organization_id or "personal-scope",
+        )
         return RESULT_PENDING
 
     try:
@@ -289,7 +307,13 @@ async def process_pending_document(
             config=config,
             request_fn=request_fn,
         )
-    except NewsdomConfigurationError:
+    except NewsdomConfigurationError as exc:
+        logger.warning(
+            "NewsDOM document %s remains pending: provider configuration was "
+            "rejected: %s",
+            getattr(document, "document_id", "?"),
+            exc,
+        )
         return RESULT_PENDING
     except (NewsdomRequestError, ValueError) as exc:
         document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
@@ -365,6 +389,8 @@ class NewsdomRecognitionWorker:
         self._config_resolver = config_resolver
         self._task: asyncio.Task | None = None
         self._is_running = False
+        self._attachment_cursor: int | None = None
+        self._document_cursor: str | None = None
 
     async def start(self) -> None:
         """Start the recognition loop once."""
@@ -430,21 +456,10 @@ class NewsdomRecognitionWorker:
                     await _release_sweep_lease(session)
 
     async def _sweep_attachments(self, session: AsyncSession) -> None:
-        """Process a bounded batch of pending PDF attachments."""
-        rows = (
-            (
-                await session.execute(
-                    select(Attachment)
-                    .where(
-                        Attachment.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
-                    )
-                    .options(selectinload(Attachment.email))
-                    .limit(self.batch_limit)
-                )
-            )
-            .scalars()
-            .all()
-        )
+        """Process a bounded, starvation-free batch of pending attachments."""
+        rows = await self._load_pending_attachments(session)
+        if rows:
+            self._attachment_cursor = rows[-1].id
         for attachment in rows:
             try:
                 result = await process_pending_attachment(
@@ -468,22 +483,50 @@ class NewsdomRecognitionWorker:
                     exc_info=True,
                 )
 
-    async def _sweep_documents(self, session: AsyncSession) -> None:
-        """Process a bounded batch of pending workspace PDF documents."""
+    def _pending_attachment_statement(self, after_id: int | None):
+        """Build the next deterministic attachment batch query."""
+        statement = select(Attachment).where(
+            Attachment.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+        )
+        if after_id is not None:
+            statement = statement.where(Attachment.id > after_id)
+        return (
+            statement.order_by(Attachment.id)
+            .options(selectinload(Attachment.email))
+            .limit(self.batch_limit)
+        )
+
+    async def _load_pending_attachments(
+        self, session: AsyncSession
+    ) -> list[Attachment]:
+        """Load after the last attempted row, wrapping at the table tail.
+
+        Advancing over rows that remain pending prevents an unconfigured
+        organization's first batch from permanently starving configured rows.
+        """
         rows = (
             (
                 await session.execute(
-                    select(Document)
-                    .where(
-                        Document.document_status
-                        == PDF_DOM_RECOGNITION_PENDING_STATUS
-                    )
-                    .limit(self.batch_limit)
+                    self._pending_attachment_statement(self._attachment_cursor)
                 )
             )
             .scalars()
             .all()
         )
+        if not rows and self._attachment_cursor is not None:
+            self._attachment_cursor = None
+            rows = (
+                (await session.execute(self._pending_attachment_statement(None)))
+                .scalars()
+                .all()
+            )
+        return rows
+
+    async def _sweep_documents(self, session: AsyncSession) -> None:
+        """Process a bounded, starvation-free batch of pending documents."""
+        rows = await self._load_pending_documents(session)
+        if rows:
+            self._document_cursor = rows[-1].document_id
         for document in rows:
             try:
                 result = await process_pending_document(
@@ -506,3 +549,32 @@ class NewsdomRecognitionWorker:
                     getattr(document, "document_id", "?"),
                     exc_info=True,
                 )
+
+    def _pending_document_statement(self, after_id: str | None):
+        """Build the next deterministic workspace-document batch query."""
+        statement = select(Document).where(
+            Document.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+        )
+        if after_id is not None:
+            statement = statement.where(Document.document_id > after_id)
+        return statement.order_by(Document.document_id).limit(self.batch_limit)
+
+    async def _load_pending_documents(self, session: AsyncSession) -> list[Document]:
+        """Load after the last attempted document and wrap at the tail."""
+        rows = (
+            (
+                await session.execute(
+                    self._pending_document_statement(self._document_cursor)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not rows and self._document_cursor is not None:
+            self._document_cursor = None
+            rows = (
+                (await session.execute(self._pending_document_statement(None)))
+                .scalars()
+                .all()
+            )
+        return rows
