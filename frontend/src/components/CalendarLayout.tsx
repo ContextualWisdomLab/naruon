@@ -145,7 +145,7 @@ export function CalendarLayout() {
   const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: CalendarViewMode) => {
     const currentIndex = CALENDAR_VIEW_MODES.indexOf(mode);
     const lastIndex = CALENDAR_VIEW_MODES.length - 1;
-    let nextIndex = currentIndex;
+    let nextIndex: number;
     if (event.key === 'ArrowRight') nextIndex = currentIndex === lastIndex ? 0 : currentIndex + 1;
     else if (event.key === 'ArrowLeft') nextIndex = currentIndex === 0 ? lastIndex : currentIndex - 1;
     else if (event.key === 'Home') nextIndex = 0;

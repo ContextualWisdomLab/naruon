@@ -370,7 +370,7 @@ export function TasksLayout() {
   const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: TaskViewMode) => {
     const currentIndex = TASK_VIEW_MODES.indexOf(mode);
     const lastIndex = TASK_VIEW_MODES.length - 1;
-    let nextIndex = currentIndex;
+    let nextIndex: number;
     if (event.key === 'ArrowRight') nextIndex = currentIndex === lastIndex ? 0 : currentIndex + 1;
     else if (event.key === 'ArrowLeft') nextIndex = currentIndex === 0 ? lastIndex : currentIndex - 1;
     else if (event.key === 'Home') nextIndex = 0;
