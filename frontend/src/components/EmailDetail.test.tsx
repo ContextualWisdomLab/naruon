@@ -680,6 +680,48 @@ describe("EmailDetail", () => {
     expect(container.textContent).not.toContain("Tasks");
   });
 
+  it("normalizes legacy synthesis todos into 실행 항목 without crashing", async () => {
+    const email: TestEmail = {
+      id: 6,
+      message_id: "<legacy-todos@example.com>",
+      thread_id: null,
+      sender: "legacy@example.com",
+      recipients: "user@example.com",
+      subject: "Legacy synthesis payload",
+      date: "2026-05-11T09:00:00Z",
+      body: "Please preserve old synthesis payloads during rollout.",
+    };
+
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/6")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(
+          jsonResponse({
+            summary: "이전 응답 형식을 정규화합니다.",
+            todos: ["근거 확인"],
+            confidence: 0.86,
+          }),
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={6} />);
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("실행 항목");
+    expect(container.textContent).toContain("근거 확인");
+    expect(container.textContent).not.toContain("실행 항목이 없습니다.");
+  });
+
   it("runs a requested reply draft command for the selected email", async () => {
     const email: TestEmail = {
       id: 7,
