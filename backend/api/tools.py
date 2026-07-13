@@ -198,6 +198,7 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     }
 
 
+
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
@@ -225,10 +226,7 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if (
-                source_phrase in lowered_text
-                and translated_phrase not in translated_terms
-            ):
+            if source_phrase in lowered_text and translated_phrase not in translated_terms:
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -247,9 +245,7 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     normalized_domain = sender_domain.lower()
     phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
     spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(
-        term for term in phishing_terms if term in normalized_content
-    )
+    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
     spam_hits = sorted(term for term in spam_terms if term in normalized_content)
     suspicious_domain = (
         normalized_domain.endswith((".ru", ".zip", ".tk"))
@@ -272,9 +268,7 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
         warnings.append(f"sender domain looks suspicious: {sender_domain}")
     return {
         "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(
-            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
-        ),
+        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
         "risk_score": risk_score,
         "warnings": warnings,
     }
@@ -299,15 +293,7 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {
-        "disappointed",
-        "urgent",
-        "issue",
-        "problem",
-        "bad",
-        "불만",
-        "문제",
-    }
+    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -652,12 +638,13 @@ registry.register(
 )
 
 
+
 registry.register(
     ToolInfo(
         code="email_translator",
-        name="이메일 번역기 (Email Translator)",
-        description="이메일 텍스트를 지정된 대상 언어로 번역합니다.",
-        category="언어 변환",
+        name="이메일 번역기",
+        description="이메일 텍스트를 대상 언어로 번역합니다.",
+        category="번역",
         parameters={"text": "string", "target_language": "string"},
     ),
     email_translator_handler,
@@ -666,8 +653,8 @@ registry.register(
 registry.register(
     ToolInfo(
         code="spam_phishing_detector",
-        name="스팸 및 피싱 탐지기 (Spam & Phishing Detector)",
-        description="이메일 본문과 발신자 도메인을 분석하여 스팸 및 피싱 위험도를 평가합니다.",
+        name="스팸/피싱 감지기",
+        description="이메일 본문에서 스팸 및 피싱 위험 요소를 평가합니다.",
         category="보안",
         parameters={"email_content": "string", "sender_domain": "string"},
     ),
@@ -677,9 +664,9 @@ registry.register(
 registry.register(
     ToolInfo(
         code="reply_drafter",
-        name="답장 초안 생성기 (Reply Drafter)",
-        description="이전 이메일 맥락과 사용자의 의도(intent)를 바탕으로 답장 초안을 자동으로 작성합니다.",
-        category="커뮤니케이션",
+        name="답장 초안 작성기",
+        description="지정된 의도를 바탕으로 이메일 답장 초안을 작성합니다.",
+        category="작성",
         parameters={"original_email": "string", "intent": "string"},
     ),
     reply_drafter_handler,
@@ -688,9 +675,9 @@ registry.register(
 registry.register(
     ToolInfo(
         code="sentiment_analyzer",
-        name="감정 분석기 (Sentiment Analyzer)",
-        description="이메일의 전반적인 감정(긍정/부정/중립)과 주요 감정 키워드를 분석합니다.",
-        category="이메일 분석",
+        name="감정 분석기",
+        description="이메일 텍스트의 감정과 핵심 정서를 분석합니다.",
+        category="분석",
         parameters={"text": "string"},
     ),
     sentiment_analyzer_handler,
@@ -699,9 +686,9 @@ registry.register(
 registry.register(
     ToolInfo(
         code="grammar_checker",
-        name="맞춤법 및 문법 검사기 (Grammar Checker)",
-        description="작성된 이메일 초안의 맞춤법과 문법 오류를 검사하고 교정 제안을 제공합니다.",
-        category="작성 도구",
+        name="맞춤법/문법 검사기",
+        description="이메일 초안의 맞춤법 및 문법을 검사하고 교정합니다.",
+        category="작성",
         parameters={"draft_content": "string"},
     ),
     grammar_checker_handler,
