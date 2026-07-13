@@ -22,11 +22,19 @@
 - hybrid retrieval의 점수 융합·질의 정규화 프리미티브를 독립 패키지 `rankweave`(PyPI, Apache-2.0)로 분리하고 naruon이 이를 의존성으로 소비하도록 배선했습니다: `backend/services/hybrid_retrieval`의 로컬 `score_fusion.py`·`query_normalization.py`를 삭제하고 해시 고정된 `rankweave==0.1.0`을 `requirements.txt`/`requirements-hashes.txt`에 추가했으며, 패키지 `__init__`은 동일한 8개 심볼을 `rankweave`에서 재수출하는 naruon 측 seam으로 유지됩니다(동작 무변경 — 융합 테스트 26건 통과, `retrieval_channels` 등 기존 소비자는 `services.hybrid_retrieval`에서 계속 import). rankweave는 standalone 제품이자 submodule/의존성으로 재사용 가능한 OSMU("따로, 또 같이") 산출물입니다.
 
 ### 기능 추가 (Features)
+- **도구 기능 대규모 추가 (naruon#tools)**: 사용자가 직접 사용할 수 있는 새롭고 유용한 5개의 AI/분석 도구를 `backend/api/tools.py`에 구현하고 레지스트리에 등록했습니다.
+  - `email_translator`: 이메일 내용을 대상 언어로 번역
+  - `spam_phishing_detector`: 이메일의 스팸 및 피싱 위험도를 분석
+  - `reply_drafter`: 이전 맥락을 기반으로 답장 초안 자동 생성
+  - `sentiment_analyzer`: 이메일의 전반적인 감정(긍정/부정) 분석
+  - `grammar_checker`: 작성된 이메일 초안의 문법과 철자 교정
+- 각 신규 도구 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
 - `text_analyzer`, `base64_encoder`, `base64_decoder` 등의 실용적인 유틸리티 도구들을 추가했습니다.
 
 ### 프로젝트 그래프 (Project Graph Traceability)
 - 프로젝트 traceability 읽기 모델/API에 유형화된 객체↔객체 **관계(relations)** 뷰를 추가했습니다 (P0 dense-KG, naruon#1051 기반). LLM 추출기가 `project_graph_edges`에 적재하는 관계(예: feature *implements* requirement, issue *blocks* milestone)를, 두 끝점이 모두 프로젝트 객체로 해석될 때에 한해 `relation_type` + 양쪽 끝점(`object_uid`/`object_type`/`title`) + 인용(`citation_bundle`)이 인라인된 `ProjectTraceRelation`으로 비정규화해 노출합니다. 소비자가 edge↔object를 재조인하지 않고도 객체가 *왜* 연결되는지 근거와 함께 렌더할 수 있습니다(CP-1 synthesis). segment-evidence 엣지(`segment:<uid>` source)는 source 끝점이 객체로 해석되지 않으므로 구조적으로 relations에서 제외되며, 기존 raw `edges` 컬렉션은 하위호환을 위해 변경 없이 유지됩니다. `GET /api/projects/{project_uid}/traceability` 응답에 `relations` 필드를 추가했습니다.
 - 프로젝트 **근거(evidence) 읽기 모델/API**에도 유형화된 관계를 per-object 단위로 확장했습니다 (P0 dense-KG, naruon#1053 후속). 단일 객체를 드릴다운하는 `GET /api/projects/{project_uid}/evidence/{object_uid}` 응답에, 그 객체가 끝점(source 또는 target)인 typed 관계만 필터링해 노출하는 `relations` 필드를 추가했습니다(양방향 inbound/outbound, 양쪽 끝점 해석 + `citation_bundle` 인라인). #1053의 traceability 전역 `relations`를 재조인하지 않고도 한 객체가 *왜* 다른 객체와 연결되는지 근거와 함께 볼 수 있습니다(Evidence Inspector 드릴다운의 그래프 legibility). #1053의 관계 projection 기계(`_trace_relations`)를 재사용하는 순수 projection이라 스키마/마이그레이션 변경 없음, opaque 객체/엣지 uid만 노출, 기존 `citation_bundle` 등 응답 필드는 하위호환 유지. TDD: `_incident_relations` 순수 필터 단위 테스트(inbound/outbound/양방향/무관 객체), mocked API 직렬화 테스트, 그리고 typed 관계 엣지를 seed 해 source(outbound)·target(inbound)·제3객체(관계 없음) evidence를 검증하는 real-PostgreSQL smoke 테스트를 추가했습니다.
+- 프로젝트 그래프에 **의사결정(decision) 전용 읽기 모델/API**를 추가했습니다 (P0 dense-KG §8, naruon#1058의 `ProjectObjectType.DECISION` 엔티티 기반, #1053/#1055/#1057 읽기 모델 라인 후속). `GET /api/projects/{project_uid}/decisions`는 프로젝트의 `decision` 유형 객체(해소된 승인·확정된 선택지)만 골라, 각 결정을 자신의 인용(`citation_bundle`)과 그 결정에 인접한 typed 관계(inbound/outbound, 양쪽 끝점 해석 + 인용 인라인)와 함께 노출하고, 집계로 `decision_count`·`grounded_decision_count`(인용을 가진 결정만 grounded 로 계수 — 근거 없는 grounding 주장 없음)를 제공합니다. traceability 전체 그래프를 가져와 클라이언트가 직접 필터링할 필요 없이 "무엇이 결정되었고 어떤 요구사항/기능/이슈와 *왜* 연결되는지"를 근거와 함께 볼 수 있습니다(프론트엔드 `DecisionPointCard` 배선 준비). #1053/#1055의 정착된 projection(`_trace_object`/`_trace_relations`/`_incident_relations`/`_citation_bundle`)을 재사용하는 순수 `_decision_view` folding이라 신규 지속성·스키마·마이그레이션 없음, opaque 객체/엣지 uid만 노출, 객체 로드 순서 보존으로 결정론적. 기존 응답 계약은 전부 하위호환 유지. TDD: `_decision_view` 순수 단위 테스트(decision 필터·양방향 인접 관계·인용 기반 grounded 계수·로드 순서 보존·빈 케이스), mocked API 직렬화/404 테스트, 그리고 결정론적 시드("…확정…")가 산출한 grounded decision과 `resolves` 인접 관계를 검증하는 real-PostgreSQL smoke 테스트를 추가했습니다.
 
 ### 테스트/품질 (PostgreSQL Smoke Evidence)
 
