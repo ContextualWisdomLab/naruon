@@ -305,16 +305,16 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"
     )
+    # Governance/security workflows (codeql, dependency-review, scorecard,
+    # trivy) are centralized in the org-level ContextualWisdomLab/.github
+    # required workflows and are intentionally not duplicated locally. Only the
+    # functional workflows that remain in this repository are asserted here.
     hardened_workflows = [
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
-        ".github/workflows/codeql.yml",
-        ".github/workflows/dependency-review.yml",
         ".github/workflows/docker-publish.yml",
         ".github/workflows/mail-smoke.yml",
         ".github/workflows/pr-governance.yml",
-        ".github/workflows/scorecard.yml",
-        ".github/workflows/trivy.yml",
     ]
 
     for workflow_path in hardened_workflows:
@@ -422,109 +422,11 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     assert "continue-on-error: true" not in workflow
 
 
-def test_codeql_workflow_scans_default_branch_only_without_uploading_sarif() -> None:
-    # PR CodeQL and the code_scanning ruleset merge gate are delegated to the
-    # central ContextualWisdomLab/.github codeql-pr.yml. The local workflow runs
-    # only as push/manual CI evidence and avoids duplicate SARIF uploads.
-    workflow = read_repo_text(".github/workflows/codeql.yml")
-
-    assert "permissions:\n  contents: read\n  security-events: read" in workflow
-    assert (
-        "    permissions:\n      actions: read\n      contents: read\n      security-events: read"
-        in workflow
-    )
-    assert "upload: never" in workflow
-    assert "security-events: write" not in workflow
-    assert "pull_request:" not in workflow
-    assert "analyze-merge:" not in workflow
-    assert "CodeQL merge preview" not in workflow
-    assert "refs/pull/" not in workflow
-    assert "- develop" in workflow
-    assert "- master" in workflow
-
-
-def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> None:
-    scorecard_workflow = read_repo_text(".github/workflows/scorecard.yml")
-    trivy_workflow = read_repo_text(".github/workflows/trivy.yml")
-
-    for workflow in (scorecard_workflow, trivy_workflow):
-        assert "pull_request:" in workflow
-        assert "push:" in workflow
-        assert "- develop" in workflow
-        assert "- master" in workflow
-        assert (
-            "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0"
-            in workflow
-        )
-        assert "security-events: write" in workflow
-        assert "continue-on-error: true" not in workflow
-        assert (
-            "github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4"
-            in workflow
-        )
-
-    assert (
-        "ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3"
-        in scorecard_workflow
-    )
-    assert "permissions:\n  contents: read\n\njobs:" in scorecard_workflow
-    assert "permissions:\n  contents: read\n\njobs:" in trivy_workflow
-    assert (
-        "    permissions:\n      actions: read\n      contents: read\n      id-token: write\n      security-events: write"
-        in scorecard_workflow
-    )
-    assert (
-        "    permissions:\n      contents: read\n      security-events: write"
-        in trivy_workflow
-    )
-    assert "results_format: sarif" in scorecard_workflow
-    assert "Restore Scorecard SARIF ownership" in scorecard_workflow
-    assert (
-        'sudo chown "$(id -u):$(id -g)" scorecard-results.sarif' in scorecard_workflow
-    )
-    assert "chmod u+rw scorecard-results.sarif" in scorecard_workflow
-    assert "Preserve Scorecard SARIF categories" in scorecard_workflow
-    assert (
-        "python scripts/ci/ensure_scorecard_sarif_categories.py scorecard-results.sarif"
-        in scorecard_workflow
-    )
-    assert "category: scorecard" in scorecard_workflow
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in scorecard_workflow
-    )
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
-        in scorecard_workflow
-    )
-    assert (
-        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in scorecard_workflow
-    )
-
-    assert (
-        "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0"
-        in trivy_workflow
-    )
-    assert "format: sarif" in trivy_workflow
-    assert "category: trivy" in trivy_workflow
-    assert "trivy-config: trivy.yaml" in trivy_workflow
-    assert "Run Trivy findings summary" in trivy_workflow
-    assert 'trusted_registries:\n    - "ghcr.io"\n    - "docker.io"' in read_repo_text(
-        ".github/trivy/trusted-registries.yaml"
-    )
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in trivy_workflow
-    )
-    assert (
-        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
-        in trivy_workflow
-    )
-    assert (
-        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        in trivy_workflow
-    )
+# CodeQL, Scorecard, and Trivy code-scanning workflows are centralized in the
+# org-level ContextualWisdomLab/.github required workflows. Their local copies
+# were removed to stop duplicate runs and duplicate SARIF uploads, so the
+# repository-level assertions that previously guarded those local files no
+# longer apply here and are enforced centrally instead.
 
 
 def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
