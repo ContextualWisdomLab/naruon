@@ -943,6 +943,11 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "CHECK_RUN_PR_NUMBER" in workflow
     assert "headRefOid" in gate_script
     assert "mergeStateStatus" in gate_script
+    assert "Merge state lookup attempt" in gate_script
+    assert "Merge state is still UNKNOWN after 4 attempts" in gate_script
+    assert "PR state became %s during merge-state refresh" in gate_script
+    assert "PR head changed during gate evaluation" in gate_script
+    assert "skipping stale gate publication" in gate_script
     assert "gh pr checks" in gate_script and "--required" in gate_script
     assert "no required checks reported" in gate_script
     assert "no legacy required status contexts reported" in gate_script
@@ -955,6 +960,7 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "coderabbitai" in gate_script
     assert "/issues/${PR_NUMBER}/comments" in gate_script
     assert "COMMENT_MARKER" in gate_script
+    assert "no current blocking failures remain" in gate_script
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script
