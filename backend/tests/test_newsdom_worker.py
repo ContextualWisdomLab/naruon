@@ -22,14 +22,13 @@ from services.newsdom_pdf_recognition import (
     PdfDomRecognitionRecords,
 )
 import services.newsdom_worker as newsdom_worker_module
-from services.newsdom_worker import (
-    NewsdomRecognitionWorker,
-    RESULT_FAILED,
-    RESULT_PENDING,
-    RESULT_RECOGNIZED,
-    process_pending_attachment,
-    process_pending_document,
-)
+
+NewsdomRecognitionWorker = newsdom_worker_module.NewsdomRecognitionWorker
+RESULT_FAILED = newsdom_worker_module.RESULT_FAILED
+RESULT_PENDING = newsdom_worker_module.RESULT_PENDING
+RESULT_RECOGNIZED = newsdom_worker_module.RESULT_RECOGNIZED
+process_pending_attachment = newsdom_worker_module.process_pending_attachment
+process_pending_document = newsdom_worker_module.process_pending_document
 
 
 def _config() -> NewsdomRuntimeConfig:
