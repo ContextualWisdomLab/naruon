@@ -313,7 +313,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
         ".github/workflows/docker-publish.yml",
-        ".github/workflows/mail-smoke.yml",
         ".github/workflows/pr-governance.yml",
     ]
 
@@ -321,6 +320,14 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         workflow = read_repo_text(workflow_path)
         assert harden_runner_ref in workflow
         assert "egress-policy: audit" in workflow
+
+    # mail-smoke seeds live mailbox/DAV credentials on a self-hosted runner, so
+    # it is hardened one level further: egress is blocked to an allowlist, not
+    # merely audited, so checked-out code cannot exfiltrate the secrets.
+    mail_smoke_workflow = read_repo_text(".github/workflows/mail-smoke.yml")
+    assert harden_runner_ref in mail_smoke_workflow
+    assert "egress-policy: block" in mail_smoke_workflow
+    assert "allowed-endpoints:" in mail_smoke_workflow
 
     dependency_review_workflow = read_repo_text(
         ".github/workflows/dependency-review.yml"
