@@ -925,6 +925,16 @@ async def test_json_validator_handler_invalid():
 
 
 @pytest.mark.asyncio
+async def test_json_validator_handler_normalizes_none_to_empty_string():
+    from api.tools import json_validator_handler
+
+    res = await json_validator_handler({"json_string": None})
+    assert res["is_valid"] is False
+    assert res["formatted_json"] is None
+    assert res["error"] is not None
+
+
+@pytest.mark.asyncio
 async def test_hash_generator_handler():
     from api.tools import hash_generator_handler
     import hashlib
@@ -932,6 +942,15 @@ async def test_hash_generator_handler():
     res = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
     assert res["hash"] == hashlib.md5(b"hello").hexdigest()
     assert res["algorithm"] == "md5"
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler_normalizes_none_values():
+    from api.tools import hash_generator_handler
+
+    res = await hash_generator_handler({"text": None, "algorithm": None})
+    assert res["hash"] == hashlib.sha256(b"").hexdigest()
+    assert res["algorithm"] == "sha256"
 
 
 @pytest.mark.asyncio
@@ -960,3 +979,168 @@ async def test_url_parser_handler_invalid():
 
     with pytest.raises(ValueError, match="Invalid URL"):
         await url_parser_handler({"url": "http://[::1"})
+
+
+@pytest.mark.asyncio
+async def test_url_parser_handler_normalizes_none_to_empty_string():
+    from api.tools import url_parser_handler
+
+    res = await url_parser_handler({"url": None})
+    assert res == {
+        "scheme": "",
+        "netloc": "",
+        "path": "",
+        "params": "",
+        "query": "",
+        "fragment": "",
+        "hostname": "",
+    }
+
+
+def test_execute_email_translator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Hello, thank you for the meeting.",
+                    "target_language": "ko",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "안녕하세요" in data["result"]["translated_text"]
+    assert "감사합니다" in data["result"]["translated_text"]
+    assert "회의" in data["result"]["translated_text"]
+    assert data["result"]["source_language_detected"] == "en"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_language"),
+    [("안녕하세요", "ko"), ("123 !?", "unknown")],
+)
+def test_email_translator_detects_non_english_sources(text, expected_language):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": text, "target_language": "en"}},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["result"]["source_language_detected"] == expected_language
+
+
+def test_execute_spam_phishing_detector():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/spam_phishing_detector/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "Urgent: update your bank password now",
+                    "sender_domain": "secure-bank-login.ru",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["is_phishing"] is True
+    assert data["result"]["is_spam"] is True
+    assert data["result"]["risk_score"] >= 90
+    assert any("sender domain" in warning for warning in data["result"]["warnings"])
+
+
+def test_execute_reply_drafter():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/reply_drafter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "original_email": "Can we meet tomorrow at 2pm?",
+                    "intent": "긍정적 동의",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "긍정적 동의" in data["result"]["draft"]
+    assert "tomorrow at 2pm" in data["result"]["draft"]
+
+
+def test_execute_sentiment_analyzer():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "I am disappointed about this urgent issue."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "negative"
+    assert data["result"]["score"] < 0.5
+    assert "불만" in data["result"]["key_emotions"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_sentiment", "expected_score"),
+    [
+        ("Thank you, this is excellent.", "positive", 0.85),
+        ("Status update.", "neutral", 0.5),
+    ],
+)
+def test_execute_sentiment_analyzer_non_negative_branches(
+    text, expected_sentiment, expected_score
+):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": text}},
+        )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["sentiment"] == expected_sentiment
+    assert result["score"] == pytest.approx(expected_score)
+
+
+def test_execute_grammar_checker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/grammar_checker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "draft_content": "안녕 하세요. 확인 부탁 드립니다. 감사 합니다."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "안녕하세요" in data["result"]["corrected_text"]
+    assert "확인 부탁드립니다" in data["result"]["corrected_text"]
+    assert "감사합니다" in data["result"]["corrected_text"]
+    assert data["result"]["errors_found"] == 3
+
+
+def test_validate_webhook_url_no_host():
+    from api.tools import validate_webhook_url
+
+    with pytest.raises(ValueError, match="Webhook URL must include a host"):
+        validate_webhook_url("https://")
+
+
+def test_validate_webhook_url_invalid_port():
+    from api.tools import validate_webhook_url
+
+    with pytest.raises(ValueError, match="Webhook URL port must be valid"):
+        validate_webhook_url("https://example.com:9999999/webhook")

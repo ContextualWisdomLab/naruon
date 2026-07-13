@@ -28,6 +28,8 @@ from services.project_graph import (
     ProjectCandidateSummary,
     ProjectCitation,
     ProjectCorrection,
+    ProjectDecisionRecord,
+    ProjectDecisionView,
     ProjectEvidence,
     ProjectGraphNotFoundError,
     ProjectRelationSummary,
@@ -893,6 +895,136 @@ async def test_project_relation_summary_endpoint_returns_404_when_missing(
 
 
 @pytest.mark.asyncio
+async def test_project_decisions_endpoint_serializes_decision_slice(
+    dev_auth_dependency_overrides,
+    monkeypatch,
+):
+    captured = {}
+
+    def _citation() -> ProjectCitation:
+        return ProjectCitation(
+            content_segment_uid="seg-dec",
+            source_kind="email_body",
+            source_record_uid="<launch@example.com>",
+            heading_path="Decisions",
+            segment_path="/document[1]/paragraph[1]",
+            ordinal_index=1,
+            safe_text_excerpt="결제 재시도 안내 도입을 최종 확정했습니다",
+        )
+
+    relation = ProjectTraceRelation(
+        relation_uid="project_edge:rel",
+        relation_type="resolves",
+        source=ProjectTraceRelationEndpoint(
+            object_uid="decision:aaa",
+            object_type="decision",
+            title="Decision: adopt retry",
+        ),
+        target=ProjectTraceRelationEndpoint(
+            object_uid="issue:bbb",
+            object_type="issue",
+            title="Issue: approval blocker",
+        ),
+        confidence=0.88,
+        source_segment_uids=("seg-dec",),
+        citation_bundle=(_citation(),),
+    )
+    view = ProjectDecisionView(
+        project_uid="project_candidate:test",
+        decision_count=1,
+        grounded_decision_count=1,
+        decisions=(
+            ProjectDecisionRecord(
+                object_uid="decision:aaa",
+                title="Decision: adopt retry",
+                summary="retry guidance adoption was approved",
+                status_code="candidate",
+                confidence=0.82,
+                citation_bundle=(_citation(),),
+                relations=(relation,),
+            ),
+        ),
+    )
+
+    async def fake_get_project_decisions(session, *, scope, project_uid):
+        captured["project_uid"] = project_uid
+        captured["scope"] = scope
+        return view
+
+    async def override_get_db():
+        yield object()
+
+    monkeypatch.setattr(
+        projects_api,
+        "get_project_decisions",
+        fake_get_project_decisions,
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with _client(
+            user_id="reviewer",
+            organization_id="org-acme",
+        ) as client:
+            response = await client.get(
+                "/api/projects/project_candidate:test/decisions"
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert captured["project_uid"] == "project_candidate:test"
+    assert body["project_uid"] == "project_candidate:test"
+    assert body["decision_count"] == 1
+    assert body["grounded_decision_count"] == 1
+    assert len(body["decisions"]) == 1
+    decision = body["decisions"][0]
+    assert decision["object_uid"] == "decision:aaa"
+    assert decision["title"] == "Decision: adopt retry"
+    # Grounded: the decision carries its own citation bundle, not a bare claim.
+    assert decision["citation_bundle"][0]["content_segment_uid"] == "seg-dec"
+    # Incident typed relations are inlined so a consumer can render *why* the
+    # decision connects to the objects it resolves.
+    assert len(decision["relations"]) == 1
+    surfaced = decision["relations"][0]
+    assert surfaced["relation_type"] == "resolves"
+    assert surfaced["source"]["object_type"] == "decision"
+    assert surfaced["target"]["object_uid"] == "issue:bbb"
+
+
+@pytest.mark.asyncio
+async def test_project_decisions_endpoint_returns_404_when_missing(
+    dev_auth_dependency_overrides,
+    monkeypatch,
+):
+    async def fake_get_project_decisions(session, *, scope, project_uid):
+        raise ProjectGraphNotFoundError("Project candidate not found")
+
+    async def override_get_db():
+        yield object()
+
+    monkeypatch.setattr(
+        projects_api,
+        "get_project_decisions",
+        fake_get_project_decisions,
+    )
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with _client(
+            user_id="reviewer",
+            organization_id="org-acme",
+        ) as client:
+            response = await client.get(
+                "/api/projects/project_candidate:missing/decisions"
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Project candidate not found"
+
+
+@pytest.mark.asyncio
 async def test_project_relation_summary_aggregates_typed_relation(
     dev_auth_dependency_overrides,
     project_graph_api_db_override,
@@ -975,6 +1107,98 @@ async def test_project_relation_summary_aggregates_typed_relation(
         assert implements["grounded_relation_count"] == 1
         assert implements["source_object_types"] == [source_object.object_type]
         assert implements["target_object_types"] == [target_object.object_type]
+
+
+@pytest.mark.asyncio
+async def test_project_decisions_surface_grounded_slice_and_incident_relation(
+    dev_auth_dependency_overrides,
+    project_graph_api_db_override,
+    project_graph_api_sessionmaker,
+):
+    user_id = f"project-api-dec-{uuid.uuid4().hex}"
+    organization_id = f"org-project-api-{uuid.uuid4().hex[:12]}"
+    async with project_graph_api_sessionmaker() as session:
+        seeded = await _seed_projection(
+            session,
+            user_id=user_id,
+            organization_id=organization_id,
+        )
+
+    async with _client(user_id=user_id, organization_id=organization_id) as client:
+        before = await client.get(
+            f"/api/projects/{seeded['candidate_uid']}/decisions"
+        )
+        assert before.status_code == 200
+        before_body = before.json()
+        # The deterministic seed text ("...확정...") yields exactly one grounded
+        # decision object, and no object-to-object relation yet.
+        assert before_body["project_uid"] == seeded["candidate_uid"]
+        assert before_body["decision_count"] == 1
+        assert before_body["grounded_decision_count"] == 1
+        decision = before_body["decisions"][0]
+        assert decision["object_uid"].startswith("decision:")
+        # Grounded: the decision carries its citation, not a bare assertion.
+        assert decision["citation_bundle"]
+        assert decision["relations"] == []
+        decision_uid = decision["object_uid"]
+
+    # Attach a typed object-to-object relation from the decision to another
+    # object so the incident-relation projection is exercised end to end.
+    async with project_graph_api_sessionmaker() as session:
+        decision_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.user_id == user_id,
+                ProjectGraphObjectRecord.object_uid == decision_uid,
+            )
+        )
+        assert decision_object is not None
+        target_object = await session.scalar(
+            select(ProjectGraphObjectRecord)
+            .where(ProjectGraphObjectRecord.user_id == user_id)
+            .where(ProjectGraphObjectRecord.object_type == "issue")
+            .order_by(ProjectGraphObjectRecord.object_uid.asc())
+        )
+        assert target_object is not None
+        segment = await session.scalar(
+            select(ContentSegmentRecord).where(
+                ContentSegmentRecord.content_segment_uid == seeded["segment_uid"]
+            )
+        )
+        assert segment is not None
+        session.add(
+            ProjectGraphEdgeRecord(
+                edge_uid=f"project_edge:test-{uuid.uuid4().hex[:16]}",
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=f"workspace-{organization_id}",
+                source_uid=decision_object.object_uid,
+                target_uid=target_object.object_uid,
+                edge_type="resolves",
+                confidence=0.86,
+                source_segment_uids=[seeded["segment_uid"]],
+                source_object=decision_object,
+                target_object=target_object,
+                primary_content_segment_id=segment.content_segment_id,
+            )
+        )
+        await session.commit()
+
+    async with _client(user_id=user_id, organization_id=organization_id) as client:
+        after = await client.get(
+            f"/api/projects/{seeded['candidate_uid']}/decisions"
+        )
+        assert after.status_code == 200
+        after_decision = after.json()["decisions"][0]
+        assert len(after_decision["relations"]) == 1
+        relation = after_decision["relations"][0]
+        assert relation["relation_type"] == "resolves"
+        assert relation["source"]["object_uid"] == decision_uid
+        assert relation["source"]["object_type"] == "decision"
+        assert relation["target"]["object_uid"] == target_object.object_uid
+        # Grounded: the relation carries the endpoint citation.
+        assert relation["citation_bundle"][0]["content_segment_uid"] == (
+            seeded["segment_uid"]
+        )
 
 
 async def _seed_projection(
