@@ -148,6 +148,15 @@ ADMIN_ROLES = SYSTEM_ADMIN_ROLES | TENANT_ADMIN_ROLES
 SESSION_ISSUER = "naruon-control-plane"
 SESSION_AUDIENCE = "naruon-api"
 JWT_DECODE_REQUIRED_CLAIMS = ("exp", "iss", "aud")
+# An OIDC ID token carries aud == client_id, so verifying signature/issuer/aud
+# alone lets a frontend ID token be replayed as an API access token (RFC 8725
+# §3.11). naruon's API credential is the OIDC access token (the frontend sends
+# token_response.access_token). Accept only material the IdP marks as an access
+# token: Keycloak sets the body claim typ="Bearer"; RFC 9068 sets the header
+# typ "at+jwt". ID tokens (Keycloak typ="ID") and unmarked material are rejected.
+# ponytail: extend these sets if a non-Keycloak/non-RFC9068 IdP is onboarded.
+OIDC_ACCESS_TOKEN_HEADER_TYPE = "at+jwt"
+OIDC_ACCESS_TOKEN_BODY_TYPES = frozenset({"bearer"})
 MIN_SESSION_SECRET_BYTES = 32
 MAX_SIGNED_SESSION_EXPIRATION_SECONDS = 12 * 60 * 60
 MAX_SIGNED_SESSION_CLOCK_SKEW_SECONDS = 60
@@ -263,7 +272,34 @@ def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:
             raise _authentication_error()
         if not isinstance(payload, dict):
             raise _authentication_error()
+        _require_oidc_access_token(header, payload)
         return payload
+    raise _authentication_error()
+
+
+def _require_oidc_access_token(
+    header: dict[str, Any], payload: dict[str, Any]
+) -> None:
+    """Reject OIDC ID tokens replayed as API access tokens (RFC 8725 §3.11).
+
+    The frontend transmits the OIDC access token as the API bearer, so only
+    material the IdP marks as an access token may build a session: an RFC 9068
+    header typ of "at+jwt", or a Keycloak body typ of "Bearer". ID tokens
+    (Keycloak typ="ID") and tokens with no access-token marker are rejected even
+    when signature, issuer, and audience verify.
+    """
+    header_type = header.get("typ")
+    if (
+        isinstance(header_type, str)
+        and header_type.strip().lower() == OIDC_ACCESS_TOKEN_HEADER_TYPE
+    ):
+        return
+    body_type = payload.get("typ")
+    if (
+        isinstance(body_type, str)
+        and body_type.strip().lower() in OIDC_ACCESS_TOKEN_BODY_TYPES
+    ):
+        return
     raise _authentication_error()
 
 

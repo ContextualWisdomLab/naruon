@@ -972,6 +972,7 @@ async def test_signed_bearer_session_with_oidc(monkeypatch):
         return {
             "iss": "https://login.example.test/realms/naruon",
             "aud": "naruon-api",
+            "typ": "Bearer",
             "sub": "alice",
             "role": "member",
             "org": "org-acme",
@@ -1026,6 +1027,7 @@ async def test_oidc_session_accepts_tuple_audience(monkeypatch):
         return {
             "iss": "https://login.example.test/realms/naruon",
             "aud": ("naruon-api", "naruon-admin"),
+            "typ": "Bearer",
             "sub": "alice",
             "role": "member",
             "org": "org-acme",
@@ -1046,6 +1048,104 @@ async def test_oidc_session_accepts_tuple_audience(monkeypatch):
         settings.OIDC_ISSUER_URL = previous_issuer_url
         settings.OIDC_CLIENT_ID = previous_client_id
         settings.AUTH_SESSION_HMAC_SECRET = previous_secret
+
+    assert context.session_verifier == "oidc"
+    assert context.user_id == "alice"
+
+
+def _oidc_settings_snapshot():
+    return (
+        settings.OIDC_ISSUER_URL,
+        settings.OIDC_CLIENT_ID,
+        settings.AUTH_SESSION_HMAC_SECRET,
+    )
+
+
+def _apply_oidc_settings():
+    settings.OIDC_ISSUER_URL = "https://login.example.test/realms/naruon"
+    settings.OIDC_CLIENT_ID = "naruon-api"
+    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+
+
+def _restore_oidc_settings(previous):
+    (
+        settings.OIDC_ISSUER_URL,
+        settings.OIDC_CLIENT_ID,
+        settings.AUTH_SESSION_HMAC_SECRET,
+    ) = previous
+
+
+def _install_oidc_decode(monkeypatch, payload):
+    import jwt
+
+    class MockKey:
+        key_id = "test-key"
+        key = "public_key"
+
+    monkeypatch.setattr("api.auth.jwks_client", object())
+    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (MockKey(),))
+    monkeypatch.setattr(jwt, "decode", lambda *a, **k: payload)
+
+
+def _oidc_claims(**overrides):
+    payload = {
+        "iss": "https://login.example.test/realms/naruon",
+        "aud": "naruon-api",
+        "sub": "alice",
+        "role": "member",
+        "org": "org-acme",
+        "groups": ["group-1", "group-2"],
+        "workspace": "workspace-org-acme",
+        "exp": int(time.time()) + 300,
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "header,claims",
+    [
+        # Keycloak ID token replayed as an API bearer (the Strix finding).
+        ({"alg": "RS256", "typ": "JWT", "kid": "test-key"}, {"typ": "ID"}),
+        # Forged/opaque material with no access-token marker (the PoC shape).
+        ({"alg": "RS256", "typ": "JWT", "kid": "test-key"}, {}),
+        # An ID-token typ must not sneak through via the header either.
+        ({"alg": "RS256", "typ": "JWT", "kid": "test-key"}, {"typ": "id"}),
+    ],
+)
+async def test_oidc_rejects_id_token_replayed_as_api_bearer(
+    monkeypatch, header, claims
+):
+    previous = _oidc_settings_snapshot()
+    _apply_oidc_settings()
+    _install_oidc_decode(monkeypatch, _oidc_claims(**claims))
+    token = _signed_session_token(_valid_session_payload(), header=header)
+
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await get_auth_context(authorization=f"Bearer {token}")
+    finally:
+        _restore_oidc_settings(previous)
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_oidc_accepts_rfc9068_access_token_header_typ(monkeypatch):
+    previous = _oidc_settings_snapshot()
+    _apply_oidc_settings()
+    # RFC 9068 access token: marker in the header typ, no body typ claim.
+    _install_oidc_decode(monkeypatch, _oidc_claims())
+    token = _signed_session_token(
+        _valid_session_payload(),
+        header={"alg": "RS256", "typ": "at+jwt", "kid": "test-key"},
+    )
+
+    try:
+        context = await get_auth_context(authorization=f"Bearer {token}")
+    finally:
+        _restore_oidc_settings(previous)
 
     assert context.session_verifier == "oidc"
     assert context.user_id == "alice"
@@ -1072,6 +1172,7 @@ async def test_oidc_session_rejects_missing_client_id_after_decode(monkeypatch):
     def mock_jwt_decode(*args, **kwargs):
         return {
             "iss": "https://login.example.test/realms/naruon",
+            "typ": "Bearer",
             "sub": "alice",
             "role": "member",
             "org": "org-acme",
