@@ -10,10 +10,14 @@ CodeRabbit/robot-review evidence. Human review is not awaited by default.
 - Application CI must run backend pytest and frontend test/lint/build checks on
   pull requests to `master` and `release/**`, while release-branch pushes must
   not create duplicate check noise; push checks are scoped to `master`.
-- The CodeRabbit robot-review gate is satisfied by current-head CodeRabbit
-  evidence only when current-head blocking findings, warnings, and failures are
-  fixed, rebutted with evidence, or superseded. Authoritative current-head
-  `Review skipped` evidence satisfies the robot-review gate when applicable.
+- The CodeRabbit robot-review gate is evidence-conditional: it applies only
+  when the current head has CodeRabbit check-run evidence. When no CodeRabbit
+  evidence exists on the head (the app is not installed in the org or has not
+  reported), the gate proceeds without waiting for it. When evidence exists, it
+  satisfies the gate only when current-head blocking findings, warnings, and
+  failures are fixed, rebutted with evidence, or superseded. Authoritative
+  current-head `Review skipped` evidence satisfies the robot-review gate when
+  applicable.
 - PR Governance automation is metadata-only: it must not checkout pull request
   code, clone the head branch, dismiss reviews, enable auto-merge, or use admin
   merge. It may read PR/check/review-thread metadata and post blocker comments;
@@ -25,8 +29,19 @@ CodeRabbit/robot-review evidence. Human review is not awaited by default.
   transient GitHub API truncation and fails closed instead of falling back to
   PR-head or local scripts.
 - Pending, queued, requested, waiting, or in-progress checks are wait states, not
-  hard failure findings. Failed, cancelled, timed-out, and action-required states
-  are blockers.
+  hard failure findings. Success, pass, skipped, and neutral states satisfy the
+  gate. Every other required-check state — including failed, cancelled,
+  timed-out, action-required, and any unrecognized state — is a blocker: the
+  gate fails closed rather than passing states it does not understand.
+- If gate evaluation itself errors (for example a transient GitHub API
+  failure), the gate publishes a completed/failure check-run instead of leaving
+  a previously published result in place.
+- Gate blocker comments publish sanitized check names and generic error text
+  only; raw CLI diagnostics stay in the workflow run log. Inside Actions the
+  gate runs with a pinned system PATH so earlier steps cannot influence tool
+  resolution via GITHUB_PATH.
+- Authoritative `Review skipped` evidence counts only when the same check
+  output carries no blocking warning/failure language alongside it.
 - `reviewDecision=CHANGES_REQUESTED` is a blocker until requested changes are
   addressed or superseded on the current head.
 - Blocker comments use the idempotent
