@@ -2,7 +2,8 @@
 
 This repository's merge gate is evidence-based: required checks must pass,
 review threads must be resolved, and the current PR head must have current-head
-CodeRabbit/robot-review evidence. Human review is not awaited by default.
+CodeRabbit or structured OpenCode App robot-review evidence. Human review is not
+awaited by default.
 
 ## Required gate contract
 
@@ -10,23 +11,41 @@ CodeRabbit/robot-review evidence. Human review is not awaited by default.
 - Application CI must run backend pytest and frontend test/lint/build checks on
   pull requests to `master` and `release/**`, while release-branch pushes must
   not create duplicate check noise; push checks are scoped to `master`.
-- The CodeRabbit robot-review gate is satisfied by current-head CodeRabbit
-  evidence only when current-head blocking findings, warnings, and failures are
-  fixed, rebutted with evidence, or superseded. Authoritative current-head
-  `Review skipped` evidence satisfies the robot-review gate when applicable.
+- The robot-review gate prefers CodeRabbit evidence. When the current head has
+  CodeRabbit check-run evidence, it satisfies the gate only when current-head
+  blocking findings, warnings, and failures are fixed, rebutted with evidence,
+  or superseded. Authoritative current-head `Review skipped` evidence satisfies
+  that path only when applicable. When no CodeRabbit check-run exists, the gate
+  waits for an exact-current-head `APPROVED` review from the `opencode-agent`
+  GitHub App. The review body must name the head SHA and include structured
+  adversarial validation with `status=passed` and at least two probes whose
+  outcome is `falsified`. Stale-head reviews, `github-actions` reviews, and
+  insufficient probe evidence do not satisfy the gate.
 - PR Governance automation is metadata-only: it must not checkout pull request
   code, clone the head branch, dismiss reviews, enable auto-merge, or use admin
   merge. It may read PR/check/review-thread metadata and post blocker comments;
   the separate human/agent landing path performs any allowed merge action after
-  current-head gates are satisfied.
+  current-head gates are satisfied. Submitted and dismissed review events rerun
+  the metadata controller so OpenCode App evidence updates the gate promptly.
 - PR Governance runs trusted-base logic only. The workflow materializes the base
   repository script from a trusted tarball and must not execute PR-head scripts.
   Trusted tarball materialization uses bounded retry plus archive validation for
   transient GitHub API truncation and fails closed instead of falling back to
   PR-head or local scripts.
 - Pending, queued, requested, waiting, or in-progress checks are wait states, not
-  hard failure findings. Failed, cancelled, timed-out, and action-required states
-  are blockers.
+  hard failure findings. Success, pass, skipped, and neutral states satisfy the
+  gate. Every other required-check state — including failed, cancelled,
+  timed-out, action-required, and any unrecognized state — is a blocker: the
+  gate fails closed rather than passing states it does not understand.
+- If gate evaluation itself errors (for example a transient GitHub API
+  failure), the gate publishes a completed/failure check-run instead of leaving
+  a previously published result in place.
+- Gate blocker comments publish sanitized check names and generic error text
+  only; raw CLI diagnostics stay in the workflow run log. Inside Actions the
+  gate runs with a pinned system PATH so earlier steps cannot influence tool
+  resolution via GITHUB_PATH.
+- Authoritative `Review skipped` evidence counts only when the same check
+  output carries no blocking warning/failure language alongside it.
 - `reviewDecision=CHANGES_REQUESTED` is a blocker until requested changes are
   addressed or superseded on the current head.
 - Blocker comments use the idempotent
@@ -59,12 +78,15 @@ gh api repos/<owner>/<repo>/rulesets --jq '.[] | {name, enforcement, rules}'
 
 ## Robot review versus GitHub approval
 
-CodeRabbit review/check evidence satisfies this repo's robot-review policy only
-after current-head CodeRabbit blocking comments, pre-merge warnings, and failure
-findings are resolved or superseded. It is not the same object as a GitHub
-`APPROVED` review. If GitHub reports a missing approving review, inspect the
-ruleset before waiting for a human review. The expected setting is
-`required_approving_review_count=0`.
+CodeRabbit review/check evidence satisfies this repo's preferred robot-review
+path only after current-head blocking comments, pre-merge warnings, and failure
+findings are resolved or superseded. When CodeRabbit evidence is absent, an
+exact-current-head `APPROVED` review from the `opencode-agent` GitHub App may
+satisfy the fallback path only with the structured adversarial evidence defined
+above. A `github-actions` review or an overview comment is not authoritative App
+approval. If GitHub reports a missing approving review despite valid robot
+evidence, inspect the ruleset before waiting for a human review. The expected
+setting is `required_approving_review_count=0`.
 
 ## Stale required contexts
 
