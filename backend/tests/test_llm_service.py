@@ -12,7 +12,7 @@ from services.llm_service import (
     OLLAMA_DRAFT_REPLY_MAX_TOKENS,
     OLLAMA_NATIVE_CHAT_TIMEOUT_SECONDS,
     draft_reply,
-    extract_action_items_and_summary,
+    extract_todos_and_summary,
     translate_email_body,
 )
 
@@ -31,13 +31,13 @@ def mock_openai():
 
 
 def test_extraction_result_confidence_is_optional_and_bounded():
-    omitted = ExtractionResult(summary="Test summary", action_items=[])
+    omitted = ExtractionResult(summary="Test summary", todos=[])
     assert omitted.confidence is None
 
     assert (
         ExtractionResult(
             summary="Test summary",
-            action_items=[],
+            todos=[],
             confidence=0,
         ).confidence
         == 0
@@ -45,14 +45,14 @@ def test_extraction_result_confidence_is_optional_and_bounded():
     assert (
         ExtractionResult(
             summary="Test summary",
-            action_items=[],
+            todos=[],
             confidence=100,
         ).confidence
         == 100
     )
 
     with pytest.raises(ValueError):
-        ExtractionResult(summary="Test summary", action_items=[], confidence=101)
+        ExtractionResult(summary="Test summary", todos=[], confidence=101)
 
 
 @pytest.mark.asyncio
@@ -252,12 +252,12 @@ async def test_llm_provider_transport_rewrites_request_origin_and_host_header():
 
 
 @pytest.mark.asyncio
-async def test_extract_action_items_and_summary_success(mock_openai):
+async def test_extract_todos_and_summary_success(mock_openai):
     # Setup mock response
     mock_response = MagicMock()
     mock_message = MagicMock()
     mock_message.parsed = ExtractionResult(
-        summary="Test summary", action_items=["Task 1"], confidence=90
+        summary="Test summary", todos=["Task 1"], confidence=90
     )
     mock_choice = MagicMock()
     mock_choice.message = mock_message
@@ -266,11 +266,11 @@ async def test_extract_action_items_and_summary_success(mock_openai):
     mock_openai.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
 
     # Call the service
-    result = await extract_action_items_and_summary("Test email", "test-key")
+    result = await extract_todos_and_summary("Test email", "test-key")
 
     # Verify results
     assert result.summary == "Test summary"
-    assert result.action_items == ["Task 1"]
+    assert result.todos == ["Task 1"]
     mock_openai.beta.chat.completions.parse.assert_called_once()
     assert (
         mock_openai.beta.chat.completions.parse.call_args.kwargs["model"]
@@ -279,20 +279,18 @@ async def test_extract_action_items_and_summary_success(mock_openai):
 
 
 @pytest.mark.asyncio
-async def test_extract_action_items_and_summary_uses_selected_provider_model(
-    mock_openai,
-):
+async def test_extract_todos_and_summary_uses_selected_provider_model(mock_openai):
     mock_response = MagicMock()
     mock_message = MagicMock()
     mock_message.parsed = ExtractionResult(
-        summary="Test summary", action_items=["Task 1"], confidence=90
+        summary="Test summary", todos=["Task 1"], confidence=90
     )
     mock_choice = MagicMock()
     mock_choice.message = mock_message
     mock_response.choices = [mock_choice]
     mock_openai.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
 
-    result = await extract_action_items_and_summary(
+    result = await extract_todos_and_summary(
         "Test email",
         "test-key",
         provider_name="Local Gemma4",
@@ -304,18 +302,18 @@ async def test_extract_action_items_and_summary_uses_selected_provider_model(
 
 
 @pytest.mark.asyncio
-async def test_extract_action_items_and_summary_api_error(mock_openai):
+async def test_extract_todos_and_summary_api_error(mock_openai):
     # Setup mock to raise an exception
     mock_openai.beta.chat.completions.parse = AsyncMock(
         side_effect=Exception("API Error")
     )
 
     with pytest.raises(LLMServiceError, match="LLM API error during extraction"):
-        await extract_action_items_and_summary("Test email", "test-key")
+        await extract_todos_and_summary("Test email", "test-key")
 
 
 @pytest.mark.asyncio
-async def test_extract_action_items_and_summary_disables_redirect_following_for_custom_base_url(
+async def test_extract_todos_and_summary_disables_redirect_following_for_custom_base_url(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -337,7 +335,7 @@ async def test_extract_action_items_and_summary_disables_redirect_following_for_
         mock_response = MagicMock()
         mock_message = MagicMock()
         mock_message.parsed = ExtractionResult(
-            summary="Test summary", action_items=["Task 1"], confidence=90
+            summary="Test summary", todos=["Task 1"], confidence=90
         )
         mock_choice = MagicMock()
         mock_choice.message = mock_message
@@ -345,14 +343,14 @@ async def test_extract_action_items_and_summary_disables_redirect_following_for_
         mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
         mock_async_openai.return_value = mock_client
 
-        result = await extract_action_items_and_summary(
+        result = await extract_todos_and_summary(
             "Test email",
             "test-key",
             base_url="https://llm-gateway.example.com/v1",
         )
 
     assert result.summary == "Test summary"
-    assert result.action_items == ["Task 1"]
+    assert result.todos == ["Task 1"]
     constructor_kwargs = mock_async_openai.call_args.kwargs
     assert "http_client" in constructor_kwargs
     assert constructor_kwargs["http_client"].follow_redirects is False

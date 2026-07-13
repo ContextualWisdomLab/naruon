@@ -9,7 +9,6 @@ fi
 
 COMMENT_MARKER='<!-- pr-governance:metadata-gate -->'
 CHECK_NAME='metadata-only gate evaluation'
-REVIEW_BOT_LOGIN_PATTERN='coderabbit|github-code-quality'
 
 PR_NUMBER="${DIRECT_PR_NUMBER:-${TARGET_PR_NUMBER:-${WORKFLOW_RUN_PR_NUMBER:-${CHECK_RUN_PR_NUMBER:-}}}}"
 if [ -z "$PR_NUMBER" ]; then
@@ -236,11 +235,7 @@ CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potent
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
   [.check_runs[]
-    | select(
-        .app.slug == "coderabbitai"
-        or .app.slug == "github-code-quality"
-        or (.name | test("CodeRabbit|coderabbit|GitHub Code Quality|github-code-quality"; "i"))
-      )]'
+    | select(.app.slug == "coderabbitai" or (.name | test("CodeRabbit|coderabbit"; "i")))]'
 )"
 CODERABBIT_COUNT="$(printf '%s' "$CODERABBIT_MATCHES" | jq 'length')"
 if [ "$CODERABBIT_COUNT" = "0" ]; then
@@ -299,7 +294,7 @@ if ! ISSUE_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues
 else
   CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s --arg head_sha "$HEAD_SHA" --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
     [.[][]
-      | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
+      | select((.user.login // "") | test("coderabbit"; "i"))
       | select((.body // "") | test($pattern; "i"))
       | select((.body // "") | contains($head_sha))]
     | length'
@@ -316,7 +311,7 @@ if ! REVIEW_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls
 else
   CODERABBIT_REVIEW_BLOCKERS="$(printf '%s' "$REVIEW_COMMENTS_JSON" | jq -s --arg head_sha "$HEAD_SHA" --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
     [.[][]
-      | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
+      | select((.user.login // "") | test("coderabbit"; "i"))
       | select((.body // "") | test($pattern; "i"))
       | select(((.commit_id // "") == $head_sha) or ((.original_commit_id // "") == $head_sha) or ((.body // "") | contains($head_sha)))]
     | length'

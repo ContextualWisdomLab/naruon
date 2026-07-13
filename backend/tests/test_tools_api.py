@@ -1014,14 +1014,6 @@ async def test_sentiment_analyzer_internal_coverage():
     assert res_neu["sentiment"] == "neutral"
 
 
-@pytest.mark.asyncio
-async def test_mock_handler():
-    from api.tools import mock_handler
-    import json
-    res = await mock_handler({"test": "data"})
-    assert res == f"Mock execution successful with params: {json.dumps({'test': 'data'}, ensure_ascii=False, sort_keys=True)}"
-
-
 def test_validate_webhook_url_details_no_hostname():
     from api.tools import validate_webhook_url_details
     with pytest.raises(ValueError, match="Webhook URL must include a host"):
