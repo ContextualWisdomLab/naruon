@@ -915,6 +915,8 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     combined = f"{workflow}\n{gate_script}"
 
     assert "pull_request_target:" in workflow
+    assert "pull_request_review:" in workflow
+    assert "types: [submitted, dismissed]" in workflow
     assert "workflow_run:" in workflow
     assert "check_run:" in workflow
     assert "workflow_dispatch:" in workflow
@@ -964,7 +966,8 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "--admin" not in combined
     assert "contents: write" not in combined
     assert "continue-on-error: true" not in combined
-    assert "dismiss" not in combined.lower()
+    assert "/dismissals" not in combined.lower()
+    assert "dismisspullrequestreview" not in combined.lower()
 
 
 def test_20b_kpi_roi_claim_gate_separates_measurements_from_assumptions() -> None:
