@@ -112,6 +112,24 @@ post_or_update_blocker_comment() {
   fi
 }
 
+update_existing_marker_comment_status() {
+  local head_ref_oid="$1"
+  local status_message="$2"
+  local body existing_comment_id
+
+  existing_comment_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+    --jq ".[] | select(.body | contains(\"${COMMENT_MARKER}\")) | .id" \
+    | tail -n 1 || true)"
+  [ -n "$existing_comment_id" ] || return 0
+
+  # shellcheck disable=SC2016  # Markdown backticks are literal.
+  body="$(printf '%s\nPR governance metadata gate update for `%s`: no current blocking failures remain.\n\n%s' \
+    "$COMMENT_MARKER" \
+    "$head_ref_oid" \
+    "$status_message")"
+  gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing_comment_id}" -f body="$body"
+}
+
 publish_gate_check() {
   local status="$1"
   local conclusion="$2"
@@ -379,6 +397,9 @@ fi
 if [ "${#WAITING[@]}" -gt 0 ]; then
   WAITING_SUMMARY="$(join_items "${WAITING[@]}")"
   printf '%s\n' "$WAITING_SUMMARY"
+  update_existing_marker_comment_status \
+    "$HEAD_REF_OID" \
+    'PR governance metadata gate is waiting on current-head requirements; see the latest check for pending reasons.'
   publish_gate_check \
     in_progress \
     '' \
@@ -389,6 +410,9 @@ fi
 
 # shellcheck disable=SC2016  # Markdown backticks are literal.
 printf 'PR governance metadata gate is ready for `%s` on `%s`.\n' "$PR_NUMBER" "$HEAD_REF_OID"
+update_existing_marker_comment_status \
+  "$HEAD_REF_OID" \
+  'PR governance metadata gate is ready; all current-head requirements passed.'
 publish_gate_check \
   completed \
   success \

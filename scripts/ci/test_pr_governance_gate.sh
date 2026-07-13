@@ -183,7 +183,7 @@ fi
 
 if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
   if [[ "$args" == *"--jq"* ]]; then
-    if [ "${GH_SCENARIO:-pass}" = "failed_existing" ]; then
+    if [ "${GH_SCENARIO:-pass}" = "failed_existing" ] || [ "${GH_SCENARIO:-pass}" = "resolved_existing" ]; then
       printf '555\n'
     fi
     exit 0
@@ -374,6 +374,18 @@ assert_existing_marker_comment_is_patched() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'api --method PATCH repos/owner/repo/issues/comments/555' "$temp_dir/gh.log"
+  assert_not_in_file 'repos/owner/repo/issues/42/comments -f body' "$temp_dir/gh.log"
+}
+
+assert_resolved_marker_comment_is_updated_on_ready_gate() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate resolved_existing "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'api --method PATCH repos/owner/repo/issues/comments/555' "$temp_dir/gh.log"
+  assert_in_file 'no current blocking failures remain' "$temp_dir/gh.log"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/gh.log"
   assert_not_in_file 'repos/owner/repo/issues/42/comments -f body' "$temp_dir/gh.log"
 }
 
@@ -695,6 +707,7 @@ assert_pr_merged_during_unknown_retry_exits_without_stale_gate
 assert_startup_failure_creates_marker_comment
 assert_failed_checks_create_marker_comment
 assert_existing_marker_comment_is_patched
+assert_resolved_marker_comment_is_updated_on_ready_gate
 assert_coderabbit_pending_waits_without_hard_comment
 assert_missing_coderabbit_waits_for_adversarial_opencode_approval
 assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval

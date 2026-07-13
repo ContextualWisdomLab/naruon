@@ -972,6 +972,7 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "coderabbitai" in gate_script
     assert "/issues/${PR_NUMBER}/comments" in gate_script
     assert "COMMENT_MARKER" in gate_script
+    assert "no current blocking failures remain" in gate_script
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script
