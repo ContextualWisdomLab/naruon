@@ -25,7 +25,7 @@ def upgrade() -> None:
             sa.Column("account_id", sa.Integer(), nullable=False),
             sa.Column("user_id", sa.String(), nullable=False),
             sa.Column("server_url", sa.String(), nullable=False),
-            sa.Column("username", sa.String(), nullable=False),
+            sa.Column("account_username", sa.String(), nullable=False),
             sa.Column("credentials_encrypted", sa.String(), nullable=False),
             sa.Column("discovery_source", sa.String(), nullable=True),
             sa.Column(

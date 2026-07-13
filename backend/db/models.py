@@ -1401,7 +1401,9 @@ class CarddavAccount(Base):
     id: Mapped[int] = mapped_column("account_id", primary_key=True)
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     server_url: Mapped[str] = mapped_column(String, nullable=False)
-    username: Mapped[str] = mapped_column(String, nullable=False)
+    # New tables use two-word snake_case column names; the Python attribute
+    # stays `username` for symmetry with the legacy CaldavAccount mapper.
+    username: Mapped[str] = mapped_column("account_username", String, nullable=False)
     credentials_encrypted: Mapped[str] = mapped_column(EncryptedString, nullable=False)
     discovery_source: Mapped[str | None] = mapped_column(String, nullable=True)
     account_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
