@@ -14,7 +14,9 @@ from defusedxml.common import DefusedXmlException
 
 from services.text_safety import strip_html_markup
 
-from .models import ContentNode, ContentSegment, ParseResult
+from collections.abc import Sequence
+
+from .models import ContentNode, ContentSegment, ParseResult, PdfDomSection
 
 
 _BLANK_LINE_RE = re.compile(r"\n\s*\n+")
@@ -329,6 +331,84 @@ def parse_content(
     if normalized_type == "text/plain":
         return _parse_plain_text(context, document_node, content)
     return _parse_plain_text(context, document_node, strip_html_markup(content))
+
+
+def parse_pdf_dom(
+    *,
+    source_kind: str,
+    source_record_uid: str,
+    sections: Sequence[PdfDomSection],
+    source_content_hash: str,
+    display_name: str = "",
+    content_type: str = "application/pdf",
+) -> ParseResult:
+    """Build a document -> section -> paragraph content graph from a recognized
+    PDF DOM tree.
+
+    Each :class:`PdfDomSection` becomes a ``section`` node under the document
+    root: its heading is emitted as a ``heading`` segment and every non-empty
+    paragraph becomes a ``paragraph`` node + segment. ``source_content_hash`` is
+    supplied by the caller so the node/segment UIDs stay stable and tied to the
+    exact recognized payload rather than a re-serialization of it.
+    """
+    context = _BuildContext(
+        source_kind=source_kind,
+        source_record_uid=source_record_uid,
+        display_name=display_name,
+        content_type=_normalize_content_type(content_type),
+        source_content_hash=source_content_hash,
+    )
+    document_node = _add_document_node(context, display_name)
+
+    section_index = 0
+    for section in sections:
+        heading_text = _safe_text(section.heading)
+        paragraph_texts = [
+            safe_paragraph
+            for paragraph in section.paragraphs
+            if (safe_paragraph := _safe_text(paragraph))
+        ]
+        if not heading_text and not paragraph_texts:
+            continue
+
+        section_index += 1
+        section_path = f"/document[1]/section[{section_index}]"
+        section_node = context.add_node(
+            parent_node_uid=document_node.content_node_uid,
+            node_kind="section",
+            node_path=section_path,
+            ordinal_index=section_index,
+            safe_text_content=heading_text,
+            display_label=heading_text or None,
+        )
+        heading_path = _join_heading_path([heading_text]) if heading_text else None
+        if heading_text:
+            context.add_segment(
+                content_node_uid=section_node.content_node_uid,
+                segment_kind="heading",
+                segment_path=f"{section_path}/heading[1]",
+                heading_path=heading_path,
+                safe_text_content=heading_text,
+            )
+
+        for paragraph_index, paragraph_text in enumerate(paragraph_texts, start=1):
+            paragraph_path = f"{section_path}/paragraph[{paragraph_index}]"
+            paragraph_node = context.add_node(
+                parent_node_uid=section_node.content_node_uid,
+                node_kind="paragraph",
+                node_path=paragraph_path,
+                ordinal_index=paragraph_index,
+                safe_text_content=paragraph_text,
+            )
+            context.add_segment(
+                content_node_uid=paragraph_node.content_node_uid,
+                segment_kind="paragraph",
+                segment_path=paragraph_path,
+                heading_path=heading_path,
+                safe_text_content=paragraph_text,
+            )
+
+    return context.result()
 
 
 def _parse_plain_text(

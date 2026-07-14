@@ -992,7 +992,7 @@ export async function mockDashboardApi(page: Page, onApiRequest?: (path: string,
     if (path === '/api/llm/summarize') {
       await fulfillJson(route, {
         summary: '출시 일정, 마케팅 계획, 파트너 미팅을 하나의 실행 흐름으로 정리해야 합니다.',
-        todos: ['리소스 배정 검토 회의', '마케팅 캠페인 오프'],
+        action_items: ['리소스 배정 검토 회의', '마케팅 캠페인 오프'],
       });
       return;
     }

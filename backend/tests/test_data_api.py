@@ -2578,6 +2578,7 @@ def test_data_document_upload_creates_workspace_scoped_document(mock_db):
     }
     stored_document = mock_db.documents[0]
     assert stored_document.workspace_id == "workspace-org-acme"
+    assert stored_document.organization_id == "org-acme"
     assert stored_document.document_content == "# Roadmap\nPhase 10"
 
 
@@ -2767,6 +2768,175 @@ def test_data_document_webdav_materialization_rejects_empty_document(mock_db):
     assert (
         response.json()["detail"] == "Workspace document has no materializable content."
     )
+
+
+def test_data_document_webdav_materialization_rejects_pending_pdf(mock_db):
+    # A PDF still pending NewsDOM recognition holds a base64 payload in
+    # document_content; materializing it would write that binary as Markdown.
+    mock_db.documents.append(
+        Document(
+            document_id="doc_pending",
+            workspace_id="workspace-org-acme",
+            document_name="contract.pdf",
+            document_type="pdf",
+            document_content="JVBERi0xLjcK",  # base64 %PDF-1.7\n
+            document_status="pdf_dom_recognition_pending",
+            created_at=_now(),
+        )
+    )
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/documents/doc_pending/webdav-materialization-intent",
+            json={
+                "target_source_id": "webdav_src_primary",
+                "execute_provider": True,
+            },
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 409, response.text
+    assert "pending recognition" in response.json()["detail"]
+
+
+def test_data_pdf_dom_recognition_intent_rejects_non_pdf_document(mock_db):
+    mock_db.documents.append(
+        Document(
+            document_id="doc_text",
+            workspace_id="workspace-org-acme",
+            document_name="notes.md",
+            document_type="text/markdown",
+            document_content="# Notes",
+            document_status="uploaded",
+            created_at=_now(),
+        )
+    )
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/documents/doc_text/pdf-dom-recognition-intent",
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 415, response.text
+    # A PDF document is accepted.
+    mock_db.documents.append(
+        Document(
+            document_id="doc_pdf",
+            workspace_id="workspace-org-acme",
+            document_name="contract.pdf",
+            document_type="pdf",
+            document_content="JVBERi0xLjcK",
+            document_status="uploaded",
+            created_at=_now(),
+        )
+    )
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        ok = client.post(
+            "/api/data/documents/doc_pdf/pdf-dom-recognition-intent",
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["document_status"] == "pdf_dom_recognition_pending"
+    assert mock_db.documents[-1].organization_id == "org-acme"
+
+
+def test_data_pdf_dom_recognition_intent_rejects_invalid_stored_payload(mock_db):
+    mock_db.documents.append(
+        Document(
+            document_id="doc_invalid_pdf",
+            workspace_id="workspace-org-acme",
+            document_name="contract.pdf",
+            document_type="pdf",
+            document_content=base64.b64encode(b"not a PDF").decode("ascii"),
+            document_status="uploaded",
+            created_at=_now(),
+        )
+    )
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/documents/doc_invalid_pdf/pdf-dom-recognition-intent",
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == (
+        "Stored PDF payload is not valid for DOM recognition."
+    )
+    assert mock_db.documents[-1].document_status == "uploaded"
+
+
+def test_data_pdf_dom_upload_persists_signed_organization_scope(mock_db):
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/documents/pdf-dom-recognition",
+            files={"file": ("contract.pdf", b"%PDF-1.7 test", "application/pdf")},
+            data={"document_name": "contract.pdf"},
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 200, response.text
+    stored_document = mock_db.documents[-1]
+    assert stored_document.organization_id == "org-acme"
+    assert stored_document.document_status == "pdf_dom_recognition_pending"
+
+
+def test_data_pdf_dom_upload_rejects_invalid_signature_and_size(mock_db, monkeypatch):
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        invalid = client.post(
+            "/api/data/documents/pdf-dom-recognition",
+            files={"file": ("contract.pdf", b"not a PDF", "application/pdf")},
+        )
+        monkeypatch.setattr(data_api, "_MAX_PDF_DOM_UPLOAD_BYTES", 5)
+        oversized = client.post(
+            "/api/data/documents/pdf-dom-recognition",
+            files={"file": ("contract.pdf", b"%PDF-1.7", "application/pdf")},
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert invalid.status_code == 415, invalid.text
+    assert oversized.status_code == 413, oversized.text
+    assert mock_db.documents == []
+
+
+def test_pending_pdf_document_decoder_rejects_malformed_payloads(monkeypatch):
+    malformed_base64 = Document(document_content="not@@base64")
+    with pytest.raises(ValueError, match="valid base64"):
+        data_api.decode_pending_pdf_document_bytes(malformed_base64)
+
+    non_pdf = Document(
+        document_content=base64.b64encode(b"not a PDF").decode("ascii")
+    )
+    with pytest.raises(ValueError, match="not a PDF"):
+        data_api.decode_pending_pdf_document_bytes(non_pdf)
+
+    monkeypatch.setattr(data_api, "_MAX_PDF_DOM_UPLOAD_BYTES", 5)
+    oversized = Document(
+        document_content=base64.b64encode(b"%PDF-1.7").decode("ascii")
+    )
+    with pytest.raises(ValueError, match="size limit"):
+        data_api.decode_pending_pdf_document_bytes(oversized)
 
 
 async def _seed_smoke_test_data(conn, ids: dict):
