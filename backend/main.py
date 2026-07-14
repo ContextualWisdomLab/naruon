@@ -35,7 +35,6 @@ from core.config import canonical_origin, settings
 from core.telemetry import setup_telemetry
 from core.version import get_release_version
 from services.imap_worker import ImapSyncWorker
-from services.newsdom_worker import NewsdomRecognitionWorker
 from services.pop3_worker import Pop3SyncWorker
 from services.provider_writeback_retry_service import ProviderWritebackRetryWorker
 from services.reply_sla_scheduler import ReplySlaScheduler
@@ -44,7 +43,6 @@ from prometheus_fastapi_instrumentator import Instrumentator
 imap_worker = ImapSyncWorker()
 pop3_worker = Pop3SyncWorker()
 reply_sla_scheduler = ReplySlaScheduler()
-newsdom_recognition_worker = NewsdomRecognitionWorker()
 provider_writeback_retry_worker = ProviderWritebackRetryWorker(
     runner_manager.dispatch_command,
 )
@@ -61,12 +59,10 @@ async def lifespan(app: FastAPI):
         await imap_worker.start()
         await pop3_worker.start()
         await reply_sla_scheduler.start()
-        await newsdom_recognition_worker.start()
         await provider_writeback_retry_worker.start()
     yield
     if not DISABLE_WORKERS:
         await provider_writeback_retry_worker.stop()
-        await newsdom_recognition_worker.stop()
         await reply_sla_scheduler.stop()
         await pop3_worker.stop()
         await imap_worker.stop()

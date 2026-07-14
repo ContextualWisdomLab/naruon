@@ -1,11 +1,9 @@
-from .models import ContentNode, ContentSegment, ParseResult, PdfDomSection
-from .parser import parse_content, parse_pdf_dom
+from .models import ContentNode, ContentSegment, ParseResult
+from .parser import parse_content
 
 __all__ = [
     "ContentNode",
     "ContentSegment",
     "ParseResult",
-    "PdfDomSection",
     "parse_content",
-    "parse_pdf_dom",
 ]
