@@ -32,18 +32,10 @@ type EmailData = ThreadEmailData & {
 };
 interface LlmData {
   summary: string;
-  action_items: string[];
+  todos: string[];
   provenance?: string;
   confidence?: number;
 }
-
-type LlmDataPayload = {
-  summary?: unknown;
-  action_items?: unknown;
-  todos?: unknown;
-  provenance?: unknown;
-  confidence?: unknown;
-};
 
 interface CreateTasksFromEmailResponse {
   created: number;
@@ -77,29 +69,6 @@ function getMessageEventId(email: EmailData) {
 
 function nowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
-}
-
-function toStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function normalizeLlmData(payload: unknown): LlmData {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("Invalid LLM summary response");
-  }
-
-  const data = payload as LlmDataPayload;
-  if (typeof data.summary !== "string") {
-    throw new Error("Invalid LLM summary response");
-  }
-
-  const hasActionItems = Array.isArray(data.action_items);
-  return {
-    summary: data.summary,
-    action_items: hasActionItems ? toStringArray(data.action_items) : toStringArray(data.todos),
-    provenance: typeof data.provenance === "string" ? data.provenance : undefined,
-    confidence: typeof data.confidence === "number" ? data.confidence : undefined,
-  };
 }
 
 export function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
@@ -216,10 +185,10 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
 
         // Fetch LLM summary in the background
         const synthesisStartedAt = nowMs();
-        apiClient.post<LlmDataPayload>('/api/llm/summarize', { email_body: emailJson.body })
+        apiClient.post<LlmData>('/api/llm/summarize', { email_body: emailJson.body })
           .then((llmJson) => {
             if (!isMounted) return;
-            setLlmData(normalizeLlmData(llmJson));
+            setLlmData(llmJson);
             recordProductEvent("latency_guardrail_recorded", {
               surface: "mail_detail",
               request_trace_id: createProductEventId("synthesis_trace"),
@@ -417,8 +386,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
   const handleSyncCalendar = useCallback(async () => {
     const actionEmailId = emailId;
     const isCurrentEmail = () => currentEmailIdRef.current === actionEmailId;
-    const actionItems = llmData?.action_items ?? [];
-    if (!actionItems.length) {
+    if (!llmData || !llmData.todos.length) {
       setSyncStatus({ type: 'error', message: '캘린더에 반영할 실행 항목이 없습니다.' });
       return;
     }
@@ -427,7 +395,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
     const startedAt = nowMs();
     try {
       const intents = await Promise.all(
-        actionItems.map((summary) =>
+        llmData.todos.map((summary) =>
           apiClient.post<CalendarWritebackIntentResponse>('/api/calendar/writeback-intent', {
             action: 'create',
             summary,
@@ -471,8 +439,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
     const actionEmailId = actionEmail?.id ?? null;
     const isCurrentEmail = () => currentEmailIdRef.current === actionEmailId;
     if (!actionEmail) return;
-    const actionItems = llmData?.action_items ?? [];
-    if (!actionItems.length) {
+    if (!llmData || !llmData.todos.length) {
       setTaskStatus('정리할 실행 항목이 없습니다.');
       return;
     }
@@ -483,7 +450,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       const data = await apiClient.post<CreateTasksFromEmailResponse>('/api/tasks/from-email', {
         source_email_id: actionEmail.message_id,
         thread_id: actionEmail.thread_id || actionEmail.message_id,
-        items: actionItems,
+        items: llmData.todos,
       });
       if (!isCurrentEmail()) return;
       setTaskStatus(`${data.created}개 실행 항목을 티켓형 실행 항목으로 추적합니다.`);
@@ -568,7 +535,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
   const confidencePercent = toConfidencePercent(llmData?.confidence);
-  const actionItems = llmData?.action_items ?? [];
 
   const handleOpenSourceDrawer = () => {
     recordProductEvent("source_chip_opened", {
@@ -678,15 +644,15 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             icon={<span aria-hidden="true">✓</span>}
             loading={!llmData && !llmError}
             error={llmError ? '실행 항목을 추출하지 못했습니다.' : null}
-            empty={Boolean(llmData && actionItems.length === 0)}
+            empty={Boolean(llmData && llmData.todos.length === 0)}
             emptyMessage="실행 항목이 없습니다."
             provenance={
               confidencePercent !== undefined ? `신뢰도 ${confidencePercent}%` : undefined
             }
             confidence={confidencePercent}
-            footerActions={llmData && (actionItems.length > 0 || syncStatus || taskStatus) ? (
+            footerActions={llmData && (llmData.todos.length > 0 || syncStatus || taskStatus) ? (
               <>
-                {actionItems.length > 0 && (
+                {llmData.todos.length > 0 && (
                   <Button
                     size="sm"
                     onClick={handleSyncCalendar}
@@ -698,7 +664,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                     {isSyncing ? "동기화 중" : "일정 반영"}
                   </Button>
                 )}
-                {actionItems.length > 0 && (
+                {llmData.todos.length > 0 && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -725,12 +691,12 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             ) : null}
           >
             {llmData ? (
-              actionItems.length > 0 ? (
+              llmData.todos.length > 0 ? (
                 <ul className="list-none space-y-2 text-sm">
-                  {actionItems.map((actionItem, idx) => (
+                  {llmData.todos.map((todo, idx) => (
                     <li key={idx} className="flex items-start gap-3 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-3">
-                      <Checkbox id={`action-item-${idx}`} className="mt-1" />
-                      <label htmlFor={`action-item-${idx}`} className="font-semibold leading-5 text-foreground">{actionItem}</label>
+                      <Checkbox id={`todo-${idx}`} className="mt-1" />
+                      <label htmlFor={`todo-${idx}`} className="font-semibold leading-5 text-foreground">{todo}</label>
                     </li>
                   ))}
                 </ul>

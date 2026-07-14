@@ -13,7 +13,7 @@ from services.llm_provider_selection import resolve_runtime_llm_provider
 from services.llm_service import (
     ExtractionResult,
     draft_reply,
-    extract_action_items_and_summary,
+    extract_todos_and_summary,
     translate_email_body,
 )
 
@@ -98,7 +98,7 @@ async def summarize_endpoint(
         if runtime_provider is None:
             raise HTTPException(status_code=400, detail="OpenAI API key not configured")
 
-        return await extract_action_items_and_summary(
+        return await extract_todos_and_summary(
             request.email_body,
             runtime_provider.api_key,
             base_url=runtime_provider.base_url,

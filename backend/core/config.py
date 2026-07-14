@@ -89,12 +89,6 @@ class Settings(BaseSettings):
     ALLOWED_POP3_PORTS: str = "995"
     ALLOWED_LLM_BASE_URL_HOSTS: str = ""
     ALLOW_LOCAL_LLM_PROVIDERS: bool = False
-    # NewsDOM PDF DOM recognition sidecar. Mirrors the LLM provider allowlist
-    # controls: the base URL host must be listed here before any request is
-    # pinned and dispatched, and container-name / loopback hosts are only
-    # accepted when ALLOW_LOCAL_NEWSDOM_PROVIDERS is enabled (dev / docker).
-    ALLOWED_NEWSDOM_HOSTS: str = ""
-    ALLOW_LOCAL_NEWSDOM_PROVIDERS: bool = False
     # Host allowlist for the scopeweave promotion target. The per-workspace
     # base URL and PAT themselves live encrypted in the database
     # (scopeweave_promotion_target); this setting only pins which hosts an
