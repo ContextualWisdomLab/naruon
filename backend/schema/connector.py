@@ -7,7 +7,9 @@ class SelfHostedConnectorRegistrationRequest(BaseModel):
 
     connector_id: str = Field(..., description="Unique identifier for the self-hosted connector")
     public_key: str = Field(..., description="Public key for mTLS or secure payload exchange")
-    supported_protocols: list[Literal["imap", "smtp", "pop3", "caldav", "webdav"]] = Field(
+    supported_protocols: list[
+        Literal["imap", "smtp", "pop3", "caldav", "carddav", "webdav"]
+    ] = Field(
         default_factory=list, description="Protocols supported by this connector instance"
     )
     capabilities: list[str] = Field(default_factory=list)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Plus, Search, Filter, User, CalendarDays, Inbox, AlertCircle, X } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
@@ -152,8 +152,15 @@ function getKnowledgeRetryLabel(intent: KnowledgeMaterializationIntent) {
   return '실행 요청 없음';
 }
 
+const TASK_VIEW_MODES = ['내 작업', '위임한 작업', '칸반', '작업 상세'] as const;
+type TaskViewMode = (typeof TASK_VIEW_MODES)[number];
+
+function taskViewTabId(mode: TaskViewMode) {
+  return `tasks-view-tab-${TASK_VIEW_MODES.indexOf(mode)}`;
+}
+
 export function TasksLayout() {
-  const [viewMode, setViewMode] = useState<'내 작업' | '위임한 작업' | '칸반' | '작업 상세'>('칸반');
+  const [viewMode, setViewMode] = useState<TaskViewMode>('칸반');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [ticketTasks, setTicketTasks] = useState<TicketTask[]>([]);
   const [ticketStatus, setTicketStatus] = useState<TicketStatus>('loading');
@@ -360,6 +367,21 @@ export function TasksLayout() {
     </div>
   ), [currentColumns, tasksByStatus, taskSearch, priorityFilter, setSelectedTaskId, setViewMode]);
 
+  const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: TaskViewMode) => {
+    const currentIndex = TASK_VIEW_MODES.indexOf(mode);
+    const lastIndex = TASK_VIEW_MODES.length - 1;
+    let nextIndex: number;
+    if (event.key === 'ArrowRight') nextIndex = currentIndex === lastIndex ? 0 : currentIndex + 1;
+    else if (event.key === 'ArrowLeft') nextIndex = currentIndex === 0 ? lastIndex : currentIndex - 1;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = lastIndex;
+    else return;
+    event.preventDefault();
+    const nextMode = TASK_VIEW_MODES[nextIndex];
+    setViewMode(nextMode);
+    document.getElementById(taskViewTabId(nextMode))?.focus();
+  };
+
   return (
     <div className="flex h-full min-h-0 bg-background text-foreground flex-col">
       {/* Top Header */}
@@ -367,12 +389,16 @@ export function TasksLayout() {
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center lg:gap-6">
           <h1 className="text-xl font-bold">실행 항목 추적</h1>
           <p className="sr-only">리소스 배정 검토 회의</p>
-          <div className="flex max-w-full overflow-x-auto rounded-md border border-border">
-            {['내 작업', '위임한 작업', '칸반', '작업 상세'].map((mode) => (
+          <div role="tablist" aria-label="작업 보기 방식" className="flex max-w-full overflow-x-auto rounded-md border border-border">
+            {TASK_VIEW_MODES.map((mode) => (
               <button type="button"
                 key={mode}
-                aria-pressed={viewMode === mode}
-                onClick={() => setViewMode(mode as '내 작업' | '위임한 작업' | '칸반' | '작업 상세')}
+                id={taskViewTabId(mode)}
+                role="tab"
+                aria-selected={viewMode === mode}
+                tabIndex={viewMode === mode ? 0 : -1}
+                onClick={() => setViewMode(mode)}
+                onKeyDown={(event) => handleViewModeKeyDown(event, mode)}
                 className={`shrink-0 px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background ${viewMode === mode ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-secondary'}`}
               >
                 {mode}

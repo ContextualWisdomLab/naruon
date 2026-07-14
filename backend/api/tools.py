@@ -2,7 +2,10 @@ import base64
 import inspect
 import json
 import logging
+import re
+import unicodedata
 import urllib.parse
+from collections import Counter
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
 
@@ -139,6 +142,7 @@ registry = ToolRegistry()
 
 # Initialize default tools
 
+
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
     return f"Mock execution successful with params: {encoded}"
@@ -196,7 +200,6 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     }
 
 
-
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
@@ -224,7 +227,10 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if source_phrase in lowered_text and translated_phrase not in translated_terms:
+            if (
+                source_phrase in lowered_text
+                and translated_phrase not in translated_terms
+            ):
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -243,7 +249,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     normalized_domain = sender_domain.lower()
     phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
     spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
+    phishing_hits = sorted(
+        term for term in phishing_terms if term in normalized_content
+    )
     spam_hits = sorted(term for term in spam_terms if term in normalized_content)
     suspicious_domain = (
         normalized_domain.endswith((".ru", ".zip", ".tk"))
@@ -252,8 +260,7 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     )
     risk_score = min(
         100,
-        10
-        + (20 * len(phishing_hits))
+        (20 * len(phishing_hits))
         + (15 * len(spam_hits))
         + (35 if suspicious_domain else 0),
     )
@@ -266,7 +273,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
         warnings.append(f"sender domain looks suspicious: {sender_domain}")
     return {
         "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
+        "is_phishing": bool(
+            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
+        ),
         "risk_score": risk_score,
         "warnings": warnings,
     }
@@ -291,7 +300,15 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
+    negative_terms = {
+        "disappointed",
+        "urgent",
+        "issue",
+        "problem",
+        "bad",
+        "불만",
+        "문제",
+    }
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -485,6 +502,7 @@ registry.register(
     tone_analyzer_handler,
 )
 
+
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -496,6 +514,7 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
+
 
 registry.register(
     ToolInfo(
@@ -606,27 +625,90 @@ registry.register(
 )
 
 
+_ANALYSIS_TOKEN_PATTERN = re.compile(r"[^\W_]+(?:['’][^\W_]+)?", re.UNICODE)
+_KEYWORD_STOPWORDS = frozenset(
+    {
+        "about",
+        "after",
+        "again",
+        "because",
+        "before",
+        "could",
+        "from",
+        "have",
+        "into",
+        "should",
+        "their",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "very",
+        "with",
+        "would",
+        "그리고",
+        "그러나",
+        "대한",
+        "위한",
+        "있는",
+        "합니다",
+    }
+)
+_CATEGORY_TERMS = (
+    ("Urgent", ("urgent", "asap", "immediate", "긴급", "시급", "빨리")),
+    ("Finance", ("invoice", "billing", "payment", "결제", "청구", "송금")),
+    ("Scheduling", ("meeting", "schedule", "appointment", "회의", "일정", "약속")),
+)
+_AGENDA_TOPICS = (
+    ("Project Status Update", ("project", "프로젝트", "과제")),
+    ("Discuss Pending Issues", ("issue", "bug", "blocker", "문제", "오류", "장애")),
+    ("Decisions Required", ("decision", "approve", "결정", "승인")),
+    (
+        "Timeline and Milestones",
+        ("deadline", "milestone", "timeline", "마감", "기한", "일정"),
+    ),
+    (
+        "Budget and Resource Review",
+        ("budget", "cost", "resource", "예산", "비용", "자원"),
+    ),
+)
+
+
+def _normalize_analysis_text(value: str) -> str:
+    """Normalize user text for deterministic, multilingual rule matching."""
+    return unicodedata.normalize("NFKC", value).casefold()
+
+
+def _analysis_tokens(value: str) -> list[str]:
+    """Return normalized Unicode word tokens without punctuation or underscores."""
+    return _ANALYSIS_TOKEN_PATTERN.findall(_normalize_analysis_text(value))
+
+
+def _contains_analysis_term(normalized_text: str, term: str) -> bool:
+    """Match ASCII terms on word boundaries and Korean terms as morpheme stems."""
+    normalized_term = _normalize_analysis_text(term)
+    if normalized_term.isascii():
+        pattern = rf"(?<![a-z0-9]){re.escape(normalized_term)}(?![a-z0-9])"
+        return re.search(pattern, normalized_text) is not None
+    return normalized_term in normalized_text
 
 
 async def email_categorizer_handler(params: Dict[str, Any]) -> Any:
-    """Categorize the given email content."""
-    content = params.get("email_content", "").lower()
-    categories = []
-
-    if "invoice" in content or "billing" in content or "payment" in content or "결제" in content or "청구" in content:
-        categories.append("Finance")
-    if "meeting" in content or "schedule" in content or "회의" in content or "일정" in content:
-        categories.append("Scheduling")
-    if "urgent" in content or "asap" in content or "긴급" in content or "빨리" in content:
-        categories.append("Urgent")
+    """Categorize email text with deterministic Korean and English rules."""
+    content = _normalize_analysis_text(params.get("email_content", ""))
+    categories = [
+        category
+        for category, terms in _CATEGORY_TERMS
+        if any(_contains_analysis_term(content, term) for term in terms)
+    ]
 
     if not categories:
-        categories.append("General")
+        categories = ["General"]
 
-    return {
-        "categories": categories,
-        "primary_category": categories[0]
-    }
+    return {"categories": categories, "primary_category": categories[0]}
+
 
 registry.register(
     ToolInfo(
@@ -639,17 +721,27 @@ registry.register(
     email_categorizer_handler,
 )
 
-async def keyword_extractor_handler(params: Dict[str, Any]) -> Any:
-    """Extract key terms from the email content."""
-    content = params.get("text", "")
-    # Simple extraction logic for demonstration
-    words = content.split()
-    keywords = list(set([w for w in words if len(w) > 4]))[:5]
 
-    return {
-        "keywords": keywords,
-        "keyword_count": len(keywords)
-    }
+async def keyword_extractor_handler(params: Dict[str, Any]) -> Any:
+    """Extract stable keywords ranked by frequency and first occurrence."""
+    candidates = [
+        token
+        for token in _analysis_tokens(params.get("text", ""))
+        if token not in _KEYWORD_STOPWORDS
+        and not token.isdecimal()
+        and (len(token) >= 4 if token.isascii() else len(token) >= 2)
+    ]
+    frequencies = Counter(candidates)
+    first_positions: dict[str, int] = {}
+    for index, token in enumerate(candidates):
+        first_positions.setdefault(token, index)
+    keywords = sorted(
+        frequencies,
+        key=lambda token: (-frequencies[token], first_positions[token], token),
+    )[:5]
+
+    return {"keywords": keywords, "keyword_count": len(keywords)}
+
 
 registry.register(
     ToolInfo(
@@ -662,25 +754,26 @@ registry.register(
     keyword_extractor_handler,
 )
 
-async def meeting_agenda_generator_handler(params: Dict[str, Any]) -> Any:
-    """Generate a meeting agenda from previous discussion context."""
-    context = params.get("discussion_context", "")
 
-    # Very basic parsing based on length and keywords
-    if len(context) < 10:
-        return {"agenda_items": ["Introductions", "Open Discussion"], "estimated_duration_minutes": 30}
+async def meeting_agenda_generator_handler(params: Dict[str, Any]) -> Any:
+    """Generate a deterministic agenda from Korean or English discussion topics."""
+    context = _normalize_analysis_text(params.get("discussion_context", ""))
+    if len(_analysis_tokens(context)) < 2:
+        return {
+            "agenda_items": ["Introductions", "Open Discussion"],
+            "estimated_duration_minutes": 30,
+        }
 
     items = ["Review previous action items"]
-    if "project" in context.lower() or "프로젝트" in context:
-        items.append("Project Status Update")
-    if "issue" in context.lower() or "bug" in context.lower() or "문제" in context:
-        items.append("Discuss Pending Issues")
+    items.extend(
+        agenda_item
+        for agenda_item, terms in _AGENDA_TOPICS
+        if any(_contains_analysis_term(context, term) for term in terms)
+    )
     items.append("Next Steps and Action Items")
 
-    return {
-        "agenda_items": items,
-        "estimated_duration_minutes": len(items) * 15
-    }
+    return {"agenda_items": items, "estimated_duration_minutes": len(items) * 15}
+
 
 registry.register(
     ToolInfo(
@@ -692,6 +785,7 @@ registry.register(
     ),
     meeting_agenda_generator_handler,
 )
+
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
