@@ -13,6 +13,8 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: true
+    tmpfs:
+      - /tmp
     image: traefik:v2.10
     command:
       - "--api.insecure=true"
@@ -50,7 +52,7 @@ services:
     read_only: true
     image: grafana/grafana:latest
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is not set}
     tmpfs:
       - /tmp
       - /var/lib/grafana
@@ -82,6 +84,8 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: true
+    tmpfs:
+      - /tmp
     image: grafana/tempo:latest
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
@@ -97,6 +101,8 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: true
+    tmpfs:
+      - /tmp
     image: otel/opentelemetry-collector:0.88.0
     ports:
       - "4317:4317" # OTLP gRPC
