@@ -2,31 +2,19 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 
-const SCREENSHOT_ORIGIN = 'http://127.0.0.1:3000';
-const SCREENSHOT_ROUTES = [
-  '/',
-  '/mail',
-  '/calendar',
-  '/tasks',
-  '/projects',
-  '/search',
-  '/data',
-  '/ai-hub',
-  '/security',
-  '/settings',
+const NAVIGATION_OPTIONS = { waitUntil: 'load', timeout: 30000 };
+const SCREENSHOT_TARGETS = [
+  { route: '/', name: 'home', navigate: (page) => page.goto('http://127.0.0.1:3000/', NAVIGATION_OPTIONS) },
+  { route: '/mail', name: 'mail', navigate: (page) => page.goto('http://127.0.0.1:3000/mail', NAVIGATION_OPTIONS) },
+  { route: '/calendar', name: 'calendar', navigate: (page) => page.goto('http://127.0.0.1:3000/calendar', NAVIGATION_OPTIONS) },
+  { route: '/tasks', name: 'tasks', navigate: (page) => page.goto('http://127.0.0.1:3000/tasks', NAVIGATION_OPTIONS) },
+  { route: '/projects', name: 'projects', navigate: (page) => page.goto('http://127.0.0.1:3000/projects', NAVIGATION_OPTIONS) },
+  { route: '/search', name: 'search', navigate: (page) => page.goto('http://127.0.0.1:3000/search', NAVIGATION_OPTIONS) },
+  { route: '/data', name: 'data', navigate: (page) => page.goto('http://127.0.0.1:3000/data', NAVIGATION_OPTIONS) },
+  { route: '/ai-hub', name: 'ai-hub', navigate: (page) => page.goto('http://127.0.0.1:3000/ai-hub', NAVIGATION_OPTIONS) },
+  { route: '/security', name: 'security', navigate: (page) => page.goto('http://127.0.0.1:3000/security', NAVIGATION_OPTIONS) },
+  { route: '/settings', name: 'settings', navigate: (page) => page.goto('http://127.0.0.1:3000/settings', NAVIGATION_OPTIONS) },
 ];
-const ALLOWED_ROUTES = new Set(SCREENSHOT_ROUTES);
-
-function routeUrl(route) {
-  if (!ALLOWED_ROUTES.has(route)) {
-    throw new Error(`Unsupported screenshot route: ${route}`);
-  }
-  const url = new URL(route, SCREENSHOT_ORIGIN);
-  if (url.origin !== SCREENSHOT_ORIGIN || url.pathname !== route || url.search || url.hash) {
-    throw new Error(`Unsafe screenshot route: ${route}`);
-  }
-  return url.toString();
-}
 
 (async () => {
   if (!fs.existsSync('test-results')) {
@@ -35,13 +23,12 @@ function routeUrl(route) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 1024 } });
 
-  for (const route of SCREENSHOT_ROUTES) {
-    const url = routeUrl(route);
+  for (const target of SCREENSHOT_TARGETS) {
+    const { route, name } = target;
     console.log('Taking screenshot for route', route);
     try {
-      await page.goto(url, { waitUntil: 'load', timeout: 30000 });
+      await target.navigate(page);
       await page.waitForTimeout(2000);
-      const name = route === '/' ? 'home' : route.slice(1);
       await page.screenshot({ path: `test-results/${name}-screenshot.png`, fullPage: true });
       console.log(`Saved test-results/${name}-screenshot.png`);
     } catch (e) {

@@ -1029,7 +1029,7 @@ def test_validate_webhook_url_details_invalid_port():
 @pytest.mark.asyncio
 async def test_json_validator_handler_valid():
     from api.tools import json_validator_handler
-    import json
+
     res = await json_validator_handler({"json_string": '{"key":"value"}'})
     assert res["is_valid"] is True
     assert json.loads(res["formatted_json"]) == {"key": "value"}
