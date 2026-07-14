@@ -746,8 +746,7 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed: Simulated HTTP Error"
-                    in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
                 )
 
     finally:
@@ -979,51 +978,109 @@ def test_execute_grammar_checker():
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
+
     res = await mock_handler({"test": 123})
     assert "123" in res
 
 
 def test_validate_webhook_url_no_host():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL must include a host"):
         validate_webhook_url("https://")
 
 
 def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
 
+
 def test_detect_text_language_en():
     from api.tools import _detect_text_language
+
     assert _detect_text_language("English text") == "en"
+
 
 def test_detect_text_language_unknown():
     from api.tools import _detect_text_language
+
     assert _detect_text_language("1234") == "unknown"
+
 
 @pytest.mark.asyncio
 async def test_sentiment_analyzer_handler_positive_and_neutral():
     from api.tools import sentiment_analyzer_handler
+
     result = await sentiment_analyzer_handler({"text": "thank you"})
     assert result["sentiment"] == "positive"
 
     result = await sentiment_analyzer_handler({"text": "hello"})
     assert result["sentiment"] == "neutral"
 
+
+@pytest.mark.asyncio
+async def test_analysis_handlers_safe_and_fallthrough_paths():
+    from api.tools import (
+        email_translator_handler,
+        grammar_checker_handler,
+        sentiment_analyzer_handler,
+        spam_phishing_detector_handler,
+    )
+
+    untranslated = await email_translator_handler(
+        {"text": "Hello, thank you for the meeting.", "target_language": "en"}
+    )
+    assert untranslated["translated_text"] == "Hello, thank you for the meeting."
+    assert untranslated["source_language_detected"] == "en"
+
+    safe_email = await spam_phishing_detector_handler(
+        {
+            "email_content": "Here are the approved meeting notes.",
+            "sender_domain": "example.com",
+        }
+    )
+    assert safe_email == {
+        "is_spam": False,
+        "is_phishing": False,
+        "risk_score": 0,
+        "warnings": [],
+    }
+
+    nonurgent_negative = await sentiment_analyzer_handler(
+        {"text": "I am disappointed."}
+    )
+    assert nonurgent_negative["sentiment"] == "negative"
+    assert nonurgent_negative["key_emotions"] == ["불만", "우려"]
+
+    clean_draft = await grammar_checker_handler(
+        {"draft_content": "안녕하세요. 확인 부탁드립니다. 감사합니다."}
+    )
+    assert clean_draft["errors_found"] == 0
+    assert clean_draft["suggestions"] == []
+
+
 def test_detect_text_language_ko():
     from api.tools import _detect_text_language
+
     assert _detect_text_language("안녕하세요") == "ko"
+
 
 @pytest.mark.asyncio
 async def test_email_categorizer_handler():
     from api.tools import email_categorizer_handler
+
     # Test Finance category
-    result = await email_categorizer_handler({"email_content": "Please pay this invoice soon."})
+    result = await email_categorizer_handler(
+        {"email_content": "Please pay this invoice soon."}
+    )
     assert "Finance" in result["categories"]
 
     # Test Scheduling category
-    result = await email_categorizer_handler({"email_content": "Let's schedule a meeting."})
+    result = await email_categorizer_handler(
+        {"email_content": "Let's schedule a meeting."}
+    )
     assert "Scheduling" in result["categories"]
 
     # Test Urgent category
@@ -1035,22 +1092,49 @@ async def test_email_categorizer_handler():
     assert "General" in result["categories"]
 
     # Test multiple categories
-    result = await email_categorizer_handler({"email_content": "URGENT: Meeting to discuss invoice payment"})
-    assert "Finance" in result["categories"]
-    assert "Scheduling" in result["categories"]
-    assert "Urgent" in result["categories"]
+    result = await email_categorizer_handler(
+        {"email_content": "URGENT: Meeting to discuss invoice payment"}
+    )
+    assert result == {
+        "categories": ["Urgent", "Finance", "Scheduling"],
+        "primary_category": "Urgent",
+    }
+
+    # ASCII category rules use token boundaries instead of substring matching.
+    result = await email_categorizer_handler(
+        {"email_content": "The prepayment plan is documented."}
+    )
+    assert result["categories"] == ["General"]
+
+    # Unicode compatibility forms and Korean stems remain matchable.
+    result = await email_categorizer_handler(
+        {"email_content": "긴급 회의에서 청구 금액을 검토합니다."}
+    )
+    assert result["categories"] == ["Urgent", "Finance", "Scheduling"]
+
 
 @pytest.mark.asyncio
 async def test_keyword_extractor_handler():
     from api.tools import keyword_extractor_handler
-    # Given a text with words longer than 4 characters
-    result = await keyword_extractor_handler({"text": "The quick brown fox jumps over the lazy dog because of something important."})
 
-    # It should extract up to 5 keywords longer than 4 characters
-    assert "quick" in result["keywords"] or "brown" in result["keywords"] or "jumps" in result["keywords"]
-    assert result["keyword_count"] == len(result["keywords"])
-    for keyword in result["keywords"]:
-        assert len(keyword) > 4
+    text = "Important, project! Project billing; important schedule."
+    first = await keyword_extractor_handler({"text": text})
+    second = await keyword_extractor_handler({"text": text})
+
+    assert first == second
+    assert first == {
+        "keywords": ["important", "project", "billing", "schedule"],
+        "keyword_count": 4,
+    }
+
+    korean = await keyword_extractor_handler(
+        {"text": "프로젝트 일정 검토와 프로젝트 예산 검토가 필요합니다."}
+    )
+    assert korean["keywords"][:3] == ["프로젝트", "일정", "검토와"]
+
+    empty = await keyword_extractor_handler({"text": "the and 123"})
+    assert empty == {"keywords": [], "keyword_count": 0}
+
 
 @pytest.mark.asyncio
 async def test_meeting_agenda_generator_handler():
@@ -1062,9 +1146,26 @@ async def test_meeting_agenda_generator_handler():
     assert result["estimated_duration_minutes"] == 30
 
     # Test with project and issue context
-    result = await meeting_agenda_generator_handler({"discussion_context": "The project has an issue that needs fixing."})
+    result = await meeting_agenda_generator_handler(
+        {"discussion_context": "The project has an issue that needs fixing."}
+    )
     assert "Review previous action items" in result["agenda_items"]
     assert "Project Status Update" in result["agenda_items"]
     assert "Discuss Pending Issues" in result["agenda_items"]
     assert "Next Steps and Action Items" in result["agenda_items"]
     assert result["estimated_duration_minutes"] == len(result["agenda_items"]) * 15
+
+    # Korean context covers decision, timeline, and resource agenda paths.
+    result = await meeting_agenda_generator_handler(
+        {"discussion_context": "프로젝트 예산 승인과 마감 일정 문제를 결정합니다."}
+    )
+    assert result["agenda_items"] == [
+        "Review previous action items",
+        "Project Status Update",
+        "Discuss Pending Issues",
+        "Decisions Required",
+        "Timeline and Milestones",
+        "Budget and Resource Review",
+        "Next Steps and Action Items",
+    ]
+    assert result["estimated_duration_minutes"] == 105
