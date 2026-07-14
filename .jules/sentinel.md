@@ -114,3 +114,8 @@
 **Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
+
+## 2025-02-27 - [Path Traversal in URL Context Path Parsing]
+**Vulnerability:** Found a vulnerability where path segments were being split without first being URL-decoded in `backend/services/carddav_discovery.py`. This meant that `path.split("/")` would fail to detect URL-encoded path traversal characters like `%2e%2e` (`..`).
+**Learning:** Even when manually splitting URL paths by `/`, you must decode the string first using `urllib.parse.unquote()`. URL-encoded payloads can bypass simple string-matching filters.
+**Prevention:** Always use `unquote(path)` prior to validation (e.g. `segment not in {".", ".."}`) to correctly decode and block traversal payloads.

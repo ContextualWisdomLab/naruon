@@ -29,7 +29,7 @@ import logging
 import socket
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -231,7 +231,7 @@ def _txt_context_path(records: list[str]) -> str | None:
                 and "?" not in path
                 and "#" not in path
                 and all(
-                    segment not in {".", ".."} for segment in path.split("/")
+                    segment not in {".", ".."} for segment in unquote(path).split("/")
                 )
                 and all(ord(ch) >= 32 and ord(ch) != 127 for ch in path)
             ):
