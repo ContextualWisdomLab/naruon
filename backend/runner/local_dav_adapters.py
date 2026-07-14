@@ -16,7 +16,7 @@ _MAX_URL_DECODE_ROUNDS = 4
 @dataclass(frozen=True)
 class LocalDavSourceConfig:
     source_id: str
-    protocol: Literal["caldav", "webdav", "carddav"]
+    protocol: Literal["caldav", "webdav"]
     base_url: str
     username: str | None = None
     password: str | None = None
@@ -51,13 +51,6 @@ class LocalDavAdapters:
             default_content_type="text/calendar; charset=utf-8",
         )
 
-    async def write_carddav(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return await self._put(
-            payload,
-            protocol="carddav",
-            default_content_type="text/vcard; charset=utf-8",
-        )
-
     def _default_http_client(self):
         return httpx.AsyncClient(follow_redirects=False, timeout=60)
 
@@ -65,7 +58,7 @@ class LocalDavAdapters:
         self,
         payload: dict[str, Any],
         *,
-        protocol: Literal["caldav", "webdav", "carddav"],
+        protocol: Literal["caldav", "webdav"],
         default_content_type: str,
     ) -> dict[str, Any]:
         source = self._source_for_payload(payload, protocol)
@@ -117,7 +110,7 @@ class LocalDavAdapters:
     def _source_for_payload(
         self,
         payload: dict[str, Any],
-        protocol: Literal["caldav", "webdav", "carddav"],
+        protocol: Literal["caldav", "webdav"],
     ) -> LocalDavSourceConfig | None:
         source_id = self._payload_text(payload, "source_id")
         if source_id is None:

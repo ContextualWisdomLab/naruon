@@ -420,35 +420,3 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.create_table(" not in revision_text
     assert "op.add_column(" not in revision_text
     assert "op.drop_column(" not in revision_text
-
-
-def test_merge_revision_reconciles_newsdom_provider_branch():
-    revision_path = (
-        BACKEND_ROOT / "alembic" / "versions" / "0015_merge_newsdom_email_heads.py"
-    )
-    assert revision_path.exists()
-    revision_text = revision_path.read_text()
-
-    assert 'revision = "0015_merge_newsdom_email_heads"' in revision_text
-    assert "down_revision = (" in revision_text
-    assert '"0010_newsdom_providers"' in revision_text
-    assert '"0014_merge_email_read_state"' in revision_text
-    assert "op.create_table(" not in revision_text
-    assert "op.add_column(" not in revision_text
-    assert "op.drop_column(" not in revision_text
-
-
-def test_merge_revision_reconciles_newsdom_document_and_carddav_heads():
-    revision_path = (
-        BACKEND_ROOT / "alembic" / "versions" / "0017_merge_newsdom_carddav_heads.py"
-    )
-    assert revision_path.exists()
-    revision_text = revision_path.read_text()
-
-    assert 'revision = "0017_merge_newsdom_carddav_heads"' in revision_text
-    assert "down_revision = (" in revision_text
-    assert '"0016_document_org_scope"' in revision_text
-    assert '"0015_merge_carddav_accounts"' in revision_text
-    assert "op.create_table(" not in revision_text
-    assert "op.add_column(" not in revision_text
-    assert "op.drop_column(" not in revision_text

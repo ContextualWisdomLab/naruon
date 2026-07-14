@@ -303,7 +303,7 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
 
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
-        "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
+        "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"
     )
     # Governance/security workflows (codeql, dependency-review, scorecard,
     # trivy) are centralized in the org-level ContextualWisdomLab/.github
@@ -313,6 +313,7 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
         ".github/workflows/docker-publish.yml",
+        ".github/workflows/mail-smoke.yml",
         ".github/workflows/pr-governance.yml",
     ]
 
@@ -320,14 +321,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         workflow = read_repo_text(workflow_path)
         assert harden_runner_ref in workflow
         assert "egress-policy: audit" in workflow
-
-    # mail-smoke seeds live mailbox/DAV credentials on a self-hosted runner, so
-    # it is hardened one level further: egress is blocked to an allowlist, not
-    # merely audited, so checked-out code cannot exfiltrate the secrets.
-    mail_smoke_workflow = read_repo_text(".github/workflows/mail-smoke.yml")
-    assert harden_runner_ref in mail_smoke_workflow
-    assert "egress-policy: block" in mail_smoke_workflow
-    assert "allowed-endpoints:" in mail_smoke_workflow
 
     dependency_review_workflow = read_repo_text(
         ".github/workflows/dependency-review.yml"
@@ -366,13 +359,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "rev: v4.4.0" in pre_commit
     assert "https://github.com/pylint-dev/pylint" in pre_commit
     assert "rev: v2.17.2" in pre_commit
-
-
-def test_actionlint_recognizes_the_mail_egress_runner_label() -> None:
-    actionlint_config = read_repo_text(".github/actionlint.yaml")
-
-    assert "self-hosted-runner:" in actionlint_config
-    assert "- mail-egress" in actionlint_config
 
 
 def test_github_actions_unpinned_major_refs_failure(
@@ -571,27 +557,27 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true" in workflow
     assert (
         workflow.count(
-            "docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0"
+            "docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0"
         )
         == 2
     )
     assert (
         workflow.count(
-            "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0"
+            "docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0"
         )
         == 2
     )
     assert (
-        "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0"
+        "docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0"
         in workflow
     )
     assert (
-        "docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0"
+        "docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0"
         in workflow
     )
     assert (
         workflow.count(
-            "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0"
+            "docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0"
         )
         == 2
     )
@@ -957,11 +943,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "CHECK_RUN_PR_NUMBER" in workflow
     assert "headRefOid" in gate_script
     assert "mergeStateStatus" in gate_script
-    assert "Merge state lookup attempt" in gate_script
-    assert "Merge state is still UNKNOWN after 4 attempts" in gate_script
-    assert "PR state became %s during merge-state refresh" in gate_script
-    assert "PR head changed during gate evaluation" in gate_script
-    assert "skipping stale gate publication" in gate_script
     assert "gh pr checks" in gate_script and "--required" in gate_script
     assert "no required checks reported" in gate_script
     assert "no legacy required status contexts reported" in gate_script
@@ -974,7 +955,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "coderabbitai" in gate_script
     assert "/issues/${PR_NUMBER}/comments" in gate_script
     assert "COMMENT_MARKER" in gate_script
-    assert "no current blocking failures remain" in gate_script
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script

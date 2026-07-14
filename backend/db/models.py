@@ -285,47 +285,6 @@ class ScopeweavePromotionLink(Base):
     )
 
 
-class NewsdomProvider(Base):
-    """NewsDOM PDF DOM recognition sidecar credentials.
-
-    Mirrors :class:`LLMProvider`: the base URL is stored in plaintext while the
-    bearer token is encrypted at rest via :class:`EncryptedString` (Fernet).
-    Consumer code reads these values from the database — never from
-    ``os.getenv`` at request time — so the sidecar can be (re)configured per
-    organization without redeploying the API.
-    """
-
-    __tablename__ = "newsdom_providers"
-    __table_args__ = (
-        UniqueConstraint(
-            "organization_id",
-            "provider_name",
-            name="uq_newsdom_providers_org_name",
-        ),
-    )
-
-    newsdom_provider_id: Mapped[int] = mapped_column(
-        "newsdom_provider_id", primary_key=True
-    )
-    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    organization_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    provider_name: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    base_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    api_token: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
-    request_language: Mapped[str] = mapped_column(
-        String(32), default="auto", nullable=False
-    )
-    recognition_mode: Mapped[str] = mapped_column(
-        String(32), default="auto", nullable=False
-    )
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=datetime.datetime.utcnow,
-        onupdate=datetime.datetime.utcnow,
-    )
-
-
 class WorkspaceRunnerConfig(Base):
     __tablename__ = "workspace_runner_configs"
 
@@ -1436,35 +1395,6 @@ class CaldavAccount(Base):
     )
 
 
-class CarddavAccount(Base):
-    __tablename__ = "carddav_accounts"
-
-    account_id: Mapped[int] = mapped_column("account_id", primary_key=True)
-    source_uid: Mapped[str] = mapped_column(
-        String,
-        unique=True,
-        index=True,
-        default=lambda: f"carddav_src_{uuid.uuid4().hex}",
-        nullable=False,
-    )
-    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
-    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    server_url: Mapped[str] = mapped_column(String, nullable=False)
-    # New tables use two-word snake_case column names; the Python attribute
-    # stays `username` for symmetry with the WebdavAccount mapper.
-    username: Mapped[str] = mapped_column("account_username", String, nullable=False)
-    credentials_encrypted: Mapped[str] = mapped_column(EncryptedString, nullable=False)
-    discovery_source: Mapped[str | None] = mapped_column(String, nullable=True)
-    account_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    writeback_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-        nullable=False,
-    )
-
-
 class CalendarWritebackSource(Base):
     __tablename__ = "calendar_writeback_sources"
 
@@ -1577,10 +1507,6 @@ class Document(Base):
 
     document_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: f"doc_{uuid.uuid4().hex}")
     workspace_id: Mapped[str] = mapped_column(String, ForeignKey("workspace_entities.workspace_id"), index=True, nullable=False)
-    # Owning organization (nullable for personal-scope docs). Persisted so the
-    # NewsDOM recognition worker can resolve the org's provider without joining
-    # through the (org-less) workspace entity.
-    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     document_name: Mapped[str] = mapped_column(String, nullable=False)
     document_type: Mapped[str] = mapped_column(String, nullable=False)
     document_content: Mapped[str] = mapped_column(Text, nullable=True)
