@@ -1,4 +1,5 @@
 import asyncio
+import urllib.parse
 import datetime
 from email import policy as email_policy
 import hashlib
@@ -117,6 +118,8 @@ class EmailImportResult:
 
 
 def _safe_upload_filename(filename: str) -> str:
+    if filename:
+        filename = urllib.parse.unquote(filename)
     name = Path(filename or "upload").name.strip()
     if name in {".", ".."}:
         return "upload"

@@ -114,3 +114,8 @@
 **Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
+
+## 2026-07-15 - Prevent URL-Encoded Path Traversal in Email Import
+**Vulnerability:** The `_safe_upload_filename` in `email_import_service.py` checked for path traversals (like `..`) without unquoting the filename first. This allowed an attacker to bypass the validation by URL-encoding the payload (e.g., `%2e%2e%2fupload`).
+**Learning:** Checking for traversal sequences on raw filenames is insufficient if the input path can contain URL-encoded payloads. The check could be bypassed since it happens before decoding, yet the application or storage mechanism may later decode and use the dangerous payload.
+**Prevention:** Always use `urllib.parse.unquote()` on raw input paths before validating, splitting, or extracting filenames to ensure URL-encoded payloads are correctly decoded and caught.
