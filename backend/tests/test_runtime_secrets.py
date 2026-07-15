@@ -1,11 +1,8 @@
-import math
 
 import pytest
 from core.runtime_secrets import (
     _KNOWN_PUBLIC_AUTH_SESSION_HMAC_SECRETS,
     _LOW_ENTROPY_PLACEHOLDER_TERMS,
-    _character_class_count,
-    _shannon_entropy_bits,
     validate_auth_session_hmac_secret_value,
 )
 
@@ -92,7 +89,9 @@ def test_validate_auth_session_hmac_secret_value_multibyte_length():
         validate_auth_session_hmac_secret_value("가나다라마바사아자차카타파하")
 
 
+
 def test_character_class_count():
+    from core.runtime_secrets import _character_class_count
     assert _character_class_count("alllower") == 1
     assert _character_class_count("ALLUPPER") == 1
     assert _character_class_count("12345678") == 1
@@ -113,6 +112,8 @@ def test_character_class_count():
 
 
 def test_shannon_entropy_bits():
+    from core.runtime_secrets import _shannon_entropy_bits
+    import math
     assert _shannon_entropy_bits("") == 0.0
 
     assert _shannon_entropy_bits("a") == 0.0
@@ -126,74 +127,6 @@ def test_shannon_entropy_bits():
     assert math.isclose(_shannon_entropy_bits("abc"), 4.754887502163468)
     assert math.isclose(_shannon_entropy_bits("abcabc"), 9.509775004326936)
 
-
-def test_key_for_id_not_found():
-    from core.runtime_secrets import EncryptionKeyRing, RuntimeEncryptionKey
-    from cryptography.fernet import Fernet
-
-    fernet = Fernet(Fernet.generate_key())
-    key1 = RuntimeEncryptionKey(key_id="test1", fernet=fernet)
-
-    secrets = EncryptionKeyRing(active_key=key1, previous_keys=())
-
-    assert secrets.key_for_id("nonexistent") is None
-
-
-def test_validate_encryption_key_id_invalid():
-    from core.runtime_secrets import validate_encryption_key_id
-    import pytest
-
-    with pytest.raises(RuntimeError, match="must be 1-64 characters"):
-        validate_encryption_key_id("test", "!invalid")
-
-    with pytest.raises(RuntimeError, match="must start with a letter or number"):
-        validate_encryption_key_id("test", "-invalid")
-
-
-def test_build_runtime_encryption_key_invalid():
-    from core.runtime_secrets import build_runtime_encryption_key
-    import pytest
-
-    with pytest.raises(RuntimeError, match="must be a valid Fernet key"):
-        build_runtime_encryption_key("test", "test", "invalid_key")
-
-
-def test_parse_previous_encryption_keys_empty_or_none():
-    from core.runtime_secrets import _parse_previous_encryption_keys
-
-    assert _parse_previous_encryption_keys(None) == ()
-    assert _parse_previous_encryption_keys("") == ()
-    assert _parse_previous_encryption_keys("   ") == ()
-
-
-def test_parse_previous_encryption_keys_invalid_format():
-    from core.runtime_secrets import _parse_previous_encryption_keys
-    import pytest
-
-    with pytest.raises(RuntimeError, match="entries must use key_id=fernet_key"):
-        _parse_previous_encryption_keys("invalid_entry")
-
-    with pytest.raises(RuntimeError, match="entries must use key_id=fernet_key"):
-        _parse_previous_encryption_keys("=fernet_key")
-
-    with pytest.raises(RuntimeError, match="entries must use key_id=fernet_key"):
-        _parse_previous_encryption_keys("key_id=")
-
-
-def test_parse_previous_encryption_keys_valid():
-    from core.runtime_secrets import _parse_previous_encryption_keys
-
-    result = _parse_previous_encryption_keys("key1=value1, key2=value2, ,,")
-    assert result == (("key1", "value1"), ("key2", "value2"))
-
-
-def test_character_class_count_incremental_classes():
-    assert _character_class_count("a") == 1
-    assert _character_class_count("aA") == 2
-    assert _character_class_count("aA1") == 3
-    assert _character_class_count("aA1!") == 4
-
-
 def test_all_keys():
     from core.runtime_secrets import EncryptionKeyRing, RuntimeEncryptionKey
     from cryptography.fernet import Fernet
@@ -204,10 +137,12 @@ def test_all_keys():
     key1 = RuntimeEncryptionKey(key_id="test1", fernet=fernet1)
     key2 = RuntimeEncryptionKey(key_id="test2", fernet=fernet2)
 
-    secrets = EncryptionKeyRing(active_key=key1, previous_keys=(key2,))
+    secrets = EncryptionKeyRing(
+        active_key=key1,
+        previous_keys=(key2,)
+    )
 
     assert secrets.all_keys() == (key1, key2)
-
 
 def test_build_encryption_keyring_invalid():
     from core.runtime_secrets import build_encryption_keyring
@@ -224,7 +159,6 @@ def test_build_encryption_keyring_invalid():
     with pytest.raises(RuntimeError, match="must not repeat key identifiers"):
         build_encryption_keyring(valid_key, "same_id", f"same_id={valid_key}")
 
-
 def test_build_encryption_keyring_valid():
     from core.runtime_secrets import build_encryption_keyring
     from cryptography.fernet import Fernet
@@ -237,7 +171,6 @@ def test_build_encryption_keyring_valid():
     assert len(keyring.previous_keys) == 1
     assert keyring.previous_keys[0].key_id == "key2"
 
-
 def test_key_for_id_found():
     from core.runtime_secrets import EncryptionKeyRing, RuntimeEncryptionKey
     from cryptography.fernet import Fernet
@@ -245,6 +178,61 @@ def test_key_for_id_found():
     fernet = Fernet(Fernet.generate_key())
     key1 = RuntimeEncryptionKey(key_id="test1", fernet=fernet)
 
-    secrets = EncryptionKeyRing(active_key=key1, previous_keys=())
+    secrets = EncryptionKeyRing(
+        active_key=key1,
+        previous_keys=()
+    )
 
     assert secrets.key_for_id("test1") == key1
+
+def test_key_for_id_not_found():
+    from core.runtime_secrets import EncryptionKeyRing, RuntimeEncryptionKey
+    from cryptography.fernet import Fernet
+
+    fernet = Fernet(Fernet.generate_key())
+    key1 = RuntimeEncryptionKey(key_id="test1", fernet=fernet)
+
+    secrets = EncryptionKeyRing(
+        active_key=key1,
+        previous_keys=()
+    )
+
+    assert secrets.key_for_id("nonexistent") is None
+
+def test_validate_encryption_key_id_invalid():
+    from core.runtime_secrets import validate_encryption_key_id
+    import pytest
+    with pytest.raises(RuntimeError, match="must be 1-64 characters"):
+        validate_encryption_key_id("test", "!invalid")
+
+    with pytest.raises(RuntimeError, match="must start with a letter or number"):
+        validate_encryption_key_id("test", "-invalid")
+
+def test_build_runtime_encryption_key_invalid():
+    from core.runtime_secrets import build_runtime_encryption_key
+    import pytest
+    with pytest.raises(RuntimeError, match="must be a valid Fernet key"):
+        build_runtime_encryption_key("test", "test", "invalid_key")
+
+def test_parse_previous_encryption_keys_empty_or_none():
+    from core.runtime_secrets import _parse_previous_encryption_keys
+    assert _parse_previous_encryption_keys(None) == ()
+    assert _parse_previous_encryption_keys("") == ()
+    assert _parse_previous_encryption_keys("   ") == ()
+
+def test_parse_previous_encryption_keys_invalid_format():
+    from core.runtime_secrets import _parse_previous_encryption_keys
+    import pytest
+    with pytest.raises(RuntimeError, match="entries must use key_id=fernet_key"):
+        _parse_previous_encryption_keys("invalid_entry")
+
+    with pytest.raises(RuntimeError, match="entries must use key_id=fernet_key"):
+        _parse_previous_encryption_keys("=fernet_key")
+
+    with pytest.raises(RuntimeError, match="entries must use key_id=fernet_key"):
+        _parse_previous_encryption_keys("key_id=")
+
+def test_parse_previous_encryption_keys_valid():
+    from core.runtime_secrets import _parse_previous_encryption_keys
+    result = _parse_previous_encryption_keys("key1=value1, key2=value2, ,,")
+    assert result == (("key1", "value1"), ("key2", "value2"))
