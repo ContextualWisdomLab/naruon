@@ -48,3 +48,5 @@ jobs:
           fail-on-severity: moderate
           comment-summary-in-pr: never
           warn-only: false
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 120
