@@ -494,3 +494,9 @@ def test_oidc_settings_reject_private_ip_literal_even_when_allowlisted(monkeypat
         match="OIDC_ISSUER_URL IP host must be globally routable",
     ):
         _settings_without_env_file()
+
+
+def test_canonical_origin_ipv6_without_brackets():
+    from core.config import canonical_origin
+    assert canonical_origin("http", "::1", 8080) == "http://[::1]:8080"
+    assert canonical_origin("https", "2001:db8::1", None) == "https://[2001:db8::1]"
