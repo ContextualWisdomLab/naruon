@@ -77,3 +77,6 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+## 2026-07-15 - custom UI button keyboard focus states
+**Learning:** Custom `<button>` elements (e.g. without standard UI components) frequently lack explicit focus indicators, which breaks keyboard accessibility. In particular, custom action buttons in secondary views often only define hover states (like `hover:bg-primary/90`) but omit `focus-visible` states.
+**Action:** Always ensure that custom button elements include `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40` to provide clear keyboard focus indicators consistent with the design system.
