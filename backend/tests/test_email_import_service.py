@@ -28,6 +28,7 @@ from services.email_import_service import (
         ("..", "upload"),
         ("/tmp/..", "upload"),  # nosec B108
         ("%2e%2e%2fupload", "upload"),
+        ("%252e%252e%252fupload", "upload"),
     ],
 )
 def test_safe_upload_filename(input_name, expected):

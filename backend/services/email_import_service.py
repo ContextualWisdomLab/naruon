@@ -119,7 +119,13 @@ class EmailImportResult:
 
 def _safe_upload_filename(filename: str) -> str:
     if filename:
-        filename = urllib.parse.unquote(filename)
+        for _ in range(100):
+            next_name = urllib.parse.unquote(filename)
+            if next_name == filename:
+                break
+            filename = next_name
+        else:
+            filename = urllib.parse.unquote(filename)
     name = Path(filename or "upload").name.strip()
     if name in {".", ".."}:
         return "upload"

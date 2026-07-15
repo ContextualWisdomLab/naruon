@@ -116,6 +116,6 @@
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
 
 ## 2026-07-15 - Prevent URL-Encoded Path Traversal in Email Import
-**Vulnerability:** The `_safe_upload_filename` in `email_import_service.py` checked for path traversals (like `..`) without unquoting the filename first. This allowed an attacker to bypass the validation by URL-encoding the payload (e.g., `%2e%2e%2fupload`).
+**Vulnerability:** The `_safe_upload_filename` in `email_import_service.py` checked for path traversals (like `..`) without unquoting the filename first. This allowed an attacker to bypass the validation by URL-encoding or doubly URL-encoding the payload (e.g., `%2e%2e%2fupload` or `%252e%252e%252fupload`).
 **Learning:** Checking for traversal sequences on raw filenames is insufficient if the input path can contain URL-encoded payloads. The check could be bypassed since it happens before decoding, yet the application or storage mechanism may later decode and use the dangerous payload.
-**Prevention:** Always use `urllib.parse.unquote()` on raw input paths before validating, splitting, or extracting filenames to ensure URL-encoded payloads are correctly decoded and caught.
+**Prevention:** Always recursively decode `urllib.parse.unquote()` on raw input paths before validating, splitting, or extracting filenames to ensure doubly URL-encoded payloads are correctly decoded and caught, with a bounded loop to avoid DoS.
