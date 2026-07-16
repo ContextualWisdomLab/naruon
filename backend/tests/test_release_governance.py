@@ -301,6 +301,30 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
     assert duplicates == [], "\n".join(duplicates)
 
 
+def test_dependabot_npm_directories_contain_package_manifests() -> None:
+    """Keep npm update jobs bound to directories that Dependabot can inspect."""
+    dependabot_config = yaml.safe_load(read_repo_text(".github/dependabot.yml"))
+
+    npm_directories = [
+        update["directory"]
+        for update in dependabot_config["updates"]
+        if update["package-ecosystem"] == "npm"
+    ]
+
+    assert npm_directories, "Dependabot must track at least one npm workspace"
+    missing_manifests = [
+        directory
+        for directory in npm_directories
+        if not (
+            REPO_ROOT / directory.removeprefix("/") / "package.json"
+        ).is_file()
+    ]
+    assert missing_manifests == [], (
+        "Dependabot npm directories must contain package.json: "
+        + ", ".join(missing_manifests)
+    )
+
+
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
