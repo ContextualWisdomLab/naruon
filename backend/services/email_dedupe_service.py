@@ -30,12 +30,20 @@ def strong_email_fingerprint(
     date: datetime.datetime | None,
     body: str | None,
 ) -> str | None:
-    if not body:
+    if not (
+        sender
+        and sender.strip()
+        and subject
+        and subject.strip()
+        and date is not None
+        and body
+        and body.strip()
+    ):
         return None
     return generate_email_fingerprint(
         {
-            "sender": sender or "",
-            "subject": subject or "",
+            "sender": sender,
+            "subject": subject,
             "date": _date_to_fingerprint_value(date),
             "body": body,
         }
@@ -65,4 +73,3 @@ def email_strong_fingerprint(email_row: Email) -> str | None:
         date=email_row.date,
         body=email_row.body,
     )
-

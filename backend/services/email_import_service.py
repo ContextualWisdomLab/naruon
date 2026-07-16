@@ -44,7 +44,6 @@ from services.project_graph.extractor_registry import (
 )
 from services.threading_service import (
     assign_thread_id,
-    generate_email_fingerprint,
     normalize_message_id,
 )
 
@@ -61,6 +60,11 @@ SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
 logger = logging.getLogger(__name__)
 
 EmailImportItemStatus = Literal["imported", "skipped_duplicate", "failed"]
+DedupeMatchReason = Literal[
+    "embedded_message_id",
+    "raw_content_sha256",
+    "complete_source_fingerprint",
+]
 
 
 class EmailImportQuotaExceeded(Exception):
@@ -100,6 +104,9 @@ class EmailImportItemResult:
     status: EmailImportItemStatus
     reason_code: str | None = None
     attachment_count: int = 0
+    dedupe_review_required: bool = False
+    dedupe_reason_codes: list[str] = field(default_factory=list)
+    dedupe_match_reason: DedupeMatchReason | None = None
 
 
 @dataclass
@@ -196,27 +203,52 @@ def _fallback_message_id(content: bytes) -> str:
     return f"import-{digest}@local.naruon"
 
 
-def _message_id_for(parsed: EmailData, content: bytes) -> str:
-    return normalize_message_id(parsed.get("message_id")) or _fallback_message_id(
-        content
-    )
+def _message_identity_for(
+    parsed: EmailData, content: bytes
+) -> tuple[str, DedupeMatchReason]:
+    embedded_message_id = normalize_message_id(parsed.get("message_id"))
+    if (
+        parsed.get("message_id_evidence_status") == "embedded"
+        and embedded_message_id
+    ):
+        return embedded_message_id, "embedded_message_id"
+    return _fallback_message_id(content), "raw_content_sha256"
 
 
-def _email_fingerprint(parsed: EmailData, persisted_date: datetime.datetime) -> str:
-    strong_fingerprint = strong_email_fingerprint(
+def _email_fingerprint(parsed: EmailData) -> str | None:
+    source_date = parsed.get("source_date")
+    if (
+        parsed.get("date_evidence_status") != "parsed"
+        or not isinstance(source_date, datetime.datetime)
+    ):
+        return None
+    return strong_email_fingerprint(
         sender=parsed.get("sender"),
         subject=parsed.get("subject"),
-        date=persisted_date,
+        date=_utc_datetime(source_date),
         body=parsed.get("body"),
     )
-    if strong_fingerprint:
-        return strong_fingerprint
-    return generate_email_fingerprint(
-        parsed.get("subject"),
-        persisted_date.isoformat(),
-        parsed.get("sender"),
-        parsed.get("recipients"),
-    )
+
+
+def _dedupe_review_reason_codes(
+    parsed: EmailData, fingerprint: str | None
+) -> list[str]:
+    reason_codes: list[str] = []
+    date_evidence_status = parsed.get("date_evidence_status")
+    if date_evidence_status == "missing":
+        reason_codes.append("date_evidence_missing")
+    elif date_evidence_status == "invalid":
+        reason_codes.append("date_evidence_invalid")
+    elif date_evidence_status != "parsed" or not isinstance(
+        parsed.get("source_date"), datetime.datetime
+    ):
+        reason_codes.append("date_evidence_unavailable")
+
+    if parsed.get("message_id_evidence_status") != "embedded":
+        reason_codes.append("message_id_evidence_missing")
+    if fingerprint is None:
+        reason_codes.append("complete_source_fingerprint_unavailable")
+    return reason_codes
 
 
 async def _find_existing_email(
@@ -225,19 +257,27 @@ async def _find_existing_email(
     user_id: str,
     organization_id: str,
     message_id: str,
-    fingerprint: str,
-) -> Email | None:
+    identity_match_reason: DedupeMatchReason,
+    fingerprint: str | None,
+) -> tuple[Email | None, DedupeMatchReason | None]:
     message_lookup_values = {message_id, f"<{message_id}>"}
+    dedupe_conditions = [Email.message_id.in_(message_lookup_values)]
+    if fingerprint is not None:
+        dedupe_conditions.append(Email.fingerprint == fingerprint)
     result = await session.execute(
         select(Email).where(
             *Email.owner_filters(user_id, organization_id),
-            or_(
-                Email.message_id.in_(message_lookup_values),
-                Email.fingerprint == fingerprint,
-            ),
+            or_(*dedupe_conditions),
         )
     )
-    return result.scalar_one_or_none()
+    existing_email = result.scalar_one_or_none()
+    if existing_email is None:
+        return None, None
+    if normalize_message_id(existing_email.message_id) == message_id:
+        return existing_email, identity_match_reason
+    if fingerprint is not None and existing_email.fingerprint == fingerprint:
+        return existing_email, "complete_source_fingerprint"
+    return None, None
 
 
 async def _owner_email_import_count(
@@ -323,7 +363,7 @@ def _build_email_object(
     organization_id: str,
     message_id: str,
     thread_id: str | None,
-    fingerprint: str,
+    fingerprint: str | None,
     persisted_date: datetime.datetime,
     attachment_payloads: list[dict],
     fitted_embeddings: list[list[float]],
@@ -829,16 +869,17 @@ async def _import_single_eml(
             reason_code="parse_failed",
         )
 
-    message_id = _message_id_for(parsed, content)
+    message_id, identity_match_reason = _message_identity_for(parsed, content)
     parsed["message_id"] = message_id
     persisted_date = _utc_datetime(parsed.get("date"))
-    fingerprint = _email_fingerprint(parsed, persisted_date)
+    fingerprint = _email_fingerprint(parsed)
 
-    existing_email = await _find_existing_email(
+    existing_email, dedupe_match_reason = await _find_existing_email(
         session,
         user_id=user_id,
         organization_id=organization_id,
         message_id=message_id,
+        identity_match_reason=identity_match_reason,
         fingerprint=fingerprint,
     )
     if existing_email is not None:
@@ -846,6 +887,7 @@ async def _import_single_eml(
             filename=display_filename,
             status="skipped_duplicate",
             reason_code="duplicate_email",
+            dedupe_match_reason=dedupe_match_reason,
         )
 
     thread_id = await assign_thread_id(
@@ -900,10 +942,13 @@ async def _import_single_eml(
         embedding_provider=embedding_provider,
     )
 
+    dedupe_reason_codes = _dedupe_review_reason_codes(parsed, fingerprint)
     return EmailImportItemResult(
         filename=display_filename,
         status="imported",
         attachment_count=attachment_count,
+        dedupe_review_required=bool(dedupe_reason_codes),
+        dedupe_reason_codes=dedupe_reason_codes,
     )
 
 

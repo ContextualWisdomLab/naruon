@@ -926,6 +926,9 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
             "status": "imported",
             "reason_code": None,
             "attachment_count": 0,
+            "dedupe_review_required": False,
+            "dedupe_reason_codes": [],
+            "dedupe_match_reason": None,
         }
     ]
     assert "imported@example.com" not in json.dumps(data)
@@ -1013,8 +1016,187 @@ async def test_import_email_files_skips_duplicate_message_id(client: AsyncClient
     assert data["failed_count"] == 0
     assert data["items"][0]["status"] == "skipped_duplicate"
     assert data["items"][0]["reason_code"] == "duplicate_email"
+    assert data["items"][0]["dedupe_review_required"] is False
+    assert data["items"][0]["dedupe_reason_codes"] == []
+    assert data["items"][0]["dedupe_match_reason"] == "embedded_message_id"
     assert session.added == []
     assert session.commit_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("date_header", "expected_date_reason"),
+    [
+        (b"", "date_evidence_missing"),
+        (b"Date: Invalid-Date-Format\r\n", "date_evidence_invalid"),
+    ],
+)
+async def test_import_email_files_does_not_treat_filename_date_as_source_metadata(
+    client: AsyncClient, date_header: bytes, expected_date_reason: str
+):
+    from db.session import get_db
+
+    session = ImportRecordingSession([])
+    previous_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: session
+    try:
+        response = await client.post(
+            "/api/emails/import-files",
+            files=[
+                (
+                    "files",
+                    (
+                        "2026-04-28-message.eml",
+                        b"Message-ID: <filename-date@example.com>\r\n"
+                        b"From: partner@example.com\r\n"
+                        b"To: user@example.com\r\n"
+                        b"Subject: Filename date is not evidence\r\n"
+                        + date_header
+                        + b"\r\n"
+                        b"Body text\r\n",
+                        "message/rfc822",
+                    ),
+                )
+            ],
+            headers={"X-Organization-Id": "org-acme"},
+        )
+    finally:
+        if previous_db_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_db_override
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 1
+    assert data["provider_write_executed"] is False
+    assert data["items"] == [
+        {
+            "filename": "2026-04-28-message.eml",
+            "status": "imported",
+            "reason_code": None,
+            "attachment_count": 0,
+            "dedupe_review_required": True,
+            "dedupe_reason_codes": [
+                expected_date_reason,
+                "complete_source_fingerprint_unavailable",
+            ],
+            "dedupe_match_reason": None,
+        }
+    ]
+    assert session.added[0].fingerprint is None
+
+
+@pytest.mark.asyncio
+async def test_import_email_files_uses_raw_sha_for_exact_no_id_duplicate(
+    client: AsyncClient,
+):
+    from db.session import get_db
+
+    content = (
+        b"Date: Thu, 11 Jun 2026 10:00:00 +0000\r\n"
+        b"From: partner@example.com\r\n"
+        b"To: user@example.com\r\n"
+        b"Subject: No embedded ID\r\n\r\n"
+        b"Body text\r\n"
+    )
+    session = ImportRecordingSession([])
+    previous_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: session
+    try:
+        response = await client.post(
+            "/api/emails/import-files",
+            files=[
+                ("files", ("first.eml", content, "message/rfc822")),
+                ("files", ("second.eml", content, "message/rfc822")),
+            ],
+            headers={"X-Organization-Id": "org-acme"},
+        )
+    finally:
+        if previous_db_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_db_override
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 1
+    assert data["skipped_count"] == 1
+    assert data["provider_write_executed"] is False
+    assert data["items"][0]["dedupe_review_required"] is True
+    assert data["items"][0]["dedupe_reason_codes"] == [
+        "message_id_evidence_missing"
+    ]
+    assert data["items"][1]["status"] == "skipped_duplicate"
+    assert data["items"][1]["dedupe_review_required"] is False
+    assert data["items"][1]["dedupe_reason_codes"] == []
+    assert data["items"][1]["dedupe_match_reason"] == "raw_content_sha256"
+
+
+@pytest.mark.asyncio
+async def test_import_email_files_reports_complete_source_fingerprint_match(
+    client: AsyncClient,
+):
+    from db.session import get_db
+
+    existing_email = Email(
+        id=81,
+        user_id="testuser",
+        organization_id="org-acme",
+        message_id="existing-fingerprint@example.com",
+        thread_id="existing-fingerprint-thread",
+        sender="Partner <partner@example.com>",
+        recipients="User <user@example.com>",
+        subject="Fingerprint match",
+        date=datetime.datetime(2026, 6, 11, 10, 0, tzinfo=datetime.timezone.utc),
+        body="Same source body",
+        fingerprint=generate_email_fingerprint(
+            {
+                "sender": "Partner <partner@example.com>",
+                "subject": "Fingerprint match",
+                "date": "2026-06-11T10:00:00+00:00",
+                "body": "Same source body",
+            }
+        ),
+        embedding=[0.0] * 1536,
+    )
+    session = ImportRecordingSession([existing_email])
+    previous_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: session
+    try:
+        response = await client.post(
+            "/api/emails/import-files",
+            files=[
+                (
+                    "files",
+                    (
+                        "fingerprint-match.eml",
+                        _sample_eml_bytes(
+                            message_id="<new-id@example.com>",
+                            subject="Fingerprint match",
+                            body="Same source body",
+                        ),
+                        "message/rfc822",
+                    ),
+                )
+            ],
+            headers={"X-Organization-Id": "org-acme"},
+        )
+    finally:
+        if previous_db_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_db_override
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["skipped_count"] == 1
+    assert data["provider_write_executed"] is False
+    assert data["items"][0]["dedupe_match_reason"] == (
+        "complete_source_fingerprint"
+    )
+    assert data["items"][0]["dedupe_review_required"] is False
+    assert data["items"][0]["dedupe_reason_codes"] == []
 
 
 @pytest.mark.asyncio

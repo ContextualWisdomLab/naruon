@@ -30,6 +30,7 @@ from services.email_dedupe_service import (
     email_strong_fingerprint,
 )
 from services.email_import_service import (
+    DedupeMatchReason,
     EmailImportEmbeddingProvider,
     EmailImportQuotaExceeded,
     MAX_IMPORT_UPLOAD_BYTES,
@@ -250,6 +251,9 @@ class EmailFileImportItem(BaseModel):
     status: EmailImportItemStatus
     reason_code: str | None = None
     attachment_count: int = 0
+    dedupe_review_required: bool = False
+    dedupe_reason_codes: list[str] = Field(default_factory=list)
+    dedupe_match_reason: DedupeMatchReason | None = None
 
 
 class EmailFileImportResponse(BaseModel):
@@ -628,6 +632,9 @@ async def import_email_files(
                 status=item.status,
                 reason_code=item.reason_code,
                 attachment_count=item.attachment_count,
+                dedupe_review_required=item.dedupe_review_required,
+                dedupe_reason_codes=item.dedupe_reason_codes,
+                dedupe_match_reason=item.dedupe_match_reason,
             )
             for item in import_result.items
         ],
