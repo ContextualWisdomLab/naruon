@@ -878,6 +878,16 @@ def test_is_safe_webhook_url_coverage():
     assert is_safe_webhook_url("https://[::1]/admin") is False
     assert is_safe_webhook_url("https://user:pass@example.com/webhook") is False
     assert is_safe_webhook_url("https://example.com/webhook#fragment") is False
+    assert is_safe_webhook_url("https://internal") is False
+    assert is_safe_webhook_url("https://local") is False
+    assert is_safe_webhook_url("https://2130706433/admin") is False
+    assert is_safe_webhook_url("https://0x7f.0.0.1/admin") is False
+    assert is_safe_webhook_url("https://0177.0.0.1/admin") is False
+    with patch(
+        "api.tools._resolve_global_addresses",
+        return_value=("8.8.8.8",),
+    ):
+        assert is_safe_webhook_url("https://8.8.8.8/webhook") is True
 
 
 def test_execute_email_translator():
