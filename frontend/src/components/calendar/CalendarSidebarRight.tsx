@@ -82,7 +82,7 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
       <div className="mt-8 flex gap-3">
         <button type="button" aria-label="출시 회의 일정 삭제" className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">삭제</button>
         <button type="button" aria-label="출시 회의 일정 복사" className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">복사</button>
-        <button type="button" aria-label="출시 회의 일정 수정" className="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">수정</button>
+        <button type="button" aria-label="출시 회의 일정 수정" className="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">수정</button>
       </div>
     </aside>
   );
