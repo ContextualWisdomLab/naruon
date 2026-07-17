@@ -140,6 +140,7 @@ function describeEdge(edge: Edge, nodes: Node[]) {
 }
 
 import { apiClient } from '@/lib/api-client';
+import { Button } from '@/components/ui/button';
 
 export default function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -361,28 +362,9 @@ export default function NetworkGraph() {
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleSelectFirstRelationship}
-            disabled={!firstEdge}
-            className="rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            첫 관계 보기
-          </button>
-          <button
-            type="button"
-            onClick={handleZoomGraph}
-            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            그래프 확대
-          </button>
-          <button
-            type="button"
-            onClick={handleFitGraph}
-            className="rounded-md border border-border bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            전체 그래프 맞춤
-          </button>
+          <Button type="button" variant="outline" size="sm" onClick={handleSelectFirstRelationship} disabled={!firstEdge}>첫 관계 보기</Button>
+          <Button type="button" variant="outline" size="sm" onClick={handleZoomGraph}>그래프 확대</Button>
+          <Button type="button" variant="outline" size="sm" onClick={handleFitGraph}>전체 그래프 맞춤</Button>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <label className="text-xs font-bold text-foreground">
