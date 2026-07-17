@@ -325,6 +325,22 @@ def test_dependabot_npm_directories_contain_package_manifests() -> None:
     )
 
 
+def test_dependabot_updates_enforce_supply_chain_cooldown() -> None:
+    """Hold newly published dependency versions for a review observation window."""
+    updates = yaml.safe_load(read_repo_text(".github/dependabot.yml"))["updates"]
+
+    assert len(updates) == 8
+    missing_or_short = [
+        f"{update['package-ecosystem']}:{update['directory']}"
+        for update in updates
+        if (update.get("cooldown") or {}).get("default-days", 0) < 7
+    ]
+    assert missing_or_short == [], (
+        "Dependabot updates require at least a seven-day cooldown: "
+        + ", ".join(missing_or_short)
+    )
+
+
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
