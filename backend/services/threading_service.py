@@ -48,15 +48,11 @@ def extract_reference_ids(value: str | None) -> list[str]:
     if not refs:
         refs = str(value).split()
 
-    normalized_refs: list[str] = []
-    # Optimization: Use a set for O(1) membership checks to avoid O(n^2) scaling on long reference lists
-    seen: set[str] = set()
-    for ref in refs:
-        normalized = normalize_message_id(ref)
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            normalized_refs.append(normalized)
-    return normalized_refs
+    # ⚡ Bolt Optimization: Use dict.fromkeys() to maintain header order while deduplicating.
+    # This avoids Python-level loop overhead and explicit set() updates, improving performance.
+    return list(dict.fromkeys(
+        normalized for ref in refs if (normalized := normalize_message_id(ref))
+    ))
 
 
 async def _find_existing_thread_ids(
@@ -69,13 +65,12 @@ async def _find_existing_thread_ids(
     if not message_ids:
         return {}
 
-    target_ids: list[str] = []
-    seen_target_ids: set[str] = set()
+    # ⚡ Bolt Optimization: Use dict.fromkeys() to maintain order and deduplicate faster
+    target_ids_dict: dict[str, None] = {}
     for message_id in message_ids:
-        for target_id in (message_id, f"<{message_id}>"):
-            if target_id not in seen_target_ids:
-                seen_target_ids.add(target_id)
-                target_ids.append(target_id)
+        target_ids_dict[message_id] = None
+        target_ids_dict[f"<{message_id}>"] = None
+    target_ids = list(target_ids_dict.keys())
 
     result = await session.execute(
         select(Email.message_id, Email.thread_id).where(
@@ -110,16 +105,15 @@ async def assign_thread_id(
     in_reply_to = normalize_message_id(email_data.get("in_reply_to"))
     references = extract_reference_ids(email_data.get("references"))
 
-    existing_candidates = []
-    # Optimization: Use a set for O(1) membership checks to prevent O(n^2) deduplication of candidates
-    seen = set()
+    # ⚡ Bolt Optimization: Use dict.fromkeys() to maintain order while deduplicating in O(N).
+    # This eliminates explicit seen set and loop management overhead.
     if in_reply_to:
-        existing_candidates.append(in_reply_to)
-        seen.add(in_reply_to)
-    for ref in references:
-        if ref not in seen:
-            seen.add(ref)
-            existing_candidates.append(ref)
+        refs = [in_reply_to]
+        if references:
+            refs.extend(references)
+        existing_candidates = list(dict.fromkeys(refs))
+    else:
+        existing_candidates = list(dict.fromkeys(references)) if references else []
 
     if existing_candidates:
         thread_ids_by_message_id = await _find_existing_thread_ids(

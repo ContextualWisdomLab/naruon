@@ -10,3 +10,6 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+## 2025-10-25 - Python dict.fromkeys() is faster than loop and set()
+**Learning:** In Python 3.7+, `dict.fromkeys()` preserves insertion order and can be significantly faster than explicit `for` loops with `set()` for deduplicating short arrays/lists while maintaining order. The loop and set overhead is quite high in Python.
+**Action:** When deduplicating lists where order matters, use `list(dict.fromkeys(iterable))` instead of manually maintaining a `seen` set in a loop.
