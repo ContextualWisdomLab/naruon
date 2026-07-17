@@ -2688,6 +2688,7 @@
 
 ## [Unreleased]
 ### Added
+- `backend/api/tools.py`에 이메일 번역(`email_translator`) 및 감정 분석(`sentiment_analyzer`) 툴의 테스트 누락을 해결하기 위해 `backend/tests/test_tools_api.py` 파일에 단위 테스트 케이스들을 추가했습니다.
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환
   - `action_item_extractor_handler`: 실행 항목 및 마감일 추출
