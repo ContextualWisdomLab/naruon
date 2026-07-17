@@ -26,7 +26,11 @@ from db.models import (
 from services.archive import extract_backup_async
 from services.batch_embedding_service import try_batch_import_embeddings
 from services.content_graph import ParseResult, parse_content
-from services.email_dedupe_service import strong_email_fingerprint
+from services.email_dedupe_service import (
+    email_strong_fingerprint,
+    strong_email_fingerprint,
+)
+from services.email_service import generate_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
@@ -230,6 +234,35 @@ def _email_fingerprint(parsed: EmailData) -> str | None:
     )
 
 
+def _legacy_email_fingerprint(parsed: EmailData) -> str | None:
+    source_date = parsed.get("source_date")
+    if (
+        parsed.get("date_evidence_status") != "parsed"
+        or not isinstance(source_date, datetime.datetime)
+    ):
+        return None
+    sender = parsed.get("sender")
+    subject = parsed.get("subject")
+    body = parsed.get("body")
+    if not (
+        sender
+        and sender.strip()
+        and subject
+        and subject.strip()
+        and body
+        and body.strip()
+    ):
+        return None
+    return generate_email_fingerprint(
+        {
+            "sender": sender,
+            "subject": subject,
+            "date": _utc_datetime(source_date).isoformat(),
+            "body": body,
+        }
+    )
+
+
 def _dedupe_review_reason_codes(
     parsed: EmailData, fingerprint: str | None
 ) -> list[str]:
@@ -259,24 +292,32 @@ async def _find_existing_email(
     message_id: str,
     identity_match_reason: DedupeMatchReason,
     fingerprint: str | None,
+    legacy_fingerprint: str | None,
 ) -> tuple[Email | None, DedupeMatchReason | None]:
     message_lookup_values = {message_id, f"<{message_id}>"}
     dedupe_conditions = [Email.message_id.in_(message_lookup_values)]
-    if fingerprint is not None:
-        dedupe_conditions.append(Email.fingerprint == fingerprint)
+    fingerprint_lookup_values = {
+        value for value in (fingerprint, legacy_fingerprint) if value is not None
+    }
+    if fingerprint_lookup_values:
+        dedupe_conditions.append(Email.fingerprint.in_(fingerprint_lookup_values))
     result = await session.execute(
         select(Email).where(
             *Email.owner_filters(user_id, organization_id),
             or_(*dedupe_conditions),
         )
     )
-    existing_email = result.scalar_one_or_none()
-    if existing_email is None:
-        return None, None
-    if normalize_message_id(existing_email.message_id) == message_id:
-        return existing_email, identity_match_reason
-    if fingerprint is not None and existing_email.fingerprint == fingerprint:
-        return existing_email, "complete_source_fingerprint"
+    existing_emails = result.scalars().all()
+    for existing_email in existing_emails:
+        if normalize_message_id(existing_email.message_id) == message_id:
+            return existing_email, identity_match_reason
+    if fingerprint is not None:
+        for existing_email in existing_emails:
+            if (
+                existing_email.fingerprint == fingerprint
+                or email_strong_fingerprint(existing_email) == fingerprint
+            ):
+                return existing_email, "complete_source_fingerprint"
     return None, None
 
 
@@ -873,6 +914,7 @@ async def _import_single_eml(
     parsed["message_id"] = message_id
     persisted_date = _utc_datetime(parsed.get("date"))
     fingerprint = _email_fingerprint(parsed)
+    legacy_fingerprint = _legacy_email_fingerprint(parsed)
 
     existing_email, dedupe_match_reason = await _find_existing_email(
         session,
@@ -881,6 +923,7 @@ async def _import_single_eml(
         message_id=message_id,
         identity_match_reason=identity_match_reason,
         fingerprint=fingerprint,
+        legacy_fingerprint=legacy_fingerprint,
     )
     if existing_email is not None:
         return EmailImportItemResult(

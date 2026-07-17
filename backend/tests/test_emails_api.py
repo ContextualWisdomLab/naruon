@@ -1200,6 +1200,69 @@ async def test_import_email_files_reports_complete_source_fingerprint_match(
 
 
 @pytest.mark.asyncio
+async def test_import_email_files_rejects_legacy_body_prefix_false_positive(
+    client: AsyncClient,
+):
+    from db.session import get_db
+
+    shared_prefix = "A" * 500
+    existing_email = Email(
+        id=82,
+        user_id="testuser",
+        organization_id="org-acme",
+        message_id="existing-prefix@example.com",
+        thread_id="existing-prefix-thread",
+        sender="Partner <partner@example.com>",
+        recipients="User <user@example.com>",
+        subject="Long body",
+        date=datetime.datetime(2026, 6, 11, 10, 0, tzinfo=datetime.timezone.utc),
+        body=f"{shared_prefix}first",
+        fingerprint=generate_email_fingerprint(
+            {
+                "sender": "Partner <partner@example.com>",
+                "subject": "Long body",
+                "date": "2026-06-11T10:00:00+00:00",
+                "body": f"{shared_prefix}first",
+            }
+        ),
+        embedding=[0.0] * 1536,
+    )
+    session = ImportRecordingSession([existing_email])
+    previous_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: session
+    try:
+        response = await client.post(
+            "/api/emails/import-files",
+            files=[
+                (
+                    "files",
+                    (
+                        "long-body.eml",
+                        _sample_eml_bytes(
+                            message_id="<new-prefix@example.com>",
+                            subject="Long body",
+                            body=f"{shared_prefix}second",
+                        ),
+                        "message/rfc822",
+                    ),
+                )
+            ],
+            headers={"X-Organization-Id": "org-acme"},
+        )
+    finally:
+        if previous_db_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_db_override
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 1
+    assert data["skipped_count"] == 0
+    assert len(session.added) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "member_name,expected_filename",
     [

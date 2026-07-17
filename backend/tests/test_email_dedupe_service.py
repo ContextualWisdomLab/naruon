@@ -85,6 +85,20 @@ def test_strong_email_fingerprint_valid():
     assert isinstance(result, str)
     assert len(result) > 0
 
+
+def test_strong_email_fingerprint_includes_body_beyond_legacy_snippet():
+    values = {
+        "sender": "sender@example.com",
+        "subject": "Subject",
+        "date": datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+    }
+
+    first = strong_email_fingerprint(**values, body=f"{'A' * 500}first")
+    second = strong_email_fingerprint(**values, body=f"{'A' * 500}second")
+
+    assert first != second
+
+
 def test_candidate_strong_fingerprint():
     candidate = EmailDedupeCandidate(
         candidate_key="key",
