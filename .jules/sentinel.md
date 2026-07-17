@@ -118,4 +118,4 @@
 ## 2025-02-27 - [Path Traversal in URL Context Path Parsing]
 **Vulnerability:** Found a vulnerability where path segments were being split without first being URL-decoded in `backend/services/carddav_discovery.py`. This meant that `path.split("/")` would fail to detect URL-encoded path traversal characters like `%2e%2e` (`..`).
 **Learning:** Even when manually splitting URL paths by `/`, you must decode the string first using `urllib.parse.unquote()`. URL-encoded payloads can bypass simple string-matching filters.
-**Prevention:** Always use `unquote(path)` prior to validation (e.g. `segment not in {".", ".."}`) to correctly decode and block traversal payloads.
+**Prevention:** Recursively decode paths with a strict iteration bound before validation, and reject traversal segments, backslashes, and control characters in the fully decoded representation.
