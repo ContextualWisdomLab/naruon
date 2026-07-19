@@ -3,6 +3,10 @@ import inspect
 import json
 import logging
 import urllib.parse
+import re
+import hashlib
+import zoneinfo
+from datetime import datetime, timezone
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
 
@@ -605,6 +609,118 @@ registry.register(
     grammar_checker_handler,
 )
 
+
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
+    domains = list(set([urllib.parse.urlparse(url if url.startswith('http') else 'http://' + url).netloc for url in urls]))
+    return {
+        "urls": urls,
+        "domains": domains,
+        "count": len(urls)
+    }
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트에서 모든 URL과 도메인을 추출합니다.",
+        category="텍스트 분석",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Any:
+    json_string = params.get("json_string", "")
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {
+            "formatted_json": formatted,
+            "is_valid": True,
+            "error": None
+        }
+    except json.JSONDecodeError as e:
+        return {
+            "formatted_json": None,
+            "is_valid": False,
+            "error": str(e)
+        }
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포맷터 (JSON Formatter)",
+        description="JSON 문자열의 유효성을 검사하고 보기 좋게 포맷팅합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    return {
+        "md5": hashlib.md5(text.encode('utf-8')).hexdigest(),
+        "sha1": hashlib.sha1(text.encode('utf-8')).hexdigest(),
+        "sha256": hashlib.sha256(text.encode('utf-8')).hexdigest(),
+    }
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트를 MD5, SHA1, SHA256 해시로 변환합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    hash_generator_handler,
+)
+
+async def datetime_converter_handler(params: Dict[str, Any]) -> Any:
+    datetime_str = params.get("datetime_str", "")
+    source_tz = params.get("source_tz", "UTC")
+    target_tz = params.get("target_tz", "UTC")
+
+    try:
+        try:
+            dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
+        except ValueError:
+            return {"error": "Invalid ISO format"}
+
+        if dt.tzinfo is None:
+            try:
+                tz_src = zoneinfo.ZoneInfo(source_tz)
+                dt = dt.replace(tzinfo=tz_src)
+            except zoneinfo.ZoneInfoNotFoundError:
+                return {"error": "Invalid source timezone"}
+
+        try:
+            tz_tgt = zoneinfo.ZoneInfo(target_tz)
+            dt_tgt = dt.astimezone(tz_tgt)
+        except zoneinfo.ZoneInfoNotFoundError:
+            return {"error": "Invalid target timezone"}
+
+        return {
+            "original": dt.isoformat(),
+            "converted": dt_tgt.isoformat(),
+            "target_timezone": target_tz
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+registry.register(
+    ToolInfo(
+        code="datetime_converter",
+        name="시간 변환기 (Datetime Converter)",
+        description="시간을 다른 시간대로 변환합니다.",
+        category="유틸리티",
+        parameters={"datetime_str": "string", "source_tz": "string", "target_tz": "string"},
+    ),
+    datetime_converter_handler,
+)
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
