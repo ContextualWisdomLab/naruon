@@ -46,6 +46,26 @@ def test_reject_unsafe_ip_literal():
 
     # Standard domain name
     _reject_unsafe_ip_literal("setting", "example.com")
+    _reject_unsafe_ip_literal("setting", "0xmacro.com")
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "2130706433",
+        "0x7f000001",
+        "127.1",
+        "0x7f.0.0.1",
+        "0177.0.0.1",
+    ],
+)
+def test_reject_unsafe_legacy_ipv4_literal(host):
+    with pytest.raises(ValueError, match="setting IP host must be globally routable"):
+        _reject_unsafe_ip_literal("setting", host)
+
+
+def test_allow_global_legacy_ipv4_literal():
+    _reject_unsafe_ip_literal("setting", "0x08080808")
 
 def test_validate_global_address():
     assert _validate_global_address("setting", "8.8.8.8") == "8.8.8.8"
