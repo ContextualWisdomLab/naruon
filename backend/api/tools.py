@@ -663,8 +663,8 @@ registry.register(
 async def hash_generator_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     return {
-        "md5": hashlib.md5(text.encode('utf-8'), usedforsecurity=False).hexdigest(),
-        "sha1": hashlib.sha1(text.encode('utf-8'), usedforsecurity=False).hexdigest(),
+        "sha224": hashlib.sha224(text.encode('utf-8')).hexdigest(),
+        "sha512": hashlib.sha512(text.encode('utf-8')).hexdigest(),
         "sha256": hashlib.sha256(text.encode('utf-8')).hexdigest(),
     }
 
@@ -672,7 +672,7 @@ registry.register(
     ToolInfo(
         code="hash_generator",
         name="해시 생성기 (Hash Generator)",
-        description="텍스트를 MD5, SHA1, SHA256 해시로 변환합니다.",
+        description="텍스트를 SHA224, SHA256, SHA512 해시로 변환합니다.",
         category="보안",
         parameters={"text": "string"},
     ),
