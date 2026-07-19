@@ -998,7 +998,6 @@ def test_validate_webhook_url_invalid_port():
 def test_execute_email_translator_ko():
     from main import app
     from fastapi.testclient import TestClient
-    from tests.test_tools_api import _signed_session_token
 
     with TestClient(app) as client:
         response = client.post(
@@ -1020,7 +1019,6 @@ def test_execute_email_translator_ko():
 def test_execute_email_translator_unknown():
     from main import app
     from fastapi.testclient import TestClient
-    from tests.test_tools_api import _signed_session_token
 
     with TestClient(app) as client:
         response = client.post(
@@ -1042,7 +1040,6 @@ def test_execute_email_translator_unknown():
 def test_execute_sentiment_analyzer_positive():
     from main import app
     from fastapi.testclient import TestClient
-    from tests.test_tools_api import _signed_session_token
 
     with TestClient(app) as client:
         response = client.post(
@@ -1060,7 +1057,6 @@ def test_execute_sentiment_analyzer_positive():
 def test_execute_sentiment_analyzer_neutral():
     from main import app
     from fastapi.testclient import TestClient
-    from tests.test_tools_api import _signed_session_token
 
     with TestClient(app) as client:
         response = client.post(
