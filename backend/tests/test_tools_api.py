@@ -1060,7 +1060,7 @@ def test_execute_hash_generator():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert "sha224" in data["result"]
+    assert "sha384" in data["result"]
     assert "sha512" in data["result"]
     assert "sha256" in data["result"]
 
