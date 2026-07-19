@@ -6,7 +6,7 @@ import urllib.parse
 import re
 import hashlib
 import zoneinfo
-from datetime import datetime, timezone
+from datetime import datetime
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
 
@@ -663,8 +663,8 @@ registry.register(
 async def hash_generator_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     return {
-        "md5": hashlib.md5(text.encode('utf-8')).hexdigest(),
-        "sha1": hashlib.sha1(text.encode('utf-8')).hexdigest(),
+        "md5": hashlib.md5(text.encode('utf-8'), usedforsecurity=False).hexdigest(),
+        "sha1": hashlib.sha1(text.encode('utf-8'), usedforsecurity=False).hexdigest(),
         "sha256": hashlib.sha256(text.encode('utf-8')).hexdigest(),
     }
 
