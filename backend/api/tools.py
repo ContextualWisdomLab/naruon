@@ -1,8 +1,8 @@
-import re
 import base64
 import inspect
 import json
 import logging
+import re
 import urllib.parse
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
@@ -608,20 +608,49 @@ registry.register(
 
 
 
+_URL_CANDIDATE_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9+.-])https?://[^\s<>\"\x27`]+",
+    re.IGNORECASE,
+)
+_URL_TRAILING_PUNCTUATION = ".,;:!?'`"
+_URL_CLOSING_DELIMITERS = {")": "(", "]": "[", "}": "{"}
+
+
+def _trim_url_candidate(candidate: str) -> str:
+    """Remove prose punctuation without truncating balanced URL delimiters."""
+    candidate = candidate.rstrip(_URL_TRAILING_PUNCTUATION)
+    while candidate and candidate[-1] in _URL_CLOSING_DELIMITERS:
+        closing = candidate[-1]
+        opening = _URL_CLOSING_DELIMITERS[closing]
+        if candidate.count(closing) <= candidate.count(opening):
+            break
+        candidate = candidate[:-1].rstrip(_URL_TRAILING_PUNCTUATION)
+    return candidate
+
+
+def _is_valid_web_url(candidate: str) -> bool:
+    if any(ord(character) < 32 or ord(character) == 127 for character in candidate):
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(candidate)
+        _ = parsed.port
+    except ValueError:
+        return False
+    return parsed.scheme.casefold() in {"http", "https"} and bool(parsed.hostname)
+
+
 async def url_extractor_handler(params: Dict[str, Any]) -> Any:
-    """Extracts all URLs from the provided text."""
+    """Extract distinct HTTP(S) URLs from free text without network I/O."""
     text = params.get("text", "")
-    # Simple regex for URLs
-    url_pattern = re.compile(
-        r'\bhttps?://(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?::[0-9]{1,5})?(?:/[^\s<>\"\']*?)?(?<![.,!?)])\b'
-    )
-    urls = url_pattern.findall(text)
-    # Deduplicate while preserving order
-    unique_urls = list(dict.fromkeys(urls))
-    return {
-        "urls": unique_urls,
-        "count": len(unique_urls)
-    }
+    unique_urls: list[str] = []
+    seen_urls: set[str] = set()
+    for raw_candidate in _URL_CANDIDATE_PATTERN.findall(text):
+        candidate = _trim_url_candidate(raw_candidate)
+        if not candidate or candidate in seen_urls or not _is_valid_web_url(candidate):
+            continue
+        seen_urls.add(candidate)
+        unique_urls.append(candidate)
+    return {"urls": unique_urls, "count": len(unique_urls)}
 
 registry.register(
     ToolInfo(
