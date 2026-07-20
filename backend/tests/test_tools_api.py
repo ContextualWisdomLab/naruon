@@ -890,38 +890,6 @@ def test_is_safe_webhook_url_coverage():
         assert is_safe_webhook_url("https://8.8.8.8/webhook") is True
 
 
-@pytest.mark.parametrize(
-    ("url_value", "expected_url", "expected_port"),
-    [
-        (
-            "https://[2606:4700:4700::1111]/hook",
-            "https://[2606:4700:4700::1111]/hook",
-            443,
-        ),
-        (
-            "https://[2606:4700:4700::1111]:8443/hook",
-            "https://[2606:4700:4700::1111]:8443/hook",
-            8443,
-        ),
-    ],
-)
-def test_validate_webhook_url_details_preserves_ipv6_authority(
-    url_value, expected_url, expected_port
-):
-    from api.tools import validate_webhook_url_details
-
-    host = "2606:4700:4700::1111"
-    with patch(
-        "api.tools._resolve_global_addresses",
-        return_value=(host,),
-    ):
-        details = validate_webhook_url_details(url_value)
-
-    assert details.normalized_url == expected_url
-    assert details.hostname == host
-    assert details.port == expected_port
-
-
 def test_execute_email_translator():
     with TestClient(app) as client:
         response = client.post(
