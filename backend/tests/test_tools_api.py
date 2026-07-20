@@ -746,8 +746,7 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed: Simulated HTTP Error"
-                    in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
                 )
 
     finally:
@@ -979,20 +978,24 @@ def test_execute_grammar_checker():
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
+
     res = await mock_handler({"test": 123})
     assert "123" in res
 
 
 def test_validate_webhook_url_no_host():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL must include a host"):
         validate_webhook_url("https://")
 
 
 def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
+
 
 def test_execute_email_translator_ko():
     with TestClient(app) as client:
@@ -1057,6 +1060,7 @@ def test_execute_sentiment_analyzer_neutral():
     assert data["result"]["sentiment"] == "neutral"
     assert "중립" in data["result"]["key_emotions"]
 
+
 def test_execute_url_extractor():
     with TestClient(app) as client:
         response = client.post(
@@ -1064,7 +1068,11 @@ def test_execute_url_extractor():
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={
                 "parameters": {
-                    "text": "Check out https://google.com and https://github.com for info. Also https://google.com again."
+                    "text": (
+                        "Check (https://google.com/a). and "
+                        "https://github.com/wiki/Function_(math), then "
+                        "https://google.com/a again."
+                    )
                 }
             },
         )
@@ -1072,19 +1080,56 @@ def test_execute_url_extractor():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["count"] == 2
-    assert data["result"]["urls"][0] == "https://google.com"
-    assert data["result"]["urls"][1] == "https://github.com"
+    assert data["result"]["urls"] == [
+        "https://google.com/a",
+        "https://github.com/wiki/Function_(math)",
+    ]
 
-def test_execute_url_extractor_empty():
+
+def test_execute_url_extractor_accepts_case_insensitive_scheme():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "See HTTPS://Example.com/path."}},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["result"] == {
+        "urls": ["HTTPS://Example.com/path"],
+        "count": 1,
+    }
+
+
+def test_execute_url_extractor_skips_embedded_and_malformed_candidates():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/url_extractor/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={
                 "parameters": {
-                    "text": "No urls here."
+                    "text": (
+                        "Ignore abchttps://embedded.example, https://[invalid, "
+                        "https://example.com:999999/path and keep "
+                        "https://example.com/ok."
+                    )
                 }
             },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["result"] == {
+        "urls": ["https://example.com/ok"],
+        "count": 1,
+    }
+
+
+def test_execute_url_extractor_empty():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "No urls here."}},
         )
     assert response.status_code == 200
     data = response.json()
