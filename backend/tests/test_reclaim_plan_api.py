@@ -6,6 +6,7 @@ from copy import deepcopy
 import pytest
 from fastapi.testclient import TestClient
 
+from api.reclaim_plan import MAX_DISKSAGE_RECLAIM_PLAN_BODY_BYTES
 from db.session import get_db
 from main import app
 
@@ -129,6 +130,7 @@ def test_validate_reclaim_plan_accepts_delete_with_unavailable_allocation(
         lambda payload: payload.__setitem__("unknown_field", "rejected"),
         lambda payload: payload.__setitem__("paths", []),
         lambda payload: payload["paths"][0].__setitem__("path", "bad\x00path"),
+        lambda payload: payload["paths"][0].__setitem__("path", "/" + "😀" * 1_024),
         lambda payload: payload["paths"][0].__setitem__("files", 0),
         lambda payload: payload["paths"][0].__setitem__("skipped", 1),
         lambda payload: payload["paths"][1].__setitem__("dirs", 0),
@@ -157,6 +159,7 @@ def test_validate_reclaim_plan_accepts_delete_with_unavailable_allocation(
         "unknown-field",
         "empty-paths",
         "control-character-path",
+        "path-over-utf8-byte-limit",
         "file-kind-count-mismatch",
         "file-kind-skipped-mismatch",
         "directory-kind-count-mismatch",
@@ -208,12 +211,46 @@ def test_validate_reclaim_plan_rejects_duplicate_json_keys(client: TestClient):
 def test_validate_reclaim_plan_caps_raw_body(client: TestClient):
     response = client.post(
         "/api/reclaim-plan/validate",
-        content=b"{" + b" " * (256 * 1024) + b"}",
+        content=b"{" + b" " * MAX_DISKSAGE_RECLAIM_PLAN_BODY_BYTES + b"}",
         headers={"Content-Type": "application/json"},
     )
 
     assert response.status_code == 413
     assert response.json() == {"detail": "disksage_reclaim_plan_too_large"}
+
+
+def test_validate_reclaim_plan_accepts_full_path_collection_above_legacy_cap(
+    client: TestClient,
+):
+    operation = "delete"
+    paths = [
+        {
+            "path": f"/evidence/{index:04d}/" + "x" * 300,
+            "kind": "file",
+            "files": 1,
+            "dirs": 0,
+            "skipped": 0,
+            "estimate": _estimate(1, 1, operation=operation),
+        }
+        for index in range(1_000)
+    ]
+    payload = {
+        "schema_kind": "disksage.reclaim-plan",
+        "schema_version": 1,
+        "operation": operation,
+        "paths": paths,
+        "totals": _estimate(1_000, 1_000, operation=operation),
+    }
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    assert 256 * 1024 < len(body) < MAX_DISKSAGE_RECLAIM_PLAN_BODY_BYTES
+
+    response = client.post(
+        "/api/reclaim-plan/validate",
+        content=body,
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 200
 
 
 def test_validate_reclaim_plan_has_no_database_dependency(client: TestClient):

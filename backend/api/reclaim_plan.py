@@ -15,7 +15,7 @@ from services.reclaim_plan import (
 
 router = APIRouter(prefix="/api/reclaim-plan", tags=["reclaim-plan"])
 
-MAX_DISKSAGE_RECLAIM_PLAN_BODY_BYTES = 256 * 1024
+MAX_DISKSAGE_RECLAIM_PLAN_BODY_BYTES = 10 * 1024 * 1024
 RECLAIM_PLAN_TOO_LARGE_ERROR = "disksage_reclaim_plan_too_large"
 RECLAIM_PLAN_INVALID_ERROR = "disksage_reclaim_plan_invalid"
 

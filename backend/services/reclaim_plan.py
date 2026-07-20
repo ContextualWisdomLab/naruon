@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 U64_MAX = 18_446_744_073_709_551_615
 MAX_RECLAIM_PATHS = 1_000
+MAX_RECLAIM_PATH_UTF8_BYTES = 4_096
 
 U64 = Annotated[int, Field(ge=0, le=U64_MAX)]
 BoundedPath = Annotated[str, Field(min_length=1, max_length=4096)]
@@ -70,7 +71,12 @@ class PathReclaimEstimate(StrictReclaimEvidenceModel):
     @field_validator("path")
     @classmethod
     def validate_path(cls, value: str) -> str:
-        return _validate_text(value, "path")
+        value = _validate_text(value, "path")
+        if len(value.encode("utf-8")) > MAX_RECLAIM_PATH_UTF8_BYTES:
+            raise ValueError(
+                f"path must not exceed {MAX_RECLAIM_PATH_UTF8_BYTES} UTF-8 bytes"
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_kind_counts(self) -> Self:
