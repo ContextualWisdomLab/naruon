@@ -713,7 +713,10 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
             status="success", result=result, message="Execution successful"
         )
     except Exception as e:
-        logger.exception("Tool execution failed", extra={"tool_code": code})
+        logger.warning(
+            "tool_execution_failed",
+            extra={"exception_type": type(e).__name__},
+        )
         return ExecuteResponse(
             status="failed",
             result=None,

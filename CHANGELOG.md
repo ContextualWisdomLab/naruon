@@ -1,4 +1,10 @@
 ## [Unreleased]
+### 보안 패치 (CodeQL extended current-head)
+
+- CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
+- 제품 이벤트 ID의 `Math.random()` fallback을 Web Crypto 기반 UUID/128-bit 난수로 교체하고, 개인 메일 smoke·live HTTP·Scorecard SARIF 경로에 home/workspace containment, symlink·크기·ZIP entry 제한, loopback endpoint allowlist를 적용했습니다. 도구 실패 로그는 사용자 입력 대신 고정 event와 예외 유형만 기록합니다.
+- 검증: 백엔드 `1560 passed, 32 skipped`(`PYTHONWARNINGS=error`), 프런트 `364 passed`, ESLint, Ruff, TypeScript, Next.js production build, 변경 Python 대상 Bandit Medium 이상 검사, Trivy Medium 이상 검사와 정확한 hash/lock 입력의 OSV 검사가 통과했습니다. GitHub hosted CodeQL/SARIF current-head 결과는 PR checks에서 별도로 확인합니다.
+
 ### 마이그레이션 정합성 (Alembic single-head 복구)
 
 - Alembic 마이그레이션 그래프의 head가 둘로 갈라져(`0011_email_read_state` — `email_records.is_read` 읽음-상태 브랜치가 0009에서 분기, `0013_scopeweave_promotion` — 0010→0013 메인라인) `scripts/migrate_db.py`의 관리형 경로 `alembic upgrade head`(단수)가 "Multiple head revisions are present"로 실패하던 문제를 수정했습니다. 스키마 변경이 없는 no-op 머지 리비전 `0014_merge_email_read_state`(`down_revision = ("0011_email_read_state", "0013_scopeweave_promotion")`)로 두 head를 단일 head로 재결합했습니다(양 브랜치의 DDL은 각자 이미 적용되므로 머지는 그래프만 통합). 재발 방지 가드로 `tests/test_alembic_migrations.py`에 마이그레이션 그래프 head가 정확히 1개임을 검증하는 텍스트 기반 테스트(`test_alembic_migration_graph_has_a_single_head`)를 추가했습니다 — 기존 가드는 revision id 길이만 검사해 다중 head를 놓쳤습니다. 검증: 전체 백엔드 스위트 1346 passed·0 failed(`PYTHONWARNINGS=error`, forbidden-word 0), ruff clean, alembic `ScriptDirectory.get_heads()` == 1.

@@ -90,4 +90,144 @@ describe("/auth/oidc/callback route", () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+  it.each([
+    "http://169.254.169.254/token",
+    "https://evil.example/token",
+    "https://login.example.com@169.254.169.254/token",
+  ])(
+    "rejects untrusted OIDC token endpoint %s before fetching",
+    async (tokenEndpoint) => {
+      vi.stubEnv("NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT", tokenEndpoint);
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const response = await POST(
+        new NextRequest("https://app.example.com/auth/oidc/callback", {
+          method: "POST",
+          headers: {
+            Cookie: oidcStateCookie("state-123", "verifier-123", "/security"),
+          },
+          body: JSON.stringify({ search: "?code=auth-code&state=state-123" }),
+        }),
+      );
+
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toEqual({
+        error_code: "oidc_token_exchange_failed",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("allows an exact loopback OIDC issuer only outside production", async () => {
+    vi.stubEnv(
+      "NEXT_PUBLIC_OIDC_ISSUER_URL",
+      "http://127.0.0.1:8080/realms/naruon",
+    );
+    vi.stubEnv(
+      "NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT",
+      "http://127.0.0.1:8080/realms/naruon/protocol/openid-connect/token",
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (
+        url ===
+        "http://127.0.0.1:8080/realms/naruon/protocol/openid-connect/token"
+      ) {
+        return Response.json({
+          access_token: "test-header.test-payload.test-signature",
+        });
+      }
+      if (url === "https://api.naruon.net/api/auth/session") {
+        return Response.json({
+          user_id: "user-1",
+          organization_id: "org-acme",
+          workspace_id: "workspace-acme",
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new NextRequest("http://localhost:3000/auth/oidc/callback", {
+        method: "POST",
+        headers: {
+          Cookie: oidcStateCookie("state-123", "verifier-123", "/security"),
+        },
+        body: JSON.stringify({ search: "?code=auth-code&state=state-123" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves a validated global IPv6 OIDC issuer authority", async () => {
+    vi.stubEnv(
+      "NEXT_PUBLIC_OIDC_ISSUER_URL",
+      "https://[2001:4860:4860::8888]/realms/naruon",
+    );
+    vi.stubEnv(
+      "NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT",
+      "https://[2001:4860:4860::8888]/realms/naruon/token",
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://[2001:4860:4860::8888]/realms/naruon/token") {
+        return Response.json({
+          access_token: "test-header.test-payload.test-signature",
+        });
+      }
+      if (url === "https://api.naruon.net/api/auth/session") {
+        return Response.json({
+          user_id: "user-1",
+          organization_id: "org-acme",
+          workspace_id: "workspace-acme",
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new NextRequest("https://app.example.com/auth/oidc/callback", {
+        method: "POST",
+        headers: {
+          Cookie: oidcStateCookie("state-123", "verifier-123", "/security"),
+        },
+        body: JSON.stringify({ search: "?code=auth-code&state=state-123" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects loopback OIDC token endpoints in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv(
+      "NEXT_PUBLIC_OIDC_ISSUER_URL",
+      "http://127.0.0.1:8080/realms/naruon",
+    );
+    vi.stubEnv(
+      "NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT",
+      "http://127.0.0.1:8080/realms/naruon/protocol/openid-connect/token",
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new NextRequest("https://app.example.com/auth/oidc/callback", {
+        method: "POST",
+        headers: {
+          Cookie: oidcStateCookie("state-123", "verifier-123", "/security"),
+        },
+        body: JSON.stringify({ search: "?code=auth-code&state=state-123" }),
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

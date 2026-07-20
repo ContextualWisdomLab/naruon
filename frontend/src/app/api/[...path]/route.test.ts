@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { POST, PUT } from "./route";
+import { GET, POST, PUT } from "./route";
 
 const ORIGINAL_ENV = { ...process.env };
 const SIGNED_SESSION_TOKEN = "signed.session.token";
@@ -241,5 +241,85 @@ describe("/api runtime proxy route", () => {
       error_code: "csrf_origin_rejected",
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it.each([".", "..", "\u0000admin"])(
+    "rejects path segment %j before URL normalization can escape the API prefix",
+    async (segment) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const response = await POST(
+        new NextRequest("https://frontend.naruon.net/api/placeholder", {
+          method: "POST",
+          headers: { Origin: "https://frontend.naruon.net" },
+          body: "{}",
+        }),
+        { params: Promise.resolve({ path: [segment, "admin"] }) },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error_code: "invalid_proxy_path",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fails closed when the backend configuration is not a bare trusted origin", async () => {
+    vi.stubEnv(
+      "BACKEND_INTERNAL_URL",
+      "https://api.naruon.net/untrusted/base?next=http://169.254.169.254",
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new NextRequest("https://frontend.naruon.net/api/tasks", {
+        method: "POST",
+        headers: { Origin: "https://frontend.naruon.net" },
+        body: "{}",
+      }),
+      { params: Promise.resolve({ path: ["tasks"] }) },
+    );
+
+    expect(response.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps encoded authority-like path input on the configured backend host", async () => {
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) =>
+      Response.json({ target_url: String(input) }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new NextRequest("https://frontend.naruon.net/api/placeholder", {
+        method: "POST",
+        headers: { Origin: "https://frontend.naruon.net" },
+        body: "{}",
+      }),
+      { params: Promise.resolve({ path: ["//169.254.169.254", "metadata"] }) },
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      target_url: "https://api.naruon.net/api/%2F%2F169.254.169.254/metadata",
+    });
+  });
+
+  it("preserves a validated global IPv6 backend authority", async () => {
+    vi.stubEnv("BACKEND_INTERNAL_URL", "https://[2001:db8::1]:8443");
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) =>
+      Response.json({ target_url: String(input) }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await GET(
+      new NextRequest("https://frontend.naruon.net/api/tasks"),
+      { params: Promise.resolve({ path: ["tasks"] }) },
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      target_url: "https://[2001:db8::1]:8443/api/tasks",
+    });
   });
 });

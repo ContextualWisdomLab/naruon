@@ -13,7 +13,14 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
-from api.tools import ToolInfo, ToolRegistry, _parameter_type_name, registry
+from api.tools import (
+    ExecuteRequest,
+    ToolInfo,
+    ToolRegistry,
+    _parameter_type_name,
+    execute_tool,
+    registry,
+)
 from main import app
 
 
@@ -355,6 +362,41 @@ async def test_execute_tool_handler_error():
     assert data["status"] == "failed"
     assert data["result"] is None
     assert "Simulated error" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(caplog):
+    hostile_code = "error_tool\r\nforged_event=true"
+
+    def error_handler(_params):
+        raise ValueError("failure\r\nforged_exception=true")
+
+    try:
+        registry.register(
+            ToolInfo(
+                code=hostile_code,
+                name="Error Tool",
+                description="This tool raises an error",
+                category="Test",
+            ),
+            error_handler,
+        )
+        with caplog.at_level("WARNING", logger="api.tools"):
+            response = await execute_tool(
+                hostile_code,
+                ExecuteRequest(parameters={}),
+            )
+    finally:
+        registry.unregister(hostile_code)
+
+    assert response.status == "failed"
+    records = [
+        record for record in caplog.records if record.message == "tool_execution_failed"
+    ]
+    assert len(records) == 1
+    assert records[0].exception_type == "ValueError"
+    assert hostile_code not in caplog.text
+    assert "forged_exception" not in caplog.text
 
 
 def test_execute_tool_sync_handler_success():
@@ -746,8 +788,7 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed: Simulated HTTP Error"
-                    in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
                 )
 
     finally:
@@ -979,17 +1020,20 @@ def test_execute_grammar_checker():
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
+
     res = await mock_handler({"test": 123})
     assert "123" in res
 
 
 def test_validate_webhook_url_no_host():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL must include a host"):
         validate_webhook_url("https://")
 
 
 def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")

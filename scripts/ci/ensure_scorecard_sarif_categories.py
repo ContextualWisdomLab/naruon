@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 REQUIRED_SCORECARD_CATEGORIES = ("supply-chain/branch-protection",)
+SCORECARD_SARIF_FILENAME = "scorecard-results.sarif"
+MAX_SARIF_BYTES = 32 * 1024 * 1024
 
 
 def run_category(run: dict[str, Any]) -> str | None:
@@ -80,6 +82,24 @@ def write_sarif(path: Path, sarif: dict[str, Any]) -> None:
     )
 
 
+def scorecard_sarif_path(argument: str) -> Path:
+    """Return the single SARIF artifact allowed in the current workspace."""
+    workspace = Path.cwd().resolve(strict=True)
+    expected = workspace / SCORECARD_SARIF_FILENAME
+    if argument not in {SCORECARD_SARIF_FILENAME, str(expected)}:
+        raise ValueError("SARIF path must name the workspace Scorecard artifact")
+    if expected.is_symlink():
+        raise ValueError("SARIF path must not be a symlink")
+    resolved = expected.resolve(strict=True)
+    if resolved.parent != workspace or not resolved.is_file():
+        raise ValueError("SARIF path must be a regular file in the workspace")
+    if resolved.stat().st_size > MAX_SARIF_BYTES:
+        raise ValueError("SARIF file exceeds the size limit")
+    # Reconstruct from trusted components so subsequent file operations cannot
+    # follow any attacker-selected parent or filename.
+    return workspace / SCORECARD_SARIF_FILENAME
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(
@@ -88,9 +108,9 @@ def main(argv: list[str]) -> int:
         )
         return 64
 
-    sarif_path = Path(argv[1])
     try:
-        sarif = json.loads(sarif_path.read_text(encoding="utf-8"))
+        sarif_path = scorecard_sarif_path(argv[1])
+        sarif = json.loads(sarif_path.read_bytes().decode("utf-8"))
         changed = ensure_categories(sarif)
         if changed:
             write_sarif(sarif_path, sarif)

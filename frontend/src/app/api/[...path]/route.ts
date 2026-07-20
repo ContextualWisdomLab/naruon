@@ -39,6 +39,8 @@ const ALLOWED_BACKEND_QUERY_PARAMS = new Set([
 ]);
 const MAX_QUERY_PARAM_COUNT = 12;
 const MAX_QUERY_PARAM_VALUE_LENGTH = 2048;
+const MAX_PROXY_PATH_SEGMENTS = 32;
+const MAX_PROXY_PATH_SEGMENT_LENGTH = 256;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -51,6 +53,86 @@ class InvalidProxyQueryError extends Error {
     super(message);
     this.name = "InvalidProxyQueryError";
   }
+}
+
+class InvalidProxyPathError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidProxyPathError";
+  }
+}
+
+function safeBackendOrigin(): URL {
+  const configured = backendApiBaseUrl();
+  const hostname = configured.hostname
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .toLowerCase();
+  const hasRootPath = configured.pathname === "" || configured.pathname === "/";
+  if (
+    !hostname ||
+    configured.username ||
+    configured.password ||
+    configured.search ||
+    configured.hash ||
+    !hasRootPath
+  ) {
+    throw new Error(
+      "BACKEND_INTERNAL_URL must be an origin without credentials, path, query, or fragment",
+    );
+  }
+
+  if (configured.protocol === "http:") {
+    const isExactLocalBackend =
+      configured.port === "8000" &&
+      (hostname === "127.0.0.1" || hostname === "localhost");
+    const isExactComposeBackend =
+      process.env.ALLOW_DOCKER_BACKEND_INTERNAL_URL === "1" &&
+      configured.port === "8000" &&
+      hostname === "backend";
+    if (
+      (!isExactLocalBackend || process.env.NODE_ENV === "production") &&
+      !isExactComposeBackend
+    ) {
+      throw new Error(
+        "Backend HTTP is limited to the exact development loopback or opted-in Compose host",
+      );
+    }
+    if (hostname === "backend") return new URL("http://backend:8000");
+    if (hostname === "localhost") return new URL("http://localhost:8000");
+    return new URL("http://127.0.0.1:8000");
+  }
+
+  if (configured.protocol !== "https:") {
+    throw new Error("Backend requests require HTTPS");
+  }
+  const encodedHostname = hostname.includes(":")
+    ? `[${hostname}]`
+    : encodeURIComponent(hostname);
+  const encodedPort = configured.port
+    ? `:${encodeURIComponent(configured.port)}`
+    : "";
+  return new URL(`https://${encodedHostname}${encodedPort}`);
+}
+
+function safeBackendPath(path: string[]): string {
+  if (path.length === 0 || path.length > MAX_PROXY_PATH_SEGMENTS) {
+    throw new InvalidProxyPathError("Invalid backend path segment count");
+  }
+  return path
+    .map((segment) => {
+      if (
+        !segment ||
+        segment === "." ||
+        segment === ".." ||
+        segment.length > MAX_PROXY_PATH_SEGMENT_LENGTH ||
+        CONTROL_CHARACTER_PATTERN.test(segment)
+      ) {
+        throw new InvalidProxyPathError("Invalid backend path segment");
+      }
+      return encodeURIComponent(segment);
+    })
+    .join("/");
 }
 
 function filteredRequestHeaders(request: NextRequest): Headers {
@@ -186,9 +268,10 @@ async function proxyApiRequest(
 
   const params = await context.params;
   const path = params.path ?? [];
-  const target = backendApiBaseUrl();
-  target.pathname = `/api/${path.map(encodeURIComponent).join("/")}`;
+  let target: URL;
   try {
+    target = safeBackendOrigin();
+    target.pathname = `/api/${safeBackendPath(path)}`;
     target.search = safeBackendQuery(request.nextUrl.searchParams);
   } catch (error) {
     if (error instanceof InvalidProxyQueryError) {
@@ -205,7 +288,25 @@ async function proxyApiRequest(
         },
       );
     }
-    throw error;
+    if (error instanceof InvalidProxyPathError) {
+      return NextResponse.json(
+        {
+          error_code: "invalid_proxy_path",
+          message: error.message,
+        },
+        {
+          status: 400,
+          headers: {
+            "Referrer-Policy": "no-referrer",
+          },
+        },
+      );
+    }
+    console.error("Proxy target configuration failed");
+    return new NextResponse(null, {
+      status: 503,
+      statusText: "Service Unavailable",
+    });
   }
 
   const init: RequestInit = {
