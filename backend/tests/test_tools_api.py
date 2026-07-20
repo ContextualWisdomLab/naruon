@@ -746,8 +746,7 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed: Simulated HTTP Error"
-                    in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
                 )
 
     finally:
@@ -979,18 +978,21 @@ def test_execute_grammar_checker():
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
+
     res = await mock_handler({"test": 123})
     assert "123" in res
 
 
 def test_validate_webhook_url_no_host():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL must include a host"):
         validate_webhook_url("https://")
 
 
 def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
 
@@ -1012,16 +1014,59 @@ def test_execute_url_extractor():
     assert len(data["result"]["urls"]) == 2
     assert "example.com" in data["result"]["domains"]
 
+
+def test_execute_url_extractor_trims_prose_and_deduplicates_domains():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": (
+                        "See https://Example.COM/a). and "
+                        "https://example.com/wiki/Function_(math)."
+                    )
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["urls"] == [
+        "https://Example.COM/a",
+        "https://example.com/wiki/Function_(math)",
+    ]
+    assert result["domains"] == ["example.com"]
+    assert result["count"] == 2
+
+
+def test_execute_url_extractor_skips_malformed_candidates():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Ignore https://[invalid but keep https://example.com/path"
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result == {
+        "urls": ["https://example.com/path"],
+        "domains": ["example.com"],
+        "count": 1,
+    }
+
+
 def test_execute_json_formatter():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/json_formatter/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "json_string": '{"key":"value"}'
-                }
-            },
+            json={"parameters": {"json_string": '{"key":"value"}'}},
         )
     assert response.status_code == 200
     data = response.json()
@@ -1029,16 +1074,13 @@ def test_execute_json_formatter():
     assert data["result"]["is_valid"] is True
     assert "value" in data["result"]["formatted_json"]
 
+
 def test_execute_json_formatter_invalid():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/json_formatter/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "json_string": '{"key":"value"'
-                }
-            },
+            json={"parameters": {"json_string": '{"key":"value"'}},
         )
     assert response.status_code == 200
     data = response.json()
@@ -1046,16 +1088,37 @@ def test_execute_json_formatter_invalid():
     assert data["result"]["is_valid"] is False
     assert "error" in data["result"]
 
+
+@pytest.mark.parametrize(
+    "json_string",
+    [
+        '{"value": NaN}',
+        '{"value": Infinity}',
+        '{"value": -Infinity}',
+        '{"value": 1e999}',
+    ],
+)
+def test_execute_json_formatter_rejects_nonfinite_numbers(json_string):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": json_string}},
+        )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["is_valid"] is False
+    assert result["formatted_json"] is None
+    assert result["error"]
+
+
 def test_execute_hash_generator():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/hash_generator/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "text": "test"
-                }
-            },
+            json={"parameters": {"text": "test"}},
         )
     assert response.status_code == 200
     data = response.json()
@@ -1063,6 +1126,7 @@ def test_execute_hash_generator():
     assert "sha384" in data["result"]
     assert "sha512" in data["result"]
     assert "sha256" in data["result"]
+
 
 def test_execute_datetime_converter():
     with TestClient(app) as client:
@@ -1073,7 +1137,7 @@ def test_execute_datetime_converter():
                 "parameters": {
                     "datetime_str": "2023-01-01T12:00:00Z",
                     "source_tz": "UTC",
-                    "target_tz": "Asia/Seoul"
+                    "target_tz": "Asia/Seoul",
                 }
             },
         )
@@ -1082,6 +1146,7 @@ def test_execute_datetime_converter():
     assert data["status"] == "success"
     assert data["result"]["target_timezone"] == "Asia/Seoul"
     assert "2023-01-01T21:00:00+09:00" == data["result"]["converted"]
+
 
 def test_execute_datetime_converter_invalid_iso():
     with TestClient(app) as client:
@@ -1092,7 +1157,7 @@ def test_execute_datetime_converter_invalid_iso():
                 "parameters": {
                     "datetime_str": "invalid-date",
                     "source_tz": "UTC",
-                    "target_tz": "Asia/Seoul"
+                    "target_tz": "Asia/Seoul",
                 }
             },
         )
@@ -1100,6 +1165,7 @@ def test_execute_datetime_converter_invalid_iso():
     data = response.json()
     assert data["status"] == "success"
     assert "error" in data["result"]
+
 
 def test_execute_datetime_converter_invalid_source_tz():
     with TestClient(app) as client:
@@ -1110,7 +1176,7 @@ def test_execute_datetime_converter_invalid_source_tz():
                 "parameters": {
                     "datetime_str": "2023-01-01T12:00:00",
                     "source_tz": "Invalid/TZ",
-                    "target_tz": "Asia/Seoul"
+                    "target_tz": "Asia/Seoul",
                 }
             },
         )
@@ -1118,6 +1184,7 @@ def test_execute_datetime_converter_invalid_source_tz():
     data = response.json()
     assert data["status"] == "success"
     assert "error" in data["result"]
+
 
 def test_execute_datetime_converter_invalid_target_tz():
     with TestClient(app) as client:
@@ -1128,7 +1195,7 @@ def test_execute_datetime_converter_invalid_target_tz():
                 "parameters": {
                     "datetime_str": "2023-01-01T12:00:00",
                     "source_tz": "UTC",
-                    "target_tz": "Invalid/TZ"
+                    "target_tz": "Invalid/TZ",
                 }
             },
         )
@@ -1137,22 +1204,61 @@ def test_execute_datetime_converter_invalid_target_tz():
     assert data["status"] == "success"
     assert "error" in data["result"]
 
+
+@pytest.mark.parametrize(
+    ("datetime_str", "expected_error"),
+    [
+        (
+            "2023-03-12T02:30:00",
+            "Nonexistent local datetime in source timezone",
+        ),
+        (
+            "2023-11-05T01:30:00",
+            "Ambiguous local datetime in source timezone",
+        ),
+    ],
+)
+def test_execute_datetime_converter_rejects_dst_gaps_and_folds(
+    datetime_str, expected_error
+):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/datetime_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "datetime_str": datetime_str,
+                    "source_tz": "America/New_York",
+                    "target_tz": "UTC",
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["result"] == {"error": expected_error}
+
+
 def test_detect_text_language():
     from api.tools import _detect_text_language
+
     assert _detect_text_language("안녕하세요") == "ko"
     assert _detect_text_language("Hello") == "en"
     assert _detect_text_language("12345") == "unknown"
 
+
 @pytest.mark.asyncio
 async def test_sentiment_analyzer_positive():
     from api.tools import sentiment_analyzer_handler
+
     res = await sentiment_analyzer_handler({"text": "Thank you, this is great!"})
     assert res["sentiment"] == "positive"
     assert "감사" in res["key_emotions"] or "기쁨" in res["key_emotions"]
 
+
 @pytest.mark.asyncio
 async def test_sentiment_analyzer_neutral():
     from api.tools import sentiment_analyzer_handler
+
     res = await sentiment_analyzer_handler({"text": "Just a normal message."})
     assert res["sentiment"] == "neutral"
     assert "중립" in res["key_emotions"]
@@ -1161,11 +1267,14 @@ async def test_sentiment_analyzer_neutral():
 @pytest.mark.asyncio
 async def test_execute_datetime_converter_generic_error():
     from api.tools import datetime_converter_handler
+
     # Passing an object that causes an exception inside the handler when replace is called
     class BadString(str):
         def replace(self, old, new):
             raise Exception("Mock generic error")
 
-    res = await datetime_converter_handler({"datetime_str": BadString("test"), "source_tz": "UTC", "target_tz": "UTC"})
+    res = await datetime_converter_handler(
+        {"datetime_str": BadString("test"), "source_tz": "UTC", "target_tz": "UTC"}
+    )
     assert "error" in res
     assert res["error"] == "Mock generic error"

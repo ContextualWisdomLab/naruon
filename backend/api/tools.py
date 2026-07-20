@@ -1,13 +1,13 @@
 import base64
+import hashlib
 import inspect
 import json
 import logging
-import urllib.parse
 import re
-import hashlib
+import urllib.parse
 import zoneinfo
-from datetime import datetime
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -143,6 +143,7 @@ registry = ToolRegistry()
 
 # Initialize default tools
 
+
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
     return f"Mock execution successful with params: {encoded}"
@@ -200,7 +201,6 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     }
 
 
-
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
@@ -228,7 +228,10 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if source_phrase in lowered_text and translated_phrase not in translated_terms:
+            if (
+                source_phrase in lowered_text
+                and translated_phrase not in translated_terms
+            ):
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -247,7 +250,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     normalized_domain = sender_domain.lower()
     phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
     spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
+    phishing_hits = sorted(
+        term for term in phishing_terms if term in normalized_content
+    )
     spam_hits = sorted(term for term in spam_terms if term in normalized_content)
     suspicious_domain = (
         normalized_domain.endswith((".ru", ".zip", ".tk"))
@@ -270,7 +275,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
         warnings.append(f"sender domain looks suspicious: {sender_domain}")
     return {
         "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
+        "is_phishing": bool(
+            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
+        ),
         "risk_score": risk_score,
         "warnings": warnings,
     }
@@ -295,7 +302,15 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
+    negative_terms = {
+        "disappointed",
+        "urgent",
+        "issue",
+        "problem",
+        "bad",
+        "불만",
+        "문제",
+    }
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -489,6 +504,7 @@ registry.register(
     tone_analyzer_handler,
 )
 
+
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -500,6 +516,7 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
+
 
 registry.register(
     ToolInfo(
@@ -610,16 +627,54 @@ registry.register(
 )
 
 
+_URL_TRAILING_PUNCTUATION = ".,;:!?'`"
+_URL_CLOSING_DELIMITERS = {")": "(", "]": "[", "}": "{"}
+
+
+def _trim_url_candidate(candidate: str) -> str:
+    """Remove prose punctuation without truncating balanced URL delimiters."""
+    candidate = candidate.rstrip(_URL_TRAILING_PUNCTUATION)
+    while candidate and candidate[-1] in _URL_CLOSING_DELIMITERS:
+        closing = candidate[-1]
+        opening = _URL_CLOSING_DELIMITERS[closing]
+        if candidate.count(closing) <= candidate.count(opening):
+            break
+        candidate = candidate[:-1].rstrip(_URL_TRAILING_PUNCTUATION)
+    return candidate
+
 
 async def url_extractor_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
-    urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
-    domains = list(set([urllib.parse.urlparse(url if url.startswith('http') else 'http://' + url).netloc for url in urls]))
+    candidates = re.findall(r'https?://[^\s<>"\x27`]+|www\.[^\s<>"\x27`]+', text)
+    urls: list[str] = []
+    domains: list[str] = []
+    seen_domains: set[str] = set()
+
+    for raw_candidate in candidates:
+        candidate = _trim_url_candidate(raw_candidate)
+        try:
+            parsed = urllib.parse.urlparse(
+                candidate
+                if candidate.startswith(("http://", "https://"))
+                else f"http://{candidate}"
+            )
+        except ValueError:
+            continue
+        hostname = parsed.hostname
+        if not candidate or not hostname:
+            continue
+        urls.append(candidate)
+        domain = hostname.rstrip(".").casefold()
+        if domain and domain not in seen_domains:
+            seen_domains.add(domain)
+            domains.append(domain)
+
     return {
         "urls": urls,
         "domains": domains,
-        "count": len(urls)
+        "count": len(urls),
     }
+
 
 registry.register(
     ToolInfo(
@@ -632,22 +687,37 @@ registry.register(
     url_extractor_handler,
 )
 
+
+def _reject_nonfinite_json_constant(value: str) -> None:
+    """Reject Python's non-standard NaN and Infinity JSON extensions."""
+    raise ValueError(f"{value} is not valid JSON")
+
+
 async def json_formatter_handler(params: Dict[str, Any]) -> Any:
     json_string = params.get("json_string", "")
     try:
-        parsed = json.loads(json_string)
-        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        parsed = json.loads(
+            json_string,
+            parse_constant=_reject_nonfinite_json_constant,
+        )
+        formatted = json.dumps(
+            parsed,
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
         return {
             "formatted_json": formatted,
             "is_valid": True,
-            "error": None
+            "error": None,
         }
-    except json.JSONDecodeError as e:
+    except ValueError as e:
         return {
             "formatted_json": None,
             "is_valid": False,
-            "error": str(e)
+            "error": str(e),
         }
+
 
 registry.register(
     ToolInfo(
@@ -660,13 +730,15 @@ registry.register(
     json_formatter_handler,
 )
 
+
 async def hash_generator_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     return {
-        "sha384": hashlib.sha384(text.encode('utf-8')).hexdigest(),
-        "sha512": hashlib.sha512(text.encode('utf-8')).hexdigest(),
-        "sha256": hashlib.sha256(text.encode('utf-8')).hexdigest(),
+        "sha384": hashlib.sha384(text.encode("utf-8")).hexdigest(),
+        "sha512": hashlib.sha512(text.encode("utf-8")).hexdigest(),
+        "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
     }
+
 
 registry.register(
     ToolInfo(
@@ -678,6 +750,7 @@ registry.register(
     ),
     hash_generator_handler,
 )
+
 
 async def datetime_converter_handler(params: Dict[str, Any]) -> Any:
     datetime_str = params.get("datetime_str", "")
@@ -693,9 +766,20 @@ async def datetime_converter_handler(params: Dict[str, Any]) -> Any:
         if dt.tzinfo is None:
             try:
                 tz_src = zoneinfo.ZoneInfo(source_tz)
-                dt = dt.replace(tzinfo=tz_src)
+                naive_dt = dt
+                dt = naive_dt.replace(tzinfo=tz_src, fold=0)
             except zoneinfo.ZoneInfoNotFoundError:
                 return {"error": "Invalid source timezone"}
+
+            round_trip = (
+                dt.astimezone(timezone.utc).astimezone(tz_src).replace(tzinfo=None)
+            )
+            if round_trip != naive_dt:
+                return {"error": "Nonexistent local datetime in source timezone"}
+
+            alternate = naive_dt.replace(tzinfo=tz_src, fold=1)
+            if alternate.utcoffset() != dt.utcoffset():
+                return {"error": "Ambiguous local datetime in source timezone"}
 
         try:
             tz_tgt = zoneinfo.ZoneInfo(target_tz)
@@ -706,10 +790,11 @@ async def datetime_converter_handler(params: Dict[str, Any]) -> Any:
         return {
             "original": dt.isoformat(),
             "converted": dt_tgt.isoformat(),
-            "target_timezone": target_tz
+            "target_timezone": target_tz,
         }
     except Exception as e:
         return {"error": str(e)}
+
 
 registry.register(
     ToolInfo(
@@ -717,10 +802,15 @@ registry.register(
         name="시간 변환기 (Datetime Converter)",
         description="시간을 다른 시간대로 변환합니다.",
         category="유틸리티",
-        parameters={"datetime_str": "string", "source_tz": "string", "target_tz": "string"},
+        parameters={
+            "datetime_str": "string",
+            "source_tz": "string",
+            "target_tz": "string",
+        },
     ),
     datetime_converter_handler,
 )
+
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
