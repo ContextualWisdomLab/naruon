@@ -13,6 +13,7 @@ import hashlib
 # email header processing, yielding a measurable speedup when handling long reference lists.
 REFERENCE_PATTERN = re.compile(r"<([^>]+)>")
 
+
 def generate_email_fingerprint(
     subject: str | None,
     date_str: str | None,
@@ -48,11 +49,14 @@ def extract_reference_ids(value: str | None) -> list[str]:
     if not refs:
         refs = str(value).split()
 
-    # ⚡ Bolt Optimization: Use dict.fromkeys() to maintain header order while deduplicating.
-    # This avoids Python-level loop overhead and explicit set() updates, improving performance.
-    return list(dict.fromkeys(
-        normalized for ref in refs if (normalized := normalize_message_id(ref))
-    ))
+    normalized_refs: list[str] = []
+    seen: set[str] = set()
+    for ref in refs:
+        normalized = normalize_message_id(ref)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            normalized_refs.append(normalized)
+    return normalized_refs
 
 
 async def _find_existing_thread_ids(
@@ -105,15 +109,14 @@ async def assign_thread_id(
     in_reply_to = normalize_message_id(email_data.get("in_reply_to"))
     references = extract_reference_ids(email_data.get("references"))
 
-    # ⚡ Bolt Optimization: Use dict.fromkeys() to maintain order while deduplicating in O(N).
-    # This eliminates explicit seen set and loop management overhead.
+    # extract_reference_ids() already returns unique values, so only the optional
+    # in-reply-to value can be duplicated. Avoid building a second dict/set here.
+    existing_candidates: list[str] = []
     if in_reply_to:
-        refs = [in_reply_to]
-        if references:
-            refs.extend(references)
-        existing_candidates = list(dict.fromkeys(refs))
-    else:
-        existing_candidates = list(dict.fromkeys(references)) if references else []
+        existing_candidates.append(in_reply_to)
+    for ref in references:
+        if ref != in_reply_to:
+            existing_candidates.append(ref)
 
     if existing_candidates:
         thread_ids_by_message_id = await _find_existing_thread_ids(
