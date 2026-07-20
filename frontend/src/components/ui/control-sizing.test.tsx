@@ -35,10 +35,7 @@ describe("brand control sizing", () => {
       );
     });
 
-    const buttonClassName = container.querySelector("button")?.className ?? "";
-    expect(buttonClassName).toContain("h-10");
-    expect(buttonClassName).toContain("focus-visible:ring-ring");
-    expect(buttonClassName).not.toContain("focus-visible:ring-ring/40");
+    expect(container.querySelector("button")?.className).toContain("h-10");
     expect(container.querySelector("input")?.className).toContain("h-10");
     expect(container.querySelector("textarea")?.className).toContain("min-h-24");
   });

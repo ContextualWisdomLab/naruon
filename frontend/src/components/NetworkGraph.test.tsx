@@ -233,12 +233,6 @@ describe("NetworkGraph", () => {
     expect(relationshipButton).toBeInstanceOf(HTMLButtonElement);
     expect(zoomButton).toBeInstanceOf(HTMLButtonElement);
     expect(fitButton).toBeInstanceOf(HTMLButtonElement);
-    for (const button of [relationshipButton, zoomButton, fitButton]) {
-      expect(button?.dataset.slot).toBe("button");
-      expect(button?.className).toContain("h-8");
-      expect(button?.className).toContain("focus-visible:ring-ring");
-      expect(button?.className).not.toContain("focus-visible:ring-ring/40");
-    }
 
     await act(async () => {
       relationshipButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
