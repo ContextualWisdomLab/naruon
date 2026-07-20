@@ -993,3 +993,101 @@ def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
+
+def test_execute_email_translator_ko():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "안녕하세요",
+                    "target_language": "en",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["source_language_detected"] == "ko"
+
+
+def test_execute_email_translator_unknown():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "123",
+                    "target_language": "ko",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["source_language_detected"] == "unknown"
+
+
+def test_execute_sentiment_analyzer_positive():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "thank you for the great job"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "positive"
+    assert "감사" in data["result"]["key_emotions"]
+
+
+def test_execute_sentiment_analyzer_neutral():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "neutral"
+    assert "중립" in data["result"]["key_emotions"]
+
+def test_execute_url_extractor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Check out https://google.com and https://github.com for info. Also https://google.com again."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["count"] == 2
+    assert "https://google.com" in data["result"]["urls"]
+    assert "https://github.com" in data["result"]["urls"]
+
+def test_execute_url_extractor_empty():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "No urls here."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["count"] == 0
+    assert len(data["result"]["urls"]) == 0

@@ -1,3 +1,4 @@
+import re
 import base64
 import inspect
 import json
@@ -603,6 +604,34 @@ registry.register(
         parameters={"draft_content": "string"},
     ),
     grammar_checker_handler,
+)
+
+
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Any:
+    """Extracts all URLs from the provided text."""
+    text = params.get("text", "")
+    # Simple regex for URLs
+    url_pattern = re.compile(
+        r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    )
+    urls = url_pattern.findall(text)
+    # Deduplicate while preserving order
+    unique_urls = list(dict.fromkeys(urls))
+    return {
+        "urls": unique_urls,
+        "count": len(unique_urls)
+    }
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에 포함된 모든 웹 링크(URL)를 추출합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
 )
 
 
