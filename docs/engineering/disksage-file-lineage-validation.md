@@ -42,6 +42,28 @@ versioned `disksage.cloud-capacity-assessment` contract with independent
 freshness, provider-account binding, and disclosure review rather than being
 added to file lineage.
 
+## Archive content-inclusion relation
+
+DiskSage archive comparison is also kept outside the per-file lineage envelope.
+The authenticated `POST /api/archive-content-inclusion/validate` endpoint accepts
+the version 1 `disksage.archive-content-inclusion` report produced by DiskSage's
+bounded Rust ZIP reader. It verifies strict field shape and internal relations:
+
+- subset and superset archive identifiers are distinct and never reflected;
+- subset and superset file counts reconcile with matching, missing, changed,
+  and additional counts;
+- inclusion and identity booleans are exactly implied by those counts;
+- bounded difference-path samples are unique, sorted, portable, category
+  disjoint, and consistent with the explicit truncation flag;
+- root prefixes agree with the chosen keep/strip mode; and
+- lowercase manifest and comparison SHA-256 fields have the expected shape.
+
+Naruon does not have either ZIP, so acceptance does not recompute a manifest,
+authenticate the comparison fingerprint, select a canonical archive, or
+authorize Trash or cloud-source eviction. The response is redacted and reports
+the same `schema-and-claim-consistency-only` scope. This version is database-free
+and is intentionally not an ontology, semantic-catalog, or LLM judgment.
+
 ## Deterministic checks
 
 The endpoint caps the raw JSON body at 256 KiB before Pydantic parsing and

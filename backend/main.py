@@ -11,6 +11,7 @@ from api.llm import router as llm_router
 from api.calendar import router as calendar_router
 from api.network import router as network_router
 from api.emails import router as emails_router
+from api.archive_content_inclusion import router as archive_content_inclusion_router
 from api.file_lineage import router as file_lineage_router
 from api.runner_config import router as runner_config_router
 from api.tenant_config import router as tenant_config_router
@@ -219,6 +220,10 @@ app.include_router(llm_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(calendar_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(network_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(emails_router, dependencies=PRIVATE_API_DEPENDENCIES)
+app.include_router(
+    archive_content_inclusion_router,
+    dependencies=PRIVATE_API_DEPENDENCIES,
+)
 app.include_router(file_lineage_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(runner_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(tenant_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
