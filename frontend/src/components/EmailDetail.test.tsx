@@ -447,6 +447,8 @@ describe("EmailDetail", () => {
     const dialog = container.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
     expect(dialog).not.toBeNull();
     expect(dialog?.textContent).toContain("맥락 종합 근거");
+    expect(dialog?.textContent).toContain("증거 종합");
+    expect(dialog?.textContent).not.toContain("증거 요약");
     expect(dialog?.textContent).toContain("<source-drawer@example.com>");
     expect(document.activeElement?.getAttribute("aria-label")).toBe("근거 원본 닫기");
 
