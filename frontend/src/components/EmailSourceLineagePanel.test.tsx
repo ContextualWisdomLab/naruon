@@ -71,6 +71,16 @@ describe("EmailSourceLineagePanel", () => {
     expect(container?.textContent).toContain(SHA256);
     expect(container?.textContent).not.toContain("저장용 fallback");
 
+    const lineageEyebrow = Array.from(container?.querySelectorAll("p") ?? []).find(
+      (element) => element.textContent === "Data lineage",
+    );
+    expect(lineageEyebrow?.classList.contains("dark:text-sky-300")).toBe(true);
+
+    const statusBadge = Array.from(container?.querySelectorAll("span") ?? []).find(
+      (element) => element.textContent === "내장 Date 헤더 확인",
+    );
+    expect(statusBadge?.classList.contains("dark:text-sky-300")).toBe(true);
+
     const precedence = container?.querySelector(
       'ol[aria-label="생산 시점 증거 우선순위"]',
     )?.textContent;
@@ -104,5 +114,35 @@ describe("EmailSourceLineagePanel", () => {
     expect(container?.textContent).toContain("저장용 fallback이며 생산일 근거가 아닙니다");
     expect(container?.textContent).toContain("파일명 날짜도 자동 승격하지 않습니다");
     expect(container?.textContent).toContain("원본 바이트 SHA-256");
+
+    const fallbackWarning = Array.from(container?.querySelectorAll("p") ?? []).find(
+      (element) => element.textContent?.includes("저장용 fallback"),
+    );
+    expect(fallbackWarning?.classList.contains("dark:text-amber-200")).toBe(true);
+  });
+
+  it("does not confirm internally inconsistent embedded evidence", () => {
+    const value = lineage({
+      selected_value: null,
+      selected_source: null,
+      embedded_status: "parsed",
+      evidence_precedence: [
+        "embedded_metadata",
+        "explicit_filename_date",
+        "filesystem_created_at",
+        "filesystem_modified_at",
+      ],
+    });
+    value.message_identity = {
+      selected_source: "embedded_message_id",
+      embedded_status: "invalid",
+    };
+
+    render(value);
+
+    expect(container?.textContent).not.toContain("내장 Date 헤더 확인");
+    expect(container?.textContent).toContain("내장 Date 헤더 근거 불완전");
+    expect(container?.textContent).not.toContain("내장 Message-ID");
+    expect(container?.textContent).toContain("Message-ID 근거 불완전");
   });
 });

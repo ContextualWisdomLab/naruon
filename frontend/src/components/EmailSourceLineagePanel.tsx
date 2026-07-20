@@ -35,19 +35,24 @@ const EVIDENCE_LABELS: Record<
 };
 
 function productionStatusLabel(
-  status: EmailSourceLineage["production_time"]["embedded_status"],
+  productionTime: EmailSourceLineage["production_time"],
+  hasEmbeddedProductionTime: boolean,
 ) {
-  if (status === "parsed") return "내장 Date 헤더 확인";
-  if (status === "missing") return "내장 Date 헤더 없음";
-  return "내장 Date 헤더 해석 불가";
+  if (hasEmbeddedProductionTime) return "내장 Date 헤더 확인";
+  if (productionTime.embedded_status === "missing") return "내장 Date 헤더 없음";
+  if (productionTime.embedded_status === "invalid") return "내장 Date 헤더 해석 불가";
+  return "내장 Date 헤더 근거 불완전";
 }
 
 function identitySourceLabel(
-  source: EmailSourceLineage["message_identity"]["selected_source"],
+  identity: EmailSourceLineage["message_identity"],
 ) {
-  return source === "embedded_message_id"
+  if (identity.selected_source === "raw_content_sha256") {
+    return "원본 바이트 SHA-256";
+  }
+  return identity.embedded_status === "embedded"
     ? "내장 Message-ID"
-    : "원본 바이트 SHA-256";
+    : "Message-ID 근거 불완전";
 }
 
 export function EmailSourceLineagePanel({
@@ -70,13 +75,13 @@ export function EmailSourceLineagePanel({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-wide text-sky-700">
+          <p className="text-[11px] font-black uppercase tracking-wide text-sky-700 dark:text-sky-300">
             Data lineage
           </p>
           <h3 className="mt-1 text-sm font-black text-foreground">원본 계보</h3>
         </div>
-        <span className="rounded-full border border-sky-500/20 bg-background px-2.5 py-1 text-[10px] font-bold text-sky-700">
-          {productionStatusLabel(productionTime.embedded_status)}
+        <span className="rounded-full border border-sky-500/20 bg-background px-2.5 py-1 text-[10px] font-bold text-sky-700 dark:text-sky-300">
+          {productionStatusLabel(productionTime, hasEmbeddedProductionTime)}
         </span>
       </div>
 
@@ -98,7 +103,7 @@ export function EmailSourceLineagePanel({
         <div className="rounded-xl border border-border bg-background p-3">
           <dt className="font-bold text-muted-foreground">메시지 식별 근거</dt>
           <dd className="mt-1 font-semibold text-foreground">
-            {identitySourceLabel(lineage.message_identity.selected_source)}
+            {identitySourceLabel(lineage.message_identity)}
           </dd>
         </div>
         <div className="rounded-xl border border-border bg-background p-3">
@@ -110,7 +115,7 @@ export function EmailSourceLineagePanel({
       </dl>
 
       {!hasEmbeddedProductionTime ? (
-        <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs font-semibold leading-5 text-amber-900">
+        <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs font-semibold leading-5 text-amber-900 dark:text-amber-200">
           화면 표시 시각{displayedDate ? ` (${formatEmailDate(displayedDate)})` : ""}은
           저장용 fallback이며 생산일 근거가 아닙니다. 파일명 날짜도 자동 승격하지 않습니다.
         </p>
