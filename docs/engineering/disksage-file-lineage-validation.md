@@ -1,0 +1,47 @@
+# DiskSage file-lineage structural validation
+
+Naruon accepts the bounded `disksage.file-lineage` version 1 envelope at the
+authenticated `POST /api/file-lineage/validate` endpoint. This is a general-file
+contract and remains separate from the RFC 822-only `EmailSourceLineage` model.
+The endpoint neither writes to a provider nor persists the submitted envelope.
+
+## Trust boundary
+
+The response deliberately reports `validation_scope: structural`. A signed
+Naruon session authenticates the caller, but the envelope does not contain the
+original immutable receipt fields or a detached signature that would let Naruon
+recompute and authenticate `receipt_id` or `lineage_fingerprint`. Acceptance
+therefore does not mean integrity verified, provider write verified, trusted, or
+safe to delete the local source.
+
+The response includes only the accepted schema kind and version. It does not
+reflect source or destination paths, content hashes, decision identifiers,
+reviewer details, or provider evidence identifiers.
+
+## Deterministic checks
+
+The endpoint caps the raw JSON body at 256 KiB before Pydantic parsing and
+rejects unknown fields at every nesting level. Version 1 requires:
+
+- the exact metadata-first production-time order: embedded metadata, explicit
+  filename date, filesystem creation time, then filesystem modification time;
+- lowercase 64-character SHA-256, BLAKE3, receipt, review, and lineage digests;
+- a portable relative source path whose basename equals `source_filename`;
+- a complete approved human review when `requires_review` is true;
+- a locally verified copy and `provider_write_executed: false`;
+- internally complete provider evidence, while allowing a persisted evidence
+  observation whose `sync_complete` result remains false; and
+- provider API evidence with remote object binding, or provider-native evidence
+  without an invented remote object identity.
+
+Malformed envelopes return `disksage_file_lineage_invalid` with HTTP 422.
+Oversized bodies return `disksage_file_lineage_too_large` with HTTP 413.
+
+## Persistence and future integrity verification
+
+Version 1 is intentionally database-free, so no Alembic migration,
+pg-erd-cloud verification, semantic catalog, ontology, LLM, Noema, or external
+orchestrator is needed. If Naruon later uses file lineage as authority for
+persistence, automation, or local-source eviction, the producer contract must
+first add a detached signature or the complete receipt and provider-evidence
+material needed for independent digest recomputation.

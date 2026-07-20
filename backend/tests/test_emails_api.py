@@ -2064,6 +2064,27 @@ async def test_get_email_by_id_omits_invalid_source_lineage(
 
 
 @pytest.mark.asyncio
+async def test_get_email_by_id_does_not_treat_file_lineage_as_rfc822(
+    client: AsyncClient, sample_email: Email
+):
+    from db.session import get_db
+
+    sample_email.source_lineage_json = {
+        "schema_version": 1,
+        "schema_kind": "disksage.file-lineage",
+        "source_kind": "file",
+        "source_filename": "report.pdf",
+        "raw_content_sha256": "a" * 64,
+    }
+    app.dependency_overrides[get_db] = lambda: MockSession([sample_email])
+
+    response = await client.get(f"/api/emails/{sample_email.id}")
+
+    assert response.status_code == 200
+    assert response.json()["source_lineage"] is None
+
+
+@pytest.mark.asyncio
 async def test_get_email_by_id_returns_ui_safe_display_fields(
     client: AsyncClient, db_session, sample_email: Email
 ):
