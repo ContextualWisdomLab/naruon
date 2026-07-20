@@ -42,13 +42,7 @@ def _resolve_safe_archive_member(output_dir: Path, info: ZipInfo) -> Path:
     return target_path
 
 
-def extract_backup(
-    zip_path: str | Path,
-    output_dir: str | Path,
-    *,
-    max_extract_size: int | None = None,
-    max_file_count: int | None = None,
-) -> list[Path]:
+def extract_backup(zip_path: str | Path, output_dir: str | Path) -> list[Path]:
     """
     Extracts a zip archive to the specified output directory.
 
@@ -59,8 +53,6 @@ def extract_backup(
     Args:
         zip_path: The path to the zip archive to extract.
         output_dir: The directory where the contents should be extracted.
-        max_extract_size: Optional caller-specific uncompressed byte limit.
-        max_file_count: Optional caller-specific extracted file count limit.
 
     Returns:
         A list of Path objects for the extracted files (excluding directories).
@@ -72,12 +64,6 @@ def extract_backup(
     """
     zip_path = Path(zip_path)
     output_dir = Path(output_dir).resolve()
-    extract_size_limit = (
-        MAX_EXTRACT_SIZE if max_extract_size is None else max_extract_size
-    )
-    file_count_limit = MAX_FILE_COUNT if max_file_count is None else max_file_count
-    if extract_size_limit < 1 or file_count_limit < 1:
-        raise ValueError("Archive extraction limits must be positive")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     extracted_paths = []
@@ -92,9 +78,9 @@ def extract_backup(
                     continue
 
                 file_count += 1
-                if file_count > file_count_limit:
+                if file_count > MAX_FILE_COUNT:
                     raise ArchiveFileCountExceededError(
-                        f"Archive exceeds maximum allowed file count of {file_count_limit}."
+                        f"Archive exceeds maximum allowed file count of {MAX_FILE_COUNT}."
                     )
 
                 target_path = _resolve_safe_archive_member(output_dir, info)
@@ -104,10 +90,9 @@ def extract_backup(
                 with z.open(info) as source, open(target_path, "wb") as target:
                     while chunk := source.read(8192):
                         total_size += len(chunk)
-                        if total_size > extract_size_limit:
+                        if total_size > MAX_EXTRACT_SIZE:
                             raise ArchiveSizeExceededError(
-                                "Archive exceeds maximum allowed extraction size of "
-                                f"{extract_size_limit} bytes."
+                                f"Archive exceeds maximum allowed extraction size of {MAX_EXTRACT_SIZE} bytes."
                             )
                         target.write(chunk)
 
@@ -120,18 +105,9 @@ def extract_backup(
 
 
 async def extract_backup_async(
-    zip_path: str | Path,
-    output_dir: str | Path,
-    *,
-    max_extract_size: int | None = None,
-    max_file_count: int | None = None,
+    zip_path: str | Path, output_dir: str | Path
 ) -> list[Path]:
     """
     Async wrapper for extract_backup to be used safely in async contexts.
     """
-    limits = {}
-    if max_extract_size is not None:
-        limits["max_extract_size"] = max_extract_size
-    if max_file_count is not None:
-        limits["max_file_count"] = max_file_count
-    return await asyncio.to_thread(extract_backup, zip_path, output_dir, **limits)
+    return await asyncio.to_thread(extract_backup, zip_path, output_dir)

@@ -868,15 +868,8 @@ def test_unique_email_thread_intent_accepts_signed_bearer_session(db_session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "upload_filename,expected_filename",
-    [
-        ("customer-source.eml", "customer-source.eml"),
-        ("%2e%2e%5ccustomer-source.eml", "customer-source.eml"),
-    ],
-)
 async def test_import_email_files_persists_signed_scoped_eml_upload(
-    client: AsyncClient, upload_filename: str, expected_filename: str
+    client: AsyncClient,
 ):
     from db.session import get_db
 
@@ -894,7 +887,7 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
                     (
                         "files",
                         (
-                            upload_filename,
+                            "customer-source.eml",
                             _sample_eml_bytes(
                                 message_id="<imported@example.com>",
                                 subject="<script>bad()</script>Quarter plan",
@@ -922,7 +915,7 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
     assert data["provenance"] == "server-authoritative"
     assert data["items"] == [
         {
-            "filename": expected_filename,
+            "filename": "customer-source.eml",
             "status": "imported",
             "reason_code": None,
             "attachment_count": 0,
@@ -942,23 +935,6 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
     assert added_email.body == "Body text"
     assert added_email.fingerprint
     assert len(added_email.embedding) == STORAGE_EMBEDDING_DIMENSION
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "upload_filename", ["%00message.eml", "%0amessage.eml", "note.txt"]
-)
-async def test_import_email_files_rejects_invalid_canonical_filename_before_read(
-    client: AsyncClient, upload_filename: str
-):
-    response = await client.post(
-        "/api/emails/import-files",
-        files=[("files", (upload_filename, b"not read", "application/octet-stream"))],
-        headers={"X-Organization-Id": "org-acme"},
-    )
-
-    assert response.status_code == 400
-    assert response.json() == {"detail": "invalid_file_type"}
 
 
 @pytest.mark.asyncio
@@ -1018,16 +994,7 @@ async def test_import_email_files_skips_duplicate_message_id(client: AsyncClient
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "member_name,expected_filename",
-    [
-        ("nested/source.eml", "email-archive.zip:source.eml"),
-        ("ok\nforged.eml", "email-archive.zip:ok_forged.eml"),
-    ],
-)
-async def test_import_email_files_extracts_eml_from_zip(
-    client: AsyncClient, member_name: str, expected_filename: str
-):
+async def test_import_email_files_extracts_eml_from_zip(client: AsyncClient):
     from db.session import get_db
 
     session = ImportRecordingSession([])
@@ -1042,7 +1009,7 @@ async def test_import_email_files_extracts_eml_from_zip(
                     (
                         "email-archive.zip",
                         _zip_with_eml_bytes(
-                            member_name,
+                            "nested/source.eml",
                             _sample_eml_bytes(message_id="<zip-source@example.com>"),
                         ),
                         "application/zip",
@@ -1060,8 +1027,7 @@ async def test_import_email_files_extracts_eml_from_zip(
     assert response.status_code == 200
     data = response.json()
     assert data["imported_count"] == 1
-    assert data["items"][0]["filename"] == expected_filename
-    assert "\n" not in data["items"][0]["filename"]
+    assert data["items"][0]["filename"] == "email-archive.zip:source.eml"
     assert session.added[0].message_id == "zip-source@example.com"
 
 

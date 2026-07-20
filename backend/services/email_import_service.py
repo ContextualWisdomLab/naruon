@@ -52,12 +52,8 @@ EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 MAX_IMPORT_UPLOADS = 10
 MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
-MAX_IMPORT_ARCHIVE_EXTRACT_BYTES = MAX_IMPORT_UPLOAD_BYTES
-MAX_IMPORT_ARCHIVE_FILES = MAX_IMPORT_EML_FILES
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
-MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 5
-SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
 logger = logging.getLogger(__name__)
 
 EmailImportItemStatus = Literal["imported", "skipped_duplicate", "failed"]
@@ -121,66 +117,26 @@ class EmailImportResult:
             self.failed_count += 1
 
 
-def _canonical_upload_filename(filename: str | None) -> str | None:
-    decoded_filename = filename or ""
-    for _ in range(MAX_UPLOAD_FILENAME_DECODE_ROUNDS):
-        next_filename = urllib.parse.unquote(decoded_filename)
-        if next_filename == decoded_filename:
-            break
-        decoded_filename = next_filename
-    else:
-        if urllib.parse.unquote(decoded_filename) != decoded_filename:
-            return None
-
-    if any(
-        ord(character) < 32 or ord(character) == 127 for character in decoded_filename
-    ):
-        return None
-
-    # Treat both network/client path separators as separators, independently of
-    # the operating system that hosts the backend.
-    normalized_filename = decoded_filename.replace("\\", "/")
-    name = Path(normalized_filename).name.strip()
-    if not name or name in {".", ".."}:
-        return None
-    return name
-
-
-def canonical_email_import_upload_filename(filename: str | None) -> str | None:
-    """Return one supported canonical upload basename, or fail closed."""
-    canonical_name = _canonical_upload_filename(filename)
-    if (
-        canonical_name is None
-        or Path(canonical_name).suffix.lower() not in SUPPORTED_EMAIL_IMPORT_SUFFIXES
-    ):
-        return None
-    return canonical_name
-
-
-def _safe_upload_filename(filename: str | None) -> str:
-    return _canonical_upload_filename(filename) or "upload"
-
-
-def _safe_display_filename_component(filename: str | None) -> str:
-    normalized_filename = (filename or "").replace("\\", "/")
-    name = Path(normalized_filename).name.strip()
-    sanitized_name = "".join(
-        "_" if ord(character) < 32 or ord(character) == 127 else character
-        for character in name
-    ).strip()
-    if sanitized_name in {"", ".", ".."}:
+def _safe_upload_filename(filename: str) -> str:
+    if filename:
+        for _ in range(100):
+            next_name = urllib.parse.unquote(filename)
+            if next_name == filename:
+                break
+            filename = next_name
+        else:
+            filename = urllib.parse.unquote(filename)
+    name = Path(filename or "upload").name.strip()
+    if name in {".", ".."}:
         return "upload"
-    return sanitized_name
+    return name or "upload"
 
 
 def _safe_item_filename(upload_name: str, eml_path: Path | None = None) -> str:
     safe_upload_name = _safe_upload_filename(upload_name)
-    if eml_path is None:
+    if eml_path is None or eml_path.name == safe_upload_name:
         return safe_upload_name
-    safe_item_name = _safe_display_filename_component(eml_path.name)
-    if safe_item_name == safe_upload_name:
-        return safe_upload_name
-    return f"{safe_upload_name}:{safe_item_name}"
+    return f"{safe_upload_name}:{eml_path.name}"
 
 
 def _utc_datetime(value: object) -> datetime.datetime:
@@ -819,7 +775,7 @@ async def _import_single_eml(
         content, parsed = await asyncio.to_thread(_read_and_parse_eml, eml_path)
     except EmailParseError as exc:
         logger.warning(
-            "Email import item failed: reason_code=parse_failed filename=%r error_type=%s",
+            "Email import item failed: reason_code=parse_failed filename=%s error_type=%s",
             display_filename,
             type(exc).__name__,
         )
@@ -883,7 +839,7 @@ async def _import_single_eml(
     except Exception:
         await session.rollback()
         logger.warning(
-            "Email import item failed: reason_code=database_commit_failed filename=%r",
+            "Email import item failed: reason_code=database_commit_failed filename=%s",
             display_filename,
         )
         return EmailImportItemResult(
@@ -1049,13 +1005,11 @@ async def _eml_paths_for_upload(
     upload: EmailImportUpload,
     upload_dir: Path,
 ) -> tuple[list[Path], str | None]:
-    upload_name = canonical_email_import_upload_filename(upload.filename)
-    if upload_name is None:
-        return [], "unsupported_file_type"
+    upload_name = _safe_upload_filename(upload.filename)
     upload_path = upload_dir / upload_name
     try:
         await asyncio.to_thread(upload_path.write_bytes, upload.content)
-    except (OSError, ValueError):
+    except OSError:
         return [], "file_write_failed"
 
     suffix = upload_path.suffix.lower()
@@ -1068,12 +1022,7 @@ async def _eml_paths_for_upload(
 
     extract_dir = upload_dir / "extracted"
     try:
-        extracted_paths = await extract_backup_async(
-            upload_path,
-            extract_dir,
-            max_extract_size=MAX_IMPORT_ARCHIVE_EXTRACT_BYTES,
-            max_file_count=MAX_IMPORT_ARCHIVE_FILES,
-        )
+        extracted_paths = await extract_backup_async(upload_path, extract_dir)
     except ArchiveError:
         return [], "archive_extract_failed"
 
@@ -1152,7 +1101,7 @@ async def import_email_uploads(
                 )
                 if failure_reason is not None:
                     logger.warning(
-                        "Email import upload failed: reason_code=%s filename=%r",
+                        "Email import upload failed: reason_code=%s filename=%s",
                         failure_reason,
                         upload_name,
                     )
