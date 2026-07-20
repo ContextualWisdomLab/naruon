@@ -67,6 +67,41 @@ def test_reject_unsafe_legacy_ipv4_literal(host):
 def test_allow_global_legacy_ipv4_literal():
     _reject_unsafe_ip_literal("setting", "0x08080808")
 
+
+@pytest.mark.parametrize(
+    ("url_value", "expected_url", "expected_port"),
+    [
+        (
+            "https://[2606:4700:4700::1111]/hook",
+            "https://[2606:4700:4700::1111]/hook",
+            443,
+        ),
+        (
+            "https://[2606:4700:4700::1111]:8443/hook",
+            "https://[2606:4700:4700::1111]:8443/hook",
+            8443,
+        ),
+    ],
+)
+def test_validate_https_url_host_details_preserves_ipv6_authority(
+    url_value, expected_url, expected_port
+):
+    host = "2606:4700:4700::1111"
+    with patch(
+        "core.url_validation._resolve_global_addresses",
+        return_value=(host,),
+    ):
+        details = validate_https_url_host_details(
+            "setting",
+            url_value,
+            frozenset({host}),
+            "ALLOWED_HOSTS",
+        )
+
+    assert details.normalized_url == expected_url
+    assert details.hostname == host
+    assert details.port == expected_port
+
 def test_validate_global_address():
     assert _validate_global_address("setting", "8.8.8.8") == "8.8.8.8"
     assert _validate_global_address("setting", "2001:4860:4860::8888") == "2001:4860:4860::8888"

@@ -74,7 +74,11 @@ def validate_https_url_host_details(
     _reject_unsafe_ip_literal(setting_name, host)
     port = parsed.port or 443
     addresses = _resolve_global_addresses(setting_name, host, port)
-    normalized_netloc = host if parsed.port is None else f"{host}:{port}"
+    normalized_netloc = _format_normalized_netloc(
+        host,
+        port,
+        explicit_port=parsed.port is not None,
+    )
     normalized_url = parsed._replace(netloc=normalized_netloc).geturl()
     return ValidatedHTTPSURLHost(
         normalized_url=normalized_url,
@@ -89,6 +93,14 @@ def _normalize_host(raw_host: str) -> str:
     if host.startswith("[") and host.endswith("]"):
         host = host[1:-1]
     return host
+
+
+def _format_normalized_netloc(
+    host: str, port: int, *, explicit_port: bool
+) -> str:
+    """Rebuild a URL authority while preserving the brackets IPv6 requires."""
+    host_part = f"[{host}]" if ":" in host else host
+    return f"{host_part}:{port}" if explicit_port else host_part
 
 
 def _parse_legacy_ipv4_literal(host: str) -> ipaddress.IPv4Address | None:

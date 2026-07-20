@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from core.url_validation import (
     ValidatedHTTPSURLHost,
+    _format_normalized_netloc,
     _normalize_host,
     _reject_unsafe_ip_literal,
     _resolve_global_addresses,
@@ -368,7 +369,11 @@ def validate_webhook_url_details(url: str) -> ValidatedHTTPSURLHost:
         raise ValueError("Webhook URL port must be valid") from exc
     addresses = _resolve_global_addresses("Webhook URL", hostname, port)
 
-    normalized_netloc = hostname if parsed.port is None else f"{hostname}:{port}"
+    normalized_netloc = _format_normalized_netloc(
+        hostname,
+        port,
+        explicit_port=parsed.port is not None,
+    )
     normalized_url = parsed._replace(netloc=normalized_netloc).geturl()
 
     return ValidatedHTTPSURLHost(
