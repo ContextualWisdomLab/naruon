@@ -2578,6 +2578,97 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("demo_user");
   });
 
+  it("keeps the WebDAV intent button descriptive while the request is pending", async () => {
+    let resolveWriteback!: (value: ReturnType<typeof jsonResponse>) => void;
+    const writebackResponse = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
+      resolveWriteback = resolve;
+    });
+    const baseFetch = mockWebdavFetch();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/webdav/writeback-intent") return writebackResponse;
+      return baseFetch(input, init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+
+    const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("WebDAV 반영 의도 점검"),
+    ) as HTMLButtonElement | undefined;
+    expect(button).toBeDefined();
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute("aria-busy")).toBe("true");
+    expect(button?.textContent).toBe("WebDAV 반영 의도 점검 중");
+    expect(button?.querySelector("svg")).not.toBeNull();
+
+    await act(async () => {
+      resolveWriteback(jsonResponse({
+        intent: "writeback",
+        source_id: "webdav_src_primary",
+        target_label: "운영 문서 원본",
+        requires_if_match: true,
+        if_match: "etag-webdav-primary",
+        provenance: "server-authoritative",
+      }));
+      await writebackResponse;
+    });
+  });
+
+  it("describes the WebDAV source-loading state before intent generation is available", async () => {
+    let resolveAccounts!: (value: ReturnType<typeof jsonResponse>) => void;
+    const accountsResponse = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
+      resolveAccounts = resolve;
+    });
+    const baseFetch = mockWebdavFetch();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/webdav/accounts") return accountsResponse;
+      return baseFetch(input, init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+
+    const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("WebDAV 원본 확인 중"),
+    ) as HTMLButtonElement | undefined;
+    expect(button).toBeDefined();
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute("aria-busy")).toBe("true");
+    expect(button?.querySelector("svg")).not.toBeNull();
+
+    await act(async () => {
+      resolveAccounts(jsonResponse([
+        {
+          source_id: "webdav_src_primary",
+          display_label: "운영 문서 원본",
+          writeback_enabled: true,
+          etag: "etag-webdav-primary",
+        },
+      ]));
+      await accountsResponse;
+    });
+
+    expect(button?.disabled).toBe(false);
+    expect(button?.getAttribute("aria-busy")).toBe("false");
+    expect(button?.textContent).toBe("WebDAV 반영 의도 점검");
+  });
+
   it("sanitizes WebDAV source labels that contain opaque source ids", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
@@ -2784,6 +2875,54 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("email.unique_thread_intent.created");
     expect(container.textContent).not.toContain("thread-q2-root");
     expect(container.textContent).not.toContain("provider_write_executed=false");
+  });
+
+  it("keeps the unique-thread intent button descriptive while the request is pending", async () => {
+    let resolveIntent!: (value: ReturnType<typeof jsonResponse>) => void;
+    const intentResponse = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
+      resolveIntent = resolve;
+    });
+    const baseFetch = mockWebdavFetch();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/emails/unique-thread-intent") return intentResponse;
+      return baseFetch(input, init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+
+    const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("중복 메일 스레드 의도 점검"),
+    ) as HTMLButtonElement | undefined;
+    expect(button).toBeDefined();
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute("aria-busy")).toBe("true");
+    expect(button?.textContent).toBe("중복 메일 스레드 의도 점검 중");
+    expect(button?.querySelector("svg")).not.toBeNull();
+
+    await act(async () => {
+      resolveIntent(jsonResponse({
+        status: "intent_ready",
+        candidates_checked: 2,
+        duplicates_found: 2,
+        provider_write_executed: false,
+        provenance: "server-authoritative",
+        audit_event: "email.unique_thread_intent.created",
+        thread_updates: [],
+      }));
+      await intentResponse;
+    });
   });
 
   it("imports email source files through signed multipart upload without public identity headers", async () => {
