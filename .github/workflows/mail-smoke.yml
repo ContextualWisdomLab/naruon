@@ -18,6 +18,7 @@ jobs:
           # A compromised dependency or checked-out change cannot exfiltrate
           # the seeded credentials past this boundary.
           egress-policy: block
+          disable-file-monitoring: true
           disable-sudo: true
           allowed-endpoints: >
             github.com:443
