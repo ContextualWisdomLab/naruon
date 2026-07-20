@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import inspect
 import json
 import logging
@@ -139,6 +140,7 @@ registry = ToolRegistry()
 
 # Initialize default tools
 
+
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
     return f"Mock execution successful with params: {encoded}"
@@ -196,7 +198,6 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     }
 
 
-
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
@@ -224,7 +225,10 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if source_phrase in lowered_text and translated_phrase not in translated_terms:
+            if (
+                source_phrase in lowered_text
+                and translated_phrase not in translated_terms
+            ):
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -243,7 +247,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     normalized_domain = sender_domain.lower()
     phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
     spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
+    phishing_hits = sorted(
+        term for term in phishing_terms if term in normalized_content
+    )
     spam_hits = sorted(term for term in spam_terms if term in normalized_content)
     suspicious_domain = (
         normalized_domain.endswith((".ru", ".zip", ".tk"))
@@ -266,7 +272,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
         warnings.append(f"sender domain looks suspicious: {sender_domain}")
     return {
         "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
+        "is_phishing": bool(
+            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
+        ),
         "risk_score": risk_score,
         "warnings": warnings,
     }
@@ -291,7 +299,15 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
+    negative_terms = {
+        "disappointed",
+        "urgent",
+        "issue",
+        "problem",
+        "bad",
+        "불만",
+        "문제",
+    }
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -485,6 +501,7 @@ registry.register(
     tone_analyzer_handler,
 )
 
+
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -496,6 +513,7 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
+
 
 registry.register(
     ToolInfo(
@@ -547,6 +565,122 @@ registry.register(
         parameters={"encoded_text": "string"},
     ),
     base64_decoder_handler,
+)
+
+
+async def json_validator_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and pretty-print JSON without evaluating embedded content."""
+    json_string = params.get("json_string")
+    if json_string is None:
+        return {
+            "is_valid": False,
+            "formatted_json": None,
+            "error": "json_string must not be None",
+        }
+
+    try:
+        parsed = json.loads(json_string)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {"is_valid": False, "formatted_json": None, "error": str(exc)}
+    return {
+        "is_valid": True,
+        "formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False),
+        "error": None,
+    }
+
+
+SUPPORTED_HASH_ALGORITHMS = frozenset(
+    {
+        "blake2b",
+        "blake2s",
+        "sha224",
+        "sha256",
+        "sha384",
+        "sha3_224",
+        "sha3_256",
+        "sha3_384",
+        "sha3_512",
+        "sha512",
+    }
+)
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Generate a deterministic digest with an explicitly supported algorithm."""
+    text = params.get("text")
+    algorithm = params.get("algorithm", "sha256")
+    if text is None:
+        text = ""
+    if not isinstance(text, str) or not isinstance(algorithm, str):
+        raise ValueError("Hash text and algorithm must be strings")
+
+    algorithm = algorithm.lower()
+    if algorithm not in SUPPORTED_HASH_ALGORITHMS:
+        supported = ", ".join(sorted(SUPPORTED_HASH_ALGORITHMS))
+        raise ValueError(
+            f"Unsupported hash algorithm: {algorithm}; supported algorithms: {supported}"
+        )
+
+    digest = hashlib.new(algorithm)
+    digest.update(text.encode("utf-8"))
+    return {"hash": digest.hexdigest(), "algorithm": algorithm}
+
+
+async def url_parser_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Split a URL string into inert components without performing network I/O."""
+    url = params.get("url")
+    if url is None:
+        url = ""
+    if not isinstance(url, str):
+        raise ValueError("URL must be a string")
+
+    try:
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname or ""
+    except ValueError as exc:
+        raise ValueError(f"Invalid URL: {exc}") from exc
+    return {
+        "scheme": parsed.scheme,
+        "netloc": parsed.netloc,
+        "path": parsed.path,
+        "params": parsed.params,
+        "query": parsed.query,
+        "fragment": parsed.fragment,
+        "hostname": hostname,
+    }
+
+
+registry.register(
+    ToolInfo(
+        code="json_validator",
+        name="JSON 검증기 (JSON Validator)",
+        description="JSON 문자열을 검증하고 읽기 쉬운 형태로 포맷합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_validator_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="SHA-2, SHA-3 또는 BLAKE2 알고리즘으로 콘텐츠 다이제스트를 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="url_parser",
+        name="URL 파서 (URL Parser)",
+        description="네트워크 요청 없이 URL 문자열을 구성 요소로 분리합니다.",
+        category="유틸리티",
+        parameters={"url": "string"},
+    ),
+    url_parser_handler,
 )
 
 

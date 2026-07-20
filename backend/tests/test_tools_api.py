@@ -746,8 +746,7 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed: Simulated HTTP Error"
-                    in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
                 )
 
     finally:
@@ -979,17 +978,151 @@ def test_execute_grammar_checker():
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
+
     res = await mock_handler({"test": 123})
     assert "123" in res
 
 
 def test_validate_webhook_url_no_host():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL must include a host"):
         validate_webhook_url("https://")
 
 
 def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
+
+
+def test_execute_json_validator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_validator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"message":"안녕하세요"}'}},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["is_valid"] is True
+    assert json.loads(data["result"]["formatted_json"]) == {"message": "안녕하세요"}
+    assert data["result"]["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_email_translator_covers_korean_and_unknown_language_detection():
+    from api.tools import email_translator_handler
+
+    korean = await email_translator_handler(
+        {"text": "안녕하세요", "target_language": "en"}
+    )
+    unknown = await email_translator_handler({"text": "12345", "target_language": "en"})
+
+    assert korean["source_language_detected"] == "ko"
+    assert unknown["source_language_detected"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_sentiment_analyzer_covers_positive_and_neutral_branches():
+    from api.tools import sentiment_analyzer_handler
+
+    positive = await sentiment_analyzer_handler({"text": "정말 좋고 감사합니다"})
+    neutral = await sentiment_analyzer_handler({"text": "오늘 회의 일정을 공유합니다"})
+
+    assert positive == {
+        "sentiment": "positive",
+        "score": pytest.approx(0.85),
+        "key_emotions": ["감사", "기쁨"],
+    }
+    assert neutral == {
+        "sentiment": "neutral",
+        "score": 0.5,
+        "key_emotions": ["중립"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_json_validator_reports_invalid_and_missing_input():
+    from api.tools import json_validator_handler
+
+    invalid = await json_validator_handler({"json_string": '{"broken":'})
+    missing = await json_validator_handler({})
+
+    assert invalid["is_valid"] is False
+    assert invalid["formatted_json"] is None
+    assert invalid["error"]
+    assert missing == {
+        "is_valid": False,
+        "formatted_json": None,
+        "error": "json_string must not be None",
+    }
+
+
+def test_execute_hash_generator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "naruon", "algorithm": "sha256"}},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"] == {
+        "hash": hashlib.sha256(b"naruon").hexdigest(),
+        "algorithm": "sha256",
+    }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_rejects_weak_or_invalid_algorithms():
+    from api.tools import hash_generator_handler
+
+    with pytest.raises(ValueError, match="Unsupported hash algorithm: md5"):
+        await hash_generator_handler({"text": "naruon", "algorithm": "md5"})
+    with pytest.raises(ValueError, match="Hash text and algorithm must be strings"):
+        await hash_generator_handler({"text": 42, "algorithm": "sha256"})
+
+    empty = await hash_generator_handler({"algorithm": "sha256"})
+    assert empty["hash"] == hashlib.sha256(b"").hexdigest()
+
+
+def test_execute_url_parser():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_parser/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"url": "https://example.com:8443/path?q=1#fragment"}},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"] == {
+        "scheme": "https",
+        "netloc": "example.com:8443",
+        "path": "/path",
+        "params": "",
+        "query": "q=1",
+        "fragment": "fragment",
+        "hostname": "example.com",
+    }
+
+
+@pytest.mark.asyncio
+async def test_url_parser_rejects_invalid_or_non_string_input():
+    from api.tools import url_parser_handler
+
+    with pytest.raises(ValueError, match="Invalid URL"):
+        await url_parser_handler({"url": "http://[::1"})
+    with pytest.raises(ValueError, match="URL must be a string"):
+        await url_parser_handler({"url": 42})
+
+    empty = await url_parser_handler({})
+    assert empty["scheme"] == ""
+    assert empty["hostname"] == ""
