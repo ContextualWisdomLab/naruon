@@ -7,6 +7,7 @@ The RFC 822 lineage contract remains email-specific. This module accepts the dis
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -27,13 +28,23 @@ EpochMilliseconds = Annotated[int, Field(ge=0, le=U64_MAX)]
 NonNegativeBytes = Annotated[int, Field(ge=0, le=U64_MAX)]
 Confidence = Literal["high", "medium", "low"]
 ReviewDisposition = Literal["approved", "held"]
+WINDOWS_INVALID_COMPONENT_CHARACTERS = frozenset('<>:"|?*')
+WINDOWS_RESERVED_COMPONENT_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+    | {f"COM{index}" for index in range(1, 10)}
+    | {f"LPT{index}" for index in range(1, 10)}
+    | {f"COM{index}" for index in "¹²³"}
+    | {f"LPT{index}" for index in "¹²³"}
+)
 
 
 def _has_control_character(value: str) -> bool:
-    return any(ord(character) < 32 or ord(character) == 127 for character in value)
+    return any(unicodedata.category(character) == "Cc" for character in value)
 
 
 def _validate_bounded_text(value: str, field_name: str) -> str:
+    if not value.strip():
+        raise ValueError(f"{field_name} must not be blank")
     if _has_control_character(value):
         raise ValueError(f"{field_name} contains a control character")
     return value
@@ -49,6 +60,13 @@ def _relative_path_parts(value: str) -> tuple[str, ...]:
     parts = tuple(value.split(separator))
     if not parts or any(part in {"", ".", ".."} for part in parts):
         raise ValueError("source_relative_path contains an unsafe component")
+    for part in parts:
+        if part.endswith((" ", ".")):
+            raise ValueError("source_relative_path contains a non-portable component")
+        if any(character in WINDOWS_INVALID_COMPONENT_CHARACTERS for character in part):
+            raise ValueError("source_relative_path contains a non-portable component")
+        if part.split(".", 1)[0].upper() in WINDOWS_RESERVED_COMPONENT_NAMES:
+            raise ValueError("source_relative_path contains a reserved component")
     return parts
 
 
@@ -83,10 +101,13 @@ class FileProductionTimeLineage(StrictLineageModel):
     @classmethod
     def validate_selected_source(cls, value: str) -> str:
         _validate_bounded_text(value, "selected_source")
-        if not (
-            value.startswith("embedded:")
-            or value.startswith("filename:")
-            or value in {"filesystem:created", "filesystem:modified-fallback"}
+        if value in {"filesystem:created", "filesystem:modified-fallback"}:
+            return value
+        prefix, separator, suffix = value.partition(":")
+        if (
+            prefix not in {"embedded", "filename"}
+            or not separator
+            or not suffix.strip()
         ):
             raise ValueError("selected_source is not a supported evidence source")
         return value
@@ -204,6 +225,10 @@ class FileCloudCopyLineage(StrictLineageModel):
             if self.sync_evidence_kind == "provider-api":
                 if any(value is None for value in remote_fields):
                     raise ValueError("provider API evidence must bind remote content")
+                if self.remote_location_bound is not True:
+                    raise ValueError(
+                        "provider API evidence must bind the remote location"
+                    )
             elif any(value is not None for value in remote_fields):
                 raise ValueError("provider native evidence cannot claim remote content")
         elif any(value is not None for value in remote_fields):
@@ -255,12 +280,51 @@ class DiskSageFileLineageEnvelope(StrictLineageModel):
         return values
 
     @model_validator(mode="after")
-    def validate_source_path_binding(self) -> Self:
+    def validate_claim_bindings(self) -> Self:
         parts = _relative_path_parts(self.source_relative_path)
         if "/" in self.source_filename or "\\" in self.source_filename:
             raise ValueError("source_filename must be a basename")
         if self.source_filename != parts[-1]:
             raise ValueError("source_filename does not match source_relative_path")
+
+        selected_source = self.production_time.selected_source
+        if selected_source == "filesystem:created":
+            if (
+                self.production_time.selected_value_ms
+                != self.filesystem_time.created_at_ms
+            ):
+                raise ValueError(
+                    "selected production time does not match filesystem creation"
+                )
+        elif selected_source == "filesystem:modified-fallback":
+            if (
+                self.production_time.selected_value_ms
+                != self.filesystem_time.modified_at_ms
+            ):
+                raise ValueError(
+                    "selected production time does not match filesystem modification"
+                )
+        else:
+            matching_evidence = any(
+                evidence.source == selected_source
+                and evidence.confidence == self.production_time.confidence
+                and evidence.field in {"production-date", "filename-date-hint"}
+                for evidence in self.metadata_evidence
+            )
+            if not matching_evidence:
+                raise ValueError(
+                    "selected production time is not bound to metadata evidence"
+                )
+
+        reviewed_at_ms = self.review.reviewed_at_ms
+        if reviewed_at_ms is not None and reviewed_at_ms > self.cloud_copy.copied_at_ms:
+            raise ValueError("review decision must predate cloud copy")
+        sync_confirmed_at_ms = self.cloud_copy.sync_confirmed_at_ms
+        if (
+            sync_confirmed_at_ms is not None
+            and sync_confirmed_at_ms < self.cloud_copy.copied_at_ms
+        ):
+            raise ValueError("provider sync evidence cannot predate cloud copy")
         return self
 
 

@@ -45,18 +45,25 @@ added to file lineage.
 ## Deterministic checks
 
 The endpoint caps the raw JSON body at 256 KiB before Pydantic parsing and
-rejects unknown fields at every nesting level. Version 1 requires:
+rejects duplicate object keys, non-finite numbers, excessive nesting, and
+unknown fields at every nesting level. Version 1 requires:
 
 - the exact metadata-first production-time order: embedded metadata, explicit
   filename date, filesystem creation time, then filesystem modification time;
+- the selected production-time source and confidence to bind matching metadata
+  evidence, or the selected filesystem value to equal the claimed creation or
+  modification timestamp;
 - lowercase 64-character SHA-256, BLAKE3, receipt, review, and lineage digests;
-- a portable relative source path whose basename equals `source_filename`;
-- a complete approved human review when `requires_review` is true;
+- a cross-platform portable relative source path whose basename equals
+  `source_filename` and contains no Windows-reserved component;
+- a complete approved human review when `requires_review` is true, with the
+  review timestamp no later than the copy timestamp;
 - a locally verified copy and `provider_write_executed: false`;
 - internally complete provider evidence, while allowing a persisted evidence
-  observation whose `sync_complete` result remains false; and
-- provider API evidence with remote object binding, or provider-native evidence
-  without an invented remote object identity.
+  observation whose `sync_complete` result remains false, provided that the
+  observation does not predate the copy; and
+- provider API evidence with a true remote-location binding, or provider-native
+  evidence without an invented remote object identity.
 
 Malformed envelopes return `disksage_file_lineage_invalid` with HTTP 422.
 Oversized bodies return `disksage_file_lineage_too_large` with HTTP 413.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 
 import pytest
@@ -48,9 +49,9 @@ def _lineage_payload() -> dict[str, object]:
         },
         "metadata_evidence": [
             {
-                "field": "production_time",
+                "field": "production-date",
                 "value": "2026-01-01",
-                "source": "exiftool:CreateDate",
+                "source": "embedded:exiftool:CreateDate",
                 "confidence": "high",
             }
         ],
@@ -115,6 +116,33 @@ def test_validate_disksage_file_lineage_requires_authentication():
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize("source", ["filesystem:created", "filename:path-token"])
+def test_validate_disksage_file_lineage_accepts_bound_production_sources(
+    client: TestClient,
+    source: str,
+):
+    payload = _lineage_payload()
+    payload["production_time"]["selected_source"] = source
+    if source == "filesystem:created":
+        payload["production_time"]["selected_value_ms"] = payload["filesystem_time"][
+            "created_at_ms"
+        ]
+    else:
+        payload["production_time"]["confidence"] = "low"
+        payload["metadata_evidence"] = [
+            {
+                "field": "filename-date-hint",
+                "value": "2026-01-01",
+                "source": source,
+                "confidence": "low",
+            }
+        ]
+
+    response = client.post("/api/file-lineage/validate", json=payload)
+
+    assert response.status_code == 200
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
@@ -141,6 +169,43 @@ def test_validate_disksage_file_lineage_requires_authentication():
         lambda payload: payload["production_time"].__setitem__(
             "unknown_field", "rejected"
         ),
+        lambda payload: payload["production_time"].update(
+            {
+                "selected_source": "filesystem:created",
+                "selected_value_ms": payload["filesystem_time"]["created_at_ms"] + 1,
+            }
+        ),
+        lambda payload: payload["production_time"].__setitem__(
+            "selected_source", "embedded:missing"
+        ),
+        lambda payload: payload["production_time"].__setitem__(
+            "selected_source", "embedded:"
+        ),
+        lambda payload: payload["production_time"].__setitem__("confidence", "low"),
+        lambda payload: payload["review"].__setitem__(
+            "reviewed_at_ms", payload["cloud_copy"]["copied_at_ms"] + 1
+        ),
+        lambda payload: payload["cloud_copy"].update(
+            {
+                "sync_evidence_record_id": "9" * 64,
+                "sync_evidence_kind": "provider-native-status",
+                "sync_evidence_id": "file-provider:pending",
+                "sync_confirmed_at_ms": payload["cloud_copy"]["copied_at_ms"] - 1,
+            }
+        ),
+        lambda payload: payload["cloud_copy"].update(
+            {
+                "provider_sync_confirmed": True,
+                "sync_evidence_record_id": "9" * 64,
+                "sync_evidence_kind": "provider-api",
+                "sync_evidence_id": "onedrive:item",
+                "sync_confirmed_at_ms": payload["cloud_copy"]["copied_at_ms"] + 1,
+                "remote_object_id": "remote-item-id",
+                "remote_revision": "remote-revision",
+                "remote_location_bound": False,
+            }
+        ),
+        lambda payload: payload.__setitem__("source_context", "downloads\u0085next"),
         lambda payload: payload.__setitem__("unknown_field", "rejected"),
     ],
     ids=[
@@ -153,6 +218,14 @@ def test_validate_disksage_file_lineage_requires_authentication():
         "sync-proof-incomplete",
         "review-not-approved",
         "unknown-nested-field",
+        "filesystem-source-value-mismatch",
+        "production-source-without-evidence",
+        "empty-production-source-suffix",
+        "production-source-confidence-mismatch",
+        "review-after-copy",
+        "sync-evidence-before-copy",
+        "remote-location-unbound",
+        "unicode-control-character",
         "unknown-field",
     ],
 )
@@ -161,6 +234,74 @@ def test_validate_disksage_file_lineage_fails_closed(client: TestClient, mutate)
     mutate(payload)
 
     response = client.post("/api/file-lineage/validate", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_file_lineage_invalid"}
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "filename"),
+    [
+        ("reports/CON", "CON"),
+        ("reports/con.txt", "con.txt"),
+        ("reports/report.pdf.", "report.pdf."),
+        ("reports/report.pdf ", "report.pdf "),
+        ("reports/a:b", "a:b"),
+    ],
+)
+def test_validate_disksage_file_lineage_rejects_nonportable_paths(
+    client: TestClient,
+    relative_path: str,
+    filename: str,
+):
+    payload = _lineage_payload()
+    payload["source_relative_path"] = relative_path
+    payload["source_filename"] = filename
+
+    response = client.post("/api/file-lineage/validate", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_file_lineage_invalid"}
+
+
+@pytest.mark.parametrize(
+    "duplicate_fragment",
+    [
+        '"bytes":999,"bytes":42',
+        '"selected_value_ms":0,"selected_value_ms":1767225600000',
+    ],
+    ids=["top-level", "nested"],
+)
+def test_validate_disksage_file_lineage_rejects_duplicate_json_keys(
+    client: TestClient,
+    duplicate_fragment: str,
+):
+    raw = json.dumps(_lineage_payload(), separators=(",", ":"))
+    if duplicate_fragment.startswith('"bytes"'):
+        raw = raw.replace('"bytes":42', duplicate_fragment, 1)
+    else:
+        raw = raw.replace('"selected_value_ms":1767225600000', duplicate_fragment, 1)
+
+    response = client.post(
+        "/api/file-lineage/validate",
+        content=raw.encode(),
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_file_lineage_invalid"}
+
+
+def test_validate_disksage_file_lineage_rejects_excessive_json_nesting(
+    client: TestClient,
+):
+    nested = '{"nested":' * 1_100 + "null" + "}" * 1_100
+
+    response = client.post(
+        "/api/file-lineage/validate",
+        content=nested.encode(),
+        headers={"Content-Type": "application/json"},
+    )
 
     assert response.status_code == 422
     assert response.json() == {"detail": "disksage_file_lineage_invalid"}
