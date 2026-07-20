@@ -63,8 +63,3 @@ updates:
     directory: /connector
     schedule:
       interval: daily
-
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: daily

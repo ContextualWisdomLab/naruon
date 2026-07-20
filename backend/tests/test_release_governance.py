@@ -43,6 +43,36 @@ def read_repo_text(relative_path: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def test_dependabot_update_directories_have_manifests() -> None:
+    """Keep each Dependabot ecosystem rooted at a directory it can update."""
+    config = yaml.safe_load(read_repo_text(".github/dependabot.yml"))
+    manifest_patterns = {
+        "docker": ("Dockerfile*",),
+        "github-actions": (".github/workflows",),
+        "npm": ("package.json",),
+        "pip": ("pyproject.toml", "requirements*.txt", "setup.py"),
+    }
+    update_keys: set[tuple[str, str]] = set()
+
+    for update in config["updates"]:
+        ecosystem = update["package-ecosystem"]
+        directory = update["directory"]
+        update_key = (ecosystem, directory)
+        assert update_key not in update_keys, (
+            f"duplicate Dependabot update target: {ecosystem} {directory}"
+        )
+        update_keys.add(update_key)
+
+        target_directory = REPO_ROOT / directory.removeprefix("/")
+        expected_patterns = manifest_patterns[ecosystem]
+        assert any(
+            any(target_directory.glob(pattern)) for pattern in expected_patterns
+        ), (
+            f"Dependabot {ecosystem} target {directory} has none of "
+            f"{', '.join(expected_patterns)}"
+        )
+
+
 def assert_dockerfile_stage_from(dockerfile: str, image: str, stage_alias: str) -> None:
     pattern = (
         rf"^FROM {re.escape(image)}@sha256:[0-9a-f]{{64}} AS {re.escape(stage_alias)}$"
