@@ -1072,8 +1072,8 @@ def test_execute_url_extractor():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["count"] == 2
-    assert "https://google.com" in data["result"]["urls"]
-    assert "https://github.com" in data["result"]["urls"]
+    assert data["result"]["urls"][0] == "https://google.com"
+    assert data["result"]["urls"][1] == "https://github.com"
 
 def test_execute_url_extractor_empty():
     with TestClient(app) as client:

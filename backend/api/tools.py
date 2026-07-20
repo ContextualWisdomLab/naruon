@@ -613,7 +613,7 @@ async def url_extractor_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     # Simple regex for URLs
     url_pattern = re.compile(
-        r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+        r'https?://[^\s<>\"\']+'
     )
     urls = url_pattern.findall(text)
     # Deduplicate while preserving order

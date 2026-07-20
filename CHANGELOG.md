@@ -2694,13 +2694,6 @@
 - `docker compose down`
 
 ## [Unreleased]
-### 신규 기능 추가 (New Feature)
-- 텍스트에서 모든 웹 링크(URL)를 추출하는 신규 유틸리티 도구인 `url_extractor` 기능을 기획하고 구현하여 `backend/api/tools.py`에 추가했습니다.
-
-### 테스트 수정 (Test Fix)
-- 추가한 신규 기능에 대한 단위 테스트를 작성했습니다.
-- 기존의 도구(`email_translator`, `sentiment_analyzer`)에서 누락되었던 테스트 케이스들을 추가하여 도구 관련 모듈(`backend/api/tools.py`)의 테스트 커버리지를 100%로 만들었습니다.
-
 ### Added
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환
