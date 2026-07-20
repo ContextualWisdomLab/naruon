@@ -167,6 +167,62 @@ describe("EmailDetail", () => {
     expect(container?.querySelector("script")).toBeNull();
   });
 
+  it("renders validated source lineage without promoting a filename date", async () => {
+    const sourceLineage = {
+      schema_version: 1,
+      source_kind: "rfc822",
+      source_filename: "260101-import.eml",
+      raw_content_sha256: "c".repeat(64),
+      production_time: {
+        selected_value: null,
+        selected_source: null,
+        embedded_status: "missing",
+        evidence_precedence: [
+          "embedded_metadata",
+          "explicit_filename_date",
+          "filesystem_created_at",
+          "filesystem_modified_at",
+        ],
+      },
+      message_identity: {
+        selected_source: "raw_content_sha256",
+        embedded_status: "missing",
+      },
+    };
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/api/emails/31")) {
+        return jsonResponse({
+          id: 31,
+          message_id: "<lineage@example.com>",
+          subject: "Lineage evidence",
+          sender: "source@example.com",
+          body: "Source body",
+          date: "2026-07-20T00:00:00Z",
+          thread_id: null,
+          source_lineage: sourceLineage,
+        });
+      }
+      if (url.endsWith("/api/llm/summarize")) {
+        return jsonResponse({ summary: "Summary", action_items: [] });
+      }
+      return jsonResponse({});
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={31} />); });
+    await flushAsyncWork();
+
+    const lineagePanel = container.querySelector('section[aria-label="원본 계보"]');
+    expect(lineagePanel).not.toBeNull();
+    expect(lineagePanel?.textContent).toContain("260101-import.eml");
+    expect(lineagePanel?.textContent).toContain("내장 Date 헤더 없음");
+    expect(lineagePanel?.textContent).toContain("파일명 날짜도 자동 승격하지 않습니다");
+    expect(lineagePanel?.textContent).toContain("원본 바이트 SHA-256");
+  });
+
   it("handles translation errors gracefully", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.endsWith("/api/emails/1")) {
