@@ -95,6 +95,35 @@ describe("CalendarPage", () => {
     expect(container.querySelector('button[aria-label="닫기"]')).not.toBeNull();
   });
 
+  it("keeps calendar custom actions keyboard focus-visible with an AA contrast ring", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(calendarSourceList)));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<CalendarPage />);
+    });
+    await flushAsyncWork();
+
+    const editButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="출시 회의 일정 수정"]',
+    );
+    const createIntentButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[type="button"]'),
+    ).find((button) => button.textContent?.includes("새 일정 intent 점검"));
+
+    for (const button of [editButton, createIntentButton]) {
+      expect(button).not.toBeNull();
+      expect(button?.type).toBe("button");
+      expect(button?.className).toContain("focus-visible:outline-none");
+      expect(button?.className).toContain("focus-visible:ring-2");
+      expect(button?.className).toContain("focus-visible:ring-ring");
+      expect(button?.className).not.toContain("focus-visible:ring-ring/40");
+      expect(button?.className).toContain("py-2");
+    }
+  });
+
   it("exposes the calendar view switcher as a keyboard-navigable tablist", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(calendarSourceList)));
     container = document.createElement("div");
