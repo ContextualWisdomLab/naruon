@@ -266,7 +266,7 @@ class DiskSageFileLineageEnvelope(StrictLineageModel):
 
 class FileLineageValidationResponse(StrictLineageModel):
     valid: Literal[True]
-    validation_scope: Literal["structural"]
+    validation_scope: Literal["schema-and-claim-consistency-only"]
     schema_version: Literal[1]
     schema_kind: Literal["disksage.file-lineage"]
 
@@ -278,7 +278,7 @@ def validation_response(
 
     return FileLineageValidationResponse(
         valid=True,
-        validation_scope="structural",
+        validation_scope="schema-and-claim-consistency-only",
         schema_version=envelope.schema_version,
         schema_kind=envelope.schema_kind,
     )

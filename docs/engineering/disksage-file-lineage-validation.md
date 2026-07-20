@@ -7,16 +7,40 @@ The endpoint neither writes to a provider nor persists the submitted envelope.
 
 ## Trust boundary
 
-The response deliberately reports `validation_scope: structural`. A signed
-Naruon session authenticates the caller, but the envelope does not contain the
-original immutable receipt fields or a detached signature that would let Naruon
+The response deliberately reports
+`validation_scope: schema-and-claim-consistency-only`. A signed Naruon session
+authenticates the caller, but the envelope does not contain the original
+immutable receipt fields or a detached signature that would let Naruon
 recompute and authenticate `receipt_id` or `lineage_fingerprint`. Acceptance
 therefore does not mean integrity verified, provider write verified, trusted, or
 safe to delete the local source.
 
 The response includes only the accepted schema kind and version. It does not
 reflect source or destination paths, content hashes, decision identifiers,
-reviewer details, or provider evidence identifiers.
+reviewer details, provider evidence identifiers, or provider-capacity evidence.
+
+## Provider-capacity planning evidence
+
+DiskSage can obtain a read-only account-capacity snapshot before a new OneDrive
+or Google Drive copy, while iCloud account quota remains unavailable through the
+third-party File Provider surface. That snapshot answers whether a proposed
+upload is likely to fit at a particular observation time. Naruon does not call
+the provider API or revalidate snapshot freshness or account binding. A capacity
+gate pass does not identify the copied remote object, prove that the provider
+accepted the bytes, attest sync completion, or authorize removal of the local
+source.
+
+Capacity is plan-level account evidence rather than file provenance, so it is
+not part of the `disksage.file-lineage` version 1 envelope. The strict Naruon
+validator rejects a submitted top-level `capacity` field instead of silently
+storing account quota as customer file metadata. Provider sync confirmation
+continues to require the separate per-file evidence fields already defined by
+`cloud_copy`.
+
+If Naruon later needs capacity evidence, it should be introduced as a separate,
+versioned `disksage.cloud-capacity-assessment` contract with independent
+freshness, provider-account binding, and disclosure review rather than being
+added to file lineage.
 
 ## Deterministic checks
 

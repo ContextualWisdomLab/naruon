@@ -38,7 +38,7 @@ async def _read_bounded_body(request: Request) -> bytes:
 async def validate_disksage_file_lineage(
     request: Request,
 ) -> FileLineageValidationResponse:
-    """Validate shape and policy invariants without claiming provenance integrity."""
+    """Validate schema and claim consistency without verifying external evidence."""
 
     body = await _read_bounded_body(request)
     try:

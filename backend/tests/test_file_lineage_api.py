@@ -97,7 +97,7 @@ def test_validate_disksage_file_lineage_returns_redacted_acceptance(client: Test
     assert response.status_code == 200
     assert response.json() == {
         "valid": True,
-        "validation_scope": "structural",
+        "validation_scope": "schema-and-claim-consistency-only",
         "schema_version": 1,
         "schema_kind": "disksage.file-lineage",
     }
@@ -177,6 +177,21 @@ def test_validate_disksage_file_lineage_caps_raw_body(client: TestClient):
     assert response.json() == {"detail": "disksage_file_lineage_too_large"}
 
 
+def test_validate_disksage_file_lineage_rejects_provider_capacity_assessment(
+    client: TestClient,
+):
+    payload = _lineage_payload()
+    payload["capacity"] = {
+        "evidence_kind": "provider-api",
+        "remaining_bytes": 1_000_000,
+    }
+
+    response = client.post("/api/file-lineage/validate", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_file_lineage_invalid"}
+
+
 def test_validate_disksage_file_lineage_accepts_incomplete_sync_evidence(
     client: TestClient,
 ):
@@ -193,7 +208,37 @@ def test_validate_disksage_file_lineage_accepts_incomplete_sync_evidence(
     response = client.post("/api/file-lineage/validate", json=payload)
 
     assert response.status_code == 200
-    assert response.json()["validation_scope"] == "structural"
+    assert response.json()["validation_scope"] == "schema-and-claim-consistency-only"
+
+
+def test_validate_disksage_file_lineage_does_not_reflect_complete_sync_claim(
+    client: TestClient,
+):
+    payload = _lineage_payload()
+    payload["cloud_copy"].update(
+        {
+            "provider_sync_confirmed": True,
+            "sync_evidence_record_id": "9" * 64,
+            "sync_evidence_kind": "provider-api",
+            "sync_evidence_id": "onedrive:item",
+            "sync_confirmed_at_ms": 1_767_229_500_000,
+            "remote_object_id": "remote-item-id",
+            "remote_revision": "remote-revision",
+            "remote_location_bound": True,
+        }
+    )
+
+    response = client.post("/api/file-lineage/validate", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "valid": True,
+        "validation_scope": "schema-and-claim-consistency-only",
+        "schema_version": 1,
+        "schema_kind": "disksage.file-lineage",
+    }
+    assert "remote-item-id" not in response.text
+    assert "remote-revision" not in response.text
 
 
 def test_validate_disksage_file_lineage_has_no_database_dependency(
