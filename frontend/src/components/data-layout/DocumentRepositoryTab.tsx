@@ -452,9 +452,10 @@ return (
                     onClick={() => void requestWebdavWritebackIntent()}
                     disabled={isWritebackLoading || !canRequestWebdavWriteback}
                     aria-busy={isWebdavSourceLoading || isWritebackLoading}
-                    className="w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    className="inline-flex w-full whitespace-nowrap items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
-                    WebDAV 반영 의도 점검
+                    {isWritebackLoading && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />}
+                    {isWritebackLoading ? '점검 중' : 'WebDAV 반영 의도 점검'}
                   </button>
                 </div>
 
@@ -518,9 +519,11 @@ return (
                     type="button"
                     onClick={() => void requestUniqueThreadIntent()}
                     disabled={isUniqueThreadLoading}
-                    className="w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                    aria-busy={isUniqueThreadLoading}
+                    className="inline-flex w-full whitespace-nowrap items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60 sm:w-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
-                    중복 메일 스레드 의도 점검
+                    {isUniqueThreadLoading && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />}
+                    {isUniqueThreadLoading ? '점검 중' : '중복 메일 스레드 의도 점검'}
                   </button>
                 </div>
 
