@@ -12,8 +12,8 @@
 # Pinned to the pydantic-ai 2.x line: services/noema_agent.py imports
 # ``OpenAIChatModel`` from ``pydantic_ai.models.openai`` (renamed from
 # ``OpenAIModel`` in 2.x) and constructs the model via ``OpenAIProvider``.
-# Version 2.8.0 is the newest 2.x release compatible with the core
-# requirements-hashes.txt pin of openai==2.44.0; 2.9.0 requires openai>=2.45.0.
+# Keep this optional lock aligned with the core runtime's exact OpenAI pin;
+# pydantic-ai-slim 2.13.0 is compatible with openai==2.46.0.
 pydantic-ai-slim[openai]==2.13.0 \
     --hash=sha256:3d5f4e5012dc0a4b0e9f76268ce8afd734191b48dbccbf221ac7d030d9e8fcae \
     --hash=sha256:b56b4bf2d5bfcadc0f83a5da16c750b013a2d79cebc2170501ed82435acf39f1
