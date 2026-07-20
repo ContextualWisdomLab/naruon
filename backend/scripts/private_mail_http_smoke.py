@@ -82,11 +82,9 @@ def _validated_cache_directory() -> Path:
     if not cache_root.is_relative_to(home):
         raise SystemExit("private_mail_cache_root_invalid")
     configured = os.environ.get("NARUON_PRIVATE_MAIL_CACHE")
-    candidate = (
-        Path(configured).expanduser()
-        if configured
-        else cache_root / "private-mail-upload-cache"
-    )
+    if configured not in {None, "", "default"}:
+        raise SystemExit("private_mail_cache_profile_invalid")
+    candidate = cache_root / "private-mail-upload-cache"
     if candidate.is_symlink():
         raise SystemExit("private_mail_cache_symlink_not_allowed")
     resolved = candidate.resolve(strict=False)

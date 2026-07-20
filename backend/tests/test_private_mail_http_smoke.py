@@ -19,8 +19,7 @@ def test_selected_upload_files_reads_emlx_inside_zip(tmp_path, monkeypatch):
     archive_path = tmp_path / "archive.zip"
     with ZipFile(archive_path, "w") as archive:
         archive.writestr("nested/original.emlx", emlx)
-    cache_dir = tmp_path / ".cache" / "naruon" / "test-cache"
-    monkeypatch.setenv("NARUON_PRIVATE_MAIL_CACHE", str(cache_dir))
+    monkeypatch.delenv("NARUON_PRIVATE_MAIL_CACHE", raising=False)
 
     selected = smoke._selected_upload_files(
         tmp_path,
@@ -105,21 +104,23 @@ def test_private_files_skips_oversized_regular_file(tmp_path, monkeypatch):
     assert smoke._private_files(home_dir, 1) == []
 
 
-def test_private_mail_cache_rejects_escape_and_symlink(tmp_path, monkeypatch):
+def test_private_mail_cache_rejects_custom_path_and_default_symlink(
+    tmp_path, monkeypatch
+):
     home_dir = tmp_path / "home"
     cache_root = home_dir / ".cache" / "naruon"
     cache_root.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("NARUON_PRIVATE_MAIL_CACHE", str(tmp_path / "outside"))
 
-    with pytest.raises(SystemExit, match="private_mail_cache_outside_naruon_cache"):
+    with pytest.raises(SystemExit, match="private_mail_cache_profile_invalid"):
         smoke._validated_cache_directory()
 
     real_cache = cache_root / "real"
     real_cache.mkdir()
-    linked_cache = cache_root / "linked"
+    linked_cache = cache_root / "private-mail-upload-cache"
     linked_cache.symlink_to(real_cache, target_is_directory=True)
-    monkeypatch.setenv("NARUON_PRIVATE_MAIL_CACHE", str(linked_cache))
+    monkeypatch.setenv("NARUON_PRIVATE_MAIL_CACHE", "default")
 
     with pytest.raises(SystemExit, match="private_mail_cache_symlink_not_allowed"):
         smoke._validated_cache_directory()
