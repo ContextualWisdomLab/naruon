@@ -10,11 +10,6 @@ x-service-hardening: &service-hardening
 services:
   traefik:
     <<: *service-hardening
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
     image: traefik:v2.10
     command:
       - "--api.insecure=true"
@@ -31,9 +26,6 @@ services:
 
   prometheus:
     <<: *service-hardening
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
     image: prom/prometheus:latest
     tmpfs:
       - /prometheus
@@ -47,12 +39,9 @@ services:
 
   grafana:
     <<: *service-hardening
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
     image: grafana/grafana:latest
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is not set}
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     tmpfs:
       - /tmp
       - /var/lib/grafana
@@ -66,9 +55,6 @@ services:
 
   loki:
     <<: *service-hardening
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
     image: grafana/loki:2.9.2
     tmpfs:
       - /loki
@@ -81,11 +67,6 @@ services:
 
   tempo:
     <<: *service-hardening
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
     image: grafana/tempo:latest
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
@@ -98,11 +79,6 @@ services:
 
   otel-collector:
     <<: *service-hardening
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
     image: otel/opentelemetry-collector:0.88.0
     ports:
       - "4317:4317" # OTLP gRPC
@@ -112,9 +88,6 @@ services:
 
   keycloak:
     <<: *service-hardening
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
     image: quay.io/keycloak/keycloak:24.0.0
     command: start-dev
     environment:

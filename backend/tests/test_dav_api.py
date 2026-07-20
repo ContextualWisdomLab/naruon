@@ -1,10 +1,17 @@
 import defusedxml.ElementTree as ET
-
 import pytest
+from contextlib import contextmanager
+from urllib.parse import unquote
+
+from fastapi import HTTPException
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
+from api import dav as dav_api
+from api.auth import get_auth_context
+from db.models import ProjectFolder
+from db.session import get_db
 from main import app
-from services.webdav_service import webdav_service
 
 AUTH_HEADERS = {
     "X-User-Id": "user123",
@@ -13,35 +20,75 @@ AUTH_HEADERS = {
 }
 
 
-@pytest.fixture
-def stub_dav_project_folders(monkeypatch):
-    async def fake_project_folders(db, user_id, organization_id, folder_uid=None):
-        assert user_id == "user123"
-        assert organization_id == "org-acme"
-        if folder_uid is None:
-            return [
-                {
-                    "folder_uid": "demo",
-                    "project_name": "demo",
-                    "webdav_path": "/projects/demo",
-                    "owner_user_id": user_id,
-                    "organization_id": organization_id,
-                }
-            ]
-        return [
-            {
-                "folder_uid": folder_uid,
-                "project_name": folder_uid,
-                "webdav_path": f"/projects/{folder_uid}",
-                "owner_user_id": user_id,
-                "organization_id": organization_id,
-            }
-        ]
+def _iter_app_routes(routes, inherited_dependencies=()):
+    for route in routes:
+        original_router = getattr(route, "original_router", None)
+        if original_router is not None:
+            include_context = getattr(route, "include_context", None)
+            include_dependencies = tuple(getattr(include_context, "dependencies", ()) or ())
+            yield from _iter_app_routes(
+                original_router.routes,
+                (*inherited_dependencies, *include_dependencies),
+            )
+        else:
+            route_dependencies = tuple(getattr(route, "dependencies", ()) or ())
+            yield route, (*inherited_dependencies, *route_dependencies)
 
-    monkeypatch.setattr(
-        webdav_service,
-        "get_project_folders_from_db",
-        fake_project_folders,
+
+class MockScalars:
+    def __init__(self, items):
+        self.items = items
+
+    def all(self):
+        return self.items
+
+
+class MockResult:
+    def __init__(self, items):
+        self.items = items
+
+    def scalars(self):
+        return MockScalars(self.items)
+
+
+class MockDavSession:
+    def __init__(self, folders):
+        self.folders = folders
+        self.statements = []
+        self.params = []
+
+    async def execute(self, stmt):
+        self.statements.append(stmt)
+        self.params.append(dict(stmt.compile().params))
+        return MockResult(self.folders)
+
+
+@contextmanager
+def dav_db_override(session):
+    async def override_get_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def project_folder(
+    folder_uid: str,
+    project_name: str,
+    *,
+    user_id: str = "user123",
+    organization_id: str | None = "org-acme",
+    webdav_path: str = "/Projects/Naruon_Roadmap_2026",
+) -> ProjectFolder:
+    return ProjectFolder(
+        folder_uid=folder_uid,
+        user_id=user_id,
+        organization_id=organization_id,
+        project_name=project_name,
+        webdav_path=webdav_path,
     )
 
 
@@ -52,13 +99,13 @@ def test_dav_rejects_missing_auth():
 
 
 def test_dav_route_uses_signed_session_dependency():
-    with TestClient(app) as client:
-        response = client.options(
-            "/dav/user123/projects/",
-            headers={"Authorization": "Bearer not-a-signed-session"},
-        )
+    for route, dependencies in _iter_app_routes(app.routes):
+        if isinstance(route, APIRoute) and route.path == "/dav/{path:path}":
+            dependency_callables = {dependency.dependency for dependency in dependencies}
+            assert get_auth_context in dependency_callables
+            return
 
-    assert response.status_code == 401
+    raise AssertionError("DAV route is not registered")
 
 
 def test_dav_options(dev_auth_dependency_overrides):
@@ -75,6 +122,64 @@ def test_dav_rejects_different_user_path(dev_auth_dependency_overrides):
         )
         assert response.status_code == 403
         assert response.json()["detail"] == "DAV path belongs to a different user"
+
+
+def test_dav_rejects_path_traversal(dev_auth_dependency_overrides):
+    with TestClient(app) as client:
+        response = client.request(
+            "PROPFIND", "/dav/user123/..%2Fother-user/projects/", headers=AUTH_HEADERS
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "DAV path must include an owner user"
+
+
+def test_dav_owner_parser_rejects_backslash_traversal():
+    owner_user_id = dav_api._dav_path_owner_user_id("user123/..\\other-user/projects")
+
+    assert owner_user_id is None
+
+
+def test_dav_rejects_backslash_traversal(dev_auth_dependency_overrides):
+    with TestClient(app) as client:
+        response = client.request(
+            "PROPFIND", "/dav/user123/..\\other-user/projects/", headers=AUTH_HEADERS
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "DAV path must include an owner user"
+
+
+def test_dav_owner_parser_rejects_double_encoded_traversal():
+    owner_user_id = dav_api._dav_path_owner_user_id(
+        "user123/%252e%252e%252fother-user/projects"
+    )
+
+    assert owner_user_id is None
+
+
+def test_dav_normalization_exceeds_limit(dev_auth_dependency_overrides, monkeypatch):
+    def fake_unquote(string, *args, **kwargs):
+        return string + "%"
+
+    monkeypatch.setattr(dav_api, "unquote", fake_unquote)
+
+    with pytest.raises(HTTPException) as exc:
+        dav_api._normalize_dav_authorization_path("test")
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "DAV path decoding limit exceeded"
+
+
+def test_dav_rejects_double_encoded_traversal(dev_auth_dependency_overrides):
+    with TestClient(app) as client:
+        response = client.request(
+            "PROPFIND",
+            "/dav/user123/%252e%252e%252fother-user/projects/",
+            headers=AUTH_HEADERS,
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "DAV path must include an owner user"
 
 
 def test_dav_rejects_ownerless_path(dev_auth_dependency_overrides):
@@ -94,28 +199,91 @@ def test_dav_rejects_ownerless_options_before_capability_discovery(
         assert response.json()["detail"] == "DAV path must include an owner user"
 
 
-def test_dav_propfind(dev_auth_dependency_overrides, stub_dav_project_folders):
+def test_dav_propfind(dev_auth_dependency_overrides):
+    session = MockDavSession(
+        [
+            project_folder("webdav_folder_roadmap", "Naruon Roadmap 2026"),
+            project_folder("webdav_folder_research", "Research Notes"),
+        ]
+    )
     with TestClient(app) as client:
-        response = client.request(
-            "PROPFIND", "/dav/user123/projects/", headers=AUTH_HEADERS
-        )
+        with dav_db_override(session):
+            response = client.request(
+                "PROPFIND",
+                "/dav/user123/projects/",
+                headers={**AUTH_HEADERS, "Depth": "1"},
+            )
         assert response.status_code == 207
         assert "<D:multistatus" in response.text
         root = ET.fromstring(response.text)
-        assert root.find(".//{DAV:}collection") is not None
+        hrefs = [node.text for node in root.findall(".//{DAV:}href")]
+        display_names = [node.text for node in root.findall(".//{DAV:}displayname")]
+        assert "/api/dav/user123/projects/webdav_folder_roadmap" in hrefs
+        assert "/api/dav/user123/projects/webdav_folder_research" in hrefs
+        assert "Naruon Roadmap 2026" in display_names
+        assert "Research Notes" in display_names
+        assert "/Projects/Naruon_Roadmap_2026" not in response.text
+        assert session.params[-1]["user_id_1"] == "user123"
+        assert session.params[-1]["organization_id_1"] == "org-acme"
 
 
-def test_dav_propfind_escapes_path_values(
+def test_dav_propfind_empty_projects_returns_empty_multistatus(
     dev_auth_dependency_overrides,
-    stub_dav_project_folders,
 ):
+    session = MockDavSession([])
     with TestClient(app) as client:
-        response = client.request(
-            "PROPFIND", "/dav/user123/projects/x%26y%3Cz%3E", headers=AUTH_HEADERS
-        )
+        with dav_db_override(session):
+            response = client.request(
+                "PROPFIND",
+                "/dav/user123/projects/",
+                headers={**AUTH_HEADERS, "Depth": "1"},
+            )
+
+    assert response.status_code == 207
+    root = ET.fromstring(response.text)
+    assert root.findall(".//{DAV:}response") == []
+    assert session.params[-1]["user_id_1"] == "user123"
+    assert session.params[-1]["organization_id_1"] == "org-acme"
+
+
+def test_dav_propfind_missing_folder_uid_returns_404(dev_auth_dependency_overrides):
+    session = MockDavSession([])
+    with TestClient(app) as client:
+        with dav_db_override(session):
+            response = client.request(
+                "PROPFIND",
+                "/dav/user123/projects/webdav_folder_missing",
+                headers={**AUTH_HEADERS, "Depth": "0"},
+            )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "DAV project folder not found"
+    assert session.params[-1]["user_id_1"] == "user123"
+    assert session.params[-1]["organization_id_1"] == "org-acme"
+
+
+def test_dav_propfind_escapes_path_values(dev_auth_dependency_overrides):
+    session = MockDavSession(
+        [
+            project_folder(
+                "x&y<z>",
+                "Folder & Research <2026>",
+                webdav_path="/Projects/Unsafe_Display",
+            )
+        ]
+    )
+    with TestClient(app) as client:
+        with dav_db_override(session):
+            response = client.request(
+                "PROPFIND",
+                "/dav/user123/projects/x%26y%3Cz%3E",
+                headers={**AUTH_HEADERS, "Depth": "0"},
+            )
         assert response.status_code == 207
         assert "x&amp;y&lt;z&gt;" in response.text
         assert "x&y<z>" not in response.text
+        assert "Folder &amp; Research &lt;2026&gt;" in response.text
+        assert "Folder & Research <2026>" not in response.text
         ET.fromstring(response.text)
 
 
@@ -156,48 +324,46 @@ def test_dav_unsupported_method_logs_reason(dev_auth_dependency_overrides, caplo
         for record in caplog.records
     )
 
+
 def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
-    """
-    Test that DAV handlers safely encode control characters in the requested path,
-    preventing log injection vulnerabilities.
-    """
+    import asyncio
     import logging
 
-    caplog.set_level(logging.INFO)
-    malicious_path = "user123/projects/test\x1b[31minjected\n\r"
-
-    # Since HTTP clients block raw control chars and starlette unquotes but might reject it before reaching our route,
-    # we test the handler directly to ensure the logger is using repr().
-    import asyncio
     from fastapi import Request
 
-    scope = {
-        "type": "http",
-        "method": "OPTIONS",
-        "headers": [],
-    }
+    from api.auth import AuthContext
+
+    caplog.set_level(logging.INFO, logger="api.dav")
+    malicious_path = "user123/projects/test%1B%5B31minjected%0A%0D"
+    malicious_folder_uid = unquote("test%1B%5B31minjected%0A%0D")
+    scope = {"type": "http", "method": "PROPFIND", "headers": []}
+    session = MockDavSession([project_folder(malicious_folder_uid, "Injected path")])
 
     async def run_handler():
         req = Request(scope)
-        from api.auth import AuthContext
-        auth_ctx = AuthContext(user_id="user123", organization_id="org1", role="user", group_ids=[], workspace_id="ws1")
-
-        from api.dav import dav_handler
-        await dav_handler(request=req, path=malicious_path, auth_context=auth_ctx)
+        auth_context = AuthContext(
+            user_id="user123",
+            organization_id="org-acme",
+            role="organization_admin",
+            group_ids=[],
+            workspace_id="workspace-org-acme",
+        )
+        await dav_api.dav_handler(
+            request=req,
+            path=unquote(malicious_path),
+            auth_context=auth_context,
+            db=session,
+        )
 
     asyncio.run(run_handler())
 
-    # In some fastapi versions, returning an unexpected path might return 404. Let's just assert the log was captured.
-    # The vulnerability is about the logger.
+    dav_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if "DAV Request" in record.getMessage()
+    ]
 
-    # Assert that the raw ansi escape / newline was not logged, but encoded
-    raw_ansi = "\x1b[31m"
-    found_in_logs = False
-    for record in caplog.records:
-        if "DAV Request" in record.message:
-            assert raw_ansi not in record.message, "Raw ANSI escape sequence found in logs!"
-            assert "\n" not in record.message[12:], "Raw newline found in log message body!"
-            assert "\\x1b[31minjected\\n\\r" in record.message or "\\x1b[31minjected\\r\\n" in record.message, "Escaped characters missing from log message!"
-            found_in_logs = True
-
-    assert found_in_logs, "DAV Request log was not found"
+    assert dav_messages
+    assert all("\x1b[31m" not in message for message in dav_messages)
+    assert all("\n" not in message for message in dav_messages)
+    assert any("\\x1b[31minjected\\n\\r" in message for message in dav_messages)

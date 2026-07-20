@@ -132,12 +132,6 @@ describe("SearchLayout product events", () => {
     });
     await waitForCondition(() => container?.textContent?.includes("런칭 캠페인 결과") ?? false);
 
-    const resultButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent?.includes("런칭 캠페인 결과"),
-    );
-    expect(resultButton?.className).toContain("focus-visible:ring-ring");
-    expect(resultButton?.className).not.toContain("focus-visible:ring-ring/40");
-
     expect(getRecordedProductEvents().some((event) =>
       event.name === "context_search_result_opened" &&
       event.payload.result_id === 101,

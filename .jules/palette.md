@@ -32,7 +32,7 @@
 
 ## 2026-06-13 - Use type=text for Custom Search Inputs
 **Learning:** When implementing a custom clear button for search inputs, using `type="search"` causes WebKit browsers to display a native clear button, resulting in double buttons. While CSS `::-webkit-search-cancel-button` tricks exist, they can be unreliable across environments.
-**Action:** Use `<input type="text" inputMode="search" role="searchbox">` only for legacy cases where the native WebKit clear control cannot be hidden; current components should follow the `type="search"` plus `[&::-webkit-search-cancel-button]:hidden` rule below.
+**Action:** Use `<input type="text" inputMode="search" role="searchbox">`. This prevents the native clear button from rendering while perfectly preserving screen reader semantics and triggering the mobile search keyboard.
 
 ## 2025-02-05 - Search clear action keyboard focus flow
 **Learning:** When users click a "clear search" icon button to empty an input field, screen readers and keyboard navigation can lose their place in the DOM structure.
@@ -47,7 +47,7 @@
 **Action:** Verify internal form inputs use explicit `label htmlFor`/`id` pairs, decorative icons are `aria-hidden`, and async buttons expose disabled loading states with visible spinner feedback.
 
 ## 2026-06-19 - Global search clear button without native WebKit controls
-**Learning:** Header-level global search should use the same custom clear-button pattern as the Search page. The `type="text"` + `inputMode="search"` + `role="searchbox"` combination is a legacy fallback only; current components follow the canonical `type="search"` plus `[&::-webkit-search-cancel-button]:hidden` rule below.
+**Learning:** Header-level global search should use the same custom clear-button pattern as the Search page: `type="text"`, `inputMode="search"`, and `role="searchbox"` avoid native WebKit clear controls while preserving search semantics.
 **Action:** Keep custom clear buttons in the same wrapper as the search input, label the clear action as `검색어 지우기`, and refocus the input after clearing.
 ## 2026-06-21 - Accessible Dynamic Empty and Error States
 **Learning:** For dynamic, client-side rendered UI components (like graph visualizations or data panels), rendering an empty state or error state message in a standard `div` will not be announced by screen readers when the state suddenly transitions (e.g., from loading to empty).
@@ -55,25 +55,6 @@
 ## 2026-06-21 - Mocking new Lucide icons in tests
 **Learning:** Adding a new icon from `lucide-react` (like `Loader2`) to a component without updating the corresponding test file's `vi.mock("lucide-react", ...)` block causes Vitest to throw a "No export is defined on the lucide-react mock" error.
 **Action:** When adding new `lucide-react` icons, always grep for `vi.mock("lucide-react"` in the `frontend/src/` directory to find and update the relevant test files.
-
-## 2024-05-24 - Add `aria-busy` to async operation buttons
-**Learning:** Action buttons triggering asynchronous network operations need an `aria-busy` attribute, alongside `disabled` state and visual indicators, to correctly communicate their loading state to screen reader users.
-**Action:** Add `aria-busy={isLoading}` to action buttons alongside existing spinner and disabled states for network interactions.
-## 2024-05-24 - Refresh button loading states
-**Learning:** Adding explicit visual indicators (like `animate-spin`) and `aria-busy` to buttons alongside `disabled` states prevents multiple clicks and effectively communicates asynchronous loading to screen readers.
-**Action:** When creating action buttons for async operations like '새로고침' (Refresh), always include `disabled={loading}`, `aria-busy={loading}`, adjust opacity (`disabled:opacity-60`), change cursor (`disabled:cursor-not-allowed`), spin icons, and update text to '새로고침 중'.
-## 2024-05-17 - Update UI Terminology Mapping
-**Learning:** Blind, global string replacement (regex) for translating or standardizing Korean UI terms can lead to semantical breaks. For example, blindly replacing "할 일" to "실행 항목" breaks other valid Korean words containing "할 일" such as "표시할 일정" (changing it to "표시실행 항목정"). Similarly, replacing "검색" with "맥락 검색" indiscriminately can lead to redundant strings like "맥락 맥락 검색".
-**Action:** When updating localization strings or terminology across a large codebase, apply context-aware parsing or careful target-word bound replacements rather than naive global string matching. Always manually verify the `git diff` for readability and semantical correctness after applying bulk string manipulations.
-## 2026-06-20 - Use semantic `type="search"` with custom clear buttons
-**Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
-**Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
-## 2024-05-24 - Ensure aria-busy accompanies disabled for async UI buttons
-**Learning:** Action buttons triggering asynchronous network operations that already implement `disabled={loading}` and visual spinners MUST also include an `aria-busy={loading}` attribute to correctly communicate the active loading state to screen reader users without requiring focus shifts.
-**Action:** When adding or auditing buttons for async operations like '동기화 중', '전송 중', or '검색 중', ensure `aria-busy={loadingVariable}` is explicitly added alongside existing spinner and disabled states.
-## 2026-06-25 - Explicit Loading Feedback for Intent Generation
-**Learning:** In deeply nested data-action layouts (like DataLayout's document and thread intent generation), missing explicit loading spinners and text changes (e.g., from "실행" to "처리 중") leaves users guessing if the button click registered. `disabled` alone is insufficient feedback for intent-checking actions which often take several seconds.
-**Action:** When adding asynchronous intent check actions (like WebDAV or thread validations), always combine `disabled={isLoading}`, `aria-busy={isLoading}`, a `Loader2` spinner, and a dynamic text label (e.g. `isLoading ? '점검 중' : '점검'`) to give immediate, unambiguous feedback.
-## 2026-06-25 - Use semantic type="search" with custom clear buttons
-**Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
-**Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+## 2026-07-13 - Standardizing Keyboard Focus Outline Styles
+**Learning:** Inconsistent focus outline styles across UI components (e.g., using `focus-visible:ring-primary` instead of the system default `focus-visible:ring-ring/40`) create an unpredictable accessibility experience for keyboard users navigating complex layouts.
+**Action:** When adding focus states to interactive elements, adhere to the standard Tailwind ring utilities defined in the application's design system (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40`) rather than custom primary colored rings.

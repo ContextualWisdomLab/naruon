@@ -726,7 +726,7 @@ async function installRoutes(page) {
         ],
       });
     }
-    if (endpoint === "/api/llm/summarize") return routeJson(route, { summary: "20억 판매 검토용 맥락 종합입니다.", action_items: ["근거 확인"], confidence: 0.86 });
+    if (endpoint === "/api/llm/summarize") return routeJson(route, { summary: "20억 판매 검토용 맥락 종합입니다.", todos: ["근거 확인"], confidence: 0.86 });
     if (endpoint === "/api/llm/draft") return routeJson(route, { draft: "검토 가능한 답장 초안입니다." });
     if (endpoint === "/api/llm/translate") return routeJson(route, { translation: "번역된 맥락입니다." });
     if (endpoint === "/api/emails/send") {
@@ -1177,7 +1177,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("If-Match 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "중복 메일 스레드 의도 점검", exact: true }).click();
     await page.getByText("Message-ID 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("tab", { name: "품질 점검", exact: true }).click();
+    await page.getByRole("button", { name: "품질 점검", exact: true }).click();
     await page.getByRole("heading", { name: "Thread id integrity", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("data:create-embedding-regeneration-intent"),
@@ -1191,14 +1191,14 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
   }
 
   if (routeSpec.name === "ai-hub") {
-    const activeAiHubPanel = page.locator('[role="tabpanel"]');
     await page.getByRole("tab", { name: "워크플로우", exact: true }).click();
-    await activeAiHubPanel.getByText("의사결정 로그 자동 작성", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("tabpanel", { name: "워크플로우", exact: true }).getByText("의사결정 로그 자동 작성", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "평가", exact: true }).click();
-    await activeAiHubPanel.getByText("연동 준비도", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("tabpanel", { name: "평가", exact: true }).getByText("연동 준비도", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "평가 근거 보기", exact: true }).first().click();
     await page.getByRole("tab", { name: "실행 이력", exact: true }).click();
-    const runEvent = activeAiHubPanel.locator("article").filter({ hasText: "워크플로우 실행" }).first();
+    const runHistoryPanel = page.getByRole("tabpanel", { name: "실행 이력", exact: true });
+    const runEvent = runHistoryPanel.locator("article").filter({ hasText: "워크플로우 실행" }).first();
     await runEvent.getByText("워크플로우 실행", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await runEvent.getByText("완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await runEvent.getByText("3개 판단 포인트를 추출했습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1249,7 +1249,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await permissionEditor.getByText("동의 차단 - 외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await permissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
     await permissionEditor.getByText("동의 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("tab", { name: "감사 로그", exact: true }).click();
+    await page.getByRole("button", { name: "감사 로그", exact: true }).click();
     const auditRegion = page.getByRole("region", { name: "보안 감사 로그", exact: true });
     await auditRegion.getByText("지속 감사 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await auditRegion.getByText("설정 변경 / LLM 제공자", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1257,14 +1257,14 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await auditRegion.getByText("서버 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await auditRegion.getByText("하트비트 수신", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await auditRegion.getByText("connector 관측 근거", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("tab", { name: "외부 공유", exact: true }).click();
+    await page.getByRole("button", { name: "외부 공유", exact: true }).click();
     await page.getByText("외부 공유 / 쓰기 경계", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("tab", { name: "정책", exact: true }).click();
+    await page.getByRole("button", { name: "정책", exact: true }).click();
     await page.getByText("차단 우선 정책 순서", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("교차 조직 제공자 secret", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("조직 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("tab", { name: "접근 권한", exact: true }).click();
+    await page.getByRole("button", { name: "접근 권한", exact: true }).click();
     const finalPermissionEditor = page.getByRole("region", { name: "보안 권한 편집", exact: true });
     await finalPermissionEditor.getByLabel("권한 판정 변경", { exact: true }).selectOption({ label: "외부 쓰기 차단" });
     await finalPermissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();

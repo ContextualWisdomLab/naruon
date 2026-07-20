@@ -2,10 +2,10 @@ import asyncio
 import datetime
 import unicodedata
 
-from .exceptions import CalendarServiceError, UnsafeCalendarActionItemError
+from .exceptions import CalendarServiceError, UnsafeCalendarTodoError
 
-MAX_CALENDAR_ACTION_ITEM_LENGTH = 500
-UNSAFE_CALENDAR_ACTION_ITEM_SEQUENCES = ("<", ">", "`", "$(", "${")
+MAX_CALENDAR_TODO_LENGTH = 500
+UNSAFE_CALENDAR_TODO_SEQUENCES = ("<", ">", "`", "$(", "${")
 GOOGLE_OAUTH_ENDPOINT_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_OAUTH_ALLOWED_KEYS = {
     "account",
@@ -41,17 +41,15 @@ def _google_credentials(validated_user_token: dict):
     return Credentials(**validated_user_token)
 
 
-def validate_calendar_action_item_text(action_item_text: str) -> str:
+def validate_calendar_todo_text(todo_text: str) -> str:
     """Validate user-authored calendar text before external writeback."""
-    normalized = action_item_text.strip()
-    if not normalized or len(normalized) > MAX_CALENDAR_ACTION_ITEM_LENGTH:
-        raise UnsafeCalendarActionItemError("Unsafe calendar action item text")
+    normalized = todo_text.strip()
+    if not normalized or len(normalized) > MAX_CALENDAR_TODO_LENGTH:
+        raise UnsafeCalendarTodoError("Unsafe calendar todo text")
     if any(unicodedata.category(character) == "Cc" for character in normalized):
-        raise UnsafeCalendarActionItemError("Unsafe calendar action item text")
-    if any(
-        sequence in normalized for sequence in UNSAFE_CALENDAR_ACTION_ITEM_SEQUENCES
-    ):
-        raise UnsafeCalendarActionItemError("Unsafe calendar action item text")
+        raise UnsafeCalendarTodoError("Unsafe calendar todo text")
+    if any(sequence in normalized for sequence in UNSAFE_CALENDAR_TODO_SEQUENCES):
+        raise UnsafeCalendarTodoError("Unsafe calendar todo text")
     return normalized
 
 
@@ -85,24 +83,24 @@ def validate_google_user_token(user_token: dict) -> dict:
     return dict(user_token)
 
 
-async def create_calendar_event(action_item_text: str, user_token: dict) -> dict:
-    """Creates a calendar event for a given action item text."""
+async def create_calendar_event(todo_text: str, user_token: dict) -> dict:
+    """Creates a calendar event for a given TODO text."""
     try:
-        safe_action_item_text = validate_calendar_action_item_text(action_item_text)
+        safe_todo_text = validate_calendar_todo_text(todo_text)
         validated_user_token = validate_google_user_token(user_token)
         creds = _google_credentials(validated_user_token)
         service = build("calendar", "v3", credentials=creds)
 
         now = datetime.datetime.now(datetime.timezone.utc)
         event = {
-            "summary": safe_action_item_text,
+            "summary": safe_todo_text,
             "start": {"dateTime": now.isoformat()},
             "end": {"dateTime": (now + datetime.timedelta(hours=1)).isoformat()},
         }
         request = service.events().insert(calendarId="primary", body=event)
         created_event = await asyncio.to_thread(request.execute)
         return created_event
-    except UnsafeCalendarActionItemError:
+    except UnsafeCalendarTodoError:
         raise
     except CalendarServiceError:
         raise
@@ -112,11 +110,11 @@ async def create_calendar_event(action_item_text: str, user_token: dict) -> dict
 
 async def _execute_calendar_event_batch(
     service,
-    safe_action_item_texts: list[str],
+    safe_todo_texts: list[str],
     now: datetime.datetime,
 ) -> list[dict]:
-    results: list[dict | None] = [None] * len(safe_action_item_texts)
-    exceptions: list[Exception | None] = [None] * len(safe_action_item_texts)
+    results: list[dict | None] = [None] * len(safe_todo_texts)
+    exceptions: list[Exception | None] = [None] * len(safe_todo_texts)
 
     def callback(request_id, response, exception):
         idx = int(request_id)
@@ -126,9 +124,9 @@ async def _execute_calendar_event_batch(
         results[idx] = response
 
     batch = service.new_batch_http_request(callback=callback)
-    for idx, safe_action_item_text in enumerate(safe_action_item_texts):
+    for idx, safe_todo_text in enumerate(safe_todo_texts):
         event = {
-            "summary": safe_action_item_text,
+            "summary": safe_todo_text,
             "start": {"dateTime": now.isoformat()},
             "end": {"dateTime": (now + datetime.timedelta(hours=1)).isoformat()},
         }
@@ -150,28 +148,23 @@ async def _execute_calendar_event_batch(
 
 
 async def create_calendar_events_batch(
-    action_item_texts: list[str], user_token: dict
+    todo_texts: list[str], user_token: dict
 ) -> list[dict]:
-    """Creates calendar events for action item text in bounded Google batch requests."""
-    if not action_item_texts:
+    """Creates calendar events for TODO text in bounded Google batch requests."""
+    if not todo_texts:
         return []
 
     try:
-        safe_action_item_texts = [
-            validate_calendar_action_item_text(action_item_text)
-            for action_item_text in action_item_texts
+        safe_todo_texts = [
+            validate_calendar_todo_text(todo_text) for todo_text in todo_texts
         ]
         validated_user_token = validate_google_user_token(user_token)
         creds = _google_credentials(validated_user_token)
         now = datetime.datetime.now(datetime.timezone.utc)
 
         tasks = []
-        for start in range(
-            0, len(safe_action_item_texts), GOOGLE_CALENDAR_BATCH_MAX_REQUESTS
-        ):
-            chunk = safe_action_item_texts[
-                start : start + GOOGLE_CALENDAR_BATCH_MAX_REQUESTS
-            ]
+        for start in range(0, len(safe_todo_texts), GOOGLE_CALENDAR_BATCH_MAX_REQUESTS):
+            chunk = safe_todo_texts[start : start + GOOGLE_CALENDAR_BATCH_MAX_REQUESTS]
             chunk_service = build("calendar", "v3", credentials=creds)
             tasks.append(_execute_calendar_event_batch(chunk_service, chunk, now))
 
@@ -179,12 +172,10 @@ async def create_calendar_events_batch(
         created_events: list[dict] = []
         for result in results:
             if isinstance(result, Exception):
-                raise CalendarServiceError(
-                    "Failed to create events in batch"
-                ) from result
+                raise CalendarServiceError("Failed to create events in batch") from result
             created_events.extend(result)
         return created_events
-    except UnsafeCalendarActionItemError:
+    except UnsafeCalendarTodoError:
         raise
     except CalendarServiceError:
         raise

@@ -136,7 +136,7 @@ describe("EmailDetail", () => {
         });
       }
       if (url.endsWith("/api/llm/summarize")) {
-        return jsonResponse({ summary: "Summary", action_items: [] });
+        return jsonResponse({ summary: "Summary", todos: [] });
       }
       if (url.endsWith("/api/llm/translate")) {
         return translation.promise;
@@ -180,7 +180,7 @@ describe("EmailDetail", () => {
         });
       }
       if (url.endsWith("/api/llm/summarize")) {
-        return jsonResponse({ summary: "Summary", action_items: [] });
+        return jsonResponse({ summary: "Summary", todos: [] });
       }
       if (url.endsWith("/api/llm/translate")) {
         return new Response("Internal Server Error", { status: 500 });
@@ -218,7 +218,7 @@ describe("EmailDetail", () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/api/emails/15")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "정상 맥락 종합", action_items: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "정상 맥락 종합", todos: [] }));
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -290,7 +290,7 @@ describe("EmailDetail", () => {
         if (url.endsWith("/api/emails/thread/thread-a")) return threadAResponse.promise;
         if (url.endsWith("/api/emails/thread/thread-b")) return threadBResponse.promise;
         if (url.endsWith("/api/llm/summarize")) {
-          return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+          return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: [] }));
         }
         throw new Error(`Unexpected fetch: ${url}`);
       });
@@ -369,7 +369,7 @@ describe("EmailDetail", () => {
       if (url.endsWith("/api/llm/summarize")) {
         return Promise.resolve(jsonResponse({
           summary: "출시 메시지의 핵심 맥락입니다.",
-          action_items: ["캘린더에 출시 리뷰 일정을 반영", "답장 초안 준비"],
+          todos: ["캘린더에 출시 리뷰 일정을 반영", "답장 초안 준비"],
           confidence: 0.82,
         }));
       }
@@ -416,7 +416,7 @@ describe("EmailDetail", () => {
       if (url.endsWith("/api/llm/summarize")) {
         return Promise.resolve(jsonResponse({
           summary: "근거 원본을 확인해야 하는 맥락 종합입니다.",
-          action_items: ["원본 확인"],
+          todos: ["원본 확인"],
           confidence: 0.86,
           provenance: "mail-thread",
         }));
@@ -498,7 +498,7 @@ describe("EmailDetail", () => {
       if (url.endsWith("/api/llm/summarize")) {
         return Promise.resolve(jsonResponse({
           summary: "후속 실행 항목을 정리해야 합니다.",
-          action_items: ["담당자 확인", "일정 공유"],
+          todos: ["담당자 확인", "일정 공유"],
         }));
       }
       if (url.endsWith("/api/tasks/from-email")) {
@@ -589,7 +589,7 @@ describe("EmailDetail", () => {
       if (url.endsWith("/api/emails/3")) return standaloneEmailResponse.promise;
       if (url.endsWith("/api/emails/thread/thread-a")) return threadResponse.promise;
       if (url.endsWith("/api/llm/summarize")) {
-        return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+        return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: [] }));
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -654,7 +654,7 @@ describe("EmailDetail", () => {
         return Promise.resolve(
           jsonResponse({
             summary: "출시 계획 검토",
-            action_items: ["일정 확인"],
+            todos: ["일정 확인"],
             confidence: 0.91,
           }),
         );
@@ -678,48 +678,6 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("신뢰도 91%");
     expect(container.textContent).not.toContain("AI Generated");
     expect(container.textContent).not.toContain("Tasks");
-  });
-
-  it("normalizes legacy synthesis todos into 실행 항목 without crashing", async () => {
-    const email: TestEmail = {
-      id: 6,
-      message_id: "<legacy-todos@example.com>",
-      thread_id: null,
-      sender: "legacy@example.com",
-      recipients: "user@example.com",
-      subject: "Legacy synthesis payload",
-      date: "2026-05-11T09:00:00Z",
-      body: "Please preserve old synthesis payloads during rollout.",
-    };
-
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/6")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) {
-        return Promise.resolve(
-          jsonResponse({
-            summary: "이전 응답 형식을 정규화합니다.",
-            todos: ["근거 확인"],
-            confidence: 0.86,
-          }),
-        );
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<EmailDetail emailId={6} />);
-    });
-    await flushAsyncWork();
-
-    expect(container.textContent).toContain("실행 항목");
-    expect(container.textContent).toContain("근거 확인");
-    expect(container.textContent).not.toContain("실행 항목이 없습니다.");
   });
 
   it("runs a requested reply draft command for the selected email", async () => {
@@ -747,7 +705,7 @@ describe("EmailDetail", () => {
       if (url.endsWith("/api/emails/7")) return Promise.resolve(jsonResponse(email));
       if (url.endsWith("/api/emails/8")) return Promise.resolve(jsonResponse(nextEmail));
       if (url.endsWith("/api/llm/summarize")) {
-        return Promise.resolve(jsonResponse({ summary: "출시 업데이트", action_items: ["일정 확인"] }));
+        return Promise.resolve(jsonResponse({ summary: "출시 업데이트", todos: ["일정 확인"] }));
       }
       if (url.endsWith("/api/llm/draft")) {
         return Promise.resolve(jsonResponse({ draft: "초안 답장입니다." }));
@@ -817,7 +775,7 @@ describe("EmailDetail", () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/api/emails/12")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "후속 조치 없음", action_items: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "후속 조치 없음", todos: [] }));
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -886,7 +844,7 @@ describe("EmailDetail", () => {
     expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/sync"))).toHaveLength(0);
 
     await act(async () => {
-      summaryResponse.resolve(jsonResponse({ summary: "회의 일정", action_items: ["출시 회의 일정 잡기"] }));
+      summaryResponse.resolve(jsonResponse({ summary: "회의 일정", todos: ["출시 회의 일정 잡기"] }));
       await summaryResponse.promise;
     });
     await flushAsyncWork();
@@ -929,7 +887,7 @@ describe("EmailDetail", () => {
       if (url.endsWith("/api/emails/10")) return Promise.resolve(jsonResponse(emailA));
       if (url.endsWith("/api/emails/11")) return Promise.resolve(jsonResponse(emailB));
       if (url.endsWith("/api/llm/summarize")) {
-        return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: ["일정 확인"] }));
+        return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: ["일정 확인"] }));
       }
       if (url.endsWith("/api/llm/draft")) return draftResponse.promise;
       throw new Error(`Unexpected fetch: ${url}`);
@@ -976,7 +934,7 @@ describe("EmailDetail", () => {
       void init;
       const url = String(input);
       if (url.endsWith("/api/emails/15")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: [] }));
       if (url.endsWith("/api/llm/draft")) return Promise.reject(new Error("Draft failed"));
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -1025,7 +983,7 @@ describe("EmailDetail", () => {
       void init;
       const url = String(input);
       if (url.endsWith("/api/emails/16")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: [] }));
       if (url.endsWith("/api/emails/thread/thread-err")) return Promise.reject(new Error("Thread err"));
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -1060,7 +1018,7 @@ describe("EmailDetail", () => {
       void init;
       const url = String(input);
       if (url.endsWith("/api/emails/17")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: [] }));
       if (url.endsWith("/api/emails/thread/thread-err2")) {
         callCount++;
         if (callCount === 1) return Promise.reject(new Error("Thread err"));
@@ -1175,7 +1133,7 @@ describe("EmailDetail", () => {
       void init;
       const url = String(input);
       if (url.endsWith("/api/emails/20")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: [] }));
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -1224,7 +1182,7 @@ describe("EmailDetail", () => {
       void init;
       const url = String(input);
       if (url.endsWith("/api/emails/21")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: [] }));
       if (url.endsWith("/api/emails/send")) return Promise.resolve(jsonResponse({ simulated: true }));
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -1278,7 +1236,7 @@ describe("EmailDetail", () => {
       void init;
       const url = String(input);
       if (url.endsWith("/api/emails/22")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", todos: [] }));
       if (url.endsWith("/api/emails/send")) return Promise.reject(new Error("Send failed"));
       throw new Error(`Unexpected fetch: ${url}`);
     });

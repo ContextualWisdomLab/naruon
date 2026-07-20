@@ -10,7 +10,6 @@ import asyncpg
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -20,7 +19,6 @@ import api.data as data_api
 from api.auth import get_auth_context, get_current_user
 from core.config import settings
 from db.models import (
-    get_fernet,
     Attachment,
     Base,
     ConnectorSignalEvent,
@@ -2578,7 +2576,6 @@ def test_data_document_upload_creates_workspace_scoped_document(mock_db):
     }
     stored_document = mock_db.documents[0]
     assert stored_document.workspace_id == "workspace-org-acme"
-    assert stored_document.organization_id == "org-acme"
     assert stored_document.document_content == "# Roadmap\nPhase 10"
 
 
@@ -2770,175 +2767,6 @@ def test_data_document_webdav_materialization_rejects_empty_document(mock_db):
     )
 
 
-def test_data_document_webdav_materialization_rejects_pending_pdf(mock_db):
-    # A PDF still pending NewsDOM recognition holds a base64 payload in
-    # document_content; materializing it would write that binary as Markdown.
-    mock_db.documents.append(
-        Document(
-            document_id="doc_pending",
-            workspace_id="workspace-org-acme",
-            document_name="contract.pdf",
-            document_type="pdf",
-            document_content="JVBERi0xLjcK",  # base64 %PDF-1.7\n
-            document_status="pdf_dom_recognition_pending",
-            created_at=_now(),
-        )
-    )
-    token = _signed_session_token(_valid_session_payload())
-    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
-    try:
-        response = client.post(
-            "/api/data/documents/doc_pending/webdav-materialization-intent",
-            json={
-                "target_source_id": "webdav_src_primary",
-                "execute_provider": True,
-            },
-        )
-    finally:
-        client.close()
-        _restore_overrides(previous_secret, original_overrides)
-
-    assert response.status_code == 409, response.text
-    assert "pending recognition" in response.json()["detail"]
-
-
-def test_data_pdf_dom_recognition_intent_rejects_non_pdf_document(mock_db):
-    mock_db.documents.append(
-        Document(
-            document_id="doc_text",
-            workspace_id="workspace-org-acme",
-            document_name="notes.md",
-            document_type="text/markdown",
-            document_content="# Notes",
-            document_status="uploaded",
-            created_at=_now(),
-        )
-    )
-    token = _signed_session_token(_valid_session_payload())
-    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
-    try:
-        response = client.post(
-            "/api/data/documents/doc_text/pdf-dom-recognition-intent",
-        )
-    finally:
-        client.close()
-        _restore_overrides(previous_secret, original_overrides)
-
-    assert response.status_code == 415, response.text
-    # A PDF document is accepted.
-    mock_db.documents.append(
-        Document(
-            document_id="doc_pdf",
-            workspace_id="workspace-org-acme",
-            document_name="contract.pdf",
-            document_type="pdf",
-            document_content="JVBERi0xLjcK",
-            document_status="uploaded",
-            created_at=_now(),
-        )
-    )
-    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
-    try:
-        ok = client.post(
-            "/api/data/documents/doc_pdf/pdf-dom-recognition-intent",
-        )
-    finally:
-        client.close()
-        _restore_overrides(previous_secret, original_overrides)
-    assert ok.status_code == 200, ok.text
-    assert ok.json()["document_status"] == "pdf_dom_recognition_pending"
-    assert mock_db.documents[-1].organization_id == "org-acme"
-
-
-def test_data_pdf_dom_recognition_intent_rejects_invalid_stored_payload(mock_db):
-    mock_db.documents.append(
-        Document(
-            document_id="doc_invalid_pdf",
-            workspace_id="workspace-org-acme",
-            document_name="contract.pdf",
-            document_type="pdf",
-            document_content=base64.b64encode(b"not a PDF").decode("ascii"),
-            document_status="uploaded",
-            created_at=_now(),
-        )
-    )
-    token = _signed_session_token(_valid_session_payload())
-    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
-    try:
-        response = client.post(
-            "/api/data/documents/doc_invalid_pdf/pdf-dom-recognition-intent",
-        )
-    finally:
-        client.close()
-        _restore_overrides(previous_secret, original_overrides)
-
-    assert response.status_code == 422, response.text
-    assert response.json()["detail"] == (
-        "Stored PDF payload is not valid for DOM recognition."
-    )
-    assert mock_db.documents[-1].document_status == "uploaded"
-
-
-def test_data_pdf_dom_upload_persists_signed_organization_scope(mock_db):
-    token = _signed_session_token(_valid_session_payload())
-    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
-    try:
-        response = client.post(
-            "/api/data/documents/pdf-dom-recognition",
-            files={"file": ("contract.pdf", b"%PDF-1.7 test", "application/pdf")},
-            data={"document_name": "contract.pdf"},
-        )
-    finally:
-        client.close()
-        _restore_overrides(previous_secret, original_overrides)
-
-    assert response.status_code == 200, response.text
-    stored_document = mock_db.documents[-1]
-    assert stored_document.organization_id == "org-acme"
-    assert stored_document.document_status == "pdf_dom_recognition_pending"
-
-
-def test_data_pdf_dom_upload_rejects_invalid_signature_and_size(mock_db, monkeypatch):
-    token = _signed_session_token(_valid_session_payload())
-    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
-    try:
-        invalid = client.post(
-            "/api/data/documents/pdf-dom-recognition",
-            files={"file": ("contract.pdf", b"not a PDF", "application/pdf")},
-        )
-        monkeypatch.setattr(data_api, "_MAX_PDF_DOM_UPLOAD_BYTES", 5)
-        oversized = client.post(
-            "/api/data/documents/pdf-dom-recognition",
-            files={"file": ("contract.pdf", b"%PDF-1.7", "application/pdf")},
-        )
-    finally:
-        client.close()
-        _restore_overrides(previous_secret, original_overrides)
-
-    assert invalid.status_code == 415, invalid.text
-    assert oversized.status_code == 413, oversized.text
-    assert mock_db.documents == []
-
-
-def test_pending_pdf_document_decoder_rejects_malformed_payloads(monkeypatch):
-    malformed_base64 = Document(document_content="not@@base64")
-    with pytest.raises(ValueError, match="valid base64"):
-        data_api.decode_pending_pdf_document_bytes(malformed_base64)
-
-    non_pdf = Document(
-        document_content=base64.b64encode(b"not a PDF").decode("ascii")
-    )
-    with pytest.raises(ValueError, match="not a PDF"):
-        data_api.decode_pending_pdf_document_bytes(non_pdf)
-
-    monkeypatch.setattr(data_api, "_MAX_PDF_DOM_UPLOAD_BYTES", 5)
-    oversized = Document(
-        document_content=base64.b64encode(b"%PDF-1.7").decode("ascii")
-    )
-    with pytest.raises(ValueError, match="size limit"):
-        data_api.decode_pending_pdf_document_bytes(oversized)
-
-
 async def _seed_smoke_test_data(conn, ids: dict):
     await conn.execute(text("SELECT 1"))
     await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -2957,7 +2785,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :user_id, :organization_id, :message_id, :thread_id,
                 :fingerprint, :sender, :recipients, :subject, now(), :body
             )
-            RETURNING id
+            RETURNING content_node_id
             """
         ),
         {
@@ -2983,7 +2811,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :user_id, :organization_id, :message_id, :sender,
                 :recipients, :subject, now(), :body
             )
-            RETURNING id
+            RETURNING content_node_id
             """
         ),
         {
@@ -3042,7 +2870,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :source_record_uid, 'paragraph', '/document[1]/paragraph[1]',
                 1, 'segmented body text', :content_hash, now()
             )
-            RETURNING content_node_id
+            RETURNING id
             """
         ),
         {
@@ -3065,7 +2893,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 :source_record_uid, 'paragraph', '/document[1]/paragraph[1]',
                 1, 'rival segmented body text', :content_hash, now()
             )
-            RETURNING content_node_id
+            RETURNING id
             """
         ),
         {
@@ -3124,8 +2952,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
                 ordinal_index, created_at
             )
             SELECT
-                :first_edge_uid, CAST(:first_email_id AS INTEGER),
-                CAST(:first_node_id AS INTEGER),
+                :first_edge_uid, :first_email_id, :first_node_id,
                 first_segment.content_segment_id,
                 'email_body', :first_source_record_uid, 'node_has_segment',
                 '/document[1]/paragraph[1]/has/smoke', 1, now()
@@ -3133,8 +2960,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
             WHERE first_segment.content_segment_uid = :first_segment_uid
             UNION ALL
             SELECT
-                :rival_edge_uid, CAST(:rival_email_id AS INTEGER),
-                CAST(:rival_node_id AS INTEGER),
+                :rival_edge_uid, :rival_email_id, :rival_node_id,
                 rival_segment.content_segment_id,
                 'email_body', :rival_source_record_uid, 'node_has_segment',
                 '/document[1]/paragraph[1]/has/rival', 1, now()
@@ -3190,25 +3016,21 @@ async def _seed_smoke_test_data(conn, ids: dict):
             """
             INSERT INTO email_attachments (
                 email_id, filename, content,
-                content_type, parse_status, parse_content_type,
-                parser_key, parse_error_code
+                content_type, parse_status, parse_error_code
             )
             VALUES
             (
                 :first_email_id, 'ready.txt', 'ready attachment',
-                'text/plain', 'parsed', 'text/plain',
-                'plain_text', NULL
+                'text/plain', 'parsed', NULL
             ),
             (
                 :second_email_id, 'blank.txt', '',
                 'application/pdf', 'unsupported_content_type',
-                'application/pdf', 'plain_text',
                 'unsupported_content_type'
             ),
             (
                 :rival_email_id, 'rival.txt', 'rival attachment',
-                'text/plain', 'parsed', 'text/plain',
-                'plain_text', NULL
+                'text/plain', 'parsed', NULL
             )
             """
         ),
@@ -3231,13 +3053,13 @@ async def _seed_smoke_test_data(conn, ids: dict):
             (
                 :webdav_uid, :user_id, :organization_id, :workspace_id,
                 'https://data-files.example/dav', 'data@example.com',
-                :webdav_credentials, true, now()
+                'encrypted-data-secret', true, now()
             ),
             (
                 :rival_webdav_uid, :rival_user_id, :rival_organization_id,
                 :rival_workspace_id,
                 'https://rival-files.example/dav', 'rival@example.com',
-                :rival_webdav_credentials, true, now()
+                'encrypted-rival-secret', true, now()
             )
             """
         ),
@@ -3246,16 +3068,10 @@ async def _seed_smoke_test_data(conn, ids: dict):
             "user_id": ids["user_id"],
             "organization_id": ids["organization_id"],
             "workspace_id": ids["workspace_id"],
-            "webdav_credentials": get_fernet()
-            .encrypt(b"data-smoke-webdav-secret")
-            .decode("ascii"),
             "rival_webdav_uid": ids["rival_webdav_uid"],
             "rival_user_id": ids["rival_user_id"],
             "rival_organization_id": ids["rival_organization_id"],
             "rival_workspace_id": ids["rival_workspace_id"],
-            "rival_webdav_credentials": get_fernet()
-            .encrypt(b"data-rival-webdav-secret")
-            .decode("ascii"),
         },
     )
     await conn.execute(
@@ -3395,20 +3211,10 @@ async def _teardown_smoke_test_data(conn, ids: dict):
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
-async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope(
-    monkeypatch,
-):
+async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope():
     database_url = getattr(settings, "DATABASE_URL", None)
     if not database_url:
         pytest.skip("PostgreSQL smoke path unavailable: DATABASE_URL is not set")
-
-    # EncryptedString needs a key for both seeding (encrypt) and the API
-    # read (decrypt); monkeypatch restores it on any exit incl. skip.
-    monkeypatch.setattr(
-        settings,
-        "ENCRYPTION_KEY",
-        SecretStr(Fernet.generate_key().decode("ascii")),
-    )
 
     user_id = f"data_smoke_user_{uuid.uuid4().hex[:12]}"
     organization_id = f"data_smoke_org_{uuid.uuid4().hex[:12]}"

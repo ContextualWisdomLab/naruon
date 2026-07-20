@@ -30,7 +30,7 @@ jobs:
       DISABLE_BACKGROUND_WORKERS: "1"
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
@@ -47,17 +47,6 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
-
-      - name: Install Noema agent optional dependency
-        # Installs pydantic-ai (services/noema_agent.py) so the real build-path
-        # test (test_agent_runs_tools_with_test_model) executes instead of being
-        # skipped. Keep the core and agent lock files on the same pip command so
-        # --require-hashes can validate both preinstalled shared dependencies and
-        # agent-only packages.
-        run: |
-          python -m pip install --disable-pip-version-check --require-hashes \
-            -r backend/requirements-hashes.txt \
-            -r backend/requirements-agent.txt
 
       - name: Run backend lint
         run: |
@@ -79,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 

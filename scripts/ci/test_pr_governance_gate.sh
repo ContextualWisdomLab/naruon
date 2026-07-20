@@ -18,33 +18,10 @@ args="$*"
 if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
   case "${GH_SCENARIO:-pass}" in
     changes_requested)
-      printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"CHANGES_REQUESTED","statusCheckRollup":[]}' "$head_sha"
-      ;;
-    transient_unknown)
-      count_file="$GH_STATE_DIR/pr-view-count"
-      count="$(cat "$count_file" 2>/dev/null || printf '0')"
-      printf '%s\n' "$((count + 1))" > "$count_file"
-      if [ "$count" -eq 0 ]; then
-        printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
-      else
-        printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
-      fi
-      ;;
-    merged_during_unknown)
-      count_file="$GH_STATE_DIR/pr-view-count"
-      count="$(cat "$count_file" 2>/dev/null || printf '0')"
-      printf '%s\n' "$((count + 1))" > "$count_file"
-      if [ "$count" -eq 0 ]; then
-        printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
-      else
-        printf '{"number":42,"state":"MERGED","headRefOid":"%s","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"APPROVED","statusCheckRollup":[]}' "$head_sha"
-      fi
-      ;;
-    persistent_unknown)
-      printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
+      printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"CHANGES_REQUESTED","statusCheckRollup":[]}'
       ;;
     *)
-      printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}' "$head_sha"
+      printf '{"number":42,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"","statusCheckRollup":[]}'
       ;;
   esac
   exit 0
@@ -54,32 +31,17 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/pulls/42 ]]; then
   if [[ "$args" == *".base.sha"* ]]; then
     printf 'abcdefabcdefabcdefabcdefabcdefabcdefabcd'
   else
-    latest_head_sha="$head_sha"
-    latest_state="open"
-    if [ "${GH_SCENARIO:-pass}" = "head_changed_during_evaluation" ]; then
-      latest_head_sha="fedcba9876543210fedcba9876543210fedcba98"
-    elif [ "${GH_SCENARIO:-pass}" = "closed_during_evaluation" ]; then
-      latest_state="closed"
-    fi
-    printf '{"state":"%s","head":{"sha":"%s"}}' "$latest_state" "$latest_head_sha"
+    printf '%s' "$head_sha"
   fi
   exit 0
 fi
 
-if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/* ]] && [[ "$2" != */check-runs* ]]; then
+if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/* ]] && [[ "$2" != */check-runs ]]; then
   printf '2026-05-19T00:00:00Z'
   exit 0
 fi
 
 if [ "$1" = "api" ] && [ "$2" = "graphql" ]; then
-  if [ "${GH_SCENARIO:-pass}" = "graphql_error" ]; then
-    printf 'GraphQL request failed\n' >&2
-    exit 1
-  fi
-  if [ "${GH_SCENARIO:-pass}" = "persistent_unknown" ]; then
-    printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"UNKNOWN","reviewThreads":{"nodes":[]}}}}}' "$head_sha"
-    exit 0
-  fi
   printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"CLEAN","reviewThreads":{"nodes":[]}}}}}' "$head_sha"
   exit 0
 fi
@@ -89,16 +51,9 @@ if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then
     printf 'no required checks reported on the test branch\n' >&2
     exit 1
   fi
-  if [ "${GH_SCENARIO:-pass}" = "pr_checks_error" ]; then
-    printf 'Error: request failed: https://api.example/download?X-Amz-Signature=SECRETVALUE\n' >&2
-    exit 1
-  fi
   case "${GH_SCENARIO:-pass}" in
-    pending|existing_gate_pending)
+    pending)
       printf '[{"name":"Application CI","state":"IN_PROGRESS","link":"https://checks/app-ci"}]'
-      ;;
-    unknown_state)
-      printf '[{"name":"Application CI","state":"STALE","link":"https://checks/app-ci"}]'
       ;;
     startup_failure)
       printf '[{"name":"Application CI","state":"STARTUP_FAILURE","link":"https://checks/app-ci"}]'
@@ -109,9 +64,6 @@ if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then
     failure|failed_existing)
       printf '[{"name":"Application CI","state":"FAILURE","link":"https://checks/app-ci"}]'
       ;;
-    self_gate_failed)
-      printf '[{"name":"metadata-only gate evaluation","state":"FAILURE","link":"https://checks/governance"},{"name":"Application CI","state":"SUCCESS","link":"https://checks/app-ci"}]'
-      ;;
     *)
       printf '[{"name":"Application CI","state":"SUCCESS","link":"https://checks/app-ci"}]'
       ;;
@@ -119,12 +71,12 @@ if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then
   exit 0
 fi
 
-if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
+if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs ]]; then
   case "${GH_SCENARIO:-pass}" in
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error)
+    missing_coderabbit)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -136,12 +88,6 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_review_skipped)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"neutral","output":{"title":"CodeRabbit","summary":"Review skipped","text":"Review skipped"},"html_url":"https://checks/coderabbit"}]}'
       ;;
-    coderabbit_skip_with_warning)
-      printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"neutral","output":{"title":"CodeRabbit","summary":"Review skipped","text":"Pre-merge blocking warning"},"html_url":"https://checks/coderabbit"}]}'
-      ;;
-    existing_gate|existing_gate_pending)
-      printf '{"check_runs":[{"id":999,"name":"metadata-only gate evaluation","external_id":"pr-governance:42:0123456789abcdef0123456789abcdef01234567","app":{"slug":"github-actions"},"status":"completed","conclusion":"failure"},{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"success","html_url":"https://checks/coderabbit"}]}'
-      ;;
     *)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"success","html_url":"https://checks/coderabbit"}]}'
       ;;
@@ -149,48 +95,9 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
   exit 0
 fi
 
-if [ "$1" = "api" ] && [[ "$args" == *repos/*/pulls/42/reviews* ]]; then
-  if [ "${GH_SCENARIO:-pass}" = "opencode_reviews_error" ]; then
-    printf 'Error: review lookup failed: https://api.example/reviews?token=SECRETVALUE\n' >&2
-    exit 1
-  fi
-  case "${GH_SCENARIO:-pass}" in
-    missing_coderabbit_with_adversarial_approval)
-      printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `%s`"}]]' "$head_sha" "$head_sha"
-      ;;
-    missing_coderabbit_stale_approval)
-      printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `old-head`"}]]' "$head_sha"
-      ;;
-    missing_coderabbit_actions_approval)
-      printf '[[{"user":{"login":"github-actions[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `%s`"}]]' "$head_sha" "$head_sha"
-      ;;
-    missing_coderabbit_one_probe)
-      printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `%s`"}]]' "$head_sha" "$head_sha"
-      ;;
-    *)
-      printf '[]'
-      ;;
-  esac
-  exit 0
-fi
-
-if [ "$1" = "api" ] && [ "$2" = "--method" ] && [ "$3" = "POST" ] && [[ "$4" == repos/*/check-runs ]]; then
-  if [ "${GH_SCENARIO:-pass}" = "check_publish_failure" ]; then
-    printf 'check publication failed\n' >&2
-    exit 1
-  fi
-  printf '{"id":999}'
-  exit 0
-fi
-
-if [ "$1" = "api" ] && [ "$2" = "--method" ] && [ "$3" = "PATCH" ] && [[ "$4" == repos/*/check-runs/* ]]; then
-  printf '{"id":999}'
-  exit 0
-fi
-
 if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
   if [[ "$args" == *"--jq"* ]]; then
-    if [ "${GH_SCENARIO:-pass}" = "failed_existing" ] || [ "${GH_SCENARIO:-pass}" = "resolved_existing" ]; then
+    if [ "${GH_SCENARIO:-pass}" = "failed_existing" ]; then
       printf '555\n'
     fi
     exit 0
@@ -202,9 +109,6 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         ;;
       coderabbit_stale_blocking_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Pre-merge warning for older head"}]'
-        ;;
-      github_code_quality_blocking_comment)
-        printf '[{"id":777,"user":{"login":"github-code-quality[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Potential issue for 0123456789abcdef0123456789abcdef01234567"}]'
         ;;
       *)
         printf '[]'
@@ -220,9 +124,6 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/pulls/42/comments* ]]; then
   case "${GH_SCENARIO:-pass}" in
     coderabbit_current_review_comment)
       printf '[{"id":888,"user":{"login":"coderabbitai[bot]"},"commit_id":"0123456789abcdef0123456789abcdef01234567","original_commit_id":"old","created_at":"2026-05-19T00:01:00Z","body":"Potential issue on current head"}]'
-      ;;
-    github_code_quality_current_review_comment)
-      printf '[{"id":888,"user":{"login":"github-code-quality[bot]"},"commit_id":"0123456789abcdef0123456789abcdef01234567","original_commit_id":"old","created_at":"2026-05-19T00:01:00Z","body":"Potential issue on current head"}]'
       ;;
     coderabbit_stale_review_comment)
       printf '[{"id":888,"user":{"login":"coderabbitai[bot]"},"commit_id":"old","original_commit_id":"old","created_at":"2026-05-19T00:01:00Z","body":"Potential issue on stale head"}]'
@@ -257,9 +158,7 @@ run_gate() {
   make_fake_gh "$temp_dir/bin"
   set +e
   GH_LOG="$temp_dir/gh.log" \
-  GH_STATE_DIR="$temp_dir" \
   GH_SCENARIO="$scenario" \
-  PR_GOVERNANCE_RETRY_SLEEP_SECONDS="0" \
   PATH="$temp_dir/bin:$PATH" \
   GITHUB_REPOSITORY="owner/repo" \
   GH_TOKEN="fake" \
@@ -267,7 +166,7 @@ run_gate() {
   TARGET_PR_NUMBER="42" \
   DIRECT_PR_NUMBER="" \
   WORKFLOW_RUN_PR_NUMBER="" \
-    bash "$script" > "$temp_dir/output.txt" 2>&1
+    bash "$script" > "$temp_dir/output.txt"
   local status=$?
   set -e
   printf '%s\n' "$status" > "$temp_dir/status.txt"
@@ -312,73 +211,8 @@ assert_no_comment_or_merge_for_pending_checks() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'Waiting for 1 required check' "$temp_dir/output.txt"
-  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=in_progress' "$temp_dir/gh.log"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_transient_unknown_merge_state_is_retried() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate transient_unknown "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Merge state lookup attempt 1 of 4 returned UNKNOWN' "$temp_dir/output.txt"
-  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_in_file 'conclusion=success' "$temp_dir/gh.log"
-  assert_not_in_file 'Merge state is UNKNOWN; resolve conflicts' "$temp_dir/gh.log"
-  assert_not_in_file 'conclusion=failure' "$temp_dir/gh.log"
-}
-
-assert_persistent_unknown_merge_state_waits_without_false_failure() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate persistent_unknown "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Merge state lookup attempt 3 of 4 returned UNKNOWN' "$temp_dir/output.txt"
-  assert_in_file 'Merge state is still UNKNOWN after 4 attempts' "$temp_dir/output.txt"
-  assert_in_file 'status=in_progress' "$temp_dir/gh.log"
-  assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
-  assert_not_in_file 'conclusion=failure' "$temp_dir/gh.log"
-}
-
-assert_pr_merged_during_unknown_retry_exits_without_stale_gate() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate merged_during_unknown "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'PR state became MERGED during merge-state refresh' "$temp_dir/output.txt"
-  assert_not_in_file 'check-runs' "$temp_dir/gh.log"
-  assert_not_in_file 'issues/42/comments -f body=' "$temp_dir/gh.log"
-  assert_not_in_file '--method PATCH repos/owner/repo/issues/comments' "$temp_dir/gh.log"
-}
-
-assert_head_change_during_evaluation_skips_stale_publication() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate head_changed_during_evaluation "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'PR head changed during gate evaluation from 0123456789abcdef0123456789abcdef01234567 to fedcba9876543210fedcba9876543210fedcba98' "$temp_dir/output.txt"
-  assert_not_in_file '--method POST repos/owner/repo/check-runs' "$temp_dir/gh.log"
-  assert_not_in_file '--method PATCH repos/owner/repo/check-runs' "$temp_dir/gh.log"
-  assert_not_in_file 'issues/42/comments -f body=' "$temp_dir/gh.log"
-  assert_not_in_file '--method PATCH repos/owner/repo/issues/comments' "$temp_dir/gh.log"
-}
-
-assert_closed_during_evaluation_skips_stale_publication() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate closed_during_evaluation "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'PR state became CLOSED during gate evaluation; skipping stale gate publication' "$temp_dir/output.txt"
-  assert_not_in_file '--method POST repos/owner/repo/check-runs' "$temp_dir/gh.log"
-  assert_not_in_file '--method PATCH repos/owner/repo/check-runs' "$temp_dir/gh.log"
-  assert_not_in_file 'issues/42/comments -f body=' "$temp_dir/gh.log"
-  assert_not_in_file '--method PATCH repos/owner/repo/issues/comments' "$temp_dir/gh.log"
 }
 
 assert_startup_failure_creates_marker_comment() {
@@ -386,10 +220,9 @@ assert_startup_failure_creates_marker_comment() {
   temp_dir="$(mktemp -d)"
   run_gate startup_failure "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file "Required check \`Application CI\` is STARTUP_FAILURE" "$temp_dir/gh.log"
+  assert_exit_code 1 "$temp_dir"
+  assert_in_file 'Required check `Application CI` is STARTUP_FAILURE' "$temp_dir/gh.log"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
-  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=failure' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -398,12 +231,10 @@ assert_failed_checks_create_marker_comment() {
   temp_dir="$(mktemp -d)"
   run_gate failed "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
+  assert_exit_code 1 "$temp_dir"
   assert_in_file 'PR governance metadata gate is not ready' "$temp_dir/gh.log"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
   assert_in_file 'Application CI' "$temp_dir/gh.log"
-  assert_not_in_file 'https://checks/app-ci' "$temp_dir/gh.log"
-  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=failure' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -412,20 +243,8 @@ assert_existing_marker_comment_is_patched() {
   temp_dir="$(mktemp -d)"
   run_gate failed_existing "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
+  assert_exit_code 1 "$temp_dir"
   assert_in_file 'api --method PATCH repos/owner/repo/issues/comments/555' "$temp_dir/gh.log"
-  assert_not_in_file 'repos/owner/repo/issues/42/comments -f body' "$temp_dir/gh.log"
-}
-
-assert_resolved_marker_comment_is_updated_on_ready_gate() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate resolved_existing "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'api --method PATCH repos/owner/repo/issues/comments/555' "$temp_dir/gh.log"
-  assert_in_file 'no current blocking failures remain' "$temp_dir/gh.log"
-  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/gh.log"
   assert_not_in_file 'repos/owner/repo/issues/42/comments -f body' "$temp_dir/gh.log"
 }
 
@@ -440,66 +259,15 @@ assert_coderabbit_pending_waits_without_hard_comment() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
-assert_missing_coderabbit_waits_for_adversarial_opencode_approval() {
+assert_missing_coderabbit_waits_without_hard_comment() {
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate missing_coderabbit "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval' "$temp_dir/output.txt"
+  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate missing_coderabbit_with_adversarial_approval "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
-  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_in_file 'conclusion=success' "$temp_dir/gh.log"
-}
-
-assert_missing_coderabbit_rejects_non_authoritative_opencode_evidence() {
-  local scenario temp_dir
-  for scenario in \
-    missing_coderabbit_stale_approval \
-    missing_coderabbit_actions_approval \
-    missing_coderabbit_one_probe; do
-    temp_dir="$(mktemp -d)"
-    run_gate "$scenario" "$temp_dir"
-
-    assert_exit_code 0 "$temp_dir"
-    assert_in_file 'Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval' "$temp_dir/output.txt"
-    assert_not_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
-    assert_in_file 'status=in_progress' "$temp_dir/gh.log"
-  done
-}
-
-assert_opencode_review_lookup_error_is_logged_but_not_published_verbatim() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate opencode_reviews_error "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'OpenCode review lookup failed' "$temp_dir/output.txt"
-  assert_in_file 'SECRETVALUE' "$temp_dir/output.txt"
-  assert_in_file 'OpenCode adversarial review evidence could not be read; see the workflow run log' "$temp_dir/gh.log"
-  assert_not_in_file 'SECRETVALUE' "$temp_dir/gh.log"
-  assert_in_file 'status=completed -f conclusion=failure' "$temp_dir/gh.log"
-}
-
-assert_completed_gate_check_is_republished_as_new_run() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate existing_gate_pending "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Waiting for 1 required check' "$temp_dir/output.txt"
-  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=in_progress' "$temp_dir/gh.log"
-  assert_not_in_file 'api --method PATCH repos/owner/repo/check-runs/999' "$temp_dir/gh.log"
 }
 
 assert_coderabbit_failure_creates_marker_comment() {
@@ -507,7 +275,7 @@ assert_coderabbit_failure_creates_marker_comment() {
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_failed "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
+  assert_exit_code 1 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit check has a blocking conclusion' "$temp_dir/gh.log"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
@@ -518,7 +286,7 @@ assert_coderabbit_neutral_without_skip_evidence_blocks() {
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_neutral "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
+  assert_exit_code 1 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit check has a blocking conclusion' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
@@ -534,99 +302,12 @@ assert_coderabbit_review_skipped_neutral_is_ready_without_merge() {
   assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
 }
 
-assert_coderabbit_skip_with_blocking_language_blocks() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate coderabbit_skip_with_warning "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Current-head CodeRabbit check has a blocking conclusion' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_unrecognized_required_check_state_blocks() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate unknown_state "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file "Required check \`Application CI\` is STALE" "$temp_dir/gh.log"
-  assert_in_file 'status=completed -f conclusion=failure' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_pr_checks_error_is_not_published_verbatim() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate pr_checks_error "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Required check metadata could not be read; see the workflow run log' "$temp_dir/gh.log"
-  assert_in_file 'SECRETVALUE' "$temp_dir/output.txt"
-  assert_not_in_file 'SECRETVALUE' "$temp_dir/gh.log"
-}
-
-assert_invalid_pr_number_fails_closed_without_gh_calls() {
-  local temp_dir status
-  temp_dir="$(mktemp -d)"
-  mkdir -p "$temp_dir/bin"
-  make_fake_gh "$temp_dir/bin"
-  : > "$temp_dir/gh.log"
-  set +e
-  GH_LOG="$temp_dir/gh.log" \
-  GH_SCENARIO="pass" \
-  PATH="$temp_dir/bin:$PATH" \
-  GITHUB_REPOSITORY="owner/repo" \
-  GH_TOKEN="fake" \
-  EVENT_NAME="workflow_dispatch" \
-  DIRECT_PR_NUMBER="$(printf '42\n::error::injected')" \
-  TARGET_PR_NUMBER="" \
-  WORKFLOW_RUN_PR_NUMBER="" \
-    bash "$script" > "$temp_dir/output.txt" 2>&1
-  status=$?
-  set -e
-  if [ "$status" = "0" ]; then
-    printf 'expected non-zero exit for invalid PR number\n' >&2
-    return 1
-  fi
-  assert_not_in_file '^::' "$temp_dir/output.txt"
-  if [ -s "$temp_dir/gh.log" ]; then
-    printf 'expected no gh invocations for invalid PR number\n' >&2
-    return 1
-  fi
-}
-
-assert_evaluation_error_publishes_gate_failure() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate graphql_error "$temp_dir"
-
-  local actual
-  actual="$(<"$temp_dir/status.txt")"
-  if [ "$actual" = "0" ]; then
-    printf 'expected non-zero exit when evaluation errors\n' >&2
-    return 1
-  fi
-  assert_in_file 'PR governance metadata gate errored' "$temp_dir/gh.log"
-  assert_in_file 'status=completed -f conclusion=failure' "$temp_dir/gh.log"
-}
-
 assert_coderabbit_blocking_issue_comment_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_blocking_comment "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_github_code_quality_blocking_issue_comment_blocks() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate github_code_quality_blocking_comment "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
+  assert_exit_code 1 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
@@ -647,17 +328,7 @@ assert_coderabbit_current_review_comment_blocks() {
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_current_review_comment "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Current-head CodeRabbit review comment has blocking warning/failure evidence' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_github_code_quality_current_review_comment_blocks() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate github_code_quality_current_review_comment "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
+  assert_exit_code 1 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit review comment has blocking warning/failure evidence' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
@@ -678,7 +349,7 @@ assert_changes_requested_creates_marker_comment() {
   temp_dir="$(mktemp -d)"
   run_gate changes_requested "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
+  assert_exit_code 1 "$temp_dir"
   assert_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/gh.log"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
@@ -691,7 +362,6 @@ assert_passing_gate_is_metadata_only_without_merge() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=success' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
   assert_not_in_file 'checkout' "$temp_dir/gh.log"
   assert_not_in_file 'dismiss' "$temp_dir/gh.log"
@@ -709,94 +379,21 @@ assert_no_required_checks_waits_without_hard_comment() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
-assert_self_gate_failure_does_not_recurse() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate self_gate_failed "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_not_in_file "Required check \`metadata-only gate evaluation\`" "$temp_dir/output.txt"
-  assert_not_in_file 'issues/42/comments -f body' "$temp_dir/gh.log"
-  assert_in_file 'conclusion=success' "$temp_dir/gh.log"
-}
-
-assert_existing_pr_head_check_is_updated() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate existing_gate "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'api --method PATCH repos/owner/repo/check-runs/999' "$temp_dir/gh.log"
-  assert_not_in_file 'api --method POST repos/owner/repo/check-runs' "$temp_dir/gh.log"
-}
-
-assert_check_publication_failure_fails_closed() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate check_publish_failure "$temp_dir"
-
-  assert_exit_code 1 "$temp_dir"
-  assert_in_file 'check publication failed' "$temp_dir/output.txt"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_workflow_separates_controller_from_required_check() {
-  local workflow="$repo_root/.github/workflows/pr-governance.yml"
-
-	assert_in_file '^  checks: read$' "$workflow"
-	assert_in_file '^      checks: write$' "$workflow"
-	assert_in_file '^  pull-requests: read$' "$workflow"
-	assert_in_file '^      pull-requests: write$' "$workflow"
-	assert_in_file '^  issues: read$' "$workflow"
-	assert_in_file '^      issues: write$' "$workflow"
-  assert_in_file '^  pull_request_review:$' "$workflow"
-  assert_in_file "github.event_name == 'pull_request_review'" "$workflow"
-  assert_in_file '^    name: PR governance metadata controller$' "$workflow"
-  assert_not_in_file '^    name: metadata-only gate evaluation$' "$workflow"
-}
-
-assert_current_head_check_lookup_uses_maximum_page_size() {
-  assert_in_file 'check-runs?per_page=100' "$repo_root/scripts/ci/pr_governance_gate.sh"
-}
-
 assert_no_comment_or_merge_for_pending_checks
-assert_transient_unknown_merge_state_is_retried
-assert_persistent_unknown_merge_state_waits_without_false_failure
-assert_pr_merged_during_unknown_retry_exits_without_stale_gate
-assert_head_change_during_evaluation_skips_stale_publication
-assert_closed_during_evaluation_skips_stale_publication
 assert_startup_failure_creates_marker_comment
 assert_failed_checks_create_marker_comment
 assert_existing_marker_comment_is_patched
-assert_resolved_marker_comment_is_updated_on_ready_gate
 assert_coderabbit_pending_waits_without_hard_comment
-assert_missing_coderabbit_waits_for_adversarial_opencode_approval
-assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval
-assert_missing_coderabbit_rejects_non_authoritative_opencode_evidence
-assert_opencode_review_lookup_error_is_logged_but_not_published_verbatim
-assert_completed_gate_check_is_republished_as_new_run
+assert_missing_coderabbit_waits_without_hard_comment
 assert_coderabbit_failure_creates_marker_comment
 assert_coderabbit_neutral_without_skip_evidence_blocks
 assert_coderabbit_review_skipped_neutral_is_ready_without_merge
-assert_coderabbit_skip_with_blocking_language_blocks
-assert_unrecognized_required_check_state_blocks
-assert_pr_checks_error_is_not_published_verbatim
-assert_invalid_pr_number_fails_closed_without_gh_calls
-assert_evaluation_error_publishes_gate_failure
 assert_coderabbit_blocking_issue_comment_blocks
-assert_github_code_quality_blocking_issue_comment_blocks
 assert_coderabbit_stale_issue_comment_does_not_block
 assert_coderabbit_current_review_comment_blocks
-assert_github_code_quality_current_review_comment_blocks
 assert_coderabbit_stale_review_comment_does_not_block
 assert_changes_requested_creates_marker_comment
 assert_passing_gate_is_metadata_only_without_merge
 assert_no_required_checks_waits_without_hard_comment
-assert_self_gate_failure_does_not_recurse
-assert_existing_pr_head_check_is_updated
-assert_check_publication_failure_fails_closed
-assert_workflow_separates_controller_from_required_check
-assert_current_head_check_lookup_uses_maximum_page_size
 
 printf 'test_pr_governance_gate: PASS\n'

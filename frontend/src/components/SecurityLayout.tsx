@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertOctagon,
   CheckCircle2,
@@ -97,14 +97,6 @@ type PermissionChangeIntentResponse = {
 };
 
 const tabs: SecurityTab[] = ['보안 대시보드', '접근 권한', '감사 로그', '외부 공유', '정책'];
-
-function securityTabId(tab: SecurityTab) {
-  return `security-tab-${tabs.indexOf(tab)}`;
-}
-
-function securityTabPanelId(tab: SecurityTab) {
-  return `security-panel-${tabs.indexOf(tab)}`;
-}
 
 const permissionDraftOptions = [
   {
@@ -847,36 +839,6 @@ export function SecurityLayout() {
     };
   }, []);
 
-  const handleSecurityTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: SecurityTab) => {
-    const currentIndex = tabs.indexOf(tab);
-    let nextIndex: number;
-
-    switch (event.key) {
-      case 'ArrowDown':
-      case 'ArrowRight':
-        nextIndex = (currentIndex + 1) % tabs.length;
-        break;
-      case 'ArrowLeft':
-      case 'ArrowUp':
-        nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-        break;
-      case 'Home':
-        nextIndex = 0;
-        break;
-      case 'End':
-        nextIndex = tabs.length - 1;
-        break;
-      default:
-        return;
-    }
-
-    event.preventDefault();
-    setActiveTab(tabs[nextIndex]);
-    event.currentTarget.parentElement
-      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-      [nextIndex]?.focus();
-  };
-
   const content = useMemo(() => {
     if (loading) return <LoadingPanel />;
     if (error) return <ErrorPanel message={error} />;
@@ -899,47 +861,35 @@ export function SecurityLayout() {
           <ShieldCheck className="size-5 text-primary" aria-hidden="true" />
           <span>보안과 관리자</span>
         </h1>
-        <div role="tablist" aria-label="보안 보기" aria-orientation="vertical" className="flex flex-col gap-1">
-          {tabs.map((tab) => (
-            <button
-              id={securityTabId(tab)}
-              type="button"
-              key={tab}
-              role="tab"
-              aria-controls={securityTabPanelId(tab)}
-              aria-selected={activeTab === tab}
-              tabIndex={activeTab === tab ? 0 : -1}
-              onClick={() => setActiveTab(tab)}
-              onKeyDown={(event) => handleSecurityTabKeyDown(event, tab)}
-              className={`rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                activeTab === tab
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-secondary'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+        {tabs.map((tab) => (
+          <button
+            type="button"
+            key={tab}
+            aria-current={activeTab === tab ? 'page' : undefined}
+            onClick={() => setActiveTab(tab)}
+            className={`rounded-lg px-3 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+              activeTab === tab
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-secondary'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Mobile local tabs: the LNB collapses to a horizontal tab strip below the desktop breakpoint */}
         <header className="flex h-16 shrink-0 items-center overflow-hidden border-b border-border bg-card px-4 lg:hidden">
           <h1 className="sr-only">보안과 관리자</h1>
-          <div role="tablist" aria-label="보안 보기" className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+          <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
             {tabs.map((tab) => (
               <button
-                id={`mobile-${securityTabId(tab)}`}
                 type="button"
                 key={tab}
-                role="tab"
-                aria-controls={securityTabPanelId(tab)}
-                aria-selected={activeTab === tab}
-                tabIndex={activeTab === tab ? 0 : -1}
+                aria-current={activeTab === tab ? 'page' : undefined}
                 onClick={() => setActiveTab(tab)}
-                onKeyDown={(event) => handleSecurityTabKeyDown(event, tab)}
-                className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition-colors ${
                   activeTab === tab
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-secondary'
@@ -952,12 +902,7 @@ export function SecurityLayout() {
         </header>
 
         <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
-        <div
-          id={securityTabPanelId(activeTab)}
-          role="tabpanel"
-          aria-labelledby={securityTabId(activeTab)}
-          className="mx-auto max-w-6xl space-y-5"
-        >
+        <div className="mx-auto max-w-6xl space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold text-muted-foreground">보안 거버넌스</p>

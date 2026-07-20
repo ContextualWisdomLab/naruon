@@ -100,17 +100,3 @@
 **Vulnerability:** JWT decoding remained allowlisted but static analysis could not prove the accepted algorithm when `jwt.decode(..., algorithms=...)` received module-level variables.
 **Learning:** Security-sensitive decode boundaries should make accepted algorithms obvious to both runtime readers and static scanners.
 **Prevention:** Pass explicit hardcoded lists such as `algorithms=["HS256"]` and `algorithms=["RS256"]` at the decode call sites, and keep header preflight checks aligned with those exact values.
-## 2026-07-07 - URL-Encoded Open Redirect Bypass
-
-**Vulnerability:** The `toSafeReturnTo` function in `frontend/src/app/auth/callback/page.tsx` validated paths to ensure they didn't start with double-slashes (`//`) or backslashes to prevent open redirects. However, attackers could bypass this validation by URL-encoding the payload (e.g. `/%5C%5Cexample.com` or `/%2fexample.com`).
-**Learning:** Checking for traversal or open redirect payloads directly on raw URLs is insufficient, as the browser will decode and redirect to the encoded malicious payload anyway.
-**Prevention:** Always decode the URI component (`decodeURIComponent`) and validate the decoded string to ensure that encoded bypass payloads are caught.
-## 2025-02-20 - Webhook DNS Rebinding SSRF
-**Vulnerability:** The webhook feature (`backend/api/tools.py`) validated that URLs resolved to safe global IP addresses using `validate_webhook_url`, but then created a fresh `httpx.AsyncClient` that performed its own independent DNS resolution at execution time. This Time-of-Check to Time-of-Use (TOCTOU) gap allowed an attacker to rapidly change DNS records after validation but before execution, causing the application to send requests to internal network services (Server-Side Request Forgery).
-**Learning:** Checking hostnames or IPs before use is insufficient if the actual execution engine (HTTP client) resolves the hostname again. The underlying validation and execution must be perfectly coupled.
-**Prevention:** Always pin the underlying HTTP transport to the exact IP addresses that were validated. This was achieved using the `ValidatedHTTPSURLHost` and `build_pinned_https_async_client` components which override the connection layer to use the pre-resolved, safe IPs.
-
-## 2026-06-30 - XSS Vulnerability in DataLayout Component
-**Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
-**Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
-**Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.

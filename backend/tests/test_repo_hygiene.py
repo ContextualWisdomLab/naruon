@@ -50,7 +50,7 @@ def test_ollama_dockerfile_keeps_pulled_models_available_to_runtime_user():
 
     assert (
         "FROM ollama/ollama@sha256:"
-        "509fdf54e23bd50d87af646cb51c0a7a203d6a83cc4d6695b3b08c5be1c62c0a"
+        "f1a705f2bd113fb8d15f85f7c217f0dc5f6bebda6b0cc42b82c3ad165ffcb9dc"
         in dockerfile
     )
     assert "FROM ollama/ollama:latest\n" not in dockerfile
@@ -102,7 +102,7 @@ def test_backend_requirements_pin_ruff_for_deterministic_ci():
     requirements = (REPO_ROOT / "backend" / "requirements.txt").read_text()
 
     assert "\nruff\n" not in f"\n{requirements}\n"
-    assert "ruff==0.15.21" in requirements
+    assert "ruff==0.15.20" in requirements
 
 
 def test_compose_gateway_services_disable_privilege_escalation():
@@ -132,38 +132,16 @@ def test_infra_compose_services_use_read_only_hardening_anchor():
     ):
         assert f"  {service}:\n    <<: *service-hardening" in compose
 
-    assert "GF_SECURITY_ADMIN_PASSWORD=admin" not in compose
-    assert (
-        "GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:"
-        "?GRAFANA_ADMIN_PASSWORD is not set}"
-    ) in compose
-
 
 def test_screenshot_utility_allows_only_local_static_routes():
     screenshot_script = (REPO_ROOT / "frontend" / "screenshot.cjs").read_text()
 
     assert "SCREENSHOT_ORIGIN = 'http://127.0.0.1:3000'" in screenshot_script
-    assert "async function gotoScreenshotRoute(page, route)" in screenshot_script
-    assert "switch (route)" in screenshot_script
-    for route, url in {
-        "/": "http://127.0.0.1:3000/",
-        "/mail": "http://127.0.0.1:3000/mail",
-        "/calendar": "http://127.0.0.1:3000/calendar",
-        "/tasks": "http://127.0.0.1:3000/tasks",
-        "/projects": "http://127.0.0.1:3000/projects",
-        "/search": "http://127.0.0.1:3000/search",
-        "/data": "http://127.0.0.1:3000/data",
-        "/ai-hub": "http://127.0.0.1:3000/ai-hub",
-        "/security": "http://127.0.0.1:3000/security",
-        "/settings": "http://127.0.0.1:3000/settings",
-    }.items():
-        assert f"case '{route}':" in screenshot_script
-        assert f"page.goto('{url}', GOTO_OPTIONS)" in screenshot_script
-    assert "Unsupported screenshot route" in screenshot_script
-    assert "nosemgrep" not in screenshot_script
+    assert "const ALLOWED_ROUTES = new Set(SCREENSHOT_ROUTES);" in screenshot_script
+    assert "ALLOWED_ROUTES.has(route)" in screenshot_script
+    assert "new URL(route, SCREENSHOT_ORIGIN)" in screenshot_script
+    assert "url.origin !== SCREENSHOT_ORIGIN" in screenshot_script
     assert "console.error('Failed to capture route'" in screenshot_script
-    assert "page.goto(url" not in screenshot_script
-    assert "new URL(" not in screenshot_script
     assert "http://localhost:3000${route}" not in screenshot_script
     assert "console.error(`Failed to capture ${route}:`" not in screenshot_script
 

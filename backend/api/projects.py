@@ -20,14 +20,9 @@ from services.project_graph.project_registration import (
     list_project_candidates,
 )
 from services.project_graph.traceability import (
-    ProjectDecisionView,
     ProjectEvidence,
-    ProjectRelationSummary,
     ProjectTraceability,
-    ProjectTraceRelation,
-    get_project_decisions,
     get_project_evidence,
-    get_project_relation_summary,
     get_project_traceability,
 )
 from services.scopeweave_client import ScopeweaveConfigError, ScopeweavePushError
@@ -94,43 +89,11 @@ class ProjectTraceEdgeResponse(BaseModel):
     citation_bundle: list[ProjectCitationResponse]
 
 
-class ProjectTraceRelationEndpointResponse(BaseModel):
-    object_uid: str
-    object_type: str
-    title: str
-
-
-class ProjectTraceRelationResponse(BaseModel):
-    relation_uid: str
-    relation_type: str
-    source: ProjectTraceRelationEndpointResponse
-    target: ProjectTraceRelationEndpointResponse
-    confidence: float
-    source_segment_uids: list[str]
-    citation_bundle: list[ProjectCitationResponse]
-
-
 class ProjectTraceabilityResponse(BaseModel):
     project_uid: str
     candidate: ProjectCandidateResponse
     objects: list[ProjectTraceObjectResponse]
     edges: list[ProjectTraceEdgeResponse]
-    relations: list[ProjectTraceRelationResponse]
-
-
-class ProjectRelationTypeSummaryResponse(BaseModel):
-    relation_type: str
-    relation_count: int
-    grounded_relation_count: int
-    source_object_types: list[str]
-    target_object_types: list[str]
-
-
-class ProjectRelationSummaryResponse(BaseModel):
-    project_uid: str
-    relation_count: int
-    grounded_relation_count: int
-    relation_types: list[ProjectRelationTypeSummaryResponse]
 
 
 class ProjectEvidenceResponse(BaseModel):
@@ -142,24 +105,6 @@ class ProjectEvidenceResponse(BaseModel):
     status_code: str
     confidence: float
     citation_bundle: list[ProjectCitationResponse]
-    relations: list[ProjectTraceRelationResponse]
-
-
-class ProjectDecisionRecordResponse(BaseModel):
-    object_uid: str
-    title: str
-    summary: str
-    status_code: str
-    confidence: float
-    citation_bundle: list[ProjectCitationResponse]
-    relations: list[ProjectTraceRelationResponse]
-
-
-class ProjectDecisionViewResponse(BaseModel):
-    project_uid: str
-    decision_count: int
-    grounded_decision_count: int
-    decisions: list[ProjectDecisionRecordResponse]
 
 
 class ProjectPromoteRequest(BaseModel):
@@ -269,46 +214,6 @@ async def get_project_traceability_endpoint(
     except ProjectGraphNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _traceability_response(traceability)
-
-
-@router.get(
-    "/{project_uid}/relations/summary",
-    response_model=ProjectRelationSummaryResponse,
-)
-async def get_project_relation_summary_endpoint(
-    project_uid: str,
-    auth_context: AuthContext = Depends(get_auth_context),
-    db: AsyncSession = Depends(get_db),
-):
-    try:
-        summary = await get_project_relation_summary(
-            db,
-            scope=_project_scope(auth_context),
-            project_uid=project_uid,
-        )
-    except ProjectGraphNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _relation_summary_response(summary)
-
-
-@router.get(
-    "/{project_uid}/decisions",
-    response_model=ProjectDecisionViewResponse,
-)
-async def get_project_decisions_endpoint(
-    project_uid: str,
-    auth_context: AuthContext = Depends(get_auth_context),
-    db: AsyncSession = Depends(get_db),
-):
-    try:
-        decisions = await get_project_decisions(
-            db,
-            scope=_project_scope(auth_context),
-            project_uid=project_uid,
-        )
-    except ProjectGraphNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _decision_view_response(decisions)
 
 
 @router.get(
@@ -432,30 +337,6 @@ def _candidate_response(candidate: ProjectCandidateSummary) -> ProjectCandidateR
     )
 
 
-def _relation_response(
-    relation: ProjectTraceRelation,
-) -> ProjectTraceRelationResponse:
-    return ProjectTraceRelationResponse(
-        relation_uid=relation.relation_uid,
-        relation_type=relation.relation_type,
-        source=ProjectTraceRelationEndpointResponse(
-            object_uid=relation.source.object_uid,
-            object_type=relation.source.object_type,
-            title=relation.source.title,
-        ),
-        target=ProjectTraceRelationEndpointResponse(
-            object_uid=relation.target.object_uid,
-            object_type=relation.target.object_type,
-            title=relation.target.title,
-        ),
-        confidence=relation.confidence,
-        source_segment_uids=list(relation.source_segment_uids),
-        citation_bundle=[
-            _citation_response(citation) for citation in relation.citation_bundle
-        ],
-    )
-
-
 def _traceability_response(
     traceability: ProjectTraceability,
 ) -> ProjectTraceabilityResponse:
@@ -493,56 +374,6 @@ def _traceability_response(
             )
             for edge in traceability.edges
         ],
-        relations=[
-            _relation_response(relation) for relation in traceability.relations
-        ],
-    )
-
-
-def _relation_summary_response(
-    summary: ProjectRelationSummary,
-) -> ProjectRelationSummaryResponse:
-    return ProjectRelationSummaryResponse(
-        project_uid=summary.project_uid,
-        relation_count=summary.relation_count,
-        grounded_relation_count=summary.grounded_relation_count,
-        relation_types=[
-            ProjectRelationTypeSummaryResponse(
-                relation_type=relation_type.relation_type,
-                relation_count=relation_type.relation_count,
-                grounded_relation_count=relation_type.grounded_relation_count,
-                source_object_types=list(relation_type.source_object_types),
-                target_object_types=list(relation_type.target_object_types),
-            )
-            for relation_type in summary.relation_types
-        ],
-    )
-
-
-def _decision_view_response(
-    view: ProjectDecisionView,
-) -> ProjectDecisionViewResponse:
-    return ProjectDecisionViewResponse(
-        project_uid=view.project_uid,
-        decision_count=view.decision_count,
-        grounded_decision_count=view.grounded_decision_count,
-        decisions=[
-            ProjectDecisionRecordResponse(
-                object_uid=decision.object_uid,
-                title=decision.title,
-                summary=decision.summary,
-                status_code=decision.status_code,
-                confidence=decision.confidence,
-                citation_bundle=[
-                    _citation_response(citation)
-                    for citation in decision.citation_bundle
-                ],
-                relations=[
-                    _relation_response(relation) for relation in decision.relations
-                ],
-            )
-            for decision in view.decisions
-        ],
     )
 
 
@@ -558,7 +389,6 @@ def _evidence_response(evidence: ProjectEvidence) -> ProjectEvidenceResponse:
         citation_bundle=[
             _citation_response(citation) for citation in evidence.citation_bundle
         ],
-        relations=[_relation_response(relation) for relation in evidence.relations],
     )
 
 

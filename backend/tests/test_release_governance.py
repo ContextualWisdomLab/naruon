@@ -163,7 +163,7 @@ def test_backend_runtime_toolchain_uses_image_scan_clean_security_pins() -> None
     assert "asyncpg==0.31.0" in requirements
     assert "tiktoken==0.13.0" in requirements
     assert "protobuf==7.35.1" in requirements
-    assert "setuptools==83.0.0" in requirements
+    assert "setuptools==82.0.1" in requirements
     assert "wheel==0.47.0" in requirements
     assert "opentelemetry-api==1.43.0" in requirements
     assert "opentelemetry-instrumentation-fastapi==0.64b0" in requirements
@@ -303,31 +303,24 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
 
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
-        "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
+        "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"
     )
-    # Governance/security workflows (codeql, dependency-review, scorecard,
-    # trivy) are centralized in the org-level ContextualWisdomLab/.github
-    # required workflows and are intentionally not duplicated locally. Only the
-    # functional workflows that remain in this repository are asserted here.
     hardened_workflows = [
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
+        ".github/workflows/codeql.yml",
+        ".github/workflows/dependency-review.yml",
         ".github/workflows/docker-publish.yml",
+        ".github/workflows/mail-smoke.yml",
         ".github/workflows/pr-governance.yml",
+        ".github/workflows/scorecard.yml",
+        ".github/workflows/trivy.yml",
     ]
 
     for workflow_path in hardened_workflows:
         workflow = read_repo_text(workflow_path)
         assert harden_runner_ref in workflow
         assert "egress-policy: audit" in workflow
-
-    # mail-smoke seeds live mailbox/DAV credentials on a self-hosted runner, so
-    # it is hardened one level further: egress is blocked to an allowlist, not
-    # merely audited, so checked-out code cannot exfiltrate the secrets.
-    mail_smoke_workflow = read_repo_text(".github/workflows/mail-smoke.yml")
-    assert harden_runner_ref in mail_smoke_workflow
-    assert "egress-policy: block" in mail_smoke_workflow
-    assert "allowed-endpoints:" in mail_smoke_workflow
 
     dependency_review_workflow = read_repo_text(
         ".github/workflows/dependency-review.yml"
@@ -366,13 +359,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "rev: v4.4.0" in pre_commit
     assert "https://github.com/pylint-dev/pylint" in pre_commit
     assert "rev: v2.17.2" in pre_commit
-
-
-def test_actionlint_recognizes_the_mail_egress_runner_label() -> None:
-    actionlint_config = read_repo_text(".github/actionlint.yaml")
-
-    assert "self-hosted-runner:" in actionlint_config
-    assert "- mail-egress" in actionlint_config
 
 
 def test_github_actions_unpinned_major_refs_failure(
@@ -436,11 +422,100 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     assert "continue-on-error: true" not in workflow
 
 
-# CodeQL, Scorecard, and Trivy code-scanning workflows are centralized in the
-# org-level ContextualWisdomLab/.github required workflows. Their local copies
-# were removed to stop duplicate runs and duplicate SARIF uploads, so the
-# repository-level assertions that previously guarded those local files no
-# longer apply here and are enforced centrally instead.
+def test_codeql_workflow_can_read_security_events_without_uploading_sarif() -> None:
+    workflow = read_repo_text(".github/workflows/codeql.yml")
+
+    assert "permissions:\n  contents: read\n  security-events: read" in workflow
+    assert (
+        "    permissions:\n      actions: read\n      contents: read\n      security-events: read"
+        in workflow
+    )
+    assert "upload: never" in workflow
+    assert "security-events: write" not in workflow
+
+
+def test_required_code_scanning_workflows_upload_scorecard_and_trivy_sarif() -> None:
+    scorecard_workflow = read_repo_text(".github/workflows/scorecard.yml")
+    trivy_workflow = read_repo_text(".github/workflows/trivy.yml")
+
+    for workflow in (scorecard_workflow, trivy_workflow):
+        assert "pull_request:" in workflow
+        assert "push:" in workflow
+        assert "- develop" in workflow
+        assert "- master" in workflow
+        assert (
+            "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0"
+            in workflow
+        )
+        assert "security-events: write" in workflow
+        assert "continue-on-error: true" not in workflow
+        assert (
+            "github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4"
+            in workflow
+        )
+
+    assert (
+        "ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3"
+        in scorecard_workflow
+    )
+    assert "permissions:\n  contents: read\n\njobs:" in scorecard_workflow
+    assert "permissions:\n  contents: read\n\njobs:" in trivy_workflow
+    assert (
+        "    permissions:\n      actions: read\n      contents: read\n      id-token: write\n      security-events: write"
+        in scorecard_workflow
+    )
+    assert (
+        "    permissions:\n      contents: read\n      security-events: write"
+        in trivy_workflow
+    )
+    assert "results_format: sarif" in scorecard_workflow
+    assert "Restore Scorecard SARIF ownership" in scorecard_workflow
+    assert (
+        'sudo chown "$(id -u):$(id -g)" scorecard-results.sarif' in scorecard_workflow
+    )
+    assert "chmod u+rw scorecard-results.sarif" in scorecard_workflow
+    assert "Preserve Scorecard SARIF categories" in scorecard_workflow
+    assert (
+        "python scripts/ci/ensure_scorecard_sarif_categories.py scorecard-results.sarif"
+        in scorecard_workflow
+    )
+    assert "category: scorecard" in scorecard_workflow
+    assert (
+        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        in scorecard_workflow
+    )
+    assert (
+        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
+        in scorecard_workflow
+    )
+    assert (
+        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        in scorecard_workflow
+    )
+
+    assert (
+        "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0"
+        in trivy_workflow
+    )
+    assert "format: sarif" in trivy_workflow
+    assert "category: trivy" in trivy_workflow
+    assert "trivy-config: trivy.yaml" in trivy_workflow
+    assert "Run Trivy findings summary" in trivy_workflow
+    assert 'trusted_registries:\n    - "ghcr.io"\n    - "docker.io"' in read_repo_text(
+        ".github/trivy/trusted-registries.yaml"
+    )
+    assert (
+        "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        in trivy_workflow
+    )
+    assert (
+        "ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}"
+        in trivy_workflow
+    )
+    assert (
+        "sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        in trivy_workflow
+    )
 
 
 def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
@@ -571,27 +646,27 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true" in workflow
     assert (
         workflow.count(
-            "docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0"
+            "docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0"
         )
         == 2
     )
     assert (
         workflow.count(
-            "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0"
+            "docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0"
         )
         == 2
     )
     assert (
-        "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0"
+        "docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0"
         in workflow
     )
     assert (
-        "docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0"
+        "docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0"
         in workflow
     )
     assert (
         workflow.count(
-            "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0"
+            "docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0"
         )
         == 2
     )
@@ -929,8 +1004,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     combined = f"{workflow}\n{gate_script}"
 
     assert "pull_request_target:" in workflow
-    assert "pull_request_review:" in workflow
-    assert "types: [submitted, dismissed]" in workflow
     assert "workflow_run:" in workflow
     assert "check_run:" in workflow
     assert "workflow_dispatch:" in workflow
@@ -957,11 +1030,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "CHECK_RUN_PR_NUMBER" in workflow
     assert "headRefOid" in gate_script
     assert "mergeStateStatus" in gate_script
-    assert "Merge state lookup attempt" in gate_script
-    assert "Merge state is still UNKNOWN after 4 attempts" in gate_script
-    assert "PR state became %s during merge-state refresh" in gate_script
-    assert "PR head changed during gate evaluation" in gate_script
-    assert "skipping stale gate publication" in gate_script
     assert "gh pr checks" in gate_script and "--required" in gate_script
     assert "no required checks reported" in gate_script
     assert "no legacy required status contexts reported" in gate_script
@@ -974,7 +1042,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "coderabbitai" in gate_script
     assert "/issues/${PR_NUMBER}/comments" in gate_script
     assert "COMMENT_MARKER" in gate_script
-    assert "no current blocking failures remain" in gate_script
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script
@@ -986,8 +1053,7 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "--admin" not in combined
     assert "contents: write" not in combined
     assert "continue-on-error: true" not in combined
-    assert "/dismissals" not in combined.lower()
-    assert "dismisspullrequestreview" not in combined.lower()
+    assert "dismiss" not in combined.lower()
 
 
 def test_20b_kpi_roi_claim_gate_separates_measurements_from_assumptions() -> None:

@@ -1,102 +1,5 @@
 # AGENTS.md
 
-<!-- BEGIN cwl-agent-guidance -->
-## Agent guidance (CWL governance)
-
-This section applies to every agent (Claude, Codex, Cursor, opencode, …) working
-in this repo.
-
-### Security Scan gate
-
-- Every PR runs the central **Security Scan** required gate: `osv-scan` +
-  `dependency-review` (diff-scoped) and `trivy-fs` (repo-wide, CRITICAL/HIGH,
-  fixable only). It runs on every PR base branch, **including stacked PRs**.
-- A failing **`trivy-fs` is a REAL finding, not a flake.** Read the job log — it
-  prints each finding's rule id / severity / file — or open the run's SARIF
-  results. Then **remediate**: bump the vulnerable dependency (this repo pins
-  Python deps in `requirements-*.txt`), fix the `Dockerfile` /
-  `docker-compose.*.yml` / `k8s/*.yaml` misconfig, or add a narrow, documented
-  `.trivyignore` / `.trivyignore.yaml` entry for a genuine false positive. Never
-  weaken, `continue-on-error`, or disable the gate.
-- **Worked example (currently blocking PRs here):** KSV-0118 (`runAsNonRoot`
-  unset) and KSV-0014 (`readOnlyRootFilesystem` unset), both HIGH k8s
-  misconfigs, fire on `k8s/*.yaml` because the Deployments/StatefulSet have no
-  `securityContext`. Fix by adding the container `securityContext`
-  (`runAsNonRoot: true`, `readOnlyRootFilesystem: true`, plus writable volume
-  mounts as needed) — do not ignore it.
-- A local `trivy` scan with a stale DB misses findings: run
-  `trivy --download-db-only` first, and scan the **merge ref**, not just the PR
-  head.
-- The org `code_scanning` ruleset is intentionally **CodeQL-only** (multiple
-  code-scanning tools can't converge on one PR ref). Gating is enforced by the
-  Security Scan **job result**, not by that rule — do **not** add Trivy,
-  Scorecard, or other tools to the `code_scanning` rule.
-
-### Code exploration
-
-- This repo has no `.codegraph/` index, so use normal search (grep/find/ripgrep).
-  If a `.codegraph/` index is later added at the repo root, prefer CodeGraph
-  (`codegraph explore "<query>"`, or the code-review-graph MCP tools) before
-  grep/find when understanding or locating code — it surfaces callers, callees,
-  and impact that text search misses.
-
-### Config & secrets (KV, not env)
-
-- **Org rule:** do **not** read config/secrets via `os.getenv()` / raw
-  environment variables at runtime. Read them from a KV / credential registry.
-  Org Actions secrets (e.g. `OPENAI_API_KEY`) flow **into** the KV via a
-  bootstrap/CI step; runtime reads from the KV — env is only transport into the
-  KV, never the runtime source. The reference implementation is
-  xtrmLLMBatchPython's pgcrypto-encrypted Postgres credential registry
-  (`get_credential(name)`); reuse that pattern (a DB-backed KV is fine) unless a
-  dedicated KV is adopted.
-- **Applies here:** this service authenticates to external systems (OpenAI, plus
-  SMTP/IMAP/POP3 mail) and holds signing/encryption secrets, so new config and
-  credentials belong in the registry, not scattered `os.getenv` reads.
-- **Already aligned — keep it this way:** per-tenant provider and mail
-  credentials (OpenAI keys, mailbox passwords) are stored in the DB-backed,
-  Fernet-encrypted tenant credential store and read from there at runtime (see
-  `backend/services/llm_provider_selection.py`, `backend/api/tenant_config.py`),
-  not from environment variables. Add any new tenant/app secret to that store.
-- **Known deviation to migrate:** the bootstrap keys `ENCRYPTION_KEY` and
-  `AUTH_SESSION_HMAC_SECRET` are still read from the environment at runtime via
-  pydantic-settings (`backend/core/config.py`). Treat these as the root-of-trust
-  that unlocks the registry and keep env strictly as bootstrap transport; do not
-  add further `os.getenv` secret reads, and migrate toward the KV pattern as it
-  is adopted.
-
-### This repo's role in the ecosystem
-
-- **This repo (naruon) is the ECOSYSTEM HUB:** email/PIM that DOM-decomposes
-  emails and files (PDF via the newsdom-api sidecar) into a persisted
-  content-graph + project-graph knowledge graph in Postgres, and composes the
-  ecosystem services below.
-- The org is an ecosystem around **naruon** (the hub: email/PIM that
-  DOM-decomposes emails/files into a persisted knowledge graph). Its components
-  are each a **standalone program that must ALSO work as a git submodule**,
-  grown separately and together: **waf-ids-ai-soc** = WAF/IDS/AI SOC/LB/APIM;
-  **clearfolio** = document viewer; **pg-erd-cloud** = ERD tool;
-  **contextual-orchestrator** = LLM cost/perf/upstream-LB gateway (beyond
-  LiteLLM); **codec-carver** = STT/omni-modal speech-video codec;
-  **fast-mlsirm** = LLM-as-a-Judge calibration + evaluation-item quality (uses
-  aFIPC FIPC + kaefa item-fit); **feelanet-adfs** = passwordless SSO
-  (OIDC/SCIM/ADFS/LDAP/FIDO2/OAuth2.1, eliminate passwords); **newsdom-api** =
-  PDF→DOM sidecar; **semantic-data-portal** = upper ontology/catalog/governance
-  plane with its own graph engine.
-
-### Research grounding (attach paper PDFs)
-
-- **Org rule:** substantive feature or process PRs should find the relevant
-  academic papers and **commit their PDFs into the PR** (e.g. a `docs/papers/`
-  or `references/` directory) with full citations, **respecting copyright** —
-  attach the PDF only when redistribution is permissible; otherwise cite, link,
-  and summarize instead.
-- **Example for this repo's domain:** a PR touching the content/project
-  knowledge-graph pipeline (DOM decomposition, entity/relation extraction,
-  grounded graph retrieval) should ground itself in the relevant layout-analysis
-  and knowledge-graph / grounded-retrieval literature.
-<!-- END cwl-agent-guidance -->
-
 ## Release governance defaults
 
 - GitHub Actions used by governed workflows must be pinned to full commit SHAs
@@ -181,22 +84,12 @@ in this repo.
 - Follow `docs/development/merge-gate-policy.md` for PR gate interpretation.
 - PR Governance must stay metadata-only: no PR-head checkout, no admin merge, no
   review dismissal, and no security-check suppression.
-- Pending/queued checks, pending CodeRabbit evidence, and a missing structured
-  OpenCode fallback approval are wait states, not hard failures. Hard blockers
-  should be reported through the idempotent
+- Pending/queued checks and pending CodeRabbit evidence are wait states, not hard
+  failures. Hard blockers should be reported through the idempotent
   `<!-- pr-governance:metadata-gate -->` comment path.
-- CodeRabbit gating is evidence-preferred. When the current head has CodeRabbit
-  check-run evidence, pending evidence is a wait state and blocking evidence is
-  a blocker. When no CodeRabbit check-run exists, require an exact-current-head
-  `APPROVED` review from the `opencode-agent` GitHub App whose body names the
-  head SHA and contains structured adversarial validation with `status=passed`
-  and at least two falsified probes. Reject stale-head, `github-actions`, and
-  insufficient-probe approvals.
-- The GitHub check-runs API silently refuses to move a completed check-run back
-  to a non-completed status (the PATCH returns 200 but the run stays
-  completed), which pins a stale failure to the head. Gate publishers must
-  create a fresh check-run for completed→non-completed transitions instead of
-  patching the completed one.
+- Missing current-head CodeRabbit evidence is a wait state until bounded polling
+  or authoritative skip/review evidence resolves it; do not post a hard blocker
+  only because the current head has not been reviewed yet.
 - OpenCode Agent approvals must be gated on current-head GitHub Checks. If a
   completed check run or status context failed, or the check rollup cannot be
   verified, the OpenCode review must request changes or explain the verification
@@ -251,11 +144,6 @@ in this repo.
   are fixed.
 - `STARTUP_FAILURE` in required PR governance/check metadata is a hard blocker
   and should use the same idempotent metadata-gate comment path.
-- Required-check state handling fails closed: only explicit pass states
-  (success, pass, skipped, neutral) satisfy the gate and only explicit pending
-  states wait; any unrecognized state is a blocker. Gate blocker comments
-  publish sanitized names and generic error text — raw CLI diagnostics belong
-  in the workflow run log, never in PR comments.
 - Trusted-base governance materialization must tolerate transient GitHub API
   truncation such as `unexpected end of JSON input` with bounded retries and
   archive validation; do not convert that infrastructure flake into a CodeRabbit
@@ -576,45 +464,6 @@ in this repo.
   signal events before the UI claims durable heartbeat evidence. Do not expose
   runner registration tokens, path tokens, or raw provider credentials in event
   ids, details, logs, Settings mocks, or E2E fixtures.
-- A `ForeignKey` column alone does NOT guarantee SQLAlchemy flush ordering.
-  The unit of work orders cross-mapper INSERTs only through
-  `relationship()`-derived dependencies, so a parent+child pair added in one
-  `session.add_all([...]); commit()` without a relationship can emit the child
-  INSERT first and raise `ForeignKeyViolationError` on real PostgreSQL (SQLite
-  and mocked sessions hide it). Every FK table pair must have a `relationship()`
-  in at least one direction; `tests/test_model_relationship_integrity.py` guards
-  this. Do not "fix" the symptom by flushing parents manually in one seeding
-  helper while leaving the model relationship missing.
-- `@pytest.mark.postgres` smoke tests exercise the real schema, so raw-SQL
-  seeding must match the live models exactly: use the current table names
-  (`email_records`, not `emails`), the correct `RETURNING` column per table,
-  and include every `NOT NULL` column the ORM default would have filled
-  (`created_at`, `observed_at`, `parse_content_type`, `parser_key`). Under
-  asyncpg, `INSERT ... SELECT`/`UNION` parameters default to `text`, so cast
-  integer FK params explicitly (`CAST(:email_id AS INTEGER)`).
-- Postgres smoke seeding of `EncryptedString` columns
-  (`credentials_encrypted`, provider `api_key`, runner tokens) must set a
-  Fernet `ENCRYPTION_KEY` for the test (monkeypatch `settings.ENCRYPTION_KEY`)
-  and store `get_fernet().encrypt(...)` output, never plaintext placeholders —
-  the API read path decrypts and fails closed without a key.
-- Org-scoped listing endpoints accumulate rows across smoke runs on a shared
-  database. Smoke tests that assert an exact count must use a unique
-  `organization_id` per run (e.g. `f"org-...-{uuid.uuid4().hex[:12]}"`), not a
-  hardcoded `"org-acme"`, or the count drifts as history builds up.
-- Every `create_async_engine` in a test must be `await engine.dispose()`d on all
-  paths (including skips). A leaked pooled connection surfaces later as a GC
-  `ResourceWarning`, which fails an unrelated downstream test under CI's
-  `PYTHONWARNINGS=error`.
-- Model column defaults must be timezone-aware: use
-  `default=lambda: datetime.datetime.now(datetime.timezone.utc)`, never the
-  deprecated `datetime.datetime.utcnow`, whose `DeprecationWarning` is fatal
-  under `PYTHONWARNINGS=error`.
-- Provider-backed AI Hub agent cards and the security access surface are
-  admin/authoritative-verifier gated; HMAC bearer sessions cannot carry
-  tenant-admin roles or satisfy `_require_authoritative_workspace_scope`. Smoke
-  tests must assert the deny-first boundary (member persona sees no agent cards)
-  or authenticate through an authoritative-verifier `AuthContext` override —
-  do not weaken the endpoint to make the test pass.
 
 ## Development environment and tooling defaults
 

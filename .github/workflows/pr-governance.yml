@@ -3,8 +3,6 @@ name: PR Governance
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
-  pull_request_review:
-    types: [submitted, dismissed]
   workflow_run:
     workflows:
       - Application CI
@@ -27,8 +25,8 @@ permissions:
   contents: read
   checks: read
   statuses: read
-  pull-requests: read
-  issues: read
+  pull-requests: write
+  issues: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.check_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}
@@ -36,18 +34,11 @@ concurrency:
 
 jobs:
   governance:
-    name: PR governance metadata controller
+    name: metadata-only gate evaluation
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-      statuses: read
-      pull-requests: write
-      issues: write
     if: >-
       ${{
         github.event_name == 'pull_request_target' ||
-        github.event_name == 'pull_request_review' ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number != '') ||
         (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0].number != '') ||
         (
@@ -62,7 +53,7 @@ jobs:
       }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
