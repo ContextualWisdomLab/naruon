@@ -13,7 +13,6 @@ import hashlib
 # email header processing, yielding a measurable speedup when handling long reference lists.
 REFERENCE_PATTERN = re.compile(r"<([^>]+)>")
 
-
 def generate_email_fingerprint(
     subject: str | None,
     date_str: str | None,
@@ -49,14 +48,11 @@ def extract_reference_ids(value: str | None) -> list[str]:
     if not refs:
         refs = str(value).split()
 
-    normalized_refs: list[str] = []
-    seen: set[str] = set()
-    for ref in refs:
-        normalized = normalize_message_id(ref)
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            normalized_refs.append(normalized)
-    return normalized_refs
+    # ⚡ Bolt Optimization: Use dict.fromkeys() to maintain header order while deduplicating.
+    # This avoids Python-level loop overhead and explicit set() updates, improving performance.
+    return list(dict.fromkeys(
+        normalized for ref in refs if (normalized := normalize_message_id(ref))
+    ))
 
 
 async def _find_existing_thread_ids(
@@ -69,7 +65,7 @@ async def _find_existing_thread_ids(
     if not message_ids:
         return {}
 
-    # ⚡ Bolt Optimization: Use dict.fromkeys() to maintain order and deduplicate faster
+    # ⚡ Bolt Optimization: Leverage Python 3.7+ dict insertion order to deduplicate while maintaining order.
     target_ids_dict: dict[str, None] = {}
     for message_id in message_ids:
         target_ids_dict[message_id] = None
@@ -109,14 +105,15 @@ async def assign_thread_id(
     in_reply_to = normalize_message_id(email_data.get("in_reply_to"))
     references = extract_reference_ids(email_data.get("references"))
 
-    # extract_reference_ids() already returns unique values, so only the optional
-    # in-reply-to value can be duplicated. Avoid building a second dict/set here.
-    existing_candidates: list[str] = []
+    # ⚡ Bolt Optimization: Use dict.fromkeys() to maintain order while deduplicating in O(N).
+    # This eliminates explicit seen set and loop management overhead.
     if in_reply_to:
-        existing_candidates.append(in_reply_to)
-    for ref in references:
-        if ref != in_reply_to:
-            existing_candidates.append(ref)
+        refs = [in_reply_to]
+        if references:
+            refs.extend(references)
+        existing_candidates = list(dict.fromkeys(refs))
+    else:
+        existing_candidates = list(dict.fromkeys(references)) if references else []
 
     if existing_candidates:
         thread_ids_by_message_id = await _find_existing_thread_ids(

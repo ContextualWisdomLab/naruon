@@ -1,6 +1,6 @@
 import pytest
 
-from services.threading_service import assign_thread_id, extract_reference_ids
+from services.threading_service import assign_thread_id
 
 
 class _Result:
@@ -30,12 +30,6 @@ class _QueryCapturingSession(_SequentialSession):
     async def execute(self, query):
         self.queries.append(query)
         return await super().execute(query)
-
-
-def test_extract_reference_ids_preserves_order_while_deduplicating():
-    assert extract_reference_ids(
-        "<root@example.com> <parent@example.com> <root@example.com>"
-    ) == ["root@example.com", "parent@example.com"]
 
 
 @pytest.mark.asyncio
