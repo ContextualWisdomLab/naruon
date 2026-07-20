@@ -164,9 +164,7 @@ class LimitAwareMockSession(MockSession):
             # Emulate the SQL window query: newest head row per thread,
             # ordered by date desc, LIMIT applied to heads (not raw rows).
             heads: dict[str, object] = {}
-            for item in sorted(
-                self.items, key=lambda email: email.date, reverse=True
-            ):
+            for item in sorted(self.items, key=lambda email: email.date, reverse=True):
                 key = item.thread_id or item.message_id
                 heads.setdefault(key, item)
             rows = list(heads.values())
@@ -1158,9 +1156,7 @@ async def test_import_email_files_uses_raw_sha_for_exact_no_id_duplicate(
     assert data["skipped_count"] == 1
     assert data["provider_write_executed"] is False
     assert data["items"][0]["dedupe_review_required"] is True
-    assert data["items"][0]["dedupe_reason_codes"] == [
-        "message_id_evidence_missing"
-    ]
+    assert data["items"][0]["dedupe_reason_codes"] == ["message_id_evidence_missing"]
     assert data["items"][1]["status"] == "skipped_duplicate"
     assert data["items"][1]["dedupe_review_required"] is False
     assert data["items"][1]["dedupe_reason_codes"] == []
@@ -1201,10 +1197,13 @@ async def test_import_email_files_records_effective_identity_for_empty_message_i
             app.dependency_overrides[get_db] = previous_db_override
 
     assert response.status_code == 200
+    data = response.json()
+    assert data["items"][0]["dedupe_review_required"] is True
+    assert data["items"][0]["dedupe_reason_codes"] == ["message_id_evidence_invalid"]
     assert session.added[0].message_id.startswith("import-")
     assert session.added[0].source_lineage_json["message_identity"] == {
         "selected_source": "raw_content_sha256",
-        "embedded_status": "embedded",
+        "embedded_status": "invalid",
     }
 
 
@@ -1267,9 +1266,7 @@ async def test_import_email_files_reports_complete_source_fingerprint_match(
     data = response.json()
     assert data["skipped_count"] == 1
     assert data["provider_write_executed"] is False
-    assert data["items"][0]["dedupe_match_reason"] == (
-        "complete_source_fingerprint"
-    )
+    assert data["items"][0]["dedupe_match_reason"] == "complete_source_fingerprint"
     assert data["items"][0]["dedupe_review_required"] is False
     assert data["items"][0]["dedupe_reason_codes"] == []
 
@@ -1389,6 +1386,13 @@ async def test_import_email_files_extracts_eml_from_zip(
 async def test_import_email_files_extracts_eml_from_mbox(client: AsyncClient):
     from db.session import get_db
 
+    source_message = _sample_eml_bytes(
+        message_id="<mbox-source@example.com>",
+        subject="MBOX source",
+    ).replace(
+        b"Subject: MBOX source\r\n",
+        b"Subject: MBOX source\r\nX-Weird:  a  b  \r\n",
+    )
     session = ImportRecordingSession([])
     previous_db_override = app.dependency_overrides.get(get_db)
     app.dependency_overrides[get_db] = lambda: session
@@ -1400,12 +1404,7 @@ async def test_import_email_files_extracts_eml_from_mbox(client: AsyncClient):
                     "files",
                     (
                         "mailbox-export.mbox",
-                        _mbox_with_eml_bytes(
-                            _sample_eml_bytes(
-                                message_id="<mbox-source@example.com>",
-                                subject="MBOX source",
-                            )
-                        ),
+                        _mbox_with_eml_bytes(source_message),
                         "application/mbox",
                     ),
                 )
@@ -1425,6 +1424,10 @@ async def test_import_email_files_extracts_eml_from_mbox(client: AsyncClient):
     assert data["items"][0]["filename"] == "mailbox-export.mbox:message_000001.eml"
     assert session.added[0].message_id == "mbox-source@example.com"
     assert session.added[0].subject == "MBOX source"
+    expected_member_bytes = source_message.replace(b"\r\n", b"\n")
+    assert session.added[0].source_lineage_json["raw_content_sha256"] == (
+        hashlib.sha256(expected_member_bytes).hexdigest()
+    )
 
 
 @pytest.mark.asyncio
@@ -2583,6 +2586,7 @@ def test_email_owner_filters():
         == "email_records.organization_id IS NULL"
     )
 
+
 def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
     """
     Test to guarantee 100% coverage on the bolt performance optimization in
@@ -2599,7 +2603,7 @@ def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
         sender="test@test.com",
         recipients="test2@test.com",
         subject="Subject",
-        body="Body"
+        body="Body",
     )
 
     candidates = [candidate]

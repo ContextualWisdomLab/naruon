@@ -160,7 +160,7 @@ class EmailMessageIdentityLineage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     selected_source: Literal["embedded_message_id", "raw_content_sha256"]
-    embedded_status: Literal["embedded", "missing"]
+    embedded_status: Literal["embedded", "missing", "invalid"]
 
 
 class EmailSourceLineage(BaseModel):

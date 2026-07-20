@@ -1,7 +1,6 @@
 import asyncio
 import urllib.parse
 import datetime
-from email import policy as email_policy
 import hashlib
 import logging
 import mailbox
@@ -217,19 +216,15 @@ def _message_identity_for(
     parsed: EmailData, content: bytes
 ) -> tuple[str, DedupeMatchReason]:
     embedded_message_id = normalize_message_id(parsed.get("message_id"))
-    if (
-        parsed.get("message_id_evidence_status") == "embedded"
-        and embedded_message_id
-    ):
+    if parsed.get("message_id_evidence_status") == "embedded" and embedded_message_id:
         return embedded_message_id, "embedded_message_id"
     return _fallback_message_id(content), "raw_content_sha256"
 
 
 def _email_fingerprint(parsed: EmailData) -> str | None:
     source_date = parsed.get("source_date")
-    if (
-        parsed.get("date_evidence_status") != "parsed"
-        or not isinstance(source_date, datetime.datetime)
+    if parsed.get("date_evidence_status") != "parsed" or not isinstance(
+        source_date, datetime.datetime
     ):
         return None
     return strong_email_fingerprint(
@@ -242,9 +237,8 @@ def _email_fingerprint(parsed: EmailData) -> str | None:
 
 def _legacy_email_fingerprint(parsed: EmailData) -> str | None:
     source_date = parsed.get("source_date")
-    if (
-        parsed.get("date_evidence_status") != "parsed"
-        or not isinstance(source_date, datetime.datetime)
+    if parsed.get("date_evidence_status") != "parsed" or not isinstance(
+        source_date, datetime.datetime
     ):
         return None
     sender = parsed.get("sender")
@@ -283,7 +277,10 @@ def _dedupe_review_reason_codes(
     ):
         reason_codes.append("date_evidence_unavailable")
 
-    if parsed.get("message_id_evidence_status") != "embedded":
+    message_id_evidence_status = parsed.get("message_id_evidence_status")
+    if message_id_evidence_status == "invalid":
+        reason_codes.append("message_id_evidence_invalid")
+    elif message_id_evidence_status != "embedded":
         reason_codes.append("message_id_evidence_missing")
     if fingerprint is None:
         reason_codes.append("complete_source_fingerprint_unavailable")
@@ -314,9 +311,7 @@ def _source_lineage_for(
             "selected_value": (
                 _utc_datetime(source_date).isoformat() if has_embedded_date else None
             ),
-            "selected_source": (
-                "embedded_date_header" if has_embedded_date else None
-            ),
+            "selected_source": ("embedded_date_header" if has_embedded_date else None),
             "embedded_status": (
                 date_evidence_status
                 if date_evidence_status in {"parsed", "missing", "invalid"}
@@ -331,8 +326,8 @@ def _source_lineage_for(
                 else "raw_content_sha256"
             ),
             "embedded_status": (
-                "embedded"
-                if message_id_evidence_status == "embedded"
+                message_id_evidence_status
+                if message_id_evidence_status in {"embedded", "missing", "invalid"}
                 else "missing"
             ),
         },
@@ -548,7 +543,11 @@ def _fallback_attachment_parser_key(
         return "calendar"
     if parse_content_type == "text/html":
         return "html"
-    if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
+    if parse_content_type in {
+        "text/markdown",
+        "text/x-markdown",
+        "application/markdown",
+    }:
         return "markdown"
     if parse_content_type == "text/plain":
         return "plain_text"
@@ -758,8 +757,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="segment_next",
                 edge_path=(
-                    f"{source_segment.segment_path}/next/"
-                    f"{target_segment.segment_path}"
+                    f"{source_segment.segment_path}/next/{target_segment.segment_path}"
                 ),
                 source_kind=source_segment.source_kind,
                 source_record_uid=source_segment.source_record_uid,
@@ -783,8 +781,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="heading_contains_segment",
                 edge_path=(
-                    f"{heading_segment.segment_path}/contains/"
-                    f"{segment.segment_path}"
+                    f"{heading_segment.segment_path}/contains/{segment.segment_path}"
                 ),
                 source_kind=segment.source_kind,
                 source_record_uid=segment.source_record_uid,
@@ -1248,11 +1245,11 @@ def _eml_paths_for_mbox_upload(
     try:
         parsed_mailbox = mailbox.mbox(upload_path, create=False)
         eml_paths: list[Path] = []
-        for index, message in enumerate(parsed_mailbox, start=1):
+        for index, key in enumerate(parsed_mailbox.iterkeys(), start=1):
             if len(eml_paths) >= MAX_IMPORT_EML_FILES:
                 return [], "mbox_too_many_eml_files"
             eml_path = extract_dir / f"message_{index:06d}.eml"
-            eml_path.write_bytes(message.as_bytes(policy=email_policy.default))
+            eml_path.write_bytes(parsed_mailbox.get_bytes(key, from_=False))
             eml_paths.append(eml_path)
     except (OSError, mailbox.Error, UnicodeError, ValueError):
         return [], "mbox_parse_failed"

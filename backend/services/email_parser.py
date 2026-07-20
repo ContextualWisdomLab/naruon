@@ -11,7 +11,7 @@ from .text_safety import strip_html_markup
 
 
 DateEvidenceStatus = Literal["parsed", "missing", "invalid"]
-MessageIdEvidenceStatus = Literal["embedded", "missing"]
+MessageIdEvidenceStatus = Literal["embedded", "missing", "invalid"]
 
 
 class EmailData(TypedDict):
@@ -170,9 +170,14 @@ def _message_to_email_data(msg: Message) -> EmailData:
     body, body_content_type, attachments = _extract_body_and_attachments(msg)
     persisted_date, source_date, date_evidence_status = _extract_date(msg)
     message_id = _sanitize_nul(msg.get("Message-ID", "")).strip()
-    message_id_evidence_status: MessageIdEvidenceStatus = (
-        "embedded" if message_id else "missing"
-    )
+    normalized_message_id = message_id.strip("<>").strip()
+    message_id_evidence_status: MessageIdEvidenceStatus
+    if normalized_message_id:
+        message_id_evidence_status = "embedded"
+    elif message_id:
+        message_id_evidence_status = "invalid"
+    else:
+        message_id_evidence_status = "missing"
     thread_id = _extract_thread_id(msg, message_id)
 
     return {

@@ -37,8 +37,11 @@ The import path selects the embedded `Date` header only when it parses as an
 RFC 822 date. A filename date remains an unselected secondary candidate. The
 temporary upload file's creation and modification times are never collected as
 source evidence because they describe Naruon's staging file, not the original
-message. A valid normalized embedded `Message-ID` is preferred for identity;
-otherwise the exact RFC 822 bytes are identified by SHA-256.
+message. A valid normalized embedded `Message-ID` is preferred for identity.
+Missing or invalid values are reported separately and require dedupe review;
+identity then falls back to SHA-256 of the exact uploaded EML bytes or the exact
+RFC 822 member bytes read from an mbox container. Mbox messages are not parsed
+and reserialized before hashing.
 
 Legacy and non-file-imported rows use the database default `{}`. The signed,
 owner-scoped email detail and thread APIs return those rows as

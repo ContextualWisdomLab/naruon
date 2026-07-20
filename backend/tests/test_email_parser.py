@@ -353,6 +353,26 @@ Test."""
         os.unlink(temp_path)
 
 
+def test_parse_eml_marks_empty_message_id_evidence_invalid():
+    eml_content = b"""Message-ID: <>
+From: test@test.com
+To: recipient@test.com
+Subject: Invalid Message ID
+Date: Mon, 27 Apr 2026 10:00:00 +0000
+
+Test."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
+        f.write(eml_content)
+        temp_path = f.name
+
+    try:
+        parsed = parse_eml(temp_path)
+        assert parsed["message_id"] == "<>"
+        assert parsed["message_id_evidence_status"] == "invalid"
+    finally:
+        os.unlink(temp_path)
+
+
 def test_parse_eml_io_error():
     with pytest.raises(EmailParseError):
         parse_eml("/path/to/nonexistent/file.eml")
