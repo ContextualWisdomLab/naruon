@@ -9,6 +9,3 @@
 ## 2026-06-08 - WorkspaceHome unused import investigation
 **Learning:** Investigating unused import reports should first verify the current file because the codebase may already have evolved. The repo lint entrypoint is `eslint`, and the focused check for this investigation was `npx eslint src/components/WorkspaceHome.tsx`.
 **Action:** Use the focused `npx eslint src/components/WorkspaceHome.tsx` check when confirming WorkspaceHome import health, and reserve broader `eslint` runs for full frontend lint validation.
-## 2026-06-09 - NetworkGraph 버튼 리팩토링
-**Learning:** 그래프 시각화 컴포넌트 내의 raw HTML `<button>` 요소들은 일관된 focus-visible 상태와 상호작용 피드백이 부족하여 키보드 탐색 접근성을 떨어뜨립니다.
-**Action:** raw HTML `<button>` 태그를 `@/components/ui/button`의 `Button` 컴포넌트로 교체하여 (`outline` 등의 variant와 `sm` 등의 size 사용) 접근성 있는 포커스 링과 상호작용 피드백을 즉시 표준화합니다.
