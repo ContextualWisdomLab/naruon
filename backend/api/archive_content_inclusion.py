@@ -29,7 +29,7 @@ ARCHIVE_CONTENT_INCLUSION_INVALID_ERROR = "disksage_archive_content_inclusion_in
 async def validate_disksage_archive_content_inclusion(
     request: Request,
 ) -> ArchiveContentInclusionValidationResponse:
-    """Validate report consistency without recomputing archive manifests or hashes."""
+    """Validate report consistency without reading the submitted archives."""
 
     body = await read_bounded_body(
         request,

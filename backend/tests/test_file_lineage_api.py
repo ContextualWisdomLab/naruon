@@ -156,6 +156,7 @@ def test_validate_disksage_file_lineage_accepts_bound_production_sources(
             ],
         ),
         lambda payload: payload.__setitem__("source_filename", "other.pdf"),
+        lambda payload: payload.__setitem__("schema_version", True),
         lambda payload: payload.__setitem__("source_relative_path", "../report.pdf"),
         lambda payload: payload.__setitem__("raw_content_sha256", "D" * 64),
         lambda payload: payload["cloud_copy"].__setitem__(
@@ -211,6 +212,7 @@ def test_validate_disksage_file_lineage_accepts_bound_production_sources(
     ids=[
         "metadata-precedence-reordered",
         "source-filename-mismatch",
+        "boolean-schema-version",
         "unsafe-relative-path",
         "uppercase-digest",
         "provider-write-invented",

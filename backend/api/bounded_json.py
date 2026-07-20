@@ -49,6 +49,8 @@ async def read_bounded_body(
 
     body = bytearray()
     async for chunk in request.stream():
+        if len(chunk) > max_body_bytes - len(body):
+            raise HTTPException(status_code=413, detail=too_large_error)
         body.extend(chunk)
         if len(body) > max_body_bytes:
             raise HTTPException(status_code=413, detail=too_large_error)

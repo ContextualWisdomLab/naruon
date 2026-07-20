@@ -265,6 +265,13 @@ class DiskSageFileLineageEnvelope(StrictLineageModel):
     review: FileReviewLineage
     cloud_copy: FileCloudCopyLineage
 
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def validate_exact_schema_version(cls, value: object) -> object:
+        if type(value) is not int or value != 1:
+            raise ValueError("schema_version must be integer 1")
+        return value
+
     @field_validator("source_filename", "source_context", "content_title")
     @classmethod
     def reject_optional_control_characters(cls, value: str | None) -> str | None:

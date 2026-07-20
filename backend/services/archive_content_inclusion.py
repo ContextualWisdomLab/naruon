@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import re
 import unicodedata
 from typing import Annotated, Literal, Self
@@ -63,6 +65,23 @@ def _canonical_archive_identity(value: str) -> str:
     return unicodedata.normalize("NFC", value.replace("\\", "/")).casefold()
 
 
+def _comparison_fingerprint_sha256(
+    root_mode: str,
+    subset_manifest_sha256: str,
+    superset_manifest_sha256: str,
+) -> str:
+    root_mode_bytes = root_mode.encode("utf-8")
+    hasher = hashlib.sha256()
+    hasher.update(b"disksage.archive-content-inclusion\0v1\0")
+    hasher.update(len(root_mode_bytes).to_bytes(8, byteorder="little"))
+    hasher.update(root_mode_bytes)
+    hasher.update(b"subset\0")
+    hasher.update(bytes.fromhex(subset_manifest_sha256))
+    hasher.update(b"superset\0")
+    hasher.update(bytes.fromhex(superset_manifest_sha256))
+    return hasher.hexdigest()
+
+
 class StrictArchiveEvidenceModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -92,6 +111,13 @@ class DiskSageArchiveContentInclusionEnvelope(StrictArchiveEvidenceModel):
     subset_manifest_sha256: Hex64
     superset_manifest_sha256: Hex64
     comparison_fingerprint_sha256: Hex64
+
+    @field_validator("version", mode="before")
+    @classmethod
+    def validate_exact_version(cls, value: object) -> object:
+        if type(value) is not int or value != 1:
+            raise ValueError("version must be integer 1")
+        return value
 
     @field_validator("subset_archive", "superset_archive")
     @classmethod
@@ -172,11 +198,25 @@ class DiskSageArchiveContentInclusionEnvelope(StrictArchiveEvidenceModel):
             and self.superset_uncompressed_bytes < self.subset_uncompressed_bytes
         ):
             raise ValueError("included superset cannot have fewer content bytes")
+        manifests_identical = (
+            self.subset_manifest_sha256 == self.superset_manifest_sha256
+        )
+        if self.archives_identical != manifests_identical:
+            raise ValueError("archive identity flag does not match manifest identity")
         if self.archives_identical and (
             self.subset_uncompressed_bytes != self.superset_uncompressed_bytes
-            or self.subset_manifest_sha256 != self.superset_manifest_sha256
         ):
-            raise ValueError("identical archives require identical manifests")
+            raise ValueError("identical archives require identical byte totals")
+        expected_fingerprint = _comparison_fingerprint_sha256(
+            self.root_mode,
+            self.subset_manifest_sha256,
+            self.superset_manifest_sha256,
+        )
+        if not hmac.compare_digest(
+            self.comparison_fingerprint_sha256,
+            expected_fingerprint,
+        ):
+            raise ValueError("comparison fingerprint does not bind submitted manifests")
         return self
 
 

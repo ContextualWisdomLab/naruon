@@ -4,11 +4,13 @@ import json
 from copy import deepcopy
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from api.archive_content_inclusion import (
     MAX_DISKSAGE_ARCHIVE_CONTENT_INCLUSION_BODY_BYTES,
 )
+from api.bounded_json import read_bounded_body
 from db.session import get_db
 from main import app
 
@@ -107,7 +109,19 @@ def test_validate_archive_content_inclusion_accepts_explicitly_truncated_samples
         lambda payload: payload.__setitem__("matching_file_count", 105),
         lambda payload: payload.__setitem__("subset_content_included", False),
         lambda payload: payload.__setitem__("archives_identical", True),
+        lambda payload: payload.__setitem__("version", True),
         lambda payload: payload.__setitem__("subset_manifest_sha256", "A" * 64),
+        lambda payload: payload.__setitem__(
+            "comparison_fingerprint_sha256", "0" * 64
+        ),
+        lambda payload: payload.update(
+            {
+                "superset_manifest_sha256": payload["subset_manifest_sha256"],
+                "comparison_fingerprint_sha256": (
+                    "42a7d0b1e87cc2242cdaaeafe66a0854cdfde5db06f8b40002cb096348192177"
+                ),
+            }
+        ),
         lambda payload: payload.__setitem__("subset_archive", "/Downloads/larger.zip"),
         lambda payload: payload.__setitem__("subset_root_prefix", "wrapper"),
         lambda payload: payload["additional_paths"].reverse(),
@@ -120,7 +134,10 @@ def test_validate_archive_content_inclusion_accepts_explicitly_truncated_samples
         "subset-count-mismatch",
         "inclusion-flag-mismatch",
         "identical-flag-mismatch",
+        "boolean-version",
         "uppercase-digest",
+        "fingerprint-mismatch",
+        "equal-manifests-for-nonidentical-archives",
         "same-archive",
         "keep-top-level-prefix-mismatch",
         "unsorted-path-samples",
@@ -150,6 +167,9 @@ def test_validate_archive_content_inclusion_accepts_stripped_distinct_wrappers(
     payload["root_mode"] = "strip-shared-root"
     payload["subset_root_prefix"] = "smaller-root"
     payload["superset_root_prefix"] = "larger-root"
+    payload["comparison_fingerprint_sha256"] = (
+        "f9c923c3516292de07a1e487e18d0a4dc249e17bd2fdb35f1a5abf1396e1755e"
+    )
 
     response = client.post("/api/archive-content-inclusion/validate", json=payload)
 
@@ -183,6 +203,34 @@ def test_validate_archive_content_inclusion_caps_raw_body(client: TestClient):
 
     assert response.status_code == 413
     assert response.json() == {"detail": "disksage_archive_content_inclusion_too_large"}
+
+
+class _OversizedChunk:
+    def __len__(self) -> int:
+        return MAX_DISKSAGE_ARCHIVE_CONTENT_INCLUSION_BODY_BYTES + 1
+
+    def __iter__(self):
+        raise AssertionError("oversized chunk must not be copied before rejection")
+
+
+class _SingleChunkRequest:
+    headers: dict[str, str] = {}
+
+    async def stream(self):
+        yield _OversizedChunk()
+
+
+@pytest.mark.asyncio
+async def test_read_bounded_body_rejects_oversized_chunk_before_copying():
+    with pytest.raises(HTTPException) as exc_info:
+        await read_bounded_body(
+            _SingleChunkRequest(),
+            max_body_bytes=MAX_DISKSAGE_ARCHIVE_CONTENT_INCLUSION_BODY_BYTES,
+            too_large_error="too_large",
+        )
+
+    assert exc_info.value.status_code == 413
+    assert exc_info.value.detail == "too_large"
 
 
 def test_validate_archive_content_inclusion_has_no_database_dependency(
