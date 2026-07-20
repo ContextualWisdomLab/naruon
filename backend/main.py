@@ -13,6 +13,7 @@ from api.network import router as network_router
 from api.emails import router as emails_router
 from api.archive_content_inclusion import router as archive_content_inclusion_router
 from api.file_lineage import router as file_lineage_router
+from api.reclaim_plan import router as reclaim_plan_router
 from api.runner_config import router as runner_config_router
 from api.tenant_config import router as tenant_config_router
 from api.runtime_config import router as runtime_config_router
@@ -225,6 +226,7 @@ app.include_router(
     dependencies=PRIVATE_API_DEPENDENCIES,
 )
 app.include_router(file_lineage_router, dependencies=PRIVATE_API_DEPENDENCIES)
+app.include_router(reclaim_plan_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(runner_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(tenant_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(runtime_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
