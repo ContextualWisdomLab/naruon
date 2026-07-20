@@ -49,6 +49,15 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    ignore:
+      # eslint-config-next의 플러그인들이 아직 ESLint 10을 지원하지 않는다.
+      - dependency-name: "eslint"
+        update-types:
+          - "version-update:semver-major"
+      # @typescript-eslint/typescript-estree 8.63은 TypeScript <6.1만 지원한다.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
     groups:
       frontend-npm:
         patterns:

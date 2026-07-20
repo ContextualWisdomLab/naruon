@@ -38,12 +38,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "4.1.10",
-    "eslint": "^10",
+    "eslint": "~9.39.5",
     "eslint-config-next": "16.2.10",
     "fast-check": "^4.9.0",
     "jsdom": "^29.1.0",
     "postcss": "^8.5.20",
-    "typescript": "^7",
+    "typescript": "~6.0.3",
     "vitest": "^4.1.10"
   },
   "overrides": {
