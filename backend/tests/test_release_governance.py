@@ -165,14 +165,16 @@ def test_backend_runtime_toolchain_uses_image_scan_clean_security_pins() -> None
     assert "protobuf==7.35.1" in requirements
     assert "setuptools==83.0.0" in requirements
     assert "wheel==0.47.0" in requirements
-    assert "opentelemetry-api==1.43.0" in requirements
-    assert "opentelemetry-instrumentation-fastapi==0.64b0" in requirements
+    assert "opentelemetry-api==1.44.0" in requirements
+    assert "opentelemetry-instrumentation-fastapi==0.65b0" in requirements
 
 
 def test_strix_ci_requirements_use_security_quality_clean_pins() -> None:
     strix_ci_requirements = read_repo_text("requirements-strix-ci.txt")
 
-    assert "strix-agent==1.0.4" in strix_ci_requirements
+    assert "strix-agent==1.1.0" in strix_ci_requirements
+    assert "google-cloud-aiplatform==1.161.0" in strix_ci_requirements
+    assert "protobuf==6.33.6" in strix_ci_requirements
     assert "cryptography==49.0.0" in strix_ci_requirements
     assert "python-multipart==0.0.32" in strix_ci_requirements
 
