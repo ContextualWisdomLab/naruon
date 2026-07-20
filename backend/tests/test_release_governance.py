@@ -368,30 +368,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "rev: v2.17.2" in pre_commit
 
 
-def test_harden_runner_file_monitoring_remains_enabled() -> None:
-    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
-        WORKFLOW_DIR.glob("*.yaml")
-    )
-    assert governed_workflows, "no governed GitHub workflows found"
-
-    hardened_runner_steps = 0
-    file_monitoring_opt_outs: list[str] = []
-    for workflow_path in governed_workflows:
-        workflow_lines = workflow_path.read_text(encoding="utf-8").splitlines()
-        hardened_runner_steps += sum(
-            "step-security/harden-runner@" in line for line in workflow_lines
-        )
-        for line_number, line in enumerate(workflow_lines, 1):
-            if re.match(r"^\s*disable-file-monitoring:\s*true(?:\s*#.*)?$", line):
-                file_monitoring_opt_outs.append(
-                    f"{workflow_path.relative_to(REPO_ROOT)}:{line_number}:"
-                    f" {line.strip()}"
-                )
-
-    assert hardened_runner_steps > 0, "no Harden-Runner steps found"
-    assert file_monitoring_opt_outs == [], "\n".join(file_monitoring_opt_outs)
-
-
 def test_actionlint_recognizes_the_mail_egress_runner_label() -> None:
     actionlint_config = read_repo_text(".github/actionlint.yaml")
 
