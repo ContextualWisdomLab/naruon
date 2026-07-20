@@ -28,7 +28,7 @@ opentelemetry-sdk==1.43.0
 opentelemetry-instrumentation-fastapi==0.64b0
 opentelemetry-exporter-otlp==1.43.0
 protobuf==7.35.1
-setuptools==83.0.0
+setuptools==82.0.1
 wheel==0.47.0
 websockets==16.0
 PyJWT==2.13.0  # latest verified 2026-06-12; do not downgrade to 2.8.0

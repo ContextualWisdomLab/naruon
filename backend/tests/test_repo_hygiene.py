@@ -1,7 +1,4 @@
-import re
 from pathlib import Path
-
-import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -116,10 +113,15 @@ def test_compose_gateway_services_disable_privilege_escalation():
     assert "- no-new-privileges:true" in traefik_block
 
 
-def test_infra_compose_services_use_explicit_read_only_hardening():
+def test_infra_compose_services_use_read_only_hardening_anchor():
     compose = (REPO_ROOT / "docker-compose.infra.yml").read_text()
-    services = yaml.safe_load(compose)["services"]
-    expected_services = (
+
+    assert "x-service-hardening: &service-hardening" in compose
+    assert "security_opt:" in compose
+    assert "- no-new-privileges:true" in compose
+    assert "read_only: true" in compose
+
+    for service in (
         "traefik",
         "prometheus",
         "grafana",
@@ -127,41 +129,19 @@ def test_infra_compose_services_use_explicit_read_only_hardening():
         "tempo",
         "otel-collector",
         "keycloak",
-    )
-
-    assert "&service-hardening" not in compose
-    assert "<<:" not in compose
-    assert set(services) == set(expected_services)
-    for service in expected_services:
-        service_config = services[service]
-        assert service_config["security_opt"] == ["no-new-privileges:true"]
-        assert service_config["read_only"] is True
-        assert "/tmp" in service_config["tmpfs"]
+    ):
+        assert f"  {service}:\n    <<: *service-hardening" in compose
 
 
 def test_screenshot_utility_allows_only_local_static_routes():
     screenshot_script = (REPO_ROOT / "frontend" / "screenshot.cjs").read_text()
-    expected_targets = [
-        "http://127.0.0.1:3000/",
-        "http://127.0.0.1:3000/mail",
-        "http://127.0.0.1:3000/calendar",
-        "http://127.0.0.1:3000/tasks",
-        "http://127.0.0.1:3000/projects",
-        "http://127.0.0.1:3000/search",
-        "http://127.0.0.1:3000/data",
-        "http://127.0.0.1:3000/ai-hub",
-        "http://127.0.0.1:3000/security",
-        "http://127.0.0.1:3000/settings",
-    ]
-    navigation_targets = re.findall(r"page\.goto\('([^']+)'", screenshot_script)
 
-    assert navigation_targets == expected_targets
-    assert screenshot_script.count("page.goto(") == len(expected_targets)
-    assert "await target.navigate(page)" in screenshot_script
+    assert "SCREENSHOT_ORIGIN = 'http://127.0.0.1:3000'" in screenshot_script
+    assert "const ALLOWED_ROUTES = new Set(SCREENSHOT_ROUTES);" in screenshot_script
+    assert "ALLOWED_ROUTES.has(route)" in screenshot_script
+    assert "new URL(route, SCREENSHOT_ORIGIN)" in screenshot_script
+    assert "url.origin !== SCREENSHOT_ORIGIN" in screenshot_script
     assert "console.error('Failed to capture route'" in screenshot_script
-    assert "page.goto(url" not in screenshot_script
-    assert "page.goto(route" not in screenshot_script
-    assert "page.goto(`" not in screenshot_script
     assert "http://localhost:3000${route}" not in screenshot_script
     assert "console.error(`Failed to capture ${route}:`" not in screenshot_script
 

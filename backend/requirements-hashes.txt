@@ -1330,7 +1330,7 @@ pyyaml==6.0.3 \
 rankweave==0.1.0 \
     --hash=sha256:bbc9a1da237bfdfc376150ec55a94628e808499778a03f3beb1ab8c238c0bd75 \
     --hash=sha256:841d4cabd4f96bb67575f9500f9af08030efc04c065c0c2de9ac7b45535b20c8
-    # via -r backend/requirements.txt
+    # via -r requirements.txt
 regex==2026.6.28 \
     --hash=sha256:03376d60b6a11aecb88a79fa2be06b40faa01c6693bc31ef69435cd4818b9463 \
     --hash=sha256:0ab0d5344311fc8e8667078942056c3b9c9b4a4b1cc99f2eb8a5af54554f4acc \
@@ -1485,9 +1485,9 @@ ruff==0.15.20 \
     --hash=sha256:ed65ef510e43a137207e0f01cfcf998aeddb1aeeda5c9d35023e910284d7cf21 \
     --hash=sha256:f701305e66b38ea6c91882490eb73459796808e4c6362a1b765255e0cdcd4053
     # via -r backend/requirements.txt
-setuptools==83.0.0 \
-    --hash=sha256:025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef \
-    --hash=sha256:29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3
+setuptools==82.0.1 \
+    --hash=sha256:7d872682c5d01cfde07da7bccc7b65469d3dca203318515ada1de5eda35efbf9 \
+    --hash=sha256:a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb
     # via -r backend/requirements.txt
 six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
