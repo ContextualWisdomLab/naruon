@@ -61,6 +61,12 @@ MAX_IMPORT_EMAILS_PER_OWNER = 1000
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
 MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 5
 SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
+SOURCE_TIME_EVIDENCE_PRECEDENCE = [
+    "embedded_metadata",
+    "explicit_filename_date",
+    "filesystem_created_at",
+    "filesystem_modified_at",
+]
 logger = logging.getLogger(__name__)
 
 EmailImportItemStatus = Literal["imported", "skipped_duplicate", "failed"]
@@ -284,6 +290,55 @@ def _dedupe_review_reason_codes(
     return reason_codes
 
 
+def _source_lineage_for(
+    parsed: EmailData,
+    *,
+    content: bytes,
+    display_filename: str,
+    identity_match_reason: DedupeMatchReason,
+) -> dict[str, object]:
+    """Build bounded source evidence without trusting temporary file timestamps."""
+    source_date = parsed.get("source_date")
+    date_evidence_status = parsed.get("date_evidence_status")
+    has_embedded_date = date_evidence_status == "parsed" and isinstance(
+        source_date, datetime.datetime
+    )
+    message_id_evidence_status = parsed.get("message_id_evidence_status")
+
+    return {
+        "schema_version": 1,
+        "source_kind": "rfc822",
+        "source_filename": display_filename,
+        "raw_content_sha256": hashlib.sha256(content).hexdigest(),
+        "production_time": {
+            "selected_value": (
+                _utc_datetime(source_date).isoformat() if has_embedded_date else None
+            ),
+            "selected_source": (
+                "embedded_date_header" if has_embedded_date else None
+            ),
+            "embedded_status": (
+                date_evidence_status
+                if date_evidence_status in {"parsed", "missing", "invalid"}
+                else "missing"
+            ),
+            "evidence_precedence": list(SOURCE_TIME_EVIDENCE_PRECEDENCE),
+        },
+        "message_identity": {
+            "selected_source": (
+                "embedded_message_id"
+                if identity_match_reason == "embedded_message_id"
+                else "raw_content_sha256"
+            ),
+            "embedded_status": (
+                "embedded"
+                if message_id_evidence_status == "embedded"
+                else "missing"
+            ),
+        },
+    }
+
+
 async def _find_existing_email(
     session: AsyncSession,
     *,
@@ -406,6 +461,7 @@ def _build_email_object(
     thread_id: str | None,
     fingerprint: str | None,
     persisted_date: datetime.datetime,
+    source_lineage_json: dict[str, object],
     attachment_payloads: list[dict],
     fitted_embeddings: list[list[float]],
 ) -> tuple[Email, int]:
@@ -422,6 +478,7 @@ def _build_email_object(
         in_reply_to=parsed.get("in_reply_to"),
         references=parsed.get("references"),
         date=persisted_date,
+        source_lineage_json=source_lineage_json,
         body=parsed.get("body", ""),
         embedding=fitted_embeddings[0] if fitted_embeddings else _zero_embedding(),
     )
@@ -952,6 +1009,12 @@ async def _import_single_eml(
         thread_id=thread_id,
         fingerprint=fingerprint,
         persisted_date=persisted_date,
+        source_lineage_json=_source_lineage_for(
+            parsed,
+            content=content,
+            display_filename=display_filename,
+            identity_match_reason=identity_match_reason,
+        ),
         attachment_payloads=attachment_payloads,
         fitted_embeddings=fitted_embeddings,
     )

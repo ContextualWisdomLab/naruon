@@ -1,14 +1,17 @@
-"""Add is_read to canonical email records (IMAP \\Seen read state).
+"""Repair the canonical email read-state column on previously stamped databases.
 
-Existing rows default to read so historical/file imports do not surface as unread.
+Revision ID: 0019_email_read_state_repair
+Revises: 0018_email_source_lineage
+Create Date: 2026-07-20 00:00:00.000000
 """
+
+from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
 
-# revision identifiers, used by Alembic.
-revision = "0011_email_read_state"
-down_revision = "0009_project_graph_projection"
+revision = "0019_email_read_state_repair"
+down_revision = "0018_email_source_lineage"
 branch_labels = None
 depends_on = None
 
@@ -30,18 +33,15 @@ def upgrade() -> None:
             _READ_COLUMN,
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text("true"),
+            server_default="true",
         ),
     )
 
 
 def downgrade() -> None:
-    connection = op.get_bind()
-    inspector = sa.inspect(connection)
-    if inspector.has_table(_EMAIL_TABLE) and _has_column(
-        inspector, _EMAIL_TABLE, _READ_COLUMN
-    ):
-        op.drop_column(_EMAIL_TABLE, _READ_COLUMN)
+    # This is a compatibility repair for the canonical model. Removing the
+    # column would make a stamped database incompatible with the ORM.
+    return None
 
 
 def _has_column(inspector, table_name: str, column_name: str) -> bool:

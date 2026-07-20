@@ -801,9 +801,14 @@ class Email(Base):
     in_reply_to: Mapped[str | None] = mapped_column(String, nullable=True)
     references: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
+    source_lineage_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, server_default="{}", nullable=False
+    )
     body: Mapped[str] = mapped_column(Text)
     # IMAP \Seen read state; defaults read so historical/file imports don't nag.
-    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_read: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
     attachments: Mapped[list["Attachment"]] = relationship(
