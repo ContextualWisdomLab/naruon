@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AuthGate } from "@/components/AuthGate";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import "./globals.css";
 
@@ -18,7 +19,9 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
-        <DashboardLayout>{children}</DashboardLayout>
+        <AuthGate>
+          <DashboardLayout>{children}</DashboardLayout>
+        </AuthGate>
       </body>
     </html>
   );
