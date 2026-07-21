@@ -319,6 +319,13 @@ in this repo.
   use them. Allowlisted OIDC hostnames must also resolve only to global
   addresses, and JWKS retrieval must connect to the already validated pinned
   address while preserving TLS/SNI for the allowlisted hostname.
+  `ALLOW_LOCAL_OIDC_PROVIDERS` is the compose-local opt-in mirroring
+  `ALLOW_LOCAL_LLM_PROVIDERS`: when explicitly enabled, allowlisted
+  localhost/single-label IdP hosts (e.g. a keyverse/Keycloak container on the
+  compose network) may use plain http, resolve to compose addresses, and span
+  the browser-facing issuer vs compose-network JWKS host pair. The strict
+  https+global contract stays the default; never enable the opt-in in
+  production deployments.
 - Email-derived tasks must stay source-linked to the email/thread and tenant
   owner scope. Do not expose new sequential database ids through task APIs; use
   opaque public ids for user-visible ticket tasks. Task titles are plain text:
@@ -373,7 +380,15 @@ in this repo.
   id, and sanitize generated task titles from email subjects before persistence.
   Do not create duplicate reminder tasks for the same pending sent-mail message.
 - Mail connection updates and workers must validate server-side SMTP, POP3,
-  IMAP, and relay destinations before persistence or network connection. POP3
+  IMAP, and relay destinations before persistence or network connection.
+  `ALLOWED_SMTP_HOSTS`/`ALLOWED_IMAP_HOSTS`/`ALLOWED_POP3_HOSTS` are OPTIONAL
+  operator pinning, not a required gate: Naruon is a control plane over
+  member-configured, customer-owned mail systems, so an empty allowlist imposes
+  no host-name restriction and the fail-closed SSRF boundary is the
+  address-class + port validation (global-address resolution, pinned connect
+  addresses, mail-port allowlists). A configured allowlist restricts to exact
+  hosts and rejects wildcards. Do not reintroduce the empty-allowlist-denies
+  behavior — it contradicts the self-service product contract. POP3
   credentials are required for POP3 sync;
   missing credentials must fail the sync path instead of logging a successful
   no-op. Do not place sensitive credential values, secret-derived values, or

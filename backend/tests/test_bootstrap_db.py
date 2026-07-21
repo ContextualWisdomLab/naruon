@@ -134,6 +134,19 @@ def test_schema_backfill_adds_email_indexes(monkeypatch):
         "create index if not exists ix_email_records_thread_id" in statement
         for statement in statements
     )
+
+
+def test_schema_backfill_never_references_retired_emails_table(monkeypatch):
+    # The pre-reconciliation "emails" table is never created by any model,
+    # migration, or bootstrap statement (see 0011_email_model_reconciliation).
+    # A statement targeting it makes alembic 0001 and bootstrap_db fail on a
+    # fresh database with UndefinedTableError.
+    statements = _get_schema_statements(monkeypatch)
+    assert not any(
+        " on emails " in statement or " on emails(" in statement
+        for statement in statements
+    )
+    assert not any("ix_emails_owner_date" in statement for statement in statements)
     assert any(
         "create index if not exists ix_email_records_date" in statement
         for statement in statements

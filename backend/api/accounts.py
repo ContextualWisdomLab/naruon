@@ -38,6 +38,7 @@ class TenantConfigUpdate(BaseModel):
     oauth_client_id: str | None = None
     oauth_client_secret: str | None = None
     oauth_redirect_uri: str | None = None
+    openai_api_key: str | None = None
 
 class TenantConfigResponse(BaseModel):
     user_id: str
@@ -56,6 +57,7 @@ class TenantConfigResponse(BaseModel):
     oauth_client_id: str | None
     oauth_redirect_uri: str | None
     has_oauth_client_secret: bool
+    has_openai_api_key: bool
 
 
 def _tenant_config_response(config) -> TenantConfigResponse:
@@ -76,6 +78,7 @@ def _tenant_config_response(config) -> TenantConfigResponse:
         oauth_client_id=config.oauth_client_id,
         oauth_redirect_uri=config.oauth_redirect_uri,
         has_oauth_client_secret=bool(config.oauth_client_secret),
+        has_openai_api_key=bool(config.openai_api_key),
     )
 
 

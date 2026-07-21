@@ -13,6 +13,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from core.env_paths import ENV_FILE_PATHS, expand_operator_path  # noqa: E402
 from core.runtime_secrets import validate_auth_session_hmac_secret_value  # noqa: E402
 from core.url_validation import (  # noqa: E402
+    is_local_dev_identity_host,
     parse_allowed_hosts,
     validate_https_url_host_details,
     validate_same_or_subdomain_host,
@@ -99,6 +100,9 @@ def validate_runtime_settings() -> list[str]:
                 "ALLOWED_OIDC_HOSTS must list trusted OIDC issuer and JWKS hosts"
             )
         else:
+            allow_local_oidc = values.get(
+                "ALLOW_LOCAL_OIDC_PROVIDERS", ""
+            ).strip().lower() in {"1", "true", "yes", "on"}
             issuer_url = None
             jwks_url = None
             try:
@@ -107,6 +111,7 @@ def validate_runtime_settings() -> list[str]:
                     values["OIDC_ISSUER_URL"],
                     allowed_oidc_hosts,
                     "ALLOWED_OIDC_HOSTS",
+                    allow_local=allow_local_oidc,
                 )
             except ValueError as exc:
                 messages.append(str(exc))
@@ -116,10 +121,18 @@ def validate_runtime_settings() -> list[str]:
                     values["OIDC_JWKS_URL"],
                     allowed_oidc_hosts,
                     "ALLOWED_OIDC_HOSTS",
+                    allow_local=allow_local_oidc,
                 )
             except ValueError as exc:
                 messages.append(str(exc))
-            if issuer_url is not None and jwks_url is not None:
+            local_oidc_pair = (
+                allow_local_oidc
+                and issuer_url is not None
+                and jwks_url is not None
+                and is_local_dev_identity_host(issuer_url.hostname)
+                and is_local_dev_identity_host(jwks_url.hostname)
+            )
+            if issuer_url is not None and jwks_url is not None and not local_oidc_pair:
                 try:
                     validate_same_or_subdomain_host(
                         "OIDC_JWKS_URL",

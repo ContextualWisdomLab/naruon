@@ -10,6 +10,7 @@ from core.runtime_secrets import (
     validate_auth_session_hmac_secret_value,
 )
 from core.url_validation import (
+    is_local_dev_identity_host,
     parse_allowed_hosts,
     validate_https_url_host_details,
     validate_same_or_subdomain_host,
@@ -160,6 +161,10 @@ class Settings(BaseSettings):
     OIDC_CLIENT_ID: str | None = None
     OIDC_JWKS_URL: str | None = None
     ALLOWED_OIDC_HOSTS: str = ""
+    # Compose-local opt-in mirroring ALLOW_LOCAL_LLM_PROVIDERS: allowlisted
+    # localhost/single-label IdP hosts (e.g. a Keycloak container) may use
+    # plain http and private compose addresses. Never enable in production.
+    ALLOW_LOCAL_OIDC_PROVIDERS: bool = False
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATHS,
@@ -214,19 +219,31 @@ class Settings(BaseSettings):
                 self.OIDC_ISSUER_URL or "",
                 allowed_oidc_hosts,
                 "ALLOWED_OIDC_HOSTS",
+                allow_local=self.ALLOW_LOCAL_OIDC_PROVIDERS,
             )
             jwks_url = validate_https_url_host_details(
                 "OIDC_JWKS_URL",
                 self.OIDC_JWKS_URL or "",
                 allowed_oidc_hosts,
                 "ALLOWED_OIDC_HOSTS",
+                allow_local=self.ALLOW_LOCAL_OIDC_PROVIDERS,
             )
-            validate_same_or_subdomain_host(
-                "OIDC_JWKS_URL",
-                jwks_url.hostname,
-                "OIDC_ISSUER_URL",
-                issuer_url.hostname,
+            # A compose-local pair legitimately spans two hostnames (the
+            # browser-facing localhost issuer vs the compose-network JWKS
+            # host), so the subdomain containment check applies only outside
+            # the local opt-in.
+            local_oidc_pair = (
+                self.ALLOW_LOCAL_OIDC_PROVIDERS
+                and is_local_dev_identity_host(issuer_url.hostname)
+                and is_local_dev_identity_host(jwks_url.hostname)
             )
+            if not local_oidc_pair:
+                validate_same_or_subdomain_host(
+                    "OIDC_JWKS_URL",
+                    jwks_url.hostname,
+                    "OIDC_ISSUER_URL",
+                    issuer_url.hostname,
+                )
         return self
 
     @property

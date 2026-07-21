@@ -422,6 +422,34 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.drop_column(" not in revision_text
 
 
+def test_email_read_state_targets_email_records_idempotently():
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    )
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    # The read-state column lives on email_records (the single email source of
+    # truth); the retired "emails" table is never created by any migration, so
+    # targeting it breaks `alembic upgrade head` on a fresh database.
+    assert '"email_records"' in revision_text
+    assert '"emails"' not in revision_text
+    # Fresh databases already get the column from 0001's create_all, so the
+    # migration must check before adding instead of failing on duplicates.
+    assert "get_columns" in revision_text
+    assert "op.add_column(" in revision_text
+
+
+def test_no_migration_applies_ddl_to_retired_emails_table():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    offenders = []
+    for path in sorted(versions_dir.glob("*.py")):
+        text = path.read_text()
+        if '"emails"' in text or "'emails'" in text or " ON emails " in text:
+            offenders.append(path.name)
+    assert offenders == []
+
+
 def test_merge_revision_reconciles_newsdom_provider_branch():
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0015_merge_newsdom_email_heads.py"

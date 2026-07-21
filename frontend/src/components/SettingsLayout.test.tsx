@@ -249,21 +249,22 @@ describe("SettingsLayout", () => {
           const body = JSON.parse(String(init.body));
           return jsonResponse({
             user_id: "default",
-            smtp_server: body.smtp_server,
-            smtp_port: body.smtp_port,
-            smtp_username: body.smtp_username,
+            smtp_server: body.smtp_server ?? null,
+            smtp_port: body.smtp_port ?? null,
+            smtp_username: body.smtp_username ?? null,
             has_smtp_password: false,
-            imap_server: body.imap_server,
-            imap_port: body.imap_port,
-            imap_username: body.imap_username,
+            imap_server: body.imap_server ?? null,
+            imap_port: body.imap_port ?? null,
+            imap_username: body.imap_username ?? null,
             has_imap_password: true,
-            pop3_server: body.pop3_server,
-            pop3_port: body.pop3_port,
-            pop3_username: body.pop3_username,
+            pop3_server: body.pop3_server ?? null,
+            pop3_port: body.pop3_port ?? null,
+            pop3_username: body.pop3_username ?? null,
             has_pop3_password: false,
-            oauth_client_id: body.oauth_client_id,
-            oauth_redirect_uri: body.oauth_redirect_uri,
+            oauth_client_id: body.oauth_client_id ?? null,
+            oauth_redirect_uri: body.oauth_redirect_uri ?? null,
             has_oauth_client_secret: true,
+            has_openai_api_key: Boolean(body.openai_api_key),
           });
         }
         if (String(input) === "/api/accounts/config") {
@@ -284,6 +285,7 @@ describe("SettingsLayout", () => {
             oauth_client_id: "oauth-client-id",
             oauth_redirect_uri: "https://naruon.net/oauth/mail/callback",
             has_oauth_client_secret: true,
+            has_openai_api_key: false,
           });
         }
         return jsonResponse({});
@@ -680,6 +682,53 @@ describe("SettingsLayout", () => {
     const embeddingPutBody = JSON.parse(String(embeddingPutCall?.[1]?.body));
     expect(embeddingPutBody).toEqual({ embedding_model: "embeddinggemma" });
     expect(container.textContent).toContain("임베딩 모델 지정을 저장했습니다");
+  });
+
+  it("registers the personal LLM API key through the owner-scoped accounts config", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const modelButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "AI 모델");
+    expect(modelButton).toBeTruthy();
+    await act(async () => {
+      modelButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("개인 LLM API Key");
+    const keyInput = container.querySelector<HTMLInputElement>("#personal-llm-api-key");
+    expect(keyInput).toBeTruthy();
+    expect(keyInput?.type).toBe("password");
+    if (keyInput) keyInput.value = "sk-personal-live-key-9876";
+
+    const keySaveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("LLM API Key 저장"));
+    expect(keySaveButton).toBeTruthy();
+    await act(async () => {
+      keySaveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const keyPutCall = vi.mocked(fetch).mock.calls.find(([input, init]) => String(input) === "/api/accounts/config" && init?.method === "PUT");
+    expect(keyPutCall?.[1]?.credentials).toBe("same-origin");
+    expect(keyPutCall?.[1]?.headers).not.toHaveProperty("Authorization");
+    expect(keyPutCall?.[1]?.headers).not.toHaveProperty("X-User-Id");
+    expect(keyPutCall?.[1]?.headers).not.toHaveProperty("X-Organization-Id");
+    expect(keyPutCall?.[1]?.headers).not.toHaveProperty("X-Dev-Auth-Token");
+    const keyPutBody = JSON.parse(String(keyPutCall?.[1]?.body));
+    expect(keyPutBody).toEqual({ openai_api_key: "sk-personal-live-key-9876" });
+
+    expect(container.textContent).toContain("LLM API Key를 저장했습니다");
+    expect(container.textContent).not.toContain("sk-personal-live-key-9876");
+    expect(keyInput?.value).toBe("");
   });
 
   it("renders settings tabs as detail surfaces instead of placeholder dead space", async () => {

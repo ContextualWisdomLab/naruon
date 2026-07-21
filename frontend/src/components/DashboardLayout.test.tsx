@@ -79,7 +79,7 @@ describe("DashboardLayout", () => {
     expect(primaryNav?.querySelector<HTMLAnchorElement>('a[href="/security"]')?.textContent).toContain("보안");
     expect(primaryNav?.querySelector<HTMLAnchorElement>('a[href="/settings"]')?.textContent).toContain("설정");
     expect(mobileNav).not.toBeNull();
-    expect(banner?.querySelector<HTMLAnchorElement>('a[aria-label="알림 보기"]')?.getAttribute("href")).toBe("/security");
+    expect(banner?.querySelector<HTMLAnchorElement>('a[aria-label="알림 보기"]')?.getAttribute("href")).toBe("/settings#notifications");
     expect(banner?.querySelector<HTMLAnchorElement>('a[aria-label="도움말 보기"]')?.getAttribute("href")).toBe("/settings#help");
     expect(banner?.querySelector<HTMLAnchorElement>('a[aria-label="프로필 메뉴"]')?.getAttribute("href")).toBe("/settings#profile");
     expect(mobileMenuButton?.getAttribute("aria-expanded")).toBe("false");
@@ -113,19 +113,13 @@ describe("DashboardLayout", () => {
 
     expect(headerEvents).toContain("reply-draft");
 
+    // The startup-view choice lives in Settings (and the mobile drawer), not as
+    // a second control strip in the desktop header.
     const desktopStartupPreference = container.querySelector<HTMLElement>('section[aria-label="Desktop startup preference"]');
-    expect(desktopStartupPreference).not.toBeNull();
-    expect(desktopStartupPreference?.textContent ?? "").toContain("시작 화면");
-    expect(desktopStartupPreference?.querySelector<HTMLButtonElement>('button[data-desktop-startup-view="dashboard"]')?.textContent).toContain("홈");
-    expect(desktopStartupPreference?.querySelector<HTMLButtonElement>('button[data-desktop-startup-view="email"]')?.textContent).toContain("메일");
-    expect(desktopStartupPreference?.querySelector<HTMLButtonElement>('button[data-desktop-startup-view="calendar"]')?.textContent).toContain("일정");
-
-    act(() => {
-      desktopStartupPreference?.querySelector<HTMLButtonElement>('button[data-desktop-startup-view="email"]')?.click();
-    });
-
-    expect(localStorage.getItem("naruon_startup_view")).toBe("email");
-    expect(window.location.hash).toBe("");
+    expect(desktopStartupPreference).toBeNull();
+    // No inert decorative status pills in the header.
+    expect(banner?.textContent ?? "").not.toContain("답장 추적");
+    expect(banner?.textContent ?? "").not.toContain("충돌 조율");
 
     act(() => {
       mobileMenuButton?.click();

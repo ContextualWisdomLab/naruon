@@ -134,9 +134,17 @@ def _parse_allowed_pop3_hosts() -> set[str]:
 def _validate_allowed_mail_host(
     normalized_host: str, allowed_hosts: set[str], host_error: str
 ) -> None:
-    """Fail closed unless the mail host is explicitly operator-allowlisted."""
+    """Optional operator pinning for member-configured mail hosts.
+
+    Naruon is a control plane over customer-owned mail systems, so operators
+    cannot pre-know every member's mail host: an EMPTY allowlist imposes no
+    host-name restriction. The fail-closed SSRF boundary stays with the
+    address-class and port guards (global-address resolution, pinned connect
+    addresses, mail-port allowlists). A configured allowlist restricts
+    connections to those exact hosts and never accepts wildcard entries.
+    """
     if not allowed_hosts:
-        raise ValueError(host_error)
+        return
     if any("*" in allowed_host for allowed_host in allowed_hosts):
         raise ValueError(host_error)
     if normalized_host not in allowed_hosts:

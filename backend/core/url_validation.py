@@ -12,6 +12,25 @@ class ValidatedHTTPSURLHost:
     hostname: str
     port: int
     addresses: tuple[str, ...]
+    url_scheme: str = "https"
+
+
+def is_local_dev_identity_host(host: str) -> bool:
+    """Hosts eligible for the compose-local identity-provider opt-in.
+
+    Only `localhost`, bare single-label compose service names, and the Docker
+    host gateway alias qualify; dotted public hostnames and IP literals never
+    do, so the opt-in cannot be used to weaken validation of real deployments.
+    """
+    if not host:
+        return False
+    if host == "localhost" or host == "host.docker.internal":
+        return True
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        return "." not in host
 
 
 def parse_allowed_hosts(raw_hosts: str) -> frozenset[str]:
@@ -55,10 +74,11 @@ def validate_https_url_host_details(
     url_value: str,
     allowed_hosts: frozenset[str],
     allowed_hosts_setting_name: str,
+    *,
+    allow_local: bool = False,
 ) -> ValidatedHTTPSURLHost:
     parsed = urlsplit(url_value)
-    if parsed.scheme.lower() != "https":
-        raise ValueError(f"{setting_name} must use https")
+    scheme = parsed.scheme.lower()
     if parsed.username or parsed.password:
         raise ValueError(f"{setting_name} must not include userinfo")
     if parsed.fragment:
@@ -71,9 +91,20 @@ def validate_https_url_host_details(
         raise ValueError(
             f"{setting_name} host must be listed in {allowed_hosts_setting_name}"
         )
-    _reject_unsafe_ip_literal(setting_name, host)
-    port = parsed.port or 443
-    addresses = _resolve_global_addresses(setting_name, host, port)
+    # Compose-local identity-provider opt-in (see ALLOW_LOCAL_OIDC_PROVIDERS):
+    # an allowlisted localhost/single-label host may use plain http and resolve
+    # to non-global (compose network) addresses. Everything else stays on the
+    # strict https + global-address path.
+    local_dev = allow_local and is_local_dev_identity_host(host)
+    if scheme != "https" and not (local_dev and scheme == "http"):
+        raise ValueError(f"{setting_name} must use https")
+    if not local_dev:
+        _reject_unsafe_ip_literal(setting_name, host)
+    port = parsed.port or (443 if scheme == "https" else 80)
+    if local_dev:
+        addresses = _resolve_any_addresses(setting_name, host, port)
+    else:
+        addresses = _resolve_global_addresses(setting_name, host, port)
     normalized_netloc = host if parsed.port is None else f"{host}:{port}"
     normalized_url = parsed._replace(netloc=normalized_netloc).geturl()
     return ValidatedHTTPSURLHost(
@@ -81,6 +112,7 @@ def validate_https_url_host_details(
         hostname=host,
         port=port,
         addresses=addresses,
+        url_scheme=scheme,
     )
 
 
@@ -113,6 +145,27 @@ def _validate_global_address(setting_name: str, address: str) -> str:
     if not ip_address.is_global:
         raise ValueError(f"{setting_name} resolved IP host must be globally routable")
     return str(ip_address)
+
+
+def _resolve_any_addresses(
+    setting_name: str, hostname: str, port: int
+) -> tuple[str, ...]:
+    """Resolve an opted-in local host without the global-address requirement."""
+    try:
+        address_infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError(f"{setting_name} host must resolve") from exc
+
+    addresses: list[str] = []
+    seen_addresses: set[str] = set()
+    for address_info in address_infos:
+        address = str(address_info[4][0])
+        if address not in seen_addresses:
+            seen_addresses.add(address)
+            addresses.append(address)
+    if not addresses:
+        raise ValueError(f"{setting_name} host must resolve")
+    return tuple(addresses)
 
 
 def _resolve_global_addresses(

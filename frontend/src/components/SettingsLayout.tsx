@@ -104,6 +104,7 @@ interface AccountConfig {
   oauth_client_id: string | null;
   oauth_redirect_uri: string | null;
   has_oauth_client_secret: boolean;
+  has_openai_api_key: boolean;
 }
 
 interface AccountConfigUpdate {
@@ -122,6 +123,7 @@ interface AccountConfigUpdate {
   oauth_client_id: string | null;
   oauth_client_secret?: string;
   oauth_redirect_uri: string | null;
+  openai_api_key?: string;
 }
 
 interface CalendarWritebackSource {
@@ -494,6 +496,23 @@ const settingsDetailSurfaces: Partial<Record<SettingsTab, {
 
 export function SettingsLayout() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('워크스페이스');
+
+  useEffect(() => {
+    // Deep links: the header bell and the Home onboarding checklist target
+    // specific settings tabs by hash.
+    const hashTabMap: Record<string, SettingsTab> = {
+      '#notifications': '알림',
+      '#accounts': '연결 계정',
+      '#ai-models': 'AI 모델',
+    };
+    const applySettingsHashTab = () => {
+      const mappedTab = hashTabMap[window.location.hash];
+      if (mappedTab) setActiveTab(mappedTab);
+    };
+    applySettingsHashTab();
+    window.addEventListener('hashchange', applySettingsHashTab);
+    return () => window.removeEventListener('hashchange', applySettingsHashTab);
+  }, []);
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig | null>(null);
   const [runnerError, setRunnerError] = useState<string | null>(null);
   const [runnerLoading, setRunnerLoading] = useState(true);
@@ -532,6 +551,10 @@ export function SettingsLayout() {
   const oauthClientSecretInputRef = useRef<HTMLInputElement>(null);
   const commercialApiKeyInputRef = useRef<HTMLInputElement>(null);
   const localApiKeyInputRef = useRef<HTMLInputElement>(null);
+  const personalLlmKeyInputRef = useRef<HTMLInputElement>(null);
+  const [personalKeySaving, setPersonalKeySaving] = useState(false);
+  const [personalKeyStatus, setPersonalKeyStatus] = useState<string | null>(null);
+  const [personalKeyError, setPersonalKeyError] = useState<string | null>(null);
   const startupView = useWorkspaceStartupView();
   const oidcBrowserConfig = getOidcBrowserConfig();
   const connectorManifest = runnerConfig?.connector_manifest;
@@ -631,6 +654,33 @@ export function SettingsLayout() {
       setAccountError(message);
     } finally {
       setAccountSaving(false);
+    }
+  };
+
+  const handlePersonalLlmKeySave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPersonalKeyStatus(null);
+    setPersonalKeyError(null);
+
+    const apiKeyValue = readInputValue(personalLlmKeyInputRef).trim();
+    if (!apiKeyValue) {
+      setPersonalKeyError('저장할 LLM API Key를 입력하세요.');
+      return;
+    }
+
+    setPersonalKeySaving(true);
+    try {
+      const savedConfig = await apiClient.put<AccountConfig>('/api/accounts/config', {
+        openai_api_key: apiKeyValue,
+      });
+      setAccountConfig(savedConfig);
+      clearInputValue(personalLlmKeyInputRef);
+      setPersonalKeyStatus('LLM API Key를 저장했습니다. 저장된 Key 원문은 응답에 노출되지 않습니다.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'LLM API Key를 저장할 수 없습니다.';
+      setPersonalKeyError(message);
+    } finally {
+      setPersonalKeySaving(false);
     }
   };
 
@@ -769,9 +819,13 @@ export function SettingsLayout() {
         setAccountForm(toAccountForm(config));
         setAccountError(null);
       })
-      .catch((error: Error) => {
+      .catch((error: Error & { status?: number }) => {
         if (cancelled) return;
-        setAccountError(error.message || '계정 설정을 불러오지 못했습니다.');
+        setAccountError(
+          error.status === 401
+            ? '로그인 세션이 없어 계정 설정을 불러올 수 없습니다. 세션 발급 후 새로고침하세요.'
+            : error.message || '계정 설정을 불러오지 못했습니다.',
+        );
       })
       .finally(() => {
         if (!cancelled) setAccountLoading(false);
@@ -929,6 +983,53 @@ export function SettingsLayout() {
                 {modelProviderStatus ? (
                   <p className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{modelProviderStatus}</p>
                 ) : null}
+
+                <section aria-label="개인 LLM API Key" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-lg">개인 LLM API Key</h3>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        본인 세션 스코프의 AI 기능을 켜는 Key입니다. 조직 provider 레지스트리와 별개로
+                        <span className="font-mono font-semibold"> /api/accounts/config</span>에 암호화 저장되며, 운영자가 지정한 LLM 게이트웨이(예: contextual-orchestrator)로 라우팅됩니다.
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${accountConfig?.has_openai_api_key ? 'bg-emerald-100 text-emerald-800' : 'bg-secondary text-muted-foreground'}`}>
+                      {accountConfig?.has_openai_api_key ? '저장된 Key 있음' : 'Key 미등록'}
+                    </span>
+                  </div>
+
+                  {personalKeyStatus ? (
+                    <p className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{personalKeyStatus}</p>
+                  ) : null}
+                  {personalKeyError ? (
+                    <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{personalKeyError}</p>
+                  ) : null}
+
+                  <form onSubmit={handlePersonalLlmKeySave} className="mt-4 flex flex-wrap items-end gap-3">
+                    <div className="min-w-64 flex-1">
+                      <label htmlFor="personal-llm-api-key" className="mb-1 block text-xs font-bold text-muted-foreground">LLM API Key</label>
+                      <input
+                        id="personal-llm-api-key"
+                        ref={personalLlmKeyInputRef}
+                        name="openai_api_key"
+                        type="password"
+                        autoComplete="off"
+                        onChange={() => { setPersonalKeyStatus(null); setPersonalKeyError(null); }}
+                        placeholder={accountConfig?.has_openai_api_key ? '저장된 Key 유지 중 · 새 Key 입력 시 교체' : '게이트웨이 또는 provider API Key 입력'}
+                        className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={personalKeySaving}
+                      aria-disabled={personalKeySaving}
+                      aria-busy={personalKeySaving}
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-60"
+                    >
+                      {personalKeySaving ? '저장 중…' : 'LLM API Key 저장'}
+                    </button>
+                  </form>
+                </section>
 
                 <section aria-label="등록된 AI 모델" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1304,7 +1405,7 @@ export function SettingsLayout() {
                       disabled={accountSaving || !accountReady}
                       aria-disabled={accountSaving || !accountReady}
                       aria-busy={accountSaving}
-                      title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
+                      title={accountSaving ? "저장 중입니다" : !accountReady ? "계정 정보를 불러오지 못해 저장할 수 없습니다 — 로그인 세션을 확인하세요" : "계정 설정 저장"}
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}

@@ -14,29 +14,52 @@ def _make_socket() -> socket.socket:
     return socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 
-def test_smtp_host_policy_denies_empty_allowlist_before_dns(monkeypatch):
+def test_smtp_host_policy_allows_any_global_host_when_allowlist_empty(monkeypatch):
+    # Naruon is a control plane over member-configured, customer-owned mail
+    # systems: operators cannot pre-know every customer host, so an EMPTY
+    # allowlist imposes no host restriction. The SSRF guards (global-address
+    # resolution, port pinning) remain the fail-closed boundary.
+    monkeypatch.setattr(email_client.settings, "ALLOWED_SMTP_HOSTS", "")
+    monkeypatch.setattr(
+        email_client.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 587))
+        ],
+    )
+
+    assert (
+        email_client.validate_smtp_host("mail.customer-example.com", resolve_host=True)
+        == "mail.customer-example.com"
+    )
+
+
+def test_smtp_allowed_host_helper_is_optional_pinning_when_empty(monkeypatch):
     monkeypatch.setattr(email_client.settings, "ALLOWED_SMTP_HOSTS", "")
 
-    def fail_getaddrinfo(*args, **kwargs):
-        raise AssertionError("empty SMTP allowlist must fail before DNS resolution")
-
-    monkeypatch.setattr(email_client.socket, "getaddrinfo", fail_getaddrinfo)
-
-    with pytest.raises(ValueError, match=email_client.SMTP_HOST_NOT_ALLOWED):
-        email_client.validate_smtp_host("smtp.example.com", resolve_host=True)
+    assert email_client._validate_allowed_smtp_host("mail.customer-example.com") is None
 
 
-def test_smtp_allowed_host_helper_fails_closed_when_allowlist_empty(monkeypatch):
+def test_smtp_host_policy_empty_allowlist_still_blocks_private_addresses(monkeypatch):
+    # With no operator pinning, the address-class guard is what fails closed.
     monkeypatch.setattr(email_client.settings, "ALLOWED_SMTP_HOSTS", "")
+    monkeypatch.setattr(
+        email_client.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", 587))
+        ],
+    )
 
     with pytest.raises(ValueError, match=email_client.SMTP_HOST_NOT_ALLOWED):
-        email_client._validate_allowed_smtp_host("smtp.example.com")
+        email_client.validate_smtp_host("mail.customer-example.com", resolve_host=True)
 
 
-def test_smtp_host_policy_keeps_empty_allowlist_guard_explicit():
+def test_smtp_host_policy_keeps_optional_pinning_guard_explicit():
     source = inspect.getsource(email_client._validate_allowed_mail_host)
 
     assert "if not allowed_hosts:" in source
+    assert "return" in source
     assert "if normalized_host not in allowed_hosts:" in source
 
 
@@ -208,28 +231,36 @@ def test_smtp_destination_rejects_mixed_public_and_private_dns_answers(monkeypat
         email_client.validate_smtp_destination("smtp.example.com", 587)
 
 
-def test_imap_host_policy_denies_empty_allowlist_before_dns(monkeypatch):
+def test_imap_host_policy_allows_any_global_host_when_allowlist_empty(monkeypatch):
     monkeypatch.setattr(email_client.settings, "ALLOWED_IMAP_HOSTS", "")
+    monkeypatch.setattr(
+        email_client.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 993))
+        ],
+    )
 
-    def fail_getaddrinfo(*args, **kwargs):
-        raise AssertionError("empty IMAP allowlist must fail before DNS resolution")
-
-    monkeypatch.setattr(email_client.socket, "getaddrinfo", fail_getaddrinfo)
-
-    with pytest.raises(ValueError, match=email_client.IMAP_HOST_NOT_ALLOWED):
-        email_client.validate_imap_destination("imap.example.com", 993)
+    assert email_client.validate_imap_destination("mail.customer-example.com", 993) == (
+        "mail.customer-example.com",
+        993,
+    )
 
 
-def test_pop3_host_policy_denies_empty_allowlist_before_dns(monkeypatch):
+def test_pop3_host_policy_allows_any_global_host_when_allowlist_empty(monkeypatch):
     monkeypatch.setattr(email_client.settings, "ALLOWED_POP3_HOSTS", "")
+    monkeypatch.setattr(
+        email_client.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 995))
+        ],
+    )
 
-    def fail_getaddrinfo(*args, **kwargs):
-        raise AssertionError("empty POP3 allowlist must fail before DNS resolution")
-
-    monkeypatch.setattr(email_client.socket, "getaddrinfo", fail_getaddrinfo)
-
-    with pytest.raises(ValueError, match=email_client.POP3_HOST_NOT_ALLOWED):
-        email_client.validate_pop3_destination("pop3.example.com", 995)
+    assert email_client.validate_pop3_destination("mail.customer-example.com", 995) == (
+        "mail.customer-example.com",
+        995,
+    )
 
 
 def test_imap_host_policy_rejects_wildcard_allowlist_entry(monkeypatch):

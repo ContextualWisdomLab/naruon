@@ -78,6 +78,35 @@ function emptyCalendarCandidateSearchResponse(url: string) {
   return null;
 }
 
+function accountsConfigResponse(url: string, overrides: Record<string, unknown> = {}) {
+  if (url.endsWith("/api/accounts/config")) {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        user_id: "default",
+        smtp_server: "smtp.example.com",
+        smtp_port: 587,
+        smtp_username: "sender@example.com",
+        has_smtp_password: true,
+        imap_server: "imap.example.com",
+        imap_port: 993,
+        imap_username: "inbox@example.com",
+        has_imap_password: true,
+        pop3_server: null,
+        pop3_port: null,
+        pop3_username: null,
+        has_pop3_password: false,
+        oauth_client_id: null,
+        oauth_redirect_uri: null,
+        has_oauth_client_secret: false,
+        has_openai_api_key: true,
+        ...overrides,
+      }),
+    });
+  }
+  return null;
+}
+
 describe("WorkspaceHome Today dashboard", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
@@ -149,6 +178,8 @@ describe("WorkspaceHome Today dashboard", () => {
       if (sourceEvidenceResponse) return sourceEvidenceResponse;
       const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
       if (calendarCandidateResponse) return calendarCandidateResponse;
+      const accountsResponse = accountsConfigResponse(url);
+      if (accountsResponse) return accountsResponse;
       throw new Error(`Unexpected fetch: ${url}`);
     }));
     container = document.createElement("div");
@@ -235,6 +266,8 @@ describe("WorkspaceHome Today dashboard", () => {
       if (sourceEvidenceResponse) return sourceEvidenceResponse;
       const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
       if (calendarCandidateResponse) return calendarCandidateResponse;
+      const accountsResponse = accountsConfigResponse(url);
+      if (accountsResponse) return accountsResponse;
       throw new Error(`Unexpected fetch: ${url}`);
     }));
     container = document.createElement("div");
@@ -319,6 +352,8 @@ describe("WorkspaceHome Today dashboard", () => {
       if (sourceEvidenceResponse) return sourceEvidenceResponse;
       const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
       if (calendarCandidateResponse) return calendarCandidateResponse;
+      const accountsResponse = accountsConfigResponse(url);
+      if (accountsResponse) return accountsResponse;
       throw new Error(`Unexpected fetch: ${url}`);
     }));
     container = document.createElement("div");
@@ -412,6 +447,8 @@ describe("WorkspaceHome Today dashboard", () => {
       if (sourceEvidenceResponse) return sourceEvidenceResponse;
       const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
       if (calendarCandidateResponse) return calendarCandidateResponse;
+      const accountsResponse = accountsConfigResponse(url);
+      if (accountsResponse) return accountsResponse;
       throw new Error(`Unexpected fetch: ${url}`);
     }));
     container = document.createElement("div");
@@ -526,6 +563,8 @@ describe("WorkspaceHome Today dashboard", () => {
       if (sourceEvidenceResponse) return sourceEvidenceResponse;
       const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
       if (calendarCandidateResponse) return calendarCandidateResponse;
+      const accountsResponse = accountsConfigResponse(url);
+      if (accountsResponse) return accountsResponse;
       throw new Error(`Unexpected fetch: ${url}`);
     }));
     container = document.createElement("div");
@@ -771,6 +810,8 @@ describe("WorkspaceHome Today dashboard", () => {
       }
       const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
       if (calendarCandidateResponse) return calendarCandidateResponse;
+      const accountsResponse = accountsConfigResponse(url);
+      if (accountsResponse) return accountsResponse;
       throw new Error(`Unexpected fetch: ${url}`);
     }));
     container = document.createElement("div");
@@ -786,5 +827,199 @@ describe("WorkspaceHome Today dashboard", () => {
     expect(container.textContent).toContain("오류");
     expect(container.textContent).toContain("일정 원본 목록 응답을 확인할 수 없습니다.");
     expect(container.textContent).not.toContain("연결된 일정 원본이 없습니다.");
+  });
+
+  it("renders the calendar startup view as a data-backed today surface", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            emails: [
+              {
+                id: 501,
+                subject: "견적 회신 대기",
+                sender: "김파트너 <partner@example.com>",
+                date: "2026-07-20T09:00:00Z",
+                snippet: "발송 후 48시간 무응답",
+                requires_reply: true,
+              },
+            ],
+          }),
+        });
+      }
+      if (url.endsWith("/api/emails")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/tasks")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([
+            {
+              id: "task-uid-1",
+              title: "출시 일정 확정",
+              status: "open",
+              priority: "high",
+              created_at: "2026-07-20T01:00:00Z",
+              updated_at: "2026-07-20T01:00:00Z",
+            },
+          ]),
+        });
+      }
+      if (url.endsWith("/api/calendar/writeback-sources")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([
+            {
+              source_id: "opaque-source-1",
+              provider: "fastmail",
+              protocol: "caldav",
+              owner_id: "owner",
+              organization_id: "org",
+              capabilities: ["read", "write", "etag"],
+              writeback_enabled: true,
+              etag: "W/\"1\"",
+            },
+          ]),
+        });
+      }
+      if (url.endsWith("/api/webdav/folders")) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      const accountsResponse = accountsConfigResponse(url);
+      if (accountsResponse) return accountsResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="calendar" />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("출시 일정 확정") ?? false);
+
+    // Calendar-first Home is a real dashboard, not a redirect card.
+    const calendarCta = Array.from(container.querySelectorAll("a")).find(
+      (link) => link.textContent?.includes("일정 관리 열기"),
+    );
+    expect(calendarCta?.getAttribute("href")).toBe("/calendar");
+    expect(container.textContent).toContain("일정 원본 연결 상태");
+    expect(container.textContent).toContain("CalDAV 원본");
+    expect(container.textContent).toContain("일정 반영");
+    expect(container.textContent).toContain("김파트너");
+    expect(container.textContent).toContain("견적 회신 대기");
+    expect(container.textContent).toContain("출시 일정 확정");
+    // Empty search candidates render as a calm empty state, and the source
+    // event feed is honestly labelled pending (no server events API yet).
+    expect(container.textContent).toContain("일정 후보가 없습니다");
+    expect(container.textContent).toContain("원본 이벤트 표시는 연동 후 제공");
+    // Opaque source ids never render as visible text.
+    expect(container.textContent).not.toContain("opaque-source-1");
+  });
+
+  it("leads with onboarding when no mailbox is connected", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/emails")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/tasks")) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+      const accountsResponse = accountsConfigResponse(url, {
+        imap_server: null,
+        imap_username: null,
+        has_imap_password: false,
+        smtp_server: null,
+        has_smtp_password: false,
+        has_openai_api_key: false,
+      });
+      if (accountsResponse) return accountsResponse;
+      const sourceEvidenceResponse = emptySourceEvidenceResponse(url);
+      if (sourceEvidenceResponse) return sourceEvidenceResponse;
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("메일 워크스페이스 시작하기") ?? false);
+
+    expect(container.textContent).toContain("메일 계정 연결");
+    expect(container.textContent).toContain("LLM API Key 등록");
+    expect(container.textContent).toContain("메일 데이터 가져오기");
+    const linkHrefByText = (label: string) =>
+      Array.from(container?.querySelectorAll("a") ?? []).find((link) => link.textContent?.includes(label))?.getAttribute("href");
+    expect(linkHrefByText("메일 계정 연결하기")).toBe("/settings#accounts");
+    expect(linkHrefByText("LLM API Key 등록하기")).toBe("/settings#ai-models");
+  });
+
+  it("hides onboarding once the mailbox and data are connected", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/emails")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            emails: [
+              { id: 1, subject: "동기화된 메일", sender: "peer@example.com", date: "2026-07-20T09:00:00Z", snippet: "본문", unread: false },
+            ],
+          }),
+        });
+      }
+      if (url.endsWith("/api/tasks")) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+      const accountsResponse = accountsConfigResponse(url);
+      if (accountsResponse) return accountsResponse;
+      const sourceEvidenceResponse = emptySourceEvidenceResponse(url);
+      if (sourceEvidenceResponse) return sourceEvidenceResponse;
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("동기화된 메일") ?? false);
+
+    expect(container.textContent).not.toContain("메일 워크스페이스 시작하기");
   });
 });

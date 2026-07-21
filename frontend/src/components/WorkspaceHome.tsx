@@ -29,6 +29,11 @@ type StartupSearchResult = {
 function useStartupSearch(query: string, limit: number) {
   const [status, setStatus] = useState<'loading' | 'success' | 'empty' | 'error'>('loading');
   const [results, setResults] = useState<StartupSearchResult[]>([]);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const retry = useCallback(() => {
+    setStatus('loading');
+    setRefreshNonce((nonce) => nonce + 1);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -50,9 +55,9 @@ function useStartupSearch(query: string, limit: number) {
       cancelled = true;
       controller.abort();
     };
-  }, [limit, query]);
+  }, [limit, query, refreshNonce]);
 
-  return { results, status };
+  return { results, status, retry };
 }
 
 type CalendarWritebackSource = {
@@ -62,6 +67,14 @@ type CalendarWritebackSource = {
   capabilities?: string[];
   writeback_enabled?: boolean;
   etag?: string | null;
+};
+
+type AccountConnectionConfig = {
+  imap_server: string | null;
+  has_imap_password: boolean;
+  smtp_server: string | null;
+  has_smtp_password: boolean;
+  has_openai_api_key: boolean;
 };
 
 type ProjectFolder = {
@@ -152,6 +165,7 @@ function useDashboardData() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [calendarSources, setCalendarSources] = useState<CalendarWritebackSource[]>([]);
   const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>([]);
+  const [accountConfig, setAccountConfig] = useState<AccountConnectionConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [sourceEvidenceStatus, setSourceEvidenceStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -169,11 +183,13 @@ function useDashboardData() {
       apiClient.get<{ emails: EmailItem[] }>('/api/emails').catch(() => ({ emails: [] })),
       apiClient.get<{ emails: EmailItem[] }>('/api/emails/pending-replies?limit=3').catch(() => ({ emails: [] })),
       apiClient.get<TaskItem[]>('/api/tasks').catch(() => []),
-    ]).then(([emailRes, pendingReplyRes, tasksRes]) => {
+      apiClient.get<AccountConnectionConfig>('/api/accounts/config').catch(() => null),
+    ]).then(([emailRes, pendingReplyRes, tasksRes, accountConfigRes]) => {
       if (cancelled) return;
       setEmails(Array.isArray(emailRes.emails) ? emailRes.emails : []);
       setPendingReplies(Array.isArray(pendingReplyRes.emails) ? pendingReplyRes.emails : []);
       setTasks(Array.isArray(tasksRes) ? tasksRes : []);
+      setAccountConfig(accountConfigRes ?? null);
     }).finally(finishRequest);
 
     Promise.all([
@@ -196,7 +212,101 @@ function useDashboardData() {
     };
   }, []);
 
-  return { emails, pendingReplies, tasks, setTasks, calendarSources, projectFolders, loading, sourceEvidenceStatus };
+  return { emails, pendingReplies, tasks, setTasks, calendarSources, projectFolders, accountConfig, loading, sourceEvidenceStatus };
+}
+
+function WorkspaceOnboarding({
+  accountConfig,
+  hasEmails,
+  calendarSourceCount,
+  loading,
+}: {
+  accountConfig: AccountConnectionConfig | null;
+  hasEmails: boolean;
+  calendarSourceCount: number;
+  loading: boolean;
+}) {
+  const mailConnected = Boolean(accountConfig?.imap_server && accountConfig?.has_imap_password);
+  const llmKeyRegistered = Boolean(accountConfig?.has_openai_api_key);
+  type OnboardingStep = {
+    key: string;
+    label: string;
+    description: string;
+    done: boolean;
+    cta: { label: string; href: string };
+    secondaryCta?: { label: string; href: string };
+  };
+  const essentialSteps: OnboardingStep[] = [
+    {
+      key: 'mail-account',
+      label: '메일 계정 연결',
+      description: 'IMAP/SMTP 서버와 앱 비밀번호를 등록하면 받은편지함 동기화가 시작됩니다.',
+      done: mailConnected,
+      cta: { label: '메일 계정 연결하기', href: '/settings#accounts' },
+    },
+    {
+      key: 'llm-key',
+      label: 'LLM API Key 등록',
+      description: 'AI 요약·맥락 검색·답장 초안을 켜는 개인 Key입니다. 게이트웨이 토큰도 사용할 수 있습니다.',
+      done: llmKeyRegistered,
+      cta: { label: 'LLM API Key 등록하기', href: '/settings#ai-models' },
+    },
+    {
+      key: 'mail-data',
+      label: '메일 데이터 가져오기',
+      description: '계정 연결 후 동기화를 기다리거나 .eml/ZIP/MBOX 파일을 반입합니다.',
+      done: hasEmails,
+      cta: { label: '메일함 열기', href: '/mail' },
+      secondaryCta: { label: '파일 반입', href: '/data' },
+    },
+  ];
+  const optionalStep: OnboardingStep = {
+    key: 'calendar-source',
+    label: '일정 원본 연결 (선택)',
+    description: 'CalDAV 원본을 연결하면 일정 반영 의도와 충돌 검사가 활성화됩니다.',
+    done: calendarSourceCount > 0,
+    cta: { label: '일정 원본 연결하기', href: '/settings#accounts' },
+  };
+  const completedCount = essentialSteps.filter((step) => step.done).length;
+  if (loading || completedCount === essentialSteps.length) return null;
+
+  return (
+    <section aria-label="메일 워크스페이스 시작하기" className="rounded-3xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Onboarding</p>
+          <h2 className="mt-2 text-xl font-black text-foreground">메일 워크스페이스 시작하기</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">Naruon은 회원이 지정한 메일 시스템 위에서 동작합니다. 아래 순서대로 연결하면 홈이 실데이터로 채워집니다.</p>
+        </div>
+        <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-black text-primary">{completedCount}/{essentialSteps.length} 완료</span>
+      </div>
+      <ol className="mt-5 grid gap-3">
+        {[...essentialSteps, optionalStep].map((step, index) => (
+          <li key={step.key} className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${step.done ? 'border-emerald-200 bg-emerald-50/60' : 'border-border bg-card'}`}>
+            <div className="flex min-w-0 items-start gap-3">
+              <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-black ${step.done ? 'bg-emerald-500 text-white' : 'bg-secondary text-muted-foreground'}`}>
+                {step.done ? <CheckCircle2 className="size-4" aria-hidden="true" /> : index + 1}
+              </span>
+              <div className="min-w-0">
+                <p className={`text-sm font-bold ${step.done ? 'text-emerald-800' : 'text-foreground'}`}>{step.label}</p>
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{step.description}</p>
+              </div>
+            </div>
+            {!step.done ? (
+              <div className="flex shrink-0 items-center gap-2">
+                <a href={step.cta.href} className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">{step.cta.label}</a>
+                {step.secondaryCta ? (
+                  <a href={step.secondaryCta.href} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">{step.secondaryCta.label}</a>
+                ) : null}
+              </div>
+            ) : (
+              <span className="shrink-0 text-xs font-bold text-emerald-700">완료</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 }
 
 function formatStartupDate(value: string) {
@@ -239,7 +349,7 @@ function StartupResultList({ results }: { results: StartupSearchResult[] }) {
 }
 
 function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupView) => void }) {
-  const { emails, pendingReplies, tasks, setTasks: setDashboardTasks, calendarSources, projectFolders, loading, sourceEvidenceStatus } = useDashboardData();
+  const { emails, pendingReplies, tasks, setTasks: setDashboardTasks, calendarSources, projectFolders, accountConfig, loading, sourceEvidenceStatus } = useDashboardData();
   const calendarCandidateEvidence = useStartupSearch('일정 충돌 일정 조율 회의 후보', 3);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState('');
@@ -302,6 +412,13 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
   return (
     <section role="region" aria-label="홈 개요" className="h-full overflow-y-auto bg-background p-4 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
+
+        <WorkspaceOnboarding
+          accountConfig={accountConfig}
+          hasEmails={emails.length > 0}
+          calendarSourceCount={calendarSources.length}
+          loading={loading}
+        />
 
         {/* Header Section */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -599,28 +716,165 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
 }
 
 function StartupCalendar({ onOpenView }: { onOpenView: (view: WorkspaceStartupView) => void }) {
-  const { results, status } = useStartupSearch('회의 마감 후속 조치 일정', 3);
+  const { emails, pendingReplies, tasks, calendarSources, accountConfig, loading, sourceEvidenceStatus } = useDashboardData();
+  const { results, status, retry } = useStartupSearch('회의 마감 후속 조치 일정', 3);
+  const pendingTasks = tasks.filter((task) => task.status !== 'done').slice(0, 3);
+  const writableCalendarSourceCount = calendarSources.filter(isWritableCalendarSource).length;
+  const sourceEvidenceError = sourceEvidenceStatus === 'error';
+  const calendarStats = [
+    {
+      title: '일정 원본',
+      value: sourceEvidenceError ? '오류' : sourceEvidenceStatus === 'loading' ? '-' : `${calendarSources.length}개`,
+      detail: sourceEvidenceError ? '원본 확인 필요' : `반영 가능 ${writableCalendarSourceCount}개`,
+      icon: CalendarDays,
+      color: sourceEvidenceError ? 'text-red-500' : 'text-blue-500',
+    },
+    { title: '답장 대기', value: loading ? '-' : `${pendingReplies.length}건`, detail: '보낸 메일 무응답', icon: Send, color: 'text-rose-500' },
+    { title: '대기 작업', value: loading ? '-' : `${pendingTasks.length}건`, detail: 'source-linked', icon: CheckCircle2, color: 'text-green-500' },
+  ];
 
   return (
     <section aria-label="일정관리 시작 화면" className="h-full overflow-y-auto rounded-3xl border border-border/80 bg-card/80 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-      <div className="max-w-4xl space-y-5">
-        <div className="rounded-3xl border border-primary/15 bg-primary/5 p-6">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Calendar</p>
-          <h1 className="mt-3 text-3xl font-black text-foreground">일정관리 시작 화면</h1>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">메일에서 추출한 회의, 마감, 후속 조치를 먼저 확인합니다.</p>
-          <button
-            type="button"
-            onClick={() => onOpenView('email')}
-            className="mt-5 inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-bold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-          >
-            <Inbox className="size-4" aria-hidden="true" />
-            메일 작업공간 열기
-          </button>
+      <div className="mx-auto max-w-5xl space-y-5">
+        <WorkspaceOnboarding
+          accountConfig={accountConfig}
+          hasEmails={emails.length > 0}
+          calendarSourceCount={calendarSources.length}
+          loading={loading}
+        />
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-primary/15 bg-primary/5 p-6">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Calendar</p>
+            <h1 className="mt-2 text-2xl font-black text-foreground">오늘의 일정 실행</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">일정 원본 상태, 메일에서 추출한 일정 후보, 답장·작업 마감을 한 화면에서 확인합니다.</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <a
+              href="/calendar"
+              className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-bold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <CalendarDays className="size-4" aria-hidden="true" />
+              일정 관리 열기
+            </a>
+            <button
+              type="button"
+              onClick={() => onOpenView('email')}
+              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-border bg-card px-4 text-sm font-bold text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <Inbox className="size-4" aria-hidden="true" />
+              메일 작업공간 열기
+            </button>
+          </div>
         </div>
-        {status === 'loading' ? <div role="status" className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground shadow-sm">일정 후보를 불러오는 중입니다.</div> : null}
-        {status === 'error' ? <div role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-semibold text-destructive shadow-sm">일정 후보를 불러오지 못했습니다.</div> : null}
-        {status === 'empty' ? <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-muted-foreground shadow-sm">일정 후보가 없습니다.</div> : null}
-        {status === 'success' ? <StartupResultList results={results} /> : null}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {calendarStats.map((stat) => (
+            <article key={stat.title} aria-label={stat.title} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-2 text-xs font-bold text-muted-foreground">
+                <span>{stat.title}</span>
+                <stat.icon className={`size-4 ${stat.color}`} aria-hidden="true" />
+              </div>
+              <p className="mt-2 text-2xl font-black text-foreground">{stat.value}</p>
+              <p className="mt-1 text-xs font-semibold text-muted-foreground">{stat.detail}</p>
+            </article>
+          ))}
+        </div>
+
+        <section aria-label="일정 원본 연결 상태" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-bold">일정 원본 연결 상태</h2>
+            <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-bold text-muted-foreground">원본 이벤트 표시는 연동 후 제공</span>
+          </div>
+          {sourceEvidenceStatus === 'loading' ? (
+            <p className="mt-4 rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold text-muted-foreground">일정 원본 목록을 확인하는 중입니다.</p>
+          ) : sourceEvidenceError ? (
+            <p className="mt-4 rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold text-muted-foreground">일정 원본 목록 응답을 확인할 수 없습니다. 설정에서 원본 계정을 점검하세요.</p>
+          ) : calendarSources.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-3 text-sm font-semibold text-muted-foreground">
+              연결된 일정 원본이 없습니다. <a href="/settings" className="font-bold text-primary hover:underline">설정 → 연결 계정</a>에서 CalDAV 원본을 등록하세요.
+            </p>
+          ) : (
+            <ul className="mt-4 grid gap-2">
+              {calendarSources.map((source, index) => (
+                <li key={source.source_id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-background px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2 text-sm font-bold text-foreground">
+                    <CalendarDays className="size-4 shrink-0 text-blue-500" aria-hidden="true" />
+                    <span className="truncate">{getCalendarSourceLabel(index)}</span>
+                    <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold text-muted-foreground">{getCalendarProtocolLabel(source.protocol)}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+                    {(source.capabilities ?? []).map((capability) => (
+                      <span key={capability} className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{getCalendarCapabilityLabel(capability)}</span>
+                    ))}
+                    <span className="rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{getCalendarConflictLabel(source)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section aria-label="메일 기반 일정 후보" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="text-base font-bold">메일 기반 일정 후보</h2>
+          <div className="mt-4">
+            {status === 'loading' ? <p role="status" className="rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold text-muted-foreground">일정 후보를 불러오는 중입니다.</p> : null}
+            {status === 'error' ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3">
+                <p className="text-sm font-semibold text-muted-foreground">일정 후보를 불러오지 못했습니다.</p>
+                <button type="button" onClick={retry} className="rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">다시 시도</button>
+              </div>
+            ) : null}
+            {status === 'empty' ? <p className="rounded-xl border border-dashed border-border px-4 py-3 text-sm font-semibold text-muted-foreground">일정 후보가 없습니다. 메일이 수집되면 회의·마감 후보가 여기에 표시됩니다.</p> : null}
+            {status === 'success' ? <StartupResultList results={results} /> : null}
+          </div>
+        </section>
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section aria-label="오늘의 실행 항목" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold">오늘의 실행 항목</h2>
+              <a href="/tasks" className="text-xs font-bold text-primary hover:underline">작업 보드 열기</a>
+            </div>
+            {loading ? (
+              <p className="mt-4 rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold text-muted-foreground">실행 항목을 불러오는 중입니다.</p>
+            ) : pendingTasks.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-3 text-sm font-semibold text-muted-foreground">대기 중인 실행 항목이 없습니다.</p>
+            ) : (
+              <ul className="mt-4 grid gap-2">
+                {pendingTasks.map((task) => (
+                  <li key={task.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-background px-4 py-3">
+                    <span className="min-w-0 truncate text-sm font-bold text-foreground">{safeWorkspaceTitle(task.title, '제목 없는 작업')}</span>
+                    <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold text-muted-foreground">{task.status === 'in_progress' ? '진행 중' : task.status === 'blocked' ? '차단' : '접수'}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section aria-label="답장 대기 메일" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold">답장 대기</h2>
+              <a href="/mail?folder=sent" className="text-xs font-bold text-primary hover:underline">보낸 메일 추적</a>
+            </div>
+            {loading ? (
+              <p className="mt-4 rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold text-muted-foreground">답장 대기 메일을 불러오는 중입니다.</p>
+            ) : pendingReplies.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-3 text-sm font-semibold text-muted-foreground">답장 대기 중인 보낸 메일이 없습니다.</p>
+            ) : (
+              <ul className="mt-4 grid gap-2">
+                {pendingReplies.map((mail) => (
+                  <li key={mail.id} className="rounded-xl border border-border bg-background px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-sm font-bold text-foreground">{toSafeReactText(mail.subject, '(제목 없음)')}</span>
+                      <span suppressHydrationWarning className="shrink-0 text-[11px] font-bold text-muted-foreground">{formatStartupDate(mail.date || '')}</span>
+                    </div>
+                    <p className="mt-1 truncate text-xs font-semibold text-primary">{toSafeReactText(mail.sender)}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       </div>
     </section>
   );

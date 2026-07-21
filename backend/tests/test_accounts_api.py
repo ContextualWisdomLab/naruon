@@ -36,6 +36,7 @@ class MockTenantConfig:
         self.oauth_client_id = None
         self.oauth_client_secret = None
         self.oauth_redirect_uri = None
+        self.openai_api_key = None
 
 class MockResult:
     def __init__(self, config=None):
@@ -329,6 +330,66 @@ def test_accounts_config_enforces_current_user_self_access_policy(monkeypatch):
             MAILBOX_MANAGE_FORBIDDEN,
         ),
     ]
+
+
+def test_accounts_config_registers_llm_api_key_write_only(
+    dev_auth_dependency_overrides,
+):
+    # Owner-scoped LLM API key registration: the key is write-only and the
+    # response only exposes a masked presence flag, never the raw value.
+    session = MockSession()
+
+    async def scoped_db():
+        yield session
+
+    app.dependency_overrides[get_db] = scoped_db
+    try:
+        with TestClient(app, headers={"X-User-Id": "llm-key-owner"}) as c:
+            response = c.put(
+                "/api/accounts/config",
+                json={"openai_api_key": "sk-live-test-key-1234"},
+            )
+            read_response = c.get("/api/accounts/config")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["has_openai_api_key"] is True
+    assert "sk-live-test-key-1234" not in response.text
+    assert read_response.status_code == 200
+    assert read_response.json()["has_openai_api_key"] is True
+    assert "sk-live-test-key-1234" not in read_response.text
+
+
+def test_accounts_config_masked_llm_api_key_sentinel_preserves_value(
+    dev_auth_dependency_overrides,
+):
+    session = MockSession()
+
+    async def scoped_db():
+        yield session
+
+    app.dependency_overrides[get_db] = scoped_db
+    try:
+        with TestClient(app, headers={"X-User-Id": "llm-key-owner"}) as c:
+            first = c.put(
+                "/api/accounts/config",
+                json={"openai_api_key": "sk-live-test-key-1234"},
+            )
+            # Saving the masked sentinel (what the UI shows for a stored
+            # secret) must keep the stored key instead of overwriting it.
+            second = c.put(
+                "/api/accounts/config",
+                json={"openai_api_key": "********"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["has_openai_api_key"] is True
+    stored = session.configs[("llm-key-owner", None)]
+    assert stored.openai_api_key == "sk-live-test-key-1234"
 
 
 def test_accounts_config_rejects_private_imap_host(client: TestClient):

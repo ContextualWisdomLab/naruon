@@ -1,0 +1,65 @@
+# Opt-in overlay for an OPTIONAL contextual-orchestrator checkout (local dev).
+#
+# contextual-orchestrator (https://github.com/ContextualWisdomLab/contextual-orchestrator)
+# is the org's LLM routing / cost hub: an OpenAI-compatible gateway
+# (`POST /v1/chat/completions`) that fans out to configured agent pools with
+# fallback + verification. naruon integrates with it config-first: the tenant
+# LLM provider's `base_url` points at this service and the hostname is added to
+# `ALLOWED_LLM_BASE_URL_HOSTS` (see
+# docs/plans/2026-07-07-contextual-orchestrator-llm-integration.md).
+#
+# This file is NOT part of the default naruon stack. Like
+# docker-compose.pg-llm-batch.yml it exists so a developer can run the
+# orchestrator from a local checkout; naruon runs fine without it.
+#
+# Prerequisites:
+#   git clone https://github.com/ContextualWisdomLab/contextual-orchestrator.git \
+#     ../contextual-orchestrator
+#
+# Usage (CONTEXTUAL_ORCHESTRATOR_TOKEN must be set in the compose env file):
+#   ./scripts/naruon_compose.sh \
+#     -f docker-compose.yml -f docker-compose.contextual-orchestrator.yml \
+#     up -d --build
+#
+# Then register the provider per tenant in naruon (Settings/AI Hub), never via
+# os.getenv:
+#   base_url = http://contextual-orchestrator:8000/v1
+#   api_key  = the CONTEXTUAL_ORCHESTRATOR_TOKEN value
+# Real upstream provider keys are registered inside the orchestrator's KV
+# (`python -m contextual_orchestrator register-credential`), so naruon tenants
+# hold only the gateway token, not raw provider keys.
+#
+# Self-hosted CUDA/MLX upstreams: the orchestrator serves sync
+# /v1/chat/completions AND /v1/embeddings from one base_url. Point it at
+# OpenAI-compatible local model servers (e.g. llama.cpp CUDA) via a local
+# override that sets AGENTS_FILE (chat pool), plus
+#   CONTEXTUAL_ORCHESTRATOR_EMBEDDINGS_UPSTREAM_BASE_URL / _MODEL
+#   CONTEXTUAL_ORCHESTRATOR_PRIVATE_PROVIDER_HOSTS   (exact-host lab opt-in
+#     that allows http + private addresses for self-hosted upstreams)
+#   CONTEXTUAL_ORCHESTRATOR_BOOTSTRAP_CREDENTIALS    (env->KV seeding at boot)
+# On Apple-silicon hosts the same pattern targets an MLX OpenAI-compatible
+# server (see the NARUON_MLX_* notes in .env.example).
+
+services:
+  contextual-orchestrator:
+    build:
+      context: ${CONTEXTUAL_ORCHESTRATOR_CHECKOUT:-../contextual-orchestrator}
+      dockerfile: Dockerfile
+    environment:
+      CONTEXTUAL_ORCHESTRATOR_TOKEN: ${CONTEXTUAL_ORCHESTRATOR_TOKEN:?Set CONTEXTUAL_ORCHESTRATOR_TOKEN in the compose env file}
+      # Defaults to the bundled mock pool; mount a real agents file and point
+      # AGENTS_FILE at it to route to real providers.
+      AGENTS_FILE: ${CONTEXTUAL_ORCHESTRATOR_AGENTS_FILE:-/app/examples/agents.mock.json}
+    # Host access is for operator/admin console use only; the backend reaches
+    # the service via the compose network hostname.
+    ports:
+      - "127.0.0.1:18090:8000"
+
+  backend:
+    environment:
+      # Extend the default allowlist so tenant LLM providers may point at the
+      # orchestrator gateway hostname on the compose network.
+      ALLOWED_LLM_BASE_URL_HOSTS: ollama,contextual-orchestrator
+    depends_on:
+      contextual-orchestrator:
+        condition: service_started

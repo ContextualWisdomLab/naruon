@@ -353,7 +353,7 @@ export function DashboardLayout({
             <Image src="/brand/naruon-symbol.svg" alt="Naruon" width={32} height={32} style={{ width: '32px', height: '32px' }} />
             <span className="text-lg font-black tracking-tight">Naruon</span>
           </div>
-          <nav aria-label="Primary workspace navigation" className="hidden max-w-[44vw] items-center gap-1 overflow-x-auto xl:flex 2xl:max-w-none">
+          <nav aria-label="Primary workspace navigation" className="hidden min-w-0 shrink items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:flex">
             {primaryNavItems.map((item) => (
               <PrimaryNavLink key={item.href} {...item} />
             ))}
@@ -386,28 +386,7 @@ export function DashboardLayout({
               </button>
             ) : null}
           </div>
-          <section aria-label="Desktop startup preference" className="hidden shrink-0 items-center gap-1 rounded-2xl border border-border bg-background/80 p-1 shadow-sm lg:flex">
-            <span className="px-2 text-[11px] font-black text-muted-foreground">시작 화면</span>
-            {startupViewItems.map(({ label, view, description }) => {
-              const active = startupView === view;
-              return (
-                <button
-                  key={view}
-                  type="button"
-                  data-desktop-startup-view={view}
-                  aria-pressed={active}
-                  title={description}
-                  onClick={() => handleStartupViewChange(view)}
-                  className={`h-8 rounded-xl px-2 text-[11px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                    active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </section>
-          <div data-testid="header-action-group" className="ml-auto hidden shrink-0 flex-wrap items-center justify-end gap-2 lg:flex">
+          <div data-testid="header-action-group" className="ml-auto hidden shrink-0 items-center justify-end gap-2 lg:flex">
             {headerActions.map(({ label, action, icon: Icon }) => (
               <HeaderActionButton key={action} label={label} action={action} icon={Icon} />
             ))}
@@ -423,7 +402,7 @@ export function DashboardLayout({
             ))}
           </div>
           <div className="ml-auto flex items-center gap-2 xl:ml-0">
-            <Link href="/security" aria-label="알림 보기" className="hidden size-10 place-items-center rounded-xl border border-border text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 md:grid">
+            <Link href="/settings#notifications" aria-label="알림 보기" className="hidden size-10 place-items-center rounded-xl border border-border text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 md:grid">
               <Bell className="size-4" aria-hidden="true" />
             </Link>
             <Link href="/settings#help" aria-label="도움말 보기" className="hidden size-10 place-items-center rounded-xl border border-border text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 md:grid">
@@ -433,12 +412,6 @@ export function DashboardLayout({
               <UserCircle className="size-4 text-primary" aria-hidden="true" />
               Seongho
             </Link>
-            <span className="hidden rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary xl:inline-flex">
-              답장 추적
-            </span>
-            <span className="hidden rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 xl:inline-flex">
-              충돌 조율
-            </span>
           </div>
         </header>
 

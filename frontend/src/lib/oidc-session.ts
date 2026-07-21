@@ -74,8 +74,45 @@ async function clearPersistedOidcSession() {
   }
 }
 
-function envValue(name: string): string | null {
-  const value = process.env[name]?.trim();
+type PublicOidcEnvName =
+  | 'NEXT_PUBLIC_OIDC_ISSUER_URL'
+  | 'NEXT_PUBLIC_OIDC_CLIENT_ID'
+  | 'NEXT_PUBLIC_OIDC_REDIRECT_URI'
+  | 'NEXT_PUBLIC_OIDC_SCOPE'
+  | 'NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT'
+  | 'NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT'
+  | 'NEXT_PUBLIC_OIDC_END_SESSION_ENDPOINT';
+
+function envValue(name: PublicOidcEnvName): string | null {
+  // NEXT_PUBLIC_* values only reach the browser bundle through STATIC
+  // `process.env.NEXT_PUBLIC_X` member accesses — Next.js never inlines
+  // dynamic `process.env[name]` lookups, which silently disables browser
+  // OIDC in every deployment. Keep each access literal.
+  let raw: string | undefined;
+  switch (name) {
+    case 'NEXT_PUBLIC_OIDC_ISSUER_URL':
+      raw = process.env.NEXT_PUBLIC_OIDC_ISSUER_URL;
+      break;
+    case 'NEXT_PUBLIC_OIDC_CLIENT_ID':
+      raw = process.env.NEXT_PUBLIC_OIDC_CLIENT_ID;
+      break;
+    case 'NEXT_PUBLIC_OIDC_REDIRECT_URI':
+      raw = process.env.NEXT_PUBLIC_OIDC_REDIRECT_URI;
+      break;
+    case 'NEXT_PUBLIC_OIDC_SCOPE':
+      raw = process.env.NEXT_PUBLIC_OIDC_SCOPE;
+      break;
+    case 'NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT':
+      raw = process.env.NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT;
+      break;
+    case 'NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT':
+      raw = process.env.NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT;
+      break;
+    case 'NEXT_PUBLIC_OIDC_END_SESSION_ENDPOINT':
+      raw = process.env.NEXT_PUBLIC_OIDC_END_SESSION_ENDPOINT;
+      break;
+  }
+  const value = raw?.trim();
   return value ? value : null;
 }
 

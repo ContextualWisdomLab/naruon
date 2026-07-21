@@ -57,6 +57,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV POSTCSS_WORKERS=1
 ENV DISABLE_POSTCSS_WORKERS=true
 
+# Public OIDC browser identity (issuer URL + public client id). These are
+# NEXT_PUBLIC_* values inlined into the client bundle at build time; they are
+# non-secret by definition. Leave empty for stacks without browser OIDC.
+ARG NEXT_PUBLIC_OIDC_ISSUER_URL=""
+ARG NEXT_PUBLIC_OIDC_CLIENT_ID=""
+ENV NEXT_PUBLIC_OIDC_ISSUER_URL=${NEXT_PUBLIC_OIDC_ISSUER_URL}
+ENV NEXT_PUBLIC_OIDC_CLIENT_ID=${NEXT_PUBLIC_OIDC_CLIENT_ID}
+
 RUN pnpm run build
 
 RUN chown -R node:node /app

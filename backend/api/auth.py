@@ -1,3 +1,4 @@
+import http.client
 from http.client import HTTPSConnection
 import hashlib
 import json
@@ -66,20 +67,30 @@ class _PinnedOIDCJWKSClient(PyJWKClient):
         target = parsed.path or "/"
         if parsed.query:
             target = f"{target}?{parsed.query}"
+        default_port = 443 if self._validated_url.url_scheme == "https" else 80
         host_header = self._validated_url.hostname
-        if self._validated_url.port != 443:
+        if self._validated_url.port != default_port:
             host_header = f"{host_header}:{self._validated_url.port}"
 
         last_error: Exception | None = None
         for address in self._validated_url.addresses:
             try:
-                connection = _PinnedHTTPSConnection(
-                    address,
-                    port=self._validated_url.port,
-                    server_hostname=self._validated_url.hostname,
-                    timeout=self.timeout,
-                    context=self._ssl_context,
-                )
+                if self._validated_url.url_scheme == "http":
+                    # Compose-local opt-in only (ALLOW_LOCAL_OIDC_PROVIDERS):
+                    # plain-http JWKS from a pinned compose-network address.
+                    connection = http.client.HTTPConnection(
+                        address,
+                        port=self._validated_url.port,
+                        timeout=self.timeout,
+                    )
+                else:
+                    connection = _PinnedHTTPSConnection(
+                        address,
+                        port=self._validated_url.port,
+                        server_hostname=self._validated_url.hostname,
+                        timeout=self.timeout,
+                        context=self._ssl_context,
+                    )
                 try:
                     connection.request(
                         "GET",
@@ -118,6 +129,7 @@ def _build_oidc_jwks_client() -> PyJWKClient | None:
         settings.OIDC_JWKS_URL,
         parse_allowed_hosts(settings.ALLOWED_OIDC_HOSTS),
         "ALLOWED_OIDC_HOSTS",
+        allow_local=settings.ALLOW_LOCAL_OIDC_PROVIDERS,
     )
     return _PinnedOIDCJWKSClient(validated_url)
 
