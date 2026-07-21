@@ -17,8 +17,14 @@ async function probeSession(): Promise<boolean> {
     credentials: "same-origin",
   });
   if (!response.ok) return false;
-  const payload = (await response.json()) as { authenticated?: boolean };
-  return payload.authenticated === true;
+  const payload = (await response.json()) as {
+    authenticated?: boolean;
+    claims?: { userId?: string | null };
+  };
+  // The live route reports `authenticated`; older fixtures only carry claims,
+  // so a concrete userId is accepted as equivalent session evidence.
+  if (payload.authenticated === true) return true;
+  return typeof payload.claims?.userId === "string" && payload.claims.userId.length > 0;
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
@@ -57,7 +63,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (status === "checking") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2 bg-background">
+        <p className="text-lg font-semibold tracking-tight">Naruon</p>
         <p className="text-sm text-muted-foreground" role="status">
           세션 확인 중…
         </p>

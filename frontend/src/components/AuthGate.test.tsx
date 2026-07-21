@@ -79,6 +79,30 @@ describe("AuthGate", () => {
     expect(mockStartOidcLogin).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts a claims-only session payload that carries a concrete userId", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ claims: { userId: "smoke-user" } }),
+        }) as Response,
+      ),
+    );
+
+    await act(async () => {
+      root.render(
+        <AuthGate>
+          <div data-testid="protected">protected content</div>
+        </AuthGate>,
+      );
+    });
+    await flushAsyncWork();
+
+    expect(container.querySelector('[data-testid="protected"]')).not.toBeNull();
+  });
+
   it("renders children once the session is authenticated", async () => {
     vi.stubGlobal(
       "fetch",

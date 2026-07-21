@@ -695,6 +695,7 @@ async function installRoutes(page) {
   let savedLlmProviders = [{ ...llmProvider }];
 
   await page.route("**/auth/session", (route) => routeJson(route, {
+    authenticated: true,
     claims: {
       userId: "smoke-user",
       organizationId: "org-acme",
