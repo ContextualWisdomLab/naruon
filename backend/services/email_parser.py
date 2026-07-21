@@ -4,10 +4,14 @@ from pathlib import Path
 import datetime
 from email.utils import formataddr, getaddresses
 from email.utils import parsedate_to_datetime
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 from .attachment_parser import parse_email_attachment
 from .exceptions import EmailParseError
 from .text_safety import strip_html_markup
+
+
+DateEvidenceStatus = Literal["parsed", "missing", "invalid"]
+MessageIdEvidenceStatus = Literal["embedded", "missing", "invalid"]
 
 
 class EmailData(TypedDict):
@@ -22,6 +26,9 @@ class EmailData(TypedDict):
     in_reply_to: str | None
     references: str | None
     date: datetime.datetime
+    source_date: NotRequired[datetime.datetime | None]
+    date_evidence_status: NotRequired[DateEvidenceStatus]
+    message_id_evidence_status: NotRequired[MessageIdEvidenceStatus]
     body: str
     body_content_type: NotRequired[str]
     body_parse_content: NotRequired[str]
@@ -125,18 +132,21 @@ def _extract_body_and_attachments(msg: Message) -> tuple[str, str, list[dict]]:
     return html_body, "text/html" if html_body else "text/plain", attachments
 
 
-def _extract_date(msg: Message) -> datetime.datetime:
+def _extract_date(
+    msg: Message,
+) -> tuple[datetime.datetime, datetime.datetime | None, DateEvidenceStatus]:
     date_header = msg.get("Date")
-    parsed_date = None
-    if date_header:
-        try:
-            parsed_date = parsedate_to_datetime(date_header)
-        except (TypeError, ValueError):
-            parsed_date = None
+    fallback_date = datetime.datetime.now(datetime.timezone.utc)
+    if date_header is None:
+        return fallback_date, None, "missing"
 
-    if not parsed_date:
-        parsed_date = datetime.datetime.now(datetime.timezone.utc)
-    return parsed_date
+    try:
+        parsed_date = parsedate_to_datetime(str(date_header).strip())
+    except (TypeError, ValueError):
+        parsed_date = None
+    if parsed_date is None:
+        return fallback_date, None, "invalid"
+    return parsed_date, parsed_date, "parsed"
 
 
 def _extract_thread_id(msg: Message, message_id: str) -> str | None:
@@ -158,8 +168,16 @@ def _extract_thread_id(msg: Message, message_id: str) -> str | None:
 
 def _message_to_email_data(msg: Message) -> EmailData:
     body, body_content_type, attachments = _extract_body_and_attachments(msg)
-    parsed_date = _extract_date(msg)
-    message_id = _sanitize_nul(msg.get("Message-ID", ""))
+    persisted_date, source_date, date_evidence_status = _extract_date(msg)
+    message_id = _sanitize_nul(msg.get("Message-ID", "")).strip()
+    normalized_message_id = message_id.strip("<>").strip()
+    message_id_evidence_status: MessageIdEvidenceStatus
+    if normalized_message_id:
+        message_id_evidence_status = "embedded"
+    elif message_id:
+        message_id_evidence_status = "invalid"
+    else:
+        message_id_evidence_status = "missing"
     thread_id = _extract_thread_id(msg, message_id)
 
     return {
@@ -181,7 +199,10 @@ def _message_to_email_data(msg: Message) -> EmailData:
         "references": (
             _sanitize_nul(msg.get("References", "")) if msg.get("References") else None
         ),
-        "date": parsed_date,
+        "date": persisted_date,
+        "source_date": source_date,
+        "date_evidence_status": date_evidence_status,
+        "message_id_evidence_status": message_id_evidence_status,
         "body": _sanitize_display_text(body),
         "body_content_type": body_content_type,
         "body_parse_content": _sanitize_nul(body),

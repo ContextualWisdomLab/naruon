@@ -1,8 +1,9 @@
 import datetime
+import hashlib
+import json
 from dataclasses import dataclass
 
 from db.models import Email
-from services.email_service import generate_email_fingerprint
 from services.threading_service import normalize_message_id
 
 
@@ -30,16 +31,22 @@ def strong_email_fingerprint(
     date: datetime.datetime | None,
     body: str | None,
 ) -> str | None:
-    if not body:
+    if not (
+        sender
+        and sender.strip()
+        and subject
+        and subject.strip()
+        and date is not None
+        and body
+        and body.strip()
+    ):
         return None
-    return generate_email_fingerprint(
-        {
-            "sender": sender or "",
-            "subject": subject or "",
-            "date": _date_to_fingerprint_value(date),
-            "body": body,
-        }
+    fingerprint_source = json.dumps(
+        [sender, subject, _date_to_fingerprint_value(date), body],
+        ensure_ascii=True,
+        separators=(",", ":"),
     )
+    return hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
 
 
 def candidate_message_lookup_values(candidate: EmailDedupeCandidate) -> set[str]:
@@ -65,4 +72,3 @@ def email_strong_fingerprint(email_row: Email) -> str | None:
         date=email_row.date,
         body=email_row.body,
     )
-

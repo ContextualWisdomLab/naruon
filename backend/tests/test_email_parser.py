@@ -29,6 +29,11 @@ This is a test email.\x00"""
         assert parsed["subject"] == "HelloWorld"  # NUL removed
         assert "This is a test email." in parsed["body"]
         assert "\x00" not in parsed["body"]
+        assert parsed["source_date"] == datetime.datetime(
+            2026, 4, 27, 10, 0, tzinfo=datetime.timezone.utc
+        )
+        assert parsed["date_evidence_status"] == "parsed"
+        assert parsed["message_id_evidence_status"] == "embedded"
     finally:
         os.unlink(temp_path)
 
@@ -316,13 +321,56 @@ Test."""
         # Missing date
         parsed1 = parse_eml(temp_path1)
         assert isinstance(parsed1["date"], datetime.datetime)
+        assert parsed1["source_date"] is None
+        assert parsed1["date_evidence_status"] == "missing"
 
         # Malformed date
         parsed2 = parse_eml(temp_path2)
         assert isinstance(parsed2["date"], datetime.datetime)
+        assert parsed2["source_date"] is None
+        assert parsed2["date_evidence_status"] == "invalid"
     finally:
         os.unlink(temp_path1)
         os.unlink(temp_path2)
+
+
+def test_parse_eml_marks_missing_message_id_evidence():
+    eml_content = b"""From: test@test.com
+To: recipient@test.com
+Subject: No Message ID
+Date: Mon, 27 Apr 2026 10:00:00 +0000
+
+Test."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
+        f.write(eml_content)
+        temp_path = f.name
+
+    try:
+        parsed = parse_eml(temp_path)
+        assert parsed["message_id"] == ""
+        assert parsed["message_id_evidence_status"] == "missing"
+    finally:
+        os.unlink(temp_path)
+
+
+def test_parse_eml_marks_empty_message_id_evidence_invalid():
+    eml_content = b"""Message-ID: <>
+From: test@test.com
+To: recipient@test.com
+Subject: Invalid Message ID
+Date: Mon, 27 Apr 2026 10:00:00 +0000
+
+Test."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
+        f.write(eml_content)
+        temp_path = f.name
+
+    try:
+        parsed = parse_eml(temp_path)
+        assert parsed["message_id"] == "<>"
+        assert parsed["message_id_evidence_status"] == "invalid"
+    finally:
+        os.unlink(temp_path)
 
 
 def test_parse_eml_io_error():

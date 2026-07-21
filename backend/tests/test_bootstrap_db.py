@@ -61,6 +61,16 @@ def test_schema_backfill_adds_email_columns(monkeypatch):
         'alter table email_records add column if not exists "references"' in statement
         for statement in statements
     )
+    assert any(
+        "alter table email_records add column if not exists "
+        "is_read boolean not null default true" in statement
+        for statement in statements
+    )
+    assert any(
+        "alter table email_records add column if not exists "
+        "source_lineage_json json not null default '{}'::json" in statement
+        for statement in statements
+    )
     assert not any(
         "update email_records set user_id" in statement for statement in statements
     )
@@ -72,6 +82,7 @@ def test_schema_backfill_adds_email_columns(monkeypatch):
         "existing email_records require explicit non-default" in statement
         for statement in statements
     )
+    assert not any(" on emails " in statement for statement in statements)
 
 
 def test_schema_backfill_adds_sender_relationship_columns_and_indexes(monkeypatch):
@@ -770,11 +781,11 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 text("""
                     INSERT INTO email_records (
                         user_id, organization_id, message_id, sender, recipients,
-                        subject, "date", body
+                        subject, "date", body, is_read
                     )
                     VALUES (
                         :user_id, :organization_id, :message_id, :sender,
-                        :recipients, :subject, now(), :body
+                        :recipients, :subject, now(), :body, true
                     )
                     RETURNING id
                     """),

@@ -125,6 +125,7 @@ def test_build_email_object_attaches_content_graph_records():
         thread_id="thread-1",
         fingerprint="fingerprint-1",
         persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        source_lineage_json={},
         attachment_payloads=list(parsed["attachments"]),
         fitted_embeddings=[
             [0.0] * EMBEDDING_DIMENSION,
@@ -186,6 +187,7 @@ def test_build_email_object_attaches_knowledge_graph_edges():
         thread_id="thread-1",
         fingerprint="fingerprint-1",
         persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        source_lineage_json={},
         attachment_payloads=list(parsed["attachments"]),
         fitted_embeddings=[
             [0.0] * EMBEDDING_DIMENSION,
@@ -269,6 +271,7 @@ def test_build_email_object_persists_attachment_parse_metadata():
         thread_id="thread-1",
         fingerprint="fingerprint-1",
         persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        source_lineage_json={},
         attachment_payloads=list(parsed["attachments"]),
         fitted_embeddings=[
             [0.0] * EMBEDDING_DIMENSION,
@@ -369,6 +372,7 @@ def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
         thread_id="thread-1",
         fingerprint="fingerprint-1",
         persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        source_lineage_json={},
         attachment_payloads=list(parsed["attachments"]),
         fitted_embeddings=[
             [0.0] * EMBEDDING_DIMENSION,
@@ -392,9 +396,12 @@ def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
         "status.xml": ["Launch"],
         "invite.ics": ["SUMMARY: Launch"],
     }
-    assert {
-        attachment.parser_key for attachment in email_obj.attachments
-    } == {"json", "csv", "xml", "calendar"}
+    assert {attachment.parser_key for attachment in email_obj.attachments} == {
+        "json",
+        "csv",
+        "xml",
+        "calendar",
+    }
 
 
 @pytest.mark.asyncio
