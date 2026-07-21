@@ -39,6 +39,8 @@ function routeUrl(route) {
     const url = routeUrl(route);
     console.log('Taking screenshot for route', route);
     try {
+      if (!ALLOWED_ROUTES.has(route)) throw new Error(`Rejected ${route}`);
+      if (!SCREENSHOT_ROUTES.includes(route)) { throw new Error('Invalid route'); }
       await page.goto(url, { waitUntil: 'load', timeout: 30000 });
       await page.waitForTimeout(2000);
       const name = route === '/' ? 'home' : route.slice(1);

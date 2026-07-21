@@ -2,7 +2,7 @@ version: '3.8'
 
 x-service-hardening: &service-hardening
   security_opt:
-    - no-new-privileges:true
+    - "no-new-privileges:true"
   read_only: true
   tmpfs:
     - /tmp
