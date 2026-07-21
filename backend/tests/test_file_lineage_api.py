@@ -339,12 +339,17 @@ def test_validate_disksage_file_lineage_accepts_incomplete_sync_evidence(
     client: TestClient,
 ):
     payload = _lineage_payload()
+    copied_at_ms = payload["cloud_copy"]["copied_at_ms"]
     payload["cloud_copy"].update(
         {
             "sync_evidence_record_id": "9" * 64,
             "sync_evidence_kind": "provider-native-status",
             "sync_evidence_id": "file-provider:pending",
-            "sync_confirmed_at_ms": 1_767_229_500_000,
+            "sync_confirmed_at_ms": copied_at_ms + 86_400_000,
+            "sync_timeliness": "overdue",
+            "sync_pending_age_ms": 86_400_000,
+            "sync_overdue_after_ms": 86_400_000,
+            "sync_reason_codes": ["provider-sync-confirmation-overdue"],
         }
     )
 
@@ -368,6 +373,10 @@ def test_validate_disksage_file_lineage_does_not_reflect_complete_sync_claim(
             "remote_object_id": "remote-item-id",
             "remote_revision": "remote-revision",
             "remote_location_bound": True,
+            "sync_timeliness": "complete",
+            "sync_pending_age_ms": 0,
+            "sync_overdue_after_ms": 86_400_000,
+            "sync_reason_codes": [],
         }
     )
 
@@ -382,6 +391,53 @@ def test_validate_disksage_file_lineage_does_not_reflect_complete_sync_claim(
     }
     assert "remote-item-id" not in response.text
     assert "remote-revision" not in response.text
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"sync_timeliness": "pending"},
+        {"sync_pending_age_ms": 86_399_999},
+        {"sync_overdue_after_ms": 1},
+        {"sync_reason_codes": ["provider-sync-confirmation-pending"]},
+        {"provider_sync_confirmed": True},
+        {"sync_confirmed_at_ms": 1_767_229_400_000 + 86_400_001},
+        {"sync_evidence_record_id": None},
+    ],
+    ids=[
+        "pending-at-threshold",
+        "overdue-below-threshold",
+        "threshold-changed",
+        "reason-mismatch",
+        "overdue-marked-confirmed",
+        "pending-age-time-mismatch",
+        "diagnostic-with-incomplete-evidence",
+    ],
+)
+def test_validate_disksage_file_lineage_rejects_inconsistent_sync_timeliness(
+    client: TestClient,
+    changes: dict[str, object],
+):
+    payload = _lineage_payload()
+    copied_at_ms = payload["cloud_copy"]["copied_at_ms"]
+    payload["cloud_copy"].update(
+        {
+            "sync_evidence_record_id": "9" * 64,
+            "sync_evidence_kind": "provider-native-status",
+            "sync_evidence_id": "file-provider:pending",
+            "sync_confirmed_at_ms": copied_at_ms + 86_400_000,
+            "sync_timeliness": "overdue",
+            "sync_pending_age_ms": 86_400_000,
+            "sync_overdue_after_ms": 86_400_000,
+            "sync_reason_codes": ["provider-sync-confirmation-overdue"],
+        }
+    )
+    payload["cloud_copy"].update(changes)
+
+    response = client.post("/api/file-lineage/validate", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_file_lineage_invalid"}
 
 
 def test_validate_disksage_file_lineage_has_no_database_dependency(

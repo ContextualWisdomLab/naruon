@@ -19,6 +19,7 @@ EVIDENCE_PRECEDENCE = (
     "filesystem_created_at",
     "filesystem_modified_at",
 )
+PROVIDER_SYNC_OVERDUE_AFTER_MS = 24 * 60 * 60 * 1_000
 
 Hex64 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 BoundedText = Annotated[str, Field(min_length=1, max_length=4096)]
@@ -28,6 +29,8 @@ EpochMilliseconds = Annotated[int, Field(ge=0, le=U64_MAX)]
 NonNegativeBytes = Annotated[int, Field(ge=0, le=U64_MAX)]
 Confidence = Literal["high", "medium", "low"]
 ReviewDisposition = Literal["approved", "held"]
+ProviderSyncTimeliness = Literal["complete", "pending", "overdue"]
+ProviderSyncReasonCode = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9-]{0,127}$")]
 WINDOWS_INVALID_COMPONENT_CHARACTERS = frozenset('<>:"|?*')
 WINDOWS_RESERVED_COMPONENT_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
@@ -190,6 +193,13 @@ class FileCloudCopyLineage(StrictLineageModel):
     remote_object_id: ShortText | None
     remote_revision: ShortText | None
     remote_location_bound: bool | None
+    sync_timeliness: ProviderSyncTimeliness | None = None
+    sync_pending_age_ms: EpochMilliseconds | None = None
+    sync_overdue_after_ms: EpochMilliseconds | None = None
+    sync_reason_codes: list[ProviderSyncReasonCode] = Field(
+        default_factory=list,
+        max_length=1,
+    )
 
     @field_validator(
         "destination",
@@ -216,7 +226,15 @@ class FileCloudCopyLineage(StrictLineageModel):
             self.remote_revision,
             self.remote_location_bound,
         )
+        timeliness_fields = (
+            self.sync_timeliness,
+            self.sync_pending_age_ms,
+            self.sync_overdue_after_ms,
+        )
         evidence_present = any(value is not None for value in required_sync_fields)
+        timeliness_present = any(
+            value is not None for value in timeliness_fields
+        ) or bool(self.sync_reason_codes)
         if evidence_present and any(value is None for value in required_sync_fields):
             raise ValueError("provider sync evidence is incomplete")
         if self.provider_sync_confirmed and not evidence_present:
@@ -233,6 +251,48 @@ class FileCloudCopyLineage(StrictLineageModel):
                 raise ValueError("provider native evidence cannot claim remote content")
         elif any(value is not None for value in remote_fields):
             raise ValueError("remote content cannot exist without sync evidence")
+
+        if timeliness_present:
+            if not evidence_present or any(
+                value is None for value in timeliness_fields
+            ):
+                raise ValueError("provider sync timeliness evidence is incomplete")
+            if self.sync_overdue_after_ms != PROVIDER_SYNC_OVERDUE_AFTER_MS:
+                raise ValueError("provider sync overdue threshold is unsupported")
+
+            if self.sync_timeliness == "complete":
+                if (
+                    not self.provider_sync_confirmed
+                    or self.sync_pending_age_ms != 0
+                    or self.sync_reason_codes
+                ):
+                    raise ValueError(
+                        "complete sync timeliness contradicts provider evidence"
+                    )
+            else:
+                if self.provider_sync_confirmed:
+                    raise ValueError(
+                        "incomplete sync timeliness contradicts provider evidence"
+                    )
+                expected_reason = f"provider-sync-confirmation-{self.sync_timeliness}"
+                if self.sync_reason_codes != [expected_reason]:
+                    raise ValueError("provider sync timeliness reason is inconsistent")
+                if (
+                    self.sync_confirmed_at_ms is None
+                    or self.sync_pending_age_ms
+                    != self.sync_confirmed_at_ms - self.copied_at_ms
+                ):
+                    raise ValueError("provider sync pending age is inconsistent")
+                if (
+                    self.sync_timeliness == "pending"
+                    and self.sync_pending_age_ms >= PROVIDER_SYNC_OVERDUE_AFTER_MS
+                ) or (
+                    self.sync_timeliness == "overdue"
+                    and self.sync_pending_age_ms < PROVIDER_SYNC_OVERDUE_AFTER_MS
+                ):
+                    raise ValueError(
+                        "provider sync timeliness threshold is inconsistent"
+                    )
         return self
 
 

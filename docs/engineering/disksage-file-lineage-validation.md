@@ -84,6 +84,10 @@ unknown fields at every nesting level. Version 1 requires:
 - internally complete provider evidence, while allowing a persisted evidence
   observation whose `sync_complete` result remains false, provided that the
   observation does not predate the copy; and
+- optional provider-sync timeliness diagnostics whose pending age is bound to
+  the copy and observation timestamps, whose fixed 24-hour threshold separates
+  `pending` from `overdue`, and whose state can never contradict sync completion;
+  legacy version 1 envelopes may omit this diagnostic block; and
 - provider API evidence with a true remote-location binding, or provider-native
   evidence without an invented remote object identity.
 
