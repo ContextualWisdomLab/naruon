@@ -1110,8 +1110,15 @@ def _oidc_claims(**overrides):
         ({"alg": "RS256", "typ": "JWT", "kid": "test-key"}, {"typ": "ID"}),
         # Forged/opaque material with no access-token marker (the PoC shape).
         ({"alg": "RS256", "typ": "JWT", "kid": "test-key"}, {}),
-        # An ID-token typ must not sneak through via the header either.
+        # An ID-token typ must not sneak through via the body either.
         ({"alg": "RS256", "typ": "JWT", "kid": "test-key"}, {"typ": "id"}),
+        # Contradictory signed markers must fail closed instead of trusting one side.
+        ({"alg": "RS256", "typ": "ID", "kid": "test-key"}, {"typ": "Bearer"}),
+        ({"alg": "RS256", "typ": "at+jwt", "kid": "test-key"}, {"typ": "ID"}),
+        # Explicit malformed marker values are not equivalent to absent markers.
+        ({"alg": "RS256", "typ": "", "kid": "test-key"}, {"typ": "Bearer"}),
+        ({"alg": "RS256", "typ": "at+jwt", "kid": "test-key"}, {"typ": ""}),
+        ({"alg": "RS256", "typ": 7, "kid": "test-key"}, {"typ": "Bearer"}),
     ],
 )
 async def test_oidc_rejects_id_token_replayed_as_api_bearer(
@@ -1132,14 +1139,15 @@ async def test_oidc_rejects_id_token_replayed_as_api_bearer(
 
 
 @pytest.mark.asyncio
-async def test_oidc_accepts_rfc9068_access_token_header_typ(monkeypatch):
+@pytest.mark.parametrize("header_type", ["at+jwt", "application/at+jwt"])
+async def test_oidc_accepts_rfc9068_access_token_header_typ(monkeypatch, header_type):
     previous = _oidc_settings_snapshot()
     _apply_oidc_settings()
     # RFC 9068 access token: marker in the header typ, no body typ claim.
     _install_oidc_decode(monkeypatch, _oidc_claims())
     token = _signed_session_token(
         _valid_session_payload(),
-        header={"alg": "RS256", "typ": "at+jwt", "kid": "test-key"},
+        header={"alg": "RS256", "typ": header_type, "kid": "test-key"},
     )
 
     try:

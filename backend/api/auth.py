@@ -155,8 +155,10 @@ JWT_DECODE_REQUIRED_CLAIMS = ("exp", "iss", "aud")
 # token: Keycloak sets the body claim typ="Bearer"; RFC 9068 sets the header
 # typ "at+jwt". ID tokens (Keycloak typ="ID") and unmarked material are rejected.
 # ponytail: extend these sets if a non-Keycloak/non-RFC9068 IdP is onboarded.
-# Bandit B105 is inapplicable: this is RFC 9068's public typ identifier.
-OIDC_ACCESS_TOKEN_HEADER_TYPE = "at+jwt"  # nosec B105
+# Bandit B105 is inapplicable: these are RFC 9068's public typ identifiers.
+OIDC_ACCESS_TOKEN_HEADER_TYPES = frozenset(  # nosec B105
+    {"at+jwt", "application/at+jwt"}
+)
 OIDC_ACCESS_TOKEN_BODY_TYPES = frozenset({"bearer"})
 MIN_SESSION_SECRET_BYTES = 32
 MAX_SIGNED_SESSION_EXPIRATION_SECONDS = 12 * 60 * 60
@@ -278,9 +280,7 @@ def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:
     raise _authentication_error()
 
 
-def _require_oidc_access_token(
-    header: dict[str, Any], payload: dict[str, Any]
-) -> None:
+def _require_oidc_access_token(header: dict[str, Any], payload: dict[str, Any]) -> None:
     """Reject OIDC ID tokens replayed as API access tokens (RFC 8725 §3.11).
 
     The frontend transmits the OIDC access token as the API bearer, so only
@@ -289,16 +289,29 @@ def _require_oidc_access_token(
     (Keycloak typ="ID") and tokens with no access-token marker are rejected even
     when signature, issuer, and audience verify.
     """
-    header_type = header.get("typ")
+    raw_header_type = header.get("typ")
+    raw_body_type = payload.get("typ")
+    if raw_header_type is not None and not isinstance(raw_header_type, str):
+        raise _authentication_error()
+    if raw_body_type is not None and not isinstance(raw_body_type, str):
+        raise _authentication_error()
+
+    header_type = (
+        raw_header_type.strip().lower() if isinstance(raw_header_type, str) else None
+    )
+    body_type = (
+        raw_body_type.strip().lower() if isinstance(raw_body_type, str) else None
+    )
+    header_marks_access = header_type in OIDC_ACCESS_TOKEN_HEADER_TYPES
+    body_marks_access = body_type in OIDC_ACCESS_TOKEN_BODY_TYPES
+    header_is_compatible = (
+        header_type is None or header_type == "jwt" or header_marks_access
+    )
+    body_is_compatible = body_type is None or body_marks_access
     if (
-        isinstance(header_type, str)
-        and header_type.strip().lower() == OIDC_ACCESS_TOKEN_HEADER_TYPE
-    ):
-        return
-    body_type = payload.get("typ")
-    if (
-        isinstance(body_type, str)
-        and body_type.strip().lower() in OIDC_ACCESS_TOKEN_BODY_TYPES
+        (header_marks_access or body_marks_access)
+        and header_is_compatible
+        and body_is_compatible
     ):
         return
     raise _authentication_error()
