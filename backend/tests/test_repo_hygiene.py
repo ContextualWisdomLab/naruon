@@ -118,7 +118,7 @@ def test_infra_compose_services_use_read_only_hardening_anchor():
 
     assert "x-service-hardening: &service-hardening" in compose
     assert "security_opt:" in compose
-    assert "- no-new-privileges:true" in compose
+    assert '- "no-new-privileges:true"' in compose
     assert "read_only: true" in compose
 
     for service in (
