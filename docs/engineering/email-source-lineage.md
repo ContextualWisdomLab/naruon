@@ -48,6 +48,13 @@ owner-scoped email detail and thread APIs return those rows as
 `source_lineage: null`. Invalid or unknown evidence envelopes also fail closed
 to `null` instead of being reflected to the client.
 
+The email detail UI renders a lineage panel only when the API returns a valid
+envelope. It shows the exact source filename and raw SHA-256, distinguishes the
+embedded `Date` header from the database display timestamp, and repeats the
+evidence-precedence order. When the embedded date is missing or invalid, the UI
+explicitly labels the displayed timestamp as a storage fallback and refuses to
+promote a filename date to production evidence.
+
 ## Schema and ERD verification
 
 The JSON envelope is intentionally additive to the reconciled single

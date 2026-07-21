@@ -12,6 +12,10 @@ import { Loader2, MessagesSquare } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
+  EmailSourceLineagePanel,
+  type EmailSourceLineage,
+} from "@/components/EmailSourceLineagePanel";
+import {
   buildThreadUrl,
   buildReplyPayload,
   formatEmailDate,
@@ -29,6 +33,7 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  source_lineage?: EmailSourceLineage | null;
 };
 interface LlmData {
   summary: string;
@@ -737,6 +742,13 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
               ) : null
             ) : null}
           </DecisionPointCard>
+
+          {email.source_lineage ? (
+            <EmailSourceLineagePanel
+              lineage={email.source_lineage}
+              displayedDate={email.date}
+            />
+          ) : null}
 
           <Separator />
 
