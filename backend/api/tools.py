@@ -606,6 +606,31 @@ registry.register(
 )
 
 
+
+async def time_spent_estimator_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    words = len(text.split())
+    # Average reading speed: 200 words per minute
+    minutes = words / 200
+    seconds = int((minutes * 60) % 60)
+    return {
+        "estimated_minutes": int(minutes),
+        "estimated_seconds": seconds,
+        "word_count": words,
+    }
+
+registry.register(
+    ToolInfo(
+        code="time_spent_estimator",
+        name="읽기 소요 시간 예측기 (Time Spent Estimator)",
+        description="텍스트의 단어 수를 기반으로 예상 읽기 소요 시간(분/초)을 계산합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    time_spent_estimator_handler,
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
