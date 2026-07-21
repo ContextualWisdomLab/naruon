@@ -10,3 +10,7 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+
+## 2024-05-18 - [Optimize setdefault with defaultdict]
+**Learning:** Using `dict.setdefault(key, []).append(value)` in tight loops instantiates an empty list `[]` on every iteration even if the key exists, which creates severe memory and garbage collection overhead, especially for large datasets.
+**Action:** Replace `dict.setdefault(key, []).append(value)` with `collections.defaultdict(list)` followed by `dict[key].append(value)` for grouping operations to improve performance and avoid unnecessary object allocations.
