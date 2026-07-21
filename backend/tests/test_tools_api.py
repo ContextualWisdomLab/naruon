@@ -1044,7 +1044,7 @@ async def test_analysis_handlers_safe_and_fallthrough_paths():
     assert safe_email == {
         "is_spam": False,
         "is_phishing": False,
-        "risk_score": 0,
+        "risk_score": 10,
         "warnings": [],
     }
 
@@ -1169,3 +1169,23 @@ async def test_meeting_agenda_generator_handler():
         "Next Steps and Action Items",
     ]
     assert result["estimated_duration_minutes"] == 105
+
+
+def test_execute_analysis_tool_rejects_oversized_text():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/keyword_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "failed",
+        "result": None,
+        "message": (
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        ),
+    }

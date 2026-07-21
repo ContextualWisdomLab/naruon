@@ -260,7 +260,8 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     )
     risk_score = min(
         100,
-        (20 * len(phishing_hits))
+        10
+        + (20 * len(phishing_hits))
         + (15 * len(spam_hits))
         + (35 if suspicious_domain else 0),
     )
@@ -625,6 +626,7 @@ registry.register(
 )
 
 
+ANALYSIS_TEXT_MAX_CHARS = 100_000
 _ANALYSIS_TOKEN_PATTERN = re.compile(r"[^\W_]+(?:['’][^\W_]+)?", re.UNICODE)
 _KEYWORD_STOPWORDS = frozenset(
     {
@@ -678,6 +680,10 @@ _AGENDA_TOPICS = (
 
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
+    if len(value) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
     return unicodedata.normalize("NFKC", value).casefold()
 
 
