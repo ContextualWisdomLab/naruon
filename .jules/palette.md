@@ -77,3 +77,7 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+
+## 2026-07-21 - Ensure robust wait conditions in local Playwright verification
+**Learning:** When using Playwright to visually verify frontend components against a local development server without the backend running, relying on `page.wait_for_selector` for elements rendered conditionally based on missing API data can cause timeouts, even if the API routes are mocked.
+**Action:** When using Playwright to visually verify frontend components locally, verify what API calls are needed for the UI component to render, and mock those API responses using `page.route('**/api/...', lambda route: route.fulfill(...))` before navigating to the page. Or prefer to capture a basic screenshot without waiting for deeply nested conditional elements.
