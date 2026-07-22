@@ -46,6 +46,22 @@ def test_reject_unsafe_ip_literal():
         _reject_unsafe_ip_literal("setting", "localhost")
     with pytest.raises(ValueError, match="setting host must not be localhost"):
         _reject_unsafe_ip_literal("setting", "test.localhost")
+    with pytest.raises(ValueError, match="setting host must not be localhost"):
+        _reject_unsafe_ip_literal("setting", " Test.Localhost. ")
+
+    # Internal domains
+    for hostname in (
+        "internal",
+        "test.internal",
+        "local",
+        "test.local",
+        " Test.Internal. ",
+        " Test.Local. ",
+    ):
+        with pytest.raises(
+            ValueError, match="setting host must not be an internal domain"
+        ):
+            _reject_unsafe_ip_literal("setting", hostname)
 
     # Standard domain name
     _reject_unsafe_ip_literal("setting", "example.com")
@@ -69,6 +85,38 @@ def test_reject_unsafe_legacy_ipv4_literal(host):
 
 def test_allow_global_legacy_ipv4_literal():
     _reject_unsafe_ip_literal("setting", "0x08080808")
+
+
+@pytest.mark.parametrize(
+    "scoped_host",
+    ["2001:4860:4860::8888%eth0", "2001:4860:4860::8888%25eth0"],
+)
+def test_reject_unsafe_ip_literal_rejects_ipv6_scope_identifier(scoped_host):
+    with pytest.raises(
+        ValueError,
+        match="setting host must not include an IPv6 scope identifier",
+    ):
+        _reject_unsafe_ip_literal("setting", scoped_host)
+
+
+@pytest.mark.parametrize(
+    "url_host",
+    ["2001:4860:4860::8888%eth0", "2001:4860:4860::8888%25eth0"],
+)
+@patch("core.url_validation._resolve_global_addresses")
+def test_validate_https_url_host_rejects_scoped_ipv6_before_resolution(
+    mock_resolve,
+    url_host,
+):
+    with pytest.raises(ValueError, match="must not include an IPv6 scope identifier"):
+        validate_https_url_host_details(
+            "setting",
+            f"https://[{url_host}]/path",
+            frozenset({url_host}),
+            "ALLOWED_HOSTS",
+        )
+
+    mock_resolve.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -122,6 +170,11 @@ def test_validate_global_address():
         ValueError, match="setting resolved IP host must be globally routable"
     ):
         _validate_global_address("setting", "invalid-ip")
+
+    with pytest.raises(
+        ValueError, match="setting resolved IP host must be globally routable"
+    ):
+        _validate_global_address("setting", "2001:4860:4860::8888%eth0")
 
 
 @patch("socket.getaddrinfo")

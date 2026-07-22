@@ -889,6 +889,14 @@ def test_is_safe_webhook_url_coverage():
         assert is_safe_webhook_url("https://8.8.8.8/webhook") is True
 
 
+@pytest.mark.parametrize("url", ["https://internal", "https://service.local"])
+def test_validate_webhook_url_internal_domain_error_names_bare_and_suffix(url):
+    from api.tools import validate_webhook_url_details
+
+    with pytest.raises(ValueError, match="must not be an internal domain"):
+        validate_webhook_url_details(url)
+
+
 @pytest.mark.parametrize(
     ("url_value", "expected_url", "expected_port"),
     [

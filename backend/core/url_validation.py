@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 
+_LOCALHOST_NAMES = ("localhost",)
+_INTERNAL_DOMAIN_NAMES = ("internal", "local")
+
+
 @dataclass(frozen=True)
 class ValidatedHTTPSURLHost:
     normalized_url: str
@@ -95,6 +99,10 @@ def _normalize_host(raw_host: str) -> str:
     return host
 
 
+def _matches_name_or_subdomain(host: str, names: tuple[str, ...]) -> bool:
+    return any(host == name or host.endswith(f".{name}") for name in names)
+
+
 def _format_normalized_netloc(host: str, port: int, *, explicit_port: bool) -> str:
     """Rebuild a URL authority while preserving the brackets IPv6 requires."""
     host_part = f"[{host}]" if ":" in host else host
@@ -148,16 +156,23 @@ def _parse_legacy_ipv4_literal(host: str) -> ipaddress.IPv4Address | None:
 
 
 def _reject_unsafe_ip_literal(setting_name: str, host: str) -> None:
+    normalized_host = _normalize_host(host)
+    if "%" in normalized_host:
+        raise ValueError(
+            f"{setting_name} host must not include an IPv6 scope identifier"
+        )
     try:
-        ip_address = ipaddress.ip_address(host)
+        ip_address = ipaddress.ip_address(normalized_host)
     except ValueError:
-        ip_address = _parse_legacy_ipv4_literal(host)
+        ip_address = _parse_legacy_ipv4_literal(normalized_host)
         if ip_address is not None:
             if not ip_address.is_global:
                 raise ValueError(f"{setting_name} IP host must be globally routable")
             return
-        if host == "localhost" or host.endswith(".localhost"):
+        if _matches_name_or_subdomain(normalized_host, _LOCALHOST_NAMES):
             raise ValueError(f"{setting_name} host must not be localhost")
+        if _matches_name_or_subdomain(normalized_host, _INTERNAL_DOMAIN_NAMES):
+            raise ValueError(f"{setting_name} host must not be an internal domain")
         return
 
     if not ip_address.is_global:
@@ -165,6 +180,8 @@ def _reject_unsafe_ip_literal(setting_name: str, host: str) -> None:
 
 
 def _validate_global_address(setting_name: str, address: str) -> str:
+    if "%" in address:
+        raise ValueError(f"{setting_name} resolved IP host must be globally routable")
     try:
         ip_address = ipaddress.ip_address(address)
     except ValueError as exc:
