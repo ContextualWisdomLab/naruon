@@ -114,3 +114,7 @@
 **Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
+## 2025-02-15 - [SSRF 방지: 정확한 TLD 차단 누락 해결]
+**Vulnerability:** webhook URL 검증 로직에서 도메인 접미사(`.internal`, `.local`)는 차단했지만 `internal` 및 `local`과 같은 TLD 자체와의 일치 여부를 검사하지 않아 SSRF 우회가 발생할 수 있었음.
+**Learning:** Python의 `endswith()` 만을 사용하면 접미사가 없는 단일 TLD 문자열 검증에 누락이 발생함.
+**Prevention:** 도메인 및 호스트 검증 시, `endswith` 검사뿐만 아니라 `==`을 활용하여 TLD 정확한 일치 여부도 함께 검증해야 함.
