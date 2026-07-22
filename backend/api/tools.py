@@ -140,6 +140,7 @@ registry = ToolRegistry()
 
 # Initialize default tools
 
+
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
     return f"Mock execution successful with params: {encoded}"
@@ -197,7 +198,6 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
     }
 
 
-
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
@@ -225,7 +225,10 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if source_phrase in lowered_text and translated_phrase not in translated_terms:
+            if (
+                source_phrase in lowered_text
+                and translated_phrase not in translated_terms
+            ):
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -244,7 +247,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     normalized_domain = sender_domain.lower()
     phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
     spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
+    phishing_hits = sorted(
+        term for term in phishing_terms if term in normalized_content
+    )
     spam_hits = sorted(term for term in spam_terms if term in normalized_content)
     suspicious_domain = (
         normalized_domain.endswith((".ru", ".zip", ".tk"))
@@ -267,7 +272,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
         warnings.append(f"sender domain looks suspicious: {sender_domain}")
     return {
         "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
+        "is_phishing": bool(
+            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
+        ),
         "risk_score": risk_score,
         "warnings": warnings,
     }
@@ -292,7 +299,15 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
+    negative_terms = {
+        "disappointed",
+        "urgent",
+        "issue",
+        "problem",
+        "bad",
+        "불만",
+        "문제",
+    }
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -359,7 +374,11 @@ def validate_webhook_url_details(url: str) -> ValidatedHTTPSURLHost:
         raise ValueError("Webhook URL must include a host")
 
     hostname = _normalize_host(parsed.hostname)
-    if hostname in ("internal", "local") or hostname.endswith(".internal") or hostname.endswith(".local"):
+    if (
+        hostname in ("internal", "local")
+        or hostname.endswith(".internal")
+        or hostname.endswith(".local")
+    ):
         raise ValueError("Webhook URL host must not use an internal domain suffix")
 
     _reject_unsafe_ip_literal("Webhook URL", hostname)
@@ -491,6 +510,7 @@ registry.register(
     tone_analyzer_handler,
 )
 
+
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -502,6 +522,7 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
+
 
 registry.register(
     ToolInfo(

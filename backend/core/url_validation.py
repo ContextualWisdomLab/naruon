@@ -95,9 +95,7 @@ def _normalize_host(raw_host: str) -> str:
     return host
 
 
-def _format_normalized_netloc(
-    host: str, port: int, *, explicit_port: bool
-) -> str:
+def _format_normalized_netloc(host: str, port: int, *, explicit_port: bool) -> str:
     """Rebuild a URL authority while preserving the brackets IPv6 requires."""
     host_part = f"[{host}]" if ":" in host else host
     return f"{host_part}:{port}" if explicit_port else host_part
@@ -144,10 +142,7 @@ def _parse_legacy_ipv4_literal(host: str) -> ipaddress.IPv4Address | None:
         if any(number > 0xFF for number in numbers):
             return None
         packed = (
-            (numbers[0] << 24)
-            | (numbers[1] << 16)
-            | (numbers[2] << 8)
-            | numbers[3]
+            (numbers[0] << 24) | (numbers[1] << 16) | (numbers[2] << 8) | numbers[3]
         )
     return ipaddress.IPv4Address(packed)
 
@@ -159,9 +154,7 @@ def _reject_unsafe_ip_literal(setting_name: str, host: str) -> None:
         ip_address = _parse_legacy_ipv4_literal(host)
         if ip_address is not None:
             if not ip_address.is_global:
-                raise ValueError(
-                    f"{setting_name} IP host must be globally routable"
-                )
+                raise ValueError(f"{setting_name} IP host must be globally routable")
             return
         if host == "localhost" or host.endswith(".localhost"):
             raise ValueError(f"{setting_name} host must not be localhost")

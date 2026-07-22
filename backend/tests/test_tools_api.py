@@ -746,8 +746,7 @@ async def test_webhook_handler_http_error():
                 data = response.json()
                 assert data["status"] == "failed"
                 assert (
-                    "Webhook execution failed: Simulated HTTP Error"
-                    in data["message"]
+                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
                 )
 
     finally:
@@ -1021,17 +1020,20 @@ def test_execute_grammar_checker():
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
+
     res = await mock_handler({"test": 123})
     assert "123" in res
 
 
 def test_validate_webhook_url_no_host():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL must include a host"):
         validate_webhook_url("https://")
 
 
 def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
+
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
