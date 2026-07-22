@@ -234,7 +234,22 @@ class ConnectionManager:
                 schedule_retry=schedule_retry,
             )
 
-        assert pending_key is not None
+        if pending_key is None:
+            logger.error("Runner response reservation invariant failed.")
+            await _record_connector_command_event_safely(
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                state_code="runner_dispatch_failed",
+                detail_text="runner response reservation invariant failed",
+            )
+            return await _dispatch_error_with_retry(
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                command=outbound_command,
+                error_code="runner_dispatch_failed",
+                runner_request_id=request_id,
+                schedule_retry=schedule_retry,
+            )
         try:
             await connection.send_text(
                 json.dumps(outbound_command, separators=(",", ":"), sort_keys=True)

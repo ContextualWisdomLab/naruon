@@ -1343,3 +1343,35 @@ def test_create_ticket_tasks_rejects_empty_execution_items(auth_client):
     assert response.status_code == 422
     assert response.json() == {"detail": "At least one execution item is required"}
     assert mock_session.tasks == []
+
+
+def test_create_ticket_tasks_deduplicates_before_enforcing_item_limit(auth_client):
+    mock_session.emails[14] = make_email()
+
+    response = auth_client.post(
+        "/api/tasks/from-email",
+        json={
+            "source_email_id": "<message-14@example.com>",
+            "items": ["동일 업무"] * 51,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["created"] == 1
+    assert [task.title for task in mock_session.tasks] == ["동일 업무"]
+
+
+def test_create_ticket_tasks_rejects_more_than_fifty_unique_items(auth_client):
+    mock_session.emails[14] = make_email()
+
+    response = auth_client.post(
+        "/api/tasks/from-email",
+        json={
+            "source_email_id": "<message-14@example.com>",
+            "items": [f"업무 {index}" for index in range(51)],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Too many execution items"}
+    assert mock_session.tasks == []

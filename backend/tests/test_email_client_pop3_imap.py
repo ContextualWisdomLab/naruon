@@ -42,14 +42,12 @@ def test_validate_imap_port(monkeypatch):
         validate_imap_port(110)
 
 
-def test_validate_imap_destination(monkeypatch):
+def test_unresolved_imap_hostname_is_not_a_connect_ready_destination(monkeypatch):
     monkeypatch.setattr(email_client.settings, "ALLOWED_IMAP_HOSTS", "imap.example.com")
     monkeypatch.setattr(email_client.settings, "ALLOWED_IMAP_PORTS", "993")
-    destination = validate_imap_destination("imap.example.com", 993, resolve_host=False)
-    assert destination.hostname == "imap.example.com"
-    assert destination.port == 993
-    assert destination.family == socket.AF_UNSPEC
-    assert destination.sockaddr == ("imap.example.com", 993)
+
+    with pytest.raises(ValueError, match=IMAP_HOST_NOT_ALLOWED):
+        validate_imap_destination("imap.example.com", 993, resolve_host=False)
 
 
 @pytest.mark.parametrize(

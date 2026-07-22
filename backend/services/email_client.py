@@ -317,12 +317,10 @@ def validate_imap_destination(
             else (normalized_host, validated_port)
         )
     else:
-        family, socktype, proto, sockaddr = (
-            socket.AF_UNSPEC,
-            socket.SOCK_STREAM,
-            0,
-            (normalized_host, validated_port),
-        )
+        # A hostname without resolution is policy-valid but not connect-ready.
+        # Never put it in the pinned destination type: the socket boundary
+        # accepts numeric addresses only so it cannot trigger a second lookup.
+        raise ValueError(IMAP_HOST_NOT_ALLOWED)
     return ValidatedImapDestination(
         hostname=normalized_host,
         port=validated_port,

@@ -24,7 +24,7 @@ from core.url_validation import (
 logger = logging.getLogger(__name__)
 OIDC_JWKS_TIMEOUT_SECONDS = 5
 OIDC_JWKS_MAX_RESPONSE_BYTES = 1024 * 1024
-OIDC_ACCESS_TOKEN_HEADER_TYPE = "at+jwt"
+OIDC_ACCESS_JWT_TYPE = "at+jwt"
 
 
 class _PinnedHTTPSConnection(HTTPSConnection):
@@ -233,7 +233,7 @@ def _oidc_unverified_header(token: str) -> dict[str, Any]:
     _reject_unsupported_critical_headers(header)
     if header.get("alg") != "RS256":
         raise _authentication_error()
-    if header.get("typ") != OIDC_ACCESS_TOKEN_HEADER_TYPE:
+    if header.get("typ") != OIDC_ACCESS_JWT_TYPE:
         raise _authentication_error()
     key_id = header.get("kid")
     if not isinstance(key_id, str) or not key_id.strip():

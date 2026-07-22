@@ -241,14 +241,14 @@ async def update_ticket_task(
 
 
 def _validate_execution_items(items: list[str]) -> list[str]:
-    normalized_items = _normalize_execution_items(items)
-    if not normalized_items:
+    unique_items = list(dict.fromkeys(_normalize_execution_items(items)))
+    if not unique_items:
         raise HTTPException(
             status_code=422, detail="At least one execution item is required"
         )
-    if len(normalized_items) > 50:
+    if len(unique_items) > 50:
         raise HTTPException(status_code=422, detail="Too many execution items")
-    return list(dict.fromkeys(normalized_items))
+    return unique_items
 
 
 async def _existing_email_tasks(
