@@ -111,7 +111,7 @@ export function SourceDrawer({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="absolute right-0 top-0 flex h-full w-full max-w-[440px] flex-col border-l border-border bg-card shadow-2xl"
+        className="absolute flex flex-col bg-card shadow-2xl transition-transform max-sm:bottom-0 max-sm:h-[85vh] max-sm:w-full max-sm:rounded-t-3xl max-sm:border-t max-sm:border-border sm:right-0 sm:top-0 sm:h-full sm:max-w-[440px] sm:border-l sm:border-border"
       >
         <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div className="min-w-0">

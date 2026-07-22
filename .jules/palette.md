@@ -77,3 +77,6 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+## 2024-07-22 - Email Detail and Drawer Mobile Responsiveness
+**Learning:** React components containing multiple specific UI regions (participants, attachments, schedule proposals) need their conditions guarded accurately to match high-density UI mockups. Drawer components used on mobile should adapt nicely (e.g. bottom sheet) using standard CSS tailwind practices (`max-sm:bottom-0`, `max-sm:h-[85vh]`).
+**Action:** Use accurate conditional rendering and existing tailwind classes (e.g., breakpoints `max-sm:`) rather than custom CSS when implementing detailed layout transitions for mobile devices. Ensure scratchpads used during the execution are deleted before requesting code review.
