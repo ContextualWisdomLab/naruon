@@ -118,3 +118,8 @@
 **Vulnerability:** webhook URL 검증 로직에서 도메인 접미사(`.internal`, `.local`)는 차단했지만 `internal` 및 `local`과 같은 TLD 자체와의 일치 여부를 검사하지 않아 SSRF 우회가 발생할 수 있었음.
 **Learning:** Python의 `endswith()` 만을 사용하면 접미사가 없는 단일 TLD 문자열 검증에 누락이 발생함.
 **Prevention:** 도메인 및 호스트 검증 시, `endswith` 검사뿐만 아니라 `==`을 활용하여 TLD 정확한 일치 여부도 함께 검증해야 함.
+
+## 2026-07-22 - [취약한 sharp 의존성 업데이트]
+**Vulnerability:** 프론트엔드의 `sharp` 패키지 구버전(0.34.5)에 보안 취약점이 존재하여 CI의 Trivy 검사에서 HIGH(security-severity=8.0) 등급의 보안 경고(GHSA-f88m-g3jw-g9cj)가 발생함.
+**Learning:** 애플리케이션 외부 의존성(특히 이미지 처리 라이브러리인 sharp와 같이 네이티브 바인딩을 포함하는 패키지)의 보안 취약점은 전체 시스템의 취약점으로 이어질 수 있음.
+**Prevention:** 의존성 취약점 점검 도구(Trivy 등)의 결과를 정기적으로 모니터링하고, 취약점이 발견된 패키지는 즉각적으로 최신 안정화 버전(0.35.3)으로 업데이트하여 보안 위협을 사전 차단해야 함.
