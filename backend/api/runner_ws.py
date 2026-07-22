@@ -231,7 +231,9 @@ class ConnectionManager:
                 command=outbound_command,
                 error_code=reservation_error,
                 runner_request_id=request_id,
-                schedule_retry=schedule_retry,
+                schedule_retry=(
+                    schedule_retry and reservation_error != "runner_request_conflict"
+                ),
             )
 
         if pending_key is None:

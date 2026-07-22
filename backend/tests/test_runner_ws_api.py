@@ -379,13 +379,13 @@ async def test_runner_duplicate_request_id_does_not_replace_pending_waiter():
         "workspace-org-acme",
         command,
         timeout_seconds=1,
-        schedule_retry=False,
     )
 
     assert second_response["status"] == "error"
     assert second_response["error"] == "runner_request_conflict"
     assert second_response["error_code"] == "runner_request_conflict"
     assert second_response["provider_write_executed"] is False
+    assert "retry_item_uid" not in second_response
     assert await manager.handle_runner_message(
         connection_id,
         json.dumps({"request_id": "stable-request", "status": "ok"}),
