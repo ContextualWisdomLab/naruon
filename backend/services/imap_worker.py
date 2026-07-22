@@ -148,11 +148,12 @@ class _PinnedIMAP4SSL(aioimaplib.IMAP4_SSL):
         )
 
 
-def _build_pinned_imap_client(
+def build_pinned_imap_client(
     destination: ValidatedImapDestination,
     imap_socket: socket.socket,
     ssl_context: ssl.SSLContext,
 ) -> aioimaplib.IMAP4_SSL:
+    """Build an IMAP client bound to one prevalidated connected socket."""
     return _PinnedIMAP4SSL(
         destination,
         imap_socket,
@@ -316,7 +317,7 @@ class ImapSyncWorker:
         ssl_context = ssl.create_default_context()
         imap_socket = await connect_validated_imap_socket(destination)
         try:
-            imap_client = _build_pinned_imap_client(
+            imap_client = build_pinned_imap_client(
                 destination,
                 imap_socket,
                 ssl_context,

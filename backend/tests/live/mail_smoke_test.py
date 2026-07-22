@@ -85,14 +85,14 @@ async def _check_imap(spec: LiveAccountSpec) -> ProtocolResult:
         connect_validated_imap_socket,
         validate_imap_destination,
     )
-    from services.imap_worker import _build_pinned_imap_client
+    from services.imap_worker import build_pinned_imap_client
 
     assert spec.imap is not None
     destination = validate_imap_destination(spec.imap.host, spec.imap.port)
     ssl_context = ssl.create_default_context()
     imap_socket = await connect_validated_imap_socket(destination)
     try:
-        client = _build_pinned_imap_client(destination, imap_socket, ssl_context)
+        client = build_pinned_imap_client(destination, imap_socket, ssl_context)
         try:
             await asyncio.wait_for(client.wait_hello_from_server(), timeout=30)
             if not spec.email or not spec.password:

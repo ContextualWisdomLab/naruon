@@ -39,7 +39,7 @@ def _patch_pinned_client(monkeypatch, imap_client):
         connect_socket,
     )
     monkeypatch.setattr(
-        "services.imap_worker._build_pinned_imap_client",
+        "services.imap_worker.build_pinned_imap_client",
         build_client,
     )
     return imap_socket
@@ -252,7 +252,7 @@ async def test_imap_worker_closes_pinned_socket_when_client_build_fails(monkeypa
         connect_socket,
     )
     monkeypatch.setattr(
-        "services.imap_worker._build_pinned_imap_client",
+        "services.imap_worker.build_pinned_imap_client",
         fail_build,
     )
 

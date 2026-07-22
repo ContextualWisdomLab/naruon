@@ -31,6 +31,12 @@ class FakeDatabaseIntegrityError(Exception):
         super().__init__(f"unique constraint violation: {constraint_name}")
 
 
+class FakeAsyncpgIntegrityError(Exception):
+    def __init__(self, constraint_name: str):
+        self.constraint_name = constraint_name
+        super().__init__(f"unique constraint violation: {constraint_name}")
+
+
 def _base64url_encode(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
@@ -1134,7 +1140,13 @@ def test_create_ticket_tasks_from_email_replay_reuses_existing_tasks(auth_client
     assert len(mock_session.tasks) == 2
 
 
-def test_create_ticket_tasks_maps_only_email_item_unique_conflict(auth_client):
+@pytest.mark.parametrize(
+    "database_error_type",
+    [FakeDatabaseIntegrityError, FakeAsyncpgIntegrityError],
+)
+def test_create_ticket_tasks_maps_only_email_item_unique_conflict(
+    auth_client, database_error_type
+):
     class ConflictingEmailTaskSession(MockTaskSession):
         def __init__(self) -> None:
             super().__init__()
@@ -1145,7 +1157,7 @@ def test_create_ticket_tasks_maps_only_email_item_unique_conflict(auth_client):
             raise IntegrityError(
                 "email task replay",
                 {},
-                FakeDatabaseIntegrityError(EMAIL_TASK_IDEMPOTENCY_CONSTRAINT),
+                database_error_type(EMAIL_TASK_IDEMPOTENCY_CONSTRAINT),
             )
 
         async def rollback(self):

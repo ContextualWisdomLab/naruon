@@ -80,11 +80,12 @@ class UpdateTicketTaskRequest(BaseModel):
 
 def _is_email_task_idempotency_conflict(exc: IntegrityError) -> bool:
     """Return true only for the email-item replay uniqueness boundary."""
-    diagnostic = getattr(exc.orig, "diag", None)
-    return (
-        getattr(diagnostic, "constraint_name", None)
-        == EMAIL_TASK_IDEMPOTENCY_CONSTRAINT
-    )
+    database_error = exc.orig
+    constraint_name = getattr(database_error, "constraint_name", None)
+    if constraint_name is None:
+        diagnostic = getattr(database_error, "diag", None)
+        constraint_name = getattr(diagnostic, "constraint_name", None)
+    return constraint_name == EMAIL_TASK_IDEMPOTENCY_CONSTRAINT
 
 
 def _normalize_execution_items(items: list[str]) -> list[str]:
