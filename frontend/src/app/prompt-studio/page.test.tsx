@@ -60,6 +60,14 @@ function getButton(container: HTMLElement, label: string) {
   return button as HTMLButtonElement;
 }
 
+function getButtonByAccessibleName(container: HTMLElement, label: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (node) => node.getAttribute("aria-label") === label,
+  );
+  expect(button).toBeInstanceOf(HTMLButtonElement);
+  return button as HTMLButtonElement;
+}
+
 function setControlValue(control: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const prototype = control instanceof HTMLTextAreaElement
     ? window.HTMLTextAreaElement.prototype
@@ -177,12 +185,24 @@ describe("PromptStudioPage", () => {
     const fetchMock = vi.fn(() => promptTest.promise);
     vi.stubGlobal("fetch", fetchMock);
     const page = await renderPage();
+    const runButton = getButtonByAccessibleName(page, "실행 (Test)");
+    const regenerateButton = getButtonByAccessibleName(page, "다시 생성");
 
     act(() => {
-      getButton(page, "실행 (Test)").click();
+      runButton.click();
     });
 
-    expect(getButton(page, "생성 중...").disabled).toBe(true);
+    expect(runButton.disabled).toBe(true);
+    expect(runButton.getAttribute("aria-busy")).toBe("true");
+    expect(runButton.getAttribute("aria-label")).toBe("프롬프트 테스트 생성 중");
+    expect(regenerateButton.disabled).toBe(true);
+    expect(regenerateButton.getAttribute("aria-busy")).toBe("true");
+    expect(regenerateButton.getAttribute("aria-label")).toBe("결과 다시 생성 중");
+    expect(
+      Array.from(page.querySelectorAll('[role="status"][aria-live="polite"]')).filter(
+        (node) => node.textContent === "생성 중...",
+      ),
+    ).toHaveLength(1);
     expect(page.querySelector("[data-testid='loader']")).not.toBeNull();
 
     await act(async () => {
@@ -191,7 +211,10 @@ describe("PromptStudioPage", () => {
     });
     await flushAsyncWork();
 
-    expect(getButton(page, "실행 (Test)").disabled).toBe(false);
+    expect(runButton.disabled).toBe(false);
+    expect(runButton.getAttribute("aria-busy")).toBeNull();
+    expect(runButton.getAttribute("aria-label")).toBe("실행 (Test)");
+    expect(regenerateButton.getAttribute("aria-label")).toBe("다시 생성");
     expect(page.textContent).toContain("맥락 종합 결과");
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/prompts/test",
