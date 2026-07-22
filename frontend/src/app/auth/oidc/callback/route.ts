@@ -48,7 +48,11 @@ function searchParamsFromBodySearch(value: unknown) {
 }
 
 function normalizedHostname(url: URL): string {
-  return url.hostname.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
+  return url.hostname
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .replace(/\.+$/, "")
+    .toLowerCase();
 }
 
 function isLoopbackHostname(hostname: string): boolean {
