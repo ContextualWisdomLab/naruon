@@ -1,6 +1,7 @@
 import asyncio
 import urllib.parse
 import datetime
+from email import policy as email_policy
 import hashlib
 import logging
 import mailbox
@@ -25,11 +26,7 @@ from db.models import (
 from services.archive import extract_backup_async
 from services.batch_embedding_service import try_batch_import_embeddings
 from services.content_graph import ParseResult, parse_content
-from services.email_dedupe_service import (
-    email_strong_fingerprint,
-    strong_email_fingerprint,
-)
-from services.email_service import generate_email_fingerprint
+from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
@@ -47,6 +44,7 @@ from services.project_graph.extractor_registry import (
 )
 from services.threading_service import (
     assign_thread_id,
+    generate_email_fingerprint,
     normalize_message_id,
 )
 
@@ -54,26 +52,11 @@ EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 MAX_IMPORT_UPLOADS = 10
 MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
-MAX_IMPORT_ARCHIVE_EXTRACT_BYTES = MAX_IMPORT_UPLOAD_BYTES
-MAX_IMPORT_ARCHIVE_FILES = MAX_IMPORT_EML_FILES
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
-MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 5
-SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
-SOURCE_TIME_EVIDENCE_PRECEDENCE = [
-    "embedded_metadata",
-    "explicit_filename_date",
-    "filesystem_created_at",
-    "filesystem_modified_at",
-]
 logger = logging.getLogger(__name__)
 
 EmailImportItemStatus = Literal["imported", "skipped_duplicate", "failed"]
-DedupeMatchReason = Literal[
-    "embedded_message_id",
-    "raw_content_sha256",
-    "complete_source_fingerprint",
-]
 
 
 class EmailImportQuotaExceeded(Exception):
@@ -113,9 +96,6 @@ class EmailImportItemResult:
     status: EmailImportItemStatus
     reason_code: str | None = None
     attachment_count: int = 0
-    dedupe_review_required: bool = False
-    dedupe_reason_codes: list[str] = field(default_factory=list)
-    dedupe_match_reason: DedupeMatchReason | None = None
 
 
 @dataclass
@@ -137,64 +117,26 @@ class EmailImportResult:
             self.failed_count += 1
 
 
-def _canonical_upload_filename(filename: str | None) -> str | None:
-    decoded_filename = filename or ""
-    for _ in range(MAX_UPLOAD_FILENAME_DECODE_ROUNDS):
-        next_filename = urllib.parse.unquote(decoded_filename)
-        if next_filename == decoded_filename:
-            break
-        decoded_filename = next_filename
-    else:
-        if urllib.parse.unquote(decoded_filename) != decoded_filename:
-            return None
-
-    if not decoded_filename.isprintable():
-        return None
-
-    # Treat both network/client path separators as separators, independently of
-    # the operating system that hosts the backend.
-    normalized_filename = decoded_filename.replace("\\", "/")
-    name = Path(normalized_filename).name.strip()
-    if not name or name in {".", ".."}:
-        return None
-    return name
-
-
-def canonical_email_import_upload_filename(filename: str | None) -> str | None:
-    """Return one supported canonical upload basename, or fail closed."""
-    canonical_name = _canonical_upload_filename(filename)
-    if (
-        canonical_name is None
-        or Path(canonical_name).suffix.lower() not in SUPPORTED_EMAIL_IMPORT_SUFFIXES
-    ):
-        return None
-    return canonical_name
-
-
-def _safe_upload_filename(filename: str | None) -> str:
-    return _canonical_upload_filename(filename) or "upload"
-
-
-def _safe_display_filename_component(filename: str | None) -> str:
-    normalized_filename = (filename or "").replace("\\", "/")
-    name = Path(normalized_filename).name.strip()
-    sanitized_name = "".join(
-        character if character.isprintable() else "_"
-        for character in name
-    ).strip()
-    if sanitized_name in {"", ".", ".."}:
+def _safe_upload_filename(filename: str) -> str:
+    if filename:
+        for _ in range(100):
+            next_name = urllib.parse.unquote(filename)
+            if next_name == filename:
+                break
+            filename = next_name
+        else:
+            filename = urllib.parse.unquote(filename)
+    name = Path(filename or "upload").name.strip()
+    if name in {".", ".."}:
         return "upload"
-    return sanitized_name
+    return name or "upload"
 
 
 def _safe_item_filename(upload_name: str, eml_path: Path | None = None) -> str:
     safe_upload_name = _safe_upload_filename(upload_name)
-    if eml_path is None:
+    if eml_path is None or eml_path.name == safe_upload_name:
         return safe_upload_name
-    safe_item_name = _safe_display_filename_component(eml_path.name)
-    if safe_item_name == safe_upload_name:
-        return safe_upload_name
-    return f"{safe_upload_name}:{safe_item_name}"
+    return f"{safe_upload_name}:{eml_path.name}"
 
 
 def _utc_datetime(value: object) -> datetime.datetime:
@@ -210,126 +152,27 @@ def _fallback_message_id(content: bytes) -> str:
     return f"import-{digest}@local.naruon"
 
 
-def _message_identity_for(
-    parsed: EmailData, content: bytes
-) -> tuple[str, DedupeMatchReason]:
-    embedded_message_id = normalize_message_id(parsed.get("message_id"))
-    if parsed.get("message_id_evidence_status") == "embedded" and embedded_message_id:
-        return embedded_message_id, "embedded_message_id"
-    return _fallback_message_id(content), "raw_content_sha256"
+def _message_id_for(parsed: EmailData, content: bytes) -> str:
+    return normalize_message_id(parsed.get("message_id")) or _fallback_message_id(
+        content
+    )
 
 
-def _email_fingerprint(parsed: EmailData) -> str | None:
-    source_date = parsed.get("source_date")
-    if parsed.get("date_evidence_status") != "parsed" or not isinstance(
-        source_date, datetime.datetime
-    ):
-        return None
-    return strong_email_fingerprint(
+def _email_fingerprint(parsed: EmailData, persisted_date: datetime.datetime) -> str:
+    strong_fingerprint = strong_email_fingerprint(
         sender=parsed.get("sender"),
         subject=parsed.get("subject"),
-        date=_utc_datetime(source_date),
+        date=persisted_date,
         body=parsed.get("body"),
     )
-
-
-def _legacy_email_fingerprint(parsed: EmailData) -> str | None:
-    source_date = parsed.get("source_date")
-    if parsed.get("date_evidence_status") != "parsed" or not isinstance(
-        source_date, datetime.datetime
-    ):
-        return None
-    sender = parsed.get("sender")
-    subject = parsed.get("subject")
-    body = parsed.get("body")
-    if not (
-        sender
-        and sender.strip()
-        and subject
-        and subject.strip()
-        and body
-        and body.strip()
-    ):
-        return None
+    if strong_fingerprint:
+        return strong_fingerprint
     return generate_email_fingerprint(
-        {
-            "sender": sender,
-            "subject": subject,
-            "date": _utc_datetime(source_date).isoformat(),
-            "body": body,
-        }
+        parsed.get("subject"),
+        persisted_date.isoformat(),
+        parsed.get("sender"),
+        parsed.get("recipients"),
     )
-
-
-def _dedupe_review_reason_codes(
-    parsed: EmailData, fingerprint: str | None
-) -> list[str]:
-    reason_codes: list[str] = []
-    date_evidence_status = parsed.get("date_evidence_status")
-    if date_evidence_status == "missing":
-        reason_codes.append("date_evidence_missing")
-    elif date_evidence_status == "invalid":
-        reason_codes.append("date_evidence_invalid")
-    elif date_evidence_status != "parsed" or not isinstance(
-        parsed.get("source_date"), datetime.datetime
-    ):
-        reason_codes.append("date_evidence_unavailable")
-
-    message_id_evidence_status = parsed.get("message_id_evidence_status")
-    if message_id_evidence_status == "invalid":
-        reason_codes.append("message_id_evidence_invalid")
-    elif message_id_evidence_status != "embedded":
-        reason_codes.append("message_id_evidence_missing")
-    if fingerprint is None:
-        reason_codes.append("complete_source_fingerprint_unavailable")
-    return reason_codes
-
-
-def _source_lineage_for(
-    parsed: EmailData,
-    *,
-    content: bytes,
-    display_filename: str,
-    identity_match_reason: DedupeMatchReason,
-) -> dict[str, object]:
-    """Build bounded source evidence without trusting temporary file timestamps."""
-    source_date = parsed.get("source_date")
-    date_evidence_status = parsed.get("date_evidence_status")
-    has_embedded_date = date_evidence_status == "parsed" and isinstance(
-        source_date, datetime.datetime
-    )
-    message_id_evidence_status = parsed.get("message_id_evidence_status")
-
-    return {
-        "schema_version": 1,
-        "source_kind": "rfc822",
-        "source_filename": display_filename,
-        "raw_content_sha256": hashlib.sha256(content).hexdigest(),
-        "production_time": {
-            "selected_value": (
-                _utc_datetime(source_date).isoformat() if has_embedded_date else None
-            ),
-            "selected_source": ("embedded_date_header" if has_embedded_date else None),
-            "embedded_status": (
-                date_evidence_status
-                if date_evidence_status in {"parsed", "missing", "invalid"}
-                else "missing"
-            ),
-            "evidence_precedence": list(SOURCE_TIME_EVIDENCE_PRECEDENCE),
-        },
-        "message_identity": {
-            "selected_source": (
-                "embedded_message_id"
-                if identity_match_reason == "embedded_message_id"
-                else "raw_content_sha256"
-            ),
-            "embedded_status": (
-                message_id_evidence_status
-                if message_id_evidence_status in {"embedded", "missing", "invalid"}
-                else "missing"
-            ),
-        },
-    }
 
 
 async def _find_existing_email(
@@ -338,44 +181,19 @@ async def _find_existing_email(
     user_id: str,
     organization_id: str,
     message_id: str,
-    identity_match_reason: DedupeMatchReason,
-    fingerprint: str | None,
-    legacy_fingerprint: str | None,
-) -> tuple[Email | None, DedupeMatchReason | None]:
+    fingerprint: str,
+) -> Email | None:
     message_lookup_values = {message_id, f"<{message_id}>"}
-    dedupe_conditions = [Email.message_id.in_(message_lookup_values)]
-    fingerprint_lookup_values = {
-        value for value in (fingerprint, legacy_fingerprint) if value is not None
-    }
-    if fingerprint_lookup_values:
-        dedupe_conditions.append(Email.fingerprint.in_(fingerprint_lookup_values))
     result = await session.execute(
         select(Email).where(
             *Email.owner_filters(user_id, organization_id),
-            or_(*dedupe_conditions),
+            or_(
+                Email.message_id.in_(message_lookup_values),
+                Email.fingerprint == fingerprint,
+            ),
         )
     )
-    existing_emails = result.scalars().all()
-    for existing_email in existing_emails:
-        if normalize_message_id(existing_email.message_id) == message_id:
-            return existing_email, identity_match_reason
-    if fingerprint is not None:
-        for existing_email in existing_emails:
-            stored_fingerprint = existing_email.fingerprint
-            if stored_fingerprint == fingerprint:
-                return existing_email, "complete_source_fingerprint"
-            if (
-                legacy_fingerprint is not None
-                and stored_fingerprint == legacy_fingerprint
-            ):
-                # Legacy fingerprints truncate the body. Require the full-source
-                # fingerprint too, so a shared 500-character prefix is not a match.
-                if email_strong_fingerprint(existing_email) == fingerprint:
-                    return existing_email, "complete_source_fingerprint"
-                continue
-            if email_strong_fingerprint(existing_email) == fingerprint:
-                return existing_email, "complete_source_fingerprint"
-    return None, None
+    return result.scalar_one_or_none()
 
 
 async def _owner_email_import_count(
@@ -461,9 +279,8 @@ def _build_email_object(
     organization_id: str,
     message_id: str,
     thread_id: str | None,
-    fingerprint: str | None,
+    fingerprint: str,
     persisted_date: datetime.datetime,
-    source_lineage_json: dict[str, object],
     attachment_payloads: list[dict],
     fitted_embeddings: list[list[float]],
 ) -> tuple[Email, int]:
@@ -480,7 +297,6 @@ def _build_email_object(
         in_reply_to=parsed.get("in_reply_to"),
         references=parsed.get("references"),
         date=persisted_date,
-        source_lineage_json=source_lineage_json,
         body=parsed.get("body", ""),
         embedding=fitted_embeddings[0] if fitted_embeddings else _zero_embedding(),
     )
@@ -550,11 +366,7 @@ def _fallback_attachment_parser_key(
         return "calendar"
     if parse_content_type == "text/html":
         return "html"
-    if parse_content_type in {
-        "text/markdown",
-        "text/x-markdown",
-        "application/markdown",
-    }:
+    if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
         return "markdown"
     if parse_content_type == "text/plain":
         return "plain_text"
@@ -764,7 +576,8 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="segment_next",
                 edge_path=(
-                    f"{source_segment.segment_path}/next/{target_segment.segment_path}"
+                    f"{source_segment.segment_path}/next/"
+                    f"{target_segment.segment_path}"
                 ),
                 source_kind=source_segment.source_kind,
                 source_record_uid=source_segment.source_record_uid,
@@ -788,7 +601,8 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="heading_contains_segment",
                 edge_path=(
-                    f"{heading_segment.segment_path}/contains/{segment.segment_path}"
+                    f"{heading_segment.segment_path}/contains/"
+                    f"{segment.segment_path}"
                 ),
                 source_kind=segment.source_kind,
                 source_record_uid=segment.source_record_uid,
@@ -961,7 +775,7 @@ async def _import_single_eml(
         content, parsed = await asyncio.to_thread(_read_and_parse_eml, eml_path)
     except EmailParseError as exc:
         logger.warning(
-            "Email import item failed: reason_code=parse_failed filename=%r error_type=%s",
+            "Email import item failed: reason_code=parse_failed filename=%s error_type=%s",
             display_filename,
             type(exc).__name__,
         )
@@ -971,27 +785,23 @@ async def _import_single_eml(
             reason_code="parse_failed",
         )
 
-    message_id, identity_match_reason = _message_identity_for(parsed, content)
+    message_id = _message_id_for(parsed, content)
     parsed["message_id"] = message_id
     persisted_date = _utc_datetime(parsed.get("date"))
-    fingerprint = _email_fingerprint(parsed)
-    legacy_fingerprint = _legacy_email_fingerprint(parsed)
+    fingerprint = _email_fingerprint(parsed, persisted_date)
 
-    existing_email, dedupe_match_reason = await _find_existing_email(
+    existing_email = await _find_existing_email(
         session,
         user_id=user_id,
         organization_id=organization_id,
         message_id=message_id,
-        identity_match_reason=identity_match_reason,
         fingerprint=fingerprint,
-        legacy_fingerprint=legacy_fingerprint,
     )
     if existing_email is not None:
         return EmailImportItemResult(
             filename=display_filename,
             status="skipped_duplicate",
             reason_code="duplicate_email",
-            dedupe_match_reason=dedupe_match_reason,
         )
 
     thread_id = await assign_thread_id(
@@ -1013,12 +823,6 @@ async def _import_single_eml(
         thread_id=thread_id,
         fingerprint=fingerprint,
         persisted_date=persisted_date,
-        source_lineage_json=_source_lineage_for(
-            parsed,
-            content=content,
-            display_filename=display_filename,
-            identity_match_reason=identity_match_reason,
-        ),
         attachment_payloads=attachment_payloads,
         fitted_embeddings=fitted_embeddings,
     )
@@ -1035,7 +839,7 @@ async def _import_single_eml(
     except Exception:
         await session.rollback()
         logger.warning(
-            "Email import item failed: reason_code=database_commit_failed filename=%r",
+            "Email import item failed: reason_code=database_commit_failed filename=%s",
             display_filename,
         )
         return EmailImportItemResult(
@@ -1052,13 +856,10 @@ async def _import_single_eml(
         embedding_provider=embedding_provider,
     )
 
-    dedupe_reason_codes = _dedupe_review_reason_codes(parsed, fingerprint)
     return EmailImportItemResult(
         filename=display_filename,
         status="imported",
         attachment_count=attachment_count,
-        dedupe_review_required=bool(dedupe_reason_codes),
-        dedupe_reason_codes=dedupe_reason_codes,
     )
 
 
@@ -1204,13 +1005,11 @@ async def _eml_paths_for_upload(
     upload: EmailImportUpload,
     upload_dir: Path,
 ) -> tuple[list[Path], str | None]:
-    upload_name = canonical_email_import_upload_filename(upload.filename)
-    if upload_name is None:
-        return [], "unsupported_file_type"
+    upload_name = _safe_upload_filename(upload.filename)
     upload_path = upload_dir / upload_name
     try:
         await asyncio.to_thread(upload_path.write_bytes, upload.content)
-    except (OSError, ValueError):
+    except OSError:
         return [], "file_write_failed"
 
     suffix = upload_path.suffix.lower()
@@ -1223,12 +1022,7 @@ async def _eml_paths_for_upload(
 
     extract_dir = upload_dir / "extracted"
     try:
-        extracted_paths = await extract_backup_async(
-            upload_path,
-            extract_dir,
-            max_extract_size=MAX_IMPORT_ARCHIVE_EXTRACT_BYTES,
-            max_file_count=MAX_IMPORT_ARCHIVE_FILES,
-        )
+        extracted_paths = await extract_backup_async(upload_path, extract_dir)
     except ArchiveError:
         return [], "archive_extract_failed"
 
@@ -1252,11 +1046,11 @@ def _eml_paths_for_mbox_upload(
     try:
         parsed_mailbox = mailbox.mbox(upload_path, create=False)
         eml_paths: list[Path] = []
-        for index, key in enumerate(parsed_mailbox.iterkeys(), start=1):
+        for index, message in enumerate(parsed_mailbox, start=1):
             if len(eml_paths) >= MAX_IMPORT_EML_FILES:
                 return [], "mbox_too_many_eml_files"
             eml_path = extract_dir / f"message_{index:06d}.eml"
-            eml_path.write_bytes(parsed_mailbox.get_bytes(key, from_=False))
+            eml_path.write_bytes(message.as_bytes(policy=email_policy.default))
             eml_paths.append(eml_path)
     except (OSError, mailbox.Error, UnicodeError, ValueError):
         return [], "mbox_parse_failed"
@@ -1307,7 +1101,7 @@ async def import_email_uploads(
                 )
                 if failure_reason is not None:
                     logger.warning(
-                        "Email import upload failed: reason_code=%s filename=%r",
+                        "Email import upload failed: reason_code=%s filename=%s",
                         failure_reason,
                         upload_name,
                     )

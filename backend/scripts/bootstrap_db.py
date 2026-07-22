@@ -37,14 +37,6 @@ def _get_add_columns_statements() -> list[Executable]:
         text("ALTER TABLE email_records ADD COLUMN IF NOT EXISTS in_reply_to varchar"),
         text('ALTER TABLE email_records ADD COLUMN IF NOT EXISTS "references" varchar'),
         text("ALTER TABLE email_records ADD COLUMN IF NOT EXISTS reply_to varchar"),
-        text(
-            "ALTER TABLE email_records ADD COLUMN IF NOT EXISTS "
-            "is_read boolean NOT NULL DEFAULT true"
-        ),
-        text(
-            "ALTER TABLE email_records ADD COLUMN IF NOT EXISTS "
-            "source_lineage_json json NOT NULL DEFAULT '{}'::json"
-        ),
         text("ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS user_id varchar"),
         text(
             "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS organization_id varchar"
@@ -193,6 +185,10 @@ def _get_create_indexes_statements() -> list[Executable]:
         text(
             "CREATE INDEX IF NOT EXISTS ix_email_records_owner_date "
             "ON email_records (user_id, organization_id, date)"
+        ),
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_emails_owner_date "
+            "ON emails (user_id, organization_id, date)"
         ),
         text(
             "CREATE INDEX IF NOT EXISTS ix_sender_relationships_owner_source "

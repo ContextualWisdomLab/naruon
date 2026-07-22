@@ -66,22 +66,6 @@ def test_extract_backup_size_exceeded(tmp_path, monkeypatch):
         archive_module.extract_backup(zip_path, tmp_path / "output")
 
 
-def test_extract_backup_honors_caller_size_limit(tmp_path):
-    zip_path = tmp_path / "bounded.zip"
-    with zipfile.ZipFile(zip_path, "w") as z:
-        z.writestr("large.txt", b"A" * 20)
-
-    with pytest.raises(
-        ArchiveSizeExceededError,
-        match="Archive exceeds maximum allowed extraction size of 10 bytes",
-    ):
-        archive_module.extract_backup(
-            zip_path,
-            tmp_path / "output",
-            max_extract_size=10,
-        )
-
-
 def test_extract_backup_malformed_path(tmp_path):
     zip_path = tmp_path / "malformed.zip"
     with zipfile.ZipFile(zip_path, "w") as z:
@@ -150,23 +134,6 @@ def test_extract_backup_file_count_exceeded(tmp_path, monkeypatch):
         archive_module.extract_backup(zip_path, tmp_path / "output")
 
 
-def test_extract_backup_honors_caller_file_count_limit(tmp_path):
-    zip_path = tmp_path / "bounded-count.zip"
-    with zipfile.ZipFile(zip_path, "w") as z:
-        z.writestr("file1.txt", b"1")
-        z.writestr("file2.txt", b"2")
-
-    with pytest.raises(
-        ArchiveFileCountExceededError,
-        match="Archive exceeds maximum allowed file count of 1",
-    ):
-        archive_module.extract_backup(
-            zip_path,
-            tmp_path / "output",
-            max_file_count=1,
-        )
-
-
 def test_extract_backup_async(tmp_path):
     zip_path = tmp_path / "test_async.zip"
     with zipfile.ZipFile(zip_path, "w") as z:
@@ -201,30 +168,3 @@ async def test_extract_backup_async_calls_to_thread(tmp_path, monkeypatch):
     assert called is True
     assert passed_args == (archive_module.extract_backup, zip_path, out_dir)
     assert result == [tmp_path / "dummy.txt"]
-
-
-@pytest.mark.asyncio
-async def test_extract_backup_async_forwards_caller_limits(tmp_path, monkeypatch):
-    passed_call = ()
-
-    async def mock_to_thread(func, *args, **kwargs):
-        nonlocal passed_call
-        passed_call = (func, args, kwargs)
-        return []
-
-    monkeypatch.setattr(asyncio, "to_thread", mock_to_thread)
-
-    zip_path = tmp_path / "test.zip"
-    out_dir = tmp_path / "output"
-    await archive_module.extract_backup_async(
-        zip_path,
-        out_dir,
-        max_extract_size=1024,
-        max_file_count=10,
-    )
-
-    assert passed_call == (
-        archive_module.extract_backup,
-        (zip_path, out_dir),
-        {"max_extract_size": 1024, "max_file_count": 10},
-    )

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
 from db.models import Email
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError
+from pydantic import BaseModel, EmailStr, Field
 import datetime
 import time
 from typing import Literal
@@ -30,14 +30,12 @@ from services.email_dedupe_service import (
     email_strong_fingerprint,
 )
 from services.email_import_service import (
-    DedupeMatchReason,
     EmailImportEmbeddingProvider,
     EmailImportQuotaExceeded,
     MAX_IMPORT_UPLOAD_BYTES,
     MAX_IMPORT_UPLOADS,
     EmailImportItemStatus,
     EmailImportUpload,
-    canonical_email_import_upload_filename,
     import_email_uploads,
 )
 from services.llm_provider_selection import resolve_runtime_llm_provider
@@ -142,48 +140,6 @@ def _safe_email_snippet(value: str | None) -> str:
     return body[:100] + "..." if len(body) > 100 else body
 
 
-class EmailProductionTimeLineage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    selected_value: datetime.datetime | None
-    selected_source: Literal["embedded_date_header"] | None
-    embedded_status: Literal["parsed", "missing", "invalid"]
-    evidence_precedence: tuple[
-        Literal["embedded_metadata"],
-        Literal["explicit_filename_date"],
-        Literal["filesystem_created_at"],
-        Literal["filesystem_modified_at"],
-    ]
-
-
-class EmailMessageIdentityLineage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    selected_source: Literal["embedded_message_id", "raw_content_sha256"]
-    embedded_status: Literal["embedded", "missing", "invalid"]
-
-
-class EmailSourceLineage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: Literal[1]
-    source_kind: Literal["rfc822"]
-    source_filename: str = Field(min_length=1, max_length=1024)
-    raw_content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    production_time: EmailProductionTimeLineage
-    message_identity: EmailMessageIdentityLineage
-
-
-def _source_lineage_response(email: Email) -> EmailSourceLineage | None:
-    raw_lineage = getattr(email, "source_lineage_json", None)
-    if not raw_lineage:
-        return None
-    try:
-        return EmailSourceLineage.model_validate(raw_lineage)
-    except ValidationError:
-        return None
-
-
 def _email_list_item(
     *,
     email: Email,
@@ -221,7 +177,6 @@ def _email_detail_response(email: Email) -> "EmailDetailResponse":
         thread_id=canonical_thread_key(email),
         in_reply_to=email.in_reply_to,
         references=email.references,
-        source_lineage=_source_lineage_response(email),
     )
 
 
@@ -253,7 +208,6 @@ class EmailDetailResponse(BaseModel):
     body: str
     in_reply_to: str | None = None
     references: str | None = None
-    source_lineage: EmailSourceLineage | None = None
     requires_reply: bool = False
     schedule_conflict: bool = False
 
@@ -295,9 +249,6 @@ class EmailFileImportItem(BaseModel):
     status: EmailImportItemStatus
     reason_code: str | None = None
     attachment_count: int = 0
-    dedupe_review_required: bool = False
-    dedupe_reason_codes: list[str] = Field(default_factory=list)
-    dedupe_match_reason: DedupeMatchReason | None = None
 
 
 class EmailFileImportResponse(BaseModel):
@@ -625,8 +576,12 @@ async def import_email_files(
 
     uploads: list[EmailImportUpload] = []
     for upload in files:
-        canonical_filename = canonical_email_import_upload_filename(upload.filename)
-        if canonical_filename is None:
+        normalized_filename = upload.filename.lower().strip() if upload.filename else ""
+        if not upload.filename or not (
+            normalized_filename.endswith(".eml")
+            or normalized_filename.endswith(".zip")
+            or normalized_filename.endswith(".mbox")
+        ):
             raise HTTPException(status_code=400, detail="invalid_file_type")
 
         content = await upload.read(MAX_IMPORT_UPLOAD_BYTES + 1)
@@ -634,7 +589,7 @@ async def import_email_files(
             raise HTTPException(status_code=413, detail="file_too_large")
         uploads.append(
             EmailImportUpload(
-                filename=canonical_filename,
+                filename=upload.filename or "upload",
                 content=content,
             )
         )
@@ -676,9 +631,6 @@ async def import_email_files(
                 status=item.status,
                 reason_code=item.reason_code,
                 attachment_count=item.attachment_count,
-                dedupe_review_required=item.dedupe_review_required,
-                dedupe_reason_codes=item.dedupe_reason_codes,
-                dedupe_match_reason=item.dedupe_match_reason,
             )
             for item in import_result.items
         ],

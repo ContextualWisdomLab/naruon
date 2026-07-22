@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import time
-import uuid
 import zipfile
 
 import pytest
@@ -164,7 +163,9 @@ class LimitAwareMockSession(MockSession):
             # Emulate the SQL window query: newest head row per thread,
             # ordered by date desc, LIMIT applied to heads (not raw rows).
             heads: dict[str, object] = {}
-            for item in sorted(self.items, key=lambda email: email.date, reverse=True):
+            for item in sorted(
+                self.items, key=lambda email: email.date, reverse=True
+            ):
                 key = item.thread_id or item.message_id
                 heads.setdefault(key, item)
             rows = list(heads.values())
@@ -867,23 +868,11 @@ def test_unique_email_thread_intent_accepts_signed_bearer_session(db_session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "upload_filename,expected_filename",
-    [
-        ("customer-source.eml", "customer-source.eml"),
-        ("%2e%2e%5ccustomer-source.eml", "customer-source.eml"),
-    ],
-)
 async def test_import_email_files_persists_signed_scoped_eml_upload(
-    client: AsyncClient, upload_filename: str, expected_filename: str
+    client: AsyncClient,
 ):
     from db.session import get_db
 
-    source_content = _sample_eml_bytes(
-        message_id="<imported@example.com>",
-        subject="<script>bad()</script>Quarter plan",
-        body="<p>Body text</p>",
-    )
     session = ImportRecordingSession([])
     previous_db_override = app.dependency_overrides.get(get_db)
     app.dependency_overrides[get_db] = lambda: session
@@ -898,8 +887,12 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
                     (
                         "files",
                         (
-                            upload_filename,
-                            source_content,
+                            "customer-source.eml",
+                            _sample_eml_bytes(
+                                message_id="<imported@example.com>",
+                                subject="<script>bad()</script>Quarter plan",
+                                body="<p>Body text</p>",
+                            ),
                             "message/rfc822",
                         ),
                     )
@@ -922,13 +915,10 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
     assert data["provenance"] == "server-authoritative"
     assert data["items"] == [
         {
-            "filename": expected_filename,
+            "filename": "customer-source.eml",
             "status": "imported",
             "reason_code": None,
             "attachment_count": 0,
-            "dedupe_review_required": False,
-            "dedupe_reason_codes": [],
-            "dedupe_match_reason": None,
         }
     ]
     assert "imported@example.com" not in json.dumps(data)
@@ -944,45 +934,7 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
     assert added_email.subject == "Quarter plan"
     assert added_email.body == "Body text"
     assert added_email.fingerprint
-    assert added_email.source_lineage_json == {
-        "schema_version": 1,
-        "source_kind": "rfc822",
-        "source_filename": expected_filename,
-        "raw_content_sha256": hashlib.sha256(source_content).hexdigest(),
-        "production_time": {
-            "selected_value": "2026-06-11T10:00:00+00:00",
-            "selected_source": "embedded_date_header",
-            "embedded_status": "parsed",
-            "evidence_precedence": [
-                "embedded_metadata",
-                "explicit_filename_date",
-                "filesystem_created_at",
-                "filesystem_modified_at",
-            ],
-        },
-        "message_identity": {
-            "selected_source": "embedded_message_id",
-            "embedded_status": "embedded",
-        },
-    }
     assert len(added_email.embedding) == STORAGE_EMBEDDING_DIMENSION
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "upload_filename", ["%00message.eml", "%0amessage.eml", "note.txt"]
-)
-async def test_import_email_files_rejects_invalid_canonical_filename_before_read(
-    client: AsyncClient, upload_filename: str
-):
-    response = await client.post(
-        "/api/emails/import-files",
-        files=[("files", (upload_filename, b"not read", "application/octet-stream"))],
-        headers={"X-Organization-Id": "org-acme"},
-    )
-
-    assert response.status_code == 400
-    assert response.json() == {"detail": "invalid_file_type"}
 
 
 @pytest.mark.asyncio
@@ -1037,314 +989,12 @@ async def test_import_email_files_skips_duplicate_message_id(client: AsyncClient
     assert data["failed_count"] == 0
     assert data["items"][0]["status"] == "skipped_duplicate"
     assert data["items"][0]["reason_code"] == "duplicate_email"
-    assert data["items"][0]["dedupe_review_required"] is False
-    assert data["items"][0]["dedupe_reason_codes"] == []
-    assert data["items"][0]["dedupe_match_reason"] == "embedded_message_id"
     assert session.added == []
     assert session.commit_count == 0
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("date_header", "expected_date_reason"),
-    [
-        (b"", "date_evidence_missing"),
-        (b"Date: Invalid-Date-Format\r\n", "date_evidence_invalid"),
-    ],
-)
-async def test_import_email_files_does_not_treat_filename_date_as_source_metadata(
-    client: AsyncClient, date_header: bytes, expected_date_reason: str
-):
-    from db.session import get_db
-
-    session = ImportRecordingSession([])
-    previous_db_override = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = lambda: session
-    try:
-        response = await client.post(
-            "/api/emails/import-files",
-            files=[
-                (
-                    "files",
-                    (
-                        "2026-04-28-message.eml",
-                        b"Message-ID: <filename-date@example.com>\r\n"
-                        b"From: partner@example.com\r\n"
-                        b"To: user@example.com\r\n"
-                        b"Subject: Filename date is not evidence\r\n"
-                        + date_header
-                        + b"\r\n"
-                        b"Body text\r\n",
-                        "message/rfc822",
-                    ),
-                )
-            ],
-            headers={"X-Organization-Id": "org-acme"},
-        )
-    finally:
-        if previous_db_override is None:
-            app.dependency_overrides.pop(get_db, None)
-        else:
-            app.dependency_overrides[get_db] = previous_db_override
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["imported_count"] == 1
-    assert data["provider_write_executed"] is False
-    assert data["items"] == [
-        {
-            "filename": "2026-04-28-message.eml",
-            "status": "imported",
-            "reason_code": None,
-            "attachment_count": 0,
-            "dedupe_review_required": True,
-            "dedupe_reason_codes": [
-                expected_date_reason,
-                "complete_source_fingerprint_unavailable",
-            ],
-            "dedupe_match_reason": None,
-        }
-    ]
-    assert session.added[0].fingerprint is None
-    assert session.added[0].source_lineage_json["production_time"] == {
-        "selected_value": None,
-        "selected_source": None,
-        "embedded_status": expected_date_reason.removeprefix("date_evidence_"),
-        "evidence_precedence": [
-            "embedded_metadata",
-            "explicit_filename_date",
-            "filesystem_created_at",
-            "filesystem_modified_at",
-        ],
-    }
-
-
-@pytest.mark.asyncio
-async def test_import_email_files_uses_raw_sha_for_exact_no_id_duplicate(
-    client: AsyncClient,
-):
-    from db.session import get_db
-
-    content = (
-        b"Date: Thu, 11 Jun 2026 10:00:00 +0000\r\n"
-        b"From: partner@example.com\r\n"
-        b"To: user@example.com\r\n"
-        b"Subject: No embedded ID\r\n\r\n"
-        b"Body text\r\n"
-    )
-    session = ImportRecordingSession([])
-    previous_db_override = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = lambda: session
-    try:
-        response = await client.post(
-            "/api/emails/import-files",
-            files=[
-                ("files", ("first.eml", content, "message/rfc822")),
-                ("files", ("second.eml", content, "message/rfc822")),
-            ],
-            headers={"X-Organization-Id": "org-acme"},
-        )
-    finally:
-        if previous_db_override is None:
-            app.dependency_overrides.pop(get_db, None)
-        else:
-            app.dependency_overrides[get_db] = previous_db_override
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["imported_count"] == 1
-    assert data["skipped_count"] == 1
-    assert data["provider_write_executed"] is False
-    assert data["items"][0]["dedupe_review_required"] is True
-    assert data["items"][0]["dedupe_reason_codes"] == ["message_id_evidence_missing"]
-    assert data["items"][1]["status"] == "skipped_duplicate"
-    assert data["items"][1]["dedupe_review_required"] is False
-    assert data["items"][1]["dedupe_reason_codes"] == []
-    assert data["items"][1]["dedupe_match_reason"] == "raw_content_sha256"
-    assert session.added[0].source_lineage_json["message_identity"] == {
-        "selected_source": "raw_content_sha256",
-        "embedded_status": "missing",
-    }
-
-
-@pytest.mark.asyncio
-async def test_import_email_files_records_effective_identity_for_empty_message_id(
-    client: AsyncClient,
-):
-    from db.session import get_db
-
-    content = (
-        b"Message-ID: <>\r\n"
-        b"Date: Thu, 11 Jun 2026 10:00:00 +0000\r\n"
-        b"From: partner@example.com\r\n"
-        b"To: user@example.com\r\n"
-        b"Subject: Empty identity\r\n\r\n"
-        b"Body text\r\n"
-    )
-    session = ImportRecordingSession([])
-    previous_db_override = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = lambda: session
-    try:
-        response = await client.post(
-            "/api/emails/import-files",
-            files=[("files", ("empty-id.eml", content, "message/rfc822"))],
-            headers={"X-Organization-Id": "org-acme"},
-        )
-    finally:
-        if previous_db_override is None:
-            app.dependency_overrides.pop(get_db, None)
-        else:
-            app.dependency_overrides[get_db] = previous_db_override
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["items"][0]["dedupe_review_required"] is True
-    assert data["items"][0]["dedupe_reason_codes"] == ["message_id_evidence_invalid"]
-    assert session.added[0].message_id.startswith("import-")
-    assert session.added[0].source_lineage_json["message_identity"] == {
-        "selected_source": "raw_content_sha256",
-        "embedded_status": "invalid",
-    }
-
-
-@pytest.mark.asyncio
-async def test_import_email_files_reports_complete_source_fingerprint_match(
-    client: AsyncClient,
-):
-    from db.session import get_db
-
-    existing_email = Email(
-        id=81,
-        user_id="testuser",
-        organization_id="org-acme",
-        message_id="existing-fingerprint@example.com",
-        thread_id="existing-fingerprint-thread",
-        sender="Partner <partner@example.com>",
-        recipients="User <user@example.com>",
-        subject="Fingerprint match",
-        date=datetime.datetime(2026, 6, 11, 10, 0, tzinfo=datetime.timezone.utc),
-        body="Same source body",
-        fingerprint=generate_email_fingerprint(
-            {
-                "sender": "Partner <partner@example.com>",
-                "subject": "Fingerprint match",
-                "date": "2026-06-11T10:00:00+00:00",
-                "body": "Same source body",
-            }
-        ),
-        embedding=[0.0] * 1536,
-    )
-    session = ImportRecordingSession([existing_email])
-    previous_db_override = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = lambda: session
-    try:
-        response = await client.post(
-            "/api/emails/import-files",
-            files=[
-                (
-                    "files",
-                    (
-                        "fingerprint-match.eml",
-                        _sample_eml_bytes(
-                            message_id="<new-id@example.com>",
-                            subject="Fingerprint match",
-                            body="Same source body",
-                        ),
-                        "message/rfc822",
-                    ),
-                )
-            ],
-            headers={"X-Organization-Id": "org-acme"},
-        )
-    finally:
-        if previous_db_override is None:
-            app.dependency_overrides.pop(get_db, None)
-        else:
-            app.dependency_overrides[get_db] = previous_db_override
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["skipped_count"] == 1
-    assert data["provider_write_executed"] is False
-    assert data["items"][0]["dedupe_match_reason"] == "complete_source_fingerprint"
-    assert data["items"][0]["dedupe_review_required"] is False
-    assert data["items"][0]["dedupe_reason_codes"] == []
-
-
-@pytest.mark.asyncio
-async def test_import_email_files_rejects_legacy_body_prefix_false_positive(
-    client: AsyncClient,
-):
-    from db.session import get_db
-
-    shared_prefix = "A" * 500
-    existing_email = Email(
-        id=82,
-        user_id="testuser",
-        organization_id="org-acme",
-        message_id="existing-prefix@example.com",
-        thread_id="existing-prefix-thread",
-        sender="Partner <partner@example.com>",
-        recipients="User <user@example.com>",
-        subject="Long body",
-        date=datetime.datetime(2026, 6, 11, 10, 0, tzinfo=datetime.timezone.utc),
-        body=f"{shared_prefix}first",
-        fingerprint=generate_email_fingerprint(
-            {
-                "sender": "Partner <partner@example.com>",
-                "subject": "Long body",
-                "date": "2026-06-11T10:00:00+00:00",
-                "body": f"{shared_prefix}first",
-            }
-        ),
-        embedding=[0.0] * 1536,
-    )
-    session = ImportRecordingSession([existing_email])
-    previous_db_override = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = lambda: session
-    try:
-        response = await client.post(
-            "/api/emails/import-files",
-            files=[
-                (
-                    "files",
-                    (
-                        "long-body.eml",
-                        _sample_eml_bytes(
-                            message_id="<new-prefix@example.com>",
-                            subject="Long body",
-                            body=f"{shared_prefix}second",
-                        ),
-                        "message/rfc822",
-                    ),
-                )
-            ],
-            headers={"X-Organization-Id": "org-acme"},
-        )
-    finally:
-        if previous_db_override is None:
-            app.dependency_overrides.pop(get_db, None)
-        else:
-            app.dependency_overrides[get_db] = previous_db_override
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["imported_count"] == 1
-    assert data["skipped_count"] == 0
-    assert len(session.added) == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "member_name,expected_filename",
-    [
-        ("nested/source.eml", "email-archive.zip:source.eml"),
-        ("ok\nforged.eml", "email-archive.zip:ok_forged.eml"),
-    ],
-)
-async def test_import_email_files_extracts_eml_from_zip(
-    client: AsyncClient, member_name: str, expected_filename: str
-):
+async def test_import_email_files_extracts_eml_from_zip(client: AsyncClient):
     from db.session import get_db
 
     session = ImportRecordingSession([])
@@ -1359,7 +1009,7 @@ async def test_import_email_files_extracts_eml_from_zip(
                     (
                         "email-archive.zip",
                         _zip_with_eml_bytes(
-                            member_name,
+                            "nested/source.eml",
                             _sample_eml_bytes(message_id="<zip-source@example.com>"),
                         ),
                         "application/zip",
@@ -1377,8 +1027,7 @@ async def test_import_email_files_extracts_eml_from_zip(
     assert response.status_code == 200
     data = response.json()
     assert data["imported_count"] == 1
-    assert data["items"][0]["filename"] == expected_filename
-    assert "\n" not in data["items"][0]["filename"]
+    assert data["items"][0]["filename"] == "email-archive.zip:source.eml"
     assert session.added[0].message_id == "zip-source@example.com"
 
 
@@ -1386,13 +1035,6 @@ async def test_import_email_files_extracts_eml_from_zip(
 async def test_import_email_files_extracts_eml_from_mbox(client: AsyncClient):
     from db.session import get_db
 
-    source_message = _sample_eml_bytes(
-        message_id="<mbox-source@example.com>",
-        subject="MBOX source",
-    ).replace(
-        b"Subject: MBOX source\r\n",
-        b"Subject: MBOX source\r\nX-Weird:  a  b  \r\n",
-    )
     session = ImportRecordingSession([])
     previous_db_override = app.dependency_overrides.get(get_db)
     app.dependency_overrides[get_db] = lambda: session
@@ -1404,7 +1046,12 @@ async def test_import_email_files_extracts_eml_from_mbox(client: AsyncClient):
                     "files",
                     (
                         "mailbox-export.mbox",
-                        _mbox_with_eml_bytes(source_message),
+                        _mbox_with_eml_bytes(
+                            _sample_eml_bytes(
+                                message_id="<mbox-source@example.com>",
+                                subject="MBOX source",
+                            )
+                        ),
                         "application/mbox",
                     ),
                 )
@@ -1424,10 +1071,6 @@ async def test_import_email_files_extracts_eml_from_mbox(client: AsyncClient):
     assert data["items"][0]["filename"] == "mailbox-export.mbox:message_000001.eml"
     assert session.added[0].message_id == "mbox-source@example.com"
     assert session.added[0].subject == "MBOX source"
-    expected_member_bytes = source_message.replace(b"\r\n", b"\n")
-    assert session.added[0].source_lineage_json["raw_content_sha256"] == (
-        hashlib.sha256(expected_member_bytes).hexdigest()
-    )
 
 
 @pytest.mark.asyncio
@@ -1866,102 +1509,6 @@ async def _seed_reply_tracking_smoke_data(Session, user_id, organization_id, now
 
 @pytest.mark.postgres
 @pytest.mark.asyncio
-async def test_email_source_lineage_real_postgres_round_trip():
-    from api.auth import AuthContext
-    from api.emails import get_auth_context as emails_get_auth_context
-    from db.session import get_db
-    from sqlalchemy import delete
-
-    engine, Session = await _setup_postgres_smoke_session()
-    unique_suffix = uuid.uuid4().hex[:12]
-    user_id = f"lineage-smoke-user-{unique_suffix}"
-    organization_id = f"lineage-smoke-org-{unique_suffix}"
-    lineage = {
-        "schema_version": 1,
-        "source_kind": "rfc822",
-        "source_filename": "lineage-smoke.eml",
-        "raw_content_sha256": "b" * 64,
-        "production_time": {
-            "selected_value": "2026-06-11T10:00:00+00:00",
-            "selected_source": "embedded_date_header",
-            "embedded_status": "parsed",
-            "evidence_precedence": [
-                "embedded_metadata",
-                "explicit_filename_date",
-                "filesystem_created_at",
-                "filesystem_modified_at",
-            ],
-        },
-        "message_identity": {
-            "selected_source": "embedded_message_id",
-            "embedded_status": "embedded",
-        },
-    }
-
-    async def real_db_override():
-        async with Session() as session:
-            yield session
-
-    async def auth_override():
-        return AuthContext(
-            user_id=user_id,
-            role="member",
-            organization_id=organization_id,
-            group_ids=(),
-            workspace_id=f"workspace-{organization_id}",
-        )
-
-    email_id: int | None = None
-    previous_db_override = app.dependency_overrides.get(get_db)
-    previous_auth_override = app.dependency_overrides.get(emails_get_auth_context)
-    try:
-        async with Session() as session:
-            email = Email(
-                user_id=user_id,
-                organization_id=organization_id,
-                message_id=f"lineage-smoke-{unique_suffix}@example.com",
-                thread_id=f"lineage-smoke-thread-{unique_suffix}",
-                sender="partner@example.com",
-                recipients="user@example.com",
-                subject="Lineage smoke",
-                date=datetime.datetime(2026, 6, 11, 10, tzinfo=datetime.timezone.utc),
-                source_lineage_json=lineage,
-                body="PostgreSQL source lineage round trip.",
-            )
-            session.add(email)
-            await session.commit()
-            email_id = email.id
-
-        app.dependency_overrides[get_db] = real_db_override
-        app.dependency_overrides[emails_get_auth_context] = auth_override
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as api_client:
-            response = await api_client.get(f"/api/emails/{email_id}")
-
-        assert response.status_code == 200
-        assert response.json()["source_lineage"]["raw_content_sha256"] == "b" * 64
-        assert response.json()["source_lineage"]["production_time"] == {
-            **lineage["production_time"],
-            "selected_value": "2026-06-11T10:00:00Z",
-        }
-    finally:
-        if previous_db_override is None:
-            app.dependency_overrides.pop(get_db, None)
-        else:
-            app.dependency_overrides[get_db] = previous_db_override
-        if previous_auth_override is None:
-            app.dependency_overrides.pop(emails_get_auth_context, None)
-        else:
-            app.dependency_overrides[emails_get_auth_context] = previous_auth_override
-        async with Session() as session:
-            await session.execute(delete(Email).where(Email.user_id == user_id))
-            await session.commit()
-        await engine.dispose()
-
-
-@pytest.mark.postgres
-@pytest.mark.asyncio
 async def test_get_emails_reply_tracking_real_postgres_smoke():
     from db.session import get_db
 
@@ -2013,75 +1560,10 @@ async def test_get_emails_reply_tracking_real_postgres_smoke():
 
 @pytest.mark.asyncio
 async def test_get_email_by_id(client: AsyncClient, db_session, sample_email: Email):
-    sample_email.source_lineage_json = {
-        "schema_version": 1,
-        "source_kind": "rfc822",
-        "source_filename": "message.eml",
-        "raw_content_sha256": "a" * 64,
-        "production_time": {
-            "selected_value": "2026-06-11T10:00:00Z",
-            "selected_source": "embedded_date_header",
-            "embedded_status": "parsed",
-            "evidence_precedence": [
-                "embedded_metadata",
-                "explicit_filename_date",
-                "filesystem_created_at",
-                "filesystem_modified_at",
-            ],
-        },
-        "message_identity": {
-            "selected_source": "embedded_message_id",
-            "embedded_status": "embedded",
-        },
-    }
-
     response = await client.get(f"/api/emails/{sample_email.id}")
-
     assert response.status_code == 200
     assert response.json()["id"] == sample_email.id
     assert response.json()["reply_to"] == "reply@example.com"
-    assert response.json()["source_lineage"] == sample_email.source_lineage_json
-
-
-@pytest.mark.asyncio
-async def test_get_email_by_id_omits_invalid_source_lineage(
-    client: AsyncClient, sample_email: Email
-):
-    from db.session import get_db
-
-    sample_email.source_lineage_json = {
-        "schema_version": 1,
-        "source_kind": "rfc822",
-        "source_filename": "message.eml",
-        "raw_content_sha256": "not-a-sha256",
-    }
-    app.dependency_overrides[get_db] = lambda: MockSession([sample_email])
-
-    response = await client.get(f"/api/emails/{sample_email.id}")
-
-    assert response.status_code == 200
-    assert response.json()["source_lineage"] is None
-
-
-@pytest.mark.asyncio
-async def test_get_email_by_id_does_not_treat_file_lineage_as_rfc822(
-    client: AsyncClient, sample_email: Email
-):
-    from db.session import get_db
-
-    sample_email.source_lineage_json = {
-        "schema_version": 1,
-        "schema_kind": "disksage.file-lineage",
-        "source_kind": "file",
-        "source_filename": "report.pdf",
-        "raw_content_sha256": "a" * 64,
-    }
-    app.dependency_overrides[get_db] = lambda: MockSession([sample_email])
-
-    response = await client.get(f"/api/emails/{sample_email.id}")
-
-    assert response.status_code == 200
-    assert response.json()["source_lineage"] is None
 
 
 @pytest.mark.asyncio
@@ -2607,7 +2089,6 @@ def test_email_owner_filters():
         == "email_records.organization_id IS NULL"
     )
 
-
 def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
     """
     Test to guarantee 100% coverage on the bolt performance optimization in
@@ -2624,7 +2105,7 @@ def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
         sender="test@test.com",
         recipients="test2@test.com",
         subject="Subject",
-        body="Body",
+        body="Body"
     )
 
     candidates = [candidate]
