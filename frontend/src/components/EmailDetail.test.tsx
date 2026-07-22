@@ -211,7 +211,7 @@ describe("EmailDetail", () => {
     const email = {
       id: 22,
       message_id: "<rich@example.com>",
-      thread_id: null,
+      thread_id: "thread-rich",
       sender: "owner@example.com",
       recipients: "user@example.com",
       subject: "제품 검토 회의",
@@ -227,6 +227,20 @@ describe("EmailDetail", () => {
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/api/emails/22")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/thread/thread-rich")) {
+        return Promise.resolve(jsonResponse({
+          thread: [
+            email,
+            {
+              ...email,
+              id: 23,
+              message_id: "<other@example.com>",
+              subject: "이전 메시지",
+              body: "첨부파일이 없는 이전 메시지",
+            },
+          ],
+        }));
+      }
       if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "회의 요약", action_items: [] }));
       throw new Error(`Unexpected fetch: ${url}`);
     }));
@@ -242,11 +256,12 @@ describe("EmailDetail", () => {
     expect(container.querySelector("[role='list'][aria-label='참여자']")?.textContent).toContain("검토자");
     expect(container.textContent).toContain("검토자료.pdf");
     expect(container.textContent).toContain("검토화면.png");
-    const attachmentList = container.querySelector("[role='list'][aria-label='첨부파일']");
+    const attachmentList = container.querySelector("#msg-22 [role='list'][aria-label='첨부파일']");
     expect(attachmentList).not.toBeNull();
     expect(attachmentList?.querySelectorAll("[role='listitem']")).toHaveLength(2);
     expect(attachmentList?.querySelector("[data-testid='file-attachment-icon']")).not.toBeNull();
     expect(attachmentList?.querySelector("[data-testid='image-attachment-icon']")).not.toBeNull();
+    expect(container.querySelector("#msg-23 [role='list'][aria-label='첨부파일']")).toBeNull();
     expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent?.includes("검토자료.pdf"))).toBe(false);
 
     const meetingProposal = container.querySelector("[role='region'][aria-label='회의 제안']");
