@@ -174,6 +174,9 @@ class Settings(BaseSettings):
     REGISTRATION_SERVICE_URL: str | None = None
     REGISTRATION_SERVICE_TOKEN: SecretStr | None = None
     ALLOWED_REGISTRATION_SERVICE_HOSTS: str = ""
+    # Explicit compose-local exception. Strict HTTPS and globally routable DNS
+    # remain mandatory unless this opt-in is enabled for a single-label host.
+    ALLOW_LOCAL_REGISTRATION_SERVICE: bool = False
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATHS,

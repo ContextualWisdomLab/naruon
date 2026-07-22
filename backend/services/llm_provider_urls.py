@@ -264,17 +264,30 @@ async def validate_llm_provider_base_url_async(value: str | None) -> str | None:
 
 
 class _PinnedLLMProviderNetworkBackend(httpcore.AsyncNetworkBackend):
-    def __init__(self, hostname: str, port: int, addresses: tuple[str, ...]):
+    def __init__(
+        self,
+        hostname: str,
+        port: int,
+        addresses: tuple[str, ...],
+        *,
+        addresses_already_validated: bool = False,
+    ):
         if not addresses:
             raise ValueError(LLM_BASE_URL_NOT_ALLOWED)
         self._hostname = hostname
         self._port = port
-        # Re-validate each address; pass the hostname so Docker-container names
-        # in ALLOWED_LLM_BASE_URL_HOSTS are accepted.
-        self._addresses = tuple(
-            _validate_global_address(address, hostname=hostname)
-            for address in addresses
-        )
+        self._addresses_already_validated = addresses_already_validated
+        if addresses_already_validated:
+            self._addresses = tuple(
+                str(ipaddress.ip_address(address)) for address in addresses
+            )
+        else:
+            # Re-validate each address; pass the hostname so Docker-container
+            # names in ALLOWED_LLM_BASE_URL_HOSTS are accepted.
+            self._addresses = tuple(
+                _validate_global_address(address, hostname=hostname)
+                for address in addresses
+            )
         self._backend = AutoBackend()
 
     async def _connect_validated_ip_address(
@@ -285,7 +298,10 @@ class _PinnedLLMProviderNetworkBackend(httpcore.AsyncNetworkBackend):
         local_address: str | None,
         socket_options,
     ):
-        pinned_address = _validate_global_address(address, hostname=self._hostname)
+        if self._addresses_already_validated:
+            pinned_address = str(ipaddress.ip_address(address))
+        else:
+            pinned_address = _validate_global_address(address, hostname=self._hostname)
         return await self._backend.connect_tcp(
             pinned_address,
             port,
@@ -382,7 +398,12 @@ class _PinnedLLMProviderNetworkBackend(httpcore.AsyncNetworkBackend):
 
 
 class _PinnedLLMProviderAsyncTransport(httpx.AsyncBaseTransport):
-    def __init__(self, validated: ValidatedLLMProviderBaseURL):
+    def __init__(
+        self,
+        validated: ValidatedLLMProviderBaseURL,
+        *,
+        addresses_already_validated: bool = False,
+    ):
         self._validated = validated
         ssl_context = create_ssl_context(verify=True, trust_env=False)
         self._pool = httpcore.AsyncConnectionPool(
@@ -396,6 +417,7 @@ class _PinnedLLMProviderAsyncTransport(httpx.AsyncBaseTransport):
                 validated.hostname,
                 validated.port,
                 validated.addresses,
+                addresses_already_validated=addresses_already_validated,
             ),
         )
 
@@ -406,9 +428,7 @@ class _PinnedLLMProviderAsyncTransport(httpx.AsyncBaseTransport):
         validated_netloc = parsed_url.netloc.encode("ascii")
 
         safe_headers = [
-            (key, value)
-            for key, value in request.headers.raw
-            if key.lower() != b"host"
+            (key, value) for key, value in request.headers.raw if key.lower() != b"host"
         ]
         safe_headers.append((b"host", validated_netloc))
 
@@ -479,4 +499,32 @@ def build_pinned_https_async_client(
         follow_redirects=False,
         trust_env=False,
         transport=_PinnedLLMProviderAsyncTransport(pinned),
+    )
+
+
+def build_pinned_validated_url_async_client(
+    normalized_url: str,
+    hostname: str,
+    port: int,
+    addresses: tuple[str, ...],
+) -> httpx.AsyncClient:
+    """Pin a URL whose public/local address policy was already validated.
+
+    Every argument must come from
+    ``core.url_validation.validate_https_url_host_details``. Unlike the LLM
+    transport, this boundary permits an explicitly opted-in Compose address;
+    it still checks IP syntax and prevents any host or port change.
+    """
+    pinned = ValidatedLLMProviderBaseURL(
+        normalized_url=normalized_url,
+        hostname=hostname,
+        port=port,
+        addresses=addresses,
+    )
+    return httpx.AsyncClient(
+        follow_redirects=False,
+        trust_env=False,
+        transport=_PinnedLLMProviderAsyncTransport(
+            pinned, addresses_already_validated=True
+        ),
     )

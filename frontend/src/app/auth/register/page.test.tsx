@@ -76,7 +76,7 @@ describe("RegisterPage", () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/auth/register/submit");
+    expect(url).toBe("/api/auth/register");
     const payload = JSON.parse(String(init.body));
     expect(payload.email_address).toBe("new.user@example.com");
     expect(payload.first_name).toBe("홍");

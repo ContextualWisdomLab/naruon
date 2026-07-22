@@ -58,7 +58,7 @@ export default function RegisterPage() {
       try {
         const trimmedName = displayName.trim();
         const [firstName, ...restName] = trimmedName.split(/\s+/);
-        const response = await fetch("/auth/register/submit", {
+        const response = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",

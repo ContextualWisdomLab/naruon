@@ -77,6 +77,10 @@ def validate_https_url_host_details(
     *,
     allow_local: bool = False,
 ) -> ValidatedHTTPSURLHost:
+    if "\\" in url_value or any(
+        ord(character) < 32 or ord(character) == 127 for character in url_value
+    ):
+        raise ValueError(f"{setting_name} must not include unsafe characters")
     parsed = urlsplit(url_value)
     scheme = parsed.scheme.lower()
     if parsed.username or parsed.password:

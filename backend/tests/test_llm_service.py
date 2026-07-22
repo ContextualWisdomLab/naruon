@@ -95,6 +95,50 @@ async def test_llm_provider_pinned_backend_uses_validated_ip_address():
 
 
 @pytest.mark.asyncio
+async def test_pinned_backend_accepts_caller_validated_private_address():
+    calls = []
+    stream = object()
+    backend = provider_urls._PinnedLLMProviderNetworkBackend(
+        "account-unification",
+        8099,
+        ("10.20.0.8",),
+        addresses_already_validated=True,
+    )
+
+    class FakeBackend:
+        async def connect_tcp(
+            self,
+            host,
+            port,
+            timeout=None,
+            local_address=None,
+            socket_options=None,
+        ):
+            calls.append((host, port))
+            return stream
+
+        async def sleep(self, seconds):
+            return None
+
+    backend._backend = FakeBackend()
+
+    result = await backend.connect_tcp("account-unification", 8099)
+
+    assert result is stream
+    assert calls == [("10.20.0.8", 8099)]
+
+
+def test_pinned_backend_rejects_malformed_prevalidated_address():
+    with pytest.raises(ValueError):
+        provider_urls._PinnedLLMProviderNetworkBackend(
+            "account-unification",
+            8099,
+            ("not-an-ip-address",),
+            addresses_already_validated=True,
+        )
+
+
+@pytest.mark.asyncio
 async def test_llm_provider_pinned_backend_returns_first_parallel_success():
     stream = object()
     backend = provider_urls._PinnedLLMProviderNetworkBackend(
@@ -189,7 +233,14 @@ async def test_llm_provider_pinned_backend_closes_extra_success_streams():
 
 
 @pytest.mark.asyncio
-async def test_llm_provider_pinned_backend_rejects_host_changes():
+@pytest.mark.parametrize(
+    ("host", "port"),
+    [
+        ("metadata.google.internal", 443),
+        ("llm-gateway.example.com", 8443),
+    ],
+)
+async def test_llm_provider_pinned_backend_rejects_host_or_port_changes(host, port):
     backend = provider_urls._PinnedLLMProviderNetworkBackend(
         "llm-gateway.example.com",
         443,
@@ -197,7 +248,7 @@ async def test_llm_provider_pinned_backend_rejects_host_changes():
     )
 
     with pytest.raises(OSError, match="host changed"):
-        await backend.connect_tcp("metadata.google.internal", 443)
+        await backend.connect_tcp(host, port)
 
 
 @pytest.mark.asyncio

@@ -62,6 +62,50 @@ describe("/api runtime proxy route", () => {
     });
   });
 
+  it("proxies registration without forwarding browser or session credentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+        const headers = init?.headers as Headers;
+        return Response.json({
+          target_url: String(input),
+          auth_header: headers.get("authorization"),
+          cookie_header: headers.get("cookie"),
+          request_body: await new Response(init?.body).text(),
+        });
+      }),
+    );
+
+    const request = new NextRequest(
+      "https://frontend.naruon.net/api/auth/register",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer attacker-controlled-token",
+          Cookie: `naruon_session=${SIGNED_SESSION_TOKEN}`,
+          Origin: "https://frontend.naruon.net",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email_address: "new.user@example.com",
+          initial_password: "bootstrap-pass-1",
+        }),
+      },
+    );
+
+    const response = await POST(request, {
+      params: Promise.resolve({ path: ["auth", "register"] }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      target_url: "https://api.naruon.net/api/auth/register",
+      auth_header: null,
+      cookie_header: null,
+      request_body:
+        '{"email_address":"new.user@example.com","initial_password":"bootstrap-pass-1"}',
+    });
+  });
+
   it("rejects unsupported query parameters before proxying", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

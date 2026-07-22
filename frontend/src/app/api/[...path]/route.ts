@@ -53,7 +53,10 @@ class InvalidProxyQueryError extends Error {
   }
 }
 
-function filteredRequestHeaders(request: NextRequest): Headers {
+function filteredRequestHeaders(
+  request: NextRequest,
+  includeSession: boolean,
+): Headers {
   const headers = new Headers();
   request.headers.forEach((value, name) => {
     const lowerName = name.toLowerCase();
@@ -61,11 +64,13 @@ function filteredRequestHeaders(request: NextRequest): Headers {
     if (CLIENT_AUTHORITY_HEADERS.has(lowerName)) return;
     headers.set(name, value);
   });
-  const sessionToken = normalizeSessionToken(
-    request.cookies.get(SESSION_COOKIE_NAME)?.value,
-  );
-  if (sessionToken) {
-    headers.set("Authorization", `Bearer ${sessionToken}`);
+  if (includeSession) {
+    const sessionToken = normalizeSessionToken(
+      request.cookies.get(SESSION_COOKIE_NAME)?.value,
+    );
+    if (sessionToken) {
+      headers.set("Authorization", `Bearer ${sessionToken}`);
+    }
   }
   return headers;
 }
@@ -186,6 +191,8 @@ async function proxyApiRequest(
 
   const params = await context.params;
   const path = params.path ?? [];
+  const isAnonymousRegistration =
+    path.length === 2 && path[0] === "auth" && path[1] === "register";
   const target = backendApiBaseUrl();
   target.pathname = `/api/${path.map(encodeURIComponent).join("/")}`;
   try {
@@ -210,7 +217,7 @@ async function proxyApiRequest(
 
   const init: RequestInit = {
     method: request.method,
-    headers: filteredRequestHeaders(request),
+    headers: filteredRequestHeaders(request, !isAnonymousRegistration),
     redirect: "manual",
   };
   if (request.method !== "GET" && request.method !== "HEAD") {
