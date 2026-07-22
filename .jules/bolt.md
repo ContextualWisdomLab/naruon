@@ -11,5 +11,5 @@
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
 ## 2024-05-30 - Dictionary Boolean Tracking Anti-Pattern
-**Learning:** Using a dictionary (`has_sent_message = {}` -> `has_sent_message[key] = True`) where every value is always True to test boolean presence via `if key in dict` or `dict.get(key)` adds unnecessary value storage and degrades code semantics.
-**Action:** Always replace pure boolean tracking dictionaries with a `set()` and use `.add()` and the `in` operator. This avoids unnecessary value allocation and signals intent more clearly.
+**Learning:** Using a dictionary (`has_sent_message = {}` -> `has_sent_message[key] = True`) solely to track key presence adds unnecessary value storage and obscures the intent.
+**Action:** When every dictionary value is always `True` and carries no additional information, use a `set()` with `.add()` and the `in` operator instead.
