@@ -6,6 +6,7 @@ import logging
 import math
 import socket
 import ssl
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, cast
@@ -257,24 +258,31 @@ def _oidc_unverified_header(token: str) -> dict[str, Any]:
 # day because the startup-only preload never saw the new keys).
 JWKS_UNKNOWN_KID_REFRESH_INTERVAL_SECONDS = 60.0
 _last_unknown_kid_refresh_monotonic: float = float("-inf")
+_unknown_kid_refresh_lock = threading.Lock()
 
 
 def _refresh_jwks_for_unknown_kid(key_id: str) -> bool:
-    """Refetch the JWKS once when a token presents a kid we do not hold."""
+    """Refetch the JWKS once when a token presents a kid we do not hold.
+
+    The lock spans cache re-check, throttle reservation, and the network fetch.
+    Concurrent unknown-kid requests therefore share one refresh instead of
+    racing multiple IdP calls through the same rate-limit window.
+    """
     global _last_unknown_kid_refresh_monotonic
-    if any(
-        getattr(signing_key, "key_id", None) == key_id
-        for signing_key in _cached_oidc_signing_keys
-    ):
-        return False
-    now = time.monotonic()
-    if now - _last_unknown_kid_refresh_monotonic < (
-        JWKS_UNKNOWN_KID_REFRESH_INTERVAL_SECONDS
-    ):
-        return False
-    _last_unknown_kid_refresh_monotonic = now
-    preload_oidc_jwks()
-    return True
+    with _unknown_kid_refresh_lock:
+        if any(
+            getattr(signing_key, "key_id", None) == key_id
+            for signing_key in _cached_oidc_signing_keys
+        ):
+            return False
+        now = time.monotonic()
+        if now - _last_unknown_kid_refresh_monotonic < (
+            JWKS_UNKNOWN_KID_REFRESH_INTERVAL_SECONDS
+        ):
+            return False
+        _last_unknown_kid_refresh_monotonic = now
+        preload_oidc_jwks()
+        return True
 
 
 def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:

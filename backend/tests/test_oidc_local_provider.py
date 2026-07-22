@@ -76,6 +76,45 @@ def test_local_opt_in_accepts_private_single_label_compose_host(monkeypatch):
     assert validated.addresses == ("172.20.0.7",)
 
 
+def test_local_opt_in_normalizes_resolved_ip_addresses(monkeypatch):
+    monkeypatch.setattr(
+        url_validation.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                socket.AF_INET6,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("2001:0db8:0000:0000:0000:0000:0000:0001", 8080, 0, 0),
+            )
+        ],
+    )
+
+    validated = validate_https_url_host_details(
+        "OIDC_JWKS_URL",
+        "http://keyverse:8080/jwks",
+        parse_allowed_hosts("keyverse"),
+        "ALLOWED_OIDC_HOSTS",
+        allow_local=True,
+    )
+
+    assert validated.addresses == ("2001:db8::1",)
+
+
+def test_local_opt_in_rejects_malformed_resolver_output(monkeypatch):
+    _stub_resolver(monkeypatch, "not-an-ip-address")
+
+    with pytest.raises(ValueError, match="resolved host must be an IP address"):
+        validate_https_url_host_details(
+            "OIDC_JWKS_URL",
+            "http://keyverse:8080/jwks",
+            parse_allowed_hosts("keyverse"),
+            "ALLOWED_OIDC_HOSTS",
+            allow_local=True,
+        )
+
+
 def test_local_opt_in_still_requires_allowlist_membership(monkeypatch):
     _stub_resolver(monkeypatch, "172.20.0.7")
     with pytest.raises(ValueError, match="ALLOWED_OIDC_HOSTS"):

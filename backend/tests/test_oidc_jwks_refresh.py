@@ -1,6 +1,9 @@
 """JWKS refresh on unknown kid: key rotation must not require a restart."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from threading import Event
+
 import jwt as pyjwt
 import pytest
 
@@ -91,6 +94,43 @@ def test_refresh_is_rate_limited_against_kid_spray(monkeypatch):
         assert getattr(first.value, "status_code", None) == 401
 
     assert len(fetch_calls) == 1
+
+
+def test_concurrent_unknown_kids_share_one_blocking_refresh(monkeypatch):
+    monkeypatch.setattr(
+        auth_module, "_cached_oidc_signing_keys", (FakeKey("old-kid"),)
+    )
+    monkeypatch.setattr(auth_module.time, "monotonic", lambda: 100.0)
+    preload_started = Event()
+    release_preload = Event()
+    fetch_calls: list[bool] = []
+
+    def blocking_preload():
+        fetch_calls.append(True)
+        preload_started.set()
+        assert release_preload.wait(timeout=2)
+        auth_module._cached_oidc_signing_keys = (FakeKey("rotated-kid"),)
+
+    monkeypatch.setattr(auth_module, "preload_oidc_jwks", blocking_preload)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(
+            auth_module._refresh_jwks_for_unknown_kid, "rotated-kid"
+        )
+        assert preload_started.wait(timeout=1)
+        second = executor.submit(
+            auth_module._refresh_jwks_for_unknown_kid, "rotated-kid"
+        )
+        try:
+            with pytest.raises(FutureTimeoutError):
+                second.result(timeout=0.05)
+        finally:
+            release_preload.set()
+
+        assert first.result(timeout=1) is True
+        assert second.result(timeout=1) is False
+
+    assert fetch_calls == [True]
 
 
 def test_known_kid_with_bad_signature_never_refreshes(monkeypatch):

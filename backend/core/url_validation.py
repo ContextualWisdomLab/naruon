@@ -163,7 +163,12 @@ def _resolve_any_addresses(
     addresses: list[str] = []
     seen_addresses: set[str] = set()
     for address_info in address_infos:
-        address = str(address_info[4][0])
+        try:
+            address = str(ipaddress.ip_address(str(address_info[4][0])))
+        except ValueError as exc:
+            raise ValueError(
+                f"{setting_name} resolved host must be an IP address"
+            ) from exc
         if address not in seen_addresses:
             seen_addresses.add(address)
             addresses.append(address)
