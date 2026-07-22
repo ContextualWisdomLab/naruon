@@ -28,6 +28,7 @@ const PRIVATE_OIDC_HOST_PATTERNS: readonly RegExp[] = [
   /^192\.168\./,
   /^::$/,
   /^::1$/,
+  /^::ffff:/,
   /^fc[0-9a-f]{2}:/,
   /^fd[0-9a-f]{2}:/,
   /^fe[89ab][0-9a-f]:/,

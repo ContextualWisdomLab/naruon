@@ -119,6 +119,35 @@ describe("/auth/oidc/callback route", () => {
     },
   );
 
+  it("rejects IPv4-mapped IPv6 OIDC token endpoints before fetching", async () => {
+    vi.stubEnv(
+      "NEXT_PUBLIC_OIDC_ISSUER_URL",
+      "https://[::ffff:127.0.0.1]/realms/naruon",
+    );
+    vi.stubEnv(
+      "NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT",
+      "https://[::ffff:127.0.0.1]/realms/naruon/token",
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new NextRequest("https://app.example.com/auth/oidc/callback", {
+        method: "POST",
+        headers: {
+          Cookie: oidcStateCookie("state-123", "verifier-123", "/security"),
+        },
+        body: JSON.stringify({ search: "?code=auth-code&state=state-123" }),
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error_code: "oidc_token_exchange_failed",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("allows an exact loopback OIDC issuer only outside production", async () => {
     vi.stubEnv(
       "NEXT_PUBLIC_OIDC_ISSUER_URL",
