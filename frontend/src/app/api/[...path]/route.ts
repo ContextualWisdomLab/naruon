@@ -43,6 +43,10 @@ const MAX_PROXY_PATH_SEGMENTS = 32;
 const MAX_PROXY_PATH_SEGMENT_LENGTH = 256;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const PROXY_ERROR_HEADERS = {
+  "Cache-Control": "no-store",
+  "Referrer-Policy": "no-referrer",
+};
 
 type ApiRouteContext = {
   params: Promise<{ path?: string[] }>;
@@ -259,9 +263,7 @@ async function proxyApiRequest(
       },
       {
         status: 403,
-        headers: {
-          "Referrer-Policy": "no-referrer",
-        },
+        headers: PROXY_ERROR_HEADERS,
       },
     );
   }
@@ -282,9 +284,7 @@ async function proxyApiRequest(
         },
         {
           status: 400,
-          headers: {
-            "Referrer-Policy": "no-referrer",
-          },
+          headers: PROXY_ERROR_HEADERS,
         },
       );
     }
@@ -296,9 +296,7 @@ async function proxyApiRequest(
         },
         {
           status: 400,
-          headers: {
-            "Referrer-Policy": "no-referrer",
-          },
+          headers: PROXY_ERROR_HEADERS,
         },
       );
     }
@@ -306,6 +304,7 @@ async function proxyApiRequest(
     return new NextResponse(null, {
       status: 503,
       statusText: "Service Unavailable",
+      headers: PROXY_ERROR_HEADERS,
     });
   }
 
@@ -324,7 +323,11 @@ async function proxyApiRequest(
   } catch (error) {
     // If the backend isn't available (e.g. during build), return a 503 instead of throwing
     console.error("Proxy fetch failed:", error);
-    return new NextResponse(null, { status: 503, statusText: "Service Unavailable" });
+    return new NextResponse(null, {
+      status: 503,
+      statusText: "Service Unavailable",
+      headers: PROXY_ERROR_HEADERS,
+    });
   }
 
   return new NextResponse(response.body, {

@@ -283,7 +283,24 @@ describe("/api runtime proxy route", () => {
     );
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns secure no-store headers when the backend fetch fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("backend unavailable");
+    }));
+
+    const response = await GET(
+      new NextRequest("https://frontend.naruon.net/api/tasks"),
+      { params: Promise.resolve({ path: ["tasks"] }) },
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
   });
 
   it("keeps encoded authority-like path input on the configured backend host", async () => {
