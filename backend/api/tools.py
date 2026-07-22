@@ -364,9 +364,7 @@ def validate_webhook_url_details(url: str) -> ValidatedHTTPSURLHost:
         or hostname == "local"
         or hostname.endswith(".local")
     ):
-        raise ValueError(
-            "Webhook URL host must not use an internal hostname or domain suffix"
-        )
+        raise ValueError("Webhook URL host must not use an internal hostname or domain suffix")
     _reject_unsafe_ip_literal("Webhook URL", hostname)
     try:
         port = parsed.port or 443
