@@ -119,3 +119,8 @@
 **Vulnerability:** The `_safe_upload_filename` in `email_import_service.py` checked for path traversals (like `..`) without unquoting the filename first. This allowed an attacker to bypass the validation by URL-encoding or doubly URL-encoding the payload (e.g., `%2e%2e%2fupload` or `%252e%252e%252fupload`).
 **Learning:** Checking for traversal sequences on raw filenames is insufficient if the input path can contain URL-encoded payloads. The check could be bypassed since it happens before decoding, yet the application or storage mechanism may later decode and use the dangerous payload.
 **Prevention:** Always recursively decode `urllib.parse.unquote()` on raw input paths before validating, splitting, or extracting filenames to ensure doubly URL-encoded payloads are correctly decoded and caught, with a bounded loop to avoid DoS.
+
+## 2026-07-22 - Prevent Path Traversal via Backslashes
+**Vulnerability:** The `_safe_upload_filename` in `email_import_service.py` checked for path traversals (like `..`) but did not convert backslashes (`\`) to forward slashes (`/`), meaning that Windows-style path traversal attacks (like `..\..\upload` or encoded versions) could bypass the check.
+**Learning:** Checking for traversal sequences using `pathlib.Path.name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes.
+**Prevention:** Always convert backslashes to forward slashes before parsing filenames.
