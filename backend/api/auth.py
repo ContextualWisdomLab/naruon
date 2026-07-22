@@ -250,12 +250,52 @@ def _oidc_unverified_header(token: str) -> dict[str, Any]:
     return header
 
 
+# Minimum seconds between JWKS refetches triggered by an unknown kid. Bounds
+# how hard an attacker spraying bogus kids can make us hit the IdP, while a
+# genuine key rotation recovers within one interval instead of requiring a
+# process restart (a realm re-import once silently killed every login for a
+# day because the startup-only preload never saw the new keys).
+JWKS_UNKNOWN_KID_REFRESH_INTERVAL_SECONDS = 60.0
+_last_unknown_kid_refresh_monotonic: float = float("-inf")
+
+
+def _refresh_jwks_for_unknown_kid(key_id: str) -> bool:
+    """Refetch the JWKS once when a token presents a kid we do not hold."""
+    global _last_unknown_kid_refresh_monotonic
+    if any(
+        getattr(signing_key, "key_id", None) == key_id
+        for signing_key in _cached_oidc_signing_keys
+    ):
+        return False
+    now = time.monotonic()
+    if now - _last_unknown_kid_refresh_monotonic < (
+        JWKS_UNKNOWN_KID_REFRESH_INTERVAL_SECONDS
+    ):
+        return False
+    _last_unknown_kid_refresh_monotonic = now
+    preload_oidc_jwks()
+    return True
+
+
 def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:
-    if not _cached_oidc_signing_keys:
-        raise _authentication_error()
     header = _oidc_unverified_header(token)
     key_id = header["kid"].strip()
+    if not _cached_oidc_signing_keys:
+        if not _refresh_jwks_for_unknown_kid(key_id):
+            raise _authentication_error()
+        return _decode_with_cached_oidc_keys(token, key_id)
+    try:
+        return _decode_with_cached_oidc_keys(token, key_id)
+    except HTTPException:
+        # The signature check failed against every cached key. If the token
+        # names a key we have never seen, the IdP may have rotated: refetch
+        # (rate-limited) and try exactly once more before failing closed.
+        if not _refresh_jwks_for_unknown_kid(key_id):
+            raise
+        return _decode_with_cached_oidc_keys(token, key_id)
 
+
+def _decode_with_cached_oidc_keys(token: str, key_id: str) -> dict[str, Any]:
     for signing_key in _cached_oidc_signing_keys:
         try:
             payload = jwt.decode(
