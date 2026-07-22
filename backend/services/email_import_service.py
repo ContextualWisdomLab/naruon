@@ -126,9 +126,8 @@ def _safe_upload_filename(filename: str | None) -> str:
         if next_name == decoded:
             break
         decoded = next_name
-    else:
-        if urllib.parse.unquote(decoded) != decoded:
-            return "upload"
+    if urllib.parse.unquote(decoded) != decoded:
+        return "upload"
 
     if any(unicodedata.category(character).startswith("C") for character in decoded):
         return "upload"
