@@ -49,7 +49,6 @@
   "resolutions": {
     "postcss": "^8.5.16",
     "undici": "7.28.0",
-    "sharp": "0.34.5",
     "uuid": "^14.0.0"
   }
 }
