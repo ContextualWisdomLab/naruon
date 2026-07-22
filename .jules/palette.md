@@ -77,6 +77,6 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
-## 2024-07-22 - [Refrain from File-Wide Formatting to Abide by Line Constraints]
+## 2026-07-22 - [Refrain from File-Wide Formatting to Abide by Line Constraints]
 **Learning:** When operating under strict line-count constraints (e.g., changes under 50 lines), applying file-wide formatting tools like `prettier --write` can introduce massive, irrelevant diffs (e.g., changing quote styles universally), which violates the constraints and clouds the intent of the PR.
 **Action:** In tasks with strict line-count limits, avoid file-wide auto-formatters. Manually format only the specific lines being modified or rely on CI formatters to handle the styling in separate, non-feature commits.
