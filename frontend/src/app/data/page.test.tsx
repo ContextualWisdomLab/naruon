@@ -2425,7 +2425,7 @@ describe("DataPage", () => {
     expect(copiedSnapshot.acquisition_readiness_gate.decision_summary.target_gap_count).toBe(9);
     expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions).toHaveLength(9);
     expect(copiedSnapshot.acquisition_readiness_gate.remediation_actions[0].action_key).toBe("repair_thread_id_integrity");
-  }, 15_000);
+  });
 
   it("keeps quality checks usable when evidence snapshot fetch fails", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
