@@ -635,10 +635,10 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
               답장 주소: {safeReplyTo}
             </div>
             {email.participants && email.participants.length > 0 && (
-              <div className="mt-2 hidden flex-wrap items-center gap-1.5 md:flex">
+              <div role="list" aria-label="참여자" className="mt-2 hidden flex-wrap items-center gap-1.5 md:flex">
                 <Users className="h-3 w-3 text-muted-foreground mr-1" aria-hidden="true" />
                 {email.participants.map((p) => (
-                  <Badge key={`${p.role}:${p.email}`} variant="secondary" className="text-[10px] bg-secondary/50 font-medium">
+                  <Badge role="listitem" key={`${p.role}:${p.email}`} variant="secondary" className="text-[10px] bg-secondary/50 font-medium">
                     <span className="text-muted-foreground mr-1 uppercase">{p.role}</span>
                     {p.name}
                   </Badge>
@@ -664,7 +664,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
           {email.meeting_proposal && (
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div role="region" aria-label="회의 제안" className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600">
                   <Calendar className="size-5" aria-hidden="true" />

@@ -48,11 +48,11 @@ vi.mock("lucide-react", () => ({
   Calendar: () => <svg aria-hidden="true" />,
   CheckCircle2: () => <svg aria-hidden="true" />,
   ExternalLink: () => <svg aria-hidden="true" />,
-  FileText: () => <svg aria-hidden="true" />,
+  FileText: () => <svg aria-hidden="true" data-testid="file-attachment-icon" />,
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
-  Paperclip: () => <svg aria-hidden="true" />,
+  Paperclip: () => <svg aria-hidden="true" data-testid="image-attachment-icon" />,
   Users: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
@@ -218,7 +218,10 @@ describe("EmailDetail", () => {
       date: "2026-07-22T09:00:00Z",
       body: "회의 자료를 확인해주세요.",
       participants: [{ name: "검토자", email: "reviewer@example.com", role: "cc" }],
-      attachments: [{ id: "attachment-1", name: "검토자료.pdf", size: "2 MB", type: "application/pdf" }],
+      attachments: [
+        { id: "attachment-1", name: "검토자료.pdf", size: "2 MB", type: "application/pdf" },
+        { id: "attachment-2", name: "검토화면.png", size: "1 MB", type: "image/png" },
+      ],
       meeting_proposal: { title: "제품 검토", time: "2026-07-23 10:00", location: "회의실 A" },
     };
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
@@ -236,10 +239,20 @@ describe("EmailDetail", () => {
     });
     await flushAsyncWork();
 
-    expect(container.textContent).toContain("검토자");
+    expect(container.querySelector("[role='list'][aria-label='참여자']")?.textContent).toContain("검토자");
     expect(container.textContent).toContain("검토자료.pdf");
-    expect(container.querySelector("[role='list'][aria-label='첨부파일']")).not.toBeNull();
+    expect(container.textContent).toContain("검토화면.png");
+    const attachmentList = container.querySelector("[role='list'][aria-label='첨부파일']");
+    expect(attachmentList).not.toBeNull();
+    expect(attachmentList?.querySelectorAll("[role='listitem']")).toHaveLength(2);
+    expect(attachmentList?.querySelector("[data-testid='file-attachment-icon']")).not.toBeNull();
+    expect(attachmentList?.querySelector("[data-testid='image-attachment-icon']")).not.toBeNull();
     expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent?.includes("검토자료.pdf"))).toBe(false);
+
+    const meetingProposal = container.querySelector("[role='region'][aria-label='회의 제안']");
+    expect(meetingProposal?.textContent).toContain("제품 검토");
+    expect(meetingProposal?.textContent).toContain("2026-07-23 10:00");
+    expect(meetingProposal?.textContent).toContain("회의실 A");
 
     const acceptButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("일정 수락 준비 중"));
     expect(acceptButton).toBeInstanceOf(HTMLButtonElement);
@@ -283,6 +296,9 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("hello�");
     expect(container.textContent).not.toContain("<img");
     expect(container.textContent).not.toContain("<script>");
+    expect(container.querySelector("[role='list'][aria-label='참여자']")).toBeNull();
+    expect(container.querySelector("[role='list'][aria-label='첨부파일']")).toBeNull();
+    expect(container.querySelector("[role='region'][aria-label='회의 제안']")).toBeNull();
     expect(container.textContent).not.toContain("alert(1)");
     expect(container.textContent).not.toContain("alert(2)");
     expect(container.textContent).not.toContain("alert(3)");
