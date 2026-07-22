@@ -115,9 +115,9 @@
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
 ## 2025-02-15 - [SSRF 방지: 정확한 TLD 차단 누락 해결]
-**Vulnerability:** webhook URL 검증 로직에서 도메인 접미사(`.internal`, `.local`)는 차단했지만 `internal` 및 `local`과 같은 TLD 자체와의 일치 여부를 검사하지 않아 SSRF 우회가 발생할 수 있었음.
-**Learning:** Python의 `endswith()` 만을 사용하면 접미사가 없는 단일 TLD 문자열 검증에 누락이 발생함.
-**Prevention:** 도메인 및 호스트 검증 시, `endswith` 검사뿐만 아니라 `==`을 활용하여 TLD 정확한 일치 여부도 함께 검증해야 함.
+**Vulnerability:** webhook hostname 정책이 `.internal` 및 `.local` 접미사는 명시적으로 차단했지만, 정확한 `internal` 및 `local` hostname을 같은 정책으로 분류하지 않아 방어 계층이 일관되지 않았음. 기존 global-address 검증과 DNS-pinned transport는 비전역 주소 연결을 계속 차단했음.
+**Learning:** hostname deny policy와 실제 네트워크 연결 경계는 별도 계층임. 접미사 검사만으로 정확한 단일-label hostname을 표현할 수 없으며, hostname 검사만으로 global-address 검증을 대체할 수도 없음.
+**Prevention:** normalized hostname의 정확한 일치와 접미사를 모두 검사하고, 모든 resolved address의 global 여부 검증, 실행 직전 재검증, 검증 IP에 고정된 transport, redirect 비활성화를 함께 유지해야 함.
 
 ## 2026-07-22 - [취약한 sharp 의존성 업데이트]
 **Vulnerability:** 프론트엔드의 `sharp` 패키지 구버전(0.34.5)에 보안 취약점이 존재하여 CI의 Trivy 검사에서 HIGH(security-severity=8.0) 등급의 보안 경고(GHSA-f88m-g3jw-g9cj)가 발생함.
