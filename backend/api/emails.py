@@ -321,8 +321,7 @@ async def get_emails(
 
     reply_counts = defaultdict(int)
     thread_messages = defaultdict(list)
-    # ⚡ Bolt: Use a set instead of a dict for boolean presence tracking to reduce memory footprint and improve semantics.
-    has_sent_message = set()
+    has_sent_message: set[str] = set()
 
     if grouped:
         thread_lookup: set[str] = set()
