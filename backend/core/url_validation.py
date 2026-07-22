@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 
+_LOCALHOST_NAMES = ("localhost",)
+_INTERNAL_DOMAIN_NAMES = ("internal", "local")
+
+
 @dataclass(frozen=True)
 class ValidatedHTTPSURLHost:
     normalized_url: str
@@ -91,19 +95,22 @@ def _normalize_host(raw_host: str) -> str:
     return host
 
 
+def _matches_name_or_subdomain(host: str, names: tuple[str, ...]) -> bool:
+    return any(host == name or host.endswith(f".{name}") for name in names)
+
+
 def _reject_unsafe_ip_literal(setting_name: str, host: str) -> None:
     normalized_host = _normalize_host(host)
+    if "%" in normalized_host:
+        raise ValueError(
+            f"{setting_name} host must not include an IPv6 scope identifier"
+        )
     try:
         ip_address = ipaddress.ip_address(normalized_host)
     except ValueError:
-        if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
+        if _matches_name_or_subdomain(normalized_host, _LOCALHOST_NAMES):
             raise ValueError(f"{setting_name} host must not be localhost")
-        if (
-            normalized_host == "internal"
-            or normalized_host.endswith(".internal")
-            or normalized_host == "local"
-            or normalized_host.endswith(".local")
-        ):
+        if _matches_name_or_subdomain(normalized_host, _INTERNAL_DOMAIN_NAMES):
             raise ValueError(f"{setting_name} host must not be an internal domain")
         return
 
@@ -112,6 +119,10 @@ def _reject_unsafe_ip_literal(setting_name: str, host: str) -> None:
 
 
 def _validate_global_address(setting_name: str, address: str) -> str:
+    if "%" in address:
+        raise ValueError(
+            f"{setting_name} resolved IP host must be globally routable"
+        )
     try:
         ip_address = ipaddress.ip_address(address)
     except ValueError as exc:
