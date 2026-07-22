@@ -77,3 +77,7 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+
+## 2024-07-22 - aria-busy attribute must accompany disabled on UI buttons
+**Learning:** Adding the `aria-busy` attribute correctly sets up asynchronous buttons for screen reader users by showing them that an interaction was logged and the operation is still running in the background. It shouldn't just be limited to standard API form inputs, but also internal tool interactions.
+**Action:** For ALL `<button>` tags with a disabled property that depends on a loading flag/operation (e.g., `disabled={loading}`), always explicitly set `aria-busy={loadingVariable}` along with it.
