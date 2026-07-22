@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 TaskStatus = Literal["open", "in_progress", "blocked", "done"]
 TaskPriority = Literal["low", "normal", "high", "urgent"]
+EMAIL_TASK_IDEMPOTENCY_CONSTRAINT = "uq_ticket_tasks_email_item"
 
 
 class CreateTasksFromEmailRequest(BaseModel):
@@ -75,6 +76,15 @@ class UpdateTicketTaskRequest(BaseModel):
 
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
+
+
+def _is_email_task_idempotency_conflict(exc: IntegrityError) -> bool:
+    """Return true only for the email-item replay uniqueness boundary."""
+    diagnostic = getattr(exc.orig, "diag", None)
+    return (
+        getattr(diagnostic, "constraint_name", None)
+        == EMAIL_TASK_IDEMPOTENCY_CONSTRAINT
+    )
 
 
 def _normalize_execution_items(items: list[str]) -> list[str]:
@@ -316,8 +326,10 @@ async def create_tasks_from_email(
             for task in new_tasks:
                 db.add(task)
             await db.commit()
-        except IntegrityError:
+        except IntegrityError as exc:
             await db.rollback()
+            if not _is_email_task_idempotency_conflict(exc):
+                raise
             if attempt == 1:
                 raise HTTPException(
                     status_code=409,

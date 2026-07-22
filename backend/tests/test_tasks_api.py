@@ -22,6 +22,13 @@ from main import app
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
 TEST_SESSION_HMAC_SECRET = os.environ["AUTH_SESSION_HMAC_SECRET"]
+EMAIL_TASK_IDEMPOTENCY_CONSTRAINT = "uq_ticket_tasks_email_item"
+
+
+class FakeDatabaseIntegrityError(Exception):
+    def __init__(self, constraint_name: str):
+        self.diag = type("Diagnostic", (), {"constraint_name": constraint_name})()
+        super().__init__(f"unique constraint violation: {constraint_name}")
 
 
 def _base64url_encode(raw: bytes) -> str:
@@ -1072,7 +1079,9 @@ def test_ticket_task_model_declares_email_item_unique_index():
     assert "organization_id" in expression_text
     assert "source_type" in expression_text
     assert "email_id" in expression_text
-    assert "md5" in expression_text
+    assert "sha256" in expression_text
+    assert "convert_to" in expression_text
+    assert "md5" not in expression_text
     assert "task_title" in expression_text
 
 
@@ -1123,6 +1132,78 @@ def test_create_ticket_tasks_from_email_replay_reuses_existing_tasks(auth_client
     assert second_response.json()["created"] == 0
     assert second_response.json()["tasks"] == first_response.json()["tasks"]
     assert len(mock_session.tasks) == 2
+
+
+def test_create_ticket_tasks_maps_only_email_item_unique_conflict(auth_client):
+    class ConflictingEmailTaskSession(MockTaskSession):
+        def __init__(self) -> None:
+            super().__init__()
+            self.commit_attempts = 0
+
+        async def commit(self):
+            self.commit_attempts += 1
+            raise IntegrityError(
+                "email task replay",
+                {},
+                FakeDatabaseIntegrityError(EMAIL_TASK_IDEMPOTENCY_CONSTRAINT),
+            )
+
+        async def rollback(self):
+            self.tasks.clear()
+
+    conflict_session = ConflictingEmailTaskSession()
+    conflict_session.emails[14] = make_email()
+    app.dependency_overrides[get_db] = lambda: conflict_session
+
+    response = auth_client.post(
+        "/api/tasks/from-email",
+        json={
+            "source_email_id": "<message-14@example.com>",
+            "items": ["담당자 확인"],
+        },
+    )
+
+    assert conflict_session.commit_attempts == 2
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": {
+            "error_code": "email_task_idempotency_conflict",
+            "message": "Email task replay conflict",
+        }
+    }
+
+
+def test_create_ticket_tasks_reraises_unrelated_integrity_error(auth_client):
+    class UnrelatedConflictSession(MockTaskSession):
+        def __init__(self) -> None:
+            super().__init__()
+            self.commit_attempts = 0
+
+        async def commit(self):
+            self.commit_attempts += 1
+            raise IntegrityError(
+                "unrelated task constraint",
+                {},
+                FakeDatabaseIntegrityError("fk_ticket_tasks_user_id"),
+            )
+
+        async def rollback(self):
+            self.tasks.clear()
+
+    conflict_session = UnrelatedConflictSession()
+    conflict_session.emails[14] = make_email()
+    app.dependency_overrides[get_db] = lambda: conflict_session
+
+    with pytest.raises(IntegrityError):
+        auth_client.post(
+            "/api/tasks/from-email",
+            json={
+                "source_email_id": "<message-14@example.com>",
+                "items": ["담당자 확인"],
+            },
+        )
+
+    assert conflict_session.commit_attempts == 1
 
 
 def test_create_ticket_tasks_sanitizes_nul_bytes_from_execution_items(auth_client):

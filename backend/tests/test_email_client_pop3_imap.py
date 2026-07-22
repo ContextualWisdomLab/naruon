@@ -48,7 +48,36 @@ def test_validate_imap_destination(monkeypatch):
     destination = validate_imap_destination("imap.example.com", 993, resolve_host=False)
     assert destination.hostname == "imap.example.com"
     assert destination.port == 993
+    assert destination.family == socket.AF_UNSPEC
     assert destination.sockaddr == ("imap.example.com", 993)
+
+
+@pytest.mark.parametrize(
+    ("host", "expected_family", "expected_sockaddr"),
+    [
+        ("1.1.1.1", socket.AF_INET, ("1.1.1.1", 993)),
+        (
+            "2606:4700:4700::1111",
+            socket.AF_INET6,
+            ("2606:4700:4700::1111", 993, 0, 0),
+        ),
+    ],
+)
+def test_validate_unresolved_imap_ip_literal_is_connect_ready(
+    monkeypatch,
+    host,
+    expected_family,
+    expected_sockaddr,
+):
+    monkeypatch.setattr(email_client.settings, "ALLOWED_IMAP_HOSTS", host)
+    monkeypatch.setattr(email_client.settings, "ALLOWED_IMAP_PORTS", "993")
+
+    destination = validate_imap_destination(host, 993, resolve_host=False)
+
+    assert destination.family == expected_family
+    assert destination.socktype == socket.SOCK_STREAM
+    assert destination.proto == socket.IPPROTO_TCP
+    assert destination.sockaddr == expected_sockaddr
 
 
 @pytest.mark.asyncio

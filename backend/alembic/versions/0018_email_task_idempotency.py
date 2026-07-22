@@ -43,7 +43,7 @@ def upgrade() -> None:
             sa.text("COALESCE(organization_id, '')"),
             "source_type",
             "email_id",
-            sa.text("md5(task_title)"),
+            sa.text("sha256(convert_to(task_title, 'UTF8'))"),
         ],
         unique=True,
         postgresql_where=sa.text("source_type = 'email' AND email_id IS NOT NULL"),

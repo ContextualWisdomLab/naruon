@@ -310,7 +310,7 @@ class ImapSyncWorker:
         self,
         config: TenantConfig,
         destination: ValidatedImapDestination | None = None,
-    ) -> list[bytes]:
+    ) -> list[tuple[bytes, bool]]:
         if destination is None:
             destination = self._validated_destination(config)
         ssl_context = ssl.create_default_context()

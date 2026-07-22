@@ -464,5 +464,6 @@ def test_email_task_idempotency_migration_installs_unique_boundary():
     assert 'revision = "0018_email_task_idempotency"' in revision_text
     assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
     assert "uq_ticket_tasks_email_item" in revision_text
-    assert "md5(task_title)" in revision_text
+    assert "sha256(convert_to(task_title, 'UTF8'))" in revision_text
+    assert "md5(task_title)" not in revision_text
     assert "DELETE FROM ticket_tasks AS duplicate" in revision_text

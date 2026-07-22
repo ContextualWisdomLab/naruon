@@ -306,6 +306,16 @@ def validate_imap_destination(
             normalized_host,
             validated_port,
         )
+    elif _is_ip_literal(normalized_host):
+        ip_address = ipaddress.ip_address(normalized_host)
+        family = socket.AF_INET6 if ip_address.version == 6 else socket.AF_INET
+        socktype = socket.SOCK_STREAM
+        proto = socket.IPPROTO_TCP
+        sockaddr = (
+            (normalized_host, validated_port, 0, 0)
+            if ip_address.version == 6
+            else (normalized_host, validated_port)
+        )
     else:
         family, socktype, proto, sockaddr = (
             socket.AF_UNSPEC,

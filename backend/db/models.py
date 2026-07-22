@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    literal_column,
 )
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -880,7 +881,7 @@ _ticket_tasks_email_item_index = Index(
     func.coalesce(TicketTask.organization_id, ""),
     TicketTask.source_type,
     TicketTask.related_email_id,
-    func.md5(TicketTask.title),
+    func.sha256(func.convert_to(TicketTask.title, literal_column("'UTF8'"))),
     unique=True,
     postgresql_where=(
         (TicketTask.source_type == "email")
