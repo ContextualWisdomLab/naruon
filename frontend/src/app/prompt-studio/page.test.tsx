@@ -255,12 +255,19 @@ describe("PromptStudioPage", () => {
     vi.stubGlobal("fetch", fetchMock);
     const page = await renderPage();
     setControlValue(page.querySelector<HTMLInputElement>("#prompt-title")!, "맥락 종합 프롬프트");
+    const saveButton = getButton(page, "프롬프트 저장 (Save)");
 
     act(() => {
-      getButton(page, "프롬프트 저장 (Save)").click();
+      saveButton.click();
     });
 
-    expect(getButton(page, "저장 중...").disabled).toBe(true);
+    expect(saveButton.disabled).toBe(true);
+    expect(saveButton.getAttribute("aria-busy")).toBe("true");
+    expect(
+      Array.from(page.querySelectorAll('[role="status"][aria-live="polite"]')).filter(
+        (node) => node.textContent === "프롬프트 저장 중...",
+      ),
+    ).toHaveLength(1);
     expect(page.querySelector("[data-testid='loader']")).not.toBeNull();
 
     await act(async () => {
@@ -269,7 +276,8 @@ describe("PromptStudioPage", () => {
     });
     await flushAsyncWork();
 
-    expect(getButton(page, "프롬프트 저장 (Save)").disabled).toBe(false);
+    expect(saveButton.disabled).toBe(false);
+    expect(saveButton.getAttribute("aria-busy")).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/prompts",
       expect.objectContaining({
