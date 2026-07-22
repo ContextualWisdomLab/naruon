@@ -41,6 +41,40 @@ Notice = Literal[
     "candidate-output-truncated",
     "inventory-incomplete",
     "worker-hard-timeout",
+    "inventory-issues-truncated",
+]
+IssueKind = Literal[
+    "read-directory-failed",
+    "read-entry-failed",
+    "read-metadata-failed",
+    "symlink-skipped",
+    "unsupported-entry-type",
+    "allocation-evidence-unavailable",
+]
+IssueReason = Literal[
+    "not-found",
+    "permission-denied",
+    "connection-refused",
+    "connection-reset",
+    "connection-aborted",
+    "not-connected",
+    "address-in-use",
+    "address-unavailable",
+    "broken-pipe",
+    "already-exists",
+    "would-block",
+    "invalid-input",
+    "invalid-data",
+    "timed-out",
+    "write-zero",
+    "interrupted",
+    "unsupported",
+    "unexpected-eof",
+    "out-of-memory",
+    "other-io-error",
+    "policy-not-followed",
+    "policy-not-file-or-directory",
+    "platform-unsupported",
 ]
 
 
@@ -86,6 +120,69 @@ class CloudLocalInventoryOptions(StrictAllocationModel):
     max_results: Annotated[int, Field(ge=1, le=10_000)]
     max_depth: Annotated[int, Field(ge=0, le=64)]
     max_duration_ms: Annotated[int, Field(ge=1, le=300_000)]
+    max_issues: Annotated[int, Field(ge=1, le=1_000)] | None = None
+
+
+class CloudLocalInventoryIssue(StrictAllocationModel):
+    relative_scope: BoundedText | None
+    kind: IssueKind
+    reason: IssueReason
+
+    @field_validator("relative_scope")
+    @classmethod
+    def validate_relative_scope_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        _validate_bounded_text(value, "issue.relative_scope")
+        if len(value.encode("utf-8")) > MAX_PATH_UTF8_BYTES:
+            raise ValueError("issue.relative_scope exceeds the UTF-8 byte limit")
+        return value
+
+    @model_validator(mode="after")
+    def validate_kind_reason_binding(self) -> Self:
+        read_kinds = {
+            "read-directory-failed",
+            "read-entry-failed",
+            "read-metadata-failed",
+        }
+        io_reasons = {
+            "not-found",
+            "permission-denied",
+            "connection-refused",
+            "connection-reset",
+            "connection-aborted",
+            "not-connected",
+            "address-in-use",
+            "address-unavailable",
+            "broken-pipe",
+            "already-exists",
+            "would-block",
+            "invalid-input",
+            "invalid-data",
+            "timed-out",
+            "write-zero",
+            "interrupted",
+            "unsupported",
+            "unexpected-eof",
+            "out-of-memory",
+            "other-io-error",
+        }
+        expected_policy_reason = {
+            "symlink-skipped": "policy-not-followed",
+            "unsupported-entry-type": "policy-not-file-or-directory",
+            "allocation-evidence-unavailable": "platform-unsupported",
+        }
+        if self.kind in read_kinds:
+            if self.reason not in io_reasons:
+                raise ValueError("read issue requires a stable I/O reason")
+        elif self.reason != expected_policy_reason[self.kind]:
+            raise ValueError("policy issue reason contradicts its kind")
+        if self.relative_scope is None and self.kind not in {
+            "read-directory-failed",
+            "read-entry-failed",
+        }:
+            raise ValueError("entry-specific issue requires a relative scope")
+        return self
 
 
 class CloudLocalAllocationCandidate(StrictAllocationModel):
@@ -111,7 +208,7 @@ class CloudLocalAllocationCandidate(StrictAllocationModel):
 
 
 class DiskSageCloudLocalAllocationInventory(StrictAllocationModel):
-    version: Literal[1]
+    version: Literal[1, 2]
     cloud_root_id: ShortText
     provider: CloudProvider
     account_scope: CloudAccountScope
@@ -122,18 +219,22 @@ class DiskSageCloudLocalAllocationInventory(StrictAllocationModel):
     visited_files: U64
     visited_directories: U64
     skipped_entries: U64
+    issues: (
+        Annotated[list[CloudLocalInventoryIssue], Field(max_length=1_000)] | None
+    ) = None
+    issues_truncated: bool | None = None
     allocated_candidate_bytes: U64
     candidates: list[CloudLocalAllocationCandidate] = Field(max_length=10_000)
     results_truncated: bool
     evidence_complete: bool
     stop_reasons: list[StopReason] = Field(max_length=6)
-    notices: list[Notice] = Field(min_length=4, max_length=7)
+    notices: list[Notice] = Field(min_length=4, max_length=8)
 
     @field_validator("version", mode="before")
     @classmethod
     def validate_exact_version(cls, value: object) -> object:
-        if type(value) is not int or value != 1:
-            raise ValueError("version must be integer 1")
+        if type(value) is not int or value not in {1, 2}:
+            raise ValueError("version must be integer 1 or 2")
         return value
 
     @field_validator("cloud_root_id", "cloud_root")
@@ -187,6 +288,70 @@ class DiskSageCloudLocalAllocationInventory(StrictAllocationModel):
                 raise ValueError("candidate is below the allocation threshold")
             visible_allocations.append(candidate.allocated_bytes)
 
+        if self.version == 1:
+            if (
+                self.options.max_issues is not None
+                or self.issues is not None
+                or self.issues_truncated is not None
+            ):
+                raise ValueError("version 1 must not contain version 2 issue fields")
+        else:
+            if (
+                self.options.max_issues is None
+                or self.issues is None
+                or self.issues_truncated is None
+            ):
+                raise ValueError("version 2 requires bounded issue evidence")
+            if len(self.issues) > self.options.max_issues:
+                raise ValueError("issue output exceeds the declared bound")
+            if self.issues_truncated:
+                if len(
+                    self.issues
+                ) != self.options.max_issues or self.skipped_entries <= len(
+                    self.issues
+                ):
+                    raise ValueError("truncated issue output does not fill its bound")
+            elif self.skipped_entries != len(self.issues):
+                raise ValueError("complete issue output does not account for skips")
+
+            read_issue_present = False
+            allocation_issue_present = False
+            for issue in self.issues:
+                if issue.relative_scope is not None:
+                    issue_path: PurePosixPath | PureWindowsPath
+                    if root_style == "posix":
+                        issue_path = PurePosixPath(issue.relative_scope)
+                    else:
+                        issue_path = PureWindowsPath(issue.relative_scope)
+                    if issue_path.is_absolute() or any(
+                        part in {".", ".."} for part in issue_path.parts
+                    ):
+                        raise ValueError("issue scope is not a safe relative path")
+                if issue.kind.startswith("read-"):
+                    read_issue_present = True
+                if issue.kind == "allocation-evidence-unavailable":
+                    allocation_issue_present = True
+            entry_errors_stopped = "entry-errors" in self.stop_reasons
+            if read_issue_present and not entry_errors_stopped:
+                raise ValueError("entry error stop contradicts issue evidence")
+            if (
+                entry_errors_stopped
+                and not read_issue_present
+                and not self.issues_truncated
+            ):
+                raise ValueError("entry error stop contradicts issue evidence")
+            allocation_stopped = (
+                "allocated-byte-evidence-unavailable" in self.stop_reasons
+            )
+            if allocation_issue_present and not allocation_stopped:
+                raise ValueError("allocation stop contradicts issue evidence")
+            if (
+                allocation_stopped
+                and not allocation_issue_present
+                and not self.issues_truncated
+            ):
+                raise ValueError("allocation stop contradicts issue evidence")
+
         visible_allocated_bytes = _saturating_u64_sum(visible_allocations)
         if visible_allocated_bytes > self.allocated_candidate_bytes:
             raise ValueError("visible candidate allocation exceeds the inventory total")
@@ -211,6 +376,8 @@ class DiskSageCloudLocalAllocationInventory(StrictAllocationModel):
         hard_timeout = self.stop_reasons == ["hard-timeout-reached"]
         if hard_timeout:
             expected_notices.append("worker-hard-timeout")
+        if self.version == 2 and self.issues_truncated:
+            expected_notices.append("inventory-issues-truncated")
         if self.notices != expected_notices:
             raise ValueError("inventory notices contradict the report state")
 
@@ -236,6 +403,8 @@ class DiskSageCloudLocalAllocationInventory(StrictAllocationModel):
                 self.allocated_candidate_bytes,
                 len(self.candidates),
                 int(self.results_truncated),
+                len(self.issues or []),
+                int(self.issues_truncated or False),
             )
         ):
             raise ValueError("hard timeout report must be empty and fail closed")
@@ -245,7 +414,7 @@ class DiskSageCloudLocalAllocationInventory(StrictAllocationModel):
 class CloudLocalAllocationValidationResponse(StrictAllocationModel):
     valid: Literal[True]
     validation_scope: Literal["schema-and-claim-consistency-only"]
-    version: Literal[1]
+    version: Literal[1, 2]
     evidence_kind: Literal["disksage.cloud-local-allocation-inventory"]
 
 

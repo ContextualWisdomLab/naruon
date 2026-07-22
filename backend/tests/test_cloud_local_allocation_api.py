@@ -98,6 +98,45 @@ def _hard_timeout_payload() -> dict[str, object]:
     return payload
 
 
+def _inventory_v2_payload() -> dict[str, object]:
+    payload = deepcopy(_inventory_payload())
+    payload["version"] = 2
+    payload["options"]["max_issues"] = 10
+    payload["issues"] = []
+    payload["issues_truncated"] = False
+    return payload
+
+
+def _v2_issue_payload() -> dict[str, object]:
+    payload = _inventory_v2_payload()
+    payload.update(
+        {
+            "visited_entries": 4,
+            "visited_files": 1,
+            "visited_directories": 1,
+            "skipped_entries": 2,
+            "allocated_candidate_bytes": 0,
+            "candidates": [],
+            "issues": [
+                {
+                    "relative_scope": "Projects/Search",
+                    "kind": "read-entry-failed",
+                    "reason": "timed-out",
+                },
+                {
+                    "relative_scope": "Projects/reference.drawio",
+                    "kind": "symlink-skipped",
+                    "reason": "policy-not-followed",
+                },
+            ],
+            "evidence_complete": False,
+            "stop_reasons": ["entry-errors"],
+            "notices": _base_notices() + ["inventory-incomplete"],
+        }
+    )
+    return payload
+
+
 def test_validate_inventory_returns_redacted_acceptance(client: TestClient):
     payload = _inventory_payload()
 
@@ -132,6 +171,120 @@ def test_validate_inventory_accepts_fail_closed_hard_timeout(client: TestClient)
     )
 
     assert response.status_code == 200
+
+
+def test_validate_inventory_accepts_v2_bounded_issue_evidence(client: TestClient):
+    payload = _v2_issue_payload()
+
+    response = client.post("/api/cloud-local-allocation/validate", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["version"] == 2
+    assert "Projects/Search" not in response.text
+    assert "timed-out" not in response.text
+
+
+def test_validate_inventory_accepts_v2_truncated_issue_evidence(
+    client: TestClient,
+):
+    payload = _v2_issue_payload()
+    payload["options"]["max_issues"] = 1
+    payload["issues"] = payload["issues"][:1]
+    payload["issues_truncated"] = True
+    payload["notices"].append("inventory-issues-truncated")
+
+    response = client.post("/api/cloud-local-allocation/validate", json=payload)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "stop_reason",
+    ["entry-errors", "allocated-byte-evidence-unavailable"],
+)
+def test_validate_inventory_accepts_v2_stop_evidence_hidden_by_issue_truncation(
+    client: TestClient,
+    stop_reason: str,
+):
+    payload = _v2_issue_payload()
+    payload["options"]["max_issues"] = 1
+    payload["issues"] = payload["issues"][1:]
+    payload["issues_truncated"] = True
+    payload["stop_reasons"] = [stop_reason]
+    payload["notices"].append("inventory-issues-truncated")
+
+    response = client.post("/api/cloud-local-allocation/validate", json=payload)
+
+    assert response.status_code == 200
+
+
+def test_validate_inventory_accepts_v2_fail_closed_hard_timeout(
+    client: TestClient,
+):
+    payload = _hard_timeout_payload()
+    payload["version"] = 2
+    payload["options"]["max_issues"] = 10
+    payload["issues"] = []
+    payload["issues_truncated"] = False
+
+    response = client.post("/api/cloud-local-allocation/validate", json=payload)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda payload: payload["options"].pop("max_issues"),
+        lambda payload: payload.pop("issues"),
+        lambda payload: payload.pop("issues_truncated"),
+        lambda payload: payload["issues"][0].__setitem__(
+            "relative_scope", "/absolute/path"
+        ),
+        lambda payload: payload["issues"][0].__setitem__(
+            "relative_scope", "Projects/../escape"
+        ),
+        lambda payload: payload["issues"][0].__setitem__(
+            "reason", "policy-not-followed"
+        ),
+        lambda payload: payload.__setitem__("skipped_entries", 3),
+        lambda payload: payload.__setitem__("stop_reasons", []),
+        lambda payload: payload["notices"].append("inventory-issues-truncated"),
+        lambda payload: payload["options"].__setitem__("max_issues", 1_001),
+    ],
+    ids=[
+        "missing-issue-bound",
+        "missing-issues",
+        "missing-truncation-flag",
+        "absolute-issue-scope",
+        "parent-issue-scope",
+        "kind-reason-mismatch",
+        "skip-accounting-mismatch",
+        "entry-stop-mismatch",
+        "notice-mismatch",
+        "issue-bound-overflow",
+    ],
+)
+def test_validate_inventory_v2_issues_fail_closed(client: TestClient, mutate):
+    payload = deepcopy(_v2_issue_payload())
+    mutate(payload)
+
+    response = client.post("/api/cloud-local-allocation/validate", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_cloud_local_allocation_invalid"}
+
+
+def test_validate_inventory_rejects_v2_fields_on_version_1(client: TestClient):
+    payload = _inventory_payload()
+    payload["options"]["max_issues"] = 10
+    payload["issues"] = []
+    payload["issues_truncated"] = False
+
+    response = client.post("/api/cloud-local-allocation/validate", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_cloud_local_allocation_invalid"}
 
 
 def test_validate_inventory_accepts_bounded_empty_and_truncated_reports(
