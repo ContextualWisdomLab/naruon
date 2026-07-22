@@ -340,4 +340,24 @@ describe("DashboardLayout", () => {
     expect(container.querySelector<HTMLAnchorElement>('[data-mobile-view="calendar"]')?.getAttribute("aria-current")).toBeNull();
   });
 
+  it("renders /auth pages bare, without any workspace chrome", () => {
+    window.history.replaceState(null, "", "/auth/register");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(
+        <DashboardLayout>
+          <section data-testid="signup">signup form</section>
+        </DashboardLayout>,
+      );
+    });
+
+    expect(container.querySelector('[data-testid="signup"]')).not.toBeNull();
+    expect(container.querySelector("header")).toBeNull();
+    expect(container.querySelector("nav")).toBeNull();
+    expect(container.textContent).not.toContain("내 계정");
+  });
+
 });

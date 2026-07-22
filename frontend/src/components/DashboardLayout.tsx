@@ -288,6 +288,12 @@ export function DashboardLayout({
     };
   }, [isWorkspaceMenuOpen]);
 
+  // /auth/* pages (signup, OIDC callback) are standalone flows an anonymous
+  // visitor reaches: never wrap them in the workspace chrome.
+  if (pathname?.startsWith('/auth')) {
+    return <>{children}</>;
+  }
+
   function closeMobileWorkspaceMenu() {
     const menu = document.getElementById('mobile-workspace-menu') as (HTMLElement & { hidePopover?: () => void }) | null;
     menu?.hidePopover?.();
@@ -410,7 +416,7 @@ export function DashboardLayout({
             </Link>
             <Link href="/settings#profile" aria-label="프로필 메뉴" className="hidden h-10 items-center gap-2 rounded-xl border border-border bg-background/80 px-3 text-xs font-bold text-foreground transition-colors hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 xl:inline-flex">
               <UserCircle className="size-4 text-primary" aria-hidden="true" />
-              Seongho
+              내 계정
             </Link>
           </div>
         </header>
