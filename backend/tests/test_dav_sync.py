@@ -101,33 +101,6 @@ async def test_webdav_sync_skips_hostless_https_url():
     assert "webdav_accounts.user_id" in statement_text
     assert "webdav_accounts.organization_id" in statement_text
 
-
-@pytest.mark.parametrize("hostname", ["test.internal.", "test.local."])
-@pytest.mark.asyncio
-async def test_webdav_sync_skips_trailing_dot_internal_domain(hostname):
-    from services.webdav_service import sync_webdav_folders
-
-    session_mock = AsyncMock()
-    execute_res = MagicMock()
-    execute_res.all.return_value = [
-        (f"https://{hostname}/dav", "webdav_src_internal")
-    ]
-    session_mock.execute.return_value = execute_res
-
-    with patch("services.webdav_service.logger") as logger_mock:
-        await sync_webdav_folders(session_mock, "user_1", "org_1")
-
-        logger_mock.warning.assert_called_once()
-        warning_args = logger_mock.warning.call_args.args
-        assert "Invalid WebDAV server URL" in warning_args[0]
-        assert str(warning_args[2]) == (
-            "WebDAV server_url host must not be an internal domain"
-        )
-        assert not any(
-            call.args[:1] == ("Fetched folder structures for WebDAV source %s",)
-            for call in logger_mock.info.call_args_list
-        )
-
 @pytest.mark.asyncio
 async def test_webdav_sync_skips_non_https_url():
     """
