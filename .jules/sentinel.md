@@ -114,3 +114,7 @@
 **Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
+## 2026-07-22 - Sharp Vulnerability Update
+**Vulnerability:** GHSA-f88m-g3jw-g9cj frontend/pnpm-lock.yaml:1 - Package: sharp (Vulnerable version 0.34.5)
+**Learning:** Trivy correctly flags vulnerabilities in locked dependencies.
+**Prevention:** Update `sharp` to a patched version (`0.35.3`+) using the package manager (`pnpm add sharp@0.35.3`).
