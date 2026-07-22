@@ -166,6 +166,15 @@ class Settings(BaseSettings):
     # plain http and private compose addresses. Never enable in production.
     ALLOW_LOCAL_OIDC_PROVIDERS: bool = False
 
+    # Headless self-registration relay: the IdP-side account-registration API
+    # (keyverse account-unification service) plus its dedicated bearer token.
+    # All three must be set for /api/auth/register to operate; otherwise the
+    # surface answers registration_unavailable and never falls open. The host
+    # allowlist is a strict egress pin like ALLOWED_OIDC_HOSTS.
+    REGISTRATION_SERVICE_URL: str | None = None
+    REGISTRATION_SERVICE_TOKEN: SecretStr | None = None
+    ALLOWED_REGISTRATION_SERVICE_HOSTS: str = ""
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATHS,
         env_file_encoding="utf-8",

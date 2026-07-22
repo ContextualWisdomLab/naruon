@@ -151,6 +151,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                   {loginError}
                 </p>
               ) : null}
+              <p className="text-xs text-muted-foreground">
+                처음이신가요?{" "}
+                <a
+                  href="/auth/register"
+                  className="font-medium text-primary hover:underline"
+                >
+                  회원가입
+                </a>
+              </p>
             </div>
           ) : (
             <SetupGuide />

@@ -74,6 +74,8 @@ describe("AuthGate", () => {
 
     expect(container.querySelector('[data-testid="protected"]')).toBeNull();
     expect(container.textContent).toContain("로그인");
+    const registerLink = container.querySelector('a[href="/auth/register"]');
+    expect(registerLink?.textContent).toContain("회원가입");
     const loginButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("로그인"),
     );
