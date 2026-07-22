@@ -8,6 +8,14 @@ from urllib.parse import urlsplit
 
 @dataclass(frozen=True)
 class ValidatedHTTPSURLHost:
+    """Allowlisted, DNS-pinned URL endpoint details.
+
+    HTTPS is mandatory by default. An explicit local-development opt-in may
+    return a single-label or localhost endpoint with ``url_scheme == "http"``;
+    transports must inspect ``url_scheme`` instead of assuming TLS from this
+    legacy class name.
+    """
+
     normalized_url: str
     hostname: str
     port: int
@@ -77,6 +85,12 @@ def validate_https_url_host_details(
     *,
     allow_local: bool = False,
 ) -> ValidatedHTTPSURLHost:
+    """Validate and DNS-pin an allowlisted HTTPS endpoint.
+
+    ``allow_local`` permits plain HTTP only for the narrowly defined local-dev
+    host shapes accepted by :func:`is_local_dev_identity_host`; the returned
+    ``url_scheme`` remains authoritative for transport selection.
+    """
     if "\\" in url_value or any(
         ord(character) < 32 or ord(character) == 127 for character in url_value
     ):
