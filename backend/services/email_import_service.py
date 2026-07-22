@@ -1,5 +1,4 @@
 import asyncio
-import urllib.parse
 import datetime
 from email import policy as email_policy
 import hashlib
@@ -7,6 +6,8 @@ import logging
 import mailbox
 import os
 import stat
+import unicodedata
+import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -53,6 +54,7 @@ MAX_IMPORT_UPLOADS = 10
 MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
+MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 8
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
 logger = logging.getLogger(__name__)
 
@@ -117,16 +119,22 @@ class EmailImportResult:
             self.failed_count += 1
 
 
-def _safe_upload_filename(filename: str) -> str:
-    if filename:
-        for _ in range(100):
-            next_name = urllib.parse.unquote(filename).replace("\\", "/")
-            if next_name == filename:
-                break
-            filename = next_name
-        else:
-            filename = urllib.parse.unquote(filename).replace("\\", "/")
-    name = Path(filename or "upload").name.strip()
+def _safe_upload_filename(filename: str | None) -> str:
+    decoded = filename or ""
+    for _ in range(MAX_UPLOAD_FILENAME_DECODE_ROUNDS):
+        next_name = urllib.parse.unquote(decoded)
+        if next_name == decoded:
+            break
+        decoded = next_name
+    if urllib.parse.unquote(decoded) != decoded:
+        return "upload"
+
+    if any(unicodedata.category(character).startswith("C") for character in decoded):
+        return "upload"
+
+    # pathlib on POSIX does not treat a backslash as a separator. Normalize both
+    # separator forms before selecting the final filename component.
+    name = Path(decoded.replace("\\", "/") or "upload").name.strip()
     if name in {".", ".."}:
         return "upload"
     return name or "upload"
@@ -134,9 +142,12 @@ def _safe_upload_filename(filename: str) -> str:
 
 def _safe_item_filename(upload_name: str, eml_path: Path | None = None) -> str:
     safe_upload_name = _safe_upload_filename(upload_name)
-    if eml_path is None or eml_path.name == safe_upload_name:
+    if eml_path is None:
         return safe_upload_name
-    return f"{safe_upload_name}:{eml_path.name}"
+    safe_item_name = _safe_upload_filename(eml_path.name)
+    if safe_item_name == safe_upload_name:
+        return safe_upload_name
+    return f"{safe_upload_name}:{safe_item_name}"
 
 
 def _utc_datetime(value: object) -> datetime.datetime:
