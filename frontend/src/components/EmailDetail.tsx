@@ -637,12 +637,14 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             {email.participants && email.participants.length > 0 && (
               <div className="mt-2 hidden flex-wrap items-center gap-1.5 md:flex">
                 <Users className="h-3 w-3 text-muted-foreground mr-1" aria-hidden="true" />
-                {email.participants.map((p) => (
-                  <Badge key={`${p.role}:${p.email}`} variant="secondary" className="text-[10px] bg-secondary/50 font-medium">
-                    <span className="text-muted-foreground mr-1 uppercase">{p.role}</span>
-                    {p.name}
-                  </Badge>
-                ))}
+                <div role="list" aria-label="참여자" className="flex flex-wrap items-center gap-1.5">
+                  {email.participants.map((p) => (
+                    <Badge role="listitem" key={`${p.role}:${p.email}`} variant="secondary" className="text-[10px] bg-secondary/50 font-medium">
+                      <span className="text-muted-foreground mr-1 uppercase">{p.role}</span>
+                      {p.name}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -664,7 +666,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
           {email.meeting_proposal && (
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div role="region" aria-label="회의 제안" className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600">
                   <Calendar className="size-5" aria-hidden="true" />
@@ -674,9 +676,12 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   <p className="mt-1 text-xs font-medium text-muted-foreground">
                     {email.meeting_proposal.time}{email.meeting_proposal.location ? ` · ${email.meeting_proposal.location}` : ''}
                   </p>
+                  <p id={`meeting-accept-unavailable-${email.id}`} className="mt-1 text-xs text-muted-foreground">
+                    일정 수락 기능은 준비 중입니다.
+                  </p>
                 </div>
               </div>
-              <Button size="sm" type="button" disabled title="일정 수락 준비 중" aria-label="일정 수락 준비 중" className="h-9 shrink-0 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              <Button size="sm" type="button" disabled aria-describedby={`meeting-accept-unavailable-${email.id}`} className="h-9 shrink-0 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
                 일정 수락
               </Button>
@@ -825,11 +830,11 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   )}
                   <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
                   {msg.id === email.id && email.attachments && email.attachments.length > 0 && (
-                    <div role="list" className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                    <div role="list" aria-label="첨부파일" className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                       {email.attachments.map((file) => (
                         <div role="listitem" key={file.id} className="flex shrink-0 items-center gap-3 rounded-xl border border-border bg-background p-3 shadow-sm transition-colors">
                           <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
-                            {file.type.includes('image') ? <Paperclip className="size-5" aria-hidden="true" /> : <FileText className="size-5" aria-hidden="true" />}
+                            {file.type.toLowerCase().startsWith('image/') ? <Paperclip className="size-5" aria-hidden="true" /> : <FileText className="size-5" aria-hidden="true" />}
                           </div>
                           <div className="flex flex-col min-w-[120px]">
                             <span className="text-xs font-bold text-foreground line-clamp-1">{file.name}</span>
