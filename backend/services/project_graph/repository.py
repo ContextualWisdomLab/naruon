@@ -296,7 +296,7 @@ def _unique_source_segment_uids(
         if not source_uids:
             raise ValueError("Project graph projection requires cited objects")
         for source_uid in source_uids:
-            seen.setdefault(source_uid, None)
+            seen[source_uid] = None
     return tuple(seen)
 
 
