@@ -45,16 +45,16 @@ vi.mock("@/components/ui/input", () => ({
 vi.mock("lucide-react", () => ({
   MessagesSquare: () => <svg aria-hidden="true" />,
   AlertCircle: () => <svg aria-hidden="true" />,
+  Calendar: () => <svg aria-hidden="true" />,
+  CheckCircle2: () => <svg aria-hidden="true" />,
   ExternalLink: () => <svg aria-hidden="true" />,
   FileText: () => <svg aria-hidden="true" />,
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
-  X: () => <svg aria-hidden="true" />,
-  Users: () => <svg aria-hidden="true" />,
   Paperclip: () => <svg aria-hidden="true" />,
-  Calendar: () => <svg aria-hidden="true" />,
-  CheckCircle2: () => <svg aria-hidden="true" />,
+  Users: () => <svg aria-hidden="true" />,
+  X: () => <svg aria-hidden="true" />,
 }));
 
 import { EmailDetail } from "./EmailDetail";
@@ -205,6 +205,46 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
 
     expect(container?.textContent).toContain("번역을 수행하지 못했습니다.");
+  });
+
+  it("renders rich email metadata without exposing unavailable actions", async () => {
+    const email = {
+      id: 22,
+      message_id: "<rich@example.com>",
+      thread_id: null,
+      sender: "owner@example.com",
+      recipients: "user@example.com",
+      subject: "제품 검토 회의",
+      date: "2026-07-22T09:00:00Z",
+      body: "회의 자료를 확인해주세요.",
+      participants: [{ name: "검토자", email: "reviewer@example.com", role: "cc" }],
+      attachments: [{ id: "attachment-1", name: "검토자료.pdf", size: "2 MB", type: "application/pdf" }],
+      meeting_proposal: { title: "제품 검토", time: "2026-07-23 10:00", location: "회의실 A" },
+    };
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/22")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "회의 요약", action_items: [] }));
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<EmailDetail emailId={22} />);
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("검토자");
+    expect(container.textContent).toContain("검토자료.pdf");
+    expect(container.querySelector("[role='list'][aria-label='첨부파일']")).not.toBeNull();
+    expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent?.includes("검토자료.pdf"))).toBe(false);
+
+    const acceptButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("일정 수락 준비 중"));
+    expect(acceptButton).toBeInstanceOf(HTMLButtonElement);
+    expect(acceptButton?.disabled).toBe(true);
+    expect(acceptButton?.type).toBe("button");
   });
 
   it("renders untrusted detail fields as plain display text without markup", async () => {
