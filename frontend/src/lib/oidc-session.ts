@@ -147,6 +147,66 @@ export function getOidcBrowserConfig(origin = defaultBrowserOrigin()): OidcBrows
   };
 }
 
+interface RuntimeOidcConfigPayload {
+  configured?: unknown;
+  issuer_url?: unknown;
+  client_id?: unknown;
+  redirect_uri?: unknown;
+  scope?: unknown;
+  authorization_endpoint?: unknown;
+  end_session_endpoint?: unknown;
+}
+
+function stringField(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function runtimeConfigFromPayload(payload: RuntimeOidcConfigPayload, origin: string): OidcBrowserConfig | null {
+  if (payload.configured !== true) return null;
+  const issuerUrl = stringField(payload.issuer_url);
+  const clientId = stringField(payload.client_id);
+  if (!issuerUrl || !clientId) return null;
+
+  const normalizedIssuer = trimTrailingSlash(issuerUrl);
+  const keycloakEndpointBase = `${normalizedIssuer}/protocol/openid-connect`;
+  return {
+    issuerUrl: normalizedIssuer,
+    clientId,
+    redirectUri: stringField(payload.redirect_uri) ?? defaultRedirectUri(origin),
+    scope: stringField(payload.scope) ?? DEFAULT_OIDC_SCOPE,
+    authorizationEndpoint:
+      stringField(payload.authorization_endpoint) ?? `${keycloakEndpointBase}/auth`,
+    // The runtime route never exposes the token endpoint (its override may be
+    // container-internal); the browser-facing derivation is only a placeholder
+    // because the code exchange runs in the server routes.
+    tokenEndpoint: `${keycloakEndpointBase}/token`,
+    endSessionEndpoint:
+      stringField(payload.end_session_endpoint) ?? `${keycloakEndpointBase}/logout`,
+  };
+}
+
+// Build-time inlined values win when present; otherwise the frontend server
+// reports its runtime env through /auth/oidc-config, so one prebuilt image
+// works for every deployment without NEXT_PUBLIC_* build args.
+export async function resolveOidcBrowserConfig(): Promise<OidcBrowserConfig | null> {
+  const inlined = getOidcBrowserConfig();
+  if (inlined) return inlined;
+
+  try {
+    const response = await fetch('/auth/oidc-config', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as RuntimeOidcConfigPayload;
+    return runtimeConfigFromPayload(payload, defaultBrowserOrigin());
+  } catch {
+    return null;
+  }
+}
+
 function requireBrowserStorage() {
   if (typeof window === 'undefined') {
     throw new OidcSessionError('OIDC browser session storage is unavailable');
@@ -183,7 +243,7 @@ export async function buildOidcAuthorizationUrl(config: OidcBrowserConfig, state
 
 export async function startOidcLogin(options: OidcLoginOptions = {}) {
   requireBrowserStorage();
-  if (!getOidcBrowserConfig()) {
+  if (!(await resolveOidcBrowserConfig())) {
     throw new OidcSessionError('OIDC browser configuration is missing');
   }
 
@@ -196,7 +256,7 @@ export async function startOidcLogin(options: OidcLoginOptions = {}) {
 
 export async function completeOidcRedirect(search = window.location.search) {
   requireBrowserStorage();
-  if (!getOidcBrowserConfig()) {
+  if (!(await resolveOidcBrowserConfig())) {
     throw new OidcSessionError('OIDC browser configuration is missing');
   }
 
@@ -213,7 +273,7 @@ export function clearOidcTransientState() {
 
 export async function clearOidcSession(options: OidcLogoutOptions = {}) {
   requireBrowserStorage();
-  const config = getOidcBrowserConfig();
+  const config = await resolveOidcBrowserConfig();
   await clearPersistedOidcSession();
   clearOidcTransientState();
 

@@ -6,6 +6,7 @@ import {
   clearOidcSession,
   completeOidcRedirect,
   getOidcBrowserConfig,
+  resolveOidcBrowserConfig,
   startOidcLogin,
 } from './oidc-session';
 
@@ -154,5 +155,52 @@ describe('oidc-session', () => {
     vi.stubGlobal('window', undefined);
 
     expect(() => clearOidcTransientState()).not.toThrow();
+  });
+
+  it('resolves the browser config from the runtime route when no values were inlined', async () => {
+    vi.stubEnv('NEXT_PUBLIC_OIDC_ISSUER_URL', '');
+    vi.stubEnv('NEXT_PUBLIC_OIDC_CLIENT_ID', '');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      expect(input).toBe('/auth/oidc-config');
+      return new Response(JSON.stringify({
+        configured: true,
+        issuer_url: 'https://login.example.com/realms/naruon/',
+        client_id: 'naruon-web',
+        redirect_uri: 'https://app.example.com/auth/callback',
+        scope: 'openid',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    const config = await resolveOidcBrowserConfig();
+
+    expect(config).toMatchObject({
+      issuerUrl: 'https://login.example.com/realms/naruon',
+      clientId: 'naruon-web',
+      redirectUri: 'https://app.example.com/auth/callback',
+      scope: 'openid',
+      authorizationEndpoint: 'https://login.example.com/realms/naruon/protocol/openid-connect/auth',
+      endSessionEndpoint: 'https://login.example.com/realms/naruon/protocol/openid-connect/logout',
+    });
+  });
+
+  it('reports no config when the runtime route says OIDC is not configured', async () => {
+    vi.stubEnv('NEXT_PUBLIC_OIDC_ISSUER_URL', '');
+    vi.stubEnv('NEXT_PUBLIC_OIDC_CLIENT_ID', '');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ configured: false }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    expect(await resolveOidcBrowserConfig()).toBeNull();
+  });
+
+  it('prefers build-time inlined values without calling the runtime route', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const config = await resolveOidcBrowserConfig();
+
+    expect(config?.clientId).toBe('naruon-web');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

@@ -102,7 +102,12 @@
   `naruon_session` cookie into a backend `Authorization: Bearer` session.
 - When `NEXT_PUBLIC_OIDC_ISSUER_URL` and `NEXT_PUBLIC_OIDC_CLIENT_ID` are set,
   the browser can start an Authorization Code + PKCE login against the configured
-  Keycloak/Casdoor issuer. The same-origin `/auth/oidc/*` server routes keep
+  Keycloak/Casdoor issuer. Setting them as **runtime environment variables on
+  the frontend server is sufficient**: the login screen resolves the browser
+  config through the same-origin `/auth/oidc-config` route, so one prebuilt
+  image serves every deployment. Build-time (`ARG`) injection still works and
+  takes precedence, but is no longer required. The same-origin `/auth/oidc/*`
+  server routes keep
   PKCE verifier state in an HttpOnly transient cookie, exchange the callback
   code server-side, verify the resulting token with the backend, and then install
   only the HttpOnly `naruon_session` cookie for private API calls. Public
@@ -111,7 +116,8 @@
   `NEXT_PUBLIC_OIDC_END_SESSION_ENDPOINT`, `NEXT_PUBLIC_OIDC_REDIRECT_URI`, and
   `NEXT_PUBLIC_OIDC_SCOPE`; otherwise Keycloak's
   `/protocol/openid-connect/{auth,token,logout}` endpoints are derived from the
-  issuer URL.
+  issuer URL. `/auth/oidc-config` never exposes the token endpoint, whose
+  override may point at a container-internal address.
 - Browser-side OIDC support does not mint local roles. The IdP token must still
   satisfy the backend's signed claim contract: verified issuer/audience, subject,
   explicit non-platform role, organization, groups, workspace, expiry, and no

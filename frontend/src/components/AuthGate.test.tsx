@@ -8,20 +8,26 @@ vi.mock("next/navigation", () => ({
   usePathname: () => mockUsePathname(),
 }));
 
-const mockStartOidcLogin = vi.fn(async (_options: unknown) => {});
+const mockStartOidcLogin = vi.fn(async (options: unknown) => {
+  void options;
+});
 const mockGetOidcBrowserConfig = vi.fn(() => ({}) as unknown);
 vi.mock("@/lib/oidc-session", () => ({
   startOidcLogin: (options: unknown) => mockStartOidcLogin(options),
-  getOidcBrowserConfig: () => mockGetOidcBrowserConfig(),
+  resolveOidcBrowserConfig: async () => mockGetOidcBrowserConfig(),
 }));
 
 import { AuthGate } from "./AuthGate";
 
 async function flushAsyncWork() {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+  // Session probe and OIDC availability resolve in chained effects, so a
+  // couple of microtask rounds are needed before the final UI settles.
+  for (let round = 0; round < 3; round += 1) {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
 }
 
 function sessionResponse(authenticated: boolean) {

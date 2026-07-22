@@ -16,6 +16,7 @@ export interface ServerOidcConfig {
   scope: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
+  endSessionEndpoint: string;
 }
 
 export interface OidcStateCookiePayload {
@@ -49,6 +50,8 @@ export function serverOidcConfig(origin: string): ServerOidcConfig | null {
       envValue("NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT") ?? `${keycloakEndpointBase}/auth`,
     tokenEndpoint:
       envValue("NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT") ?? `${keycloakEndpointBase}/token`,
+    endSessionEndpoint:
+      envValue("NEXT_PUBLIC_OIDC_END_SESSION_ENDPOINT") ?? `${keycloakEndpointBase}/logout`,
   };
 }
 
