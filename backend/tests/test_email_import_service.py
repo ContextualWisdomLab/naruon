@@ -29,10 +29,24 @@ from services.email_import_service import (
         ("/tmp/..", "upload"),  # nosec B108
         ("%2e%2e%2fupload", "upload"),
         ("%252e%252e%252fupload", "upload"),
+        ("%2e%2e%5csecret.eml", "secret.eml"),
+        ("%00secret.eml", "upload"),
+        ("%0asecret.eml", "upload"),
+        ("%C2%85secret.eml", "upload"),
+        ("secret\u202eeml", "upload"),
+        ("회의.eml", "회의.eml"),
     ],
 )
 def test_safe_upload_filename(input_name, expected):
     assert email_import_module._safe_upload_filename(input_name) == expected
+
+
+def test_safe_upload_filename_fails_closed_beyond_decode_round_limit():
+    encoded_name = "%2e%2e%2fsecret.eml"
+    for _ in range(email_import_module.MAX_UPLOAD_FILENAME_DECODE_ROUNDS):
+        encoded_name = encoded_name.replace("%", "%25")
+
+    assert email_import_module._safe_upload_filename(encoded_name) == "upload"
 
 
 @pytest.mark.parametrize(
@@ -54,6 +68,16 @@ def test_safe_upload_filename(input_name, expected):
             "my_archive.zip:email_1.eml",
         ),
         ("", Path("email_1.eml"), "upload:email_1.eml"),
+        (
+            "my_archive.zip",
+            Path("ok\nforged.eml"),
+            "my_archive.zip:upload",
+        ),
+        (
+            "my_archive.zip",
+            Path("safe\u202ename.eml"),
+            "my_archive.zip:upload",
+        ),
     ],
 )
 def test_safe_item_filename(upload_name, eml_path, expected):
