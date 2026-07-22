@@ -30,6 +30,8 @@ from services.email_import_service import (
         ("%2e%2e%2fupload", "upload"),
         ("%252e%252e%252fupload", "upload"),
         ("%2e%2e%5csecret.eml", "secret.eml"),
+        ("..\\..\\upload", "upload"),
+        ("..%5c..%5cupload", "upload"),
         ("%00secret.eml", "upload"),
         ("%0asecret.eml", "upload"),
         ("%C2%85secret.eml", "upload"),
