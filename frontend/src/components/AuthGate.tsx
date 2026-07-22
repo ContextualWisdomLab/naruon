@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
+import { AuthCardHeader, AuthShell } from "@/components/AuthShell";
 import { resolveOidcBrowserConfig, startOidcLogin } from "@/lib/oidc-session";
 
 type AuthGateStatus = "checking" | "authenticated" | "unauthenticated";
@@ -31,23 +32,23 @@ async function probeSession(): Promise<boolean> {
 function SetupGuide() {
   return (
     <div className="space-y-4 text-left">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-slate-500">
         Naruon이 실행 중이지만 아직 로그인에 사용할 조직 계정(OIDC) 연결이
         없습니다. 연결이 끝나면 이 화면이 자동으로 로그인 버튼으로 바뀝니다.
       </p>
-      <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+      <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-500">
         <li>조직 IdP(예: Keycloak, Entra ID)에 Naruon용 공개 클라이언트를 만듭니다.</li>
         <li>발급된 발급자 주소와 클라이언트 ID를 서버 환경 변수로 넣고 재시작합니다.</li>
         <li>이 페이지를 새로 고치면 로그인 버튼이 나타납니다.</li>
       </ol>
-      <details className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+      <details className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
         <summary className="cursor-pointer font-medium">운영자용 상세 설정</summary>
         <div className="mt-2 space-y-1">
           <p>
             frontend 컨테이너의 <strong>런타임 환경 변수</strong>로 설정하면 되며,
             이미지 재빌드는 필요 없습니다.
           </p>
-          <pre className="overflow-x-auto rounded bg-background p-2">
+          <pre className="overflow-x-auto rounded bg-white p-2">
 {`NEXT_PUBLIC_OIDC_ISSUER_URL=https://idp.example.com/realms/<realm>
 NEXT_PUBLIC_OIDC_CLIENT_ID=naruon-web`}
           </pre>
@@ -121,51 +122,46 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (status === "unauthenticated") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background px-6">
-        <div className="w-full max-w-sm space-y-6 text-center">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">Naruon</h1>
-            <p className="text-sm text-muted-foreground">
-              메일, 일정, 관계, 판단 포인트를 하나의 맥락으로 연결하는 AI 메일
-              워크스페이스
+      <AuthShell>
+        <AuthCardHeader
+          title="계정에 로그인"
+          subtitle="나루온에 오신 것을 환영합니다."
+        />
+        {oidcAvailability === "checking" ? (
+          <p className="text-sm text-slate-500" role="status">
+            로그인 방법 확인 중…
+          </p>
+        ) : oidcAvailability === "configured" ? (
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={handleLogin}
+              className="w-full rounded-lg bg-[#2563ff] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1d4fd7]"
+            >
+              조직 계정으로 로그인
+            </button>
+            <p className="text-xs text-slate-500">
+              조직 IdP(OIDC)로 이동해 패스키 또는 조직 자격 증명으로 로그인합니다.
+            </p>
+            {loginError ? (
+              <p className="text-xs text-red-600" role="alert">
+                {loginError}
+              </p>
+            ) : null}
+            <p className="border-t border-slate-100 pt-4 text-center text-xs text-slate-500">
+              계정이 없으신가요?{" "}
+              <a
+                href="/auth/register"
+                className="font-semibold text-[#2563ff] hover:underline"
+              >
+                회원가입
+              </a>
             </p>
           </div>
-          {oidcAvailability === "checking" ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              로그인 방법 확인 중…
-            </p>
-          ) : oidcAvailability === "configured" ? (
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={handleLogin}
-                className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                조직 계정으로 로그인
-              </button>
-              <p className="text-xs text-muted-foreground">
-                조직 IdP(OIDC)로 이동해 패스키 또는 조직 자격 증명으로 로그인합니다.
-              </p>
-              {loginError ? (
-                <p className="text-xs text-destructive" role="alert">
-                  {loginError}
-                </p>
-              ) : null}
-              <p className="text-xs text-muted-foreground">
-                처음이신가요?{" "}
-                <a
-                  href="/auth/register"
-                  className="font-medium text-primary hover:underline"
-                >
-                  회원가입
-                </a>
-              </p>
-            </div>
-          ) : (
-            <SetupGuide />
-          )}
-        </div>
-      </main>
+        ) : (
+          <SetupGuide />
+        )}
+      </AuthShell>
     );
   }
 
