@@ -358,11 +358,12 @@ export default function PromptStudioPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={handleSave} disabled={saving || testing} aria-busy={saving || undefined} className="font-black">
+            <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{saving ? '프롬프트 저장 중...' : testing ? '테스트 중...' : ''}</div>
+            <Button variant="outline" onClick={handleSave} disabled={saving || testing} aria-busy={saving} className="font-black">
               {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" data-testid="loader" /> : <Save className="size-4" aria-hidden="true" />}
               {saving ? '저장 중...' : '프롬프트 저장 (Save)'}
             </Button>
-            <Button variant="outline" onClick={handleTest} disabled={testing || saving || !formData.content.trim()} aria-busy={testing || undefined} className="font-black">
+            <Button variant="outline" onClick={handleTest} disabled={testing || saving || !formData.content.trim()} aria-busy={testing} className="font-black">
               {testing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" data-testid="loader" /> : <Play className="size-4" aria-hidden="true" />}
               {testing ? '테스트 중...' : '실행 (Test)'}
             </Button>
@@ -373,9 +374,6 @@ export default function PromptStudioPage() {
               <Rocket className="size-4" aria-hidden="true" />
               게시
             </a>
-            <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-              {saving ? '프롬프트 저장 중입니다.' : testing ? '프롬프트 테스트 실행 중입니다.' : ''}
-            </span>
           </div>
         </section>
 
@@ -663,8 +661,9 @@ export default function PromptStudioPage() {
 
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{testing ? '다시 생성 중...' : ''}</div>
                     <p className="text-sm font-black">생성된 결과</p>
-                    <Button variant="outline" size="sm" onClick={handleTest} disabled={testing || saving || !formData.content.trim()} aria-busy={testing || undefined}>
+                    <Button variant="outline" size="sm" onClick={handleTest} disabled={testing || saving || !formData.content.trim()} aria-busy={testing}>
                       {testing ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" data-testid="loader" /> : <RefreshCw className="size-3.5" aria-hidden="true" />}
                       {testing ? '다시 생성 중...' : '다시 생성'}
                     </Button>

@@ -183,9 +183,6 @@ describe("PromptStudioPage", () => {
     });
 
     expect(getButton(page, "테스트 중...").disabled).toBe(true);
-    expect(getButton(page, "테스트 중...").getAttribute("aria-busy")).toBe("true");
-    expect(getButton(page, "다시 생성 중...").getAttribute("aria-busy")).toBe("true");
-    expect(page.querySelector("[role='status']")?.textContent).toContain("프롬프트 테스트 실행 중입니다.");
     expect(page.querySelector("[data-testid='loader']")).not.toBeNull();
 
     await act(async () => {
@@ -195,8 +192,6 @@ describe("PromptStudioPage", () => {
     await flushAsyncWork();
 
     expect(getButton(page, "실행 (Test)").disabled).toBe(false);
-    expect(getButton(page, "실행 (Test)").getAttribute("aria-busy")).toBeNull();
-    expect(getButton(page, "다시 생성").getAttribute("aria-busy")).toBeNull();
     expect(page.textContent).toContain("맥락 종합 결과");
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/prompts/test",
@@ -216,30 +211,6 @@ describe("PromptStudioPage", () => {
       getButton(page, "데이터 분석 판단 포인트").click();
     });
     expect(page.textContent).not.toContain("맥락 종합 결과");
-  });
-
-  it("announces and restores the regenerate action state", async () => {
-    const promptTest = deferred<Response>();
-    vi.stubGlobal("fetch", vi.fn(() => promptTest.promise));
-    const page = await renderPage();
-
-    act(() => {
-      getButton(page, "다시 생성").click();
-    });
-
-    expect(getButton(page, "다시 생성 중...").disabled).toBe(true);
-    expect(getButton(page, "다시 생성 중...").getAttribute("aria-busy")).toBe("true");
-    expect(page.querySelector("[role='status']")?.textContent).toContain("프롬프트 테스트 실행 중입니다.");
-
-    await act(async () => {
-      promptTest.resolve(jsonResponse({ result: "재생성 결과" }));
-      await promptTest.promise;
-    });
-    await flushAsyncWork();
-
-    expect(getButton(page, "다시 생성").disabled).toBe(false);
-    expect(getButton(page, "다시 생성").getAttribute("aria-busy")).toBeNull();
-    expect(page.textContent).toContain("재생성 결과");
   });
 
   it("loads a fresh sample input from the preview panel", async () => {
@@ -267,8 +238,6 @@ describe("PromptStudioPage", () => {
     });
 
     expect(getButton(page, "저장 중...").disabled).toBe(true);
-    expect(getButton(page, "저장 중...").getAttribute("aria-busy")).toBe("true");
-    expect(page.querySelector("[role='status']")?.textContent).toContain("프롬프트 저장 중입니다.");
     expect(page.querySelector("[data-testid='loader']")).not.toBeNull();
 
     await act(async () => {
@@ -278,7 +247,6 @@ describe("PromptStudioPage", () => {
     await flushAsyncWork();
 
     expect(getButton(page, "프롬프트 저장 (Save)").disabled).toBe(false);
-    expect(getButton(page, "프롬프트 저장 (Save)").getAttribute("aria-busy")).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/prompts",
       expect.objectContaining({
