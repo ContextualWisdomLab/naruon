@@ -64,7 +64,7 @@ def _lineage_payload() -> dict[str, object]:
             "review_fingerprint": "f" * 64,
             "requires_review": True,
             "reason_codes": ["sensitive-document"],
-            "decision_id": "decision-1",
+            "decision_id": "1" * 64,
             "disposition": "approved",
             "reviewed_at_ms": 1_767_229_300_000,
             "reviewed_by": "human:local:test",
@@ -103,8 +103,24 @@ def test_validate_disksage_file_lineage_returns_redacted_acceptance(client: Test
         "schema_kind": "disksage.file-lineage",
     }
     assert "/cloud/report.pdf" not in response.text
-    assert "decision-1" not in response.text
+    assert "1" * 64 not in response.text
     assert "d" * 64 not in response.text
+
+
+def test_validate_disksage_file_lineage_accepts_attribution_boundaries(
+    client: TestClient,
+):
+    payload = _lineage_payload()
+    payload["review"]["reviewed_by"] = "human:" + "a" * 122
+    payload["review"]["rationale"] = "r" * 1_000
+
+    response = client.post("/api/file-lineage/validate", json=payload)
+
+    assert response.status_code == 200
+
+    payload["review"]["rationale"] = "\u0e33"
+    response = client.post("/api/file-lineage/validate", json=payload)
+    assert response.status_code == 200
 
 
 def test_validate_disksage_file_lineage_requires_authentication():
@@ -167,6 +183,41 @@ def test_validate_disksage_file_lineage_accepts_bound_production_sources(
             "provider_sync_confirmed", True
         ),
         lambda payload: payload["review"].__setitem__("disposition", "held"),
+        lambda payload: payload["review"].__setitem__("decision_id", "decision-1"),
+        lambda payload: payload["review"].__setitem__(
+            "reviewed_by", "agent:local:test"
+        ),
+        lambda payload: payload["review"].__setitem__("reviewed_by", "human:   "),
+        lambda payload: payload["review"].__setitem__("reviewed_by", "human:\u200b"),
+        lambda payload: payload["review"].__setitem__("reviewed_by", "human:---"),
+        lambda payload: payload["review"].__setitem__(
+            "reviewed_by", "human:" + "a" * 123
+        ),
+        lambda payload: payload["review"].__setitem__(
+            "reviewed_by", "human:local:test "
+        ),
+        lambda payload: payload["review"].__setitem__(
+            "reviewed_by", "\u0085human:local:test"
+        ),
+        lambda payload: payload["review"].__setitem__(
+            "reviewed_by", "human:local:test\ufeff"
+        ),
+        lambda payload: payload["review"].__setitem__(
+            "rationale", "Embedded metadata checked "
+        ),
+        lambda payload: payload["review"].__setitem__(
+            "rationale", "\u0085Embedded metadata checked"
+        ),
+        lambda payload: payload["review"].__setitem__(
+            "rationale", "Embedded metadata checked\ufeff"
+        ),
+        lambda payload: payload["review"].__setitem__("rationale", "\u200b"),
+        lambda payload: payload["review"].__setitem__("rationale", "\u2060"),
+        lambda payload: payload["review"].__setitem__(
+            "rationale", "metadata\u202ereviewed"
+        ),
+        lambda payload: payload["review"].__setitem__("rationale", "\u0345"),
+        lambda payload: payload["review"].__setitem__("rationale", "r" * 1_001),
         lambda payload: payload["production_time"].__setitem__(
             "unknown_field", "rejected"
         ),
@@ -219,6 +270,23 @@ def test_validate_disksage_file_lineage_accepts_bound_production_sources(
         "local-copy-unverified",
         "sync-proof-incomplete",
         "review-not-approved",
+        "review-decision-id-not-digest",
+        "reviewer-not-human",
+        "reviewer-identity-empty",
+        "reviewer-identity-invisible",
+        "reviewer-identity-without-alphanumeric",
+        "reviewer-too-long",
+        "reviewer-not-trimmed",
+        "reviewer-nel-padded",
+        "reviewer-bom-padded",
+        "review-rationale-not-trimmed",
+        "review-rationale-nel-padded",
+        "review-rationale-bom-padded",
+        "review-rationale-invisible",
+        "review-rationale-word-joiner",
+        "review-rationale-bidi-control",
+        "review-rationale-combining-mark-only",
+        "review-rationale-too-long",
         "unknown-nested-field",
         "filesystem-source-value-mismatch",
         "production-source-without-evidence",

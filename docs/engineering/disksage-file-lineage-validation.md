@@ -78,8 +78,17 @@ unknown fields at every nesting level. Version 1 requires:
 - lowercase 64-character SHA-256, BLAKE3, receipt, review, and lineage digests;
 - a cross-platform portable relative source path whose basename equals
   `source_filename` and contains no Windows-reserved component;
-- a complete approved human review when `requires_review` is true, with the
-  review timestamp no later than the copy timestamp;
+- a complete approved human review when `requires_review` is true: the decision
+  ID is a lowercase 64-character integrity digest, `reviewed_by` uses the
+  `human:` namespace with an ASCII identifier containing an alphanumeric
+  character and at most 128 characters, the
+  rationale is canonically trimmed, contains a Unicode letter or number,
+  contains no Unicode control or format-control character, and contains at most
+  1,000 characters, and the review timestamp is no later than
+  the copy timestamp. Canonical trimming uses the union of Rust Unicode
+  whitespace and ECMAScript whitespace, plus zero-width boundaries, including
+  U+0085, U+200B, and U+FEFF. Letter, number, and format-control categories are
+  interpreted using Unicode 16.0;
 - a locally verified copy and `provider_write_executed: false`;
 - internally complete provider evidence, while allowing a persisted evidence
   observation whose `sync_complete` result remains false, provided that the

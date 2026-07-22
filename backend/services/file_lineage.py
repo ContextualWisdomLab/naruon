@@ -24,6 +24,8 @@ PROVIDER_SYNC_OVERDUE_AFTER_MS = 24 * 60 * 60 * 1_000
 Hex64 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 BoundedText = Annotated[str, Field(min_length=1, max_length=4096)]
 ShortText = Annotated[str, Field(min_length=1, max_length=1024)]
+HumanReviewer = Annotated[str, Field(min_length=7, max_length=128)]
+ReviewRationale = Annotated[str, Field(min_length=1, max_length=1000)]
 U64_MAX = 18_446_744_073_709_551_615
 EpochMilliseconds = Annotated[int, Field(ge=0, le=U64_MAX)]
 NonNegativeBytes = Annotated[int, Field(ge=0, le=U64_MAX)]
@@ -43,6 +45,36 @@ WINDOWS_RESERVED_COMPONENT_NAMES = frozenset(
 
 def _has_control_character(value: str) -> bool:
     return any(unicodedata.category(character) == "Cc" for character in value)
+
+
+def _trim_review_text(value: str) -> str:
+    """Apply the union of Rust and ECMAScript surrounding-whitespace rules."""
+    previous = value
+    while True:
+        trimmed = previous.strip().strip("\u200b\ufeff")
+        if trimmed == previous:
+            return trimmed
+        previous = trimmed
+
+
+def _is_review_format_control(character: str) -> bool:
+    codepoint = ord(character)
+    return (
+        codepoint == 0x00AD
+        or 0x0600 <= codepoint <= 0x0605
+        or codepoint in {0x061C, 0x06DD, 0x070F, 0x08E2, 0x180E, 0xFEFF}
+        or 0x0890 <= codepoint <= 0x0891
+        or 0x200B <= codepoint <= 0x200F
+        or 0x202A <= codepoint <= 0x202E
+        or 0x2060 <= codepoint <= 0x2064
+        or 0x2066 <= codepoint <= 0x206F
+        or 0xFFF9 <= codepoint <= 0xFFFB
+        or codepoint in {0x110BD, 0x110CD, 0xE0001}
+        or 0x13430 <= codepoint <= 0x1343F
+        or 0x1BCA0 <= codepoint <= 0x1BCA3
+        or 0x1D173 <= codepoint <= 0x1D17A
+        or 0xE0020 <= codepoint <= 0xE007F
+    )
 
 
 def _validate_bounded_text(value: str, field_name: str) -> str:
@@ -135,17 +167,47 @@ class FileReviewLineage(StrictLineageModel):
     reason_codes: list[Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9-]{0,127}$")]] = (
         Field(max_length=128)
     )
-    decision_id: ShortText | None
+    decision_id: Hex64 | None
     disposition: ReviewDisposition | None
     reviewed_at_ms: EpochMilliseconds | None
-    reviewed_by: ShortText | None
-    rationale: BoundedText | None
+    reviewed_by: HumanReviewer | None
+    rationale: ReviewRationale | None
 
-    @field_validator("decision_id", "reviewed_by", "rationale")
+    @field_validator("decision_id")
     @classmethod
-    def reject_optional_control_characters(cls, value: str | None) -> str | None:
+    def reject_decision_id_control_characters(cls, value: str | None) -> str | None:
         if value is not None:
             _validate_bounded_text(value, "review")
+        return value
+
+    @field_validator("reviewed_by")
+    @classmethod
+    def validate_human_reviewer(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        _validate_bounded_text(value, "reviewed_by")
+        identity = value.removeprefix("human:")
+        if (
+            value != _trim_review_text(value)
+            or identity == value
+            or re.fullmatch(r"[A-Za-z0-9._:@/-]+", identity) is None
+            or re.search(r"[A-Za-z0-9]", identity) is None
+        ):
+            raise ValueError("reviewed_by must identify a human reviewer")
+        return value
+
+    @field_validator("rationale")
+    @classmethod
+    def validate_review_rationale(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        _validate_bounded_text(value, "rationale")
+        if value != _trim_review_text(value):
+            raise ValueError("rationale must be trimmed")
+        if not any(character.isalnum() for character in value):
+            raise ValueError("rationale must contain a letter or number")
+        if any(_is_review_format_control(character) for character in value):
+            raise ValueError("rationale contains a format control")
         return value
 
     @model_validator(mode="after")
