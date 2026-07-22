@@ -92,12 +92,18 @@ def _normalize_host(raw_host: str) -> str:
 
 
 def _reject_unsafe_ip_literal(setting_name: str, host: str) -> None:
+    normalized_host = _normalize_host(host)
     try:
-        ip_address = ipaddress.ip_address(host)
+        ip_address = ipaddress.ip_address(normalized_host)
     except ValueError:
-        if host == "localhost" or host.endswith(".localhost"):
+        if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
             raise ValueError(f"{setting_name} host must not be localhost")
-        if host == "internal" or host.endswith(".internal") or host == "local" or host.endswith(".local"):
+        if (
+            normalized_host == "internal"
+            or normalized_host.endswith(".internal")
+            or normalized_host == "local"
+            or normalized_host.endswith(".local")
+        ):
             raise ValueError(f"{setting_name} host must not be an internal domain")
         return
 

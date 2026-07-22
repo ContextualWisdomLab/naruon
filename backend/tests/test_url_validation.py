@@ -43,6 +43,8 @@ def test_reject_unsafe_ip_literal():
         _reject_unsafe_ip_literal("setting", "localhost")
     with pytest.raises(ValueError, match="setting host must not be localhost"):
         _reject_unsafe_ip_literal("setting", "test.localhost")
+    with pytest.raises(ValueError, match="setting host must not be localhost"):
+        _reject_unsafe_ip_literal("setting", " Test.Localhost. ")
 
     # Internal domains
     with pytest.raises(ValueError, match="setting host must not be an internal domain"):
@@ -53,6 +55,10 @@ def test_reject_unsafe_ip_literal():
         _reject_unsafe_ip_literal("setting", "local")
     with pytest.raises(ValueError, match="setting host must not be an internal domain"):
         _reject_unsafe_ip_literal("setting", "test.local")
+    with pytest.raises(ValueError, match="setting host must not be an internal domain"):
+        _reject_unsafe_ip_literal("setting", " Test.Internal. ")
+    with pytest.raises(ValueError, match="setting host must not be an internal domain"):
+        _reject_unsafe_ip_literal("setting", " Test.Local. ")
 
     # Standard domain name
     _reject_unsafe_ip_literal("setting", "example.com")
