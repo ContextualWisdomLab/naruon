@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth import (
@@ -38,6 +38,7 @@ class WritebackSource(BaseModel):
     protocol: Literal["caldav", "carddav", "webdav", "local"]
     owner_id: str
     organization_id: str | None
+    workspace_id: str | None = Field(default=None, exclude=True)
     capabilities: list[str]
     writeback_enabled: bool
     etag: str | None = None
@@ -88,6 +89,7 @@ def _writeback_source_from_registry(
         protocol=registry_source.source_protocol,
         owner_id=registry_source.user_id,
         organization_id=registry_source.organization_id,
+        workspace_id=registry_source.workspace_id,
         capabilities=_registry_capabilities(registry_source),
         writeback_enabled=bool(registry_source.writeback_enabled),
         etag=registry_source.etag_value,
@@ -112,6 +114,7 @@ def _registry_scope_statement(auth_context: AuthContext):
     return statement.where(
         CalendarWritebackSource.user_id == auth_context.user_id,
         organization_filter,
+        CalendarWritebackSource.workspace_id == auth_context.workspace_id,
     )
 
 
@@ -165,12 +168,14 @@ def _select_writeback_source(
     sources: Sequence[WritebackSource],
     owner_id: str,
     organization_id: str | None,
+    workspace_id: str,
 ) -> WritebackSource | None:
     for source in sources:
         if (
             not _has_writeback_capability(source)
             or source.owner_id != owner_id
             or source.organization_id != organization_id
+            or source.workspace_id != workspace_id
         ):
             continue
         return source
@@ -191,7 +196,10 @@ def _can_target_writeback_source(
 ) -> bool:
     if target_source.organization_id != auth_context.organization_id:
         return False
-    return target_source.owner_id == auth_context.user_id
+    return (
+        target_source.owner_id == auth_context.user_id
+        and target_source.workspace_id == auth_context.workspace_id
+    )
 
 
 def _authorize_targeted_writeback_source(
@@ -351,6 +359,7 @@ async def create_writeback_intent(
             available_sources,
             auth_context.user_id,
             auth_context.organization_id,
+            auth_context.workspace_id,
         )
     if target_source is None:
         raise HTTPException(

@@ -4,6 +4,7 @@ from typing import Literal, cast
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import AuthContext, get_auth_context
@@ -237,7 +238,26 @@ def _validate_execution_items(items: list[str]) -> list[str]:
         )
     if len(normalized_items) > 50:
         raise HTTPException(status_code=422, detail="Too many execution items")
-    return normalized_items
+    return list(dict.fromkeys(normalized_items))
+
+
+async def _existing_email_tasks(
+    db: AsyncSession,
+    *,
+    auth_context: AuthContext,
+    email_id: int,
+    titles: list[str],
+) -> dict[str, TicketTask]:
+    result = await db.execute(
+        select(TicketTask).where(
+            TicketTask.user_id == auth_context.user_id,
+            TicketTask.organization_id == auth_context.organization_id,
+            TicketTask.source_type == "email",
+            TicketTask.related_email_id == email_id,
+            TicketTask.title.in_(titles),
+        )
+    )
+    return {task.title: task for task in result.scalars().all()}
 
 
 async def _fetch_source_email(
@@ -266,25 +286,55 @@ async def create_tasks_from_email(
     email = await _fetch_source_email(db, request, auth_context)
 
     thread_id = canonical_thread_key(email) or request.thread_id
-    tasks = [
-        TicketTask(
-            user_id=auth_context.user_id,
-            organization_id=auth_context.organization_id,
-            title=item,
-            status="open",
-            priority="normal",
-            source_type="email",
-            related_email_id=email.id,
-            related_thread_id=thread_id,
+    tasks_by_title: dict[str, TicketTask] = {}
+    created = 0
+    for attempt in range(2):
+        tasks_by_title = await _existing_email_tasks(
+            db,
+            auth_context=auth_context,
+            email_id=email.id,
+            titles=items,
         )
-        for item in items
-    ]
-    for task in tasks:
-        db.add(task)
+        missing_items = [item for item in items if item not in tasks_by_title]
+        if not missing_items:
+            break
 
-    await db.commit()
+        new_tasks = [
+            TicketTask(
+                user_id=auth_context.user_id,
+                organization_id=auth_context.organization_id,
+                title=item,
+                status="open",
+                priority="normal",
+                source_type="email",
+                related_email_id=email.id,
+                related_thread_id=thread_id,
+            )
+            for item in missing_items
+        ]
+        try:
+            for task in new_tasks:
+                db.add(task)
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            if attempt == 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "error_code": "email_task_idempotency_conflict",
+                        "message": "Email task replay conflict",
+                    },
+                ) from None
+            continue
+
+        tasks_by_title.update({task.title: task for task in new_tasks})
+        created = len(new_tasks)
+        break
+
+    tasks = [tasks_by_title[item] for item in items]
 
     return CreateTasksFromEmailResponse(
-        created=len(tasks),
+        created=created,
         tasks=[_task_response(task, email.message_id) for task in tasks],
     )

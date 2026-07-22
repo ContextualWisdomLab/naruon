@@ -1,9 +1,48 @@
+import asyncio
+import socket
+import ssl
 from unittest.mock import AsyncMock
 
 import pytest
 
 from db.models import TenantConfig
-from services.imap_worker import ImapSyncWorker
+from services.email_client import ValidatedImapDestination
+from services.imap_worker import ImapSyncWorker, _PinnedIMAP4SSL
+
+
+def _destination() -> ValidatedImapDestination:
+    return ValidatedImapDestination(
+        hostname="imap.example.com",
+        port=993,
+        family=socket.AF_INET,
+        socktype=socket.SOCK_STREAM,
+        proto=6,
+        sockaddr=("8.8.8.8", 993),
+    )
+
+
+def _patch_pinned_client(monkeypatch, imap_client):
+    imap_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    async def connect_socket(destination):
+        assert destination == _destination()
+        return imap_socket
+
+    def build_client(destination, connected_socket, ssl_context):
+        assert destination == _destination()
+        assert connected_socket is imap_socket
+        assert isinstance(ssl_context, ssl.SSLContext)
+        return imap_client
+
+    monkeypatch.setattr(
+        "services.imap_worker.connect_validated_imap_socket",
+        connect_socket,
+    )
+    monkeypatch.setattr(
+        "services.imap_worker._build_pinned_imap_client",
+        build_client,
+    )
+    return imap_socket
 
 
 @pytest.mark.asyncio
@@ -16,11 +55,13 @@ async def test_imap_worker_skips_disallowed_destination(monkeypatch):
     )
     connection_attempts = []
 
-    def fail_connect(*args, **kwargs):
+    async def fail_connect(*args, **kwargs):
         connection_attempts.append((args, kwargs))
         raise AssertionError("IMAP connection must not open before policy validation")
 
-    monkeypatch.setattr("services.imap_worker.aioimaplib.IMAP4_SSL", fail_connect)
+    monkeypatch.setattr(
+        "services.imap_worker.connect_validated_imap_socket", fail_connect
+    )
 
     await worker._sync_tenant(config)
 
@@ -42,15 +83,13 @@ async def test_imap_worker_sync_tenant_raises_when_connection_fails(monkeypatch)
 
     monkeypatch.setattr(
         "services.imap_worker.validate_imap_destination",
-        lambda host, port: (host, port),
+        lambda host, port: _destination(),
     )
-    monkeypatch.setattr(
-        "services.imap_worker.aioimaplib.IMAP4_SSL",
-        lambda host, port, **kwargs: imap_client,
-    )
+    imap_socket = _patch_pinned_client(monkeypatch, imap_client)
 
     with pytest.raises(Exception, match="IMAP Sync failed for user testuser"):
         await worker._sync_tenant(config)
+    assert imap_socket.fileno() == -1
 
 
 @pytest.mark.asyncio
@@ -94,12 +133,9 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
 
     monkeypatch.setattr(
         "services.imap_worker.validate_imap_destination",
-        lambda host, port: (host, port),
+        lambda host, port: _destination(),
     )
-    monkeypatch.setattr(
-        "services.imap_worker.aioimaplib.IMAP4_SSL",
-        lambda host, port, **kwargs: imap_client,
-    )
+    imap_socket = _patch_pinned_client(monkeypatch, imap_client)
     monkeypatch.setattr("services.imap_worker.AsyncSessionLocal", lambda: session)
     monkeypatch.setattr(
         "services.imap_worker.process_fetched_email",
@@ -129,6 +165,7 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
 
     session.commit.assert_awaited_once()
     session.rollback.assert_not_awaited()
+    assert imap_socket.fileno() == -1
 
 
 @pytest.mark.asyncio
@@ -149,12 +186,9 @@ async def test_imap_worker_requires_credentials_without_sensitive_log_names(
 
     monkeypatch.setattr(
         "services.imap_worker.validate_imap_destination",
-        lambda host, port: (host, port),
+        lambda host, port: _destination(),
     )
-    monkeypatch.setattr(
-        "services.imap_worker.aioimaplib.IMAP4_SSL",
-        lambda host, port, **kwargs: imap_client,
-    )
+    imap_socket = _patch_pinned_client(monkeypatch, imap_client)
 
     with pytest.raises(Exception, match="IMAP Sync failed for user imap-user"):
         await worker._sync_tenant(config)
@@ -162,6 +196,70 @@ async def test_imap_worker_requires_credentials_without_sensitive_log_names(
     assert "imap_password" not in caplog.text
     assert "password" not in caplog.text.lower()
     assert "imap-secret" not in caplog.text
+    assert imap_socket.fileno() == -1
+
+
+@pytest.mark.asyncio
+async def test_pinned_imap_client_uses_socket_without_dns_and_keeps_tls_hostname(
+    monkeypatch,
+):
+    imap_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    create_connection_calls = []
+    loop = asyncio.get_running_loop()
+
+    async def create_connection(protocol_factory, *args, **kwargs):
+        create_connection_calls.append((args, kwargs))
+        return object(), protocol_factory()
+
+    monkeypatch.setattr(loop, "create_connection", create_connection)
+    client = _PinnedIMAP4SSL(
+        _destination(),
+        imap_socket,
+        ssl_context=ssl.create_default_context(),
+    )
+    try:
+        await client._client_task
+    finally:
+        imap_socket.close()
+
+    assert len(create_connection_calls) == 1
+    args, kwargs = create_connection_calls[0]
+    assert args == ()
+    assert kwargs["sock"] is imap_socket
+    assert isinstance(kwargs["ssl"], ssl.SSLContext)
+    assert kwargs["server_hostname"] == "imap.example.com"
+
+
+@pytest.mark.asyncio
+async def test_imap_worker_closes_pinned_socket_when_client_build_fails(monkeypatch):
+    worker = ImapSyncWorker()
+    config = TenantConfig(
+        user_id="imap-user",
+        imap_server="imap.example.com",
+        imap_port=993,
+    )
+    imap_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    async def connect_socket(destination):
+        assert destination == _destination()
+        return imap_socket
+
+    def fail_build(*args, **kwargs):
+        raise RuntimeError("client build failed")
+
+    monkeypatch.setattr(
+        "services.imap_worker.connect_validated_imap_socket",
+        connect_socket,
+    )
+    monkeypatch.setattr(
+        "services.imap_worker._build_pinned_imap_client",
+        fail_build,
+    )
+
+    with pytest.raises(RuntimeError, match="client build failed"):
+        await worker._fetch_messages(config, _destination())
+
+    assert imap_socket.fileno() == -1
 
 
 def test_flags_indicate_seen_parses_seen_flag():
@@ -173,7 +271,7 @@ def test_flags_indicate_seen_parses_seen_flag():
     no_flags = ("OK", [(b"1 (RFC822 {%d}" % len(raw), raw)])
 
     assert flags_indicate_seen(seen[1]) is True
-    assert flags_indicate_seen(unseen[1]) is False   # other flags, but not \Seen
+    assert flags_indicate_seen(unseen[1]) is False  # other flags, but not \Seen
     assert flags_indicate_seen(no_flags[1]) is False  # no FLAGS section -> unread
     assert flags_indicate_seen([]) is False
     assert flags_indicate_seen(None) is False

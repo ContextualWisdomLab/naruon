@@ -874,6 +874,21 @@ Index(
     ),
 )
 
+_ticket_tasks_email_item_index = Index(
+    "uq_ticket_tasks_email_item",
+    TicketTask.user_id,
+    func.coalesce(TicketTask.organization_id, ""),
+    TicketTask.source_type,
+    TicketTask.related_email_id,
+    func.md5(TicketTask.title),
+    unique=True,
+    postgresql_where=(
+        (TicketTask.source_type == "email")
+        & (TicketTask.related_email_id.is_not(None))
+    ),
+)
+_ticket_tasks_email_item_index.ddl_if(dialect="postgresql")
+
 
 class Attachment(Base):
     __tablename__ = "email_attachments"

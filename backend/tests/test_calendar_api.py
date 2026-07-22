@@ -39,8 +39,15 @@ def _server_owned_google_credentials() -> dict[str, str]:
 @pytest.fixture
 def writeback_source_override():
     def apply(sources: list[WritebackSource]) -> None:
+        scoped_sources = [
+            source
+            if source.workspace_id is not None
+            else source.model_copy(update={"workspace_id": "workspace-org-acme"})
+            for source in sources
+        ]
+
         async def source_override() -> tuple[WritebackSource, ...]:
-            return tuple(sources)
+            return tuple(scoped_sources)
 
         app.dependency_overrides[calendar_api.get_writeback_sources] = source_override
 
@@ -677,6 +684,40 @@ def test_calendar_writeback_targeted_authorization_hides_source_existence(
     assert missing_response.json() == cross_org_response.json()
 
 
+def test_calendar_writeback_rejects_same_owner_cross_workspace_source(
+    writeback_source_override,
+):
+    writeback_source_override(
+        [
+            WritebackSource(
+                source_id="cross-workspace-calendar",
+                provider="fastmail",
+                protocol="caldav",
+                owner_id="testuser",
+                organization_id="org-acme",
+                workspace_id="workspace-rival",
+                capabilities=["read", "write", "etag"],
+                writeback_enabled=True,
+                etag="cross-workspace-etag",
+            )
+        ]
+    )
+
+    response = workspace_client.post(
+        "/api/calendar/writeback-intent",
+        json={
+            "action": "create",
+            "summary": "Launch review",
+            "target_source_id": "cross-workspace-calendar",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Not authorized for requested writeback source"
+    }
+
+
 def test_calendar_writeback_rejects_org_admin_cross_user_targeting(
     writeback_source_override,
 ):
@@ -888,6 +929,7 @@ def test_calendar_writeback_sources_use_db_backed_caldav_registry():
     assert body["provenance"]["source_provider"] == "Fastmail"
     assert "calendar_writeback_sources.organization_id" in fake_session.statement_text
     assert "calendar_writeback_sources.user_id" in fake_session.statement_text
+    assert "calendar_writeback_sources.workspace_id" in fake_session.statement_text
     assert "calendar_writeback_sources.source_protocol" in fake_session.statement_text
 
 
@@ -898,6 +940,35 @@ def test_calendar_writeback_db_registry_rejects_cross_org_rows():
                 source_uid="caldav_src_rival_primary",
                 organization_id="org-rival",
                 provider_name="Rival CalDAV",
+            )
+        ]
+    )
+
+    async def override_db():
+        yield fake_session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = workspace_client.post(
+            "/api/calendar/writeback-intent",
+            json={"action": "create", "summary": "Launch review"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "No customer-owned writeback source is available"
+    }
+
+
+def test_calendar_writeback_db_registry_rejects_cross_workspace_rows():
+    fake_session = FakeCalendarRegistrySession(
+        [
+            _calendar_writeback_source(
+                source_uid="caldav_src_rival_workspace",
+                workspace_id="workspace-rival",
+                provider_name="Rival Workspace CalDAV",
             )
         ]
     )

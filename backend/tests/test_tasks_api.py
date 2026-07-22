@@ -151,6 +151,17 @@ class MockTaskSession:
             organization_id = params.get("organization_id_1")
             source_type = params.get("source_type_1")
             related_email_id = params.get("email_id_1")
+            requested_titles = {
+                candidate
+                for key, value in params.items()
+                if key.startswith("task_title")
+                for candidate in (
+                    value
+                    if isinstance(value, (list, tuple, set))
+                    else (value,)
+                )
+                if isinstance(candidate, str)
+            }
             returns_joined_email = len(descriptions) > 1
             scoped_email_join = (
                 "email_records.user_id" in statement_text
@@ -198,6 +209,7 @@ class MockTaskSession:
                     organization_id is None or task.organization_id == organization_id
                 )
                 and (source_type is None or task.source_type == source_type)
+                and (not requested_titles or task.title in requested_titles)
                 and (
                     related_email_id is None
                     or (
@@ -1046,6 +1058,24 @@ def test_ticket_task_model_declares_reply_sla_unique_index():
     assert "email_id" in expression_text
 
 
+def test_ticket_task_model_declares_email_item_unique_index():
+    indexes = {index.name: index for index in TicketTask.__table__.indexes}
+
+    email_item_index = indexes["uq_ticket_tasks_email_item"]
+
+    assert email_item_index.unique is True
+    expression_text = " ".join(
+        str(expression).lower() for expression in email_item_index.expressions
+    )
+    assert "user_id" in expression_text
+    assert "coalesce" in expression_text
+    assert "organization_id" in expression_text
+    assert "source_type" in expression_text
+    assert "email_id" in expression_text
+    assert "md5" in expression_text
+    assert "task_title" in expression_text
+
+
 def test_create_ticket_tasks_from_email_links_source_email_and_thread(auth_client):
     mock_session.emails[14] = make_email()
 
@@ -1074,6 +1104,25 @@ def test_create_ticket_tasks_from_email_links_source_email_and_thread(auth_clien
     assert {task["related_thread_id"] for task in body["tasks"]} == {"thread-123"}
     assert all("user_id" not in task for task in body["tasks"])
     assert all("organization_id" not in task for task in body["tasks"])
+
+
+def test_create_ticket_tasks_from_email_replay_reuses_existing_tasks(auth_client):
+    mock_session.emails[14] = make_email()
+    payload = {
+        "source_email_id": "<message-14@example.com>",
+        "thread_id": "thread-123",
+        "items": ["담당자 확인", "일정 공유", "담당자 확인"],
+    }
+
+    first_response = auth_client.post("/api/tasks/from-email", json=payload)
+    second_response = auth_client.post("/api/tasks/from-email", json=payload)
+
+    assert first_response.status_code == 200, first_response.text
+    assert second_response.status_code == 200, second_response.text
+    assert first_response.json()["created"] == 2
+    assert second_response.json()["created"] == 0
+    assert second_response.json()["tasks"] == first_response.json()["tasks"]
+    assert len(mock_session.tasks) == 2
 
 
 def test_create_ticket_tasks_sanitizes_nul_bytes_from_execution_items(auth_client):

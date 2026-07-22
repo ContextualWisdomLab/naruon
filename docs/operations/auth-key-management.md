@@ -113,9 +113,12 @@
   `/protocol/openid-connect/{auth,token,logout}` endpoints are derived from the
   issuer URL.
 - Browser-side OIDC support does not mint local roles. The IdP token must still
-  satisfy the backend's signed claim contract: verified issuer/audience, subject,
-  explicit non-platform role, organization, groups, workspace, expiry, and no
-  unsupported critical headers.
+  satisfy the backend's signed claim contract: an RFC 9068 `typ=at+jwt` access
+  token, verified issuer, the dedicated `OIDC_API_AUDIENCE`, an `azp` or
+  `client_id` equal to `OIDC_CLIENT_ID`, subject, explicit non-platform role,
+  organization, groups, workspace, expiry, and no unsupported critical
+  headers. Configure the IdP to issue this API resource audience; browser ID
+  tokens and client-only audiences are rejected.
 
 ## Keycloak/Casdoor decision path
 

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -61,6 +62,26 @@ class _FailingSendWebSocket:
 class _AcceptOnlyWebSocket:
     async def accept(self):
         return None
+
+
+class _RecordingWebSocket:
+    def __init__(self):
+        self.accepted = False
+        self.sent: list[str] = []
+        self.send_event = asyncio.Event()
+        self.close_code: int | None = None
+        self.close_reason: str | None = None
+
+    async def accept(self):
+        self.accepted = True
+
+    async def send_text(self, text: str):
+        self.sent.append(text)
+        self.send_event.set()
+
+    async def close(self, *, code: int, reason: str):
+        self.close_code = code
+        self.close_reason = reason
 
 
 def _base64url_encode(raw: bytes) -> str:
@@ -236,13 +257,13 @@ async def test_runner_manager_records_durable_signal_events(monkeypatch):
         capture_connector_signal_event,
     )
 
-    await runner_ws.manager.connect(
+    connection_id = await runner_ws.manager.connect(
         _AcceptOnlyWebSocket(),
         "org-acme:registered",
         _auth_context(),
     )
-    await runner_ws.manager.touch("org-acme:registered")
-    await runner_ws.manager.disconnect("org-acme:registered")
+    await runner_ws.manager.touch(connection_id)
+    await runner_ws.manager.disconnect(connection_id)
 
     assert [event["state_code"] for event in recorded_events] == [
         "connected",
@@ -257,6 +278,150 @@ async def test_runner_manager_records_durable_signal_events(monkeypatch):
         event["workspace_id"] == "workspace-org-acme" for event in recorded_events
     )
     assert "nrn_registered-token" not in str(recorded_events)
+
+
+@pytest.mark.asyncio
+async def test_runner_replacement_cannot_be_removed_by_stale_disconnect():
+    manager = runner_ws.ConnectionManager()
+    first = _RecordingWebSocket()
+    replacement = _RecordingWebSocket()
+
+    first_id = await manager.connect(first, "org-acme:registered", _auth_context())
+    replacement_id = await manager.connect(
+        replacement,
+        "org-acme:registered",
+        _auth_context(),
+    )
+
+    assert first_id != replacement_id
+    assert first_id not in manager.active_connections
+    assert manager.active_connections[replacement_id] is replacement
+    assert first.close_code == status.WS_1008_POLICY_VIOLATION
+    assert first.close_reason == "Runner connection replaced"
+
+    await manager.disconnect(first_id)
+
+    assert manager.active_connections[replacement_id] is replacement
+    assert manager.snapshot(
+        "org-acme", "workspace-org-acme"
+    ).active_connection_count == 1
+
+
+@pytest.mark.asyncio
+async def test_runner_response_is_bound_to_dispatching_connection():
+    manager = runner_ws.ConnectionManager()
+    expected = _RecordingWebSocket()
+    other = _RecordingWebSocket()
+    expected_id = await manager.connect(
+        expected,
+        "org-acme:registered",
+        _auth_context(),
+    )
+    other_id = await manager.connect(
+        other,
+        "org-rival:registered",
+        AuthContext(
+            user_id="mallory",
+            role="member",
+            organization_id="org-rival",
+            group_ids=(),
+            workspace_id="workspace-org-rival",
+        ),
+    )
+
+    dispatch = asyncio.create_task(
+        manager.dispatch_command(
+            "org-acme",
+            "workspace-org-acme",
+            {"action": "probe"},
+            timeout_seconds=1,
+            schedule_retry=False,
+        )
+    )
+    await asyncio.wait_for(expected.send_event.wait(), timeout=1)
+    request_id = json.loads(expected.sent[0])["request_id"]
+    injected = json.dumps(
+        {"request_id": request_id, "status": "ok", "result": "injected"}
+    )
+
+    assert await manager.handle_runner_message(other_id, injected) is False
+    assert dispatch.done() is False
+    expected_response = json.dumps(
+        {"request_id": request_id, "status": "ok", "result": "expected"}
+    )
+    assert await manager.handle_runner_message(expected_id, expected_response) is True
+    assert (await dispatch)["result"] == "expected"
+
+
+@pytest.mark.asyncio
+async def test_runner_duplicate_request_id_does_not_replace_pending_waiter():
+    manager = runner_ws.ConnectionManager()
+    websocket = _RecordingWebSocket()
+    connection_id = await manager.connect(
+        websocket,
+        "org-acme:registered",
+        _auth_context(),
+    )
+    command = {"action": "probe", "request_id": "stable-request"}
+
+    first_dispatch = asyncio.create_task(
+        manager.dispatch_command(
+            "org-acme",
+            "workspace-org-acme",
+            command,
+            timeout_seconds=1,
+            schedule_retry=False,
+        )
+    )
+    await asyncio.wait_for(websocket.send_event.wait(), timeout=1)
+    second_response = await manager.dispatch_command(
+        "org-acme",
+        "workspace-org-acme",
+        command,
+        timeout_seconds=1,
+        schedule_retry=False,
+    )
+
+    assert second_response["status"] == "error"
+    assert second_response["error"] == "runner_request_conflict"
+    assert second_response["error_code"] == "runner_request_conflict"
+    assert second_response["provider_write_executed"] is False
+    assert await manager.handle_runner_message(
+        connection_id,
+        json.dumps({"request_id": "stable-request", "status": "ok"}),
+    )
+    assert await first_dispatch == {"request_id": "stable-request", "status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_runner_revocation_closes_socket_and_fails_pending_commands():
+    manager = runner_ws.ConnectionManager()
+    websocket = _RecordingWebSocket()
+    await manager.connect(websocket, "org-acme:registered", _auth_context())
+    dispatch = asyncio.create_task(
+        manager.dispatch_command(
+            "org-acme",
+            "workspace-org-acme",
+            {"action": "probe"},
+            timeout_seconds=1,
+            schedule_retry=False,
+        )
+    )
+    await asyncio.wait_for(websocket.send_event.wait(), timeout=1)
+
+    revoked_count = await manager.revoke_organization_connections("org-acme")
+
+    assert revoked_count == 1
+    assert websocket.close_code == status.WS_1008_POLICY_VIOLATION
+    assert websocket.close_reason == "Runner credentials rotated"
+    dispatch_response = await dispatch
+    assert dispatch_response["status"] == "error"
+    assert dispatch_response["error"] == "runner_connection_revoked"
+    assert dispatch_response["error_code"] == "runner_connection_revoked"
+    assert dispatch_response["provider_write_executed"] is False
+    assert manager.snapshot(
+        "org-acme", "workspace-org-acme"
+    ).connection_state == "not_connected"
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,7 @@ def _clear_runtime_settings(monkeypatch) -> None:
         "AUTH_SESSION_HMAC_SECRET",
         "OIDC_ISSUER_URL",
         "OIDC_CLIENT_ID",
+        "OIDC_API_AUDIENCE",
         "OIDC_JWKS_URL",
         "ALLOWED_OIDC_HOSTS",
     ):
@@ -94,7 +95,8 @@ def test_start_backend_rejects_partial_oidc_configuration(monkeypatch, tmp_path)
     monkeypatch.chdir(tmp_path)
 
     assert start_backend.validate_runtime_settings() == [
-        "OIDC_ISSUER_URL, OIDC_CLIENT_ID, and OIDC_JWKS_URL must be set together"
+        "OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_API_AUDIENCE, and "
+        "OIDC_JWKS_URL must be set together"
     ]
 
 
@@ -106,6 +108,7 @@ def test_start_backend_rejects_oidc_without_allowed_hosts(monkeypatch, tmp_path)
     monkeypatch.setenv("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
     monkeypatch.setenv("OIDC_ISSUER_URL", "https://login.example.test/realms/naruon")
     monkeypatch.setenv("OIDC_CLIENT_ID", "naruon-api")
+    monkeypatch.setenv("OIDC_API_AUDIENCE", "https://api.example.test/naruon")
     monkeypatch.setenv("OIDC_JWKS_URL", "https://login.example.test/realms/naruon/jwks")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.chdir(tmp_path)
@@ -123,6 +126,7 @@ def test_start_backend_rejects_untrusted_oidc_jwks_host(monkeypatch, tmp_path):
     monkeypatch.setenv("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
     monkeypatch.setenv("OIDC_ISSUER_URL", "https://login.example.test/realms/naruon")
     monkeypatch.setenv("OIDC_CLIENT_ID", "naruon-api")
+    monkeypatch.setenv("OIDC_API_AUDIENCE", "https://api.example.test/naruon")
     monkeypatch.setenv("OIDC_JWKS_URL", "https://127.0.0.1/jwks")
     monkeypatch.setenv("ALLOWED_OIDC_HOSTS", "login.example.test")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -144,6 +148,7 @@ def test_start_backend_rejects_oidc_jwks_host_outside_issuer_domain(
     monkeypatch.setenv("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
     monkeypatch.setenv("OIDC_ISSUER_URL", "https://login.example.test/realms/naruon")
     monkeypatch.setenv("OIDC_CLIENT_ID", "naruon-api")
+    monkeypatch.setenv("OIDC_API_AUDIENCE", "https://api.example.test/naruon")
     monkeypatch.setenv("OIDC_JWKS_URL", "https://jwks.example.test/realms/naruon/jwks")
     monkeypatch.setenv("ALLOWED_OIDC_HOSTS", "login.example.test,jwks.example.test")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -171,6 +176,7 @@ def test_start_backend_rejects_oidc_hostname_resolving_private_address(
     monkeypatch.setenv("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
     monkeypatch.setenv("OIDC_ISSUER_URL", "https://login.example.test/realms/naruon")
     monkeypatch.setenv("OIDC_CLIENT_ID", "naruon-api")
+    monkeypatch.setenv("OIDC_API_AUDIENCE", "https://api.example.test/naruon")
     monkeypatch.setenv("OIDC_JWKS_URL", "https://login.example.test/realms/naruon/jwks")
     monkeypatch.setenv("ALLOWED_OIDC_HOSTS", "login.example.test")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))

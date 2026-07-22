@@ -1,6 +1,8 @@
 import asyncio
 import datetime
 import logging
+import socket
+import ssl
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -9,7 +11,11 @@ from sqlalchemy import select
 
 from db.models import Email, TenantConfig
 from db.session import AsyncSessionLocal
-from services.email_client import validate_imap_destination
+from services.email_client import (
+    ValidatedImapDestination,
+    connect_validated_imap_socket,
+    validate_imap_destination,
+)
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.exceptions import EmailParseError
@@ -98,8 +104,60 @@ async def process_fetched_email(
         await extract_knowledge_from_self_sent(session, new_email, owner_addresses)
     return new_email
 
+
 logger = logging.getLogger(__name__)
 MAX_IMAP_FETCH_MESSAGES = 10
+
+
+class _PinnedIMAP4SSL(aioimaplib.IMAP4_SSL):
+    """aioimaplib client using a validated socket and the original TLS hostname."""
+
+    def __init__(
+        self,
+        destination: ValidatedImapDestination,
+        pinned_socket: socket.socket,
+        *,
+        ssl_context: ssl.SSLContext,
+    ) -> None:
+        self._pinned_socket = pinned_socket
+        super().__init__(
+            destination.hostname,
+            destination.port,
+            ssl_context=ssl_context,
+        )
+
+    def create_client(
+        self,
+        host: str,
+        port: int,
+        loop=None,
+        conn_lost_cb=None,
+        ssl_context: ssl.SSLContext | None = None,
+    ) -> None:
+        del port
+        local_loop = loop if loop is not None else asyncio.get_running_loop()
+        tls_context = ssl_context or ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        self.protocol = aioimaplib.IMAP4ClientProtocol(local_loop, conn_lost_cb)
+        self._client_task = local_loop.create_task(
+            local_loop.create_connection(
+                lambda: self.protocol,
+                sock=self._pinned_socket,
+                ssl=tls_context,
+                server_hostname=host,
+            )
+        )
+
+
+def _build_pinned_imap_client(
+    destination: ValidatedImapDestination,
+    imap_socket: socket.socket,
+    ssl_context: ssl.SSLContext,
+) -> aioimaplib.IMAP4_SSL:
+    return _PinnedIMAP4SSL(
+        destination,
+        imap_socket,
+        ssl_context=ssl_context,
+    )
 
 
 def flags_indicate_seen(fetch_data) -> bool:
@@ -112,7 +170,11 @@ def flags_indicate_seen(fetch_data) -> bool:
     for item in fetch_data or []:
         parts = item if isinstance(item, (tuple, list)) else (item,)
         for part in parts:
-            raw = part if isinstance(part, bytes) else str(part).encode("utf-8", "replace")
+            raw = (
+                part
+                if isinstance(part, bytes)
+                else str(part).encode("utf-8", "replace")
+            )
             upper = raw.upper()
             if b"FLAGS" in upper and b"\\SEEN" in upper:
                 return True
@@ -207,25 +269,26 @@ class ImapSyncWorker:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _sync_tenant(self, config: TenantConfig | ImapSyncConfig):
-        imap_server = str(config.imap_server)
-        imap_port = int(config.imap_port)  # type: ignore[arg-type]
         try:
-            imap_server, imap_port = validate_imap_destination(imap_server, imap_port)
+            destination = validate_imap_destination(
+                str(config.imap_server),
+                int(config.imap_port),  # type: ignore[arg-type]
+            )
         except ValueError:
             logger.info(
                 "Skipping IMAP sync for user %s due to mail destination policy",
                 config.user_id,
             )
             return 0
-        
+
         logger.info(
             "Connecting to IMAP server %s:%s for user %s",
-            imap_server,
-            imap_port,
+            destination.hostname,
+            destination.port,
             config.user_id,
         )
         try:
-            messages = await self._fetch_messages(config, imap_server, imap_port)
+            messages = await self._fetch_messages(config, destination)
             imported_count = await self._import_messages(config, messages)
             logger.info(
                 "Successfully synced IMAP server for user %s with %s imported messages.",
@@ -246,67 +309,72 @@ class ImapSyncWorker:
     async def _fetch_messages(
         self,
         config: TenantConfig,
-        imap_server: str | None = None,
-        imap_port: int | None = None,
+        destination: ValidatedImapDestination | None = None,
     ) -> list[bytes]:
-        if imap_server is None or imap_port is None:
-            imap_server, imap_port = self._validated_destination(config)
-        import ssl
+        if destination is None:
+            destination = self._validated_destination(config)
         ssl_context = ssl.create_default_context()
-        imap_client = aioimaplib.IMAP4_SSL(
-            imap_server, imap_port, ssl_context=ssl_context
-        )
+        imap_socket = await connect_validated_imap_socket(destination)
         try:
-            await imap_client.wait_hello_from_server()
-            logger.info(
-                "Successfully connected to IMAP server for user %s.",
-                config.user_id,
+            imap_client = _build_pinned_imap_client(
+                destination,
+                imap_socket,
+                ssl_context,
             )
-            if not config.imap_username or not config.imap_password:
-                logger.error(
-                    "IMAP account configuration incomplete for user %s.",
-                    config.user_id,
-                )
-                raise RuntimeError(
-                    f"IMAP account configuration incomplete for user {config.user_id}"
-                )
-
-            resp, _data = await imap_client.login(
-                config.imap_username, config.imap_password
-            )
-            if resp != "OK":
-                raise RuntimeError("IMAP authentication failed")
-
-            select_resp, _select_data = await imap_client.select("INBOX")
-            if select_resp != "OK":
-                raise RuntimeError("IMAP mailbox selection failed")
-
-            search_resp, search_data = await imap_client.search("ALL")
-            if search_resp != "OK":
-                raise RuntimeError("IMAP message search failed")
-
-            messages: list[tuple[bytes, bool]] = []
-            message_numbers = self._message_numbers_from_search(search_data)
-            for message_number in message_numbers[-MAX_IMAP_FETCH_MESSAGES:]:
-                fetch_resp, fetch_data = await imap_client.fetch(
-                    message_number, "(RFC822 FLAGS)"
-                )
-                if fetch_resp != "OK":
-                    continue
-                is_read = flags_indicate_seen(fetch_data)
-                for raw in self._extract_rfc822_messages(fetch_data):
-                    messages.append((raw, is_read))
-            return messages
-        finally:
             try:
-                if hasattr(imap_client, "protocol") and imap_client.protocol:
-                    await imap_client.logout()
-            except Exception as logout_err:
-                logger.warning(
-                    "Error during IMAP logout for user %s: %s",
+                await imap_client.wait_hello_from_server()
+                logger.info(
+                    "Successfully connected to IMAP server for user %s.",
                     config.user_id,
-                    type(logout_err).__name__,
                 )
+                if not config.imap_username or not config.imap_password:
+                    logger.error(
+                        "IMAP account configuration incomplete for user %s.",
+                        config.user_id,
+                    )
+                    raise RuntimeError(
+                        "IMAP account configuration incomplete for "
+                        f"user {config.user_id}"
+                    )
+
+                resp, _data = await imap_client.login(
+                    config.imap_username, config.imap_password
+                )
+                if resp != "OK":
+                    raise RuntimeError("IMAP authentication failed")
+
+                select_resp, _select_data = await imap_client.select("INBOX")
+                if select_resp != "OK":
+                    raise RuntimeError("IMAP mailbox selection failed")
+
+                search_resp, search_data = await imap_client.search("ALL")
+                if search_resp != "OK":
+                    raise RuntimeError("IMAP message search failed")
+
+                messages: list[tuple[bytes, bool]] = []
+                message_numbers = self._message_numbers_from_search(search_data)
+                for message_number in message_numbers[-MAX_IMAP_FETCH_MESSAGES:]:
+                    fetch_resp, fetch_data = await imap_client.fetch(
+                        message_number, "(RFC822 FLAGS)"
+                    )
+                    if fetch_resp != "OK":
+                        continue
+                    is_read = flags_indicate_seen(fetch_data)
+                    for raw in self._extract_rfc822_messages(fetch_data):
+                        messages.append((raw, is_read))
+                return messages
+            finally:
+                try:
+                    if hasattr(imap_client, "protocol") and imap_client.protocol:
+                        await imap_client.logout()
+                except Exception as logout_err:
+                    logger.warning(
+                        "Error during IMAP logout for user %s: %s",
+                        config.user_id,
+                        type(logout_err).__name__,
+                    )
+        finally:
+            imap_socket.close()
 
     async def _import_messages(
         self, config: TenantConfig, messages: list[tuple[bytes, bool]]
@@ -342,7 +410,10 @@ class ImapSyncWorker:
                 raise
         return imported_count
 
-    def _validated_destination(self, config: TenantConfig) -> tuple[str, int]:
+    def _validated_destination(
+        self,
+        config: TenantConfig,
+    ) -> ValidatedImapDestination:
         return validate_imap_destination(
             str(config.imap_server),
             int(config.imap_port),  # type: ignore[arg-type]
@@ -388,6 +459,4 @@ class ImapSyncWorker:
         header_block = value.split(b"\r\n\r\n", maxsplit=1)[0]
         if header_block == value:
             header_block = value.split(b"\n\n", maxsplit=1)[0]
-        return b":" in header_block and (
-            b"\r\n\r\n" in value or b"\n\n" in value
-        )
+        return b":" in header_block and (b"\r\n\r\n" in value or b"\n\n" in value)

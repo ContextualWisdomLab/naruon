@@ -38,6 +38,7 @@ class RunnerConnectionRecord:
     organization_id: str
     workspace_id: str
     connected_at: str
+    credential_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -60,26 +61,50 @@ class ConnectionManager:
         self.connection_records: dict[str, RunnerConnectionRecord] = {}
         self.last_seen_by_org: dict[str, str] = {}
         self.last_disconnect_by_org: dict[str, str] = {}
-        self.pending_responses: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self.pending_responses: dict[
+            tuple[str, str], asyncio.Future[dict[str, Any]]
+        ] = {}
+        self._state_lock = asyncio.Lock()
 
     async def connect(
         self,
         ws: WebSocket,
-        connection_key: str,
+        credential_key: str,
         auth_context: AuthContext,
-    ):
-        await ws.accept()
+    ) -> str:
         organization_id = auth_context.organization_id
         if not organization_id:
             raise _policy_violation()
+        await ws.accept()
+        connection_id = f"runner_conn_{uuid.uuid4().hex}"
         now = _utc_now_iso()
-        self.active_connections[connection_key] = ws
-        self.connection_records[connection_key] = RunnerConnectionRecord(
-            organization_id=organization_id,
-            workspace_id=auth_context.workspace_id,
-            connected_at=now,
-        )
-        self.last_seen_by_org[organization_id] = now
+        replaced_connections: list[tuple[str, WebSocket]] = []
+        async with self._state_lock:
+            for existing_id, record in list(self.connection_records.items()):
+                if (
+                    record.organization_id == organization_id
+                    and record.workspace_id == auth_context.workspace_id
+                ):
+                    existing_ws = self._detach_connection_locked(
+                        existing_id,
+                        error_code="runner_connection_replaced",
+                    )
+                    if existing_ws is not None:
+                        replaced_connections.append((existing_id, existing_ws))
+            self.active_connections[connection_id] = ws
+            self.connection_records[connection_id] = RunnerConnectionRecord(
+                organization_id=organization_id,
+                workspace_id=auth_context.workspace_id,
+                connected_at=now,
+                credential_key=credential_key,
+            )
+            self.last_seen_by_org[organization_id] = now
+        for replaced_id, replaced_ws in replaced_connections:
+            await self._close_websocket_safely(
+                replaced_id,
+                replaced_ws,
+                reason="Runner connection replaced",
+            )
         logger.info(
             "Runner connected for organization %s workspace %s",
             organization_id,
@@ -92,11 +117,15 @@ class ConnectionManager:
             state_code="connected",
             detail_text="outbound runner socket connected",
         )
+        return connection_id
 
-    async def disconnect(self, connection_key: str):
-        record = self.connection_records.pop(connection_key, None)
-        if connection_key in self.active_connections:
-            del self.active_connections[connection_key]
+    async def disconnect(self, connection_id: str):
+        async with self._state_lock:
+            record = self.connection_records.get(connection_id)
+            self._detach_connection_locked(
+                connection_id,
+                error_code="runner_disconnected",
+            )
         if record:
             disconnected_at = _utc_now_iso()
             self.last_disconnect_by_org[record.organization_id] = disconnected_at
@@ -113,8 +142,9 @@ class ConnectionManager:
                 detail_text="outbound runner socket disconnected",
             )
 
-    async def touch(self, connection_key: str):
-        record = self.connection_records.get(connection_key)
+    async def touch(self, connection_id: str):
+        async with self._state_lock:
+            record = self.connection_records.get(connection_id)
         if record:
             self.last_seen_by_org[record.organization_id] = _utc_now_iso()
             await _record_connector_signal_event_safely(
@@ -125,6 +155,36 @@ class ConnectionManager:
                 detail_text="outbound runner heartbeat received",
             )
 
+    async def revoke_organization_connections(self, organization_id: str) -> int:
+        revoked: list[tuple[str, WebSocket, RunnerConnectionRecord]] = []
+        async with self._state_lock:
+            for connection_id, record in list(self.connection_records.items()):
+                if record.organization_id != organization_id:
+                    continue
+                websocket = self._detach_connection_locked(
+                    connection_id,
+                    error_code="runner_connection_revoked",
+                )
+                if websocket is not None:
+                    revoked.append((connection_id, websocket, record))
+            if revoked:
+                self.last_disconnect_by_org[organization_id] = _utc_now_iso()
+
+        for connection_id, websocket, record in revoked:
+            await self._close_websocket_safely(
+                connection_id,
+                websocket,
+                reason="Runner credentials rotated",
+            )
+            await _record_connector_signal_event_safely(
+                organization_id=record.organization_id,
+                workspace_id=record.workspace_id,
+                signal_key="connector_heartbeat",
+                state_code="revoked",
+                detail_text="outbound runner socket revoked after credential rotation",
+            )
+        return len(revoked)
+
     async def dispatch_command(
         self,
         organization_id: str,
@@ -134,23 +194,6 @@ class ConnectionManager:
         timeout_seconds: float = 30,
         schedule_retry: bool = True,
     ) -> dict[str, Any]:
-        connection = self._active_connection_for_scope(organization_id, workspace_id)
-        if connection is None:
-            await _record_connector_command_event_safely(
-                organization_id=organization_id,
-                workspace_id=workspace_id,
-                state_code="runner_not_connected",
-                detail_text="runner command dispatch failed",
-            )
-            return await _dispatch_error_with_retry(
-                organization_id=organization_id,
-                workspace_id=workspace_id,
-                command=command,
-                error_code="runner_not_connected",
-                runner_request_id=None,
-                schedule_retry=schedule_retry,
-            )
-
         request_id = _valid_request_id(command.get("request_id")) or (
             f"runner_req_{uuid.uuid4().hex}"
         )
@@ -158,7 +201,40 @@ class ConnectionManager:
         outbound_command["request_id"] = request_id
         loop = asyncio.get_running_loop()
         response_future: asyncio.Future[dict[str, Any]] = loop.create_future()
-        self.pending_responses[request_id] = response_future
+        async with self._state_lock:
+            active_connection = self._active_connection_for_scope_locked(
+                organization_id,
+                workspace_id,
+            )
+            if active_connection is None:
+                pending_key = None
+                reservation_error = "runner_not_connected"
+            else:
+                connection_id, connection = active_connection
+                pending_key = (connection_id, request_id)
+                if pending_key in self.pending_responses:
+                    reservation_error = "runner_request_conflict"
+                else:
+                    self.pending_responses[pending_key] = response_future
+                    reservation_error = None
+
+        if reservation_error is not None:
+            await _record_connector_command_event_safely(
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                state_code=reservation_error,
+                detail_text="runner command dispatch failed",
+            )
+            return await _dispatch_error_with_retry(
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                command=outbound_command,
+                error_code=reservation_error,
+                runner_request_id=request_id,
+                schedule_retry=schedule_retry,
+            )
+
+        assert pending_key is not None
         try:
             await connection.send_text(
                 json.dumps(outbound_command, separators=(",", ":"), sort_keys=True)
@@ -194,6 +270,21 @@ class ConnectionManager:
                 runner_request_id=request_id,
                 schedule_retry=schedule_retry,
             )
+        except RunnerConnectionUnavailable as exc:
+            await _record_connector_command_event_safely(
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                state_code=exc.error_code,
+                detail_text="runner connection became unavailable",
+            )
+            return await _dispatch_error_with_retry(
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                command=outbound_command,
+                error_code=exc.error_code,
+                runner_request_id=request_id,
+                schedule_retry=schedule_retry,
+            )
         except Exception:
             logger.exception("Runner command dispatch failed.")
             await _record_connector_command_event_safely(
@@ -211,9 +302,11 @@ class ConnectionManager:
                 schedule_retry=schedule_retry,
             )
         finally:
-            self.pending_responses.pop(request_id, None)
+            async with self._state_lock:
+                if self.pending_responses.get(pending_key) is response_future:
+                    self.pending_responses.pop(pending_key, None)
 
-    async def handle_runner_message(self, connection_key: str, data: str) -> bool:
+    async def handle_runner_message(self, connection_id: str, data: str) -> bool:
         try:
             payload = json.loads(data)
         except json.JSONDecodeError:
@@ -223,11 +316,12 @@ class ConnectionManager:
         request_id = _valid_request_id(payload.get("request_id"))
         if request_id is None:
             return False
-        response_future = self.pending_responses.get(request_id)
-        if response_future is None or response_future.done():
-            return False
-        response_future.set_result(payload)
-        record = self.connection_records.get(connection_key)
+        async with self._state_lock:
+            response_future = self.pending_responses.get((connection_id, request_id))
+            if response_future is None or response_future.done():
+                return False
+            response_future.set_result(payload)
+            record = self.connection_records.get(connection_id)
         if record:
             await _record_connector_command_event_safely(
                 organization_id=record.organization_id,
@@ -273,16 +367,56 @@ class ConnectionManager:
                 response_future.cancel()
         self.pending_responses.clear()
 
-    def _active_connection_for_scope(
+    def _active_connection_for_scope_locked(
         self, organization_id: str, workspace_id: str
-    ) -> WebSocket | None:
-        for connection_key, record in self.connection_records.items():
+    ) -> tuple[str, WebSocket] | None:
+        for connection_id, record in reversed(self.connection_records.items()):
             if (
                 record.organization_id == organization_id
                 and record.workspace_id == workspace_id
             ):
-                return self.active_connections.get(connection_key)
+                connection = self.active_connections.get(connection_id)
+                if connection is not None:
+                    return connection_id, connection
         return None
+
+    def _detach_connection_locked(
+        self,
+        connection_id: str,
+        *,
+        error_code: str,
+    ) -> WebSocket | None:
+        self.connection_records.pop(connection_id, None)
+        websocket = self.active_connections.pop(connection_id, None)
+        for pending_key, response_future in list(self.pending_responses.items()):
+            if pending_key[0] != connection_id:
+                continue
+            self.pending_responses.pop(pending_key, None)
+            if not response_future.done():
+                response_future.set_exception(RunnerConnectionUnavailable(error_code))
+        return websocket
+
+    @staticmethod
+    async def _close_websocket_safely(
+        connection_id: str,
+        websocket: WebSocket,
+        *,
+        reason: str,
+    ) -> None:
+        try:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=reason)
+        except Exception:
+            logger.debug(
+                "Runner WebSocket close skipped for %s",
+                connection_id,
+                exc_info=True,
+            )
+
+
+class RunnerConnectionUnavailable(RuntimeError):
+    def __init__(self, error_code: str):
+        super().__init__(error_code)
+        self.error_code = error_code
 
 
 manager = ConnectionManager()
@@ -462,16 +596,16 @@ async def _runner_connection_key(token: str, auth_context: AuthContext) -> str:
 @router.websocket("/ws/runner/{token}")
 async def runner_endpoint(websocket: WebSocket, token: str):
     auth_context = _auth_context_from_websocket(websocket)
-    connection_key = await _runner_connection_key(token, auth_context)
-    await manager.connect(websocket, connection_key, auth_context)
+    credential_key = await _runner_connection_key(token, auth_context)
+    connection_id = await manager.connect(websocket, credential_key, auth_context)
     try:
         while True:
             data = await websocket.receive_text()
-            await manager.touch(connection_key)
-            if await manager.handle_runner_message(connection_key, data):
+            await manager.touch(connection_id)
+            if await manager.handle_runner_message(connection_id, data):
                 continue
             await websocket.send_text(f"Naruon ack: {data}")
     except WebSocketDisconnect:
         pass
     finally:
-        await manager.disconnect(connection_key)
+        await manager.disconnect(connection_id)

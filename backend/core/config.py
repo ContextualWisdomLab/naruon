@@ -158,6 +158,7 @@ class Settings(BaseSettings):
     # OIDC Settings
     OIDC_ISSUER_URL: str | None = None
     OIDC_CLIENT_ID: str | None = None
+    OIDC_API_AUDIENCE: str | None = None
     OIDC_JWKS_URL: str | None = None
     ALLOWED_OIDC_HOSTS: str = ""
 
@@ -192,6 +193,7 @@ class Settings(BaseSettings):
         oidc_values = {
             "OIDC_ISSUER_URL": self.OIDC_ISSUER_URL,
             "OIDC_CLIENT_ID": self.OIDC_CLIENT_ID,
+            "OIDC_API_AUDIENCE": self.OIDC_API_AUDIENCE,
             "OIDC_JWKS_URL": self.OIDC_JWKS_URL,
         }
         configured_oidc_values = {
@@ -201,9 +203,14 @@ class Settings(BaseSettings):
         }
         if configured_oidc_values and len(configured_oidc_values) != len(oidc_values):
             raise ValueError(
-                "OIDC_ISSUER_URL, OIDC_CLIENT_ID, and OIDC_JWKS_URL must be set together"
+                "OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_API_AUDIENCE, and "
+                "OIDC_JWKS_URL must be set together"
             )
         if len(configured_oidc_values) == len(oidc_values):
+            if self.OIDC_API_AUDIENCE == self.OIDC_CLIENT_ID:
+                raise ValueError(
+                    "OIDC_API_AUDIENCE must be distinct from OIDC_CLIENT_ID"
+                )
             allowed_oidc_hosts = parse_allowed_hosts(self.ALLOWED_OIDC_HOSTS)
             if not allowed_oidc_hosts:
                 raise ValueError(

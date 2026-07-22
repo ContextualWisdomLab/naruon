@@ -14,6 +14,7 @@ from api.auth import (
     is_admin_role,
     is_tenant_admin_role,
 )
+from api.runner_ws import manager as runner_connection_manager
 from core.config import settings
 from db.models import WorkspaceRunnerConfig
 from db.session import get_db
@@ -143,6 +144,7 @@ async def rotate_runner_token(
             status_code=503,
             detail="Server encryption key is not configured. Contact your workspace administrator.",
         ) from exc
+    await runner_connection_manager.revoke_organization_connections(organization_id)
     return RunnerRotateResponse(
         workspace_id=config.workspace_id,
         configured=True,

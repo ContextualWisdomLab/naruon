@@ -81,31 +81,37 @@ class SmokeReport:
 
 
 async def _check_imap(spec: LiveAccountSpec) -> ProtocolResult:
-    import aioimaplib
-
-    from services.email_client import validate_imap_destination
+    from services.email_client import (
+        connect_validated_imap_socket,
+        validate_imap_destination,
+    )
+    from services.imap_worker import _build_pinned_imap_client
 
     assert spec.imap is not None
-    host, port = validate_imap_destination(spec.imap.host, spec.imap.port)
+    destination = validate_imap_destination(spec.imap.host, spec.imap.port)
     ssl_context = ssl.create_default_context()
-    client = aioimaplib.IMAP4_SSL(host, port, ssl_context=ssl_context)
+    imap_socket = await connect_validated_imap_socket(destination)
     try:
-        await asyncio.wait_for(client.wait_hello_from_server(), timeout=30)
-        if not spec.email or not spec.password:
-            return ProtocolResult("imap", spec.index, False, detail="missing creds")
-        resp, _ = await client.login(spec.email, spec.password)
-        if resp != "OK":
-            return ProtocolResult("imap", spec.index, False, detail="login failed")
-        select_resp, _ = await client.select("INBOX")
-        ok = select_resp == "OK"
-        return ProtocolResult(
-            "imap", spec.index, ok, detail="select ok" if ok else "select failed"
-        )
-    finally:
+        client = _build_pinned_imap_client(destination, imap_socket, ssl_context)
         try:
-            await client.logout()
-        except Exception:  # noqa: BLE001
-            pass
+            await asyncio.wait_for(client.wait_hello_from_server(), timeout=30)
+            if not spec.email or not spec.password:
+                return ProtocolResult("imap", spec.index, False, detail="missing creds")
+            resp, _ = await client.login(spec.email, spec.password)
+            if resp != "OK":
+                return ProtocolResult("imap", spec.index, False, detail="login failed")
+            select_resp, _ = await client.select("INBOX")
+            ok = select_resp == "OK"
+            return ProtocolResult(
+                "imap", spec.index, ok, detail="select ok" if ok else "select failed"
+            )
+        finally:
+            try:
+                await client.logout()
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        imap_socket.close()
 
 
 async def _check_pop3(spec: LiveAccountSpec) -> ProtocolResult:
@@ -275,13 +281,9 @@ async def seed_and_smoke(environ: dict[str, str] | None = None) -> SmokeReport:
         raise SmokeError(
             "no NARUON_TEST_EMAIL{N} accounts were seeded; nothing to verify."
         )
-    seeded_protocols = sum(
-        len(summary.get("protocols") or []) for summary in summaries
-    )
+    seeded_protocols = sum(len(summary.get("protocols") or []) for summary in summaries)
     if seeded_protocols == 0:
-        raise SmokeError(
-            "seeding produced no configured protocols; check the secrets."
-        )
+        raise SmokeError("seeding produced no configured protocols; check the secrets.")
     discovery_failures = [
         summary["user_id"]
         for summary in summaries
@@ -315,9 +317,7 @@ def main() -> int:
         )
 
     if report.failures:
-        print(
-            f"Mail smoke test FAILED: {len(report.failures)} unreachable protocol(s)"
-        )
+        print(f"Mail smoke test FAILED: {len(report.failures)} unreachable protocol(s)")
         return 1
     if not report.reached:
         # Every configured protocol was skipped -- nothing was actually

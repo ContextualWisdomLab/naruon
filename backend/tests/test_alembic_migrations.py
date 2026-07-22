@@ -452,3 +452,17 @@ def test_merge_revision_reconciles_newsdom_document_and_carddav_heads():
     assert "op.create_table(" not in revision_text
     assert "op.add_column(" not in revision_text
     assert "op.drop_column(" not in revision_text
+
+
+def test_email_task_idempotency_migration_installs_unique_boundary():
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0018_email_task_idempotency.py"
+    )
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0018_email_task_idempotency"' in revision_text
+    assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
+    assert "uq_ticket_tasks_email_item" in revision_text
+    assert "md5(task_title)" in revision_text
+    assert "DELETE FROM ticket_tasks AS duplicate" in revision_text

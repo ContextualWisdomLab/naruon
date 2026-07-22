@@ -21,7 +21,12 @@ from core.url_validation import (  # noqa: E402
 DEFAULT_SERVER_HOST = "127.0.0.1"
 DEFAULT_SERVER_PORT = 8000
 REQUIRED_SETTINGS = ("DATABASE_URL", "AUTH_SESSION_HMAC_SECRET")
-OIDC_SETTINGS = ("OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_JWKS_URL")
+OIDC_SETTINGS = (
+    "OIDC_ISSUER_URL",
+    "OIDC_CLIENT_ID",
+    "OIDC_API_AUDIENCE",
+    "OIDC_JWKS_URL",
+)
 
 
 def _strip_env_value(value: str) -> str:
@@ -67,7 +72,9 @@ def validate_runtime_settings() -> list[str]:
     messages: list[str] = []
 
     missing_settings = [
-        setting_name for setting_name in REQUIRED_SETTINGS if not values.get(setting_name)
+        setting_name
+        for setting_name in REQUIRED_SETTINGS
+        if not values.get(setting_name)
     ]
     if missing_settings:
         checked = ", ".join(str(path) for path in checked_paths)
@@ -90,9 +97,12 @@ def validate_runtime_settings() -> list[str]:
     ]
     if configured_oidc and len(configured_oidc) != len(OIDC_SETTINGS):
         messages.append(
-            "OIDC_ISSUER_URL, OIDC_CLIENT_ID, and OIDC_JWKS_URL must be set together"
+            "OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_API_AUDIENCE, and "
+            "OIDC_JWKS_URL must be set together"
         )
     if len(configured_oidc) == len(OIDC_SETTINGS):
+        if values["OIDC_API_AUDIENCE"] == values["OIDC_CLIENT_ID"]:
+            messages.append("OIDC_API_AUDIENCE must be distinct from OIDC_CLIENT_ID")
         allowed_oidc_hosts = parse_allowed_hosts(values.get("ALLOWED_OIDC_HOSTS", ""))
         if not allowed_oidc_hosts:
             messages.append(

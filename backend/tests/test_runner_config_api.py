@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 import pytest
 
+from api import runner_config as runner_config_api
 from core.config import settings
 from db.models import WorkspaceRunnerConfig
 from db.session import get_db
@@ -175,7 +176,21 @@ def test_runner_config_uses_configured_control_plane_domain(admin_client):
     )
 
 
-def test_runner_rotation_includes_connector_bootstrap_contract(admin_client):
+def test_runner_rotation_includes_connector_bootstrap_contract(
+    admin_client, monkeypatch
+):
+    revoked_organizations: list[str] = []
+
+    async def revoke_connections(organization_id: str) -> int:
+        revoked_organizations.append(organization_id)
+        return 1
+
+    monkeypatch.setattr(
+        runner_config_api.runner_connection_manager,
+        "revoke_organization_connections",
+        revoke_connections,
+    )
+
     response = admin_client.post("/api/runner-config/rotate")
 
     assert response.status_code == 200
@@ -184,6 +199,7 @@ def test_runner_rotation_includes_connector_bootstrap_contract(admin_client):
     assert data["connector_manifest"]["network_mode"] == "outbound_only"
     assert data["connector_manifest"]["control_plane_domain"] == "naruon.net"
     assert "registration_token" not in data["connector_manifest"]
+    assert revoked_organizations == ["org-acme"]
 
 
 def test_system_admin_can_manage_runner_config(system_admin_client):

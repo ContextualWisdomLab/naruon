@@ -3930,7 +3930,10 @@ async def get_data_quality_surface(
     documents = await _scoped_rows(
         db,
         select(Document)
-        .where(Document.workspace_id == auth_context.workspace_id)
+        .where(
+            Document.workspace_id == auth_context.workspace_id,
+            Document.organization_id == auth_context.organization_id,
+        )
         .order_by(Document.created_at.desc(), Document.document_id.asc())
         .limit(8),
     )

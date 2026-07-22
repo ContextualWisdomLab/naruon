@@ -30,6 +30,7 @@ IMAP_PORT_NOT_ALLOWED = "IMAP port is not allowed"
 POP3_HOST_NOT_ALLOWED = "POP3 server is not allowed"
 POP3_PORT_NOT_ALLOWED = "POP3 port is not allowed"
 SMTP_TIMEOUT_SECONDS = 60
+IMAP_TIMEOUT_SECONDS = 60
 SMTP_EGRESS_PORTS = {25, 465, 587}
 IMAP_EGRESS_PORTS = {143, 993}
 POP3_EGRESS_PORTS = {110, 995}
@@ -45,6 +46,17 @@ class ValidatedSmtpDestination:
     proto: int
     sockaddr: tuple[Any, ...]
 
+
+@dataclass(frozen=True)
+class ValidatedImapDestination:
+    hostname: str
+    port: int
+    family: int
+    socktype: int
+    proto: int
+    sockaddr: tuple[Any, ...]
+
+
 @dataclass(frozen=True)
 class EmailMessageParams:
     to_address: str
@@ -53,13 +65,13 @@ class EmailMessageParams:
     in_reply_to: str | None = None
     references: str | None = None
 
+
 @dataclass(frozen=True)
 class SmtpConfig:
     smtp_server: str
     smtp_port: int
     smtp_username: str | None = None
     smtp_password: str | None = None
-
 
 
 def generate_oauth2_string(user: str, access_token: str) -> bytes:
@@ -102,21 +114,15 @@ def _parse_allowed_ports(
 
 
 def _parse_allowed_smtp_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_SMTP_PORTS, "SMTP", SMTP_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_SMTP_PORTS, "SMTP", SMTP_EGRESS_PORTS)
 
 
 def _parse_allowed_imap_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_IMAP_PORTS, "IMAP", IMAP_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_IMAP_PORTS, "IMAP", IMAP_EGRESS_PORTS)
 
 
 def _parse_allowed_pop3_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_POP3_PORTS, "POP3", POP3_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_POP3_PORTS, "POP3", POP3_EGRESS_PORTS)
 
 
 def _parse_allowed_smtp_hosts() -> set[str]:
@@ -291,10 +297,77 @@ def validate_imap_destination(
     imap_port: int,
     *,
     resolve_host: bool = True,
-) -> tuple[str, int]:
-    """Validate IMAP destination before any server-side network connection."""
-    normalized_host = validate_imap_host(imap_server, resolve_host=resolve_host)
-    return normalized_host, validate_imap_port(imap_port)
+) -> ValidatedImapDestination:
+    """Resolve and validate an IMAP destination for a pinned socket connection."""
+    normalized_host = validate_imap_host(imap_server, resolve_host=False)
+    validated_port = validate_imap_port(imap_port)
+    if resolve_host:
+        family, socktype, proto, sockaddr = _resolve_imap_connect_address(
+            normalized_host,
+            validated_port,
+        )
+    else:
+        family, socktype, proto, sockaddr = (
+            socket.AF_UNSPEC,
+            socket.SOCK_STREAM,
+            0,
+            (normalized_host, validated_port),
+        )
+    return ValidatedImapDestination(
+        hostname=normalized_host,
+        port=validated_port,
+        family=family,
+        socktype=socktype,
+        proto=proto,
+        sockaddr=sockaddr,
+    )
+
+
+def _resolve_imap_connect_address(
+    imap_server: str,
+    imap_port: int,
+) -> tuple[int, int, int, tuple[Any, ...]]:
+    """Resolve IMAP once and return a fully validated public socket target."""
+    address_infos = _resolve_all_public_mail_addresses(
+        imap_server,
+        imap_port,
+        IMAP_HOST_NOT_ALLOWED,
+    )
+    for family, socktype, proto, _, sockaddr in address_infos:
+        return family, socktype, proto, sockaddr
+    raise ValueError(IMAP_HOST_NOT_ALLOWED)
+
+
+def _validate_pinned_imap_sockaddr(sockaddr: tuple[Any, ...]) -> None:
+    """Reject hostnames and non-public addresses before an IMAP socket opens."""
+    if not sockaddr:
+        raise ValueError(IMAP_HOST_NOT_ALLOWED)
+    _validate_public_ip_address(str(sockaddr[0]), IMAP_HOST_NOT_ALLOWED)
+
+
+async def connect_validated_imap_socket(
+    imap_destination: ValidatedImapDestination,
+) -> socket.socket:
+    """Connect to the pre-resolved IMAP address without a second DNS lookup."""
+    _validate_pinned_imap_sockaddr(imap_destination.sockaddr)
+    imap_socket = socket.socket(
+        imap_destination.family,
+        imap_destination.socktype,
+        imap_destination.proto,
+    )
+    imap_socket.setblocking(False)
+    try:
+        await asyncio.wait_for(
+            asyncio.get_running_loop().sock_connect(
+                imap_socket,
+                imap_destination.sockaddr,
+            ),
+            timeout=IMAP_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        imap_socket.close()
+        raise
+    return imap_socket
 
 
 def validate_pop3_host(host: str, *, resolve_host: bool) -> str:
@@ -561,7 +634,9 @@ def build_email_message(
     message["To"] = _validate_email_header_value(message_params.to_address)
     message["Subject"] = _validate_email_header_value(message_params.subject)
     if message_params.in_reply_to:
-        message["In-Reply-To"] = _validate_email_header_value(message_params.in_reply_to)
+        message["In-Reply-To"] = _validate_email_header_value(
+            message_params.in_reply_to
+        )
     if message_params.references:
         message["References"] = _validate_email_header_value(message_params.references)
     message.set_content(message_params.body)
@@ -591,7 +666,9 @@ async def send_email(
         )
         return {"status": "simulated", "simulated": True}
 
-    smtp_destination = validate_smtp_destination(smtp_config.smtp_server, smtp_config.smtp_port)
+    smtp_destination = validate_smtp_destination(
+        smtp_config.smtp_server, smtp_config.smtp_port
+    )
 
     try:
         smtp_socket = await _connect_validated_smtp_socket(smtp_destination)

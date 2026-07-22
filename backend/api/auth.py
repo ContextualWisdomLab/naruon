@@ -24,6 +24,7 @@ from core.url_validation import (
 logger = logging.getLogger(__name__)
 OIDC_JWKS_TIMEOUT_SECONDS = 5
 OIDC_JWKS_MAX_RESPONSE_BYTES = 1024 * 1024
+OIDC_ACCESS_TOKEN_HEADER_TYPE = "at+jwt"
 
 
 class _PinnedHTTPSConnection(HTTPSConnection):
@@ -232,6 +233,8 @@ def _oidc_unverified_header(token: str) -> dict[str, Any]:
     _reject_unsupported_critical_headers(header)
     if header.get("alg") != "RS256":
         raise _authentication_error()
+    if header.get("typ") != OIDC_ACCESS_TOKEN_HEADER_TYPE:
+        raise _authentication_error()
     key_id = header.get("kid")
     if not isinstance(key_id, str) or not key_id.strip():
         raise _authentication_error()
@@ -239,7 +242,7 @@ def _oidc_unverified_header(token: str) -> dict[str, Any]:
 
 
 def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:
-    if not _cached_oidc_signing_keys:
+    if not _cached_oidc_signing_keys or not settings.OIDC_API_AUDIENCE:
         raise _authentication_error()
     header = _oidc_unverified_header(token)
     key_id = header["kid"].strip()
@@ -250,7 +253,7 @@ def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:
                 token,
                 signing_key.key,
                 algorithms=["RS256"],
-                audience=settings.OIDC_CLIENT_ID,
+                audience=settings.OIDC_API_AUDIENCE,
                 issuer=settings.OIDC_ISSUER_URL,
                 options={
                     "require": JWT_DECODE_REQUIRED_CLAIMS,
@@ -467,11 +470,18 @@ def _validate_session_metadata(
     payload: dict[str, Any], session_verifier: SessionVerifier
 ) -> None:
     if session_verifier == "oidc":
-        if not settings.OIDC_ISSUER_URL or not settings.OIDC_CLIENT_ID:
+        if (
+            not settings.OIDC_ISSUER_URL
+            or not settings.OIDC_CLIENT_ID
+            or not settings.OIDC_API_AUDIENCE
+        ):
             raise _authentication_error()
         if payload.get("iss") != settings.OIDC_ISSUER_URL:
             raise _authentication_error()
-        if settings.OIDC_CLIENT_ID not in _session_audience_claim(payload):
+        if settings.OIDC_API_AUDIENCE not in _session_audience_claim(payload):
+            raise _authentication_error()
+        authorized_client = payload.get("azp", payload.get("client_id"))
+        if authorized_client != settings.OIDC_CLIENT_ID:
             raise _authentication_error()
     else:
         if payload.get("ver") != 1:

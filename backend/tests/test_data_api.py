@@ -101,11 +101,23 @@ class MockAsyncSession:
                 ),
                 None,
             )
+            organization_id = next(
+                (
+                    value
+                    for key, value in params.items()
+                    if key.startswith("organization_id")
+                ),
+                None,
+            )
             rows = [
                 document
                 for document in self.documents
                 if (document_id is None or document.document_id == document_id)
                 and (workspace_id is None or document.workspace_id == workspace_id)
+                and (
+                    organization_id is None
+                    or document.organization_id == organization_id
+                )
             ]
             if "order by" in rendered_query_lower:
                 return MockResult(rows)
@@ -2484,6 +2496,7 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
             Document(
                 document_id="doc_owned",
                 workspace_id="workspace-org-acme",
+                organization_id="org-acme",
                 document_name="<b>roadmap.md</b>",
                 document_type="text/markdown",
                 document_content="# Roadmap",
@@ -2492,7 +2505,8 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
             ),
             Document(
                 document_id="doc_rival",
-                workspace_id="workspace-rival",
+                workspace_id="workspace-org-acme",
+                organization_id="org-rival",
                 document_name="rival.md",
                 document_type="text/markdown",
                 document_content="rival",
@@ -2544,6 +2558,12 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
         }
     ]
     assert "doc_rival" not in response.text
+    rendered_queries = "\n".join(str(query) for query in mock_db.queries)
+    assert "workspace_documents.workspace_id = :workspace_id_1" in rendered_queries
+    assert (
+        "workspace_documents.organization_id = :organization_id_1"
+        in rendered_queries
+    )
 
 
 def test_data_document_upload_creates_workspace_scoped_document(mock_db):

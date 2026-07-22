@@ -319,6 +319,10 @@ in this repo.
   use them. Allowlisted OIDC hostnames must also resolve only to global
   addresses, and JWKS retrieval must connect to the already validated pinned
   address while preserving TLS/SNI for the allowlisted hostname.
+  API bearer tokens must use RFC 9068 `typ=at+jwt`, target the dedicated
+  `OIDC_API_AUDIENCE` (which must differ from `OIDC_CLIENT_ID`), and identify
+  the configured client through `azp` or `client_id`. Browser/client ID tokens
+  are never API sessions.
 - Email-derived tasks must stay source-linked to the email/thread and tenant
   owner scope. Do not expose new sequential database ids through task APIs; use
   opaque public ids for user-visible ticket tasks. Task titles are plain text:
