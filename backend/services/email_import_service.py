@@ -148,9 +148,7 @@ def _canonical_upload_filename(filename: str | None) -> str | None:
         if urllib.parse.unquote(decoded_filename) != decoded_filename:
             return None
 
-    if any(
-        ord(character) < 32 or ord(character) == 127 for character in decoded_filename
-    ):
+    if not decoded_filename.isprintable():
         return None
 
     # Treat both network/client path separators as separators, independently of
@@ -181,7 +179,7 @@ def _safe_display_filename_component(filename: str | None) -> str:
     normalized_filename = (filename or "").replace("\\", "/")
     name = Path(normalized_filename).name.strip()
     sanitized_name = "".join(
-        "_" if ord(character) < 32 or ord(character) == 127 else character
+        character if character.isprintable() else "_"
         for character in name
     ).strip()
     if sanitized_name in {"", ".", ".."}:

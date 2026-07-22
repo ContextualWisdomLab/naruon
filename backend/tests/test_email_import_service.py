@@ -36,6 +36,9 @@ from services.email_import_service import (
         ("%2e%2e%5csecret.eml", "secret.eml"),
         ("%00secret.eml", "upload"),
         ("%0asecret.eml", "upload"),
+        ("%C2%85secret.eml", "upload"),
+        ("secret\u202eeml", "upload"),
+        ("회의.eml", "회의.eml"),
     ],
 )
 def test_safe_upload_filename(input_name, expected):
@@ -56,6 +59,8 @@ def test_safe_upload_filename_fails_closed_beyond_decode_round_limit():
         ("message.eml", "message.eml"),
         ("%2e%2e%5cmessage.eml", "message.eml"),
         ("%00message.eml", None),
+        ("message\u0085.eml", None),
+        ("message\u200b.eml", None),
         ("message.txt", None),
     ],
 )
@@ -89,6 +94,16 @@ def test_canonical_email_import_upload_filename(input_name, expected):
             "my_archive.zip",
             Path("ok\nforged.eml"),
             "my_archive.zip:ok_forged.eml",
+        ),
+        (
+            "my_archive.zip",
+            Path("ok\u0085forged.eml"),
+            "my_archive.zip:ok_forged.eml",
+        ),
+        (
+            "my_archive.zip",
+            Path("safe\u202ename.eml"),
+            "my_archive.zip:safe_name.eml",
         ),
     ],
 )
