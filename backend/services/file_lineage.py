@@ -38,14 +38,14 @@ WINDOWS_RESERVED_COMPONENT_NAMES = frozenset(
 )
 
 
-def _has_control_character(value: str) -> bool:
-    return any(unicodedata.category(character) == "Cc" for character in value)
+def _has_unsafe_unicode_character(value: str) -> bool:
+    return any(unicodedata.category(character).startswith("C") for character in value)
 
 
 def _validate_bounded_text(value: str, field_name: str) -> str:
     if not value.strip():
         raise ValueError(f"{field_name} must not be blank")
-    if _has_control_character(value):
+    if _has_unsafe_unicode_character(value):
         raise ValueError(f"{field_name} contains a control character")
     return value
 
@@ -90,12 +90,14 @@ class FileProductionTimeLineage(StrictLineageModel):
     selected_value_ms: EpochMilliseconds
     selected_source: ShortText
     confidence: Confidence
-    evidence_precedence: tuple[
-        Literal["embedded_metadata"],
-        Literal["explicit_filename_date"],
-        Literal["filesystem_created_at"],
-        Literal["filesystem_modified_at"],
-    ]
+    evidence_precedence: list[
+        Literal[
+            "embedded_metadata",
+            "explicit_filename_date",
+            "filesystem_created_at",
+            "filesystem_modified_at",
+        ]
+    ] = Field(min_length=4, max_length=4)
 
     @field_validator("selected_source")
     @classmethod
@@ -114,8 +116,8 @@ class FileProductionTimeLineage(StrictLineageModel):
 
     @field_validator("evidence_precedence")
     @classmethod
-    def validate_evidence_precedence(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if value != EVIDENCE_PRECEDENCE:
+    def validate_evidence_precedence(cls, value: list[str]) -> list[str]:
+        if tuple(value) != EVIDENCE_PRECEDENCE:
             raise ValueError("evidence_precedence does not match the v1 contract")
         return value
 

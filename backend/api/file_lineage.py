@@ -31,8 +31,8 @@ def _reject_non_json_constant(_value: str) -> None:
     raise ValueError("non-finite JSON number")
 
 
-def _validate_unique_json_object_keys(body: bytes) -> None:
-    json.loads(
+def _parse_strict_json_body(body: bytes) -> object:
+    return json.loads(
         body.decode("utf-8"),
         object_pairs_hook=_reject_duplicate_keys,
         parse_constant=_reject_non_json_constant,
@@ -65,8 +65,8 @@ async def validate_disksage_file_lineage(
 
     body = await _read_bounded_body(request)
     try:
-        _validate_unique_json_object_keys(body)
-        envelope = DiskSageFileLineageEnvelope.model_validate_json(body)
+        parsed_body = _parse_strict_json_body(body)
+        envelope = DiskSageFileLineageEnvelope.model_validate(parsed_body)
     except (
         UnicodeDecodeError,
         json.JSONDecodeError,

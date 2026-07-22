@@ -6,6 +6,7 @@ from copy import deepcopy
 import pytest
 from fastapi.testclient import TestClient
 
+import api.file_lineage as file_lineage_api
 from api.file_lineage import MAX_DISKSAGE_FILE_LINEAGE_BODY_BYTES
 from db.session import get_db
 from main import app
@@ -105,6 +106,44 @@ def test_validate_disksage_file_lineage_returns_redacted_acceptance(client: Test
     assert "/cloud/report.pdf" not in response.text
     assert "decision-1" not in response.text
     assert "d" * 64 not in response.text
+
+
+def test_validate_disksage_file_lineage_parses_strict_json_once(
+    client: TestClient,
+    monkeypatch,
+):
+    parse_calls = 0
+    original_parse = file_lineage_api._parse_strict_json_body
+
+    def counting_parse(body: bytes) -> object:
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_parse(body)
+
+    monkeypatch.setattr(
+        file_lineage_api,
+        "_parse_strict_json_body",
+        counting_parse,
+    )
+
+    response = client.post("/api/file-lineage/validate", json=_lineage_payload())
+
+    assert response.status_code == 200
+    assert parse_calls == 1
+
+
+@pytest.mark.parametrize("unsafe_character", ["\u200b", "\u202e", "\ue000", "\u0378"])
+def test_validate_disksage_file_lineage_rejects_all_unicode_other_categories(
+    client: TestClient,
+    unsafe_character: str,
+):
+    payload = _lineage_payload()
+    payload["source_context"] = f"downloads{unsafe_character}hidden"
+
+    response = client.post("/api/file-lineage/validate", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_file_lineage_invalid"}
 
 
 def test_validate_disksage_file_lineage_requires_authentication():

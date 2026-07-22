@@ -361,10 +361,19 @@ async def _find_existing_email(
             return existing_email, identity_match_reason
     if fingerprint is not None:
         for existing_email in existing_emails:
+            stored_fingerprint = existing_email.fingerprint
+            if stored_fingerprint == fingerprint:
+                return existing_email, "complete_source_fingerprint"
             if (
-                existing_email.fingerprint == fingerprint
-                or email_strong_fingerprint(existing_email) == fingerprint
+                legacy_fingerprint is not None
+                and stored_fingerprint == legacy_fingerprint
             ):
+                # Legacy fingerprints truncate the body. Require the full-source
+                # fingerprint too, so a shared 500-character prefix is not a match.
+                if email_strong_fingerprint(existing_email) == fingerprint:
+                    return existing_email, "complete_source_fingerprint"
+                continue
+            if email_strong_fingerprint(existing_email) == fingerprint:
                 return existing_email, "complete_source_fingerprint"
     return None, None
 
