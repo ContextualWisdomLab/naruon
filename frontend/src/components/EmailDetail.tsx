@@ -638,7 +638,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
               <div className="mt-2 hidden flex-wrap items-center gap-1.5 md:flex">
                 <Users className="h-3 w-3 text-muted-foreground mr-1" aria-hidden="true" />
                 {email.participants.map((p) => (
-                  <Badge key={`${p.role}:${p.email}`} variant="secondary" className="text-[10px] bg-secondary/50 font-medium">
+                  <Badge key={`${p.role}-${p.email}`} variant="secondary" className="text-[10px] bg-secondary/50 font-medium">
                     <span className="text-muted-foreground mr-1 uppercase">{p.role}</span>
                     {p.name}
                   </Badge>
@@ -676,15 +676,9 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   </p>
                 </div>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                disabled
-                title="일정 수락 기능 준비 중"
-                className="h-9 shrink-0 rounded-xl bg-emerald-600 px-4 text-white disabled:cursor-not-allowed disabled:opacity-70"
-              >
+              <Button size="sm" type="button" disabled title="일정 수락 준비 중" aria-label="일정 수락 준비 중" className="h-9 shrink-0 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
-                일정 수락 준비 중
+                일정 수락
               </Button>
             </div>
           )}
@@ -831,9 +825,9 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   )}
                   <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
                   {msg.id === email.id && email.attachments && email.attachments.length > 0 && (
-                    <div role="list" aria-label="첨부파일" className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                    <div role="list" className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                       {email.attachments.map((file) => (
-                        <div role="listitem" key={file.id} className="flex shrink-0 items-center gap-3 rounded-xl border border-border bg-background p-3 shadow-sm">
+                        <div role="listitem" key={file.id} className="flex shrink-0 items-center gap-3 rounded-xl border border-border bg-background p-3 shadow-sm transition-colors">
                           <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
                             {file.type.includes('image') ? <Paperclip className="size-5" aria-hidden="true" /> : <FileText className="size-5" aria-hidden="true" />}
                           </div>
