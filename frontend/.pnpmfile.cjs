@@ -1,19 +1,12 @@
-function readPackage(pkg, context) {
-  if (pkg.dependencies && pkg.dependencies.sharp) {
-    pkg.dependencies.sharp = '0.35.3';
-  }
-  if (pkg.devDependencies && pkg.devDependencies.sharp) {
-    pkg.devDependencies.sharp = '0.35.3';
-  }
-  if (pkg.name === 'next') {
-    if (pkg.dependencies && pkg.dependencies.sharp) {
-        pkg.dependencies.sharp = '0.35.3';
+function readPackage(pkg) {
+  for (const dependencyGroup of ['dependencies', 'peerDependencies', 'devDependencies']) {
+    if (pkg[dependencyGroup] && pkg[dependencyGroup].postcss) {
+      pkg[dependencyGroup].postcss = '^8.5.16';
     }
-    if (pkg.optionalDependencies && pkg.optionalDependencies.sharp) {
-        pkg.optionalDependencies.sharp = '0.35.3';
-    }
-    if (pkg.peerDependencies && pkg.peerDependencies.sharp) {
-        pkg.peerDependencies.sharp = '0.35.3';
+  }
+  for (const dependencyGroup of ['dependencies', 'peerDependencies', 'devDependencies', 'optionalDependencies']) {
+    if (pkg[dependencyGroup] && pkg[dependencyGroup].sharp) {
+      pkg[dependencyGroup].sharp = '0.35.3';
     }
   }
   return pkg;

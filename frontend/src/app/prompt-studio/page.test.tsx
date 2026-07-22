@@ -152,6 +152,14 @@ describe("PromptStudioPage", () => {
       expect(page.querySelector(`#${fieldId}`)).not.toBeNull();
       expect(page.querySelector(`label[for="${fieldId}"]`)).not.toBeNull();
     }
+
+    const templateSearch = page.querySelector<HTMLInputElement>(
+      'input[aria-label="템플릿 검색"]',
+    );
+    expect(templateSearch?.type).toBe("search");
+    expect(templateSearch?.className).toContain(
+      "[&::-webkit-search-cancel-button]:hidden",
+    );
   });
 
   it("renders the full Prompt Studio surface from the UI/UX reference", async () => {
@@ -187,6 +195,15 @@ describe("PromptStudioPage", () => {
     );
     expect(busyButtons).toHaveLength(2);
     expect(busyButtons.every((button) => button.textContent?.includes("생성 중..."))).toBe(true);
+    expect(busyButtons.map((button) => button.getAttribute("aria-label")).sort()).toEqual([
+      "프롬프트 다시 생성 중",
+      "프롬프트 실행 중",
+    ]);
+    expect(
+      Array.from(page.querySelectorAll('[role="status"][aria-live="polite"]')).filter(
+        (status) => status.textContent?.includes("생성 중..."),
+      ),
+    ).toHaveLength(1);
     expect(page.querySelector("[data-testid='loader']")).not.toBeNull();
 
     await act(async () => {

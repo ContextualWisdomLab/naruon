@@ -8,7 +8,7 @@ overrides:
   postcss: ^8.5.15
   undici: 7.28.0
 
-pnpmfileChecksum: sha256-2RJzaB/5zfKmqVMiIUB8gOjycnzoOsJ5N4vxUeJvCZA=
+pnpmfileChecksum: sha256-ZP/4etA3EI8nfbsqV4eIJKGOh0HF9b+NEq7G6/Tkyis=
 
 importers:
 
