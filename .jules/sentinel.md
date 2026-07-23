@@ -123,3 +123,8 @@
 **Vulnerability:** 프론트엔드의 `sharp` 패키지 구버전(0.34.5)에 보안 취약점이 존재하여 CI의 Trivy 검사에서 HIGH(security-severity=8.0) 등급의 보안 경고(GHSA-f88m-g3jw-g9cj)가 발생함.
 **Learning:** 애플리케이션 외부 의존성(특히 이미지 처리 라이브러리인 sharp와 같이 네이티브 바인딩을 포함하는 패키지)의 보안 취약점은 전체 시스템의 취약점으로 이어질 수 있음.
 **Prevention:** 의존성 취약점 점검 도구(Trivy 등)의 결과를 정기적으로 모니터링하고, 취약점이 발견된 패키지는 즉각적으로 최신 안정화 버전(0.35.3)으로 업데이트하여 보안 위협을 사전 차단해야 함.
+
+## 2026-07-22 - [취약한 postcss 의존성 업데이트]
+**Vulnerability:** 프론트엔드의 `postcss` 패키지 구버전(8.4.31)에 CSS Stringify 출력 시 Unescaped </style>로 인한 XSS 취약점(GHSA-qx2v-qp2m-jg93, CVE-2026-41305)이 존재하여 dependency-review 검사에서 실패가 발생함.
+**Learning:** 애플리케이션의 개발 의존성 패키지(예: postcss, sharp 등)라 할지라도 빌드 파이프라인이나 의존성 체인 내에서 보안 취약점이 있는 구버전을 사용하는 경우 전체 시스템에 XSS 등의 보안 위험을 초래할 수 있음.
+**Prevention:** 의존성 취약점 점검 도구(OSV-Scanner, Trivy 등)의 결과를 주기적으로 확인하고, `pnpm-workspace.yaml`의 `overrides` 필드를 사용하여 전체 워크스페이스에 최신 안정화 버전(예: `>=8.5.10`)을 강제 적용함으로써 의존성 트리에 안전한 버전만 포함되도록 관리해야 함.
