@@ -119,3 +119,9 @@
 **Vulnerability:** Weak random number generation using `Math.random` was found in `frontend/src/lib/product-events.ts` for product event ID creation.
 **Learning:** `Math.random` does not provide cryptographically secure random numbers, making ID predictability possible, which could potentially be abused or lead to conflicts.
 **Prevention:** Use `window.crypto.getRandomValues` or `globalThis.crypto.getRandomValues` instead of `Math.random` when dealing with any type of security-related tokens, identifiers, or other contexts requiring randomness.
+
+## 2024-07-23 - Dependency Vulnerabilities Fixed
+
+**Vulnerability:** Outdated `next` and `sharp` dependencies in `frontend` contained known CVEs (high/medium severity) as flagged by `pnpm audit`.
+**Learning:** Outdated dependencies in package management can silently introduce critical security flaws across the application stack.
+**Prevention:** Regularly audit and update dependencies (e.g., using `pnpm audit` or automated tools) to ensure known vulnerabilities are patched.
