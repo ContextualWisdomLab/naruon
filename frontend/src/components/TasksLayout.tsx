@@ -687,7 +687,7 @@ export function TasksLayout() {
             {filteredTicketTasks.length > 0 ? filteredTicketTasks.map(task => (
               <button key={task.id} type="button" className="flex w-full items-center justify-between p-4 rounded-xl border border-border bg-card text-left shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}>
                 <div className="flex items-center gap-4">
-                  <div className={`size-3 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
+                  <div role="img" aria-label={`우선순위: ${taskPriorityLabels[task.priority]}`} title={`우선순위: ${taskPriorityLabels[task.priority]}`} className={`size-3 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
                   <div>
                     <h3 className="font-bold text-sm">{safeTaskTitle(task.title)}</h3>
                     <p className="text-xs text-muted-foreground mt-1">근거: {getTaskEvidenceLabel(task)} | 원본: {getTaskSourceLabel(task.source_type)}</p>
