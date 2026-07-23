@@ -681,7 +681,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   </p>
                 </div>
               </div>
-              <Button size="sm" type="button" disabled aria-describedby={`meeting-accept-unavailable-${email.id}`} className="h-9 shrink-0 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              <Button size="sm" type="button" disabled aria-describedby={`meeting-accept-unavailable-${email.id}`} className="h-9 shrink-0 rounded-xl bg-emerald-600 px-4 text-white enabled:hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
                 일정 수락
               </Button>
