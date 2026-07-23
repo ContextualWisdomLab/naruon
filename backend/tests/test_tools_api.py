@@ -873,6 +873,8 @@ def test_is_safe_webhook_url_coverage():
     assert is_safe_webhook_url("ftp://example.com") is False
     assert is_safe_webhook_url("http://example.com") is False
     assert is_safe_webhook_url("https://example.internal") is False
+    assert is_safe_webhook_url("https://internal") is False
+    assert is_safe_webhook_url("https://local") is False
     assert is_safe_webhook_url("https://localhost/admin") is False
     assert is_safe_webhook_url("https://127.0.0.1/admin") is False
     assert is_safe_webhook_url("https://[::1]/admin") is False
@@ -993,3 +995,27 @@ def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
+
+def test_detect_text_language_unknown():
+    from api.tools import _detect_text_language
+    assert _detect_text_language("12345") == "unknown"
+
+def test_analyze_email_sentiment_positive_and_neutral():
+    from api.tools import sentiment_analyzer_handler as analyze_email_sentiment_handler
+    import asyncio
+
+    # positive
+    result_pos = asyncio.run(analyze_email_sentiment_handler({"text": "Thanks!"}))
+    assert result_pos["sentiment"] == "positive"
+
+    # neutral
+    result_neu = asyncio.run(analyze_email_sentiment_handler({"text": "Hello"}))
+    assert result_neu["sentiment"] == "neutral"
+
+def test_detect_text_language_en():
+    from api.tools import _detect_text_language
+    assert _detect_text_language("Hello") == "en"
+
+def test_detect_text_language_ko_only():
+    from api.tools import _detect_text_language
+    assert _detect_text_language("안녕하세요") == "ko"
