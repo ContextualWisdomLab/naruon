@@ -254,15 +254,15 @@ describe("EmailDetail", () => {
     });
     await flushAsyncWork();
 
-    expect(container.querySelector("[role='list'][aria-label='참여자']")?.textContent).toContain("검토자");
+    expect(container.querySelector("ul[aria-label='참여자']")?.textContent).toContain("검토자");
     expect(container.textContent).toContain("검토자료.pdf");
     expect(container.textContent).toContain("검토화면.png");
-    const attachmentList = container.querySelector("#msg-22 [role='list'][aria-label='첨부파일']");
+    const attachmentList = container.querySelector("#msg-22 ul[aria-label='첨부파일']");
     expect(attachmentList).not.toBeNull();
-    expect(attachmentList?.querySelectorAll("[role='listitem']")).toHaveLength(3);
+    expect(attachmentList?.querySelectorAll("li")).toHaveLength(3);
     expect(attachmentList?.querySelectorAll("[data-testid='file-attachment-icon']")).toHaveLength(2);
     expect(attachmentList?.querySelectorAll("[data-testid='image-attachment-icon']")).toHaveLength(1);
-    expect(container.querySelector("#msg-23 [role='list'][aria-label='첨부파일']")).toBeNull();
+    expect(container.querySelector("#msg-23 ul[aria-label='첨부파일']")).toBeNull();
     expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent?.includes("검토자료.pdf"))).toBe(false);
 
     const meetingProposal = container.querySelector("[role='region'][aria-label='회의 제안']");
@@ -315,8 +315,8 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("hello�");
     expect(container.textContent).not.toContain("<img");
     expect(container.textContent).not.toContain("<script>");
-    expect(container.querySelector("[role='list'][aria-label='참여자']")).toBeNull();
-    expect(container.querySelector("[role='list'][aria-label='첨부파일']")).toBeNull();
+    expect(container.querySelector("ul[aria-label='참여자']")).toBeNull();
+    expect(container.querySelector("ul[aria-label='첨부파일']")).toBeNull();
     expect(container.querySelector("[role='region'][aria-label='회의 제안']")).toBeNull();
     expect(container.textContent).not.toContain("alert(1)");
     expect(container.textContent).not.toContain("alert(2)");

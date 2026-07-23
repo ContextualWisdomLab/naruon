@@ -637,14 +637,16 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             {email.participants && email.participants.length > 0 && (
               <div className="mt-2 hidden flex-wrap items-center gap-1.5 md:flex">
                 <Users className="h-3 w-3 text-muted-foreground mr-1" aria-hidden="true" />
-                <div role="list" aria-label="참여자" className="flex flex-wrap items-center gap-1.5">
+                <ul aria-label="참여자" className="m-0 flex list-none flex-wrap items-center gap-1.5 p-0">
                   {email.participants.map((p) => (
-                    <Badge role="listitem" key={`${p.role}:${p.email}`} variant="secondary" className="text-[10px] bg-secondary/50 font-medium">
-                      <span className="text-muted-foreground mr-1 uppercase">{p.role}</span>
-                      {p.name}
-                    </Badge>
+                    <li key={`${p.role}:${p.email}`}>
+                      <Badge variant="secondary" className="text-[10px] bg-secondary/50 font-medium">
+                        <span className="text-muted-foreground mr-1 uppercase">{p.role}</span>
+                        {p.name}
+                      </Badge>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
           </div>
@@ -830,9 +832,9 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   )}
                   <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
                   {msg.id === email.id && email.attachments && email.attachments.length > 0 && (
-                    <div role="list" aria-label="첨부파일" className="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                    <ul aria-label="첨부파일" className="mt-4 m-0 flex list-none gap-2 overflow-x-auto p-0 pb-2 scrollbar-thin">
                       {email.attachments.map((file) => (
-                        <div role="listitem" key={file.id} className="flex shrink-0 items-center gap-3 rounded-xl border border-border bg-background p-3 shadow-sm transition-colors">
+                        <li key={file.id} className="flex shrink-0 items-center gap-3 rounded-xl border border-border bg-background p-3 shadow-sm transition-colors">
                           <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
                             {file.type.toLowerCase().startsWith('image/') ? <Paperclip className="size-5" aria-hidden="true" /> : <FileText className="size-5" aria-hidden="true" />}
                           </div>
@@ -840,9 +842,9 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                             <span className="text-xs font-bold text-foreground line-clamp-1">{file.name}</span>
                             <span className="text-[10px] text-muted-foreground">{file.size}</span>
                           </div>
-                        </div>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   )}
                 </div>
               ))}
