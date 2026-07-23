@@ -238,6 +238,16 @@ function StartupResultList({ results }: { results: StartupSearchResult[] }) {
   );
 }
 
+
+function mapPriorityToKorean(p: string) {
+  switch(p) {
+    case 'urgent': return '긴급';
+    case 'high': return '높음';
+    case 'normal': return '보통';
+    case 'low': return '낮음';
+    default: return p;
+  }
+}
 function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupView) => void }) {
   const { emails, pendingReplies, tasks, setTasks: setDashboardTasks, calendarSources, projectFolders, loading, sourceEvidenceStatus } = useDashboardData();
   const calendarCandidateEvidence = useStartupSearch('일정 충돌 일정 조율 회의 후보', 3);
@@ -252,6 +262,73 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
   const taskCompletionRate = buildCompletionRate(tasks);
   const sourceEvidenceLoading = sourceEvidenceStatus === 'loading';
   const sourceEvidenceError = sourceEvidenceStatus === 'error';
+  // ⚡ Bolt: Wrap dashboard quick actions in useMemo to prevent O(N) re-renders
+  // 🎯 Why: Re-rendering static configuration lists on every timer tick wastes CPU.
+  const quickActionsBoard = useMemo(() => dashboardQuickActions.map((action) => (
+    <a key={action.href} href={action.href} className="flex items-center justify-start gap-3 rounded-xl border border-border bg-card px-4 py-3 text-xs font-bold transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
+      <action.icon className={`size-5 shrink-0 ${action.color}`} />
+      <span className="truncate">{action.label}</span>
+    </a>
+  )), []);
+
+  const {
+    taskUpdateStatusById,
+    replySlaStatus,
+    replySlaMessage,
+    handleTaskCompletionToggle,
+    handleReplySlaEscalation,
+  } = useTasks(setDashboardTasks, safeWorkspaceTitle);
+
+  // ⚡ Bolt: Wrap pending replies in useMemo to prevent O(N) re-renders
+  const pendingRepliesBoard = useMemo(() => {
+    if (loading) return <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 불러오는 중...</div>;
+    if (pendingReplies.length === 0) return <div className="text-sm text-muted-foreground p-2">답변 대기 중인 보낸 메일이 없습니다.</div>;
+    return pendingReplies.map((reply) => {
+      const safeSubject = toSafeReactText(reply.subject?.trim() || null, '(제목 없음)');
+      const safeSnippet = toSafeReactText(reply.snippet);
+      return (
+        <div key={reply.id} className="flex flex-col gap-2 rounded-lg bg-secondary/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <span className="w-fit shrink-0 rounded bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">답변 대기</span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold">{safeSubject}</p>
+              <p className="line-clamp-2 text-[11px] text-muted-foreground">{safeSnippet}</p>
+            </div>
+          </div>
+          <span suppressHydrationWarning className="shrink-0 text-xs text-muted-foreground">{formatStartupDate(reply.date || '')}</span>
+        </div>
+      );
+    });
+  }, [loading, pendingReplies]);
+
+  // ⚡ Bolt: Wrap pending tasks in useMemo to prevent O(N) re-renders
+  const pendingTasksBoard = useMemo(() => {
+    if (loading) return <div className="text-sm text-muted-foreground p-2">작업을 불러오는 중...</div>;
+    if (pendingTasks.length === 0) return <div className="text-sm text-muted-foreground p-2">대기 작업이 없습니다.</div>;
+    return pendingTasks.slice(0, 3).map((task) => {
+      const pKor = mapPriorityToKorean(task.priority);
+      const pClass = pKor === '긴급' || pKor === '높음' ? 'text-red-500' : pKor === '보통' ? 'text-green-500' : 'text-muted-foreground';
+      const displayTitle = safeWorkspaceTitle(task.title, '제목 없는 작업');
+      return (
+        <div key={task.id} className="flex items-center justify-between">
+          <label className="flex cursor-pointer items-center gap-3 group">
+            <input
+              type="checkbox"
+              checked={task.status === 'done'}
+              onChange={() => void handleTaskCompletionToggle(task)}
+              className="size-4 cursor-pointer rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              aria-label={`${displayTitle} 작업 선택`}
+            />
+            <span className="text-sm font-medium transition-colors group-hover:text-primary">{displayTitle}</span>
+          </label>
+          <div className="flex items-center gap-2 text-xs">
+            <span className={`font-semibold ${pClass}`}>{pKor}</span>
+          </div>
+        </div>
+      );
+    });
+  }, [loading, pendingTasks, handleTaskCompletionToggle]);
+
   const dashboardStats = useMemo(() => ([
     { title: '받은 메일', value: loading ? '-' : emails.length.toString(), diff: unreadCount > 0 ? `+${unreadCount}` : '-', diffText: '안 읽음', icon: Inbox, color: 'text-primary' },
     { title: '답변 대기', value: loading ? '-' : pendingReplyCount.toString(), diff: pendingReplyCount > 0 ? `${pendingReplyCount}건` : '-', diffText: '보낸 메일', icon: Send, color: 'text-rose-500' },
@@ -274,13 +351,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
     unreadCount,
     writableCalendarSourceCount,
   ]);
-  const {
-    taskUpdateStatusById,
-    replySlaStatus,
-    replySlaMessage,
-    handleTaskCompletionToggle,
-    handleReplySlaEscalation,
-  } = useTasks(setDashboardTasks, safeWorkspaceTitle);
+
 
   useEffect(() => {
     const updateTimestamp = () => setCurrentTimestamp(formatDashboardTimestamp(new Date()));
@@ -289,15 +360,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
     return () => window.clearInterval(intervalId);
   }, []);
 
-  const mapPriorityToKorean = (p: string) => {
-    switch(p) {
-      case 'urgent': return '긴급';
-      case 'high': return '높음';
-      case 'normal': return '보통';
-      case 'low': return '낮음';
-      default: return p;
-    }
-  };
+
 
   return (
     <section role="region" aria-label="홈 개요" className="h-full overflow-y-auto bg-background p-4 sm:p-6">
@@ -419,26 +482,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             </div>
             <div className="space-y-3">
               <div className="text-xs font-bold text-muted-foreground">답변 대기 메일</div>
-              {loading ? (
-                <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 불러오는 중...</div>
-              ) : pendingReplies.length === 0 ? (
-                <div className="text-sm text-muted-foreground p-2">답변 대기 중인 보낸 메일이 없습니다.</div>
-              ) : pendingReplies.map((reply) => {
-                const safeSubject = toSafeReactText(reply.subject?.trim() || null, '(제목 없음)');
-                const safeSnippet = toSafeReactText(reply.snippet);
-                return (
-                  <div key={reply.id} className="flex flex-col gap-2 rounded-lg bg-secondary/50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                      <span className="w-fit shrink-0 rounded bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">답변 대기</span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold">{safeSubject}</p>
-                        <p className="line-clamp-2 text-[11px] text-muted-foreground">{safeSnippet}</p>
-                      </div>
-                    </div>
-                    <span suppressHydrationWarning className="shrink-0 text-xs text-muted-foreground">{formatStartupDate(reply.date || '')}</span>
-                  </div>
-                );
-              })}
+              {pendingRepliesBoard}
             </div>
             <a href="/mail?folder=sent" className="mt-4 block w-full text-center text-sm font-semibold text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">보낸 메일 전체 보기</a>
           </div>
@@ -448,32 +492,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
               <h2 className="text-base font-bold">대기 작업 {pendingTasks.length > 0 && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">{pendingTasks.length}건</span>}</h2>
             </div>
             <div className="space-y-3">
-              {loading ? (
-                <div className="text-sm text-muted-foreground p-2">작업을 불러오는 중...</div>
-              ) : pendingTasks.length === 0 ? (
-                <div className="text-sm text-muted-foreground p-2">대기 작업이 없습니다.</div>
-              ) : pendingTasks.slice(0, 3).map((task) => {
-                const pKor = mapPriorityToKorean(task.priority);
-                const pClass = pKor === '긴급' || pKor === '높음' ? 'text-red-500' : pKor === '보통' ? 'text-green-500' : 'text-muted-foreground';
-                const displayTitle = safeWorkspaceTitle(task.title, '제목 없는 작업');
-                return (
-                  <div key={task.id} className="flex items-center justify-between">
-                    <label className="flex cursor-pointer items-center gap-3 group">
-                      <input
-                        type="checkbox"
-                        checked={task.status === 'done'}
-                        onChange={() => void handleTaskCompletionToggle(task)}
-                        className="size-4 cursor-pointer rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                        aria-label={`${displayTitle} 작업 선택`}
-                      />
-                      <span className="text-sm font-medium transition-colors group-hover:text-primary">{displayTitle}</span>
-                    </label>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className={`font-semibold ${pClass}`}>{pKor}</span>
-                    </div>
-                  </div>
-                );
-              })}
+              {pendingTasksBoard}
             </div>
             {Array.from(taskUpdateStatusById.entries()).map(([taskId, taskUpdateStatus]) => (
               <p key={taskId} role="status" className="mt-3 text-xs font-semibold text-muted-foreground">{taskUpdateStatus}</p>
@@ -583,12 +602,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
               <h2 className="text-base font-bold">빠른 실행</h2>
             </div>
             <div aria-label="홈 빠른 실행" className="grid grid-cols-2 gap-3">
-              {dashboardQuickActions.map((action) => (
-                <a key={action.href} href={action.href} className="flex items-center justify-start gap-3 rounded-xl border border-border bg-card px-4 py-3 text-xs font-bold transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
-                  <action.icon className={`size-5 shrink-0 ${action.color}`} />
-                  <span className="truncate">{action.label}</span>
-                </a>
-              ))}
+              {quickActionsBoard}
             </div>
           </div>
         </div>

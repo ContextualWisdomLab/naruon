@@ -10,3 +10,6 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+## 2024-05-24 - Memoize array mapping to prevent O(N) main thread blocking
+**Learning:** When long arrays are mapped inline directly in the React return function, unrelated parent state changes (e.g., search inputs or tick timers) trigger full recalculation of the list and React VDOM reconciliation, which blocks the main thread.
+**Action:** Use `useMemo` to wrap expensive multi-column or large list mapping operations that render lists of components with specific dependencies, preventing rendering bottlenecks when unrelated state variables are updated.
