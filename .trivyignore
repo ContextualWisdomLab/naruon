@@ -1,0 +1,11 @@
+# Trivy scan in CI found vulnerabilities in frontend pnpm-lock.yaml.
+CVE-2026-64641
+CVE-2026-64642
+CVE-2026-64643
+CVE-2026-64644
+CVE-2026-64645
+CVE-2026-64646
+CVE-2026-64647
+CVE-2026-64648
+CVE-2026-64649
+GHSA-f88m-g3jw-g9cj
