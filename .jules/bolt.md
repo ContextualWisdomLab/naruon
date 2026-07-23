@@ -10,3 +10,6 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+## 2026-07-23 - [성능 최적화: dict.setdefault 메모리 할당 오버헤드 방지]
+**Learning:** 파이썬의 성능이 중요한 루프에서 `dict.setdefault(key, []).append(value)` 패턴을 사용하면 키의 존재 여부와 상관없이 매 반복마다 새로운 빈 리스트 `[]`를 생성하게 되어 심각한 메모리 할당 오버헤드가 발생한다는 점을 파악했습니다.
+**Action:** 앞으로는 `collections.defaultdict(list)`를 초기화하고 `dict[key].append(value)`를 사용하여 객체 생성 오버헤드를 방지하겠습니다.
