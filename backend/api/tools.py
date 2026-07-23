@@ -1,6 +1,7 @@
 import base64
 import inspect
 import json
+import re
 import logging
 import urllib.parse
 from collections.abc import Callable
@@ -605,6 +606,41 @@ registry.register(
     grammar_checker_handler,
 )
 
+
+
+async def pii_redactor_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+
+    # Simple regex for email, phone (010-XXXX-XXXX), and RRN (XXXXXX-XXXXXXX)
+    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    phone_pattern = r'01[016789]-?\d{3,4}-?\d{4}'
+    rrn_pattern = r'\d{6}-?[1-4]\d{6}'
+
+    redacted_text = text
+    pii_count = 0
+
+    for pattern in [email_pattern, phone_pattern, rrn_pattern]:
+        matches = re.findall(pattern, text)
+        if matches:
+            pii_count += len(matches)
+            for match in matches:
+                redacted_text = redacted_text.replace(match, "[REDACTED]")
+
+    return {
+        "redacted_text": redacted_text,
+        "pii_count": pii_count
+    }
+
+registry.register(
+    ToolInfo(
+        code="pii_redactor",
+        name="개인정보 마스킹 (PII Redactor)",
+        description="텍스트 내의 중요 개인정보(이메일, 전화번호, 주민등록번호 등)를 감지하고 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_redactor_handler,
+)
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:

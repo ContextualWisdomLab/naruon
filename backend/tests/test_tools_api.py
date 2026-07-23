@@ -189,6 +189,62 @@ async def test_execute_tone_analyzer():
     assert data["result"]["tone_score"] == 85
 
 
+
+@pytest.mark.asyncio
+async def test_execute_pii_redactor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_redactor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "제 이메일은 test@example.com이고 전화번호는 010-1234-5678, 주민번호는 900101-1234567 입니다."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert "redacted_text" in result
+    assert "pii_count" in result
+    assert result["pii_count"] == 3
+    assert result["redacted_text"] == "제 이메일은 [REDACTED]이고 전화번호는 [REDACTED], 주민번호는 [REDACTED] 입니다."
+
+@pytest.mark.asyncio
+async def test_execute_pii_redactor_no_pii():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_redactor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "이 텍스트에는 개인정보가 없습니다."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert result["pii_count"] == 0
+    assert result["redacted_text"] == "이 텍스트에는 개인정보가 없습니다."
+
+@pytest.mark.asyncio
+async def test_execute_pii_redactor_empty_text():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_redactor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": ""}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert result["pii_count"] == 0
+    assert result["redacted_text"] == ""
+
 def test_execute_tool_rejects_unexpected_parameter():
     with TestClient(app) as client:
         response = client.post(
@@ -880,6 +936,44 @@ def test_is_safe_webhook_url_coverage():
     assert is_safe_webhook_url("https://example.com/webhook#fragment") is False
 
 
+
+@pytest.mark.asyncio
+async def test_execute_email_translator_english_language():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Hello, thank you very much for the meeting yesterday.",
+                    "target_language": "ko"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["source_language_detected"] == "en"
+
+
+@pytest.mark.asyncio
+async def test_execute_email_translator_korean_language():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "안녕하세요. 반갑습니다.",
+                    "target_language": "en"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["source_language_detected"] == "ko"
+
 def test_execute_email_translator():
     with TestClient(app) as client:
         response = client.post(
@@ -900,6 +994,43 @@ def test_execute_email_translator():
     assert "회의" in data["result"]["translated_text"]
     assert data["result"]["source_language_detected"] == "en"
 
+
+
+@pytest.mark.asyncio
+async def test_execute_email_translator_unknown_language():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "12345",
+                    "target_language": "en"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["source_language_detected"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_execute_sentiment_analyzer_positive():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Thank you very much, this is great!"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "positive"
 
 def test_execute_spam_phishing_detector():
     with TestClient(app) as client:
@@ -940,6 +1071,42 @@ def test_execute_reply_drafter():
     assert "긍정적 동의" in data["result"]["draft"]
     assert "tomorrow at 2pm" in data["result"]["draft"]
 
+
+
+@pytest.mark.asyncio
+async def test_execute_sentiment_analyzer_negative_urgent():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "This is an urgent issue and I am very disappointed."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "negative"
+    assert "긴급" in data["result"]["key_emotions"]
+
+@pytest.mark.asyncio
+async def test_execute_sentiment_analyzer_neutral():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "This is a regular email without strong words."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "neutral"
 
 def test_execute_sentiment_analyzer():
     with TestClient(app) as client:
