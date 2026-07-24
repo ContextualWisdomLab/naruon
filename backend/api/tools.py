@@ -606,7 +606,50 @@ registry.register(
 )
 
 
-@router.get("/tools", response_model=list[ToolInfo])
+
+import re
+import json
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Any:
+    """Extract URLs from text."""
+    text = params.get("text", "")
+    urls = re.findall(r'(https?://[^\s]+)', text)
+    return {"urls": urls, "count": len(urls)}
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에서 모든 HTTP/HTTPS URL을 찾아 목록으로 반환합니다.",
+        category="텍스트 처리",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Any:
+    """Format a JSON string into a nicely indented format."""
+    json_string = params.get("json_string", "")
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted, "is_valid": True}
+    except json.JSONDecodeError as e:
+        return {"formatted_json": "", "is_valid": False, "error": str(e)}
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="입력된 JSON 문자열의 유효성을 검사하고 보기 좋게 들여쓰기하여 반환합니다.",
+        category="개발자 도구",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
+
+@router.get("/tools",
+ response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
     Naruon AI 이메일 워크스페이스에서 사용할 수 있는 분석 및 실행 도구 목록을 반환합니다.
