@@ -77,3 +77,6 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+## 2024-07-24 - High-Density Email Detail Participants, Attachments, and Schedule
+**Learning:** Adding new dynamic UI data rendering (like participants, attachments, and schedule) must be properly wired back to the component types and gracefully handle missing arrays or properties. Adding `lucide-react` icons requires updating the mock in `setup.ts` or the `.test.tsx` file for Vite tests.
+**Action:** When creating high density components from design mockups, always ensure mock data falls back safely in actual Typescript types. Also, always patch `.test.tsx` `vi.mock('lucide-react')` calls when adding new icons.

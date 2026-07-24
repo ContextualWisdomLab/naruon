@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, FileText, FileSpreadsheet, Calendar, Clock } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -29,6 +29,9 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  recipients?: string[];
+  attachments?: { filename: string; size_label: string; type: string }[];
+  schedule_options?: { date: string; time: string; recommended?: boolean }[];
 };
 interface LlmData {
   summary: string;
@@ -625,11 +628,21 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                 {isTranslating ? "번역 중" : "번역"}
               </Button>
             </div>
-            <div className="line-clamp-1 text-xs">
-              <span className="text-muted-foreground">{safeEmailSender}</span>
-            </div>
-            <div className="line-clamp-1 text-xs text-muted-foreground">
-              답장 주소: {safeReplyTo}
+            <div className="mt-2 flex flex-col gap-1.5 text-xs text-muted-foreground">
+              <div className="grid grid-cols-[55px_1fr] items-baseline gap-2">
+                <span className="font-semibold text-foreground/70">보낸 사람</span>
+                <span className="text-foreground">{safeEmailSender} <span className="text-muted-foreground/60">&lt;{toMailDisplayText(email.sender, '')}&gt;</span></span>
+              </div>
+              <div className="grid grid-cols-[55px_1fr] items-baseline gap-2">
+                <span className="font-semibold text-foreground/70">받는 사람</span>
+                <span className="text-foreground">{Array.isArray(email.recipients) ? email.recipients.join(', ') : (email.recipients || '나')}</span>
+              </div>
+              {email.reply_to && email.reply_to !== email.sender && (
+                <div className="grid grid-cols-[55px_1fr] items-baseline gap-2">
+                  <span className="font-semibold text-foreground/70">참조</span>
+                  <span className="text-foreground">{safeReplyTo}</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -644,6 +657,23 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             )}
           </div>
         </div>
+
+        {/* Attachment Rail */}
+        {email.attachments && email.attachments.length > 0 && (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {email.attachments.map((file, idx) => (
+              <div key={idx} className="flex items-center gap-3 rounded-xl border border-border bg-background/50 p-2 pr-4 shadow-sm transition-colors hover:bg-muted/50 cursor-pointer">
+                <div className={`flex size-8 items-center justify-center rounded-lg ${file.type === 'spreadsheet' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {file.type === 'spreadsheet' ? <FileSpreadsheet className="size-4" /> : <FileText className="size-4" />}
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-foreground">{file.filename}</span>
+                  <span className="text-[10px] text-muted-foreground">{file.size_label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <Separator />
       <ScrollArea className="flex-1">
@@ -672,6 +702,63 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
               </div>
             ) : null}
           </DecisionPointCard>
+
+          {email.schedule_conflict && (
+            <DecisionPointCard
+              title="일정 조율 제안"
+              icon={<Calendar aria-hidden="true" className="w-4 h-4" />}
+              provenance="메일 내용 기반 자동 분석"
+            >
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-4">
+                <div className="flex flex-col gap-1">
+                  <h4 className="text-sm font-bold text-foreground">제안된 일정 옵션</h4>
+                  <p className="text-xs text-muted-foreground">상대방이 제안한 시간 중 캘린더와 충돌하지 않는 옵션입니다.</p>
+                </div>
+
+                {email.schedule_options && email.schedule_options.length > 0 ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {email.schedule_options.map((option, idx) => (
+                      <div key={idx} className={`flex flex-col gap-2 rounded-lg border border-border bg-card p-3 shadow-sm cursor-pointer hover:border-emerald-500/50 transition-colors ${option.recommended ? 'ring-1 ring-emerald-500' : ''}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Calendar className={`size-4 ${option.recommended ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+                            <span className="text-sm font-semibold">{option.date}</span>
+                          </div>
+                          {option.recommended && (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">추천</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Clock className="size-3" />
+                          <span>{option.time}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 shadow-sm cursor-pointer hover:border-emerald-500/50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="size-4 text-muted-foreground" />
+                          <span className="text-sm font-semibold">일정 불러오는 중...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-2">
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm rounded-xl px-4 h-9">
+                    일정 확정 및 초대장 전송
+                  </Button>
+                  <Button size="sm" variant="outline" className="rounded-xl px-4 h-9 bg-card">
+                    다른 시간 보기
+                  </Button>
+                </div>
+              </div>
+            </DecisionPointCard>
+          )}
 
           <DecisionPointCard
             title="실행 항목"
