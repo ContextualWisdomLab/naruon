@@ -118,3 +118,7 @@
 **Vulnerability:** [webhook URL 검증 시 `hostname.endswith(".internal")`만 검사하여 `https://internal`와 같이 정확히 일치하는 단일 레이블 내부 도메인 우회 가능성 발견]
 **Learning:** [접미사 기반 필터링은 부분 일치 취약점을 가질 수 있으며, 단일 레이블 도메인에 대한 검증 누락으로 이어질 수 있음을 배움]
 **Prevention:** [도메인 기반 블랙리스트 검증 시, `endswith` 검사뿐만 아니라 `==`을 통한 완전 일치 검사도 병행하여 우회를 원천 차단해야 함]
+## 2026-07-24 - [Resolve Frontend Package Vulnerabilities via `overrides`]
+**Vulnerability:** [trivy-fs scan flagged multiple vulnerabilities (CVE-2026-64641, GHSA-f88m-g3jw-g9cj, etc.) in deeply nested or transitive frontend dependencies (like `next`, `sharp`, `postcss`).]
+**Learning:** [Standard package manager update commands (`npm update`, `pnpm update`) may fail to correctly resolve and bump indirect nested dependencies securely.]
+**Prevention:** [When addressing security scan failures for transitive dependencies in `package.json`, explicitly define the secure target version in the `"overrides"` field to force resolution across the entire dependency graph, then run `pnpm install` and verify resolution.]
