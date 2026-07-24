@@ -114,3 +114,7 @@
 **Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
+## 2026-07-24 - [SSRF 방어를 위한 Webhook 검증 로직 강화]
+**Vulnerability:** [webhook URL 검증 시 `hostname.endswith(".internal")`만 검사하여 `https://internal`와 같이 정확히 일치하는 단일 레이블 내부 도메인 우회 가능성 발견]
+**Learning:** [접미사 기반 필터링은 부분 일치 취약점을 가질 수 있으며, 단일 레이블 도메인에 대한 검증 누락으로 이어질 수 있음을 배움]
+**Prevention:** [도메인 기반 블랙리스트 검증 시, `endswith` 검사뿐만 아니라 `==`을 통한 완전 일치 검사도 병행하여 우회를 원천 차단해야 함]
