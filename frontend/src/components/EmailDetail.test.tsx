@@ -221,7 +221,7 @@ describe("EmailDetail", () => {
       attachments: [
         { id: "attachment-1", name: "검토자료.pdf", size: "2 MB", type: "application/pdf" },
         { id: "attachment-2", name: "검토화면.png", size: "1 MB", type: "IMAGE/PNG" },
-        { id: "attachment-3", name: "디스크이미지.bin", size: "3 MB", type: "application/x-diskimage" },
+        { id: "attachment-3", name: "디스크이미지.bin", size: "3 MB" },
       ],
       meeting_proposal: { title: "제품 검토", time: "2026-07-23 10:00", location: "회의실 A" },
     };

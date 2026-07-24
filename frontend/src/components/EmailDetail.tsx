@@ -30,7 +30,7 @@ type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
   participants?: { name: string; email: string; role: 'to' | 'cc' }[];
-  attachments?: { id: string; name: string; size: string; type: string }[];
+  attachments?: { id: string; name: string; size: string; type?: string | null }[];
   meeting_proposal?: { title: string; time: string; location?: string };
 };
 interface LlmData {
@@ -836,7 +836,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                       {email.attachments.map((file) => (
                         <li key={file.id} className="flex shrink-0 items-center gap-3 rounded-xl border border-border bg-background p-3 shadow-sm transition-colors">
                           <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
-                            {file.type.toLowerCase().startsWith('image/') ? <Paperclip className="size-5" aria-hidden="true" /> : <FileText className="size-5" aria-hidden="true" />}
+                            {file.type?.toLowerCase().startsWith('image/') ? <Paperclip className="size-5" aria-hidden="true" /> : <FileText className="size-5" aria-hidden="true" />}
                           </div>
                           <div className="flex flex-col min-w-[120px]">
                             <span className="text-xs font-bold text-foreground line-clamp-1">{file.name}</span>
