@@ -2125,7 +2125,7 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("Critical close blocker concentration");
     expect(container.textContent).toContain("2 critical exception(s)");
     expect(container.textContent).toContain("exception_repair_thread_id_integrity");
-    expect(container.textContent).toContain("Diligence close decision summary");
+    expect(container.textContent).toContain("Diligence close 핵심 맥락");
     expect(container.textContent).toContain("close_blocked");
     expect(container.textContent).toContain("Close remains blocked");
     expect(container.textContent).toContain("6 proof requirement(s)");
@@ -2180,7 +2180,7 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("증거 패킷 생성됨");
     expect(container.textContent).toContain("Snapshot verification ready");
     expect(container.textContent).toContain("thread_id_integrity");
-    expect(container.textContent).toContain("Acquisition decision summary");
+    expect(container.textContent).toContain("Acquisition 핵심 맥락");
     expect(container.textContent).toContain("Remediate acquisition evidence gaps before close.");
     expect(container.textContent).toContain("remediate_before_close");
     expect(container.textContent).toContain("Resolve critical and high remediation actions");

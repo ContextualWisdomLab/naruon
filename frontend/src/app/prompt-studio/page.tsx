@@ -105,7 +105,7 @@ const TEMPLATE_GROUPS = [
     name: '업무 종합',
     items: [
       { id: 'summary', title: '문서 종합/초안 작성', favorite: true },
-      { id: 'insight', title: '데이터 분석 판단 포인트' },
+      { id: 'decision_point', title: '데이터 분석 판단 포인트' },
       { id: 'mail', title: '이메일 작성' },
       { id: 'automation', title: '업무 자동화 제안' },
     ],

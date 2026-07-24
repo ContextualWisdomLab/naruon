@@ -136,7 +136,7 @@ describe("EmailDetail", () => {
         });
       }
       if (url.endsWith("/api/llm/summarize")) {
-        return jsonResponse({ summary: "Summary", action_items: [] });
+        return jsonResponse({ summary: "핵심 맥락", action_items: [] });
       }
       if (url.endsWith("/api/llm/translate")) {
         return translation.promise;
@@ -180,7 +180,7 @@ describe("EmailDetail", () => {
         });
       }
       if (url.endsWith("/api/llm/summarize")) {
-        return jsonResponse({ summary: "Summary", action_items: [] });
+        return jsonResponse({ summary: "핵심 맥락", action_items: [] });
       }
       if (url.endsWith("/api/llm/translate")) {
         return new Response("Internal Server Error", { status: 500 });

@@ -309,7 +309,7 @@ export function QualityCheckTab({
                   )}
                   {closeDecisionSummary && closeDecisionSummary.total_proof_count > 0 && (
                     <div className="border-t border-border p-5">
-                      <p className="text-xs font-black text-muted-foreground">Diligence close decision summary</p>
+                      <p className="text-xs font-black text-muted-foreground">Diligence close 핵심 맥락</p>
                       <div className="mt-3 rounded-xl border border-border bg-background p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
@@ -657,7 +657,7 @@ export function QualityCheckTab({
                     </div>
                   </dl>
                   <div className="border-t border-border p-5">
-                    <p className="text-xs font-black text-muted-foreground">Acquisition decision summary</p>
+                    <p className="text-xs font-black text-muted-foreground">Acquisition 핵심 맥락</p>
                     <div className="mt-3 rounded-xl border border-border bg-background p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
@@ -680,7 +680,7 @@ export function QualityCheckTab({
                           </dd>
                         </div>
                         <div>
-                          <dt className="font-black text-muted-foreground">Summary key</dt>
+                          <dt className="font-black text-muted-foreground">핵심 맥락 키</dt>
                           <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(acquisitionReadinessGate.decision_summary.summary_key)}</dd>
                         </div>
                         <div>

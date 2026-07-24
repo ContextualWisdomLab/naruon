@@ -163,7 +163,7 @@ export default function NetworkGraph() {
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Failed to load network graph:', err);
+        console.error('Failed to load relation context:', err);
         setError('관계 맥락을 불러오지 못했습니다.');
         setLoading(false);
       });
