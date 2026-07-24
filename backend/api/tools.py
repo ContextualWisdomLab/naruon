@@ -1,6 +1,7 @@
 import base64
 import inspect
 import json
+import re
 import logging
 import urllib.parse
 from collections.abc import Callable
@@ -607,8 +608,6 @@ registry.register(
 
 
 
-import re
-import json
 
 async def url_extractor_handler(params: Dict[str, Any]) -> Any:
     """Extract URLs from text."""
@@ -648,8 +647,7 @@ registry.register(
     json_formatter_handler,
 )
 
-@router.get("/tools",
- response_model=list[ToolInfo])
+@router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
     Naruon AI 이메일 워크스페이스에서 사용할 수 있는 분석 및 실행 도구 목록을 반환합니다.
