@@ -680,7 +680,7 @@ export function QualityCheckTab({
                           </dd>
                         </div>
                         <div>
-                          <dt className="font-black text-muted-foreground">Summary key</dt>
+                          <dt className="font-black text-muted-foreground">종합, 핵심 맥락 키</dt>
                           <dd className="mt-1 break-all text-sm font-bold">{toSafeReactText(acquisitionReadinessGate.decision_summary.summary_key)}</dd>
                         </div>
                         <div>
