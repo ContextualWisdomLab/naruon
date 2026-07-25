@@ -1,6 +1,8 @@
 import base64
 import inspect
 import json
+import hashlib
+from datetime import datetime, timedelta
 import logging
 import urllib.parse
 from collections.abc import Callable
@@ -603,6 +605,86 @@ registry.register(
         parameters={"draft_content": "string"},
     ),
     grammar_checker_handler,
+)
+
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algo = params.get("algorithm", "sha256").lower()
+    encoded = text.encode("utf-8")
+    if algo == "md5":
+        h = hashlib.md5(encoded).hexdigest()
+    elif algo == "sha1":
+        h = hashlib.sha1(encoded).hexdigest()
+    elif algo == "sha512":
+        h = hashlib.sha512(encoded).hexdigest()
+    else:
+        h = hashlib.sha256(encoded).hexdigest()
+    return {"hash_value": h}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트를 MD5, SHA1, SHA256, SHA512 알고리즘으로 해싱합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Any:
+    json_str = params.get("json_string", "")
+    minify = params.get("minify", False)
+    try:
+        parsed = json.loads(json_str)
+        if minify:
+            formatted = json.dumps(parsed, separators=(",", ":"), ensure_ascii=False)
+        else:
+            formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted, "is_valid": True}
+    except json.JSONDecodeError as e:
+        return {"formatted_json": "", "is_valid": False, "error": str(e)}
+
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포맷터 (JSON Formatter)",
+        description="JSON 문자열을 보기 좋게 정렬하거나 공백을 제거하고 유효성을 검사합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string", "minify": "boolean"},
+    ),
+    json_formatter_handler,
+)
+
+
+async def date_calculator_handler(params: Dict[str, Any]) -> Any:
+    base_date_str = params.get("base_date", "")
+    days = params.get("days", 0)
+    try:
+        if "T" in base_date_str:
+            base_date = datetime.fromisoformat(base_date_str.replace("Z", "+00:00"))
+        else:
+            base_date = datetime.strptime(base_date_str, "%Y-%m-%d")
+        new_date = base_date + timedelta(days=days)
+        return {"calculated_date": new_date.strftime("%Y-%m-%d")}
+    except ValueError as e:
+        raise ValueError(f"Invalid date format: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="date_calculator",
+        name="날짜 계산기 (Date Calculator)",
+        description="특정 날짜에 일수를 더하거나 빼서 새로운 날짜를 계산합니다.",
+        category="유틸리티",
+        parameters={"base_date": "string", "days": "integer"},
+    ),
+    date_calculator_handler,
 )
 
 
