@@ -1,4 +1,5 @@
 from __future__ import annotations
+import collections
 
 import datetime
 import hashlib
@@ -612,9 +613,9 @@ def _candidate_groups(
     *,
     scope: ProjectGraphQueryScope,
 ) -> tuple[_CandidateGroup, ...]:
-    records_by_email: dict[int, list[ProjectGraphObjectRecord]] = {}
+    records_by_email: dict[int, list[ProjectGraphObjectRecord]] = collections.defaultdict(list)
     for record in records:
-        records_by_email.setdefault(record.email_id, []).append(record)
+        records_by_email[record.email_id].append(record)
 
     groups: list[_CandidateGroup] = []
     for group_records in records_by_email.values():
@@ -842,9 +843,9 @@ def _relation_summary(
     ``relation_count`` descending with a ``relation_type``-ascending tie-break so
     the result is deterministic regardless of relation iteration order.
     """
-    grouped: dict[str, list[ProjectTraceRelation]] = {}
+    grouped: dict[str, list[ProjectTraceRelation]] = collections.defaultdict(list)
     for relation in relations:
-        grouped.setdefault(relation.relation_type, []).append(relation)
+        grouped[relation.relation_type].append(relation)
     type_summaries = [
         ProjectRelationTypeSummary(
             relation_type=relation_type,
@@ -934,7 +935,7 @@ def _record_segment_uids(
     seen: dict[str, None] = {}
     for record in records:
         for source_uid in record.source_segment_uids:
-            seen.setdefault(source_uid, None)
+            seen[source_uid] = None
     return tuple(seen)
 
 
@@ -944,7 +945,7 @@ def _edge_segment_uids(
     seen: dict[str, None] = {}
     for edge in edges:
         for source_uid in edge.source_segment_uids:
-            seen.setdefault(source_uid, None)
+            seen[source_uid] = None
     return tuple(seen)
 
 
