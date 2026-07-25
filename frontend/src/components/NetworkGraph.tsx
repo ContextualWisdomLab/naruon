@@ -391,7 +391,7 @@ export default function NetworkGraph() {
               aria-label="관계 선택"
               value={relationshipOptionId}
               onChange={(event) => handleRelationshipOptionChange(event.target.value)}
-              className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <option value="">관계 선택</option>
               {relationshipOptions.map((option) => (
@@ -407,7 +407,7 @@ export default function NetworkGraph() {
               aria-label="노드 선택"
               value={nodeOptionId}
               onChange={(event) => handleNodeOptionChange(event.target.value)}
-              className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <option value="">노드 선택</option>
               {nodeOptions.map((option) => (
