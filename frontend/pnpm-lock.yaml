@@ -91,7 +91,7 @@ importers:
         specifier: ^29.1.1
         version: 29.1.1
       postcss:
-        specifier: ^8.5.15
+        specifier: ^8.5.22
         version: 8.5.22
       typescript:
         specifier: ^6.0.3
