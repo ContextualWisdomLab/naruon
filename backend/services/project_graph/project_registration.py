@@ -1,6 +1,6 @@
 from __future__ import annotations
-import collections
 
+import collections
 import datetime
 import hashlib
 from collections import Counter
@@ -328,7 +328,9 @@ async def get_project_traceability(
     source_uids = _record_segment_uids(group.records) + _edge_segment_uids(edges)
     segment_map = await _load_citation_map(session, source_uids, scope=scope)
     candidate = _candidate_summary(group, segment_map=segment_map)
-    trace_objects = tuple(_trace_object(record, segment_map) for record in group.records)
+    trace_objects = tuple(
+        _trace_object(record, segment_map) for record in group.records
+    )
     trace_edges = tuple(_trace_edge(edge, segment_map) for edge in edges)
     return ProjectTraceability(
         project_uid=group.project_uid,
@@ -366,7 +368,9 @@ async def get_project_relation_summary(
         _edge_segment_uids(edges),
         scope=scope,
     )
-    trace_objects = tuple(_trace_object(record, segment_map) for record in group.records)
+    trace_objects = tuple(
+        _trace_object(record, segment_map) for record in group.records
+    )
     trace_edges = tuple(_trace_edge(edge, segment_map) for edge in edges)
     relations = _trace_relations(trace_edges, trace_objects)
     return _relation_summary(group.project_uid, relations)
@@ -399,7 +403,9 @@ async def get_project_decisions(
         _record_segment_uids(group.records) + _edge_segment_uids(edges),
         scope=scope,
     )
-    trace_objects = tuple(_trace_object(record, segment_map) for record in group.records)
+    trace_objects = tuple(
+        _trace_object(record, segment_map) for record in group.records
+    )
     trace_edges = tuple(_trace_edge(edge, segment_map) for edge in edges)
     relations = _trace_relations(trace_edges, trace_objects)
     return _decision_view(group.project_uid, trace_objects, relations)
@@ -418,7 +424,11 @@ async def get_project_evidence(
         project_uid=project_uid,
     )
     record = next(
-        (candidate for candidate in group.records if candidate.object_uid == object_uid),
+        (
+            candidate
+            for candidate in group.records
+            if candidate.object_uid == object_uid
+        ),
         None,
     )
     if record is None:
@@ -470,7 +480,11 @@ async def apply_project_correction(
         project_uid=project_uid,
     )
     record = next(
-        (candidate for candidate in group.records if candidate.object_uid == object_uid),
+        (
+            candidate
+            for candidate in group.records
+            if candidate.object_uid == object_uid
+        ),
         None,
     )
     if record is None:
@@ -613,7 +627,9 @@ def _candidate_groups(
     *,
     scope: ProjectGraphQueryScope,
 ) -> tuple[_CandidateGroup, ...]:
-    records_by_email: dict[int, list[ProjectGraphObjectRecord]] = collections.defaultdict(list)
+    records_by_email: dict[int, list[ProjectGraphObjectRecord]] = (
+        collections.defaultdict(list)
+    )
     for record in records:
         records_by_email[record.email_id].append(record)
 
@@ -633,7 +649,9 @@ def _candidate_groups(
             if explicit_candidate is not None
             else _synthetic_project_uid(group_records, scope=scope)
         )
-        groups.append(_CandidateGroup(project_uid=project_uid, records=tuple(group_records)))
+        groups.append(
+            _CandidateGroup(project_uid=project_uid, records=tuple(group_records))
+        )
     return tuple(groups)
 
 
@@ -669,7 +687,9 @@ def _candidate_summary(
     type_counts = Counter(record.object_type for record in group.records)
     representative = _representative_record(group.records)
     source_segment_uids = _record_segment_uids(group.records)
-    updated_values = [record.updated_at for record in group.records if record.updated_at]
+    updated_values = [
+        record.updated_at for record in group.records if record.updated_at
+    ]
     return ProjectCandidateSummary(
         candidate_uid=group.project_uid,
         project_uid=group.project_uid,
@@ -713,14 +733,15 @@ def _candidate_status(records: tuple[ProjectGraphObjectRecord, ...]) -> str:
 
 def _candidate_score(records: tuple[ProjectGraphObjectRecord, ...]) -> float:
     type_signal = sum(
-        PROJECT_OBJECT_SCORE_WEIGHTS.get(record.object_type, 0.04)
-        for record in records
+        PROJECT_OBJECT_SCORE_WEIGHTS.get(record.object_type, 0.04) for record in records
     )
     confidence_signal = (
         sum(record.confidence for record in records) / len(records) if records else 0.0
     )
     source_signal = min(len(set(_record_segment_uids(records))), 8) * 0.025
-    return round(min(0.99, 0.18 + type_signal + confidence_signal * 0.24 + source_signal), 3)
+    return round(
+        min(0.99, 0.18 + type_signal + confidence_signal * 0.24 + source_signal), 3
+    )
 
 
 def _representative_record(
@@ -748,7 +769,9 @@ def _trace_object(
         status_code=record.status_code,
         confidence=record.confidence,
         source_segment_uids=tuple(record.source_segment_uids),
-        citation_bundle=_citation_bundle(tuple(record.source_segment_uids), segment_map),
+        citation_bundle=_citation_bundle(
+            tuple(record.source_segment_uids), segment_map
+        ),
         attributes=dict(record.attributes_json or {}),
     )
 

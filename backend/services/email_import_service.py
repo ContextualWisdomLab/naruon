@@ -1,13 +1,13 @@
-import collections
 import asyncio
+import collections
 import datetime
-from email import policy as email_policy
 import hashlib
 import logging
 import mailbox
 import os
 import stat
 from dataclasses import dataclass, field
+from email import policy as email_policy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
@@ -38,10 +38,7 @@ from services.project_graph import (
     ProjectSourceSegment,
     persist_project_graph_projection,
 )
-from services.project_graph.extractor_registry import (
-    KgExtractorContext,
-    run_extraction,
-)
+from services.project_graph.extractor_registry import KgExtractorContext, run_extraction
 from services.threading_service import (
     assign_thread_id,
     generate_email_fingerprint,
@@ -358,7 +355,11 @@ def _fallback_attachment_parser_key(
         return "calendar"
     if parse_content_type == "text/html":
         return "html"
-    if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
+    if parse_content_type in {
+        "text/markdown",
+        "text/x-markdown",
+        "application/markdown",
+    }:
         return "markdown"
     if parse_content_type == "text/plain":
         return "plain_text"
@@ -550,7 +551,9 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             item.segment_path,
         ),
     ):
-        segments_by_source[(segment.source_kind, segment.source_record_uid)].append(segment)
+        segments_by_source[(segment.source_kind, segment.source_record_uid)].append(
+            segment
+        )
         add_edge(
             edge_kind="node_has_segment",
             edge_path=f"{segment.content_node.node_path}/has/{segment.segment_path}",
@@ -565,8 +568,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="segment_next",
                 edge_path=(
-                    f"{source_segment.segment_path}/next/"
-                    f"{target_segment.segment_path}"
+                    f"{source_segment.segment_path}/next/{target_segment.segment_path}"
                 ),
                 source_kind=source_segment.source_kind,
                 source_record_uid=source_segment.source_record_uid,
@@ -590,8 +592,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="heading_contains_segment",
                 edge_path=(
-                    f"{heading_segment.segment_path}/contains/"
-                    f"{segment.segment_path}"
+                    f"{heading_segment.segment_path}/contains/{segment.segment_path}"
                 ),
                 source_kind=segment.source_kind,
                 source_record_uid=segment.source_record_uid,
