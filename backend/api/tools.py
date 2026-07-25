@@ -614,9 +614,9 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     algo = params.get("algorithm", "sha256").lower()
     encoded = text.encode("utf-8")
     if algo == "md5":
-        h = hashlib.md5(encoded).hexdigest()
+        h = hashlib.md5(encoded, usedforsecurity=False).hexdigest()
     elif algo == "sha1":
-        h = hashlib.sha1(encoded).hexdigest()
+        h = hashlib.sha1(encoded, usedforsecurity=False).hexdigest()
     elif algo == "sha512":
         h = hashlib.sha512(encoded).hexdigest()
     else:
