@@ -114,3 +114,7 @@
 **Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
+## 2024-07-25 - Webhook URL SSRF 취약점 우회 패턴 (내부/로컬 TLD 정확한 일치)
+**Vulnerability:** Webhook URL을 검증할 때 `.internal` 및 `.local` 도메인의 내부 접근을 차단하기 위해 `hostname.endswith(".internal")`와 같은 suffix(접미사) 검사만 수행하고 있었습니다. 이는 `https://internal` 이나 `https://local` 과 같이 정확히 일치하는(Exact Match) 내부 TLD에 대한 공격(SSRF)을 방어하지 못해 우회될 수 있는 취약점을 유발합니다.
+**Learning:** Python의 문자열 처리(예: `endswith`)에 의존하여 도메인 유효성을 검사할 때, 최상위 도메인(TLD) 자체를 단독으로 사용하는 형태(`https://internal` 등)를 놓치기 쉽다는 것을 알게 되었습니다.
+**Prevention:** 내부망에 대한 SSRF 공격을 차단할 때는 접미사 일치뿐만 아니라, 도메인이 정확히 내부 TLD 문자열과 일치하는지(`hostname == "internal"`) 여부도 반드시 병행해서 검증해야 합니다.

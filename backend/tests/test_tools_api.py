@@ -873,6 +873,9 @@ def test_is_safe_webhook_url_coverage():
     assert is_safe_webhook_url("ftp://example.com") is False
     assert is_safe_webhook_url("http://example.com") is False
     assert is_safe_webhook_url("https://example.internal") is False
+    assert is_safe_webhook_url("https://internal") is False
+    assert is_safe_webhook_url("https://local") is False
+    assert is_safe_webhook_url("https://example.local") is False
     assert is_safe_webhook_url("https://localhost/admin") is False
     assert is_safe_webhook_url("https://127.0.0.1/admin") is False
     assert is_safe_webhook_url("https://[::1]/admin") is False
