@@ -3,6 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST } from "./route";
 
+const { postOidcTokenRequestMock } = vi.hoisted(() => ({
+  postOidcTokenRequestMock: vi.fn<
+    (endpoint: URL, body: URLSearchParams) => Promise<{ access_token?: unknown }>
+  >(),
+}));
+
+vi.mock("@/lib/oidc-token-client", () => ({
+  postOidcTokenRequest: postOidcTokenRequestMock,
+}));
+
 const ORIGINAL_ENV = { ...process.env };
 
 function oidcStateCookie(state: string, verifier: string, returnTo: string) {
@@ -23,9 +33,14 @@ describe("/auth/oidc/callback route", () => {
     vi.stubEnv("NEXT_PUBLIC_OIDC_ISSUER_URL", "https://login.example.com/realms/naruon/");
     vi.stubEnv("NEXT_PUBLIC_OIDC_CLIENT_ID", "naruon-web");
     vi.stubEnv("NEXT_PUBLIC_OIDC_REDIRECT_URI", "https://app.example.com/auth/callback");
+    postOidcTokenRequestMock.mockReset();
+    postOidcTokenRequestMock.mockResolvedValue({
+      access_token: "test-header.test-payload.test-signature",
+    });
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
@@ -69,7 +84,14 @@ describe("/auth/oidc/callback route", () => {
     expect(setCookie).toContain("naruon_oidc_pkce=");
     expect(setCookie).toContain("Max-Age=0");
     expect(setCookie).not.toContain("verifier-123");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postOidcTokenRequestMock).toHaveBeenCalledTimes(1);
+    const [tokenEndpoint, tokenBody] = postOidcTokenRequestMock.mock.calls[0];
+    expect(tokenEndpoint.href).toBe(
+      "https://login.example.com/realms/naruon/protocol/openid-connect/token",
+    );
+    expect(tokenBody.get("code")).toBe("auth-code");
+    expect(tokenBody.get("code_verifier")).toBe("verifier-123");
   });
 
   it("rejects callbacks without matching server-side state", async () => {
@@ -218,7 +240,8 @@ describe("/auth/oidc/callback route", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postOidcTokenRequestMock).toHaveBeenCalledTimes(1);
   });
 
   it("preserves a validated global IPv6 OIDC issuer authority", async () => {
@@ -259,11 +282,13 @@ describe("/auth/oidc/callback route", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(postOidcTokenRequestMock).toHaveBeenCalledTimes(1);
   });
 
   it("rejects loopback OIDC token endpoints in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OIDC_ALLOWED_HOSTS", "127.0.0.1");
     vi.stubEnv(
       "NEXT_PUBLIC_OIDC_ISSUER_URL",
       "http://127.0.0.1:8080/realms/naruon",
@@ -287,5 +312,59 @@ describe("/auth/oidc/callback route", () => {
 
     expect(response.status).toBe(502);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(postOidcTokenRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("requires an exact server-only OIDC host allowlist in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const warnMock = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new NextRequest("https://app.example.com/auth/oidc/callback", {
+        method: "POST",
+        headers: {
+          Cookie: oidcStateCookie("state-123", "verifier-123", "/security"),
+        },
+        body: JSON.stringify({ search: "?code=auth-code&state=state-123" }),
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(postOidcTokenRequestMock).not.toHaveBeenCalled();
+    expect(warnMock).toHaveBeenCalledWith(
+      "oidc_token_exchange_failed",
+      { reason: "configuration_rejected" },
+    );
+  });
+
+  it("uses the pinned token client for an allowlisted production issuer", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OIDC_ALLOWED_HOSTS", "login.example.com");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe("https://api.naruon.net/api/auth/session");
+      return Response.json({
+        user_id: "user-1",
+        organization_id: "org-acme",
+        workspace_id: "workspace-acme",
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(
+      new NextRequest("https://app.example.com/auth/oidc/callback", {
+        method: "POST",
+        headers: {
+          Cookie: oidcStateCookie("state-123", "verifier-123", "/security"),
+        },
+        body: JSON.stringify({ search: "?code=auth-code&state=state-123" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(postOidcTokenRequestMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

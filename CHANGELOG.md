@@ -2,8 +2,9 @@
 ### 보안 패치 (CodeQL extended current-head)
 
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
+- OIDC token endpoint는 운영 환경에서 서버 전용 `OIDC_ALLOWED_HOSTS` 정확 호스트 allowlist를 필수로 적용합니다. hostname의 모든 DNS 결과가 공인 주소인지 검증한 뒤 해당 주소 집합을 native HTTP(S) 연결의 `lookup`에 고정하고, 원래 issuer hostname은 Host/TLS SNI로 유지해 사설 주소 해석과 DNS rebinding 사이의 TOCTOU를 차단합니다. 실패 로그는 입력 URL·token 대신 고정된 configuration/DNS·transport/response/backend-verification reason code만 남깁니다.
 - 제품 이벤트 ID의 `Math.random()` fallback을 Web Crypto 기반 UUID/128-bit 난수로 교체하고, 개인 메일 smoke·live HTTP·Scorecard SARIF 경로에 home/workspace containment, symlink·크기·ZIP entry 제한, loopback endpoint allowlist를 적용했습니다. 도구 실패 로그는 사용자 입력 대신 고정 event와 예외 유형만 기록합니다.
-- 검증: 백엔드 `1560 passed, 32 skipped`(`PYTHONWARNINGS=error`), 프런트 `364 passed`, ESLint, Ruff, TypeScript, Next.js production build, 변경 Python 대상 Bandit Medium 이상 검사, Trivy Medium 이상 검사와 정확한 hash/lock 입력의 OSV 검사가 통과했습니다. GitHub hosted CodeQL/SARIF current-head 결과는 PR checks에서 별도로 확인합니다.
+- 검증: 백엔드 `1560 passed, 32 skipped`(`PYTHONWARNINGS=error`), 프런트 `385 passed`, ESLint, Ruff, TypeScript, Next.js production build, 변경 Python 대상 Bandit Medium 이상 검사, Trivy Medium 이상 검사와 정확한 hash/lock 입력의 OSV 검사가 통과했습니다. GitHub hosted CodeQL/SARIF current-head 결과는 PR checks에서 별도로 확인합니다.
 
 ### 마이그레이션 정합성 (Alembic single-head 복구)
 

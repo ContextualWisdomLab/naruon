@@ -6,6 +6,7 @@ import {
   buildSessionCookieOptions,
   normalizeSessionToken,
 } from "@/lib/session-cookie";
+import { postOidcTokenRequest } from "@/lib/oidc-token-client";
 
 import {
   OIDC_NO_STORE_HEADERS,
@@ -34,12 +35,24 @@ const PRIVATE_OIDC_HOST_PATTERNS: readonly RegExp[] = [
   /^fe[89ab][0-9a-f]:/,
 ];
 const OIDC_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
+const OIDC_ALLOWED_HOSTS_ENV = "OIDC_ALLOWED_HOSTS";
+type OidcTokenExchangeFailureReason =
+  | "configuration_rejected"
+  | "dns_or_transport_rejected"
+  | "access_token_missing_or_invalid"
+  | "backend_session_rejected";
 
 function errorResponse(errorCode: string, status = 400) {
   return NextResponse.json(
     { error_code: errorCode },
     { status, headers: OIDC_NO_STORE_HEADERS },
   );
+}
+
+function recordOidcTokenExchangeFailure(
+  reason: OidcTokenExchangeFailureReason,
+): void {
+  console.warn("oidc_token_exchange_failed", { reason });
 }
 
 function searchParamsFromBodySearch(value: unknown) {
@@ -57,8 +70,40 @@ function normalizedHostname(url: URL): string {
 
 function isLoopbackHostname(hostname: string): boolean {
   return (
-    hostname === "localhost" || hostname === "::1" || /^127\./.test(hostname)
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1"
   );
+}
+
+function assertAllowedOidcHostname(hostname: string): void {
+  const configuredHosts = process.env[OIDC_ALLOWED_HOSTS_ENV]?.trim();
+  if (!configuredHosts) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        `${OIDC_ALLOWED_HOSTS_ENV} is required for production OIDC token exchange`,
+      );
+    }
+    return;
+  }
+  const allowedHosts = new Set(
+    configuredHosts
+      .split(",")
+      .map((host) =>
+        host
+          .trim()
+          .replace(/^\[/, "")
+          .replace(/\]$/, "")
+          .replace(/\.+$/, "")
+          .toLowerCase(),
+      )
+      .filter(Boolean),
+  );
+  if (!allowedHosts.has(hostname)) {
+    throw new Error(
+      `OIDC token endpoint host must be listed in ${OIDC_ALLOWED_HOSTS_ENV}`,
+    );
+  }
 }
 
 function trustedOidcTokenEndpoint(config: {
@@ -86,6 +131,7 @@ function trustedOidcTokenEndpoint(config: {
   }
 
   const isLoopback = isLoopbackHostname(hostname);
+  assertAllowedOidcHostname(hostname);
   if (endpoint.protocol === "http:") {
     if (!isLoopback || process.env.NODE_ENV === "production") {
       throw new Error(
@@ -259,24 +305,32 @@ export async function POST(request: NextRequest) {
     code_verifier: stateCookie.verifier,
     redirect_uri: config.redirectUri,
   });
-  let accessToken: string | null = null;
+  let tokenEndpoint: URL;
   try {
-    const tokenResponse = await fetch(trustedOidcTokenEndpoint(config), {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: tokenBody,
-      cache: "no-store",
-    });
-    if (!tokenResponse.ok) {
-      return errorResponse("oidc_token_exchange_failed", 502);
-    }
-    const tokenJson = await tokenResponse.json() as { access_token?: unknown };
-    accessToken = normalizeSessionToken(tokenJson.access_token);
+    tokenEndpoint = trustedOidcTokenEndpoint(config);
   } catch {
+    recordOidcTokenExchangeFailure("configuration_rejected");
     return errorResponse("oidc_token_exchange_failed", 502);
   }
 
-  if (!accessToken || !(await backendAcceptsSessionToken(accessToken))) {
+  let accessToken: string | null = null;
+  try {
+    const tokenJson = await postOidcTokenRequest(tokenEndpoint, tokenBody);
+    accessToken = normalizeSessionToken(tokenJson.access_token);
+  } catch {
+    recordOidcTokenExchangeFailure("dns_or_transport_rejected");
+    return errorResponse("oidc_token_exchange_failed", 502);
+  }
+
+  if (!accessToken) {
+    recordOidcTokenExchangeFailure("access_token_missing_or_invalid");
+  }
+  const backendAccepted =
+    accessToken ? await backendAcceptsSessionToken(accessToken) : false;
+  if (!accessToken || !backendAccepted) {
+    if (accessToken && !backendAccepted) {
+      recordOidcTokenExchangeFailure("backend_session_rejected");
+    }
     const response = errorResponse("invalid_session_token", 401);
     response.cookies.set(expiredOidcStateCookieOptions());
     response.cookies.set(buildExpiredSessionCookieOptions());
