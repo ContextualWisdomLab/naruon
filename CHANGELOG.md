@@ -5,6 +5,7 @@
 - OIDC token endpoint는 운영 환경에서 서버 전용 `OIDC_ALLOWED_HOSTS` 정확 호스트 allowlist를 필수로 적용합니다. hostname의 모든 DNS 결과가 공인 주소인지 검증한 뒤 해당 주소 집합을 native HTTP(S) 연결의 `lookup`에 고정하고, 원래 issuer hostname은 Host/TLS SNI로 유지해 사설 주소 해석과 DNS rebinding 사이의 TOCTOU를 차단합니다. 실패 로그는 입력 URL·token 대신 고정된 configuration/DNS·transport/response/backend-verification reason code만 남깁니다.
 - Trivy 2026-07-26 DB에서 새로 확인된 Next.js High 4건·Medium 5건(`CVE-2026-64641`–`CVE-2026-64649`)과 PostCSS High 1건(`GHSA-r28c-9q8g-f849`)을 제거하기 위해 Next.js/`eslint-config-next`를 `16.2.11`, PostCSS를 `8.5.18`로 갱신했습니다. 두 버전은 각 취약점의 최초 수정 버전이며 저장소의 release-age 정책을 우회하지 않습니다.
 - `pnpm audit`가 개발 도구 체인에서 추가 탐지한 `brace-expansion <=5.0.7` High DoS(`GHSA-mh99-v99m-4gvg`)는 `5.0.8` 전역 override로 제거했습니다. CommonJS default export를 기대하는 legacy `minimatch 3.1.5`에는 `expand` named export도 수용하는 최소 pnpm 패치를 적용해 ESLint/glob 동작을 보존합니다.
+- root·frontend Docker build의 frozen install 계층이 pnpm manifest와 함께 `frontend/patches`를 먼저 복사하도록 수정해, 이미지 검증에서도 lockfile의 patched dependency를 동일하게 재현합니다.
 - 제품 이벤트 ID의 `Math.random()` fallback을 Web Crypto 기반 UUID/128-bit 난수로 교체하고, 개인 메일 smoke·live HTTP·Scorecard SARIF 경로에 home/workspace containment, symlink·크기·ZIP entry 제한, loopback endpoint allowlist를 적용했습니다. 도구 실패 로그는 사용자 입력 대신 고정 event와 예외 유형만 기록합니다.
 - 검증: 백엔드 `1560 passed, 32 skipped`(`PYTHONWARNINGS=error`), 프런트 `385 passed`, ESLint, Ruff, TypeScript, Next.js production build, 변경 Python 대상 Bandit Medium 이상 검사, Trivy Medium 이상 검사와 정확한 hash/lock 입력의 OSV 검사가 통과했습니다. GitHub hosted CodeQL/SARIF current-head 결과는 PR checks에서 별도로 확인합니다.
 
