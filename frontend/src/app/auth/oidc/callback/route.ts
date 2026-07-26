@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { backendApiBaseUrl } from "@/lib/backend-url";
+import { trustedBackendOrigin } from "@/lib/backend-url";
 import {
   buildExpiredSessionCookieOptions,
   buildSessionCookieOptions,
@@ -186,63 +186,9 @@ function trustedOidcTokenEndpoint(config: {
   );
 }
 
-function trustedBackendSessionUrl(): URL {
-  const configured = backendApiBaseUrl();
-  const hostname = normalizedHostname(configured);
-  const hasRootPath = configured.pathname === "" || configured.pathname === "/";
-  if (
-    !hostname ||
-    configured.username ||
-    configured.password ||
-    configured.search ||
-    configured.hash ||
-    !hasRootPath
-  ) {
-    throw new Error("BACKEND_INTERNAL_URL must be a trusted origin");
-  }
-
-  if (configured.protocol === "http:") {
-    const isExactLocalBackend =
-      configured.port === "8000" &&
-      (hostname === "127.0.0.1" || hostname === "localhost");
-    const isExactComposeBackend =
-      process.env.ALLOW_DOCKER_BACKEND_INTERNAL_URL === "1" &&
-      configured.port === "8000" &&
-      hostname === "backend";
-    if (
-      (!isExactLocalBackend || process.env.NODE_ENV === "production") &&
-      !isExactComposeBackend
-    ) {
-      throw new Error(
-        "Backend HTTP is limited to a trusted loopback or Compose host",
-      );
-    }
-    const origin =
-      hostname === "backend"
-        ? "http://backend:8000"
-        : hostname === "localhost"
-          ? "http://localhost:8000"
-          : "http://127.0.0.1:8000";
-    return new URL("/api/auth/session", origin);
-  }
-  if (configured.protocol !== "https:") {
-    throw new Error("Backend requests require HTTPS");
-  }
-  const encodedPort = configured.port
-    ? `:${encodeURIComponent(configured.port)}`
-    : "";
-  const encodedHostname = hostname.includes(":")
-    ? `[${hostname}]`
-    : encodeURIComponent(hostname);
-  return new URL(
-    "/api/auth/session",
-    `https://${encodedHostname}${encodedPort}`,
-  );
-}
-
 async function backendAcceptsSessionToken(token: string) {
   try {
-    const target = trustedBackendSessionUrl();
+    const target = new URL("/api/auth/session", trustedBackendOrigin());
     const response = await fetch(target, {
       method: "GET",
       headers: {

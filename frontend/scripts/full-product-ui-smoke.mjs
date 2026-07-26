@@ -11,7 +11,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.resolve(scriptDir, "..");
 const nextCliPath = path.join(frontendDir, "node_modules", "next", "dist", "bin", "next");
 const requestedBaseUrl = process.env.NARUON_FULL_PRODUCT_BASE_URL || "http://127.0.0.1:3001";
-const requestedScreenshotProfile = process.env.NARUON_FULL_PRODUCT_SCREENSHOT_DIR;
+const requestedScreenshotProfile = resolveFullProductScreenshotProfile();
 const SERVER_PROBE_TIMEOUT_MS = 5_000;
 const SERVER_READY_TIMEOUT_MS = 90_000;
 const IS_WINDOWS = process.platform === "win32";
@@ -96,6 +96,13 @@ export function resolveFullProductChromePath(rawChromePath, platform = process.p
   return "/usr/bin/google-chrome";
 }
 
+export function resolveFullProductScreenshotProfile(environment = process.env) {
+  return (
+    environment.NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE ??
+    environment.NARUON_FULL_PRODUCT_SCREENSHOT_DIR
+  );
+}
+
 function resolveFullProductArtifactPrefix(rawProfile) {
   switch (rawProfile) {
     case undefined:
@@ -104,7 +111,9 @@ function resolveFullProductArtifactPrefix(rawProfile) {
     case RESPONSIVE_FULL_PRODUCT_SCREENSHOT_PROFILE:
       return "naruon-full-product-responsive-qa-";
     default:
-      throw new Error("NARUON_FULL_PRODUCT_SCREENSHOT_DIR must select an approved artifact profile");
+      throw new Error(
+        "NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE (or legacy NARUON_FULL_PRODUCT_SCREENSHOT_DIR) must select an approved artifact profile",
+      );
   }
 }
 

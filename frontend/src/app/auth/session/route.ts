@@ -10,7 +10,7 @@ import {
   normalizeSessionToken,
   type SessionClaims,
 } from "@/lib/session-cookie";
-import { backendApiBaseUrl } from "@/lib/backend-url";
+import { trustedBackendOrigin } from "@/lib/backend-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,62 +33,6 @@ type SessionVerificationBucket = {
 };
 
 const sessionVerificationBuckets = new Map<string, SessionVerificationBucket>();
-
-function trustedBackendSessionUrl(): URL {
-  const configured = backendApiBaseUrl();
-  const hostname = configured.hostname
-    .replace(/^\[/, "")
-    .replace(/\]$/, "")
-    .toLowerCase();
-  const hasRootPath = configured.pathname === "" || configured.pathname === "/";
-  if (
-    !hostname ||
-    configured.username ||
-    configured.password ||
-    configured.search ||
-    configured.hash ||
-    !hasRootPath
-  ) {
-    throw new Error("BACKEND_INTERNAL_URL must be a trusted origin");
-  }
-
-  let origin: string;
-  if (configured.protocol === "http:") {
-    const isExactLocalBackend =
-      configured.port === "8000" &&
-      (hostname === "127.0.0.1" || hostname === "localhost");
-    const isExactComposeBackend =
-      process.env.ALLOW_DOCKER_BACKEND_INTERNAL_URL === "1" &&
-      configured.port === "8000" &&
-      hostname === "backend";
-    if (
-      (!isExactLocalBackend || process.env.NODE_ENV === "production") &&
-      !isExactComposeBackend
-    ) {
-      throw new Error(
-        "Backend HTTP is limited to a trusted loopback or Compose host",
-      );
-    }
-    origin =
-      hostname === "backend"
-        ? "http://backend:8000"
-        : hostname === "localhost"
-          ? "http://localhost:8000"
-          : "http://127.0.0.1:8000";
-  } else if (configured.protocol === "https:") {
-    const encodedHostname = hostname.includes(":")
-      ? `[${hostname}]`
-      : encodeURIComponent(hostname);
-    const encodedPort = configured.port
-      ? `:${encodeURIComponent(configured.port)}`
-      : "";
-    origin = `https://${encodedHostname}${encodedPort}`;
-  } else {
-    throw new Error("Backend requests require HTTPS");
-  }
-
-  return new URL("/api/auth/session", origin);
-}
 
 function firstHeaderValue(value: string | null): string | null {
   return value?.split(",")[0]?.trim() || null;
@@ -288,7 +232,7 @@ async function verifySessionToken(
   token: string,
 ): Promise<SessionClaims | null> {
   try {
-    const target = trustedBackendSessionUrl();
+    const target = new URL("/api/auth/session", trustedBackendOrigin());
     const response = await fetch(target, {
       method: "GET",
       headers: {

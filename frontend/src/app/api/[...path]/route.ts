@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { backendApiBaseUrl } from "@/lib/backend-url";
+import { trustedBackendOrigin } from "@/lib/backend-url";
 import { SESSION_COOKIE_NAME, normalizeSessionToken } from "@/lib/session-cookie";
 
 export const runtime = "nodejs";
@@ -64,59 +64,6 @@ class InvalidProxyPathError extends Error {
     super(message);
     this.name = "InvalidProxyPathError";
   }
-}
-
-function safeBackendOrigin(): URL {
-  const configured = backendApiBaseUrl();
-  const hostname = configured.hostname
-    .replace(/^\[/, "")
-    .replace(/\]$/, "")
-    .toLowerCase();
-  const hasRootPath = configured.pathname === "" || configured.pathname === "/";
-  if (
-    !hostname ||
-    configured.username ||
-    configured.password ||
-    configured.search ||
-    configured.hash ||
-    !hasRootPath
-  ) {
-    throw new Error(
-      "BACKEND_INTERNAL_URL must be an origin without credentials, path, query, or fragment",
-    );
-  }
-
-  if (configured.protocol === "http:") {
-    const isExactLocalBackend =
-      configured.port === "8000" &&
-      (hostname === "127.0.0.1" || hostname === "localhost");
-    const isExactComposeBackend =
-      process.env.ALLOW_DOCKER_BACKEND_INTERNAL_URL === "1" &&
-      configured.port === "8000" &&
-      hostname === "backend";
-    if (
-      (!isExactLocalBackend || process.env.NODE_ENV === "production") &&
-      !isExactComposeBackend
-    ) {
-      throw new Error(
-        "Backend HTTP is limited to the exact development loopback or opted-in Compose host",
-      );
-    }
-    if (hostname === "backend") return new URL("http://backend:8000");
-    if (hostname === "localhost") return new URL("http://localhost:8000");
-    return new URL("http://127.0.0.1:8000");
-  }
-
-  if (configured.protocol !== "https:") {
-    throw new Error("Backend requests require HTTPS");
-  }
-  const encodedHostname = hostname.includes(":")
-    ? `[${hostname}]`
-    : encodeURIComponent(hostname);
-  const encodedPort = configured.port
-    ? `:${encodeURIComponent(configured.port)}`
-    : "";
-  return new URL(`https://${encodedHostname}${encodedPort}`);
 }
 
 function safeBackendPath(path: string[]): string {
@@ -272,7 +219,7 @@ async function proxyApiRequest(
   const path = params.path ?? [];
   let target: URL;
   try {
-    target = safeBackendOrigin();
+    target = trustedBackendOrigin();
     target.pathname = `/api/${safeBackendPath(path)}`;
     target.search = safeBackendQuery(request.nextUrl.searchParams);
   } catch (error) {

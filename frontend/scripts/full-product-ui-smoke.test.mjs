@@ -17,6 +17,7 @@ import {
   resolveFullProductArtifactPath,
   resolveFullProductBaseUrl,
   resolveFullProductChromePath,
+  resolveFullProductScreenshotProfile,
   resolveFullProductViewportSpecs,
 } from "./full-product-ui-smoke.mjs";
 
@@ -58,6 +59,23 @@ describe("full product UI smoke base URL guard", () => {
       await rm(firstDirectory, { recursive: true, force: true });
       await rm(secondDirectory, { recursive: true, force: true });
     }
+  });
+
+  it("prefers the screenshot profile variable and preserves the legacy directory alias", () => {
+    expect(
+      resolveFullProductScreenshotProfile({
+        NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE:
+          "/tmp/naruon-full-product-responsive-qa",
+        NARUON_FULL_PRODUCT_SCREENSHOT_DIR:
+          "/tmp/naruon-full-product-smoke",
+      }),
+    ).toBe("/tmp/naruon-full-product-responsive-qa");
+    expect(
+      resolveFullProductScreenshotProfile({
+        NARUON_FULL_PRODUCT_SCREENSHOT_DIR:
+          "/tmp/naruon-full-product-smoke",
+      }),
+    ).toBe("/tmp/naruon-full-product-smoke");
   });
 
   it("allows only fixed system Chrome fallback executables", () => {
