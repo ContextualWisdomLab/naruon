@@ -154,7 +154,7 @@ export function SourceDrawer({
           </section>
 
           <section className="mt-5 space-y-3">
-            <h3 className="text-sm font-black text-foreground">증거 요약</h3>
+            <h3 className="text-sm font-black text-foreground">증거 종합</h3>
             <p className="rounded-xl border border-border bg-background p-4 text-sm leading-6 text-foreground">
               {summary}
             </p>
