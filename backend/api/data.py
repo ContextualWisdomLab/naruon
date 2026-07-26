@@ -1,3 +1,4 @@
+from collections import defaultdict
 import base64
 import binascii
 from datetime import datetime, timezone
@@ -1692,7 +1693,7 @@ def _risk_matrix_key_part(value: str) -> str:
 def _diligence_risk_matrix(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceRiskMatrixEntry]:
-    from collections import defaultdict
+    # ⚡ Bolt: Use defaultdict(list) instead of dict.setdefault(..., []).append(...) to avoid O(N) empty list allocation overhead inside the loop.
     groups: dict[
         tuple[RemediationPriority, str, str],
         list[DataDiligenceExceptionRegisterEntry],
@@ -1845,7 +1846,7 @@ def _diligence_close_decision_summary(
 def _diligence_close_artifact_review_queue(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceCloseArtifactReviewQueueEntry]:
-    from collections import defaultdict
+    # ⚡ Bolt: Use defaultdict(list) instead of dict.setdefault(..., []).append(...) to avoid O(N) empty list allocation overhead inside the loop.
     groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = defaultdict(list)
     for proof in snapshot.diligence_close_proof_plan:
         groups[proof.required_proof_artifact].append(proof)
@@ -1891,7 +1892,7 @@ def _diligence_close_artifact_review_queue(
 def _diligence_close_owner_handoff_queue(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceCloseOwnerHandoffQueueEntry]:
-    from collections import defaultdict
+    # ⚡ Bolt: Use defaultdict(list) instead of dict.setdefault(..., []).append(...) to avoid O(N) empty list allocation overhead inside the loop.
     groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = defaultdict(list)
     for proof in snapshot.diligence_close_proof_plan:
         groups[proof.owner_area].append(proof)

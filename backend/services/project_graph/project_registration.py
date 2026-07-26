@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import defaultdict
 
 import datetime
 import hashlib
@@ -612,7 +613,7 @@ def _candidate_groups(
     *,
     scope: ProjectGraphQueryScope,
 ) -> tuple[_CandidateGroup, ...]:
-    from collections import defaultdict
+    # ⚡ Bolt: Use defaultdict(list) instead of dict.setdefault(..., []).append(...) to avoid O(N) empty list allocation overhead inside the loop.
     records_by_email: dict[int, list[ProjectGraphObjectRecord]] = defaultdict(list)
     for record in records:
         records_by_email[record.email_id].append(record)
@@ -843,7 +844,7 @@ def _relation_summary(
     ``relation_count`` descending with a ``relation_type``-ascending tie-break so
     the result is deterministic regardless of relation iteration order.
     """
-    from collections import defaultdict
+    # ⚡ Bolt: Use defaultdict(list) instead of dict.setdefault(..., []).append(...) to avoid O(N) empty list allocation overhead inside the loop.
     grouped: dict[str, list[ProjectTraceRelation]] = defaultdict(list)
     for relation in relations:
         grouped[relation.relation_type].append(relation)
