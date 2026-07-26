@@ -612,9 +612,10 @@ def _candidate_groups(
     *,
     scope: ProjectGraphQueryScope,
 ) -> tuple[_CandidateGroup, ...]:
-    records_by_email: dict[int, list[ProjectGraphObjectRecord]] = {}
+    from collections import defaultdict
+    records_by_email: dict[int, list[ProjectGraphObjectRecord]] = defaultdict(list)
     for record in records:
-        records_by_email.setdefault(record.email_id, []).append(record)
+        records_by_email[record.email_id].append(record)
 
     groups: list[_CandidateGroup] = []
     for group_records in records_by_email.values():
@@ -842,9 +843,10 @@ def _relation_summary(
     ``relation_count`` descending with a ``relation_type``-ascending tie-break so
     the result is deterministic regardless of relation iteration order.
     """
-    grouped: dict[str, list[ProjectTraceRelation]] = {}
+    from collections import defaultdict
+    grouped: dict[str, list[ProjectTraceRelation]] = defaultdict(list)
     for relation in relations:
-        grouped.setdefault(relation.relation_type, []).append(relation)
+        grouped[relation.relation_type].append(relation)
     type_summaries = [
         ProjectRelationTypeSummary(
             relation_type=relation_type,
