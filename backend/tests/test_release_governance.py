@@ -478,8 +478,8 @@ def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
 
     sarif_path.chmod(0o444)
     try:
-        for _ in range(2):
-            ret = ensure_scorecard_module.main([str(normalizer), str(sarif_path)])
+        for argument in (str(sarif_path), "./scorecard-results.sarif"):
+            ret = ensure_scorecard_module.main([str(normalizer), argument])
             assert ret == 0, f"Scorecard script failed with {ret}"
     finally:
         sarif_path.chmod(0o644)

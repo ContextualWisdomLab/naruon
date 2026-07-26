@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 import sys
 from copy import deepcopy
@@ -86,7 +87,8 @@ def scorecard_sarif_path(argument: str) -> Path:
     """Return the single SARIF artifact allowed in the current workspace."""
     workspace = Path.cwd().resolve(strict=True)
     expected = workspace / SCORECARD_SARIF_FILENAME
-    if argument not in {SCORECARD_SARIF_FILENAME, str(expected)}:
+    candidate = Path(os.path.abspath(argument))
+    if candidate != expected:
         raise ValueError("SARIF path must name the workspace Scorecard artifact")
     if expected.is_symlink():
         raise ValueError("SARIF path must not be a symlink")
