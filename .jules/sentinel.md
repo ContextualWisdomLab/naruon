@@ -114,3 +114,8 @@
 **Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
+
+## 2024-07-26 - SSRF Bypass on Webhook Validation
+**Vulnerability:** A webhook SSRF protection check only validated if hostnames ended with `.internal` or `.local` (`hostname.endswith(".internal")`). Exact matches like `https://internal` bypassed this check and were forwarded to standard IP resolution.
+**Learning:** In containerized or orchestrated environments (like Docker/Kubernetes), single-word hostnames like `internal` or `local` can successfully resolve to internal services. Basic suffix checks on hostnames for SSRF protection are insufficient.
+**Prevention:** Always ensure exact match checks (`hostname == "internal"`) are included alongside suffix checks, or rely exclusively on resolved IP address validation against private/loopback IP blocks rather than string-matching hostnames.
