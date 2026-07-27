@@ -42,17 +42,21 @@
     "eslint-config-next": "16.2.10",
     "fast-check": "^4.9.0",
     "jsdom": "^29.1.0",
-    "postcss": "^8.5.16",
+    "postcss": "^8.5.23",
     "typescript": "^6",
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "postcss": "^8.5.16",
+    "postcss": "^8.5.17",
     "undici": "7.28.0",
-    "uuid": "^14.0.0"
+    "uuid": "^14.0.0",
+    "next": "16.2.11",
+    "sharp": "^0.34.5"
   },
   "resolutions": {
-    "postcss": "^8.5.16",
-    "undici": "7.28.0"
+    "postcss": "^8.5.17",
+    "undici": "7.28.0",
+    "next": "16.2.11",
+    "sharp": "^0.34.5"
   }
 }
