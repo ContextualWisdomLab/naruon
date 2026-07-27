@@ -328,7 +328,7 @@ export function TasksLayout() {
                 key={task.id}
                 type="button"
                 onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}
-                className="w-full rounded-lg border border-border bg-background p-3 text-left shadow-sm transition-all hover:border-primary/50 hover:shadow-md"
+                className="w-full rounded-lg border border-border bg-background p-3 text-left shadow-sm transition-all hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <div className="flex flex-wrap gap-1 mb-2">
                   <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">{getTaskSourceLabel(task.source_type)}</span>
@@ -499,7 +499,7 @@ export function TasksLayout() {
                 disabled={replySlaStatus === 'loading'}
                 aria-busy={replySlaStatus === 'loading'}
                 onClick={() => void handleReplySlaEscalation()}
-                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
+                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <Plus className="size-3.5" />
                 {replySlaStatus === 'loading' ? '확인 중' : '팔로업 작업 생성'}
@@ -551,7 +551,7 @@ export function TasksLayout() {
                           aria-label={`${displayTitle} 상태를 ${taskStatusChangeLabels[status]} 변경`}
                           aria-pressed={task.status === status}
                           onClick={() => void handleTicketStatusChange(task.id, status)}
-                          className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-colors ${
+                          className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
                             task.status === status
                               ? 'border-primary bg-primary text-primary-foreground'
                               : 'border-border bg-card text-foreground hover:border-primary/60 hover:bg-secondary'
@@ -602,7 +602,7 @@ export function TasksLayout() {
                             disabled={currentKnowledgeIntent.state === 'loading'}
                             aria-busy={currentKnowledgeIntent.state === 'loading'}
                             onClick={() => void handleKnowledgeIntentCreate(task.id)}
-                            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
+                            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                           >
                             <Plus className="size-3.5" />
                             {currentKnowledgeIntent.state === 'loading' ? '생성 중' : '의도 생성'}
@@ -613,7 +613,7 @@ export function TasksLayout() {
                             disabled={currentKnowledgeIntent.state === 'loading'}
                             aria-busy={currentKnowledgeIntent.state === 'loading'}
                             onClick={() => void handleKnowledgeIntentCreate(task.id, true)}
-                            className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/15 disabled:cursor-wait disabled:opacity-70"
+                            className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/15 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                           >
                             실행 요청
                           </button>
@@ -771,7 +771,7 @@ export function TasksLayout() {
                     aria-label={`${safeTaskTitle(task.title)} 상세 상태를 ${taskStatusChangeLabels[status]} 변경`}
                     aria-pressed={task.status === status}
                     onClick={() => void handleTicketStatusChange(task.id, status)}
-                    className={`rounded-md border px-3 py-1.5 text-xs font-bold transition-colors ${
+                    className={`rounded-md border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
                       task.status === status
                         ? 'border-primary bg-primary text-primary-foreground'
                         : 'border-border bg-card text-foreground hover:border-primary/60 hover:bg-secondary'
