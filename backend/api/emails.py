@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
 from db.models import Email
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
 from typing import Literal
@@ -577,11 +577,16 @@ async def import_email_files(
     uploads: list[EmailImportUpload] = []
     for upload in files:
         normalized_filename = upload.filename.lower().strip() if upload.filename else ""
-        if not upload.filename or not (
-            normalized_filename.endswith(".eml")
-            or normalized_filename.endswith(".zip")
-            or normalized_filename.endswith(".mbox")
-        ):
+        if not upload.filename:
+            raise HTTPException(status_code=400, detail="invalid_file_type")
+
+        allowed_extensions = {".eml", ".zip", ".mbox"}
+        segments = normalized_filename.split(".")
+        if len(segments) < 2 or ("." + segments[-1]) not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="invalid_file_type")
+
+        dangerous_extensions = {".exe", ".sh", ".bat", ".cmd", ".msi", ".vbs", ".scr", ".pif", ".dll", ".com"}
+        if any(("." + seg) in dangerous_extensions for seg in segments[:-1]):
             raise HTTPException(status_code=400, detail="invalid_file_type")
 
         content = await upload.read(MAX_IMPORT_UPLOAD_BYTES + 1)
@@ -695,6 +700,17 @@ class SendEmailRequest(BaseModel):
     body: str
     in_reply_to: str | None = None  # O3: email threading support
     references: str | None = None
+
+    @field_validator("to", "subject", "in_reply_to", "references", mode="before")
+    @classmethod
+    def reject_crlf(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not isinstance(v, str):
+            return v
+        if chr(10) in v or chr(13) in v:
+            raise ValueError("Email header fields must not contain newlines")
+        return v
 
 
 @router.post("/send")
