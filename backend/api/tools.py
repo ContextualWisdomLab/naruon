@@ -606,6 +606,78 @@ registry.register(
 )
 
 
+
+async def contact_extractor_handler(params: Dict[str, Any]) -> Any:
+    """Extract contact information like names, emails, and phone numbers."""
+    email_content = params.get("email_content", "")
+
+    # Simple extraction logic for demo
+    emails = []
+    phones = []
+
+    words = email_content.split()
+    for word in words:
+        if "@" in word and "." in word:
+            emails.append(word.strip(".,;:()<>[]\'\""))
+        if any(c.isdigit() for c in word) and "-" in word and len(word) >= 10:
+            phones.append(word.strip(".,;:()<>[]\'\""))
+
+    return {
+        "emails": emails,
+        "phones": phones,
+        "has_contacts": bool(emails or phones)
+    }
+
+registry.register(
+    ToolInfo(
+        code="contact_extractor",
+        name="연락처 추출기 (Contact Extractor)",
+        description="이메일 본문에서 이메일 주소 및 전화번호 등 연락처 정보를 추출합니다.",
+        category="정보 추출",
+        parameters={"email_content": "string"},
+    ),
+    contact_extractor_handler,
+)
+
+async def priority_classifier_handler(params: Dict[str, Any]) -> Any:
+    """Classify the priority of an email (High, Medium, Low)."""
+    email_content = params.get("email_content", "").lower()
+    subject = params.get("subject", "").lower()
+
+    combined = subject + " " + email_content
+
+    high_keywords = {"urgent", "asap", "immediate", "critical", "emergency", "긴급", "즉시", "중요"}
+    low_keywords = {"fyi", "newsletter", "update", "info", "참고", "뉴스레터", "업데이트"}
+
+    high_hits = sum(1 for kw in high_keywords if kw in combined)
+    low_hits = sum(1 for kw in low_keywords if kw in combined)
+
+    if high_hits > 0 and high_hits > low_hits:
+        priority = "High"
+    elif low_hits > 0 and low_hits >= high_hits:
+        priority = "Low"
+    else:
+        priority = "Medium"
+
+    return {
+        "priority": priority,
+        "reasons": {
+            "high_keywords_found": high_hits,
+            "low_keywords_found": low_hits
+        }
+    }
+
+registry.register(
+    ToolInfo(
+        code="priority_classifier",
+        name="우선순위 분류기 (Priority Classifier)",
+        description="이메일의 내용과 제목을 분석하여 중요도(High, Medium, Low)를 분류합니다.",
+        category="이메일 분석",
+        parameters={"email_content": "string", "subject": "string"},
+    ),
+    priority_classifier_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """

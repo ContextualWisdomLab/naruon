@@ -993,3 +993,162 @@ def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
+
+
+def test_execute_email_translator_ko():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "안녕하세요",
+                    "target_language": "en",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["source_language_detected"] == "ko"
+
+
+def test_execute_email_translator_unknown():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_translator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "12345 !@#",
+                    "target_language": "en",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["source_language_detected"] == "unknown"
+
+
+def test_execute_sentiment_analyzer_positive():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "Thank you for the great work!"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "positive"
+    assert data["result"]["score"] > 0.5
+    assert "감사" in data["result"]["key_emotions"]
+
+
+def test_execute_sentiment_analyzer_neutral():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sentiment_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "I will go to the office today."}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["sentiment"] == "neutral"
+    assert data["result"]["score"] == 0.5
+    assert "중립" in data["result"]["key_emotions"]
+
+
+def test_execute_contact_extractor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/contact_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "You can reach me at test@example.com or call 010-1234-5678."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "test@example.com" in data["result"]["emails"]
+    assert "010-1234-5678." in data["result"]["phones"] or "010-1234-5678" in data["result"]["phones"]
+    assert data["result"]["has_contacts"] is True
+
+def test_execute_contact_extractor_empty():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/contact_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "Just a normal email without contacts."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["result"]["emails"]) == 0
+    assert len(data["result"]["phones"]) == 0
+    assert data["result"]["has_contacts"] is False
+
+
+def test_execute_priority_classifier_high():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/priority_classifier/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "We need to fix this emergency issue immediately.",
+                    "subject": "URGENT: Server Down"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["priority"] == "High"
+    assert data["result"]["reasons"]["high_keywords_found"] > 0
+
+
+def test_execute_priority_classifier_low():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/priority_classifier/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "Here is the weekly update for your info.",
+                    "subject": "FYI Newsletter"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["priority"] == "Low"
+    assert data["result"]["reasons"]["low_keywords_found"] > 0
+
+
+def test_execute_priority_classifier_medium():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/priority_classifier/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "email_content": "Let's meet tomorrow to discuss the project.",
+                    "subject": "Meeting request"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["priority"] == "Medium"
