@@ -14,28 +14,32 @@
 # ``OpenAIModel`` in 2.x) and constructs the model via ``OpenAIProvider``.
 # Version 2.8.0 is the newest 2.x release compatible with the core
 # requirements-hashes.txt pin of openai==2.44.0; 2.9.0 requires openai>=2.45.0.
-pydantic-ai-slim[openai]==2.9.0 \
-    --hash=sha256:11b812833eb75cfcc31c86b6e2db75e28cade6bb746844e28a40eb51b04a09d3 \
-    --hash=sha256:560a860cb67cf7732b16fb40e1d9205d75c02934e75e41db7ccb104ebc9ea266
+pydantic-ai-slim[openai]==2.18.0 \
+    --hash=sha256:4c4076166a63ad96fe6ed5a517223c4a5aba6c9682a17d8d0ac42839cbc83622 \
+    --hash=sha256:dfe47a3602049f779223702a684ed8091b111cfae1851236616d6b0eb3b0b077
     # via -r backend/requirements-agent.txt
-genai-prices==0.0.71 \
-    --hash=sha256:1d13111563af2b1ce43ccfacf77b7ac3216ad704c644408a56e11b181fe0d128
+genai-prices==0.0.72 \
+    --hash=sha256:21281d8df34d9bfbb736e0763a60ceda02226938cd47379ae437a44fcf8ba23d \
+    --hash=sha256:a7e481d0ea85922fcf48df6864f2491fc81a4f03dcf0ecbd9aa8c2c6d9fcdbe8
     # via pydantic-ai-slim
 griffelib==2.1.0 \
     --hash=sha256:cc7b3d2d2865ad0b909fcc38086e3f554b5ea7acbaa7bbb7ecaa3f5dfb7d9f00
     # via pydantic-ai-slim
-httpcore2==2.5.0 \
-    --hash=sha256:5ce35188de461d31e8d000bfb8ef8bf22c6c16587a211e5571deaa5e9bdf842a
+httpcore2==2.9.1 \
+    --hash=sha256:4d8acbf8b306f48c9d6046591fd5ba4037d1b1b1000d140fc2c3eab1e9a0c0e2 \
+    --hash=sha256:6182472379e855fe4221246a2bb7ecede403bc61c6798062ae1787d051ccde26
     # via httpx2
-httpx2==2.5.0 \
-    --hash=sha256:3d2d4d9cf4b61f1a1f46a95947cfdb47e80cb56a2f91c6256ac8f58e4891df41
+httpx2==2.9.1 \
+    --hash=sha256:1820fe14a9ab1107bfeff39259987429450b070ec0ff38cc87eb0d8c97fdc71a \
+    --hash=sha256:1932a768737e3666291582833da748cc4e563c337cf96706fccc04fa6e58764a
     # via genai-prices
-logfire-api==4.37.0 \
-    --hash=sha256:1d756f8ba23aa56d438e0ba2c0f529a00fcac975b8785c561b058267f9465088
+logfire-api==4.39.0 \
+    --hash=sha256:1e885f95c37d58cdb927bbc6baea4f4a7c13066f6b3019758627d4dc442643d0 \
+    --hash=sha256:20057bbd2898dec2eed02e2559bd73f4e10bc4b108987821df55e9c762da3ba8
     # via pydantic-graph
-pydantic-graph==2.9.0 \
-    --hash=sha256:0ee8ad7b69d628037f3194d506b6c7099e416f25e477f9590da110cdaf48c649 \
-    --hash=sha256:a6d146cfd97b086e4334afc6717b2d078a3f102631cfe05e421fda2ca5a7046f
+pydantic-graph==2.18.0 \
+    --hash=sha256:48df74e3ae12ca44f99890e9b4f7020ae70a5a38d20df02db7cb16b0db3c3711 \
+    --hash=sha256:9423defa047b477a561a06eadfd37aaf101a2b690d044adb79de80d7ea203e4e
     # via pydantic-ai-slim
 truststore==0.10.4 \
     --hash=sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981
