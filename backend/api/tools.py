@@ -641,8 +641,8 @@ registry.register(
 
 async def priority_classifier_handler(params: Dict[str, Any]) -> Any:
     """Classify the priority of an email (High, Medium, Low)."""
-    email_content = params.get("email_content", "").lower()
-    subject = params.get("subject", "").lower()
+    email_content = (params.get("email_content") or "").lower()
+    subject = (params.get("subject") or "").lower()
 
     combined = subject + " " + email_content
 
