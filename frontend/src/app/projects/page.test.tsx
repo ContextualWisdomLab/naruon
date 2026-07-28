@@ -15,6 +15,7 @@ vi.mock("lucide-react", () => ({
   FolderOpen: () => <svg aria-hidden="true" />,
   GitBranch: () => <svg aria-hidden="true" />,
   ListChecks: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
   Network: () => <svg aria-hidden="true" />,
   Search: () => <svg aria-hidden="true" />,
   User: () => <svg aria-hidden="true" />,
