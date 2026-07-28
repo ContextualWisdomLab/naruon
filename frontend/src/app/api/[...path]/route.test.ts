@@ -14,6 +14,7 @@ describe("/api runtime proxy route", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
@@ -266,6 +267,7 @@ describe("/api runtime proxy route", () => {
   );
 
   it("fails closed when the backend configuration is not a bare trusted origin", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubEnv(
       "BACKEND_INTERNAL_URL",
       "https://api.naruon.net/untrusted/base?next=http://169.254.169.254",
@@ -286,11 +288,16 @@ describe("/api runtime proxy route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      "proxy_target_configuration_failed",
+      { error_type: "Error" },
+    );
   });
 
   it("returns secure no-store headers when the backend fetch fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("backend unavailable");
+      throw new Error("backend unavailable\r\nforged_event=true");
     }));
 
     const response = await GET(
@@ -301,6 +308,10 @@ describe("/api runtime proxy route", () => {
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(consoleError).toHaveBeenCalledWith("proxy_fetch_failed", {
+      error_type: "Error",
+    });
+    expect(consoleError.mock.calls.flat().join(" ")).not.toContain("forged_event");
   });
 
   it("keeps encoded authority-like path input on the configured backend host", async () => {

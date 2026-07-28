@@ -29,6 +29,21 @@ def _tool_code_fingerprint(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8", errors="replace")).hexdigest()[:12]
 
 
+def _exception_traceback_fingerprint(exc: Exception) -> str:
+    """Fingerprint traceback locations without logging exception text or source."""
+    locations: list[str] = []
+    traceback_cursor = exc.__traceback__
+    while traceback_cursor is not None:
+        frame = traceback_cursor.tb_frame
+        locations.append(
+            f"{frame.f_code.co_filename}:{frame.f_code.co_name}:"
+            f"{traceback_cursor.tb_lineno}"
+        )
+        traceback_cursor = traceback_cursor.tb_next
+    material = "\n".join(locations) or type(exc).__name__
+    return hashlib.sha256(material.encode("utf-8", errors="replace")).hexdigest()[:12]
+
+
 def _safe_tool_failure_message(exc: Exception) -> str:
     """Return a bounded single-line exception message for the API response."""
     raw = str(exc) or type(exc).__name__
@@ -749,6 +764,7 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
             "tool_execution_failed",
             extra={
                 "exception_type": type(e).__name__,
+                "exception_traceback_fingerprint": _exception_traceback_fingerprint(e),
                 "tool_code_fingerprint": _tool_code_fingerprint(code),
             },
         )

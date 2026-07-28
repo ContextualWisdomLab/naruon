@@ -395,6 +395,8 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     ]
     assert len(records) == 1
     assert records[0].exception_type == "ValueError"
+    assert len(records[0].exception_traceback_fingerprint) == 12
+    int(records[0].exception_traceback_fingerprint, 16)
     assert records[0].tool_code_fingerprint == hashlib.sha256(
         hostile_code.encode("utf-8")
     ).hexdigest()[:12]

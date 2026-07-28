@@ -66,6 +66,15 @@ class InvalidProxyPathError extends Error {
   }
 }
 
+function proxyFailureDetails(error: unknown) {
+  const candidate =
+    error instanceof Error ? error.constructor.name : typeof error;
+  const errorType = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(candidate)
+    ? candidate
+    : "Error";
+  return { error_type: errorType };
+}
+
 function safeBackendPath(path: string[]): string {
   if (path.length === 0 || path.length > MAX_PROXY_PATH_SEGMENTS) {
     throw new InvalidProxyPathError("Invalid backend path segment count");
@@ -247,7 +256,10 @@ async function proxyApiRequest(
         },
       );
     }
-    console.error("Proxy target configuration failed");
+    console.error(
+      "proxy_target_configuration_failed",
+      proxyFailureDetails(error),
+    );
     return new NextResponse(null, {
       status: 503,
       statusText: "Service Unavailable",
@@ -269,7 +281,7 @@ async function proxyApiRequest(
     response = await fetch(target, init);
   } catch (error) {
     // If the backend isn't available (e.g. during build), return a 503 instead of throwing
-    console.error("Proxy fetch failed:", error);
+    console.error("proxy_fetch_failed", proxyFailureDetails(error));
     return new NextResponse(null, {
       status: 503,
       statusText: "Service Unavailable",
