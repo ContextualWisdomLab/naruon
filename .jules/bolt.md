@@ -10,3 +10,6 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+## 2025-02-12 - Memoize My Tasks list rendering in TasksLayout
+**Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
+**Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks in the "내 작업" view) in a `useMemo` hook with specific dependencies to prevent rendering bottlenecks when other unrelated state variables are updated.
