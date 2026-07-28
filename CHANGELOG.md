@@ -2688,6 +2688,9 @@
 
 ## [Unreleased]
 ### Added
+- `backend/api/tools.py`에 이메일 본문에서 URL을 추출하는 `url_extractor` 도구 추가
+- `backend/api/tools.py`에 개인정보(이메일, 전화번호)를 마스킹하는 `pii_redactor` 도구 추가
+
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환
   - `action_item_extractor_handler`: 실행 항목 및 마감일 추출

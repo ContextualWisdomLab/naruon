@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
-from api.tools import ToolInfo, ToolRegistry, _parameter_type_name, registry
+from api.tools import ToolInfo, ToolRegistry, _parameter_type_name, registry, _detect_text_language, sentiment_analyzer_handler, url_extractor_handler, pii_redactor_handler
 from main import app
 
 
@@ -993,3 +993,44 @@ def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
+
+
+def test_detect_text_language():
+    assert _detect_text_language("안녕하세요") == "ko"
+    assert _detect_text_language("Hello") == "en"
+    assert _detect_text_language("123") == "unknown"
+
+@pytest.mark.asyncio
+async def test_sentiment_analyzer_positive():
+    params = {"text": "Thank you very much"}
+    res = await sentiment_analyzer_handler(params)
+    assert res["sentiment"] == "positive"
+
+@pytest.mark.asyncio
+async def test_sentiment_analyzer_negative_urgent():
+    params = {"text": "urgent issue problem"}
+    res = await sentiment_analyzer_handler(params)
+    assert res["sentiment"] == "negative"
+    assert "긴급" in res["key_emotions"]
+
+@pytest.mark.asyncio
+async def test_sentiment_analyzer_neutral():
+    params = {"text": "This is a book."}
+    res = await sentiment_analyzer_handler(params)
+    assert res["sentiment"] == "neutral"
+
+@pytest.mark.asyncio
+async def test_url_extractor():
+    params = {"text": "Here is a link: https://example.com and www.test.com"}
+    res = await url_extractor_handler(params)
+    assert "https://example.com" in res["urls"]
+    assert "www.test.com" in res["urls"]
+
+@pytest.mark.asyncio
+async def test_pii_redactor():
+    params = {"text": "My email is test@example.com and phone is 010-1234-5678."}
+    res = await pii_redactor_handler(params)
+    assert "test@example.com" not in res["redacted_text"]
+    assert "[EMAIL REDACTED]" in res["redacted_text"]
+    assert "010-1234-5678" not in res["redacted_text"]
+    assert "[PHONE REDACTED]" in res["redacted_text"]

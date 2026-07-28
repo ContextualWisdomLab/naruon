@@ -606,6 +606,48 @@ registry.register(
 )
 
 
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Any:
+    """Extract URLs from text."""
+    text = params.get("text", "")
+    import re
+    # Simple regex for URLs
+    urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
+    return {"urls": urls}
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="이메일 본문 등의 텍스트에서 모든 URL을 추출합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+async def pii_redactor_handler(params: Dict[str, Any]) -> Any:
+    """Redact PII (email, phone) from text."""
+    text = params.get("text", "")
+    import re
+    # Redact email
+    redacted = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL REDACTED]', text)
+    # Redact simple phone numbers (e.g. 010-1234-5678, 02-123-4567)
+    redacted = re.sub(r'\d{2,3}-\d{3,4}-\d{4}', '[PHONE REDACTED]', redacted)
+    return {"redacted_text": redacted}
+
+registry.register(
+    ToolInfo(
+        code="pii_redactor",
+        name="개인정보 마스킹 (PII Redactor)",
+        description="텍스트 내의 이메일 주소나 전화번호 같은 개인정보를 마스킹합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_redactor_handler,
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
