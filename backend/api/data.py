@@ -1,4 +1,5 @@
 import base64
+from collections import defaultdict
 import binascii
 from datetime import datetime, timezone
 import hashlib
@@ -1692,17 +1693,18 @@ def _risk_matrix_key_part(value: str) -> str:
 def _diligence_risk_matrix(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceRiskMatrixEntry]:
+    # ⚡ Bolt: Use defaultdict to prevent O(N) empty list allocations during setdefault
     groups: dict[
         tuple[RemediationPriority, str, str],
         list[DataDiligenceExceptionRegisterEntry],
-    ] = {}
+    ] = defaultdict(list)
     for exception in snapshot.diligence_exception_register:
         key = (
             exception.severity_code,
             exception.owner_area,
             exception.related_artifact,
         )
-        groups.setdefault(key, []).append(exception)
+        groups[key].append(exception)
 
     entries: list[DataDiligenceRiskMatrixEntry] = []
     for (severity, owner_area, related_artifact), exceptions in sorted(
@@ -1844,9 +1846,10 @@ def _diligence_close_decision_summary(
 def _diligence_close_artifact_review_queue(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceCloseArtifactReviewQueueEntry]:
-    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = {}
+    # ⚡ Bolt: Use defaultdict to prevent O(N) empty list allocations during setdefault
+    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = defaultdict(list)
     for proof in snapshot.diligence_close_proof_plan:
-        groups.setdefault(proof.required_proof_artifact, []).append(proof)
+        groups[proof.required_proof_artifact].append(proof)
 
     entries: list[DataDiligenceCloseArtifactReviewQueueEntry] = []
     for artifact, proofs in sorted(groups.items()):
@@ -1889,9 +1892,10 @@ def _diligence_close_artifact_review_queue(
 def _diligence_close_owner_handoff_queue(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceCloseOwnerHandoffQueueEntry]:
-    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = {}
+    # ⚡ Bolt: Use defaultdict to prevent O(N) empty list allocations during setdefault
+    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = defaultdict(list)
     for proof in snapshot.diligence_close_proof_plan:
-        groups.setdefault(proof.owner_area, []).append(proof)
+        groups[proof.owner_area].append(proof)
 
     entries: list[DataDiligenceCloseOwnerHandoffQueueEntry] = []
     for owner_area, proofs in sorted(groups.items()):

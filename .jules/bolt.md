@@ -10,3 +10,7 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+## 2025-02-12 - Replaced Memory-Intensive dict.setdefault in Python Loops
+
+**Learning:** 파이썬의 `dict.setdefault(key, []).append(value)` 패턴은 루프 안에서 심각한 메모리 할당 오버헤드를 발생시킵니다. 키가 이미 존재하는지 여부와 상관없이 파이썬 엔진은 매 순회마다 새로운 빈 리스트 객체 `[]`를 생성한 다음, 키가 존재하면 이를 버리기 때문입니다. 성능이 중요한 파이썬 백엔드 코드에서 대량의 데이터를 순회할 때 이 패턴은 눈에 띄는 병목을 유발합니다.
+**Action:** 파이썬에서 그룹핑(루프를 돌며 리스트를 딕셔너리에 추가하는 작업)을 수행할 때는 항상 `collections.defaultdict(list)`를 초기화하고 `dict[key].append(value)`를 사용하십시오. 이를 통해 불필요한 객체 생성을 막고 성능을 크게 최적화할 수 있습니다.

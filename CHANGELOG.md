@@ -2703,3 +2703,7 @@
 - **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 그대로 재제출하여 파이프라인 재실행을 시도합니다.
 - **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 반복되는 외부 인프라 타임아웃 문제를 해결하기 위해, 마지막으로 재제출을 시도합니다.
 - **Note:** 추가적인 코드 변경은 없으며, PR 내 자동 분석 커멘트에 대한 답변(CI 실패가 본 PR이 아닌 develop의 기존 이슈임을 인지함)을 남기고 현재 워크플로우를 완료합니다.
+
+## [Unreleased]
+### 변경 사항
+- **성능 (Performance)**: 백엔드 모듈(`project_registration.py`, `data.py`) 내 그룹화 로직의 O(N) 메모리 낭비 제거 및 `defaultdict` 적용을 통해 처리 성능을 향상시켰습니다.
