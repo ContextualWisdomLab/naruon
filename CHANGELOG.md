@@ -8,6 +8,7 @@
 - root·frontend Docker build의 frozen install 계층이 pnpm manifest와 함께 `frontend/patches`를 먼저 복사하도록 수정해, 이미지 검증에서도 lockfile의 patched dependency를 동일하게 재현합니다.
 - Scorecard SARIF normalizer는 고정 workspace artifact로 정규화되는 `./scorecard-results.sarif`와 절대 경로를 동일하게 허용하면서 symlink·workspace 이탈은 계속 거부합니다. 도구 실행 실패 API는 CR/LF·제어 문자를 escape하고 500자로 제한하며, 로그에는 raw 도구 코드·예외 text 대신 SHA-256 기반 코드·traceback 상관 식별자만 기록합니다.
 - 백엔드 origin 보안 경계를 `frontend/src/lib/backend-url.ts`의 단일 생성기로 통합해 API proxy·session·OIDC callback이 같은 검증을 사용합니다. UI smoke의 새 `NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE` 이름은 실제 selector 의미를 드러내며, 기존 `..._SCREENSHOT_DIR`은 호환 alias로 계속 지원합니다.
+- PR governance의 CodeRabbit issue-summary 분류는 실제 pre-merge 실패·blocking finding·actionable comment 신호만 차단하고, current-head SHA가 포함된 `Review limit reached` 같은 운영 quota 안내는 소스 결함으로 오분류하지 않습니다. check-run 결론과 inline review comment 검사는 그대로 유지됩니다.
 - 제품 이벤트 ID의 `Math.random()` fallback을 Web Crypto 기반 UUID/128-bit 난수로 교체하고, 개인 메일 smoke·live HTTP·Scorecard SARIF 경로에 home/workspace containment, symlink·크기·ZIP entry 제한, loopback endpoint allowlist를 적용했습니다. 도구 실패 로그는 사용자 입력 대신 고정 event와 예외 유형만 기록합니다.
 - 검증: 백엔드 `1560 passed, 32 skipped`(`PYTHONWARNINGS=error`), 프런트 `385 passed`, ESLint, Ruff, TypeScript, Next.js production build, 변경 Python 대상 Bandit Medium 이상 검사, Trivy Medium 이상 검사와 정확한 hash/lock 입력의 OSV 검사가 통과했습니다. GitHub hosted CodeQL/SARIF current-head 결과는 PR checks에서 별도로 확인합니다.
 
