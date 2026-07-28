@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
 from db.models import Email
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
 from typing import Literal
@@ -575,6 +575,7 @@ async def import_email_files(
         raise HTTPException(status_code=422, detail="too_many_files")
 
     uploads: list[EmailImportUpload] = []
+    dangerous_extensions = {".exe", ".sh", ".bat", ".cmd", ".msi", ".ps1", ".js", ".vbs"}
     for upload in files:
         normalized_filename = upload.filename.lower().strip() if upload.filename else ""
         if not upload.filename or not (
@@ -583,6 +584,11 @@ async def import_email_files(
             or normalized_filename.endswith(".mbox")
         ):
             raise HTTPException(status_code=400, detail="invalid_file_type")
+
+        filename_parts = normalized_filename.split(".")
+        for part in filename_parts[1:]:
+            if f".{part}" in dangerous_extensions:
+                raise HTTPException(status_code=400, detail="invalid_file_type")
 
         content = await upload.read(MAX_IMPORT_UPLOAD_BYTES + 1)
         if len(content) > MAX_IMPORT_UPLOAD_BYTES:
@@ -695,6 +701,14 @@ class SendEmailRequest(BaseModel):
     body: str
     in_reply_to: str | None = None  # O3: email threading support
     references: str | None = None
+
+    @field_validator("to", "subject", "in_reply_to", "references", mode="before")
+    @classmethod
+    def validate_no_crlf(cls, v: str | None) -> str | None:
+        if v is not None and isinstance(v, str):
+            if chr(10) in v or chr(13) in v:
+                raise ValueError("Header injection detected")
+        return v
 
 
 @router.post("/send")
