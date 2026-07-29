@@ -349,7 +349,9 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
 export function SearchLayout() {
   const [query, setQuery] = useState(DEFAULT_QUERY);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchSessionIdRef = useRef(createProductEventId("context_search_session"));
+  const searchSessionIdRef = useRef(
+    createProductEventId("context_search_session"),
+  );
   const lastOpenedResultKeyRef = useRef<string | null>(null);
   const [submittedQuery, setSubmittedQuery] = useState(DEFAULT_QUERY);
   const [activeFilter, setActiveFilter] = useState<ResultFilter>("all");
@@ -539,7 +541,9 @@ export function SearchLayout() {
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedQuery = query.trim();
-    searchSessionIdRef.current = createProductEventId("context_search_session");
+    searchSessionIdRef.current = createProductEventId(
+      "context_search_session",
+    );
     lastOpenedResultKeyRef.current = null;
     recordProductEvent("context_search_submitted", {
       surface: "context_search",

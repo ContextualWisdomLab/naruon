@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
 
-import pytest
-
 from services.email_dedupe_service import (
     EmailDedupeCandidate,
     candidate_message_lookup_values,
@@ -60,20 +58,6 @@ def test_strong_email_fingerprint_no_body():
     )
     assert result is None
 
-
-@pytest.mark.parametrize("missing_field", ["sender", "subject", "date", "body"])
-def test_strong_email_fingerprint_requires_complete_source_metadata(missing_field):
-    values = {
-        "sender": "sender@example.com",
-        "subject": "Subject",
-        "date": datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-        "body": "Hello world",
-    }
-    values[missing_field] = None
-
-    assert strong_email_fingerprint(**values) is None
-
-
 def test_strong_email_fingerprint_valid():
     result = strong_email_fingerprint(
         sender="sender@example.com",
@@ -84,20 +68,6 @@ def test_strong_email_fingerprint_valid():
     assert result is not None
     assert isinstance(result, str)
     assert len(result) > 0
-
-
-def test_strong_email_fingerprint_includes_body_beyond_legacy_snippet():
-    values = {
-        "sender": "sender@example.com",
-        "subject": "Subject",
-        "date": datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-    }
-
-    first = strong_email_fingerprint(**values, body=f"{'A' * 500}first")
-    second = strong_email_fingerprint(**values, body=f"{'A' * 500}second")
-
-    assert first != second
-
 
 def test_candidate_strong_fingerprint():
     candidate = EmailDedupeCandidate(

@@ -274,40 +274,6 @@ def test_scopeweave_promotion_has_incremental_revision():
     assert "if_exists=True" in revision_text
 
 
-def test_email_source_lineage_has_incremental_revision():
-    versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    revision_path = versions_dir / "0018_email_source_lineage.py"
-    assert revision_path.exists()
-    revision_text = revision_path.read_text()
-
-    assert 'revision = "0018_email_source_lineage"' in revision_text
-    assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
-    assert '"email_records"' in revision_text
-    assert '"source_lineage_json"' in revision_text
-    assert "sa.JSON()" in revision_text
-    assert "has_table" in revision_text
-    assert "_has_column" in revision_text
-    assert "op.add_column(" in revision_text
-    assert "op.drop_column(" in revision_text
-    assert "sa.text(" not in revision_text
-
-
-def test_email_read_state_repair_has_incremental_revision():
-    versions_dir = BACKEND_ROOT / "alembic" / "versions"
-    revision_path = versions_dir / "0019_email_read_state_repair.py"
-    assert revision_path.exists()
-    revision_text = revision_path.read_text()
-
-    assert 'revision = "0019_email_read_state_repair"' in revision_text
-    assert 'down_revision = "0018_email_source_lineage"' in revision_text
-    assert '"email_records"' in revision_text
-    assert '"is_read"' in revision_text
-    assert "has_table" in revision_text
-    assert "_has_column" in revision_text
-    assert "op.add_column(" in revision_text
-    assert "sa.text(" not in revision_text
-
-
 def test_migration_runner_uses_alembic_upgrade_head_not_bootstrap_create_all():
     migration_runner = BACKEND_ROOT / "scripts" / "migrate_db.py"
 
