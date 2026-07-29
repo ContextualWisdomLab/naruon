@@ -10,7 +10,7 @@ import {
   normalizeSessionToken,
   type SessionClaims,
 } from "@/lib/session-cookie";
-import { backendApiBaseUrl } from "@/lib/backend-url";
+import { fetchTrustedBackendSession } from "@/lib/backend-session-probe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -228,27 +228,12 @@ function claimsFromBackendSession(body: BackendSessionResponse): SessionClaims |
   };
 }
 
-async function verifySessionToken(token: string): Promise<SessionClaims | null> {
-  const target = backendApiBaseUrl();
-  target.pathname = "/api/auth/session";
-  target.search = "";
-
-  try {
-    const response = await fetch(target, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      cache: "no-store",
-    });
-    if (!response.ok) return null;
-
-    const body = (await response.json()) as BackendSessionResponse;
-    return claimsFromBackendSession(body);
-  } catch {
-    return null;
-  }
+async function verifySessionToken(
+  token: string,
+): Promise<SessionClaims | null> {
+  const body = await fetchTrustedBackendSession(token);
+  if (!body || typeof body !== "object") return null;
+  return claimsFromBackendSession(body as BackendSessionResponse);
 }
 
 function sessionJson(claims: SessionClaims | null) {
