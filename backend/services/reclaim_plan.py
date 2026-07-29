@@ -110,7 +110,10 @@ class DiskSageReclaimPlanEnvelope(StrictReclaimEvidenceModel):
 
     @model_validator(mode="after")
     def validate_claim_bindings(self) -> Self:
-        path_names = [entry.path for entry in self.paths]
+        path_names = [
+            unicodedata.normalize("NFC", entry.path).casefold()
+            for entry in self.paths
+        ]
         if len(path_names) != len(set(path_names)):
             raise ValueError("paths must be unique")
 
