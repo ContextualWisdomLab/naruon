@@ -289,7 +289,8 @@ export async function fetchTrustedBackend(
     };
     // The target origin and every DNS answer were validated above, and this
     // per-request dispatcher can connect only to the resulting pinned IPs.
-    const response = await globalThis.fetch(target, requestInit); // lgtm[js/request-forgery]
+    // lgtm[js/request-forgery]
+    const response = await globalThis.fetch(target, requestInit);
     return response;
   } finally {
     void dispatcher.close().catch(() => undefined);
