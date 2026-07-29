@@ -1273,5 +1273,4 @@ async def test_execute_url_extractor():
 
     assert result.status == "success"
     assert result.result["url_count"] == 2
-    assert "https://www.naver.com" in result.result["urls"]
-    assert "http://google.com" in result.result["urls"]
+    assert result.result["urls"] == ["https://www.naver.com", "http://google.com"]
