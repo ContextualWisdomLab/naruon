@@ -1,6 +1,6 @@
 import base64
-from collections import defaultdict
 import binascii
+from collections import defaultdict
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -1693,7 +1693,6 @@ def _risk_matrix_key_part(value: str) -> str:
 def _diligence_risk_matrix(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceRiskMatrixEntry]:
-    # ⚡ Bolt: Use defaultdict to prevent O(N) empty list allocations during setdefault
     groups: dict[
         tuple[RemediationPriority, str, str],
         list[DataDiligenceExceptionRegisterEntry],
@@ -1846,7 +1845,6 @@ def _diligence_close_decision_summary(
 def _diligence_close_artifact_review_queue(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceCloseArtifactReviewQueueEntry]:
-    # ⚡ Bolt: Use defaultdict to prevent O(N) empty list allocations during setdefault
     groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = defaultdict(list)
     for proof in snapshot.diligence_close_proof_plan:
         groups[proof.required_proof_artifact].append(proof)
@@ -1892,7 +1890,6 @@ def _diligence_close_artifact_review_queue(
 def _diligence_close_owner_handoff_queue(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceCloseOwnerHandoffQueueEntry]:
-    # ⚡ Bolt: Use defaultdict to prevent O(N) empty list allocations during setdefault
     groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = defaultdict(list)
     for proof in snapshot.diligence_close_proof_plan:
         groups[proof.owner_area].append(proof)

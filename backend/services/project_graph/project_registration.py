@@ -612,7 +612,6 @@ def _candidate_groups(
     *,
     scope: ProjectGraphQueryScope,
 ) -> tuple[_CandidateGroup, ...]:
-    # ⚡ Bolt: Use defaultdict to prevent O(N) empty list allocations during setdefault
     records_by_email: dict[int, list[ProjectGraphObjectRecord]] = defaultdict(list)
     for record in records:
         records_by_email[record.email_id].append(record)
@@ -633,7 +632,9 @@ def _candidate_groups(
             if explicit_candidate is not None
             else _synthetic_project_uid(group_records, scope=scope)
         )
-        groups.append(_CandidateGroup(project_uid=project_uid, records=tuple(group_records)))
+        groups.append(
+            _CandidateGroup(project_uid=project_uid, records=tuple(group_records))
+        )
     return tuple(groups)
 
 
@@ -843,7 +844,6 @@ def _relation_summary(
     ``relation_count`` descending with a ``relation_type``-ascending tie-break so
     the result is deterministic regardless of relation iteration order.
     """
-    # ⚡ Bolt: Use defaultdict to prevent O(N) empty list allocations during setdefault
     grouped: dict[str, list[ProjectTraceRelation]] = defaultdict(list)
     for relation in relations:
         grouped[relation.relation_type].append(relation)

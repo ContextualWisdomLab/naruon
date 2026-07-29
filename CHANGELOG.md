@@ -66,6 +66,7 @@
 
 ### 코드 건강성 개선 (Code Health)
 
+- 백엔드 그룹화 루프에 `defaultdict(list)`를 적용해 기존 순서와 응답을 보존하면서 `setdefault`가 매 반복마다 만들던 미사용 빈 리스트 할당을 피했습니다.
 - `WorkspaceHome`의 작업 완료 토글과 Reply SLA 팔로업 생성 로직을 `useTasks` hook으로 분리하고, 화면 쪽 formatter를 주입해 작업 제목 정규화 로직 중복을 방지했습니다.
 - `backend/api/security.py`에서 사용하지 않는 `from __future__ import annotations` 구문을 제거하고 조건 표현식을 정리했습니다.
 - `backend/alembic/env.py`에서 사용하지 않는 `from __future__ import annotations` 구문을 제거해 Alembic 환경 설정 코드를 간결하게 정리했습니다.
@@ -2716,7 +2717,3 @@
 - **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 이는 외부 AI 검토 모델 서버(github-models 등)의 응답 지연에 기인한 일시적 인프라 문제로 판단되며, 코드 변경 자체의 결함은 아니므로 그대로 재제출하여 파이프라인 재실행을 시도합니다.
 - **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 반복되는 외부 인프라 타임아웃 문제를 해결하기 위해, 마지막으로 재제출을 시도합니다.
 - **Note:** 추가적인 코드 변경은 없으며, PR 내 자동 분석 커멘트에 대한 답변(CI 실패가 본 PR이 아닌 develop의 기존 이슈임을 인지함)을 남기고 현재 워크플로우를 완료합니다.
-
-## [Unreleased]
-### 변경 사항
-- **성능 (Performance)**: 백엔드 모듈(`project_registration.py`, `data.py`) 내 그룹화 로직의 O(N) 메모리 낭비 제거 및 `defaultdict` 적용을 통해 처리 성능을 향상시켰습니다.
