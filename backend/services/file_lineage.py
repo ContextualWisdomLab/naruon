@@ -6,11 +6,12 @@ The RFC 822 lineage contract remains email-specific. This module accepts the dis
 
 from __future__ import annotations
 
-import re
 import unicodedata
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from services.portable_paths import portable_relative_path_parts
 
 
 EVIDENCE_PRECEDENCE = (
@@ -31,14 +32,6 @@ Confidence = Literal["high", "medium", "low"]
 ReviewDisposition = Literal["approved", "held"]
 ProviderSyncTimeliness = Literal["complete", "pending", "overdue"]
 ProviderSyncReasonCode = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9-]{0,127}$")]
-WINDOWS_INVALID_COMPONENT_CHARACTERS = frozenset('<>:"|?*')
-WINDOWS_RESERVED_COMPONENT_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
-    | {f"COM{index}" for index in range(1, 10)}
-    | {f"LPT{index}" for index in range(1, 10)}
-    | {f"COM{index}" for index in "¹²³"}
-    | {f"LPT{index}" for index in "¹²³"}
-)
 
 
 def _has_control_character(value: str) -> bool:
@@ -55,22 +48,10 @@ def _validate_bounded_text(value: str, field_name: str) -> str:
 
 def _relative_path_parts(value: str) -> tuple[str, ...]:
     _validate_bounded_text(value, "source_relative_path")
-    if value.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", value):
-        raise ValueError("source_relative_path must be relative")
-    if "/" in value and "\\" in value:
-        raise ValueError("source_relative_path cannot mix path separators")
-    separator = "\\" if "\\" in value else "/"
-    parts = tuple(value.split(separator))
-    if not parts or any(part in {"", ".", ".."} for part in parts):
-        raise ValueError("source_relative_path contains an unsafe component")
-    for part in parts:
-        if part.endswith((" ", ".")):
-            raise ValueError("source_relative_path contains a non-portable component")
-        if any(character in WINDOWS_INVALID_COMPONENT_CHARACTERS for character in part):
-            raise ValueError("source_relative_path contains a non-portable component")
-        if part.split(".", 1)[0].upper() in WINDOWS_RESERVED_COMPONENT_NAMES:
-            raise ValueError("source_relative_path contains a reserved component")
-    return parts
+    return portable_relative_path_parts(
+        value,
+        field_name="source_relative_path",
+    )
 
 
 class StrictLineageModel(BaseModel):

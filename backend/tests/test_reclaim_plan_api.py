@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from copy import deepcopy
 
 import pytest
@@ -203,6 +204,35 @@ def test_validate_reclaim_plan_rejects_duplicate_json_keys(client: TestClient):
         content=raw.encode(),
         headers={"Content-Type": "application/json"},
     )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "disksage_reclaim_plan_invalid"}
+
+
+@pytest.mark.parametrize(
+    ("first_path", "equivalent_path"),
+    [
+        (
+            "/Users/example/Downloads/file.bin",
+            "/users/EXAMPLE/downloads/FILE.BIN",
+        ),
+        (
+            "/Users/example/Downloads/Föö.bin",
+            unicodedata.normalize("NFD", "/Users/example/Downloads/Föö.bin"),
+        ),
+    ],
+    ids=["casefold-equivalent", "unicode-normalization-equivalent"],
+)
+def test_validate_reclaim_plan_rejects_platform_equivalent_paths(
+    client: TestClient,
+    first_path: str,
+    equivalent_path: str,
+):
+    payload = _reclaim_payload()
+    payload["paths"][0]["path"] = first_path
+    payload["paths"][1]["path"] = equivalent_path
+
+    response = client.post("/api/reclaim-plan/validate", json=payload)
 
     assert response.status_code == 422
     assert response.json() == {"detail": "disksage_reclaim_plan_invalid"}
