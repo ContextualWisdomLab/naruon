@@ -107,7 +107,13 @@ async def assign_thread_id(
     Determine the thread_id for a new email based on in_reply_to and references.
     If no existing match is found, generate a new thread_id.
     """
-    in_reply_to = normalize_message_id(email_data.get("in_reply_to"))
+    # RFC 5322 §3.6.4 defines In-Reply-To as ``1*msg-id``: it may carry more
+    # than one message-id. Parse it with the same angle-bracket extractor used
+    # for References and take the first parsed id as the immediate parent
+    # (jwz "message threading": extract the first message-id from In-Reply-To).
+    # Stripping ``<>`` off the whole header would mangle a multi-id value.
+    in_reply_to_ids = extract_reference_ids(email_data.get("in_reply_to"))
+    in_reply_to = in_reply_to_ids[0] if in_reply_to_ids else None
     references = extract_reference_ids(email_data.get("references"))
 
     existing_candidates = []
