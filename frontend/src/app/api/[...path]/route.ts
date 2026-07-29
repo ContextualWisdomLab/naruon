@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { backendApiBaseUrl } from "@/lib/backend-url";
+import { trustedBackendOrigin } from "@/lib/backend-url";
 import { SESSION_COOKIE_NAME, normalizeSessionToken } from "@/lib/session-cookie";
 
 export const runtime = "nodejs";
@@ -39,8 +39,14 @@ const ALLOWED_BACKEND_QUERY_PARAMS = new Set([
 ]);
 const MAX_QUERY_PARAM_COUNT = 12;
 const MAX_QUERY_PARAM_VALUE_LENGTH = 2048;
+const MAX_PROXY_PATH_SEGMENTS = 32;
+const MAX_PROXY_PATH_SEGMENT_LENGTH = 256;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const PROXY_ERROR_HEADERS = {
+  "Cache-Control": "no-store",
+  "Referrer-Policy": "no-referrer",
+};
 
 type ApiRouteContext = {
   params: Promise<{ path?: string[] }>;
@@ -51,6 +57,42 @@ class InvalidProxyQueryError extends Error {
     super(message);
     this.name = "InvalidProxyQueryError";
   }
+}
+
+class InvalidProxyPathError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidProxyPathError";
+  }
+}
+
+function proxyFailureDetails(error: unknown) {
+  const candidate =
+    error instanceof Error ? error.constructor.name : typeof error;
+  const errorType = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(candidate)
+    ? candidate
+    : "Error";
+  return { error_type: errorType };
+}
+
+function safeBackendPath(path: string[]): string {
+  if (path.length === 0 || path.length > MAX_PROXY_PATH_SEGMENTS) {
+    throw new InvalidProxyPathError("Invalid backend path segment count");
+  }
+  return path
+    .map((segment) => {
+      if (
+        !segment ||
+        segment === "." ||
+        segment === ".." ||
+        segment.length > MAX_PROXY_PATH_SEGMENT_LENGTH ||
+        CONTROL_CHARACTER_PATTERN.test(segment)
+      ) {
+        throw new InvalidProxyPathError("Invalid backend path segment");
+      }
+      return encodeURIComponent(segment);
+    })
+    .join("/");
 }
 
 function filteredRequestHeaders(request: NextRequest): Headers {
@@ -177,18 +219,17 @@ async function proxyApiRequest(
       },
       {
         status: 403,
-        headers: {
-          "Referrer-Policy": "no-referrer",
-        },
+        headers: PROXY_ERROR_HEADERS,
       },
     );
   }
 
   const params = await context.params;
   const path = params.path ?? [];
-  const target = backendApiBaseUrl();
-  target.pathname = `/api/${path.map(encodeURIComponent).join("/")}`;
+  let target: URL;
   try {
+    target = trustedBackendOrigin();
+    target.pathname = `/api/${safeBackendPath(path)}`;
     target.search = safeBackendQuery(request.nextUrl.searchParams);
   } catch (error) {
     if (error instanceof InvalidProxyQueryError) {
@@ -199,13 +240,31 @@ async function proxyApiRequest(
         },
         {
           status: 400,
-          headers: {
-            "Referrer-Policy": "no-referrer",
-          },
+          headers: PROXY_ERROR_HEADERS,
         },
       );
     }
-    throw error;
+    if (error instanceof InvalidProxyPathError) {
+      return NextResponse.json(
+        {
+          error_code: "invalid_proxy_path",
+          message: error.message,
+        },
+        {
+          status: 400,
+          headers: PROXY_ERROR_HEADERS,
+        },
+      );
+    }
+    console.error(
+      "proxy_target_configuration_failed",
+      proxyFailureDetails(error),
+    );
+    return new NextResponse(null, {
+      status: 503,
+      statusText: "Service Unavailable",
+      headers: PROXY_ERROR_HEADERS,
+    });
   }
 
   const init: RequestInit = {
@@ -222,8 +281,12 @@ async function proxyApiRequest(
     response = await fetch(target, init);
   } catch (error) {
     // If the backend isn't available (e.g. during build), return a 503 instead of throwing
-    console.error("Proxy fetch failed:", error);
-    return new NextResponse(null, { status: 503, statusText: "Service Unavailable" });
+    console.error("proxy_fetch_failed", proxyFailureDetails(error));
+    return new NextResponse(null, {
+      status: 503,
+      statusText: "Service Unavailable",
+      headers: PROXY_ERROR_HEADERS,
+    });
   }
 
   return new NextResponse(response.body, {

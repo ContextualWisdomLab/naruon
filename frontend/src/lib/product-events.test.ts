@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   bucketSearchRank,
   bucketTextLength,
@@ -186,5 +186,32 @@ describe("product event contracts", () => {
     expect(bucketSearchRank(2)).toBe("top_3");
     expect(bucketSearchRank(9)).toBe("top_10");
     expect(bucketSearchRank(10)).toBe("below_10");
+  });
+
+  it("uses Web Crypto bytes when randomUUID is unavailable", () => {
+    vi.stubGlobal("crypto", {
+      getRandomValues: (bytes: Uint8Array) => {
+        bytes.fill(0xab);
+        return bytes;
+      },
+    });
+    try {
+      expect(createProductEventId("secure")).toBe(
+        `secure_${"ab".repeat(16)}`,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("fails closed when Web Crypto is unavailable", () => {
+    vi.stubGlobal("crypto", undefined);
+    try {
+      expect(() => createProductEventId("secure")).toThrow(
+        "Web Crypto is required",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

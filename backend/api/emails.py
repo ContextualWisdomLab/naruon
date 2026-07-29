@@ -36,6 +36,7 @@ from services.email_import_service import (
     MAX_IMPORT_UPLOADS,
     EmailImportItemStatus,
     EmailImportUpload,
+    canonical_email_import_upload_filename,
     import_email_uploads,
 )
 from services.llm_provider_selection import resolve_runtime_llm_provider
@@ -576,12 +577,8 @@ async def import_email_files(
 
     uploads: list[EmailImportUpload] = []
     for upload in files:
-        normalized_filename = upload.filename.lower().strip() if upload.filename else ""
-        if not upload.filename or not (
-            normalized_filename.endswith(".eml")
-            or normalized_filename.endswith(".zip")
-            or normalized_filename.endswith(".mbox")
-        ):
+        canonical_filename = canonical_email_import_upload_filename(upload.filename)
+        if canonical_filename is None:
             raise HTTPException(status_code=400, detail="invalid_file_type")
 
         content = await upload.read(MAX_IMPORT_UPLOAD_BYTES + 1)
@@ -589,7 +586,7 @@ async def import_email_files(
             raise HTTPException(status_code=413, detail="file_too_large")
         uploads.append(
             EmailImportUpload(
-                filename=upload.filename or "upload",
+                filename=canonical_filename,
                 content=content,
             )
         )
