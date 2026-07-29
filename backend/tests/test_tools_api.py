@@ -14,10 +14,12 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
+    MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
     ToolRegistry,
     _parameter_type_name,
+    _safe_tool_failure_message,
     execute_tool,
     registry,
 )
@@ -405,6 +407,17 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert "\n" not in response.message
     assert hostile_code not in caplog.text
     assert "forged_exception" not in caplog.text
+
+
+def test_safe_tool_failure_message_escapes_controls_and_bounds_output():
+    message = _safe_tool_failure_message(
+        ValueError("\t\x01" + ("x" * MAX_TOOL_FAILURE_MESSAGE_CHARS))
+    )
+
+    assert message.startswith(r"\t\u0001")
+    assert len(message) == MAX_TOOL_FAILURE_MESSAGE_CHARS
+    assert "\t" not in message
+    assert "\x01" not in message
 
 
 def test_execute_tool_sync_handler_success():
