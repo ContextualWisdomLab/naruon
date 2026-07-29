@@ -4,26 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import re
 import unicodedata
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from services.portable_paths import portable_relative_path_parts
 
 
 U64_MAX = 18_446_744_073_709_551_615
 MAX_ARCHIVE_FILES = 100_000
 MAX_ARCHIVE_UNCOMPRESSED_BYTES = 16 * 1024 * 1024 * 1024
 MAX_PATH_SAMPLES = 1_000
-WINDOWS_INVALID_COMPONENT_CHARACTERS = frozenset('<>:"|?*')
-WINDOWS_RESERVED_COMPONENT_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
-    | {f"COM{index}" for index in range(1, 10)}
-    | {f"LPT{index}" for index in range(1, 10)}
-    | {f"COM{index}" for index in "¹²³"}
-    | {f"LPT{index}" for index in "¹²³"}
-)
-
 Hex64 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 BoundedText = Annotated[str, Field(min_length=1, max_length=4096)]
 FileCount = Annotated[int, Field(ge=0, le=MAX_ARCHIVE_FILES)]
@@ -44,21 +36,7 @@ def _validate_text(value: str, field_name: str) -> str:
 
 def _logical_path_parts(value: str) -> tuple[str, ...]:
     _validate_text(value, "logical_path")
-    if value.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", value):
-        raise ValueError("logical_path must be relative")
-    if "\\" in value:
-        raise ValueError("logical_path must use forward slashes")
-    parts = tuple(value.split("/"))
-    if not parts or any(part in {"", ".", ".."} for part in parts):
-        raise ValueError("logical_path contains an unsafe component")
-    for part in parts:
-        if part.endswith((" ", ".")):
-            raise ValueError("logical_path contains a non-portable component")
-        if any(character in WINDOWS_INVALID_COMPONENT_CHARACTERS for character in part):
-            raise ValueError("logical_path contains a non-portable component")
-        if part.split(".", 1)[0].upper() in WINDOWS_RESERVED_COMPONENT_NAMES:
-            raise ValueError("logical_path contains a reserved component")
-    return parts
+    return portable_relative_path_parts(value, field_name="logical_path")
 
 
 def _canonical_archive_identity(value: str) -> str:

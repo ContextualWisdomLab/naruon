@@ -2,7 +2,8 @@ import os
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from api.auth import get_auth_context, preload_oidc_jwks
