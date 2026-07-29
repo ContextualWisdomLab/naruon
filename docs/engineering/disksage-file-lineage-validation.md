@@ -45,6 +45,22 @@ validator checks strict provider/account binding and deterministic arithmetic,
 while explicitly declining to claim independent provider authentication or
 freshness. Capacity remains rejected as a top-level file-lineage field.
 
+## Pre-copy semantic catalog candidates
+
+DiskSage's pre-copy `disksage.file-catalog-candidate-batch` is also separate
+from post-copy file lineage. It can contain private embedded title, author,
+context, worksheet, and metadata evidence needed for a semantic preview, but it
+does not yet contain the content SHA-256 and verified distribution evidence
+required for a persisted file asset.
+
+Naruon accepts the bounded contract only through
+`POST /api/file-catalog-candidate-batch/validate`, as documented in
+`docs/engineering/disksage-file-catalog-candidate-batch-validation.md`. The
+validator enforces the same metadata-first production-time precedence without
+persisting or reflecting private content. Ontology projection remains delegated
+to semantic-data-portal, and successful validation cannot authorize copy or
+eviction.
+
 ## Archive content-inclusion relation
 
 DiskSage archive comparison is also kept outside the per-file lineage envelope.

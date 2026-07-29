@@ -14,6 +14,9 @@ from api.network import router as network_router
 from api.emails import router as emails_router
 from api.archive_content_inclusion import router as archive_content_inclusion_router
 from api.file_lineage import router as file_lineage_router
+from api.file_catalog_candidate_batch import (
+    router as file_catalog_candidate_batch_router,
+)
 from api.cloud_local_allocation import router as cloud_local_allocation_router
 from api.cloud_local_eviction import router as cloud_local_eviction_router
 from api.cloud_source_eviction import router as cloud_source_eviction_router
@@ -231,6 +234,10 @@ app.include_router(
     dependencies=PRIVATE_API_DEPENDENCIES,
 )
 app.include_router(file_lineage_router, dependencies=PRIVATE_API_DEPENDENCIES)
+app.include_router(
+    file_catalog_candidate_batch_router,
+    dependencies=PRIVATE_API_DEPENDENCIES,
+)
 app.include_router(
     cloud_local_allocation_router,
     dependencies=PRIVATE_API_DEPENDENCIES,
