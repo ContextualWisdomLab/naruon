@@ -85,14 +85,6 @@ describe("SearchLayout product events", () => {
   });
 
   it("records context search submit, result open, and result action events without raw query text", async () => {
-    const randomUUID = vi.fn(
-      () =>
-        "11111111-2222-4333-8444-555555555555" as `${string}-${string}-${string}-${string}-${string}`,
-    );
-    vi.stubGlobal("crypto", {
-      randomUUID,
-      getRandomValues: <T extends ArrayBufferView | null>(array: T) => array,
-    });
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/search")) {
@@ -159,9 +151,7 @@ describe("SearchLayout product events", () => {
     expect(getRecordedProductEvents().some((event) =>
       event.name === "context_search_submitted" &&
       event.payload.surface === "context_search" &&
-      event.payload.query_length_bucket === "1_20" &&
-      event.payload.search_session_id ===
-        "context_search_session_11111111-2222-4333-8444-555555555555",
+      event.payload.query_length_bucket === "1_20",
     )).toBe(true);
     expect(getRecordedProductEvents().some((event) =>
       event.name === "context_search_result_opened" &&

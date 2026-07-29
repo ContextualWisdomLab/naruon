@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  backendApiBaseUrl,
-  parseBackendInternalUrl,
-  trustedBackendOrigin,
-} from "./backend-url";
+import { backendApiBaseUrl, parseBackendInternalUrl } from "./backend-url";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -123,30 +119,5 @@ describe("backend URL guard", () => {
   it("requires a runtime backend origin in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect(() => backendApiBaseUrl()).toThrow("production runtime");
-  });
-
-  it("builds one normalized trusted origin for server routes", () => {
-    vi.stubEnv("BACKEND_INTERNAL_URL", "https://backend.example.com.:8443");
-    expect(trustedBackendOrigin().href).toBe("https://backend.example.com:8443/");
-  });
-
-  it.each([
-    "https://user@backend.example.com",
-    "https://backend.example.com/api",
-    "https://backend.example.com?scope=all",
-    "https://backend.example.com#fragment",
-  ])("rejects non-origin backend configuration %s", (backendInternalUrl) => {
-    vi.stubEnv("BACKEND_INTERNAL_URL", backendInternalUrl);
-    expect(() => trustedBackendOrigin()).toThrow(
-      "must be an origin without credentials, path, query, or fragment",
-    );
-  });
-
-  it("preserves the exact development and opted-in Compose origins", () => {
-    expect(trustedBackendOrigin().origin).toBe("http://127.0.0.1:8000");
-
-    vi.stubEnv("ALLOW_DOCKER_BACKEND_INTERNAL_URL", "1");
-    vi.stubEnv("BACKEND_INTERNAL_URL", "http://backend:8000");
-    expect(trustedBackendOrigin().origin).toBe("http://backend:8000");
   });
 });

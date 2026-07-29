@@ -28,8 +28,6 @@ export type CalendarWritebackSource = {
 
 export type WritebackStatus = 'idle' | 'loading' | 'success' | 'no_source' | 'conflict' | 'auth' | 'error';
 
-export type CalendarWritebackActionKey = 'create' | 'update' | 'execute';
-
 export type CalendarDefinition = {
   id: string;
   name: string;
