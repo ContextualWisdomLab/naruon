@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 from dataclasses import dataclass
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 ALLOWED_LOOPBACK_HTTP_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 
 
 class LocalHTTPValidationError(ValueError):
@@ -31,7 +33,12 @@ def validate_loopback_http_origin(value: str) -> LocalHTTPOrigin:
     """Return a canonical origin restricted to exact loopback hosts."""
     if _has_control_characters(value):
         raise LocalHTTPValidationError("local HTTP origin contains control characters")
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError as exc:
+        raise LocalHTTPValidationError(
+            "local HTTP origin must be a loopback HTTP(S) origin"
+        ) from exc
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.hostname
@@ -84,13 +91,37 @@ def validate_local_request_target(
     """Return a relative local API target with traversal and authority rejected."""
     if _has_control_characters(path):
         raise LocalHTTPValidationError("local request path contains control characters")
-    parsed = urlsplit(path)
+    try:
+        parsed = urlsplit(path)
+    except ValueError as exc:
+        raise LocalHTTPValidationError("request path must be a local API path") from exc
     if parsed.scheme or parsed.netloc or parsed.fragment:
         raise LocalHTTPValidationError("request path must be a local API path")
     if not (parsed.path.startswith("/api/") or parsed.path in allowed_exact_paths):
         raise LocalHTTPValidationError(
             "request path must target an allowed local endpoint"
         )
-    if any(part in {".", ".."} for part in parsed.path.split("/")):
-        raise LocalHTTPValidationError("local request path traversal is not allowed")
+    if _INVALID_PERCENT_ESCAPE.search(parsed.path):
+        raise LocalHTTPValidationError(
+            "local request path contains invalid percent encoding"
+        )
+    for raw_segment in parsed.path.split("/"):
+        try:
+            decoded_segment = unquote(raw_segment, errors="strict")
+        except UnicodeDecodeError as exc:
+            raise LocalHTTPValidationError(
+                "local request path contains invalid percent encoding"
+            ) from exc
+        if (
+            decoded_segment in {".", ".."}
+            or "/" in decoded_segment
+            or "\\" in decoded_segment
+        ):
+            raise LocalHTTPValidationError(
+                "local request path traversal is not allowed"
+            )
+        if _has_control_characters(decoded_segment):
+            raise LocalHTTPValidationError(
+                "local request path contains control characters"
+            )
     return urlunsplit(("", "", parsed.path, parsed.query, ""))
