@@ -1,56 +1,10 @@
-const PRIVATE_BACKEND_HOST_PATTERNS: readonly RegExp[] = [
-  /^localhost$/,
-  /^127\./,
-  /^0\./,
-  /^10\./,
-  /^192\.168\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^169\.254\./,
-  /^::1$/,
-  /^::$/,
-  /^fc[0-9a-f]{2}:/,
-  /^fd[0-9a-f]{2}:/,
-  /^fe[89ab][0-9a-f]:/,
-];
-
-function normalizeHost(parsed: URL): string {
-  return parsed.hostname.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
-}
-
-function ipv4MappedHostToDotted(host: string): string | null {
-  if (!host.startsWith("::ffff:")) return null;
-  const suffix = host.slice("::ffff:".length);
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(suffix)) return suffix;
-  const [highHex, lowHex] = suffix.split(":");
-  if (
-    !highHex ||
-    !lowHex ||
-    !/^[0-9a-f]{1,4}$/.test(highHex) ||
-    !/^[0-9a-f]{1,4}$/.test(lowHex)
-  ) {
-    return null;
-  }
-  const high = Number.parseInt(highHex, 16);
-  const low = Number.parseInt(lowHex, 16);
-  if (!Number.isFinite(high) || !Number.isFinite(low)) return null;
-  const bytes = [high >> 8, high & 255, low >> 8, low & 255];
-  return bytes.join(".");
-}
-
-function hostCandidates(parsed: URL): string[] {
-  const host = normalizeHost(parsed);
-  const mapped = ipv4MappedHostToDotted(host);
-  return mapped ? [host, mapped] : [host];
-}
-
-function isPrivateBackendHost(parsed: URL): boolean {
-  return hostCandidates(parsed).some((host) =>
-    PRIVATE_BACKEND_HOST_PATTERNS.some((pattern) => pattern.test(host)),
-  );
-}
+import {
+  isPrivateOrLoopbackHostname,
+  normalizeHostname,
+} from "@/lib/host-policy";
 
 function isAllowedComposeBackendUrl(parsed: URL): boolean {
-  const host = normalizeHost(parsed);
+  const host = normalizeHostname(parsed);
   return (
     process.env.ALLOW_DOCKER_BACKEND_INTERNAL_URL === "1" &&
     parsed.protocol === "http:" &&
@@ -75,12 +29,12 @@ export function parseBackendInternalUrl(raw: string): URL {
       `BACKEND_INTERNAL_URL must use https:// in split deployments, got ${parsed.protocol}//`,
     );
   }
-  if (!normalizeHost(parsed)) {
+  if (!normalizeHostname(parsed)) {
     throw new Error("BACKEND_INTERNAL_URL must include a hostname");
   }
-  if (isPrivateBackendHost(parsed)) {
+  if (isPrivateOrLoopbackHostname(parsed)) {
     throw new Error(
-      `BACKEND_INTERNAL_URL host ${normalizeHost(parsed)} is in a private/loopback/link-local range`,
+      `BACKEND_INTERNAL_URL host ${normalizeHostname(parsed)} is in a private/loopback/link-local range`,
     );
   }
   return parsed;
@@ -96,4 +50,54 @@ export function backendApiBaseUrl(): URL {
     );
   }
   return new URL("http://127.0.0.1:8000");
+}
+
+export function trustedBackendOrigin(): URL {
+  const configured = backendApiBaseUrl();
+  const hostname = normalizeHostname(configured);
+  const hasRootPath = configured.pathname === "" || configured.pathname === "/";
+  if (
+    !hostname ||
+    configured.username ||
+    configured.password ||
+    configured.search ||
+    configured.hash ||
+    !hasRootPath
+  ) {
+    throw new Error(
+      "BACKEND_INTERNAL_URL must be an origin without credentials, path, query, or fragment",
+    );
+  }
+
+  if (configured.protocol === "http:") {
+    const isExactLocalBackend =
+      configured.port === "8000" &&
+      (hostname === "127.0.0.1" || hostname === "localhost");
+    const isExactComposeBackend =
+      process.env.ALLOW_DOCKER_BACKEND_INTERNAL_URL === "1" &&
+      configured.port === "8000" &&
+      hostname === "backend";
+    if (
+      (!isExactLocalBackend || process.env.NODE_ENV === "production") &&
+      !isExactComposeBackend
+    ) {
+      throw new Error(
+        "Backend HTTP is limited to the exact development loopback or opted-in Compose host",
+      );
+    }
+    if (hostname === "backend") return new URL("http://backend:8000");
+    if (hostname === "localhost") return new URL("http://localhost:8000");
+    return new URL("http://127.0.0.1:8000");
+  }
+
+  if (configured.protocol !== "https:") {
+    throw new Error("Backend requests require HTTPS");
+  }
+  const encodedHostname = hostname.includes(":")
+    ? `[${hostname}]`
+    : encodeURIComponent(hostname);
+  const encodedPort = configured.port
+    ? `:${encodeURIComponent(configured.port)}`
+    : "";
+  return new URL(`https://${encodedHostname}${encodedPort}`);
 }
