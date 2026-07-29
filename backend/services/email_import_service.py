@@ -55,6 +55,7 @@ MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 8
+SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,7 @@ class EmailImportResult:
             self.failed_count += 1
 
 
-def _safe_upload_filename(filename: str | None) -> str:
+def _canonical_upload_filename(filename: str | None) -> str | None:
     decoded = filename or ""
     for _ in range(MAX_UPLOAD_FILENAME_DECODE_ROUNDS):
         next_name = urllib.parse.unquote(decoded)
@@ -127,17 +128,32 @@ def _safe_upload_filename(filename: str | None) -> str:
             break
         decoded = next_name
     if urllib.parse.unquote(decoded) != decoded:
-        return "upload"
+        return None
 
     if any(unicodedata.category(character).startswith("C") for character in decoded):
-        return "upload"
+        return None
 
     # pathlib on POSIX does not treat a backslash as a separator. Normalize both
     # separator forms before selecting the final filename component.
-    name = Path(decoded.replace("\\", "/") or "upload").name.strip()
-    if name in {".", ".."}:
-        return "upload"
-    return name or "upload"
+    name = Path(decoded.replace("\\", "/")).name.strip()
+    if not name or name in {".", ".."}:
+        return None
+    return name
+
+
+def canonical_email_import_upload_filename(filename: str | None) -> str | None:
+    """Return a supported canonical upload basename, or fail closed."""
+    canonical_name = _canonical_upload_filename(filename)
+    if (
+        canonical_name is None
+        or Path(canonical_name).suffix.lower() not in SUPPORTED_EMAIL_IMPORT_SUFFIXES
+    ):
+        return None
+    return canonical_name
+
+
+def _safe_upload_filename(filename: str | None) -> str:
+    return _canonical_upload_filename(filename) or "upload"
 
 
 def _safe_item_filename(upload_name: str, eml_path: Path | None = None) -> str:
