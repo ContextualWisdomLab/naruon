@@ -7,13 +7,23 @@ import json
 import os
 import stat
 import sys
+import tempfile
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, Iterator, NamedTuple
 
 REQUIRED_SCORECARD_CATEGORIES = ("supply-chain/branch-protection",)
 SCORECARD_SARIF_FILENAME = "scorecard-results.sarif"
 MAX_SARIF_BYTES = 32 * 1024 * 1024
+
+
+class ScorecardSarifArtifact(NamedTuple):
+    """An opened, validated Scorecard artifact and its original file mode."""
+
+    path: Path
+    source: BinaryIO
+    mode: int
 
 
 def run_category(run: dict[str, Any]) -> str | None:
@@ -73,33 +83,65 @@ def ensure_categories(sarif: dict[str, Any]) -> bool:
     return True
 
 
-def write_sarif(path: Path, sarif: dict[str, Any]) -> None:
-    mode = path.stat().st_mode
-    if mode & stat.S_IWUSR == 0:
-        path.chmod(mode | stat.S_IWUSR)
-    path.write_text(
-        json.dumps(sarif, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+def write_sarif(artifact: ScorecardSarifArtifact, sarif: dict[str, Any]) -> None:
+    """Atomically replace the workspace artifact without following hard links."""
+    rendered = (json.dumps(sarif, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=artifact.path.parent,
+            prefix=f".{artifact.path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            os.fchmod(
+                temporary.fileno(),
+                stat.S_IMODE(artifact.mode) | stat.S_IWUSR,
+            )
+            temporary.write(rendered)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, artifact.path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
-def scorecard_sarif_path(argument: str) -> Path:
-    """Return the single SARIF artifact allowed in the current workspace."""
+@contextmanager
+def scorecard_sarif_path(argument: str) -> Iterator[ScorecardSarifArtifact]:
+    """Open and validate the single SARIF artifact allowed in the workspace."""
     workspace = Path.cwd().resolve(strict=True)
     expected = workspace / SCORECARD_SARIF_FILENAME
     candidate = Path(os.path.abspath(argument))
     if candidate != expected:
         raise ValueError("SARIF path must name the workspace Scorecard artifact")
-    if expected.is_symlink():
-        raise ValueError("SARIF path must not be a symlink")
-    resolved = expected.resolve(strict=True)
-    if resolved.parent != workspace or not resolved.is_file():
-        raise ValueError("SARIF path must be a regular file in the workspace")
-    if resolved.stat().st_size > MAX_SARIF_BYTES:
-        raise ValueError("SARIF file exceeds the size limit")
-    # Reconstruct from trusted components so subsequent file operations cannot
-    # follow any attacker-selected parent or filename.
-    return workspace / SCORECARD_SARIF_FILENAME
+
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
+        raise OSError("secure no-follow file opening is unavailable")
+    flags = os.O_RDONLY | nofollow | getattr(os, "O_CLOEXEC", 0)
+    descriptor = os.open(expected, flags)
+    try:
+        opened = os.fstat(descriptor)
+        named = os.stat(expected, follow_symlinks=False)
+        if not stat.S_ISREG(opened.st_mode):
+            raise ValueError("SARIF path must be a regular file in the workspace")
+        if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+            raise ValueError("SARIF path changed while it was being opened")
+        if opened.st_nlink != 1:
+            raise ValueError("SARIF path must not be a hard link")
+        if opened.st_size > MAX_SARIF_BYTES:
+            raise ValueError("SARIF file exceeds the size limit")
+
+        with os.fdopen(descriptor, "rb", closefd=True) as source:
+            descriptor = -1
+            yield ScorecardSarifArtifact(expected, source, opened.st_mode)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def main(argv: list[str]) -> int:
@@ -111,11 +153,16 @@ def main(argv: list[str]) -> int:
         return 64
 
     try:
-        sarif_path = scorecard_sarif_path(argv[1])
-        sarif = json.loads(sarif_path.read_bytes().decode("utf-8"))
-        changed = ensure_categories(sarif)
-        if changed:
-            write_sarif(sarif_path, sarif)
+        with scorecard_sarif_path(argv[1]) as artifact:
+            payload = artifact.source.read(MAX_SARIF_BYTES + 1)
+            if len(payload) > MAX_SARIF_BYTES:
+                raise ValueError("SARIF file exceeds the size limit")
+            if os.fstat(artifact.source.fileno()).st_nlink != 1:
+                raise ValueError("SARIF path became a hard link while being read")
+            sarif = json.loads(payload.decode("utf-8"))
+            changed = ensure_categories(sarif)
+            if changed:
+                write_sarif(artifact, sarif)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"cannot normalize Scorecard SARIF: {exc}", file=sys.stderr)
         return 65

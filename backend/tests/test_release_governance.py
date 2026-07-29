@@ -8,6 +8,7 @@ workflow governance before a release branch can land.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import importlib.util
@@ -499,7 +500,7 @@ def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
     assert branch_protection_run["results"] == []
 
 
-def test_scorecard_sarif_normalizer_rejects_escape_symlink_and_large_input(
+def test_scorecard_sarif_normalizer_rejects_escape_links_and_large_input(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -522,6 +523,13 @@ def test_scorecard_sarif_normalizer_rejects_escape_symlink_and_large_input(
     expected.symlink_to(outside)
     assert module.main([str(normalizer), str(expected)]) == 65
     expected.unlink()
+
+    outside_before = outside.read_bytes()
+    os.link(outside, expected)
+    assert module.main([str(normalizer), str(expected)]) == 65
+    assert outside.read_bytes() == outside_before
+    expected.unlink()
+
     expected.write_bytes(b" " * (module.MAX_SARIF_BYTES + 1))
     assert module.main([str(normalizer), str(expected)]) == 65
 
