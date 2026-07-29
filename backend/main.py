@@ -16,6 +16,7 @@ from api.file_lineage import router as file_lineage_router
 from api.cloud_local_allocation import router as cloud_local_allocation_router
 from api.cloud_local_eviction import router as cloud_local_eviction_router
 from api.cloud_source_eviction import router as cloud_source_eviction_router
+from api.cloud_capacity_assessment import router as cloud_capacity_assessment_router
 from api.reclaim_plan import router as reclaim_plan_router
 from api.runner_config import router as runner_config_router
 from api.tenant_config import router as tenant_config_router
@@ -239,6 +240,10 @@ app.include_router(
 )
 app.include_router(
     cloud_source_eviction_router,
+    dependencies=PRIVATE_API_DEPENDENCIES,
+)
+app.include_router(
+    cloud_capacity_assessment_router,
     dependencies=PRIVATE_API_DEPENDENCIES,
 )
 app.include_router(reclaim_plan_router, dependencies=PRIVATE_API_DEPENDENCIES)

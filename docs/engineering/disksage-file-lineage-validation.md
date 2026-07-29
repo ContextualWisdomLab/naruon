@@ -21,14 +21,15 @@ reviewer details, provider evidence identifiers, or provider-capacity evidence.
 
 ## Provider-capacity planning evidence
 
-DiskSage can obtain a read-only account-capacity snapshot before a new OneDrive
-or Google Drive copy, while iCloud account quota remains unavailable through the
-third-party File Provider surface. That snapshot answers whether a proposed
-upload is likely to fit at a particular observation time. Naruon does not call
-the provider API or revalidate snapshot freshness or account binding. A capacity
-gate pass does not identify the copied remote object, prove that the provider
-accepted the bytes, attest sync completion, or authorize removal of the local
-source.
+DiskSage can obtain a read-only account-capacity snapshot before a new copy.
+OneDrive and Google Drive use their provider APIs. On macOS, iCloud uses a
+strictly parsed provider-native quota status that exposes personal-account
+remaining bytes without inventing total or used values. That snapshot answers
+whether a proposed upload is likely to fit at a particular observation time.
+Naruon does not call the provider API or revalidate snapshot freshness. A
+capacity gate pass does not identify the copied remote object, prove that the
+provider accepted the bytes, attest sync completion, or authorize removal of
+the local source.
 
 Capacity is plan-level account evidence rather than file provenance, so it is
 not part of the `disksage.file-lineage` version 1 envelope. The strict Naruon
@@ -37,10 +38,12 @@ storing account quota as customer file metadata. Provider sync confirmation
 continues to require the separate per-file evidence fields already defined by
 `cloud_copy`.
 
-If Naruon later needs capacity evidence, it should be introduced as a separate,
-versioned `disksage.cloud-capacity-assessment` contract with independent
-freshness, provider-account binding, and disclosure review rather than being
-added to file lineage.
+Naruon now accepts that evidence through the separate, versioned
+`disksage.cloud-capacity-assessment` contract documented in
+`docs/engineering/disksage-cloud-capacity-assessment-validation.md`. The
+validator checks strict provider/account binding and deterministic arithmetic,
+while explicitly declining to claim independent provider authentication or
+freshness. Capacity remains rejected as a top-level file-lineage field.
 
 ## Archive content-inclusion relation
 
