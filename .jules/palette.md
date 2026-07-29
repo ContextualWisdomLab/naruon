@@ -77,3 +77,6 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+## 2026-07-29 - Explicit Loading States on Async Action Buttons in Project Layout
+**Learning:** Async confirmation and review action buttons in project layouts were missing explicit `aria-busy` and visual loading spinners (`Loader2`), relying only on disabled states and text changes. This provides poor feedback for long-running operations and incomplete accessibility cues for screen readers.
+**Action:** Always combine `disabled`, `aria-busy`, a visual `Loader2` spinner, and a dynamic text label for asynchronous submission buttons like "프로젝트 후보 확정" or "문단 근거 검토 저장".

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, Clock, FileText, FolderOpen, GitBranch, ListChecks, Network, Search, User } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Clock, FileText, FolderOpen, GitBranch, ListChecks, Network, Search, User, Loader2 } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
 import { toSafeReactText } from '@/lib/safe-text';
@@ -681,8 +681,10 @@ export function ProjectsLayout() {
                         type="button"
                         onClick={handleConfirmCandidate}
                         disabled={confirmSubmitting || candidateConfirmed}
-                        className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+                        aria-busy={confirmSubmitting}
+                        className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
                       >
+                        {confirmSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                         {candidateConfirmed ? '프로젝트 후보 확정됨' : confirmSubmitting ? '확정 저장 중' : '프로젝트 후보 확정'}
                       </button>
                     </div>
@@ -968,8 +970,10 @@ export function ProjectsLayout() {
                               type="button"
                               onClick={handleMarkEvidenceReviewed}
                               disabled={correctionSubmitting || evidenceLoading}
-                              className="mt-3 min-h-9 w-full rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+                              aria-busy={correctionSubmitting}
+                              className="mt-3 inline-flex min-h-9 w-full items-center justify-center rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
                             >
+                              {correctionSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                               {correctionSubmitting ? '검토 저장 중' : '문단 근거 검토 저장'}
                             </button>
                             {currentCorrection ? (

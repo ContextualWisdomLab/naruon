@@ -18,6 +18,7 @@ vi.mock("lucide-react", () => ({
   Network: () => <svg aria-hidden="true" />,
   Search: () => <svg aria-hidden="true" />,
   User: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
 }));
 
 import ProjectsPage from "./page";
