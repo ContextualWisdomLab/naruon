@@ -88,6 +88,10 @@ if [ "$1" = "api" ] && [ "$2" = "graphql" ]; then
     printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"CLEAN","reviewThreads":{"pageInfo":{"hasNextPage":true},"nodes":[]}}}}}' "$head_sha"
     exit 0
   fi
+  if [ "${GH_SCENARIO:-pass}" = "review_thread_comments_truncated" ]; then
+    printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"CLEAN","reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"thread-888","isResolved":false,"isOutdated":false,"comments":{"pageInfo":{"hasNextPage":true},"nodes":[{"databaseId":888}]}}]}}}}}' "$head_sha"
+    exit 0
+  fi
   if [ "${GH_SCENARIO:-pass}" = "persistent_unknown" ]; then
     printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"UNKNOWN","reviewThreads":{"nodes":[]}}}}}' "$head_sha"
     exit 0
@@ -792,6 +796,17 @@ assert_truncated_review_thread_metadata_blocks() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_truncated_review_thread_comments_metadata_blocks() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate review_thread_comments_truncated "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Review thread metadata was truncated; current resolution state could not be proven.' "$temp_dir/gh.log"
+  assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
 assert_github_code_quality_current_review_comment_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -937,6 +952,7 @@ assert_coderabbit_no_actionable_summary_with_blocker_still_blocks
 assert_coderabbit_current_review_comment_blocks
 assert_coderabbit_resolved_current_review_comment_does_not_block
 assert_truncated_review_thread_metadata_blocks
+assert_truncated_review_thread_comments_metadata_blocks
 assert_github_code_quality_current_review_comment_blocks
 assert_coderabbit_stale_review_comment_does_not_block
 assert_changes_requested_creates_marker_comment
