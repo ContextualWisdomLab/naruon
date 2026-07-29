@@ -228,7 +228,7 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Review limit reached. This is an operational warning for 0123456789abcdef0123456789abcdef01234567; retry later."}]'
         ;;
       coderabbit_no_actionable_summary)
-        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"No actionable comments were generated in the recent review. Reviewing files between base and 0123456789abcdef0123456789abcdef01234567."}]'
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"No actionable comments were generated in the recent review. Reviewing files between base and 0123456789abcdef0123456789abcdef01234567.\\n\\n<details><summary>Walkthrough</summary>The gate distinguishes non-blocking summaries from substantive blocking language and potential issues.</details>"}]'
         ;;
       coderabbit_no_actionable_with_blocker)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"No actionable comments were generated in the recent review. Blocking issue remains on 0123456789abcdef0123456789abcdef01234567."}]'

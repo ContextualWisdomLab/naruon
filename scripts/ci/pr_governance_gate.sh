@@ -422,10 +422,11 @@ else
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select(
           (.body // "") as $body
+          | ($body | split("<details>")[0]) as $summary
           | ($body | test($pattern; "i"))
             and (
               (($body | test($no_actionable_pattern; "i")) | not)
-              or ($body | test($substantive_pattern; "i"))
+              or ($summary | test($substantive_pattern; "i"))
             )
         )
       | select((.body // "") | contains($head_sha))]
