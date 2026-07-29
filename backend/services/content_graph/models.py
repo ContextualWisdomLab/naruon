@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +30,20 @@ class ContentSegment:
     safe_text_content: str
     content_hash: str
     word_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class PdfDomSection:
+    """A normalized section of a recognized PDF DOM tree.
+
+    One section maps to a single NewsDOM article (its ``headline`` becomes the
+    section heading and each entry in ``paragraphs`` becomes a paragraph leaf).
+    ``page_number`` is retained for stable ordering and provenance.
+    """
+
+    heading: str
+    paragraphs: tuple[str, ...] = field(default_factory=tuple)
+    page_number: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

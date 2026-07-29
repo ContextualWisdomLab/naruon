@@ -11,6 +11,7 @@ vi.mock("lucide-react", () => ({
   CalendarDays: () => <svg aria-hidden="true" />,
   CheckCircle2: () => <svg aria-hidden="true" />,
   Clock: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
   Users: () => <svg aria-hidden="true" />,
   Video: () => <svg aria-hidden="true" />,
   Plus: () => <svg aria-hidden="true" />,
@@ -92,6 +93,45 @@ describe("CalendarPage", () => {
     expect(container.querySelector('button[aria-label="다음 달"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="설정"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="닫기"]')).not.toBeNull();
+  });
+
+  it("exposes the calendar view switcher as a keyboard-navigable tablist", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(calendarSourceList)));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<CalendarPage />);
+    });
+    await flushAsyncWork();
+
+    const tablist = container.querySelector<HTMLElement>('[role="tablist"][aria-label="일정 보기 방식"]');
+    expect(tablist).not.toBeNull();
+    const tabs = Array.from(tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["월간 캘린더", "주간 캘린더", "일정 상세", "회의 조율", "일정 후보"]);
+
+    const monthlyTab = tabs[0];
+    expect(monthlyTab?.getAttribute("aria-selected")).toBe("true");
+    expect(monthlyTab?.tabIndex).toBe(0);
+    expect(monthlyTab?.getAttribute("aria-controls")).toBe("calendar-view-panel");
+    const panel = container.querySelector<HTMLElement>('#calendar-view-panel[role="tabpanel"]');
+    expect(panel?.getAttribute("aria-labelledby")).toBe(monthlyTab?.id);
+    for (const tab of tabs.slice(1)) {
+      expect(tab.getAttribute("aria-selected")).toBe("false");
+      expect(tab.tabIndex).toBe(-1);
+    }
+
+    act(() => {
+      monthlyTab?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    const weeklyTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab) => tab.textContent === "주간 캘린더");
+    expect(weeklyTab?.getAttribute("aria-selected")).toBe("true");
+    expect(weeklyTab?.tabIndex).toBe(0);
+    expect(container.querySelector<HTMLElement>('#calendar-view-panel[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(weeklyTab?.id);
   });
 
   it("filters rendered calendar events when a calendar visibility checkbox changes", async () => {
@@ -397,6 +437,10 @@ describe("CalendarPage", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe("/api/calendar/writeback-intent");
     expect(button?.getAttribute("aria-busy")).toBe("true");
+    expect(button?.textContent).toContain("처리 중");
+    const updateButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("ETag 업데이트 점검"));
+    expect(updateButton?.getAttribute("aria-busy")).toBe("false");
+    expect(container.textContent).toContain("ETag 실행 요청");
     expect(container.textContent).toContain("일정 반영 의도 요청 중입니다.");
   });
 
