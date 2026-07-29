@@ -85,6 +85,11 @@ describe("/auth/oidc/callback route", () => {
     expect(setCookie).toContain("Max-Age=0");
     expect(setCookie).not.toContain("verifier-123");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      cache: "no-store",
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    }));
     expect(postOidcTokenRequestMock).toHaveBeenCalledTimes(1);
     const [tokenEndpoint, tokenBody] = postOidcTokenRequestMock.mock.calls[0];
     expect(tokenEndpoint.href).toBe(

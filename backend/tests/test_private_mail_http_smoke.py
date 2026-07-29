@@ -315,6 +315,31 @@ def test_post_json_with_retry_retries_network_error(monkeypatch):
     assert len(calls) == 2
 
 
+def test_request_maps_broken_http_response_to_retryable_network_error(monkeypatch):
+    class BrokenConnection:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def request(self, *_args, **_kwargs):
+            pass
+
+        def getresponse(self):
+            raise smoke.http.client.BadStatusLine("malformed status")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(smoke.http.client, "HTTPConnection", BrokenConnection)
+
+    with pytest.raises(smoke._RequestNetworkError):
+        smoke._request(
+            "http://127.0.0.1:8000",
+            "token",
+            "GET",
+            "/api/emails",
+        )
+
+
 def test_post_json_with_retry_raises_network_error_after_retries(monkeypatch):
     calls: list[tuple[str, str]] = []
 

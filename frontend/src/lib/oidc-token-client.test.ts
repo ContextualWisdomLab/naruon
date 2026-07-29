@@ -158,7 +158,7 @@ describe("OIDC token destination pinning", () => {
     ).rejects.toThrow("unexpected hostname");
   });
 
-  it("posts through the pinned native client without following redirects", async () => {
+  it("posts through the pinned native client", async () => {
     vi.stubEnv("NODE_ENV", "development");
     const server = createServer((request, response) => {
       expect(request.method).toBe("POST");
@@ -183,6 +183,74 @@ describe("OIDC token destination pinning", () => {
           new URLSearchParams({ code: "auth-code" }),
         ),
       ).resolves.toEqual({ access_token: "signed-token" });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
+  });
+
+  it("rejects redirects instead of following them", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const server = createServer((_request, response) => {
+      response.writeHead(302, {
+        Location: "http://127.0.0.1/redirected",
+      });
+      response.end();
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      server.close();
+      throw new Error("test server did not expose a TCP port");
+    }
+
+    try {
+      await expect(
+        postOidcTokenRequest(
+          new URL(`http://127.0.0.1:${address.port}/token`),
+          new URLSearchParams({ code: "auth-code" }),
+        ),
+      ).rejects.toThrow("returned HTTP 302");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
+  });
+
+  it("rejects oversized responses even when the response ends", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(Buffer.alloc(1024 * 1024 + 1, "x"));
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      server.close();
+      throw new Error("test server did not expose a TCP port");
+    }
+
+    try {
+      await expect(
+        postOidcTokenRequest(
+          new URL(`http://127.0.0.1:${address.port}/token`),
+          new URLSearchParams({ code: "auth-code" }),
+        ),
+      ).rejects.toThrow("exceeded the size limit");
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {

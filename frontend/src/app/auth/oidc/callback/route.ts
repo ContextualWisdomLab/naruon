@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { trustedBackendOrigin } from "@/lib/backend-url";
+import { fetchTrustedBackendSession } from "@/lib/backend-session-probe";
+import {
+  isIpv4MappedHostname,
+  isLoopbackHostname,
+  isPrivateOrLoopbackHostname,
+  normalizeHostname,
+} from "@/lib/host-policy";
 import {
   buildExpiredSessionCookieOptions,
   buildSessionCookieOptions,
@@ -20,20 +26,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
-const PRIVATE_OIDC_HOST_PATTERNS: readonly RegExp[] = [
-  /^0\./,
-  /^10\./,
-  /^127\./,
-  /^169\.254\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^::$/,
-  /^::1$/,
-  /^::ffff:/,
-  /^fc[0-9a-f]{2}:/,
-  /^fd[0-9a-f]{2}:/,
-  /^fe[89ab][0-9a-f]:/,
-];
 const OIDC_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 const OIDC_ALLOWED_HOSTS_ENV = "OIDC_ALLOWED_HOSTS";
 type OidcTokenExchangeFailureReason =
@@ -58,22 +50,6 @@ function recordOidcTokenExchangeFailure(
 function searchParamsFromBodySearch(value: unknown) {
   const search = typeof value === "string" ? value.trim() : "";
   return new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-}
-
-function normalizedHostname(url: URL): string {
-  return url.hostname
-    .replace(/^\[/, "")
-    .replace(/\]$/, "")
-    .replace(/\.+$/, "")
-    .toLowerCase();
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1"
-  );
 }
 
 function assertAllowedOidcHostname(hostname: string): void {
@@ -112,7 +88,7 @@ function trustedOidcTokenEndpoint(config: {
 }): URL {
   const issuer = new URL(config.issuerUrl);
   const endpoint = new URL(config.tokenEndpoint);
-  const hostname = normalizedHostname(endpoint);
+  const hostname = normalizeHostname(endpoint);
   if (
     !hostname ||
     endpoint.username ||
@@ -141,9 +117,10 @@ function trustedOidcTokenEndpoint(config: {
   } else if (endpoint.protocol === "https:") {
     if (
       isLoopback ||
+      isIpv4MappedHostname(hostname) ||
       hostname.endsWith(".internal") ||
       hostname.endsWith(".local") ||
-      PRIVATE_OIDC_HOST_PATTERNS.some((pattern) => pattern.test(hostname))
+      isPrivateOrLoopbackHostname(hostname)
     ) {
       throw new Error("OIDC token endpoint must not target a private host");
     }
@@ -187,30 +164,18 @@ function trustedOidcTokenEndpoint(config: {
 }
 
 async function backendAcceptsSessionToken(token: string) {
-  try {
-    const target = new URL("/api/auth/session", trustedBackendOrigin());
-    const response = await fetch(target, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      cache: "no-store",
-    });
-    if (!response.ok) return false;
-    const body = (await response.json()) as {
-      user_id?: unknown;
-      organization_id?: unknown;
-      workspace_id?: unknown;
-    };
-    return (
-      typeof body.user_id === "string" &&
-      typeof body.organization_id === "string" &&
-      typeof body.workspace_id === "string"
-    );
-  } catch {
-    return false;
-  }
+  const body = await fetchTrustedBackendSession(token);
+  if (!body || typeof body !== "object") return false;
+  const session = body as {
+    user_id?: unknown;
+    organization_id?: unknown;
+    workspace_id?: unknown;
+  };
+  return (
+    typeof session.user_id === "string" &&
+    typeof session.organization_id === "string" &&
+    typeof session.workspace_id === "string"
+  );
 }
 
 export async function POST(request: NextRequest) {

@@ -6,84 +6,37 @@ import base64
 import hashlib
 import hmac
 import http.client
-import ipaddress
 import json
 import os
 import time
 from pathlib import Path
 from typing import Any
-from dataclasses import dataclass
-from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 
+from core.local_http import (
+    LocalHTTPOrigin as _LiveHTTPOrigin,
+    LocalHTTPValidationError,
+    validate_local_request_target,
+    validate_loopback_http_origin,
+)
 
 SESSION_COOKIE_NAME = "naruon_session"
 DEFAULT_LIVE_HTTP_TIMEOUT_SECONDS = 30.0
 
 
-@dataclass(frozen=True)
-class _LiveHTTPOrigin:
-    origin: str
-    scheme: str
-    hostname: str
-    port: int
-
-
 def _validated_live_origin(value: str) -> _LiveHTTPOrigin:
-    if any(ord(character) < 32 or ord(character) == 127 for character in value):
-        raise AssertionError("LIVE_BASE_URL contains control characters")
-    parsed = urlsplit(value)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.path not in {"", "/"}
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise AssertionError("LIVE_BASE_URL must be a loopback HTTP(S) origin")
-    hostname = parsed.hostname.lower().rstrip(".")
-    if hostname == "localhost":
-        safe_hostname = "localhost"
-    elif hostname == "127.0.0.1":
-        safe_hostname = "127.0.0.1"
-    elif hostname == "::1":
-        safe_hostname = "::1"
-    else:
-        try:
-            address = ipaddress.ip_address(hostname)
-        except ValueError as exc:
-            raise AssertionError("LIVE_BASE_URL host is not allowlisted") from exc
-        if not address.is_loopback or address.compressed not in {"127.0.0.1", "::1"}:
-            raise AssertionError("LIVE_BASE_URL host is not allowlisted")
-        safe_hostname = address.compressed
     try:
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    except ValueError as exc:
-        raise AssertionError("LIVE_BASE_URL port is invalid") from exc
-    if not 1 <= port <= 65535:
-        raise AssertionError("LIVE_BASE_URL port is invalid")
-    host_part = f"[{safe_hostname}]" if ":" in safe_hostname else safe_hostname
-    default_port = 443 if parsed.scheme == "https" else 80
-    netloc = host_part if port == default_port else f"{host_part}:{port}"
-    origin = urlunsplit((parsed.scheme, netloc, "", "", ""))
-    return _LiveHTTPOrigin(origin, parsed.scheme, safe_hostname, port)
+        return validate_loopback_http_origin(value)
+    except LocalHTTPValidationError as exc:
+        raise AssertionError("LIVE_BASE_URL must be a loopback HTTP(S) origin") from exc
 
 
 def _validated_live_path(path: str) -> str:
-    parsed = urlsplit(path)
-    if (
-        any(ord(character) < 32 or ord(character) == 127 for character in path)
-        or parsed.scheme
-        or parsed.netloc
-        or parsed.fragment
-        or not parsed.path.startswith("/api/")
-        or any(part in {".", ".."} for part in parsed.path.split("/"))
-    ):
-        raise AssertionError("live request path must be a local API path")
-    return urlunsplit(("", "", parsed.path, parsed.query, ""))
+    try:
+        return validate_local_request_target(path)
+    except LocalHTTPValidationError as exc:
+        raise AssertionError("live request path must be a local API path") from exc
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,8 @@ import {
   type LookupFunction,
 } from "node:net";
 
+import { normalizeHostname } from "@/lib/host-policy";
+
 const OIDC_DNS_TIMEOUT_MS = 5_000;
 const OIDC_REQUEST_TIMEOUT_MS = 15_000;
 const OIDC_RESPONSE_MAX_BYTES = 1024 * 1024;
@@ -66,14 +68,6 @@ for (const [network, prefix] of [
   ["ff00::", 8],
 ] as const) {
   NON_GLOBAL_ADDRESSES.addSubnet(network, prefix, "ipv6");
-}
-
-function normalizedHostname(url: URL): string {
-  return url.hostname
-    .replace(/^\[/, "")
-    .replace(/\]$/, "")
-    .replace(/\.+$/, "")
-    .toLowerCase();
 }
 
 function isLoopbackAddress(address: string): boolean {
@@ -146,7 +140,7 @@ export async function resolveOidcTokenAddresses(
   endpoint: URL,
   dnsLookup: OidcDnsLookup = systemLookup,
 ): Promise<OidcResolvedAddress[]> {
-  const hostname = normalizedHostname(endpoint);
+  const hostname = normalizeHostname(endpoint);
   const allowLoopback =
     endpoint.protocol === "http:" &&
     process.env.NODE_ENV !== "production" &&
@@ -222,16 +216,22 @@ function collectJsonResponse(
       const statusCode = response.statusCode ?? 0;
       const chunks: Buffer[] = [];
       let receivedBytes = 0;
+      let sizeLimitExceeded = false;
       response.on("data", (chunk: Buffer | string) => {
+        if (sizeLimitExceeded) return;
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         receivedBytes += buffer.length;
         if (receivedBytes > OIDC_RESPONSE_MAX_BYTES) {
-          request.destroy(new Error("OIDC token response exceeded the size limit"));
+          sizeLimitExceeded = true;
+          const error = new Error("OIDC token response exceeded the size limit");
+          request.destroy(error);
+          reject(error);
           return;
         }
         chunks.push(buffer);
       });
       response.on("end", () => {
+        if (sizeLimitExceeded) return;
         if (statusCode < 200 || statusCode >= 300) {
           reject(new Error(`OIDC token endpoint returned HTTP ${statusCode}`));
           return;
@@ -264,7 +264,7 @@ export async function postOidcTokenRequest(
     throw new Error("OIDC token endpoint requires HTTP(S)");
   }
   const addresses = await resolveOidcTokenAddresses(endpoint);
-  const hostname = normalizedHostname(endpoint);
+  const hostname = normalizeHostname(endpoint);
   const encodedBody = body.toString();
   const requestOptions: RequestOptions = {
     method: "POST",

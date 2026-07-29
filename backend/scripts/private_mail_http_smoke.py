@@ -8,7 +8,6 @@ import base64
 import hashlib
 import hmac
 import http.client
-import ipaddress
 import json
 import mailbox
 import mimetypes
@@ -20,7 +19,7 @@ from email import message_from_bytes, policy
 from email.parser import BytesHeaderParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit
 from zipfile import BadZipFile, ZipFile
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +27,11 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from core.env_paths import operator_home  # noqa: E402
+from core.local_http import (  # noqa: E402
+    LocalHTTPValidationError,
+    validate_local_request_target,
+    validate_loopback_http_origin,
+)
 
 SESSION_COOKIE_NAME = "naruon_session"
 SUPPORTED_SUFFIXES = {".eml", ".emlx", ".mbox", ".zip"}
@@ -37,11 +41,6 @@ SEARCH_RETRY_DEFAULT_DELAY_SECONDS = 0.75
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 MAX_PRIVATE_MAIL_FILE_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_ENTRIES = 10_000
-ALLOWED_LOCAL_HTTP_HOSTS = {"127.0.0.1", "localhost", "::1"}
-
-
-def _has_control_characters(value: str) -> bool:
-    return any(ord(character) < 32 or ord(character) == 127 for character in value)
 
 
 def _validated_operator_path(
@@ -100,61 +99,21 @@ def _validated_cache_directory() -> Path:
 
 
 def _validated_local_base_url(base_url: str) -> tuple[str, str, int]:
-    if _has_control_characters(base_url):
-        raise SystemExit("base-url contains control characters")
-    parsed = urlsplit(base_url)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.query
-        or parsed.fragment
-        or parsed.path not in {"", "/"}
-    ):
-        raise SystemExit("base-url must be a loopback HTTP(S) origin")
-    hostname = parsed.hostname.lower().rstrip(".")
-    if hostname == "localhost":
-        safe_hostname = "localhost"
-    elif hostname == "127.0.0.1":
-        safe_hostname = "127.0.0.1"
-    elif hostname == "::1":
-        safe_hostname = "::1"
-    else:
-        try:
-            address = ipaddress.ip_address(hostname)
-        except ValueError as exc:
-            raise SystemExit("base-url host is not allowlisted") from exc
-        if (
-            not address.is_loopback
-            or address.compressed not in ALLOWED_LOCAL_HTTP_HOSTS
-        ):
-            raise SystemExit("base-url host is not allowlisted")
-        safe_hostname = address.compressed
     try:
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    except ValueError as exc:
-        raise SystemExit("base-url port is invalid") from exc
-    if not 1 <= port <= 65535:
-        raise SystemExit("base-url port is invalid")
-    host_part = f"[{safe_hostname}]" if ":" in safe_hostname else safe_hostname
-    default_port = 443 if parsed.scheme == "https" else 80
-    netloc = host_part if port == default_port else f"{host_part}:{port}"
-    return urlunsplit((parsed.scheme, netloc, "", "", "")), safe_hostname, port
+        validated = validate_loopback_http_origin(base_url)
+    except LocalHTTPValidationError as exc:
+        raise SystemExit(str(exc)) from exc
+    return validated.origin, validated.hostname, validated.port
 
 
 def _validated_request_target(path: str) -> str:
-    if _has_control_characters(path):
-        raise SystemExit("request path contains control characters")
-    parsed = urlsplit(path)
-    if parsed.scheme or parsed.netloc or parsed.fragment:
-        raise SystemExit("request path must be a local API path")
-    if not (parsed.path.startswith("/api/") or parsed.path == "/auth/session"):
-        raise SystemExit("request path must target an allowed local endpoint")
-    path_parts = parsed.path.split("/")
-    if any(part in {".", ".."} for part in path_parts):
-        raise SystemExit("request path traversal is not allowed")
-    return urlunsplit(("", "", parsed.path, parsed.query, ""))
+    try:
+        return validate_local_request_target(
+            path,
+            allowed_exact_paths=frozenset({"/auth/session"}),
+        )
+    except LocalHTTPValidationError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _b64_json(value: dict[str, object]) -> str:
@@ -471,7 +430,7 @@ def _request(
         conn.request(method, request_target, body=body, headers=headers)
         resp = conn.getresponse()
         return resp.status, resp.read()
-    except OSError as exc:
+    except (OSError, http.client.HTTPException) as exc:
         raise _RequestNetworkError(
             "request transport error to local Naruon endpoint"
         ) from exc

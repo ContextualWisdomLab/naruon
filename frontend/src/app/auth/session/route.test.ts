@@ -277,14 +277,18 @@ describe("/auth/session route", () => {
       org: "local-org",
       workspace: "local-workspace",
     });
-    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
-      expect(String(input)).toBe("http://127.0.0.1:8000/api/auth/session");
-      return Response.json({
+    const fetchMock = vi
+      .fn<
+        (
+          input: URL | RequestInfo,
+          init?: RequestInit,
+        ) => Promise<Response>
+      >()
+      .mockResolvedValue(Response.json({
         user_id: "local-user",
         organization_id: "local-org",
         workspace_id: "local-workspace",
-      });
-    });
+      }));
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await GET(
@@ -297,6 +301,13 @@ describe("/auth/session route", () => {
       authenticated: true,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(String(input)).toBe("http://127.0.0.1:8000/api/auth/session");
+    expect(init).toEqual(expect.objectContaining({
+      cache: "no-store",
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    }));
   });
 
   it("preserves a validated global IPv6 backend authority", async () => {
@@ -309,16 +320,18 @@ describe("/auth/session route", () => {
       org: "ipv6-org",
       workspace: "ipv6-workspace",
     });
-    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
-      expect(String(input)).toBe(
-        "https://[2001:4860:4860::8888]:8443/api/auth/session",
-      );
-      return Response.json({
+    const fetchMock = vi
+      .fn<
+        (
+          input: URL | RequestInfo,
+          init?: RequestInit,
+        ) => Promise<Response>
+      >()
+      .mockResolvedValue(Response.json({
         user_id: "ipv6-user",
         organization_id: "ipv6-org",
         workspace_id: "ipv6-workspace",
-      });
-    });
+      }));
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await GET(
@@ -331,6 +344,14 @@ describe("/auth/session route", () => {
       authenticated: true,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(String(input)).toBe(
+      "https://[2001:4860:4860::8888]:8443/api/auth/session",
+    );
+    expect(init).toEqual(expect.objectContaining({
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    }));
   });
 
   it("rejects forged tokens that the backend verifier does not accept", async () => {
