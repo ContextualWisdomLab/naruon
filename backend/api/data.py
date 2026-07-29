@@ -5,6 +5,8 @@ import hashlib
 import json
 import re
 from typing import Literal, NamedTuple
+from collections import defaultdict
+
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
@@ -59,15 +61,13 @@ CONTENT_SEGMENT_TEXT_READINESS_EVIDENCE_SOURCE = (
     "content_segments.word_count, content_segments.safe_text_content"
 )
 KNOWLEDGE_GRAPH_EVIDENCE_ENDPOINT_READINESS_EVIDENCE_SOURCE = (
-    "knowledge_graph_edges.source_segment_id, "
-    "knowledge_graph_edges.target_segment_id"
+    "knowledge_graph_edges.source_segment_id, knowledge_graph_edges.target_segment_id"
 )
 SEMANTIC_KG_READINESS_EVIDENCE_SOURCE = (
     "knowledge_graph_edges.edge_kind, content_segments.segment_path"
 )
 SEMANTIC_RELATION_SOURCE_BACKING_EVIDENCE_SOURCE = (
-    "sender_relationships.source_message_id, "
-    "sender_relationships.source_thread_id"
+    "sender_relationships.source_message_id, sender_relationships.source_thread_id"
 )
 WEB_DAV_ERROR_STATUS_CODES = {
     "no_webdav_account": 422,
@@ -667,9 +667,9 @@ class DataEvidenceSnapshotResponse(BaseModel):
     diligence_close_owner_handoff_queue: list[
         DataDiligenceCloseOwnerHandoffQueueEntry
     ] = Field(default_factory=list)
-    diligence_close_traceability_map: list[
-        DataDiligenceCloseTraceabilityMapEntry
-    ] = Field(default_factory=list)
+    diligence_close_traceability_map: list[DataDiligenceCloseTraceabilityMapEntry] = (
+        Field(default_factory=list)
+    )
     parser_manifest_summary: list[DataEvidenceSnapshotParserSummary]
     quality_checks: list[DataEvidenceSnapshotQualityCheck]
     content_graph_topology_counts: list[DataEvidenceSnapshotContentTopologyCount]
@@ -812,8 +812,7 @@ _REMEDIATION_ACTIONS_BY_CHECK_KEY = {
         "priority_code": "high",
         "impact_text": "Paragraph evidence needs non-empty safe text and word counts.",
         "recommended_next_step": (
-            "Rebuild affected content segments with safe text and word-count "
-            "evidence."
+            "Rebuild affected content segments with safe text and word-count evidence."
         ),
     },
     "knowledge_graph_evidence_endpoint_readiness": {
@@ -824,8 +823,7 @@ _REMEDIATION_ACTIONS_BY_CHECK_KEY = {
         "priority_code": "high",
         "impact_text": "KG edges need paragraph endpoints to be auditable.",
         "recommended_next_step": (
-            "Attach source or target paragraph segment endpoints to affected KG "
-            "edges."
+            "Attach source or target paragraph segment endpoints to affected KG edges."
         ),
     },
     "semantic_relation_source_backing": {
@@ -1402,9 +1400,7 @@ def _evidence_packet_checklist(
         DataEvidencePacketChecklistItem(
             checklist_key="knowledge_graph_topology",
             display_name="Knowledge graph topology",
-            state_code=_checklist_state(
-                bool(snapshot.knowledge_graph_topology_counts)
-            ),
+            state_code=_checklist_state(bool(snapshot.knowledge_graph_topology_counts)),
             source_field="knowledge_graph_topology_counts",
             required_artifact="source_kind_edge_kind_counts",
             detail_text=(
@@ -1695,14 +1691,14 @@ def _diligence_risk_matrix(
     groups: dict[
         tuple[RemediationPriority, str, str],
         list[DataDiligenceExceptionRegisterEntry],
-    ] = {}
+    ] = defaultdict(list)
     for exception in snapshot.diligence_exception_register:
         key = (
             exception.severity_code,
             exception.owner_area,
             exception.related_artifact,
         )
-        groups.setdefault(key, []).append(exception)
+        groups[key].append(exception)
 
     entries: list[DataDiligenceRiskMatrixEntry] = []
     for (severity, owner_area, related_artifact), exceptions in sorted(
@@ -1763,9 +1759,7 @@ def _diligence_close_proof_plan(
                 "Regenerate the evidence snapshot and run python "
                 "scripts/verify_evidence_snapshot.py <snapshot.json>."
             ),
-            buyer_close_dependency=_CLOSE_DEPENDENCY_BY_SEVERITY[
-                risk.severity_code
-            ],
+            buyer_close_dependency=_CLOSE_DEPENDENCY_BY_SEVERITY[risk.severity_code],
             close_gate_status="blocked" if risk.blocks_close else "ready",
             next_action=risk.recommended_next_action,
             provider_write_executed=False,
@@ -1778,22 +1772,14 @@ def _diligence_close_decision_summary(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> DataDiligenceCloseDecisionSummary:
     proof_plan = snapshot.diligence_close_proof_plan
-    blocked = [
-        item for item in proof_plan if item.close_gate_status == "blocked"
-    ]
+    blocked = [item for item in proof_plan if item.close_gate_status == "blocked"]
     ready = [item for item in proof_plan if item.close_gate_status == "ready"]
-    required_artifacts = sorted(
-        {item.required_proof_artifact for item in proof_plan}
-    )
+    required_artifacts = sorted({item.required_proof_artifact for item in proof_plan})
     critical_blocker_count = sum(
         1 for item in blocked if item.severity_code == "critical"
     )
-    high_blocker_count = sum(
-        1 for item in blocked if item.severity_code == "high"
-    )
-    medium_blocker_count = sum(
-        1 for item in blocked if item.severity_code == "medium"
-    )
+    high_blocker_count = sum(1 for item in blocked if item.severity_code == "high")
+    medium_blocker_count = sum(1 for item in blocked if item.severity_code == "medium")
     highest_severity: DiligenceCloseSeverity = "none"
     if critical_blocker_count:
         highest_severity = "critical"
@@ -1844,9 +1830,9 @@ def _diligence_close_decision_summary(
 def _diligence_close_artifact_review_queue(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceCloseArtifactReviewQueueEntry]:
-    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = {}
+    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = defaultdict(list)
     for proof in snapshot.diligence_close_proof_plan:
-        groups.setdefault(proof.required_proof_artifact, []).append(proof)
+        groups[proof.required_proof_artifact].append(proof)
 
     entries: list[DataDiligenceCloseArtifactReviewQueueEntry] = []
     for artifact, proofs in sorted(groups.items()):
@@ -1889,9 +1875,9 @@ def _diligence_close_artifact_review_queue(
 def _diligence_close_owner_handoff_queue(
     snapshot: DataEvidenceSnapshotResponse,
 ) -> list[DataDiligenceCloseOwnerHandoffQueueEntry]:
-    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = {}
+    groups: dict[str, list[DataDiligenceCloseProofPlanEntry]] = defaultdict(list)
     for proof in snapshot.diligence_close_proof_plan:
-        groups.setdefault(proof.owner_area, []).append(proof)
+        groups[proof.owner_area].append(proof)
 
     entries: list[DataDiligenceCloseOwnerHandoffQueueEntry] = []
     for owner_area, proofs in sorted(groups.items()):
@@ -1910,9 +1896,7 @@ def _diligence_close_owner_handoff_queue(
                 key=lambda severity: _RISK_SEVERITY_RANK[severity],
             )
         ]
-        related_artifacts = sorted(
-            {proof.required_proof_artifact for proof in proofs}
-        )
+        related_artifacts = sorted({proof.required_proof_artifact for proof in proofs})
         handoff_status: DiligenceOwnerHandoffStatus = (
             "blocked" if blocked_count else "ready_for_handoff"
         )
@@ -1960,9 +1944,7 @@ def _diligence_close_traceability_map(
         risk_key = proof.proof_key.removeprefix("proof_")
         risk = risk_by_key[risk_key]
         manifest = manifest_by_file[proof.required_proof_artifact]
-        artifact_review = artifact_review_by_artifact[
-            proof.required_proof_artifact
-        ]
+        artifact_review = artifact_review_by_artifact[proof.required_proof_artifact]
         owner_handoff = owner_handoff_by_owner[proof.owner_area]
         source_field = manifest.source_field
         data_room_artifact = proof.required_proof_artifact
@@ -2228,9 +2210,7 @@ def _evidence_snapshot_from_surface(
         ],
         content_graph_evidence_samples=surface.content_graph_evidence_samples,
         knowledge_graph_evidence_samples=surface.knowledge_graph_evidence_samples,
-        semantic_relation_evidence_samples=(
-            surface.semantic_relation_evidence_samples
-        ),
+        semantic_relation_evidence_samples=(surface.semantic_relation_evidence_samples),
         semantic_extraction_manifest=surface.semantic_extraction_manifest,
     )
     snapshot = snapshot.model_copy(
@@ -2245,17 +2225,13 @@ def _evidence_snapshot_from_surface(
         update={"data_room_package_manifest": _data_room_package_manifest(snapshot)}
     )
     snapshot = snapshot.model_copy(
-        update={
-            "diligence_exception_register": _diligence_exception_register(snapshot)
-        }
+        update={"diligence_exception_register": _diligence_exception_register(snapshot)}
     )
     snapshot = snapshot.model_copy(
         update={"diligence_risk_matrix": _diligence_risk_matrix(snapshot)}
     )
     snapshot = snapshot.model_copy(
-        update={
-            "diligence_close_proof_plan": _diligence_close_proof_plan(snapshot)
-        }
+        update={"diligence_close_proof_plan": _diligence_close_proof_plan(snapshot)}
     )
     snapshot = snapshot.model_copy(
         update={
@@ -3960,8 +3936,8 @@ async def get_data_quality_surface(
         db,
         auth_context,
     )
-    semantic_relation_evidence_samples = (
-        await _get_semantic_relation_evidence_samples(db, auth_context)
+    semantic_relation_evidence_samples = await _get_semantic_relation_evidence_samples(
+        db, auth_context
     )
     attachment_parse_stats = await _get_attachment_parse_stats(db, email_scope)
     email_count = email_stats.count
@@ -3976,9 +3952,7 @@ async def get_data_quality_surface(
     edged_email_count = knowledge_graph_stats.edged_email_count
     knowledge_graph_edge_count = knowledge_graph_stats.edge_count
     semantic_relation_count = semantic_relation_stats.total_count
-    semantic_relation_source_backed_count = (
-        semantic_relation_stats.source_backed_count
-    )
+    semantic_relation_source_backed_count = semantic_relation_stats.source_backed_count
     parsed_attachment_count = attachment_parse_stats.parsed_count
     unparsed_attachment_count = attachment_parse_stats.unparsed_count
 
