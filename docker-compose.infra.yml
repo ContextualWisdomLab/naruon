@@ -1,16 +1,11 @@
 version: '3.8'
 
-x-service-hardening: &service-hardening
-  security_opt:
-    - no-new-privileges:true
-  read_only: true
-  tmpfs:
-    - /tmp
-
 services:
   traefik:
-    <<: *service-hardening
     image: traefik:v2.10
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     command:
       - "--api.insecure=true"
       - "--providers.docker=true"
@@ -25,8 +20,10 @@ services:
       - naruon-network
 
   prometheus:
-    <<: *service-hardening
     image: prom/prometheus:latest
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     tmpfs:
       - /prometheus
       - /tmp
@@ -38,8 +35,10 @@ services:
       - naruon-network
 
   grafana:
-    <<: *service-hardening
     image: grafana/grafana:latest
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     tmpfs:
@@ -54,8 +53,10 @@ services:
       - naruon-network
 
   loki:
-    <<: *service-hardening
     image: grafana/loki:2.9.2
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     tmpfs:
       - /loki
       - /tmp
@@ -66,8 +67,10 @@ services:
       - naruon-network
 
   tempo:
-    <<: *service-hardening
     image: grafana/tempo:latest
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./observability/tempo.yaml:/etc/tempo.yaml:ro
@@ -78,8 +81,10 @@ services:
       - naruon-network
 
   otel-collector:
-    <<: *service-hardening
     image: otel/opentelemetry-collector:0.88.0
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     ports:
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
@@ -87,8 +92,10 @@ services:
       - naruon-network
 
   keycloak:
-    <<: *service-hardening
     image: quay.io/keycloak/keycloak:24.0.0
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     command: start-dev
     environment:
       KC_DB: dev-file

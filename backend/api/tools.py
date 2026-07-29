@@ -606,6 +606,93 @@ registry.register(
 )
 
 
+
+
+async def email_categorizer_handler(params: Dict[str, Any]) -> Any:
+    """Categorize the given email content."""
+    content = params.get("email_content", "").lower()
+    categories = []
+
+    if "invoice" in content or "billing" in content or "payment" in content or "결제" in content or "청구" in content:
+        categories.append("Finance")
+    if "meeting" in content or "schedule" in content or "회의" in content or "일정" in content:
+        categories.append("Scheduling")
+    if "urgent" in content or "asap" in content or "긴급" in content or "빨리" in content:
+        categories.append("Urgent")
+
+    if not categories:
+        categories.append("General")
+
+    return {
+        "categories": categories,
+        "primary_category": categories[0]
+    }
+
+registry.register(
+    ToolInfo(
+        code="email_categorizer",
+        name="이메일 자동 분류기 (Email Categorizer)",
+        description="이메일 내용을 분석하여 알맞은 카테고리로 자동 분류합니다.",
+        category="이메일 분석",
+        parameters={"email_content": "string"},
+    ),
+    email_categorizer_handler,
+)
+
+async def keyword_extractor_handler(params: Dict[str, Any]) -> Any:
+    """Extract key terms from the email content."""
+    content = params.get("text", "")
+    # Simple extraction logic for demonstration
+    words = content.split()
+    keywords = list(set([w for w in words if len(w) > 4]))[:5]
+
+    return {
+        "keywords": keywords,
+        "keyword_count": len(keywords)
+    }
+
+registry.register(
+    ToolInfo(
+        code="keyword_extractor",
+        name="주요 키워드 추출기 (Keyword Extractor)",
+        description="텍스트 본문에서 가장 중요한 키워드를 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    keyword_extractor_handler,
+)
+
+async def meeting_agenda_generator_handler(params: Dict[str, Any]) -> Any:
+    """Generate a meeting agenda from previous discussion context."""
+    context = params.get("discussion_context", "")
+
+    # Very basic parsing based on length and keywords
+    if len(context) < 10:
+        return {"agenda_items": ["Introductions", "Open Discussion"], "estimated_duration_minutes": 30}
+
+    items = ["Review previous action items"]
+    if "project" in context.lower() or "프로젝트" in context:
+        items.append("Project Status Update")
+    if "issue" in context.lower() or "bug" in context.lower() or "문제" in context:
+        items.append("Discuss Pending Issues")
+    items.append("Next Steps and Action Items")
+
+    return {
+        "agenda_items": items,
+        "estimated_duration_minutes": len(items) * 15
+    }
+
+registry.register(
+    ToolInfo(
+        code="meeting_agenda_generator",
+        name="회의 아젠다 생성기 (Meeting Agenda Generator)",
+        description="논의 컨텍스트를 바탕으로 적절한 회의 아젠다를 자동으로 생성합니다.",
+        category="일정 관리",
+        parameters={"discussion_context": "string"},
+    ),
+    meeting_agenda_generator_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """

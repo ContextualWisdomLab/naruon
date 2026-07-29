@@ -39,7 +39,7 @@ function routeUrl(route) {
     const url = routeUrl(route);
     console.log('Taking screenshot for route', route);
     try {
-      await page.goto(url, { waitUntil: 'load', timeout: 30000 });
+      await page.goto(new URL(url).href, { waitUntil: 'load', timeout: 30000 });
       await page.waitForTimeout(2000);
       const name = route === '/' ? 'home' : route.slice(1);
       await page.screenshot({ path: `test-results/${name}-screenshot.png`, fullPage: true });

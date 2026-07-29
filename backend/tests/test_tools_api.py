@@ -993,3 +993,78 @@ def test_validate_webhook_url_invalid_port():
     from api.tools import validate_webhook_url
     with pytest.raises(ValueError, match="Webhook URL port must be valid"):
         validate_webhook_url("https://example.com:9999999/webhook")
+
+def test_detect_text_language_en():
+    from api.tools import _detect_text_language
+    assert _detect_text_language("English text") == "en"
+
+def test_detect_text_language_unknown():
+    from api.tools import _detect_text_language
+    assert _detect_text_language("1234") == "unknown"
+
+@pytest.mark.asyncio
+async def test_sentiment_analyzer_handler_positive_and_neutral():
+    from api.tools import sentiment_analyzer_handler
+    result = await sentiment_analyzer_handler({"text": "thank you"})
+    assert result["sentiment"] == "positive"
+
+    result = await sentiment_analyzer_handler({"text": "hello"})
+    assert result["sentiment"] == "neutral"
+
+def test_detect_text_language_ko():
+    from api.tools import _detect_text_language
+    assert _detect_text_language("안녕하세요") == "ko"
+
+@pytest.mark.asyncio
+async def test_email_categorizer_handler():
+    from api.tools import email_categorizer_handler
+    # Test Finance category
+    result = await email_categorizer_handler({"email_content": "Please pay this invoice soon."})
+    assert "Finance" in result["categories"]
+
+    # Test Scheduling category
+    result = await email_categorizer_handler({"email_content": "Let's schedule a meeting."})
+    assert "Scheduling" in result["categories"]
+
+    # Test Urgent category
+    result = await email_categorizer_handler({"email_content": "This is urgent!"})
+    assert "Urgent" in result["categories"]
+
+    # Test General category (fallback)
+    result = await email_categorizer_handler({"email_content": "Hello, how are you?"})
+    assert "General" in result["categories"]
+
+    # Test multiple categories
+    result = await email_categorizer_handler({"email_content": "URGENT: Meeting to discuss invoice payment"})
+    assert "Finance" in result["categories"]
+    assert "Scheduling" in result["categories"]
+    assert "Urgent" in result["categories"]
+
+@pytest.mark.asyncio
+async def test_keyword_extractor_handler():
+    from api.tools import keyword_extractor_handler
+    # Given a text with words longer than 4 characters
+    result = await keyword_extractor_handler({"text": "The quick brown fox jumps over the lazy dog because of something important."})
+
+    # It should extract up to 5 keywords longer than 4 characters
+    assert "quick" in result["keywords"] or "brown" in result["keywords"] or "jumps" in result["keywords"]
+    assert result["keyword_count"] == len(result["keywords"])
+    for keyword in result["keywords"]:
+        assert len(keyword) > 4
+
+@pytest.mark.asyncio
+async def test_meeting_agenda_generator_handler():
+    from api.tools import meeting_agenda_generator_handler
+
+    # Test with short context
+    result = await meeting_agenda_generator_handler({"discussion_context": "short"})
+    assert result["agenda_items"] == ["Introductions", "Open Discussion"]
+    assert result["estimated_duration_minutes"] == 30
+
+    # Test with project and issue context
+    result = await meeting_agenda_generator_handler({"discussion_context": "The project has an issue that needs fixing."})
+    assert "Review previous action items" in result["agenda_items"]
+    assert "Project Status Update" in result["agenda_items"]
+    assert "Discuss Pending Issues" in result["agenda_items"]
+    assert "Next Steps and Action Items" in result["agenda_items"]
+    assert result["estimated_duration_minutes"] == len(result["agenda_items"]) * 15
