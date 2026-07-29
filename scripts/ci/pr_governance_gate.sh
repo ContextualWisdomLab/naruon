@@ -318,6 +318,7 @@ else
 fi
 
 CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potential issue|actionable comment|actionable comments'
+CODERABBIT_ISSUE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|actionable comments?|changes requested|request changes'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
   [.check_runs[]
@@ -382,7 +383,7 @@ if ! ISSUE_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues
   printf '%s\n' "$(<"$ISSUE_COMMENTS_ERROR_FILE")" | sed 's/^/    /'
   add_blocker 'PR issue comments could not be read; see the workflow run log.'
 else
-  CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s --arg head_sha "$HEAD_SHA" --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
+  CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s --arg head_sha "$HEAD_SHA" --arg pattern "$CODERABBIT_ISSUE_BLOCKING_PATTERN" '
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select((.body // "") | test($pattern; "i"))
