@@ -66,7 +66,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/pulls/42 ]]; then
   exit 0
 fi
 
-if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/* ]] && [[ "$2" != */check-runs* ]]; then
+if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/* ]] && [[ "$2" != */check-runs* ]] && [[ "$2" != */status ]]; then
   printf '2026-05-19T00:00:00Z'
   exit 0
 fi
@@ -124,7 +124,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error)
+    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -144,6 +144,27 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
       ;;
     *)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"success","html_url":"https://checks/coderabbit"}]}'
+      ;;
+  esac
+  exit 0
+fi
+
+if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/status ]]; then
+  case "${GH_SCENARIO:-pass}" in
+    coderabbit_status_success)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"success","description":"Review approved","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
+      ;;
+    coderabbit_status_pending)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"pending","description":"Review in progress","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
+      ;;
+    coderabbit_status_failed)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"failure","description":"Review failed","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
+      ;;
+    coderabbit_status_unknown)
+      printf '{"statuses":[{"context":"CodeRabbit","state":"stale","description":"Unrecognized state","created_at":"2026-07-29T01:54:41Z","updated_at":"2026-07-29T01:54:41Z"}]}'
+      ;;
+    *)
+      printf '{"statuses":[]}'
       ;;
   esac
   exit 0
@@ -202,6 +223,9 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         ;;
       coderabbit_stale_blocking_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Pre-merge warning for older head"}]'
+        ;;
+      coderabbit_review_limit_comment)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Review limit reached. This is an operational warning for 0123456789abcdef0123456789abcdef01234567; retry later."}]'
         ;;
       github_code_quality_blocking_comment)
         printf '[{"id":777,"user":{"login":"github-code-quality[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Potential issue for 0123456789abcdef0123456789abcdef01234567"}]'
@@ -440,6 +464,47 @@ assert_coderabbit_pending_waits_without_hard_comment() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_coderabbit_success_commit_status_completes_gate() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_status_success "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_in_file 'status=completed -f conclusion=success' "$temp_dir/gh.log"
+  assert_not_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+}
+
+assert_coderabbit_pending_commit_status_waits() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_status_pending "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_in_file 'status=in_progress' "$temp_dir/gh.log"
+}
+
+assert_coderabbit_failed_commit_status_blocks() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_status_failed "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'CodeRabbit commit status has a blocking conclusion' "$temp_dir/output.txt"
+  assert_in_file 'status=completed -f conclusion=failure' "$temp_dir/gh.log"
+}
+
+assert_coderabbit_unknown_commit_status_fails_closed() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_status_unknown "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'CodeRabbit commit status has an unrecognized state' "$temp_dir/output.txt"
+  assert_in_file 'status=completed -f conclusion=failure' "$temp_dir/gh.log"
+}
+
 assert_missing_coderabbit_waits_for_adversarial_opencode_approval() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -638,7 +703,18 @@ assert_coderabbit_stale_issue_comment_does_not_block() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/gh.log"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_coderabbit_review_limit_issue_comment_does_not_block() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_review_limit_comment "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -771,6 +847,10 @@ assert_failed_checks_create_marker_comment
 assert_existing_marker_comment_is_patched
 assert_resolved_marker_comment_is_updated_on_ready_gate
 assert_coderabbit_pending_waits_without_hard_comment
+assert_coderabbit_success_commit_status_completes_gate
+assert_coderabbit_pending_commit_status_waits
+assert_coderabbit_failed_commit_status_blocks
+assert_coderabbit_unknown_commit_status_fails_closed
 assert_missing_coderabbit_waits_for_adversarial_opencode_approval
 assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval
 assert_missing_coderabbit_rejects_non_authoritative_opencode_evidence
@@ -787,6 +867,7 @@ assert_evaluation_error_publishes_gate_failure
 assert_coderabbit_blocking_issue_comment_blocks
 assert_github_code_quality_blocking_issue_comment_blocks
 assert_coderabbit_stale_issue_comment_does_not_block
+assert_coderabbit_review_limit_issue_comment_does_not_block
 assert_coderabbit_current_review_comment_blocks
 assert_github_code_quality_current_review_comment_blocks
 assert_coderabbit_stale_review_comment_does_not_block
