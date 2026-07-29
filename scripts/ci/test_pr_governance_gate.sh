@@ -641,7 +641,7 @@ assert_coderabbit_stale_issue_comment_does_not_block() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/gh.log"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -652,7 +652,7 @@ assert_coderabbit_review_limit_issue_comment_does_not_block() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/gh.log"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
