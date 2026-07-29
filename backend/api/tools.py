@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import inspect
 import json
 import logging
@@ -23,6 +24,52 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
+MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
+
+
+def _tool_code_fingerprint(code: str) -> str:
+    """Return a stable non-reversible identifier for correlating tool failures."""
+    return hashlib.sha256(code.encode("utf-8", errors="replace")).hexdigest()[:12]
+
+
+def _exception_traceback_fingerprint(exc: Exception) -> str:
+    """Fingerprint traceback locations without logging exception text or source."""
+    locations: list[str] = []
+    traceback_cursor = exc.__traceback__
+    while traceback_cursor is not None:
+        frame = traceback_cursor.tb_frame
+        locations.append(
+            f"{frame.f_code.co_filename}:{frame.f_code.co_name}:"
+            f"{traceback_cursor.tb_lineno}"
+        )
+        traceback_cursor = traceback_cursor.tb_next
+    material = "\n".join(locations) or type(exc).__name__
+    return hashlib.sha256(material.encode("utf-8", errors="replace")).hexdigest()[:12]
+
+
+def _safe_tool_failure_message(exc: Exception) -> str:
+    """Return a bounded single-line exception message for the API response."""
+    raw = str(exc) or type(exc).__name__
+    escaped: list[str] = []
+    escaped_length = 0
+    for character in raw:
+        codepoint = ord(character)
+        if character == "\r":
+            fragment = "\\r"
+        elif character == "\n":
+            fragment = "\\n"
+        elif character == "\t":
+            fragment = "\\t"
+        elif codepoint < 0x20 or codepoint == 0x7F or codepoint in {0x2028, 0x2029}:
+            fragment = f"\\u{codepoint:04x}"
+        else:
+            fragment = character
+        escaped.append(fragment)
+        escaped_length += len(fragment)
+        if escaped_length >= MAX_TOOL_FAILURE_MESSAGE_CHARS:
+            break
+    message = "".join(escaped)[:MAX_TOOL_FAILURE_MESSAGE_CHARS]
+    return message or "Tool execution failed"
 
 
 class ToolInfo(BaseModel):
@@ -900,9 +947,16 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
             status="success", result=result, message="Execution successful"
         )
     except Exception as e:
-        logger.exception("Tool execution failed", extra={"tool_code": code})
+        logger.warning(
+            "tool_execution_failed",
+            extra={
+                "exception_type": type(e).__name__,
+                "exception_traceback_fingerprint": _exception_traceback_fingerprint(e),
+                "tool_code_fingerprint": _tool_code_fingerprint(code),
+            },
+        )
         return ExecuteResponse(
             status="failed",
             result=None,
-            message=str(e),
+            message=_safe_tool_failure_message(e),
         )
