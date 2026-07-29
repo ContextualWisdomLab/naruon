@@ -1,22 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Agent } from "undici";
 
 import {
   createPinnedBackendLookup,
+  fetchTrustedBackend,
   resolveBackendAddresses,
   type BackendDnsLookup,
 } from "./backend-request";
+
+const { systemLookupMock } = vi.hoisted(() => ({
+  systemLookupMock: vi.fn(),
+}));
+
+vi.mock("node:dns/promises", () => ({
+  lookup: systemLookupMock,
+}));
 
 const ORIGINAL_ENV = { ...process.env };
 
 describe("backend destination pinning", () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    systemLookupMock.mockReset();
     process.env = { ...ORIGINAL_ENV };
     delete process.env.ALLOW_DOCKER_BACKEND_INTERNAL_URL;
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
   });
 
@@ -51,6 +64,9 @@ describe("backend destination pinning", () => {
     "::1",
     "::ffff:127.0.0.1",
     "0:0:0:0:0:ffff:7f00:1",
+    "0::ffff:7f00:1",
+    "0:0::ffff:7f00:1",
+    "::FFFF:7F00:1",
     "fc00::1",
     "fe80::1",
   ])("rejects non-global public DNS answer %s", async (address) => {
@@ -181,5 +197,66 @@ describe("backend destination pinning", () => {
         );
       }),
     ).rejects.toThrow("unexpected hostname");
+  });
+
+  it("normalizes bracketed IPv6 hostnames in the pinned lookup", async () => {
+    const pinnedLookup = createPinnedBackendLookup(
+      "2001:4860:4860::8888",
+      [{ address: "2001:4860:4860::8888", family: 6 }],
+    );
+    const invokeLookup = pinnedLookup as unknown as (
+      hostname: string,
+      options: { all: false; family: number },
+      callback: (
+        error: Error | null,
+        address: string,
+        family: number,
+      ) => void,
+    ) => void;
+
+    await expect(
+      new Promise<{ address: string; family: number }>((resolve, reject) => {
+        invokeLookup(
+          "[2001:4860:4860::8888]",
+          { all: false, family: 6 },
+          (error, address, family) => {
+            if (error) reject(error);
+            else resolve({ address, family });
+          },
+        );
+      }),
+    ).resolves.toEqual({
+      address: "2001:4860:4860::8888",
+      family: 6,
+    });
+  });
+
+  it("wires validated DNS answers into the fetch dispatcher", async () => {
+    vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
+    systemLookupMock.mockResolvedValue([
+      { address: "8.8.8.8", family: 4 },
+      { address: "2001:4860:4860::8888", family: 6 },
+    ]);
+    const expectedResponse = new Response(null, { status: 204 });
+    const fetchMock = vi.fn().mockResolvedValue(expectedResponse);
+    vi.stubGlobal("fetch", fetchMock);
+    const target = new URL("https://api.naruon.net/api/tasks");
+
+    await expect(
+      fetchTrustedBackend(target, { redirect: "manual" }),
+    ).resolves.toBe(expectedResponse);
+
+    expect(systemLookupMock).toHaveBeenCalledWith("api.naruon.net", {
+      all: true,
+      verbatim: true,
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [fetchedTarget, requestInit] = fetchMock.mock.calls[0] as [
+      URL,
+      RequestInit & { dispatcher: Agent },
+    ];
+    expect(fetchedTarget).toBe(target);
+    expect(requestInit.redirect).toBe("manual");
+    expect(requestInit.dispatcher).toBeInstanceOf(Agent);
   });
 });

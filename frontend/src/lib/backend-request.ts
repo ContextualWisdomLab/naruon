@@ -86,12 +86,11 @@ for (const [network, prefix] of [
   COMPOSE_ADDRESSES.addSubnet(network, prefix, "ipv6");
 }
 
+const IPV4_MAPPED_IPV6_ADDRESSES = new BlockList();
+IPV4_MAPPED_IPV6_ADDRESSES.addSubnet("::ffff:0:0", 96, "ipv6");
+
 function isIpv4MappedIpv6(address: string): boolean {
-  const normalized = address.toLowerCase();
-  return (
-    normalized.startsWith("::ffff:") ||
-    normalized.startsWith("0:0:0:0:0:ffff:")
-  );
+  return IPV4_MAPPED_IPV6_ADDRESSES.check(address, "ipv6");
 }
 
 function isLoopbackAddress(address: string, family: AddressFamily): boolean {
@@ -224,8 +223,7 @@ export function createPinnedBackendLookup(
     callback: (...args: unknown[]) => void,
   ) => {
     if (
-      hostname.replace(/\.+$/, "").toLowerCase() !==
-      expectedHostname.replace(/\.+$/, "").toLowerCase()
+      normalizeHostname(hostname) !== normalizeHostname(expectedHostname)
     ) {
       callback(new Error("Backend pinned lookup rejected an unexpected hostname"));
       return;
