@@ -28,18 +28,18 @@ def generate_ics_from_task(task: CalendarTask) -> str:
         ics_status = "NEEDS-ACTION"
 
     cal = Calendar()
-    cal.add('VERSION', '2.0')
-    cal.add('PRODID', '-//Naruon//AI Workspace//EN')
+    cal.add("VERSION", "2.0")
+    cal.add("PRODID", "-//Naruon//AI Workspace//EN")
 
-    todo = Todo()
-    todo.add('UID', task.task_uid)
-    todo.add('DTSTAMP', task.updated_at)
-    todo.add('SUMMARY', task.title)
-    todo.add('STATUS', ics_status)
+    action_item = Todo()
+    action_item.add("UID", task.task_uid)
+    action_item.add("DTSTAMP", task.updated_at)
+    action_item.add("SUMMARY", task.title)
+    action_item.add("STATUS", ics_status)
 
     if task.due_date:
-        todo.add('DUE', task.due_date)
+        action_item.add("DUE", task.due_date)
 
-    cal.add_component(todo)
+    cal.add_component(action_item)
 
     return cal.to_ical().decode("utf-8")

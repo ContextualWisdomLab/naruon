@@ -8,6 +8,7 @@ workflow governance before a release branch can land.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import importlib.util
@@ -239,7 +240,11 @@ def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
         seen_keys: dict[str, int] = {}
         workflow_lines = workflow_path.read_text(encoding="utf-8").splitlines()
         for line_number, line in enumerate(workflow_lines, 1):
-            if not line or line.startswith((" ", "\t")) or line.lstrip().startswith("#"):
+            if (
+                not line
+                or line.startswith((" ", "\t"))
+                or line.lstrip().startswith("#")
+            ):
                 continue
             match = top_level_key.match(line)
             if not match:
@@ -303,7 +308,7 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
 
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
-        "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4"
+        "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
     )
     # Governance/security workflows (codeql, dependency-review, scorecard,
     # trivy) are centralized in the org-level ContextualWisdomLab/.github
@@ -313,7 +318,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
         ".github/workflows/docker-publish.yml",
-        ".github/workflows/mail-smoke.yml",
         ".github/workflows/pr-governance.yml",
     ]
 
@@ -321,6 +325,14 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         workflow = read_repo_text(workflow_path)
         assert harden_runner_ref in workflow
         assert "egress-policy: audit" in workflow
+
+    # mail-smoke seeds live mailbox/DAV credentials on a self-hosted runner, so
+    # it is hardened one level further: egress is blocked to an allowlist, not
+    # merely audited, so checked-out code cannot exfiltrate the secrets.
+    mail_smoke_workflow = read_repo_text(".github/workflows/mail-smoke.yml")
+    assert harden_runner_ref in mail_smoke_workflow
+    assert "egress-policy: block" in mail_smoke_workflow
+    assert "allowed-endpoints:" in mail_smoke_workflow
 
     dependency_review_workflow = read_repo_text(
         ".github/workflows/dependency-review.yml"
@@ -345,8 +357,8 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "${{ github.head_ref || github.ref_name }}" not in (
         log_dependency_review_script
     )
-    assert 'printf \'Base ref: %s\\n\' "$BASE_REF"' in log_dependency_review_script
-    assert 'printf \'Head ref: %s\\n\' "$HEAD_REF"' in log_dependency_review_script
+    assert "printf 'Base ref: %s\\n' \"$BASE_REF\"" in log_dependency_review_script
+    assert "printf 'Head ref: %s\\n' \"$HEAD_REF\"" in log_dependency_review_script
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -359,6 +371,13 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "rev: v4.4.0" in pre_commit
     assert "https://github.com/pylint-dev/pylint" in pre_commit
     assert "rev: v2.17.2" in pre_commit
+
+
+def test_actionlint_recognizes_the_mail_egress_runner_label() -> None:
+    actionlint_config = read_repo_text(".github/actionlint.yaml")
+
+    assert "self-hosted-runner:" in actionlint_config
+    assert "- mail-egress" in actionlint_config
 
 
 def test_github_actions_unpinned_major_refs_failure(
@@ -431,6 +450,7 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
 
 def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sarif_path = tmp_path / "scorecard-results.sarif"
     sarif_path.write_text(
@@ -455,11 +475,12 @@ def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
     ensure_scorecard_module = importlib.util.module_from_spec(spec)
     sys.modules["ensure_scorecard"] = ensure_scorecard_module
     spec.loader.exec_module(ensure_scorecard_module)
+    monkeypatch.chdir(tmp_path)
 
     sarif_path.chmod(0o444)
     try:
-        for _ in range(2):
-            ret = ensure_scorecard_module.main([str(normalizer), str(sarif_path)])
+        for argument in (str(sarif_path), "./scorecard-results.sarif"):
+            ret = ensure_scorecard_module.main([str(normalizer), argument])
             assert ret == 0, f"Scorecard script failed with {ret}"
     finally:
         sarif_path.chmod(0o644)
@@ -479,7 +500,43 @@ def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
     assert branch_protection_run["results"] == []
 
 
-def test_review_automation_uses_central_required_workflows_without_local_copies() -> None:
+def test_scorecard_sarif_normalizer_rejects_escape_links_and_large_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "scorecard-results.sarif"
+    outside.write_text('{"runs": []}', encoding="utf-8")
+    normalizer = REPO_ROOT / "scripts/ci/ensure_scorecard_sarif_categories.py"
+    spec = importlib.util.spec_from_file_location(
+        "ensure_scorecard_security", normalizer
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.chdir(workspace)
+
+    assert module.main([str(normalizer), str(outside)]) == 65
+
+    expected = workspace / "scorecard-results.sarif"
+    expected.symlink_to(outside)
+    assert module.main([str(normalizer), str(expected)]) == 65
+    expected.unlink()
+
+    outside_before = outside.read_bytes()
+    os.link(outside, expected)
+    assert module.main([str(normalizer), str(expected)]) == 65
+    assert outside.read_bytes() == outside_before
+    expected.unlink()
+
+    expected.write_bytes(b" " * (module.MAX_SARIF_BYTES + 1))
+    assert module.main([str(normalizer), str(expected)]) == 65
+
+
+def test_review_automation_uses_central_required_workflows_without_local_copies() -> (
+    None
+):
     readme = read_repo_text("README.md")
     normalized_readme = " ".join(readme.split())
     architecture = read_repo_text("ARCHITECTURE.md")
@@ -513,8 +570,7 @@ def test_review_automation_uses_central_required_workflows_without_local_copies(
     assert "This repository does not carry repo-local" in normalized_readme
     assert "OpenCode, Strix, or merge-scheduler workflow copies" in normalized_readme
     assert (
-        "branch updates, auto-merge, and mechanical merge actions"
-        in normalized_readme
+        "branch updates, auto-merge, and mechanical merge actions" in normalized_readme
     )
     assert "central required workflows" in architecture
     assert "ContextualWisdomLab/.github" in architecture
@@ -557,27 +613,27 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true" in workflow
     assert (
         workflow.count(
-            "docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0"
+            "docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0"
         )
         == 2
     )
     assert (
         workflow.count(
-            "docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0"
+            "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0"
         )
         == 2
     )
     assert (
-        "docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0"
+        "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0"
         in workflow
     )
     assert (
-        "docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0"
+        "docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0"
         in workflow
     )
     assert (
         workflow.count(
-            "docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0"
+            "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0"
         )
         == 2
     )
@@ -642,9 +698,15 @@ def test_kubernetes_deployments_use_restricted_runtime_security_contexts() -> No
     db_statefulset = read_repo_text("k8s/db-statefulset.yaml")
     frontend_deployment = read_repo_text("k8s/frontend-deployment.yaml")
 
-    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-backend" in backend_deployment
+    assert (
+        "image: ghcr.io/contextualwisdomlab/ai_email_client-backend"
+        in backend_deployment
+    )
     assert "image: docker.io/pgvector/pgvector:pg16" in db_statefulset
-    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend" in frontend_deployment
+    assert (
+        "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend"
+        in frontend_deployment
+    )
 
     for manifest in (backend_deployment, db_statefulset, frontend_deployment):
         assert "namespace: naruon-dev" in manifest
@@ -943,6 +1005,11 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "CHECK_RUN_PR_NUMBER" in workflow
     assert "headRefOid" in gate_script
     assert "mergeStateStatus" in gate_script
+    assert "Merge state lookup attempt" in gate_script
+    assert "Merge state is still UNKNOWN after 4 attempts" in gate_script
+    assert "PR state became %s during merge-state refresh" in gate_script
+    assert "PR head changed during gate evaluation" in gate_script
+    assert "skipping stale gate publication" in gate_script
     assert "gh pr checks" in gate_script and "--required" in gate_script
     assert "no required checks reported" in gate_script
     assert "no legacy required status contexts reported" in gate_script
@@ -955,6 +1022,7 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "coderabbitai" in gate_script
     assert "/issues/${PR_NUMBER}/comments" in gate_script
     assert "COMMENT_MARKER" in gate_script
+    assert "no current blocking failures remain" in gate_script
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script

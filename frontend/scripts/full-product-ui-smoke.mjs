@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
-import { mkdir, access, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { access, mkdtemp, writeFile } from "node:fs/promises";
 import net from "node:net";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -8,12 +9,14 @@ import { chromium } from "@playwright/test";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.resolve(scriptDir, "..");
-const baseUrl = process.env.NARUON_FULL_PRODUCT_BASE_URL || "http://127.0.0.1:3001";
-const screenshotDir = process.env.NARUON_FULL_PRODUCT_SCREENSHOT_DIR || "/tmp/naruon-full-product-smoke";
-const ALLOWED_FULL_PRODUCT_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+const nextCliPath = path.join(frontendDir, "node_modules", "next", "dist", "bin", "next");
+const requestedBaseUrl = process.env.NARUON_FULL_PRODUCT_BASE_URL || "http://127.0.0.1:3001";
+const requestedScreenshotProfile = resolveFullProductScreenshotProfile();
 const SERVER_PROBE_TIMEOUT_MS = 5_000;
 const SERVER_READY_TIMEOUT_MS = 90_000;
 const IS_WINDOWS = process.platform === "win32";
+const DEFAULT_FULL_PRODUCT_SCREENSHOT_PROFILE = "/tmp/naruon-full-product-smoke";
+const RESPONSIVE_FULL_PRODUCT_SCREENSHOT_PROFILE = "/tmp/naruon-full-product-responsive-qa";
 
 export const FULL_PRODUCT_ROUTES = [
   { path: "/", name: "home", expectedText: "Naruon" },
@@ -53,14 +56,93 @@ export const FULL_PRODUCT_ACCESSIBILITY_CHECK_NAMES = [
 ];
 
 export function resolveFullProductBaseUrl(rawBaseUrl) {
-  const fullProductBaseUrl = new URL(rawBaseUrl);
-  if (!ALLOWED_FULL_PRODUCT_HOSTS.has(fullProductBaseUrl.hostname)) {
-    throw new Error(`Full product smoke must run only against localhost targets, got: ${fullProductBaseUrl.hostname}`);
+  switch (rawBaseUrl) {
+    case "http://127.0.0.1:3001":
+    case "http://127.0.0.1:3001/":
+      return new URL("http://127.0.0.1:3001");
+    case "http://localhost:3001":
+    case "http://localhost:3001/":
+      return new URL("http://localhost:3001");
+    case "http://[::1]:3001":
+    case "http://[::1]:3001/":
+      return new URL("http://[::1]:3001");
+    default:
+      throw new Error("Full product smoke must run only against approved localhost targets on port 3001");
   }
-  return fullProductBaseUrl;
 }
 
-resolveFullProductBaseUrl(baseUrl);
+export function resolveFullProductChromePath(rawChromePath, platform = process.platform) {
+  if (rawChromePath !== undefined) {
+    switch (rawChromePath) {
+      case "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome":
+        return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+      case "/usr/bin/google-chrome":
+        return "/usr/bin/google-chrome";
+      case "/usr/bin/google-chrome-stable":
+        return "/usr/bin/google-chrome-stable";
+      case "/usr/bin/chromium":
+        return "/usr/bin/chromium";
+      case "/usr/bin/chromium-browser":
+        return "/usr/bin/chromium-browser";
+      case "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe":
+        return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+      default:
+        throw new Error("PLAYWRIGHT_CHROME_PATH must name an approved Chrome executable");
+    }
+  }
+
+  if (platform === "darwin") return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  if (platform === "win32") return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+  return "/usr/bin/google-chrome";
+}
+
+export function resolveFullProductScreenshotProfile(environment = process.env) {
+  return (
+    environment.NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE ??
+    environment.NARUON_FULL_PRODUCT_SCREENSHOT_DIR
+  );
+}
+
+function resolveFullProductArtifactPrefix(rawProfile) {
+  switch (rawProfile) {
+    case undefined:
+    case DEFAULT_FULL_PRODUCT_SCREENSHOT_PROFILE:
+      return "naruon-full-product-smoke-";
+    case RESPONSIVE_FULL_PRODUCT_SCREENSHOT_PROFILE:
+      return "naruon-full-product-responsive-qa-";
+    default:
+      throw new Error(
+        "NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE (or legacy NARUON_FULL_PRODUCT_SCREENSHOT_DIR) must select an approved artifact profile",
+      );
+  }
+}
+
+export async function createFullProductArtifactDirectory(rawProfile) {
+  const prefix = resolveFullProductArtifactPrefix(rawProfile);
+  return mkdtemp(path.join(tmpdir(), prefix));
+}
+
+export function createFullProductServerLaunchSpec(rawBaseUrl) {
+  const safeBaseUrl = resolveFullProductBaseUrl(rawBaseUrl);
+  return {
+    executable: process.execPath,
+    args: [nextCliPath, "dev", "--webpack", "--hostname", safeBaseUrl.hostname, "--port", safeBaseUrl.port],
+  };
+}
+
+export function resolveFullProductArtifactPath(artifactDirectory, fileName) {
+  if (!path.isAbsolute(artifactDirectory) || !/^[a-z0-9]+(?:[-.][a-z0-9]+)*\.(?:png|txt)$/u.test(fileName)) {
+    throw new Error("Full product smoke artifacts require an absolute directory and a safe file name");
+  }
+  const artifactPath = path.resolve(artifactDirectory, fileName);
+  const relativePath = path.relative(artifactDirectory, artifactPath);
+  if (relativePath.startsWith(`..${path.sep}`) || relativePath === ".." || path.isAbsolute(relativePath)) {
+    throw new Error("Full product smoke artifact path escaped its private directory");
+  }
+  return artifactPath;
+}
+
+const baseUrl = resolveFullProductBaseUrl(requestedBaseUrl).href;
 
 export function resolveFullProductViewportSpecs(rawViewports = "desktop") {
   const viewportByName = new Map(FULL_PRODUCT_VIEWPORTS.map((viewport) => [viewport.name, viewport]));
@@ -91,8 +173,14 @@ export function resolveFullProductViewportSpecs(rawViewports = "desktop") {
 }
 
 export function fullProductScreenshotName(routeSpec, viewportSpec, viewportCount = 1) {
-  if (viewportCount === 1 && viewportSpec.name === "desktop") return `${routeSpec.name}.png`;
-  return `${viewportSpec.name}-${routeSpec.name}.png`;
+  const fileName =
+    viewportCount === 1 && viewportSpec.name === "desktop"
+      ? `${routeSpec.name}.png`
+      : `${viewportSpec.name}-${routeSpec.name}.png`;
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*\.png$/u.test(fileName)) {
+    throw new Error("Full product screenshot names must contain only lowercase route and viewport segments");
+  }
+  return fileName;
 }
 
 function log(message) {
@@ -109,7 +197,8 @@ async function captureSmokeScreenshot(page, screenshotPath, label) {
         await page.waitForTimeout(250);
         continue;
       }
-      const diagnosticPath = screenshotPath.replace(/\.png$/u, ".screenshot-failed.txt");
+      const diagnosticFileName = path.basename(screenshotPath).replace(/\.png$/u, ".screenshot-failed.txt");
+      const diagnosticPath = resolveFullProductArtifactPath(path.dirname(screenshotPath), diagnosticFileName);
       const reason = error instanceof Error ? error.message : String(error);
       await writeFile(
         diagnosticPath,
@@ -127,7 +216,7 @@ async function isServerReady(url) {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), SERVER_PROBE_TIMEOUT_MS);
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, { redirect: "manual", signal: controller.signal });
     clearTimeout(timeout);
     return response.status < 500;
   } catch {
@@ -180,11 +269,10 @@ async function startServerIfNeeded() {
     return null;
   }
 
+  const launchSpec = createFullProductServerLaunchSpec(baseUrl);
   const child = spawn(
-    IS_WINDOWS ? process.env.ComSpec || "cmd.exe" : "pnpm",
-    IS_WINDOWS
-      ? ["/d", "/s", "/c", "pnpm", "dev", "--hostname", url.hostname, "--port", url.port || "3001"]
-      : ["dev", "--hostname", url.hostname, "--port", url.port || "3001"],
+    launchSpec.executable,
+    launchSpec.args,
     {
       cwd: frontendDir,
       env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
@@ -213,7 +301,9 @@ async function stopServerProcess(child) {
 
   if (IS_WINDOWS) {
     await Promise.race([
-      new Promise((resolve) => spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" }).once("close", resolve)),
+      new Promise((resolve) =>
+        execFile("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" }).once("close", resolve),
+      ),
       timeout(5_000),
     ]);
     await Promise.race([waitForExit, timeout(2_000)]);
@@ -240,9 +330,7 @@ async function launchBrowser() {
   try {
     return await chromium.launch({ headless: true });
   } catch (error) {
-    const fallbackPath =
-      process.env.PLAYWRIGHT_CHROME_PATH ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    const fallbackPath = resolveFullProductChromePath(process.env.PLAYWRIGHT_CHROME_PATH);
     await access(fallbackPath);
     log(`Using system Chrome fallback because bundled Playwright browser is unavailable: ${error.message.split("\n")[0]}`);
     return chromium.launch({ headless: true, executablePath: fallbackPath });
@@ -726,7 +814,7 @@ async function installRoutes(page) {
         ],
       });
     }
-    if (endpoint === "/api/llm/summarize") return routeJson(route, { summary: "20억 판매 검토용 맥락 종합입니다.", todos: ["근거 확인"], confidence: 0.86 });
+    if (endpoint === "/api/llm/summarize") return routeJson(route, { summary: "20억 판매 검토용 맥락 종합입니다.", action_items: ["근거 확인"], confidence: 0.86 });
     if (endpoint === "/api/llm/draft") return routeJson(route, { draft: "검토 가능한 답장 초안입니다." });
     if (endpoint === "/api/llm/translate") return routeJson(route, { translation: "번역된 맥락입니다." });
     if (endpoint === "/api/emails/send") {
@@ -1467,7 +1555,7 @@ async function runAccessibilitySmoke(page, routeSpec) {
   return [`${routeSpec.name}:a11y-basics`];
 }
 
-async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
+async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount, screenshotDir) {
   const page = await context.newPage();
   const consoleErrors = [];
   page.on("console", (message) => {
@@ -1477,7 +1565,7 @@ async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
   });
   page.on("pageerror", (error) => consoleErrors.push(`pageerror: ${error.message}`));
   await installRoutes(page);
-  await page.goto(`${baseUrl}${routeSpec.path}`, { waitUntil: "domcontentloaded" });
+  await page.goto(new URL(routeSpec.path, baseUrl).href, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
   await page.locator("body").waitFor({ state: "visible", timeout: 20_000 });
   const bodyText = await page.locator("body").innerText({ timeout: 10_000 });
@@ -1496,7 +1584,10 @@ async function runRouteSmoke(context, routeSpec, viewportSpec, viewportCount) {
   }
   const interactionEvidence = await runCriticalInteractionSmoke(page, routeSpec, viewportSpec);
   const accessibilityEvidence = await runAccessibilitySmoke(page, routeSpec);
-  const screenshotPath = path.join(screenshotDir, fullProductScreenshotName(routeSpec, viewportSpec, viewportCount));
+  const screenshotPath = resolveFullProductArtifactPath(
+    screenshotDir,
+    fullProductScreenshotName(routeSpec, viewportSpec, viewportCount),
+  );
   const screenshotArtifact = await captureSmokeScreenshot(
     page,
     screenshotPath,
@@ -1510,7 +1601,7 @@ async function main() {
   let serverProcess = null;
   let browser = null;
   try {
-    await mkdir(screenshotDir, { recursive: true });
+    const screenshotDir = await createFullProductArtifactDirectory(requestedScreenshotProfile);
     serverProcess = await startServerIfNeeded();
     browser = await launchBrowser();
     const screenshots = [];
@@ -1523,7 +1614,7 @@ async function main() {
         isMobile: Boolean(viewportSpec.isMobile),
       });
       for (const routeSpec of FULL_PRODUCT_ROUTES) {
-        const result = await runRouteSmoke(context, routeSpec, viewportSpec, viewportSpecs.length);
+        const result = await runRouteSmoke(context, routeSpec, viewportSpec, viewportSpecs.length, screenshotDir);
         screenshots.push(result.screenshotPath);
         interactions.push(...result.interactionEvidence);
         accessibility.push(...result.accessibilityEvidence);

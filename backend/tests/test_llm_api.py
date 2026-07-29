@@ -71,13 +71,16 @@ def _draft_reply_forwarded_args(mock_draft):
     return mock_draft.await_args.args[:3]
 
 
-@patch("api.llm.extract_todos_and_summary", new_callable=AsyncMock)
+@patch("api.llm.extract_action_items_and_summary", new_callable=AsyncMock)
 @patch("api.llm.draft_reply", new_callable=AsyncMock)
 def test_llm_endpoints_exist(mock_draft, mock_extract, client):
     from services.llm_service import ExtractionResult
 
     mock_extract.return_value = ExtractionResult(
-        summary="Test summary", todos=["Task 1"], provenance="OpenAI", confidence=90
+        summary="Test summary",
+        action_items=["Task 1"],
+        provenance="OpenAI",
+        confidence=90,
     )
     mock_draft.return_value = "This is a draft reply."
 
@@ -90,19 +93,22 @@ def test_llm_endpoints_exist(mock_draft, mock_extract, client):
     assert resp2.status_code == 200
 
 
-@patch("api.llm.extract_todos_and_summary", new_callable=AsyncMock)
+@patch("api.llm.extract_action_items_and_summary", new_callable=AsyncMock)
 def test_summarize_endpoint(mock_extract, client):
     from services.llm_service import ExtractionResult
 
     mock_extract.return_value = ExtractionResult(
-        summary="Test summary", todos=["Task 1"], provenance="OpenAI", confidence=90
+        summary="Test summary",
+        action_items=["Task 1"],
+        provenance="OpenAI",
+        confidence=90,
     )
 
     resp = client.post("/api/llm/summarize", json={"email_body": "test email"})
     assert resp.status_code == 200
     assert resp.json() == {
         "summary": "Test summary",
-        "todos": ["Task 1"],
+        "action_items": ["Task 1"],
         "provenance": "OpenAI",
         "confidence": 90,
     }
@@ -421,7 +427,7 @@ def test_translate_wrong_user_returns_403(mock_translate, client):
     assert resp.json() == {"detail": "Not authorized"}
 
 
-@patch("api.llm.extract_todos_and_summary", new_callable=AsyncMock)
+@patch("api.llm.extract_action_items_and_summary", new_callable=AsyncMock)
 def test_summarize_generic_error_returns_500(mock_extract, client):
     mock_extract.side_effect = Exception("Generic Error")
 
@@ -449,7 +455,7 @@ def test_draft_generic_error_returns_500(mock_draft, client):
     }
 
 
-@patch("api.llm.extract_todos_and_summary", new_callable=AsyncMock)
+@patch("api.llm.extract_action_items_and_summary", new_callable=AsyncMock)
 def test_summarize_http_exception(mock_extract, client):
     mock_extract.side_effect = HTTPException(status_code=400, detail="Bad request")
 
@@ -482,13 +488,16 @@ def test_translate_http_exception(mock_translate, client):
     assert resp.status_code == 400
 
 
-@patch("api.llm.extract_todos_and_summary", side_effect=LLMServiceError("Service down"))
+@patch(
+    "api.llm.extract_action_items_and_summary",
+    side_effect=LLMServiceError("Service down"),
+)
 def test_summarize_llm_service_error(mock_extract, client):
     resp = client.post("/api/llm/summarize", json={"email_body": "test"})
     assert resp.status_code == 500
 
 
-@patch("api.llm.extract_todos_and_summary", side_effect=Exception("Unknown"))
+@patch("api.llm.extract_action_items_and_summary", side_effect=Exception("Unknown"))
 def test_summarize_unknown_error(mock_extract, client):
     resp = client.post("/api/llm/summarize", json={"email_body": "test"})
     assert resp.status_code == 500

@@ -401,6 +401,26 @@ export function ProjectsLayout() {
   const traceLoading = Boolean(activeSemanticCandidate && !currentTraceability && traceFailureProjectUid !== activeSemanticCandidate.project_uid);
   const selectedTraceObject = currentTraceability?.objects.find((item) => item.object_uid === selectedObjectUid) ?? currentTraceability?.objects[0] ?? null;
   const selectedEvidenceProjectUid = activeSemanticCandidate?.project_uid ?? null;
+  // ⚡ Bolt: Memoize project tasks list to prevent O(N) array mapping overhead
+  const projectTasksList = useMemo(() => (
+    <ol className="divide-y divide-border">
+      {projectTasks.slice(0, 8).map((task) => (
+        <li key={task.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${taskStatusClass[task.status]}`}>{taskStatusLabel[task.status]}</span>
+              <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-muted-foreground">{priorityLabel[task.priority]}</span>
+              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">{getTaskSourceLabel(task.source_type)}</span>
+            </div>
+            <h3 className="mt-2 break-keep font-bold text-sm">{safeText(task.title, '제목 없는 작업')}</h3>
+            <p className="mt-1 text-xs font-semibold text-muted-foreground">{getTaskEvidenceLabel(task)}</p>
+          </div>
+          <time className="flex items-center gap-1 text-xs text-muted-foreground sm:justify-end"><Clock className="size-3" />{formatDate(task.updated_at)}</time>
+        </li>
+      ))}
+    </ol>
+  ), [projectTasks]);
+
   const selectedEvidenceObjectUid = selectedTraceObject?.object_uid ?? null;
   const selectedEvidenceKey = selectedEvidenceProjectUid && selectedEvidenceObjectUid ? `${selectedEvidenceProjectUid}:${selectedEvidenceObjectUid}` : null;
   const currentEvidence = selectedEvidenceKey && selectedEvidence && `${selectedEvidence.project_uid}:${selectedEvidence.object_uid}` === selectedEvidenceKey ? selectedEvidence : null;
@@ -1055,24 +1075,7 @@ export function ProjectsLayout() {
                 <h2 className="font-bold text-lg">연결 작업</h2>
                 <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-muted-foreground">{projectTasks.length}건</span>
               </div>
-              {projectTasks.length > 0 ? (
-                <ol className="divide-y divide-border">
-                  {projectTasks.slice(0, 8).map((task) => (
-                    <li key={task.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${taskStatusClass[task.status]}`}>{taskStatusLabel[task.status]}</span>
-                          <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-bold text-muted-foreground">{priorityLabel[task.priority]}</span>
-                          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">{getTaskSourceLabel(task.source_type)}</span>
-                        </div>
-                        <h3 className="mt-2 break-keep font-bold text-sm">{safeText(task.title, '제목 없는 작업')}</h3>
-                        <p className="mt-1 text-xs font-semibold text-muted-foreground">{getTaskEvidenceLabel(task)}</p>
-                      </div>
-                      <time className="flex items-center gap-1 text-xs text-muted-foreground sm:justify-end"><Clock className="size-3" />{formatDate(task.updated_at)}</time>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
+              {projectTasks.length > 0 ? projectTasksList : (
                 <div className="p-5">
                   <div className="rounded-xl border border-dashed border-border bg-background p-4">
                     <div role="status" aria-live="polite">
