@@ -9,8 +9,16 @@ const { postOidcTokenRequestMock } = vi.hoisted(() => ({
   >(),
 }));
 
+const { backendDnsLookupMock } = vi.hoisted(() => ({
+  backendDnsLookupMock: vi.fn(),
+}));
+
 vi.mock("@/lib/oidc-token-client", () => ({
   postOidcTokenRequest: postOidcTokenRequestMock,
+}));
+
+vi.mock("node:dns/promises", () => ({
+  lookup: backendDnsLookupMock,
 }));
 
 const ORIGINAL_ENV = { ...process.env };
@@ -33,6 +41,10 @@ describe("/auth/oidc/callback route", () => {
     vi.stubEnv("NEXT_PUBLIC_OIDC_ISSUER_URL", "https://login.example.com/realms/naruon/");
     vi.stubEnv("NEXT_PUBLIC_OIDC_CLIENT_ID", "naruon-web");
     vi.stubEnv("NEXT_PUBLIC_OIDC_REDIRECT_URI", "https://app.example.com/auth/callback");
+    backendDnsLookupMock.mockReset();
+    backendDnsLookupMock.mockResolvedValue([
+      { address: "8.8.8.8", family: 4 },
+    ]);
     postOidcTokenRequestMock.mockReset();
     postOidcTokenRequestMock.mockResolvedValue({
       access_token: "test-header.test-payload.test-signature",

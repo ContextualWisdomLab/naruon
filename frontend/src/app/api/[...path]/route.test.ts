@@ -1,6 +1,14 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { backendDnsLookupMock } = vi.hoisted(() => ({
+  backendDnsLookupMock: vi.fn(),
+}));
+
+vi.mock("node:dns/promises", () => ({
+  lookup: backendDnsLookupMock,
+}));
+
 import { GET, POST, PUT } from "./route";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -11,6 +19,10 @@ describe("/api runtime proxy route", () => {
     vi.unstubAllEnvs();
     process.env = { ...ORIGINAL_ENV };
     vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
+    backendDnsLookupMock.mockReset();
+    backendDnsLookupMock.mockResolvedValue([
+      { address: "8.8.8.8", family: 4 },
+    ]);
   });
 
   afterEach(() => {
@@ -25,6 +37,7 @@ describe("/api runtime proxy route", () => {
       "fetch",
       vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
         const headers = init?.headers as Headers;
+        expect(init).toHaveProperty("dispatcher");
         return Response.json({
           target_url: String(input),
           auth_header: headers.get("authorization"),
@@ -61,6 +74,29 @@ describe("/api runtime proxy route", () => {
       user_header: null,
       request_body: '{"state":"open"}',
     });
+  });
+
+  it("rejects a backend hostname that resolves to the metadata network", async () => {
+    backendDnsLookupMock.mockResolvedValue([
+      { address: "169.254.169.254", family: 4 },
+    ]);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await GET(
+      new NextRequest("https://frontend.naruon.net/api/tasks"),
+      {
+        params: Promise.resolve({ path: ["tasks"] }),
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(backendDnsLookupMock).toHaveBeenCalledWith("api.naruon.net", {
+      all: true,
+      verbatim: true,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported query parameters before proxying", async () => {
@@ -335,7 +371,10 @@ describe("/api runtime proxy route", () => {
   });
 
   it("preserves a validated global IPv6 backend authority", async () => {
-    vi.stubEnv("BACKEND_INTERNAL_URL", "https://[2001:db8::1]:8443");
+    vi.stubEnv(
+      "BACKEND_INTERNAL_URL",
+      "https://[2001:4860:4860::8888]:8443",
+    );
     const fetchMock = vi.fn(async (input: URL | RequestInfo) =>
       Response.json({ target_url: String(input) }),
     );
@@ -347,7 +386,7 @@ describe("/api runtime proxy route", () => {
     );
 
     await expect(response.json()).resolves.toEqual({
-      target_url: "https://[2001:db8::1]:8443/api/tasks",
+      target_url: "https://[2001:4860:4860::8888]:8443/api/tasks",
     });
   });
 });

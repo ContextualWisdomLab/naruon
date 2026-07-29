@@ -1,6 +1,14 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { backendDnsLookupMock } = vi.hoisted(() => ({
+  backendDnsLookupMock: vi.fn(),
+}));
+
+vi.mock("node:dns/promises", () => ({
+  lookup: backendDnsLookupMock,
+}));
+
 import { DELETE, GET, POST } from "./route";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -27,6 +35,10 @@ describe("/auth/session route", () => {
     vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
     vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
+    backendDnsLookupMock.mockReset();
+    backendDnsLookupMock.mockResolvedValue([
+      { address: "8.8.8.8", family: 4 },
+    ]);
   });
 
   afterEach(() => {
@@ -45,6 +57,7 @@ describe("/auth/session route", () => {
     const fetchMock = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
       expect(String(input)).toBe("https://api.naruon.net/api/auth/session");
       expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
+      expect(init).toHaveProperty("dispatcher");
       return verifiedSessionResponse();
     });
     vi.stubGlobal("fetch", fetchMock);
