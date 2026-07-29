@@ -112,6 +112,14 @@
   `NEXT_PUBLIC_OIDC_SCOPE`; otherwise Keycloak's
   `/protocol/openid-connect/{auth,token,logout}` endpoints are derived from the
   issuer URL.
+- Production OIDC code exchange also requires the server-only
+  `OIDC_ALLOWED_HOSTS` comma-separated exact hostname allowlist. The token
+  endpoint must remain on the issuer origin and on this allowlist. Before the
+  server sends a token request, every DNS answer is required to be globally
+  routable; the request then uses only those prevalidated addresses while
+  preserving the issuer hostname for HTTP Host and TLS SNI. This prevents
+  private-address resolution and DNS-rebinding bypasses. Development HTTP is
+  limited to exact `localhost`, `127.0.0.1`, or `::1` loopback endpoints.
 - Browser-side OIDC support does not mint local roles. The IdP token must still
   satisfy the backend's signed claim contract: verified issuer/audience, subject,
   explicit non-platform role, organization, groups, workspace, expiry, and no

@@ -7,6 +7,7 @@ from scripts import private_mail_http_smoke as smoke
 
 
 def test_selected_upload_files_reads_emlx_inside_zip(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
     raw = (
         b"Subject: Quarterly needle\r\n"
         b"From: sender@example.com\r\n"
@@ -18,8 +19,7 @@ def test_selected_upload_files_reads_emlx_inside_zip(tmp_path, monkeypatch):
     archive_path = tmp_path / "archive.zip"
     with ZipFile(archive_path, "w") as archive:
         archive.writestr("nested/original.emlx", emlx)
-    cache_dir = tmp_path / "cache"
-    monkeypatch.setenv("NARUON_PRIVATE_MAIL_CACHE", str(cache_dir))
+    monkeypatch.delenv("NARUON_PRIVATE_MAIL_CACHE", raising=False)
 
     selected = smoke._selected_upload_files(
         tmp_path,
@@ -35,14 +35,16 @@ def test_selected_upload_files_reads_emlx_inside_zip(tmp_path, monkeypatch):
 
 
 def test_selected_upload_files_creates_default_cache_path(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
     raw = b"Subject: alpha query\r\n\r\nbody"
-    mail_file = tmp_path / "message.eml"
+    mail_file = home_dir / "message.eml"
     mail_file.write_bytes(raw)
     monkeypatch.delenv("NARUON_PRIVATE_MAIL_CACHE", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("HOME", str(home_dir))
 
     selected = smoke._selected_upload_files(
-        tmp_path,
+        home_dir,
         ["query"],
         1,
         max_parse_bytes=1000,
@@ -52,7 +54,123 @@ def test_selected_upload_files_creates_default_cache_path(tmp_path, monkeypatch)
 
     assert [p.name for p in selected] == ["hit_001.eml"]
     assert selected[0].exists()
-    assert (tmp_path / "home" / ".cache" / "naruon" / "private-mail-upload-cache").exists()
+    assert (home_dir / ".cache" / "naruon" / "private-mail-upload-cache").exists()
+
+
+def test_private_files_rejects_directory_outside_operator_home(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    outside_dir = tmp_path / "outside"
+    home_dir.mkdir()
+    outside_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    with pytest.raises(SystemExit, match="mail_dir_outside_operator_home"):
+        smoke._private_files(outside_dir, 1)
+
+
+def test_private_files_rejects_symlink_directory(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    real_dir = home_dir / "real"
+    linked_dir = home_dir / "linked"
+    real_dir.mkdir(parents=True)
+    linked_dir.symlink_to(real_dir, target_is_directory=True)
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    with pytest.raises(SystemExit, match="mail_dir_symlink_not_allowed"):
+        smoke._private_files(linked_dir, 1)
+
+
+def test_private_files_rejects_nested_symlink_directory(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    real_dir = home_dir / "real" / "mail"
+    linked_parent = home_dir / "linked"
+    real_dir.mkdir(parents=True)
+    linked_parent.symlink_to(home_dir / "real", target_is_directory=True)
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    with pytest.raises(SystemExit, match="mail_dir_symlink_not_allowed"):
+        smoke._private_files(linked_parent / "mail", 1)
+
+
+def test_private_files_skips_oversized_regular_file(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    oversized = home_dir / "oversized.eml"
+    with oversized.open("wb") as stream:
+        stream.write(b"Subject: test\r\n\r\n")
+        stream.truncate(smoke.MAX_PRIVATE_MAIL_FILE_BYTES + 1)
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    assert smoke._private_files(home_dir, 1) == []
+
+
+def test_private_mail_cache_rejects_custom_path_and_default_symlink(
+    tmp_path, monkeypatch
+):
+    home_dir = tmp_path / "home"
+    cache_root = home_dir / ".cache" / "naruon"
+    cache_root.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("NARUON_PRIVATE_MAIL_CACHE", str(tmp_path / "outside"))
+
+    with pytest.raises(SystemExit, match="private_mail_cache_profile_invalid"):
+        smoke._validated_cache_directory()
+
+    real_cache = cache_root / "real"
+    real_cache.mkdir()
+    linked_cache = cache_root / "private-mail-upload-cache"
+    linked_cache.symlink_to(real_cache, target_is_directory=True)
+    monkeypatch.setenv("NARUON_PRIVATE_MAIL_CACHE", "default")
+
+    with pytest.raises(SystemExit, match="private_mail_cache_symlink_not_allowed"):
+        smoke._validated_cache_directory()
+
+
+def test_private_mail_cache_rejects_symlinked_cache_root(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    outside = tmp_path / "outside"
+    home_dir.mkdir()
+    outside.mkdir()
+    (home_dir / ".cache").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.delenv("NARUON_PRIVATE_MAIL_CACHE", raising=False)
+
+    with pytest.raises(SystemExit, match="private_mail_cache_root_invalid"):
+        smoke._validated_cache_directory()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://example.com:8000",
+        "http://user@127.0.0.1:8000",
+        "http://127.0.0.1:8000/path",
+        "http://127.0.0.1:99999",
+        "http://127.0.0.1:8000\r\nInjected: yes",
+    ],
+)
+def test_validated_local_base_url_rejects_untrusted_origin(value):
+    with pytest.raises(SystemExit):
+        smoke._validated_local_base_url(value)
+
+
+def test_validated_local_base_url_and_request_target_preserve_local_calls():
+    assert smoke._validated_local_base_url("http://localhost:18080/") == (
+        "http://localhost:18080",
+        "localhost",
+        18080,
+    )
+    assert smoke._validated_request_target("/api/emails?limit=10") == (
+        "/api/emails?limit=10"
+    )
+
+    for unsafe_path in (
+        "http://example.com/api/emails",
+        "//example.com/api",
+        "/etc/passwd",
+    ):
+        with pytest.raises(SystemExit):
+            smoke._validated_request_target(unsafe_path)
 
 
 def test_large_message_match_uses_header_probe_without_full_parse(monkeypatch):
@@ -195,6 +313,31 @@ def test_post_json_with_retry_retries_network_error(monkeypatch):
 
     assert result == {"ok": True}
     assert len(calls) == 2
+
+
+def test_request_maps_broken_http_response_to_retryable_network_error(monkeypatch):
+    class BrokenConnection:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def request(self, *_args, **_kwargs):
+            pass
+
+        def getresponse(self):
+            raise smoke.http.client.BadStatusLine("malformed status")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(smoke.http.client, "HTTPConnection", BrokenConnection)
+
+    with pytest.raises(smoke._RequestNetworkError):
+        smoke._request(
+            "http://127.0.0.1:8000",
+            "token",
+            "GET",
+            "/api/emails",
+        )
 
 
 def test_post_json_with_retry_raises_network_error_after_retries(monkeypatch):
@@ -424,7 +567,9 @@ def test_check_frontend_session_skips_on_missing_frontend(monkeypatch):
     monkeypatch.setattr(
         smoke,
         "_post_json_with_retry",
-        lambda *_a, **_k: (_ for _ in ()).throw(smoke._RequestFailed(404, b"not found")),
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            smoke._RequestFailed(404, b"not found")
+        ),
     )
     assert smoke._check_frontend_session("http://127.0.0.1:8000", "token") is None
 
@@ -435,7 +580,11 @@ def test_check_frontend_session_parses_claims(monkeypatch):
         "_post_json_with_retry",
         lambda *_a, **_k: {
             "authenticated": True,
-            "claims": {"userId": "user-1", "organizationId": "org-1", "workspaceId": "ws-1"},
+            "claims": {
+                "userId": "user-1",
+                "organizationId": "org-1",
+                "workspaceId": "ws-1",
+            },
         },
     )
 
