@@ -56,10 +56,13 @@ bounded Rust ZIP reader. It verifies strict field shape and internal relations:
 - bounded difference-path samples are unique, sorted, portable, category
   disjoint, and consistent with the explicit truncation flag;
 - root prefixes agree with the chosen keep/strip mode; and
-- lowercase manifest and comparison SHA-256 fields have the expected shape.
+- lowercase manifest and comparison SHA-256 fields have the expected shape, and
+  `comparison_fingerprint_sha256` equals the v1 digest recomputed from
+  `root_mode` and the submitted manifest digests.
 
 Naruon does not have either ZIP, so acceptance does not recompute a manifest,
-authenticate the comparison fingerprint, select a canonical archive, or
+authenticate the producer (the fingerprint is unkeyed and derivable from the
+submitted fields), select a canonical archive, or
 authorize Trash or cloud-source eviction. The response is redacted and reports
 the same `schema-and-claim-consistency-only` scope. This version is database-free
 and is intentionally not an ontology, semantic-catalog, or LLM judgment.
@@ -91,7 +94,7 @@ unknown fields at every nesting level. Version 1 requires:
   interpreted using Unicode 16.0;
 - a locally verified copy and `provider_write_executed: false`;
 - internally complete provider evidence, while allowing a persisted evidence
-  observation whose `sync_complete` result remains false, provided that the
+  observation whose `provider_sync_confirmed` result remains false, provided that the
   observation does not predate the copy; and
 - optional provider-sync timeliness diagnostics whose pending age is bound to
   the copy and observation timestamps, whose fixed 24-hour threshold separates

@@ -6,6 +6,7 @@ from copy import deepcopy
 import pytest
 from fastapi.testclient import TestClient
 
+from api.bounded_json import MAX_JSON_NESTING_DEPTH
 from api.file_lineage import MAX_DISKSAGE_FILE_LINEAGE_BODY_BYTES
 from db.session import get_db
 from main import app
@@ -317,6 +318,7 @@ def test_validate_disksage_file_lineage_fails_closed(client: TestClient, mutate)
         ("reports/report.pdf.", "report.pdf."),
         ("reports/report.pdf ", "report.pdf "),
         ("reports/a:b", "a:b"),
+        (r"reports\report.pdf", "report.pdf"),
     ],
 )
 def test_validate_disksage_file_lineage_rejects_nonportable_paths(
@@ -365,7 +367,11 @@ def test_validate_disksage_file_lineage_rejects_duplicate_json_keys(
 def test_validate_disksage_file_lineage_rejects_excessive_json_nesting(
     client: TestClient,
 ):
-    nested = '{"nested":' * 1_100 + "null" + "}" * 1_100
+    nested = (
+        '{"nested":' * (MAX_JSON_NESTING_DEPTH + 1)
+        + "null"
+        + "}" * (MAX_JSON_NESTING_DEPTH + 1)
+    )
 
     response = client.post(
         "/api/file-lineage/validate",

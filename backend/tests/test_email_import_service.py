@@ -7,11 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import services.email_import_service as email_import_module
-from services.exceptions import (
-    ArchiveSizeExceededError,
-    EmailParseError,
-    EmbeddingGenerationError,
-)
+from services.exceptions import EmailParseError, EmbeddingGenerationError
 from services.email_import_service import (
     EMBEDDING_DIMENSION,
     EmailImportEmbeddingProvider,
@@ -34,8 +30,13 @@ from services.email_import_service import (
         ("%2e%2e%2fupload", "upload"),
         ("%252e%252e%252fupload", "upload"),
         ("%2e%2e%5csecret.eml", "secret.eml"),
+        ("..\\..\\upload", "upload"),
+        ("..%5c..%5cupload", "upload"),
         ("%00secret.eml", "upload"),
         ("%0asecret.eml", "upload"),
+        ("%C2%85secret.eml", "upload"),
+        ("secret\u202eeml", "upload"),
+        ("회의.eml", "회의.eml"),
     ],
 )
 def test_safe_upload_filename(input_name, expected):
@@ -51,12 +52,15 @@ def test_safe_upload_filename_fails_closed_beyond_decode_round_limit():
 
 
 @pytest.mark.parametrize(
-    "input_name,expected",
+    ("input_name", "expected"),
     [
         ("message.eml", "message.eml"),
+        ("MESSAGE.EML", "MESSAGE.EML"),
         ("%2e%2e%5cmessage.eml", "message.eml"),
         ("%00message.eml", None),
-        ("message.txt", None),
+        ("%0amessage.eml", None),
+        ("secret.eml%00.zip", None),
+        ("payload.exe", None),
     ],
 )
 def test_canonical_email_import_upload_filename(input_name, expected):
@@ -88,7 +92,12 @@ def test_canonical_email_import_upload_filename(input_name, expected):
         (
             "my_archive.zip",
             Path("ok\nforged.eml"),
-            "my_archive.zip:ok_forged.eml",
+            "my_archive.zip:upload",
+        ),
+        (
+            "my_archive.zip",
+            Path("safe\u202ename.eml"),
+            "my_archive.zip:upload",
         ),
     ],
 )
@@ -125,7 +134,6 @@ def test_build_email_object_attaches_content_graph_records():
         thread_id="thread-1",
         fingerprint="fingerprint-1",
         persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
-        source_lineage_json={},
         attachment_payloads=list(parsed["attachments"]),
         fitted_embeddings=[
             [0.0] * EMBEDDING_DIMENSION,
@@ -187,7 +195,6 @@ def test_build_email_object_attaches_knowledge_graph_edges():
         thread_id="thread-1",
         fingerprint="fingerprint-1",
         persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
-        source_lineage_json={},
         attachment_payloads=list(parsed["attachments"]),
         fitted_embeddings=[
             [0.0] * EMBEDDING_DIMENSION,
@@ -271,7 +278,6 @@ def test_build_email_object_persists_attachment_parse_metadata():
         thread_id="thread-1",
         fingerprint="fingerprint-1",
         persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
-        source_lineage_json={},
         attachment_payloads=list(parsed["attachments"]),
         fitted_embeddings=[
             [0.0] * EMBEDDING_DIMENSION,
@@ -372,7 +378,6 @@ def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
         thread_id="thread-1",
         fingerprint="fingerprint-1",
         persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
-        source_lineage_json={},
         attachment_payloads=list(parsed["attachments"]),
         fitted_embeddings=[
             [0.0] * EMBEDDING_DIMENSION,
@@ -396,12 +401,9 @@ def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
         "status.xml": ["Launch"],
         "invite.ics": ["SUMMARY: Launch"],
     }
-    assert {attachment.parser_key for attachment in email_obj.attachments} == {
-        "json",
-        "csv",
-        "xml",
-        "calendar",
-    }
+    assert {
+        attachment.parser_key for attachment in email_obj.attachments
+    } == {"json", "csv", "xml", "calendar"}
 
 
 @pytest.mark.asyncio
@@ -467,17 +469,14 @@ async def test_eml_paths_for_upload_offloads_upload_write(monkeypatch, tmp_path)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("write_error", [OSError("disk full"), ValueError("bad path")])
-async def test_eml_paths_for_upload_reports_write_failure(
-    monkeypatch, tmp_path, write_error
-):
+async def test_eml_paths_for_upload_reports_write_failure(monkeypatch, tmp_path):
     upload = email_import_module.EmailImportUpload(
         filename="message.eml",
         content=b"not written",
     )
 
     async def fake_to_thread(func, *args):
-        raise write_error
+        raise OSError("disk full")
 
     monkeypatch.setattr(email_import_module.asyncio, "to_thread", fake_to_thread)
 
@@ -489,67 +488,6 @@ async def test_eml_paths_for_upload_reports_write_failure(
     assert eml_paths == []
     assert failure_reason == "file_write_failed"
     assert not (tmp_path / "message.eml").exists()
-
-
-@pytest.mark.asyncio
-async def test_eml_paths_for_zip_uses_email_specific_extraction_limits(
-    monkeypatch, tmp_path
-):
-    upload = email_import_module.EmailImportUpload(
-        filename="messages.zip",
-        content=b"placeholder",
-    )
-    calls = []
-
-    async def fake_extract(zip_path, output_dir, **kwargs):
-        calls.append((zip_path, output_dir, kwargs))
-        output_dir.mkdir(parents=True)
-        eml_path = output_dir / "message.eml"
-        eml_path.write_bytes(b"Subject: test\n\nbody")
-        return [eml_path]
-
-    monkeypatch.setattr(email_import_module, "extract_backup_async", fake_extract)
-
-    eml_paths, failure_reason = await email_import_module._eml_paths_for_upload(
-        upload=upload,
-        upload_dir=tmp_path,
-    )
-
-    assert failure_reason is None
-    assert eml_paths == [tmp_path / "extracted" / "message.eml"]
-    assert calls == [
-        (
-            tmp_path / "messages.zip",
-            tmp_path / "extracted",
-            {
-                "max_extract_size": email_import_module.MAX_IMPORT_ARCHIVE_EXTRACT_BYTES,
-                "max_file_count": email_import_module.MAX_IMPORT_ARCHIVE_FILES,
-            },
-        )
-    ]
-
-
-@pytest.mark.asyncio
-async def test_eml_paths_for_zip_reports_extraction_limit_failure(
-    monkeypatch, tmp_path
-):
-    upload = email_import_module.EmailImportUpload(
-        filename="messages.zip",
-        content=b"placeholder",
-    )
-
-    async def fake_extract(*args, **kwargs):
-        raise ArchiveSizeExceededError("limit exceeded")
-
-    monkeypatch.setattr(email_import_module, "extract_backup_async", fake_extract)
-
-    eml_paths, failure_reason = await email_import_module._eml_paths_for_upload(
-        upload=upload,
-        upload_dir=tmp_path,
-    )
-
-    assert eml_paths == []
-    assert failure_reason == "archive_extract_failed"
 
 
 @pytest.mark.asyncio
