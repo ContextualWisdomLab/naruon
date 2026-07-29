@@ -1252,3 +1252,26 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_execute_pii_redactor():
+    params = {"text": "내 번호는 010-1234-5678, 이메일은 aaaa@bbb.com, 주민번호는 900101-1234567입니다. 집 전화는 02-123-4567"}
+    result = await execute_tool("pii_redactor", ExecuteRequest(parameters=params))
+
+    assert result.status == "success"
+    redacted = result.result["redacted_text"]
+    assert "010-****-****" in redacted
+    assert "****@***.***" in redacted
+    assert "900101-1******" in redacted
+    assert "02-****-****" in redacted
+
+@pytest.mark.asyncio
+async def test_execute_url_extractor():
+    params = {"text": "네이버 주소는 https://www.naver.com 이고, 구글은 http://google.com 입니다."}
+    result = await execute_tool("url_extractor", ExecuteRequest(parameters=params))
+
+    assert result.status == "success"
+    assert result.result["url_count"] == 2
+    assert "https://www.naver.com" in result.result["urls"]
+    assert "http://google.com" in result.result["urls"]

@@ -706,6 +706,62 @@ _AGENDA_TOPICS = (
 )
 
 
+
+async def pii_redactor_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+
+    # 주민등록번호 마스킹 (뒷자리 첫번째 이후 마스킹)
+    text = re.sub(r'(\d{6}-?[1-4])\d{6}', r'\1******', text)
+
+    # 전화번호 마스킹 (가운데, 끝자리 마스킹)
+    # 010-1234-5678 -> 010-****-****
+    text = re.sub(r'(01[016789]-?)\d{3,4}(-?)\d{4}', r'\1****\2****', text)
+    text = re.sub(r'(\d{2,3}-?)\d{3,4}(-?)\d{4}', r'\1****\2****', text)
+
+    # 이메일 마스킹 (아이디 일부와 도메인 일부 마스킹) -> 간단히 *** 처리로 합시다.
+    # aaaa@bbb.com -> ****@***.*** 또는 전체를 ***으로?
+    # 단순화를 위해 매칭된 문자열을 ***로 변경.
+    # text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '***@***.***', text)
+    def mask_email(match):
+        local_part, domain = match.group(0).split('@')
+        domain_parts = domain.split('.')
+        masked_local = '*' * len(local_part)
+        masked_domain = '.'.join(['*' * len(p) for p in domain_parts])
+        return f"{masked_local}@{masked_domain}"
+
+    text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', mask_email, text)
+
+    return {"redacted_text": text}
+
+registry.register(
+    ToolInfo(
+        code="pii_redactor",
+        name="개인정보 마스킹 (PII Redactor)",
+        description="텍스트 내 이메일, 전화번호, 주민등록번호 등을 마스킹(* 처리)하여 보안을 강화합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_redactor_handler,
+)
+
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    urls = re.findall(r'https?://[^\s]+', text)
+    return {"urls": urls, "url_count": len(urls)}
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트에서 모든 URL을 추출하여 리스트 형태로 반환합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:

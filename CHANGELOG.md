@@ -1,4 +1,8 @@
 ## [Unreleased]
+
+### Added
+- 개인정보 마스킹 도구 (`pii_redactor`) 추가: 주민등록번호, 전화번호, 이메일을 마스킹하여 텍스트의 보안을 강화하는 기능 구현.
+- URL 추출기 (`url_extractor`) 추가: 텍스트에서 모든 URL을 추출하는 기능 구현.
 ### 보안 패치 (CodeQL extended current-head)
 
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
