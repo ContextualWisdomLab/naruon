@@ -17,10 +17,10 @@ from db.models import CalendarWritebackSource
 from db.session import get_db
 from services.calendar_service import (
     create_calendar_events_batch,
-    validate_calendar_action_item_text,
+    validate_calendar_todo_text,
 )
 from services.calendar_sync import CalendarTask, generate_ics_from_task
-from services.exceptions import CalendarServiceError, UnsafeCalendarActionItemError
+from services.exceptions import CalendarServiceError, UnsafeCalendarTodoError
 
 router = APIRouter(prefix="/api/calendar")
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class SyncRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action_items: list[str]
+    todos: list[str]
 
 
 class WritebackSource(BaseModel):
@@ -303,7 +303,7 @@ def _merge_calendar_dispatch_result(
 
 
 @router.post("/sync")
-async def sync_action_items(
+async def sync_todos(
     request: SyncRequest,
     user_token: dict | None = Depends(get_calendar_user_token),
 ):
@@ -313,25 +313,17 @@ async def sync_action_items(
             detail="No server-authoritative calendar credentials are configured",
         )
     try:
-        safe_action_items = [
-            validate_calendar_action_item_text(action_item)
-            for action_item in request.action_items
-        ]
-        results = await create_calendar_events_batch(safe_action_items, user_token)
+        safe_todos = [validate_calendar_todo_text(todo) for todo in request.todos]
+        results = await create_calendar_events_batch(safe_todos, user_token)
         return {"synced": len(results), "events": list(results)}
-    except UnsafeCalendarActionItemError:
-        raise HTTPException(
-            status_code=422, detail="Invalid or unsafe calendar action item text"
-        )
+    except UnsafeCalendarTodoError:
+        raise HTTPException(status_code=422, detail="Invalid or unsafe calendar todo text")
     except CalendarServiceError as e:
         logger.warning(
-            "Calendar service error during sync_action_items",
+            "Calendar service error during sync_todos",
             extra={"error_type": type(e).__name__},
         )
-        raise HTTPException(
-            status_code=500,
-            detail="An internal server error occurred while communicating with the calendar service",
-        )
+        raise HTTPException(status_code=500, detail="An internal server error occurred while communicating with the calendar service")
 
 
 @router.post("/writeback-intent", response_model=WritebackIntentResponse)

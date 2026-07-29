@@ -38,7 +38,6 @@ RUN mkdir -p /opt/pnpm \
     && ln -sf /opt/pnpm/bin/pnpx.cjs /usr/local/bin/pnpx \
     && rm /tmp/pnpm.tgz
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml frontend/.pnpmfile.cjs ./
-COPY frontend/patches ./patches
 RUN pnpm install --frozen-lockfile
 COPY frontend ./
 ENV NEXT_TELEMETRY_DISABLED=1

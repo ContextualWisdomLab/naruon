@@ -44,7 +44,6 @@ RUN mkdir -p /opt/pnpm \
     && rm /tmp/pnpm.tgz
 
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml frontend/.pnpmfile.cjs ./
-COPY frontend/patches ./patches
 RUN pnpm install --frozen-lockfile
 
 COPY frontend ./
