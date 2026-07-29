@@ -9,19 +9,26 @@ ENV_FILE_PATHS = ("~/.env", "../.env", ".env")
 
 def operator_home() -> Path:
     """Return the operator home directory, preferring explicit HOME overrides."""
-    configured_home = os.environ.get("HOME")
-    if configured_home:
-        return Path(configured_home).expanduser()
-    return Path.home()
+    home = Path.home()
+    if not home.is_absolute() or home.is_symlink():
+        raise ValueError("operator home must be an absolute non-symlink path")
+    resolved = home.resolve(strict=False)
+    if resolved.exists() and not resolved.is_dir():
+        raise ValueError("operator home must be a directory")
+    return resolved
 
 
 def expand_operator_path(path: str | os.PathLike[str]) -> Path:
     """Expand leading ``~`` against the operator home directory."""
     path_text = os.fspath(path)
+    home = operator_home()
     if path_text == "~":
-        return operator_home()
+        return home
     if path_text.startswith("~/") or path_text.startswith("~\\"):
-        return operator_home() / path_text[2:]
+        candidate = (home / path_text[2:]).resolve(strict=False)
+        if not candidate.is_relative_to(home):
+            raise ValueError("operator path escapes the operator home")
+        return candidate
     return Path(path_text).expanduser()
 
 
