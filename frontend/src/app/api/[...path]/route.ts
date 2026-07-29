@@ -278,9 +278,8 @@ async function proxyApiRequest(
 
   let response: Response;
   try {
-    // `target` is rebuilt by trustedBackendOrigin() from operator-only runtime
-    // configuration, then constrained to the validated API path/query above.
-    // codeql[js/request-forgery]
+    // `target` is rebuilt from URI-encoded authority/path components and the
+    // allow-listed query parameters above.
     response = await fetch(target, init);
   } catch (error) {
     // If the backend isn't available (e.g. during build), return a 503 instead of throwing

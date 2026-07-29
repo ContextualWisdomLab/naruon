@@ -93,9 +93,10 @@ export function trustedBackendOrigin(): URL {
   if (configured.protocol !== "https:") {
     throw new Error("Backend requests require HTTPS");
   }
+  const escapedHostname = encodeURIComponent(hostname);
   const encodedHostname = hostname.includes(":")
-    ? `[${hostname}]`
-    : encodeURIComponent(hostname);
+    ? `[${escapedHostname.replaceAll("%3A", ":")}]`
+    : escapedHostname;
   const encodedPort = configured.port
     ? `:${encodeURIComponent(configured.port)}`
     : "";
