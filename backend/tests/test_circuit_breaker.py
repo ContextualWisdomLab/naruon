@@ -1,5 +1,7 @@
 """Tests for the provider circuit breaker."""
 
+import asyncio
+
 import pytest
 
 from services.circuit_breaker import CircuitBreaker, CircuitOpenError
@@ -85,6 +87,35 @@ async def test_half_open_probe_failure_reopens():
     clock.now = 12.0  # still within the fresh cooldown
     with pytest.raises(CircuitOpenError):
         await breaker.call("p", _succeeding())
+
+
+@pytest.mark.asyncio
+async def test_half_open_rejects_second_probe_while_first_in_flight():
+    """Only one half-open probe is admitted at a time: a concurrent call that
+    arrives while the single probe is still awaiting fails fast rather than
+    piling a second request onto a provider that may still be down."""
+    clock = _Clock()
+    breaker = CircuitBreaker(failure_threshold=1, cooldown_seconds=10, clock=clock)
+
+    with pytest.raises(RuntimeError):
+        await breaker.call("p", _failing())
+    clock.now = 11.0  # past cooldown -> the next call is the lone half-open probe
+
+    release = asyncio.Event()
+
+    async def slow_probe():
+        await release.wait()
+        return "recovered"
+
+    probe = asyncio.create_task(breaker.call("p", slow_probe))
+    await asyncio.sleep(0)  # let the probe start and claim the in-flight slot
+
+    # A second call while the probe is in flight is rejected fast.
+    with pytest.raises(CircuitOpenError):
+        await breaker.call("p", _succeeding())
+
+    release.set()
+    assert await probe == "recovered"
 
 
 @pytest.mark.asyncio
