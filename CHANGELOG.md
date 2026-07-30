@@ -1,4 +1,9 @@
 ## [Unreleased]
+### 이메일 메타데이터 provenance 기반 (dedupe 근거 분리 · naruon#1086 파서 계층)
+
+- `backend/services/email_parser.py`가 RFC822 `Date`·`Message-ID` 근거를 명시적으로 노출합니다. `date_provenance`(`parsed`/`missing`/`invalid`)와 원본 헤더 날짜(`header_date`, 부재·파싱 실패 시 `None`)를 저장용 `date`(파싱값 또는 수집 시각 fallback)와 분리하고, `message_id_provenance`(`embedded`/`missing`)를 추가했습니다. 합성 수집 시각이 원본 발신 메타데이터로 오인되지 않으므로 후속 fingerprint dedupe가 진짜 발신 근거에만 의존할 수 있습니다. `date`의 기존 의미(파싱값-또는-fallback)는 그대로 유지되어 하위 호환입니다. 이는 naruon#1086 계약의 파서 provenance 기반이며, fingerprint gating(불완전 근거 → `dedupe_review_required`)과 import/API 노출은 후속 원자적 PR로 이어집니다.
+- 검증: 파서 provenance 로직을 5개 시나리오(valid/missing/invalid `Date`, embedded/missing `Message-ID`)와 whitespace-only `Date` 분기까지 `PYTHONWARNINGS=error`로 독립 검증했고, 동일 계약을 `tests/test_email_parser.py` 회귀 테스트로 추가했습니다(전체 백엔드 스위트는 PR checks에서 확인).
+
 ### 보안 패치 (CodeQL extended current-head)
 
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
