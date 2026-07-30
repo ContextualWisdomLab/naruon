@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from services.email_parser import (
+    EmailParseError,
     _attachment_part_content,
     _extract_thread_id,
     _format_display_address,
@@ -17,7 +18,6 @@ from services.email_parser import (
     parse_eml,
     parse_eml_bytes,
 )
-from services.exceptions import EmailParseError
 
 
 def test_parse_eml_basic():
