@@ -65,6 +65,7 @@ export function DataLayout() {
   const [emailImportResult, setEmailImportResult] = useState<EmailFileImportResponse | null>(null);
   const [emailImportFiles, setEmailImportFiles] = useState<File[]>([]);
   const [documentActionStatus, setDocumentActionStatus] = useState<DocumentActionStatus>('idle');
+  const [activeDocumentAction, setActiveDocumentAction] = useState<'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent' | null>(null);
   const [documentActionResult, setDocumentActionResult] = useState<DataDocumentActionResponse | null>(null);
   const [documentUploadFiles, setDocumentUploadFiles] = useState<File[]>([]);
   const [dataSurfaceStatus, setDataSurfaceStatus] = useState<DataSurfaceStatus>('loading');
@@ -240,6 +241,7 @@ export function DataLayout() {
     }
 
     setDocumentActionStatus('loading');
+    setActiveDocumentAction(null);
     setDocumentActionResult(null);
     try {
       const documentType = getDocumentTypeForFile(file);
@@ -258,6 +260,7 @@ export function DataLayout() {
       );
       setDocumentActionResult(result);
       setDocumentActionStatus('success');
+      setActiveDocumentAction(null);
       setDataSurfaceStatus('loading');
       await loadDataQualitySurface();
     } catch (error: unknown) {
@@ -285,6 +288,7 @@ export function DataLayout() {
     }
 
     setDocumentActionStatus('loading');
+    setActiveDocumentAction(action);
     setDocumentActionResult(null);
     try {
       const result = await apiClient.post<DataDocumentActionResponse>(
@@ -295,6 +299,7 @@ export function DataLayout() {
       );
       setDocumentActionResult(result);
       setDocumentActionStatus('success');
+      setActiveDocumentAction(null);
       setDataSurfaceStatus('loading');
       await loadDataQualitySurface();
     } catch (error: unknown) {
@@ -453,6 +458,7 @@ export function DataLayout() {
               repositoryAssets={repositoryAssets}
               selectedWorkspaceDocument={selectedWorkspaceDocument}
               requestDocumentAction={requestDocumentAction}
+              activeDocumentAction={activeDocumentAction}
               connectorEvents={connectorEvents}
               writebackStatus={writebackStatus}
               writebackResult={writebackResult}
