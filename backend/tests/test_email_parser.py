@@ -10,6 +10,8 @@ from services.email_parser import (
     _attachment_part_content,
     _extract_thread_id,
     _format_display_address,
+    _process_multipart_body,
+    _process_singlepart_body,
     _sanitize_address_display_text,
     _sanitize_nul,
     parse_eml,
@@ -189,6 +191,34 @@ def test_format_display_address_escapes_quotes_and_handles_empty_name():
     assert (
         _format_display_address('Fancy "Q"', "q@x.com") == '"Fancy \\"Q\\"" <q@x.com>'
     )
+
+
+def test_process_multipart_body_ignores_non_string_part_content():
+    # get_content() can return a non-str (e.g. undecodable bytes) even for a
+    # text/* part; the isinstance guard must drop it rather than concatenate
+    # bytes into the plain/html body.
+    plain_part = MagicMock()
+    plain_part.get_content_type.return_value = "text/plain"
+    plain_part.get_filename.return_value = None
+    plain_part.get_content.return_value = b"not-a-str"
+    html_part = MagicMock()
+    html_part.get_content_type.return_value = "text/html"
+    html_part.get_filename.return_value = None
+    html_part.get_content.return_value = b"not-a-str"
+    msg = MagicMock()
+    msg.walk.return_value = [plain_part, html_part]
+
+    assert _process_multipart_body(msg) == ("", "", [])
+
+
+def test_process_singlepart_body_ignores_non_string_content():
+    # A single-part message whose get_content() returns a non-str yields an
+    # empty body rather than a stringified bytes value.
+    msg = MagicMock()
+    msg.get_content_type.return_value = "text/plain"
+    msg.get_content.return_value = b"not-a-str"
+
+    assert _process_singlepart_body(msg) == ("", "", [])
 
 
 def test_parse_eml_strips_active_html_from_attachment_display_fields():
