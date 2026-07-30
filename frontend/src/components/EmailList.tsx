@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, memo, useMemo } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -171,6 +171,33 @@ export function EmailList({
         emptyTitle: '맥락 검색 결과가 없습니다',
         emptyBody: '맥락 검색어를 바꾸거나 메일 동기화 상태를 확인하세요.',
       };
+  // ⚡ Bolt: Wrap email list in useMemo to prevent O(N) re-renders when search input changes
+  // 🎯 Why: Mapping over long lists of emails blocks the main thread during unrelated state updates like typing in the search box.
+  const emailListContent = useMemo(() => {
+    if (loading) {
+      return <div role="status" aria-live="polite" className="rounded-2xl border border-border bg-background/70 p-4 text-sm text-muted-foreground">메일을 불러오는 중입니다...</div>;
+    }
+    if (error) {
+      return <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">{error}</div>;
+    }
+    if (emails.length === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-border bg-background/70 p-5 text-sm text-muted-foreground">
+          <p className="font-bold text-foreground">{folderCopy.emptyTitle}</p>
+          <p className="mt-1 text-xs leading-5">{folderCopy.emptyBody}</p>
+        </div>
+      );
+    }
+    return emails.map((email: EmailItem) => (
+      <EmailListItemComponent
+        key={email.id}
+        email={email}
+        selected={selectedEmailId === email.id}
+        onSelectEmail={onSelectEmail}
+      />
+    ));
+  }, [loading, error, emails, folderCopy.emptyTitle, folderCopy.emptyBody, selectedEmailId, onSelectEmail]);
+
   const searchBusy = isSearching || loading;
 
   return (
@@ -249,25 +276,7 @@ export function EmailList({
       </div>
       <ScrollArea className="min-h-0 flex-1 w-full">
         <div className="flex flex-col gap-2 p-3 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-3">
-          {loading ? (
-            <div role="status" aria-live="polite" className="rounded-2xl border border-border bg-background/70 p-4 text-sm text-muted-foreground">메일을 불러오는 중입니다...</div>
-          ) : error ? (
-            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">{error}</div>
-          ) : emails.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-background/70 p-5 text-sm text-muted-foreground">
-              <p className="font-bold text-foreground">{folderCopy.emptyTitle}</p>
-              <p className="mt-1 text-xs leading-5">{folderCopy.emptyBody}</p>
-            </div>
-          ) : (
-            emails.map((email: EmailItem) => (
-              <EmailListItemComponent
-                key={email.id}
-                email={email}
-                selected={selectedEmailId === email.id}
-                onSelectEmail={onSelectEmail}
-              />
-            ))
-          )}
+          {emailListContent}
         </div>
       </ScrollArea>
     </div>
