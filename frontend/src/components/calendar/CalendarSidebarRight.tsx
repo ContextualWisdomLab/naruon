@@ -17,7 +17,7 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
           <span className="rounded-md bg-secondary px-2 py-1 text-xs font-bold text-muted-foreground">공개</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="닫기" className="rounded-md"><X className="size-4" aria-hidden="true" /></Button>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="닫기" title="닫기" className="rounded-md"><X className="size-4" aria-hidden="true" /></Button>
         </div>
       </div>
 

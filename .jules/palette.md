@@ -77,3 +77,7 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+
+## 2026-06-25 - Use title attributes for native tooltips on icon-only buttons
+**Learning:** 아이콘만 있는 버튼에 `aria-label`이 있어도 스크린 리더 사용자에게만 유용합니다. 일반 마우스 사용자에게도 직관적인 UX를 제공하려면 브라우저 기본 툴팁을 띄워주는 `title` 속성을 함께 제공하는 것이 좋습니다.
+**Action:** 아이콘으로만 구성된 버튼(예: `CalendarLayout.tsx`의 이전/다음 달 이동 화살표, `CalendarSidebarRight.tsx`의 닫기 X 버튼 등)을 작성할 때 `aria-label`과 동일한 내용으로 `title` 속성을 반드시 추가합니다.

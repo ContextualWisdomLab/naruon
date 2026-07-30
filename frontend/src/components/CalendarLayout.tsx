@@ -175,8 +175,8 @@ export function CalendarLayout() {
           <div className="flex min-w-0 flex-wrap items-center gap-3 lg:gap-4">
             <Button type="button" variant="outline" size="sm" className="h-8 rounded-md text-xs font-semibold">오늘</Button>
             <div className="flex items-center gap-1">
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="이전 달" className="rounded-md"><ChevronLeft className="size-5" aria-hidden="true" /></Button>
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="다음 달" className="rounded-md"><ChevronRight className="size-5" aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="이전 달" title="이전 달" className="rounded-md"><ChevronLeft className="size-5" aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="다음 달" title="다음 달" className="rounded-md"><ChevronRight className="size-5" aria-hidden="true" /></Button>
             </div>
             <h1 className="text-xl font-bold">일정 관리</h1>
             <h2 className="text-sm font-bold text-muted-foreground lg:ml-2">2026년 5월</h2>
@@ -199,7 +199,7 @@ export function CalendarLayout() {
                 </button>
               ))}
             </div>
-            <Button type="button" variant="outline" size="icon-sm" className="size-9 rounded-md" aria-label="설정">
+            <Button type="button" variant="outline" size="icon-sm" className="size-9 rounded-md" aria-label="설정" title="설정">
               <Settings className="size-5" aria-hidden="true" />
             </Button>
           </div>

@@ -90,9 +90,13 @@ describe("CalendarPage", () => {
     expect(container.textContent).toContain("고객 원본 일정 반영 의도");
     expect(container.textContent).not.toContain("뷰는 아직 구현 중입니다");
     expect(container.querySelector('button[aria-label="이전 달"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="이전 달"]')?.getAttribute("title")).toBe("이전 달");
     expect(container.querySelector('button[aria-label="다음 달"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="다음 달"]')?.getAttribute("title")).toBe("다음 달");
     expect(container.querySelector('button[aria-label="설정"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="설정"]')?.getAttribute("title")).toBe("설정");
     expect(container.querySelector('button[aria-label="닫기"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="닫기"]')?.getAttribute("title")).toBe("닫기");
   });
 
   it("exposes the calendar view switcher as a keyboard-navigable tablist", async () => {
