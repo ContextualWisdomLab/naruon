@@ -1,5 +1,6 @@
+import { Readable } from "node:stream";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Agent } from "undici";
 
 import {
   createPinnedBackendLookup,
@@ -8,12 +9,17 @@ import {
   type BackendDnsLookup,
 } from "./backend-request";
 
-const { systemLookupMock } = vi.hoisted(() => ({
+const { httpsRequestMock, systemLookupMock } = vi.hoisted(() => ({
+  httpsRequestMock: vi.fn(),
   systemLookupMock: vi.fn(),
 }));
 
 vi.mock("node:dns/promises", () => ({
   lookup: systemLookupMock,
+}));
+
+vi.mock("node:https", () => ({
+  request: httpsRequestMock,
 }));
 
 const ORIGINAL_ENV = { ...process.env };
@@ -22,6 +28,7 @@ describe("backend destination pinning", () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    httpsRequestMock.mockReset();
     systemLookupMock.mockReset();
     process.env = { ...ORIGINAL_ENV };
     delete process.env.ALLOW_DOCKER_BACKEND_INTERNAL_URL;
@@ -231,32 +238,136 @@ describe("backend destination pinning", () => {
     });
   });
 
-  it("wires validated DNS answers into the fetch dispatcher", async () => {
+  it("wires validated DNS answers into a one-shot HTTPS request", async () => {
     vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
     systemLookupMock.mockResolvedValue([
       { address: "8.8.8.8", family: 4 },
       { address: "2001:4860:4860::8888", family: 6 },
     ]);
-    const expectedResponse = new Response(null, { status: 204 });
-    const fetchMock = vi.fn().mockResolvedValue(expectedResponse);
-    vi.stubGlobal("fetch", fetchMock);
+    const requestEnd = vi.fn();
+    const requestOnce = vi.fn();
+    httpsRequestMock.mockImplementation((_target, _options, callback) => {
+      const incoming = Readable.from([]) as Readable & {
+        rawHeaders: string[];
+        statusCode: number;
+        statusMessage: string;
+      };
+      incoming.rawHeaders = ["X-Backend", "pinned"];
+      incoming.statusCode = 204;
+      incoming.statusMessage = "No Content";
+      callback(incoming);
+      return {
+        destroy: vi.fn(),
+        end: requestEnd,
+        once: requestOnce,
+      };
+    });
     const target = new URL("https://api.naruon.net/api/tasks");
 
-    await expect(
-      fetchTrustedBackend(target, { redirect: "manual" }),
-    ).resolves.toBe(expectedResponse);
+    const response = await fetchTrustedBackend(target, {
+      headers: { Accept: "application/json" },
+      redirect: "manual",
+    });
 
     expect(systemLookupMock).toHaveBeenCalledWith("api.naruon.net", {
       all: true,
       verbatim: true,
     });
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [fetchedTarget, requestInit] = fetchMock.mock.calls[0] as [
+    expect(httpsRequestMock).toHaveBeenCalledOnce();
+    const [fetchedTarget, requestOptions] = httpsRequestMock.mock.calls[0] as [
       URL,
-      RequestInit & { dispatcher: Agent },
+      {
+        agent: boolean;
+        headers: Record<string, string>;
+        lookup: ReturnType<typeof createPinnedBackendLookup>;
+        method: string;
+        servername: string;
+      },
     ];
     expect(fetchedTarget).toBe(target);
-    expect(requestInit.redirect).toBe("manual");
-    expect(requestInit.dispatcher).toBeInstanceOf(Agent);
+    expect(requestOptions).toMatchObject({
+      agent: false,
+      headers: { accept: "application/json" },
+      method: "GET",
+      servername: "api.naruon.net",
+    });
+    expect(requestEnd).toHaveBeenCalledWith();
+    expect(requestOnce).toHaveBeenCalledWith("error", expect.any(Function));
+    expect(response.status).toBe(204);
+    expect(response.headers.get("x-backend")).toBe("pinned");
+
+    const invokeLookup = requestOptions.lookup as unknown as (
+      hostname: string,
+      options: { all: false; family: number },
+      callback: (
+        error: Error | null,
+        address: string,
+        family: number,
+      ) => void,
+    ) => void;
+    await expect(
+      new Promise<{ address: string; family: number }>((resolve, reject) => {
+        invokeLookup(
+          "api.naruon.net",
+          { all: false, family: 0 },
+          (error, address, family) => {
+            if (error) reject(error);
+            else resolve({ address, family });
+          },
+        );
+      }),
+    ).resolves.toEqual({ address: "8.8.8.8", family: 4 });
+  });
+
+  it("forwards an ArrayBuffer body and streams the backend response", async () => {
+    vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
+    systemLookupMock.mockResolvedValue([
+      { address: "8.8.8.8", family: 4 },
+    ]);
+    const requestEnd = vi.fn();
+    httpsRequestMock.mockImplementation((_target, _options, callback) => {
+      const incoming = Readable.from([Buffer.from("created")]) as Readable & {
+        rawHeaders: string[];
+        statusCode: number;
+        statusMessage: string;
+      };
+      incoming.rawHeaders = ["Content-Type", "text/plain"];
+      incoming.statusCode = 201;
+      incoming.statusMessage = "Created";
+      callback(incoming);
+      return {
+        destroy: vi.fn(),
+        end: requestEnd,
+        once: vi.fn(),
+      };
+    });
+    const body = new TextEncoder().encode("payload").buffer;
+
+    const response = await fetchTrustedBackend(
+      new URL("https://api.naruon.net/api/tasks"),
+      { body, method: "POST", redirect: "manual" },
+    );
+
+    expect(requestEnd).toHaveBeenCalledOnce();
+    expect(
+      new TextDecoder().decode(requestEnd.mock.calls[0][0] as Uint8Array),
+    ).toBe("payload");
+    expect(response.status).toBe(201);
+    await expect(response.text()).resolves.toBe("created");
+  });
+
+  it("rejects automatic redirect modes before opening a socket", async () => {
+    vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
+    systemLookupMock.mockResolvedValue([
+      { address: "8.8.8.8", family: 4 },
+    ]);
+    httpsRequestMock.mockClear();
+
+    await expect(
+      fetchTrustedBackend(new URL("https://api.naruon.net/api/tasks"), {
+        redirect: "follow",
+      }),
+    ).rejects.toThrow("handled manually");
+    expect(httpsRequestMock).not.toHaveBeenCalled();
   });
 });

@@ -1,10 +1,13 @@
 import { lookup as systemLookup } from "node:dns/promises";
 import {
-  BlockList,
-  isIP,
-  type LookupFunction,
-} from "node:net";
-import { Agent, type Dispatcher } from "undici";
+  request as httpRequest,
+  type ClientRequest,
+  type IncomingMessage,
+  type RequestOptions,
+} from "node:http";
+import { request as httpsRequest } from "node:https";
+import { BlockList, isIP, type LookupFunction } from "node:net";
+import { Readable } from "node:stream";
 
 import { trustedBackendOrigin } from "@/lib/backend-url";
 import { normalizeHostname } from "@/lib/host-policy";
@@ -23,10 +26,6 @@ export type BackendDnsLookup = (
   hostname: string,
   options: { all: true; verbatim: true },
 ) => Promise<readonly { address: string; family: number }[]>;
-
-type DispatcherRequestInit = RequestInit & {
-  dispatcher: Dispatcher;
-};
 
 const NON_GLOBAL_ADDRESSES = new BlockList();
 
@@ -116,7 +115,9 @@ function destinationKind(target: URL): BackendDestinationKind {
   ) {
     return "compose";
   }
-  throw new Error("Backend request target is outside the trusted origin policy");
+  throw new Error(
+    "Backend request target is outside the trusted origin policy",
+  );
 }
 
 function validateResolvedAddress(
@@ -222,10 +223,10 @@ export function createPinnedBackendLookup(
     options: unknown,
     callback: (...args: unknown[]) => void,
   ) => {
-    if (
-      normalizeHostname(hostname) !== normalizeHostname(expectedHostname)
-    ) {
-      callback(new Error("Backend pinned lookup rejected an unexpected hostname"));
+    if (normalizeHostname(hostname) !== normalizeHostname(expectedHostname)) {
+      callback(
+        new Error("Backend pinned lookup rejected an unexpected hostname"),
+      );
       return;
     }
     const requestedFamily =
@@ -239,7 +240,9 @@ export function createPinnedBackendLookup(
       ({ family }) => requestedFamily === 0 || family === requestedFamily,
     );
     if (eligible.length === 0) {
-      callback(new Error("Backend origin has no address in the requested family"));
+      callback(
+        new Error("Backend origin has no address in the requested family"),
+      );
       return;
     }
     const wantsAll =
@@ -267,6 +270,125 @@ function assertTrustedTarget(target: URL): void {
   }
 }
 
+function outgoingHeaders(
+  headersInit: HeadersInit | undefined,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  new Headers(headersInit).forEach((value, name) => {
+    headers[name] = value;
+  });
+  return headers;
+}
+
+function incomingHeaders(response: IncomingMessage): Headers {
+  const headers = new Headers();
+  for (let index = 0; index < response.rawHeaders.length; index += 2) {
+    const name = response.rawHeaders[index];
+    const value = response.rawHeaders[index + 1];
+    if (name !== undefined && value !== undefined) {
+      headers.append(name, value);
+    }
+  }
+  return headers;
+}
+
+function hasNullResponseBody(method: string, status: number): boolean {
+  return (
+    method === "HEAD" || status === 204 || status === 205 || status === 304
+  );
+}
+
+function endRequest(
+  request: ClientRequest,
+  body: BodyInit | null | undefined,
+): void {
+  if (body === null || body === undefined) {
+    request.end();
+    return;
+  }
+  if (typeof body === "string" || body instanceof URLSearchParams) {
+    request.end(body.toString());
+    return;
+  }
+  if (body instanceof ArrayBuffer) {
+    request.end(new Uint8Array(body));
+    return;
+  }
+  if (ArrayBuffer.isView(body)) {
+    request.end(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
+    return;
+  }
+  throw new TypeError(
+    "Trusted backend requests support only buffered request bodies",
+  );
+}
+
+function performPinnedRequest(
+  target: URL,
+  init: RequestInit,
+  lookup: LookupFunction,
+): Promise<Response> {
+  if (init.redirect !== undefined && init.redirect !== "manual") {
+    throw new Error("Trusted backend redirects must be handled manually");
+  }
+
+  const method = (init.method ?? "GET").toUpperCase();
+  const requestOptions: RequestOptions = {
+    agent: false,
+    headers: outgoingHeaders(init.headers),
+    lookup,
+    method,
+    signal: init.signal ?? undefined,
+  };
+
+  return new Promise<Response>((resolve, reject) => {
+    const handleResponse = (response: IncomingMessage) => {
+      const status = response.statusCode;
+      if (status === undefined || status < 200 || status > 599) {
+        response.destroy();
+        reject(new Error("Backend returned an invalid HTTP status"));
+        return;
+      }
+
+      let body: BodyInit | null = null;
+      if (hasNullResponseBody(method, status)) {
+        response.resume();
+      } else {
+        body = Readable.toWeb(response) as ReadableStream<Uint8Array>;
+      }
+      resolve(
+        new Response(body, {
+          headers: incomingHeaders(response),
+          status,
+          statusText: response.statusMessage ?? "",
+        }),
+      );
+    };
+
+    const request =
+      target.protocol === "https:"
+        ? httpsRequest(
+            target,
+            {
+              ...requestOptions,
+              servername: isIP(normalizeHostname(target))
+                ? undefined
+                : normalizeHostname(target),
+            },
+            handleResponse,
+          )
+        : httpRequest(target, requestOptions, handleResponse);
+    request.once("error", reject);
+
+    try {
+      endRequest(request, init.body);
+    } catch (error) {
+      request.destroy();
+      reject(error);
+    }
+  });
+}
+
 export async function fetchTrustedBackend(
   target: URL,
   init: RequestInit = {},
@@ -274,22 +396,12 @@ export async function fetchTrustedBackend(
   assertTrustedTarget(target);
   const addresses = await resolveBackendAddresses(target);
   const hostname = normalizeHostname(target);
-  const dispatcher = new Agent({
-    connect: {
-      lookup: createPinnedBackendLookup(hostname, addresses),
-    },
-  });
-
-  try {
-    const requestInit: DispatcherRequestInit = {
-      ...init,
-      dispatcher,
-    };
-    // The target origin and every DNS answer were validated above, and this
-    // per-request dispatcher can connect only to the resulting pinned IPs.
-    const response = await globalThis.fetch(target, requestInit);
-    return response;
-  } finally {
-    void dispatcher.close().catch(() => undefined);
-  }
+  // A one-shot Node request cannot reuse a socket opened outside this policy.
+  // Its lookup callback can return only the addresses validated above, while
+  // the original URL preserves the Host header and HTTPS SNI hostname.
+  return performPinnedRequest(
+    target,
+    init,
+    createPinnedBackendLookup(hostname, addresses),
+  );
 }

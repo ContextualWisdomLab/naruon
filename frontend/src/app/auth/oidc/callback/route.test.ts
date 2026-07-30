@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createFetchBackedNodeRequest } from "@/test/fetch-backed-node-request";
+
 import { POST } from "./route";
 
 const { postOidcTokenRequestMock } = vi.hoisted(() => ({
@@ -9,8 +11,9 @@ const { postOidcTokenRequestMock } = vi.hoisted(() => ({
   >(),
 }));
 
-const { backendDnsLookupMock } = vi.hoisted(() => ({
+const { backendDnsLookupMock, httpsRequestMock } = vi.hoisted(() => ({
   backendDnsLookupMock: vi.fn(),
+  httpsRequestMock: vi.fn(),
 }));
 
 vi.mock("@/lib/oidc-token-client", () => ({
@@ -19,6 +22,10 @@ vi.mock("@/lib/oidc-token-client", () => ({
 
 vi.mock("node:dns/promises", () => ({
   lookup: backendDnsLookupMock,
+}));
+
+vi.mock("node:https", () => ({
+  request: httpsRequestMock,
 }));
 
 const ORIGINAL_ENV = { ...process.env };
@@ -45,6 +52,8 @@ describe("/auth/oidc/callback route", () => {
     backendDnsLookupMock.mockResolvedValue([
       { address: "8.8.8.8", family: 4 },
     ]);
+    httpsRequestMock.mockReset();
+    httpsRequestMock.mockImplementation(createFetchBackedNodeRequest());
     postOidcTokenRequestMock.mockReset();
     postOidcTokenRequestMock.mockResolvedValue({
       access_token: "test-header.test-payload.test-signature",
@@ -97,9 +106,10 @@ describe("/auth/oidc/callback route", () => {
     expect(setCookie).toContain("Max-Age=0");
     expect(setCookie).not.toContain("verifier-123");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
-      cache: "no-store",
-      redirect: "manual",
+    expect(httpsRequestMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      agent: false,
+      method: "GET",
+      servername: "api.naruon.net",
       signal: expect.any(AbortSignal),
     }));
     expect(postOidcTokenRequestMock).toHaveBeenCalledTimes(1);

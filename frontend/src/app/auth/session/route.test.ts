@@ -1,12 +1,25 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { backendDnsLookupMock } = vi.hoisted(() => ({
+import { createFetchBackedNodeRequest } from "@/test/fetch-backed-node-request";
+
+const { backendDnsLookupMock, httpRequestMock, httpsRequestMock } = vi.hoisted(() => ({
   backendDnsLookupMock: vi.fn(),
+  httpRequestMock: vi.fn(),
+  httpsRequestMock: vi.fn(),
 }));
 
 vi.mock("node:dns/promises", () => ({
   lookup: backendDnsLookupMock,
+}));
+
+vi.mock("node:http", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:http")>()),
+  request: httpRequestMock,
+}));
+
+vi.mock("node:https", () => ({
+  request: httpsRequestMock,
 }));
 
 import { DELETE, GET, POST } from "./route";
@@ -39,6 +52,10 @@ describe("/auth/session route", () => {
     backendDnsLookupMock.mockResolvedValue([
       { address: "8.8.8.8", family: 4 },
     ]);
+    httpRequestMock.mockReset();
+    httpRequestMock.mockImplementation(createFetchBackedNodeRequest());
+    httpsRequestMock.mockReset();
+    httpsRequestMock.mockImplementation(createFetchBackedNodeRequest());
   });
 
   afterEach(() => {
@@ -57,7 +74,6 @@ describe("/auth/session route", () => {
     const fetchMock = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
       expect(String(input)).toBe("https://api.naruon.net/api/auth/session");
       expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
-      expect(init).toHaveProperty("dispatcher");
       return verifiedSessionResponse();
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -92,6 +108,15 @@ describe("/auth/session route", () => {
     expect(setCookie).not.toContain("access_token");
     expect(setCookie).not.toContain("attacker-fixed-session");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(httpsRequestMock).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({
+        agent: false,
+        lookup: expect.any(Function),
+        servername: "api.naruon.net",
+      }),
+      expect.any(Function),
+    );
   });
 
   it("stores a session when browser origin matches the forwarded host", async () => {
@@ -314,11 +339,11 @@ describe("/auth/session route", () => {
       authenticated: true,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [input, init] = fetchMock.mock.calls[0];
+    const [input] = fetchMock.mock.calls[0];
     expect(String(input)).toBe("http://127.0.0.1:8000/api/auth/session");
-    expect(init).toEqual(expect.objectContaining({
-      cache: "no-store",
-      redirect: "manual",
+    expect(httpRequestMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      agent: false,
+      method: "GET",
       signal: expect.any(AbortSignal),
     }));
   });
@@ -357,12 +382,14 @@ describe("/auth/session route", () => {
       authenticated: true,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [input, init] = fetchMock.mock.calls[0];
+    const [input] = fetchMock.mock.calls[0];
     expect(String(input)).toBe(
       "https://[2001:4860:4860::8888]:8443/api/auth/session",
     );
-    expect(init).toEqual(expect.objectContaining({
-      redirect: "manual",
+    expect(httpsRequestMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      agent: false,
+      method: "GET",
+      servername: undefined,
       signal: expect.any(AbortSignal),
     }));
   });

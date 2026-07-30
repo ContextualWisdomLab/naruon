@@ -1,12 +1,19 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { backendDnsLookupMock } = vi.hoisted(() => ({
+import { createFetchBackedNodeRequest } from "@/test/fetch-backed-node-request";
+
+const { backendDnsLookupMock, httpsRequestMock } = vi.hoisted(() => ({
   backendDnsLookupMock: vi.fn(),
+  httpsRequestMock: vi.fn(),
 }));
 
 vi.mock("node:dns/promises", () => ({
   lookup: backendDnsLookupMock,
+}));
+
+vi.mock("node:https", () => ({
+  request: httpsRequestMock,
 }));
 
 import { GET, POST, PUT } from "./route";
@@ -23,6 +30,8 @@ describe("/api runtime proxy route", () => {
     backendDnsLookupMock.mockResolvedValue([
       { address: "8.8.8.8", family: 4 },
     ]);
+    httpsRequestMock.mockReset();
+    httpsRequestMock.mockImplementation(createFetchBackedNodeRequest());
   });
 
   afterEach(() => {
@@ -37,7 +46,6 @@ describe("/api runtime proxy route", () => {
       "fetch",
       vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
         const headers = init?.headers as Headers;
-        expect(init).toHaveProperty("dispatcher");
         return Response.json({
           target_url: String(input),
           auth_header: headers.get("authorization"),
@@ -74,6 +82,15 @@ describe("/api runtime proxy route", () => {
       user_header: null,
       request_body: '{"state":"open"}',
     });
+    expect(httpsRequestMock).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({
+        agent: false,
+        lookup: expect.any(Function),
+        servername: "api.naruon.net",
+      }),
+      expect.any(Function),
+    );
   });
 
   it("rejects a backend hostname that resolves to the metadata network", async () => {
