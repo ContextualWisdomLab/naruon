@@ -333,6 +333,7 @@ def _build_email_object(
         in_reply_to=parsed.get("in_reply_to"),
         references=parsed.get("references"),
         date=persisted_date,
+        date_provenance=parsed.get("date_provenance", "unknown"),
         body=parsed.get("body", ""),
         embedding=fitted_embeddings[0] if fitted_embeddings else _zero_embedding(),
     )

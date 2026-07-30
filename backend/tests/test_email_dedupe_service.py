@@ -97,6 +97,7 @@ def test_email_strong_fingerprint():
         sender="sender@example.com",
         subject="Subject",
         date=datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        date_provenance="parsed",
         body="Hello world"
     )
     result1 = email_strong_fingerprint(email)
@@ -109,3 +110,26 @@ def test_email_strong_fingerprint():
     )
     assert result1 == result2
     assert result1 is not None
+
+
+def test_email_strong_fingerprint_gated_to_parsed_date_provenance():
+    """A stored row seeds a strong fingerprint only when its date is genuine.
+
+    naruon#1086: rows whose ``date`` is a synthetic collection-time fallback
+    (missing/invalid) or unknown-provenance (stored before tracking) must not
+    seed a strong auto-dedupe fingerprint, even though sender/subject/body/date
+    are populated.
+    """
+    fields = dict(
+        id=2,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="msg-2",
+        sender="sender@example.com",
+        subject="Subject",
+        date=datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        body="Hello world",
+    )
+    assert email_strong_fingerprint(Email(**fields, date_provenance="parsed")) is not None
+    for provenance in ("missing", "invalid", "unknown"):
+        assert email_strong_fingerprint(Email(**fields, date_provenance=provenance)) is None

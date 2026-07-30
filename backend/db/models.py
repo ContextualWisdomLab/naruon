@@ -801,6 +801,13 @@ class Email(Base):
     in_reply_to: Mapped[str | None] = mapped_column(String, nullable=True)
     references: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
+    # Provenance of the stored ``date``: "parsed" (genuine RFC822 Date header),
+    # "missing"/"invalid" (a synthetic collection-time fallback), or "unknown"
+    # (rows stored before provenance tracking). Only "parsed" rows may seed a
+    # strong auto-dedupe fingerprint (naruon#1086).
+    date_provenance: Mapped[str] = mapped_column(
+        String, nullable=False, server_default="unknown", default="unknown"
+    )
     body: Mapped[str] = mapped_column(Text)
     # IMAP \Seen read state; defaults read so historical/file imports don't nag.
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

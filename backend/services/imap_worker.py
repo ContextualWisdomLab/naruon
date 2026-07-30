@@ -50,12 +50,20 @@ async def process_fetched_email(
         else str(recipients_list or "")
     )
 
-    fingerprint = strong_email_fingerprint(
-        sender=sender,
-        subject=subject,
-        date=persisted_date,
-        body=email_data.get("body", ""),
-    ) or generate_email_fingerprint(subject, date_str, sender, recipients)
+    # Seed the strong (auto-dedupe) fingerprint only from a genuinely-parsed
+    # Date; a synthetic collection-time fallback must not manufacture a strong
+    # duplicate key, so it falls through to the weak fallback (naruon#1086).
+    strong_fingerprint = None
+    if email_data.get("date_provenance") == "parsed":
+        strong_fingerprint = strong_email_fingerprint(
+            sender=sender,
+            subject=subject,
+            date=persisted_date,
+            body=email_data.get("body", ""),
+        )
+    fingerprint = strong_fingerprint or generate_email_fingerprint(
+        subject, date_str, sender, recipients
+    )
 
     # Check if duplicate
     stmt = select(Email).where(

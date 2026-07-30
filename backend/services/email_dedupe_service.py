@@ -59,6 +59,12 @@ def candidate_strong_fingerprint(candidate: EmailDedupeCandidate) -> str | None:
 
 
 def email_strong_fingerprint(email_row: Email) -> str | None:
+    # A stored row may seed a strong (auto-dedupe) fingerprint only when its
+    # date is genuinely parsed sender metadata; rows with a synthetic or
+    # unknown-provenance date are excluded so they cannot manufacture a strong
+    # duplicate match (naruon#1086).
+    if getattr(email_row, "date_provenance", None) != "parsed":
+        return None
     return strong_email_fingerprint(
         sender=email_row.sender,
         subject=email_row.subject,
