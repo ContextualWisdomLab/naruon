@@ -11,6 +11,7 @@ from services.email_dedupe_service import (
     candidate_content_fingerprint,
     email_content_fingerprint,
     classify_dedupe_decision,
+    resolve_candidate_disposition,
 )
 from db.models import Email
 
@@ -297,3 +298,69 @@ def test_distinct_when_candidate_has_no_body():
     )
     existing = _email_row()
     assert classify_dedupe_decision(candidate, existing) == "distinct"
+
+
+def test_resolve_disposition_empty_corpus_is_distinct():
+    candidate = EmailDedupeCandidate(candidate_key="c", message_id="m@x", body="b")
+    assert resolve_candidate_disposition(candidate, []) == ("distinct", None)
+
+
+def test_resolve_disposition_all_distinct_returns_distinct_none():
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        message_id="only-on-candidate@x",
+        sender="different@example.com",
+        subject="Different",
+        body="different body",
+        date_provenance="parsed",
+    )
+    rows = [_email_row(id=1, message_id="a@x"), _email_row(id=2, message_id="b@x")]
+    assert resolve_candidate_disposition(candidate, rows) == ("distinct", None)
+
+
+def test_resolve_disposition_returns_review_row_when_only_content_matches():
+    date = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        sender="sender@example.com",
+        subject="Subject",
+        date=date,
+        body="Hello world",
+        date_provenance="missing",  # synthetic Date -> no strong/A1 link
+    )
+    unrelated = _email_row(id=1, message_id="unrelated@x", body="different body")
+    content_match = _email_row(id=2, date=date, date_provenance="parsed")
+    decision, matched = resolve_candidate_disposition(candidate, [unrelated, content_match])
+    assert decision == "review_required"
+    assert matched is content_match
+
+
+def test_resolve_disposition_a1_link_dominates_earlier_a2_review():
+    # A review_required content match appears BEFORE the auto_link row in the
+    # corpus; Fellegi-Sunter A1 must still win regardless of iteration order.
+    date = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        message_id="<shared@x>",
+        sender="sender@example.com",
+        subject="Subject",
+        date=date,
+        body="Hello world",
+        date_provenance="missing",
+    )
+    content_only = _email_row(id=1, date=date, date_provenance="unknown")
+    id_link = _email_row(id=2, message_id="shared@x", body="totally different")
+    decision, matched = resolve_candidate_disposition(candidate, [content_only, id_link])
+    assert decision == "auto_link"
+    assert matched is id_link
+
+
+def test_resolve_disposition_first_auto_link_wins():
+    candidate = EmailDedupeCandidate(
+        candidate_key="c", message_id="<shared@x>", body="b", date_provenance="parsed"
+    )
+    first = _email_row(id=1, message_id="shared@x")
+    second = _email_row(id=2, message_id="shared@x")
+    decision, matched = resolve_candidate_disposition(candidate, [first, second])
+    assert decision == "auto_link"
+    assert matched is first

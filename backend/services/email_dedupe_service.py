@@ -6,6 +6,7 @@ whether an incoming email is a duplicate of a stored one, keeping strong
 """
 
 import datetime
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -194,3 +195,36 @@ def classify_dedupe_decision(
         return "review_required"
 
     return "distinct"
+
+
+def resolve_candidate_disposition(
+    candidate: EmailDedupeCandidate, existing_rows: Iterable[Email]
+) -> tuple[DedupeDecision, Email | None]:
+    """Resolve a candidate against many stored rows to one Fellegi-Sunter disposition.
+
+    Real de-duplication compares one incoming email against the *set* of stored
+    rows it might duplicate, not a single row, so this collapses the per-pair
+    ``classify_dedupe_decision`` results by the Fellegi & Sunter (1969) zone
+    priority A1 > A2 > A3:
+
+    - the first stored row that yields ``auto_link`` (A1, a reliable identity
+      link) wins immediately -- a positive link cannot be outranked;
+    - absent any link, the first ``review_required`` match (A2) is held for
+      clerical review rather than silently merged or silently kept;
+    - only when no stored row shares any identity or content signal is the
+      candidate ``distinct`` (A3).
+
+    Returns the decision together with the stored row that drove a link or a
+    review hold (``None`` when distinct), so the import/IMAP paths know which
+    email the disposition targets without re-deriving the match.
+    """
+    review_match: Email | None = None
+    for existing_row in existing_rows:
+        decision = classify_dedupe_decision(candidate, existing_row)
+        if decision == "auto_link":
+            return "auto_link", existing_row
+        if decision == "review_required" and review_match is None:
+            review_match = existing_row
+    if review_match is not None:
+        return "review_required", review_match
+    return "distinct", None
