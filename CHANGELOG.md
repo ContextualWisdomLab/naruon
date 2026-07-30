@@ -1,8 +1,9 @@
 ## [Unreleased]
 ### 이메일 메타데이터 provenance 기반 (dedupe 근거 분리 · naruon#1086 파서 계층)
 
-- `backend/services/email_parser.py`가 RFC822 `Date`·`Message-ID` 근거를 명시적으로 노출합니다. `date_provenance`(`parsed`/`missing`/`invalid`)와 원본 헤더 날짜(`header_date`, 부재·파싱 실패 시 `None`)를 저장용 `date`(파싱값 또는 수집 시각 fallback)와 분리하고, `message_id_provenance`(`embedded`/`missing`)를 추가했습니다. 합성 수집 시각이 원본 발신 메타데이터로 오인되지 않으므로 후속 fingerprint dedupe가 진짜 발신 근거에만 의존할 수 있습니다. `date`의 기존 의미(파싱값-또는-fallback)는 그대로 유지되어 하위 호환입니다. 이는 naruon#1086 계약의 파서 provenance 기반이며, fingerprint gating(불완전 근거 → `dedupe_review_required`)과 import/API 노출은 후속 원자적 PR로 이어집니다.
-- 검증: 파서 provenance 로직을 5개 시나리오(valid/missing/invalid `Date`, embedded/missing `Message-ID`)와 whitespace-only `Date` 분기까지 `PYTHONWARNINGS=error`로 독립 검증했고, 동일 계약을 `tests/test_email_parser.py` 회귀 테스트로 추가했습니다(전체 백엔드 스위트는 PR checks에서 확인).
+- `backend/services/email_parser.py`가 RFC822 `Date`·`Message-ID` 근거를 명시적으로 노출합니다. `date_provenance`(`parsed`/`missing`/`invalid`)와 원본 헤더 날짜(`header_date`, 부재·파싱 실패 시 `None`)를 저장용 `date`(파싱값 또는 수집 시각 fallback)와 분리하고, `message_id_provenance`(`embedded`/`missing`)를 추가했습니다. 합성 수집 시각이 원본 발신 메타데이터로 오인되지 않으므로 fingerprint dedupe가 진짜 발신 근거에만 의존할 수 있습니다. `date`의 기존 의미(파싱값-또는-fallback)는 그대로 유지되어 하위 호환입니다.
+- `email_import_service._email_fingerprint`가 이제 `date_provenance == "parsed"`일 때만 strong(자동 중복 판정용) fingerprint를 생성합니다. `Date` 헤더가 없거나 잘못돼 `persisted_date`가 합성 수집 시각인 경우 strong key를 만들지 않고 weak fallback fingerprint(수집 시각이 매번 달라 거짓 중복을 만들 수 없음)로 내려갑니다 — 합성 시각이 strong-duplicate 근거로 승격되지 않습니다. `persisted_date`는 파서의 `date`에서만 오고 업로드 파일명에서 오지 않으므로, 날짜형 파일명이 `Date` 근거로 승격되지 않는 계약도 구조적으로 유지됩니다.
+- 검증: 파서 provenance 로직을 5개 시나리오(valid/missing/invalid `Date`, embedded/missing `Message-ID`)와 whitespace-only `Date` 분기까지 `PYTHONWARNINGS=error`로 검증하고, strong-fingerprint provenance gating 회귀 테스트를 추가했습니다. 전체 email/dedupe/import 스위트 `301 passed, 1 skipped`(`PYTHONWARNINGS=error`), ruff clean으로 통과했습니다. import/API의 `dedupe_review_required` reason-code 노출은 stored-side `date_provenance` 영속화(모델 컬럼 + Alembic 마이그레이션)를 수반하므로 후속 원자적 PR로 이어집니다.
 
 ### 보안 패치 (CodeQL extended current-head)
 
