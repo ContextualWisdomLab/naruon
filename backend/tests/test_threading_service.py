@@ -1,6 +1,7 @@
 import pytest
 
 from services.threading_service import (
+    _find_existing_thread_ids,
     assign_thread_id,
     extract_reference_ids,
     generate_email_fingerprint,
@@ -188,6 +189,58 @@ def test_extract_reference_ids_drops_bracketed_whitespace_only_ids():
     # "< >" / "<\t>" are bracketed but whitespace-only: they normalize to nothing
     # and must be dropped, not carried as empty thread candidates.
     assert extract_reference_ids("< > <a@x.com> <\t>") == ["a@x.com"]
+
+
+def test_extract_reference_ids_falls_back_to_whitespace_split_without_brackets():
+    # A References value with no angle brackets (some non-conforming clients)
+    # falls back to a whitespace split rather than yielding nothing.
+    assert extract_reference_ids("a@x.com b@x.com") == ["a@x.com", "b@x.com"]
+
+
+@pytest.mark.asyncio
+async def test_find_existing_thread_ids_returns_empty_without_candidates():
+    session = _SequentialSession([])
+    result = await _find_existing_thread_ids(
+        session, [], user_id="testuser", organization_id="org-acme"
+    )
+    assert result == {}
+    assert session.execute_count == 0
+
+
+@pytest.mark.asyncio
+async def test_find_existing_thread_ids_dedupes_overlapping_bracket_targets():
+    # A bare id and its already-bracketed form collapse to one target set, so the
+    # shared "<a@x.com>" lookup key is not enqueued twice.
+    session = _QueryCapturingSession([[("<a@x.com>", "thread-a")]])
+    result = await _find_existing_thread_ids(
+        session,
+        ["<a@x.com>", "a@x.com"],
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert result == {"a@x.com": "thread-a"}
+
+
+@pytest.mark.asyncio
+async def test_find_existing_thread_ids_skips_rows_with_blank_thread_or_message_id():
+    # A stored row with no thread_id is skipped, and a row whose message_id
+    # normalizes to nothing is skipped; neither pollutes the returned map.
+    session = _SequentialSession(
+        [
+            [
+                ("<a@x.com>", None),
+                ("", "thread-b"),
+                ("<c@x.com>", "thread-c"),
+            ]
+        ]
+    )
+    result = await _find_existing_thread_ids(
+        session,
+        ["a@x.com", "c@x.com"],
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+    assert result == {"c@x.com": "thread-c"}
 
 
 @pytest.mark.asyncio
