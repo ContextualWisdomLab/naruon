@@ -2,10 +2,17 @@ import datetime
 import os
 import tempfile
 from email.message import Message
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from services.email_parser import _extract_thread_id, _sanitize_nul, parse_eml
+from services.email_parser import (
+    _attachment_part_content,
+    _extract_thread_id,
+    _sanitize_address_display_text,
+    _sanitize_nul,
+    parse_eml,
+    parse_eml_bytes,
+)
 from services.exceptions import EmailParseError
 
 
@@ -406,6 +413,49 @@ def test_extract_thread_id_uses_first_reference_from_long_header():
     msg["In-Reply-To"] = "<reply@test.com>"
 
     assert _extract_thread_id(msg, "<message@test.com>") == "<root@test.com>"
+
+
+def test_sanitize_address_display_text_keeps_name_only_and_falls_back_to_text():
+    # A token with a display name but an empty address part keeps the name
+    # (rather than dropping it), and a header that yields no address at all
+    # falls back to the sanitized raw text.
+    assert _sanitize_address_display_text("Display Name <>") == "Display Name"
+    assert _sanitize_address_display_text("") == ""
+
+
+def test_attachment_part_content_falls_back_to_raw_payload_on_decode_error():
+    # A part whose get_content() cannot decode (unknown charset / malformed
+    # transfer-encoding) falls back to the raw decoded payload, and to "" when
+    # the payload is absent, instead of propagating the decode error.
+    raw_part = MagicMock()
+    raw_part.get_content.side_effect = LookupError("unknown charset")
+    raw_part.get_payload.return_value = b"raw-bytes"
+    assert _attachment_part_content(raw_part) == b"raw-bytes"
+
+    empty_part = MagicMock()
+    empty_part.get_content.side_effect = ValueError("bad encoding")
+    empty_part.get_payload.return_value = None
+    assert _attachment_part_content(empty_part) == ""
+
+
+def test_parse_eml_bytes_parses_provider_bytes_and_wraps_parse_errors():
+    parsed = parse_eml_bytes(
+        b"Message-ID: <bytes@test.com>\r\n"
+        b"From: sender@test.com\r\n"
+        b"To: user@test.com\r\n"
+        b"Subject: Bytes\r\n\r\n"
+        b"Body"
+    )
+    assert parsed["message_id"] == "<bytes@test.com>"
+    assert parsed["subject"] == "Bytes"
+
+    # A parser failure is wrapped as the sanitized public EmailParseError rather
+    # than leaking the internal exception chain at the ingest boundary.
+    with patch(
+        "services.email_parser.message_from_bytes", side_effect=ValueError("boom")
+    ):
+        with pytest.raises(EmailParseError):
+            parse_eml_bytes(b"anything")
 
 
 def test_extract_thread_id_falls_through_whitespace_only_headers():
