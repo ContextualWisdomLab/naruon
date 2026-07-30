@@ -7,8 +7,28 @@ from services.email_dedupe_service import (
     strong_email_fingerprint,
     candidate_strong_fingerprint,
     email_strong_fingerprint,
+    content_email_fingerprint,
+    candidate_content_fingerprint,
+    email_content_fingerprint,
+    classify_dedupe_decision,
 )
 from db.models import Email
+
+
+def _email_row(**overrides):
+    fields = dict(
+        id=100,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id=None,
+        sender="sender@example.com",
+        subject="Subject",
+        date=datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        date_provenance="parsed",
+        body="Hello world",
+    )
+    fields.update(overrides)
+    return Email(**fields)
 
 def test_candidate_message_lookup_values_basic():
     candidate = EmailDedupeCandidate(
@@ -133,3 +153,147 @@ def test_email_strong_fingerprint_gated_to_parsed_date_provenance():
     assert email_strong_fingerprint(Email(**fields, date_provenance="parsed")) is not None
     for provenance in ("missing", "invalid", "unknown"):
         assert email_strong_fingerprint(Email(**fields, date_provenance=provenance)) is None
+
+
+# --- content fingerprint (date-independent identity signal, naruon#1086) ---
+
+def test_content_email_fingerprint_none_without_body():
+    assert content_email_fingerprint(sender="a@x", subject="S", body=None) is None
+    assert content_email_fingerprint(sender="a@x", subject="S", body="") is None
+
+
+def test_content_email_fingerprint_is_date_independent_and_not_the_strong_one():
+    """The content fingerprint ignores the Date; the strong one includes it."""
+    content = content_email_fingerprint(
+        sender="sender@example.com", subject="Subject", body="Hello world"
+    )
+    strong = strong_email_fingerprint(
+        sender="sender@example.com",
+        subject="Subject",
+        date=datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        body="Hello world",
+    )
+    assert content is not None
+    assert content != strong
+    # Same content, different Date -> identical content fingerprint.
+    candidate_a = EmailDedupeCandidate(
+        candidate_key="a",
+        sender="sender@example.com",
+        subject="Subject",
+        date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        body="Hello world",
+    )
+    candidate_b = EmailDedupeCandidate(
+        candidate_key="b",
+        sender="sender@example.com",
+        subject="Subject",
+        date=datetime(2024, 6, 6, tzinfo=timezone.utc),
+        body="Hello world",
+    )
+    assert candidate_content_fingerprint(candidate_a) == candidate_content_fingerprint(
+        candidate_b
+    )
+    assert email_content_fingerprint(_email_row()) == content
+
+
+def test_email_content_fingerprint_none_without_body():
+    assert email_content_fingerprint(_email_row(body=None)) is None
+
+
+# --- Fellegi-Sunter (1969) three-zone classifier ---
+
+def test_auto_link_on_matching_normalized_message_id():
+    # Bracketed vs bare Message-ID normalize equal; content is irrelevant here.
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        message_id="<shared@x>",
+        sender="other@example.com",
+        subject="Totally different",
+        body="unrelated body",
+    )
+    existing = _email_row(message_id="shared@x")
+    assert classify_dedupe_decision(candidate, existing) == "auto_link"
+
+
+def test_auto_link_on_genuine_strong_match_without_message_id():
+    date = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        sender="sender@example.com",
+        subject="Subject",
+        date=date,
+        body="Hello world",
+        date_provenance="parsed",
+    )
+    existing = _email_row(date=date, date_provenance="parsed")
+    assert classify_dedupe_decision(candidate, existing) == "auto_link"
+
+
+def test_review_required_when_candidate_date_provenance_is_untrusted():
+    date = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        sender="sender@example.com",
+        subject="Subject",
+        date=date,
+        body="Hello world",
+        date_provenance="missing",
+    )
+    existing = _email_row(date=date, date_provenance="parsed")
+    # Same content, but the candidate's Date is synthetic -> no strong match, no
+    # Message-ID link -> clerical-review band, not a silent merge.
+    assert classify_dedupe_decision(candidate, existing) == "review_required"
+
+
+def test_review_required_when_existing_date_provenance_is_untrusted():
+    date = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        sender="sender@example.com",
+        subject="Subject",
+        date=date,
+        body="Hello world",
+        date_provenance="parsed",
+    )
+    existing = _email_row(date=date, date_provenance="unknown")
+    assert classify_dedupe_decision(candidate, existing) == "review_required"
+
+
+def test_review_required_when_content_matches_but_dates_differ_untrusted():
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        sender="sender@example.com",
+        subject="Subject",
+        date=datetime(2024, 6, 6, tzinfo=timezone.utc),
+        body="Hello world",
+        date_provenance="invalid",
+    )
+    existing = _email_row(
+        date=datetime(2023, 1, 1, tzinfo=timezone.utc), date_provenance="unknown"
+    )
+    assert classify_dedupe_decision(candidate, existing) == "review_required"
+
+
+def test_distinct_on_different_content_and_no_identity_link():
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        message_id="only-on-candidate@x",
+        sender="different@example.com",
+        subject="Different",
+        body="different body",
+        date_provenance="parsed",
+    )
+    existing = _email_row(message_id="only-on-existing@x")
+    assert classify_dedupe_decision(candidate, existing) == "distinct"
+
+
+def test_distinct_when_candidate_has_no_body():
+    candidate = EmailDedupeCandidate(
+        candidate_key="c",
+        sender="sender@example.com",
+        subject="Subject",
+        body=None,
+        date_provenance="parsed",
+    )
+    existing = _email_row()
+    assert classify_dedupe_decision(candidate, existing) == "distinct"
