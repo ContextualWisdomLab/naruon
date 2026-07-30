@@ -408,6 +408,27 @@ def test_extract_thread_id_uses_first_reference_from_long_header():
     assert _extract_thread_id(msg, "<message@test.com>") == "<root@test.com>"
 
 
+def test_extract_thread_id_falls_through_whitespace_only_headers():
+    # A References/In-Reply-To header that unfolds to only whitespace is present
+    # but yields no token when split; _extract_thread_id must fall through to the
+    # next source rather than return a blank thread id.
+    fell_to_in_reply_to = Message()
+    fell_to_in_reply_to["References"] = "   "
+    fell_to_in_reply_to["In-Reply-To"] = "<parent@test.com>"
+    assert (
+        _extract_thread_id(fell_to_in_reply_to, "<message@test.com>")
+        == "<parent@test.com>"
+    )
+
+    fell_to_message_id = Message()
+    fell_to_message_id["References"] = "  "
+    fell_to_message_id["In-Reply-To"] = " \t "
+    assert (
+        _extract_thread_id(fell_to_message_id, "<message@test.com>")
+        == "<message@test.com>"
+    )
+
+
 def test_parse_eml_extracts_reply_to_header():
     eml_content = b"""Message-ID: <reply-to@test.com>
 From: Sender Name <sender@test.com>

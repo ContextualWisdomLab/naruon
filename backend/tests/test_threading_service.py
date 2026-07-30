@@ -3,6 +3,7 @@ import pytest
 from services.threading_service import (
     assign_thread_id,
     extract_reference_ids,
+    generate_email_fingerprint,
     normalize_message_id,
 )
 
@@ -181,6 +182,81 @@ def test_extract_reference_ids_normalizes_folded_whitespace_and_dedupes():
     # The first two are the same id split over a fold boundary, so only two
     # distinct references remain, in header order.
     assert extract_reference_ids(header) == ["a@x.com", "b@x.com"]
+
+
+def test_extract_reference_ids_drops_bracketed_whitespace_only_ids():
+    # "< >" / "<\t>" are bracketed but whitespace-only: they normalize to nothing
+    # and must be dropped, not carried as empty thread candidates.
+    assert extract_reference_ids("< > <a@x.com> <\t>") == ["a@x.com"]
+
+
+@pytest.mark.asyncio
+async def test_assign_thread_id_uses_a_later_candidate_when_the_first_has_no_thread():
+    # The immediate parent (in_reply_to) is not yet imported, but an older
+    # reference is: the lookup loop must skip the unmatched first candidate and
+    # return the matched later one, not fall through to the deterministic root.
+    session = _SequentialSession([[("<older@example.com>", "thread-older")]])
+
+    thread_id = await assign_thread_id(
+        session,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": "<newer@example.com>",
+            "references": "<older@example.com>",
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert thread_id == "thread-older"
+
+
+def test_generate_email_fingerprint_is_deterministic_case_insensitive_and_field_sensitive():
+    baseline = generate_email_fingerprint(
+        "Quarterly plan", "Mon, 01 Jun 2026 09:00:00 +0000", "a@x.com", "b@y.com"
+    )
+    # 1. deterministic + SHA-256 hex digest
+    assert baseline == generate_email_fingerprint(
+        "Quarterly plan", "Mon, 01 Jun 2026 09:00:00 +0000", "a@x.com", "b@y.com"
+    )
+    assert len(baseline) == 64
+    assert all(character in "0123456789abcdef" for character in baseline)
+    # 2. lower-cased + outer-whitespace-stripped components collapse to one key
+    assert (
+        generate_email_fingerprint(
+            "  QUARTERLY PLAN  ", "Mon, 01 Jun 2026 09:00:00 +0000", "A@X.com", "  b@Y.com "
+        )
+        == baseline
+    )
+    # 3. None components are treated as empty (no crash) and stay distinct
+    all_empty = generate_email_fingerprint(None, None, None, None)
+    assert len(all_empty) == 64
+    assert all_empty != baseline
+    # 4. any changed component changes the fingerprint (no field is dropped)
+    assert (
+        generate_email_fingerprint(
+            "Quarterly plan", "Mon, 01 Jun 2026 09:00:00 +0000", "a@x.com", "c@z.com"
+        )
+        != baseline
+    )
+
+
+@pytest.mark.asyncio
+async def test_assign_thread_id_generates_fresh_uuid_when_no_identifiers_present():
+    # An email with no in_reply_to, no references, and no message_id has nothing
+    # to thread on, so a fresh uuid4 root is minted and no lookup is issued.
+    session = _SequentialSession([])
+
+    thread_id = await assign_thread_id(
+        session,
+        {"message_id": None, "in_reply_to": None, "references": None},
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert len(thread_id) == 32
+    assert all(character in "0123456789abcdef" for character in thread_id)
+    assert session.execute_count == 0
 
 
 @pytest.mark.asyncio
