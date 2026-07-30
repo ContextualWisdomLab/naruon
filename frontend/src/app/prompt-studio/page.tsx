@@ -139,7 +139,7 @@ const TEMPLATE_GROUPS = [
 const PROMPT_TABS = [
   { id: 'system', label: '시스템' },
   { id: 'user', label: '사용자' },
-  { id: 'assistant', label: '어시스턴트 예시' },
+  { id: 'assistant', label: '판단 보조 예시' },
 ] as const;
 
 const MODEL_OPTIONS = [
@@ -457,7 +457,7 @@ export default function PromptStudioPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <CardTitle className="font-black">프롬프트 에디터</CardTitle>
-                    <CardDescription className="mt-1">시스템, 사용자, 어시스턴트 예시를 한 작업면에서 조율합니다.</CardDescription>
+                    <CardDescription className="mt-1">시스템, 사용자, 판단 보조 예시를 한 작업면에서 조율합니다.</CardDescription>
                   </div>
                   <Badge variant="outline" className="font-black">{promptVariables.length} variables</Badge>
                 </div>
@@ -532,7 +532,7 @@ export default function PromptStudioPage() {
                   </TabsContent>
                   <TabsContent value="assistant" className="mt-0">
                     <div className="rounded-xl border border-border bg-secondary/30 p-4 text-sm leading-6">
-                      어시스턴트 예시는 품질 기준, 톤, 출력 구조를 Publisher가 검수할 때 사용하는 reference response입니다.
+                      판단 보조 예시는 품질 기준, 톤, 출력 구조를 Publisher가 검수할 때 사용하는 reference response입니다.
                     </div>
                   </TabsContent>
                 </Tabs>
