@@ -631,6 +631,31 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             <div className="line-clamp-1 text-xs text-muted-foreground">
               답장 주소: {safeReplyTo}
             </div>
+            {/* 참여자 목록 */}
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-semibold text-muted-foreground">참여자:</span>
+              <Badge variant="secondary" className="text-[10px] bg-secondary/50">alice@example.com</Badge>
+              <Badge variant="secondary" className="text-[10px] bg-secondary/50">bob@example.com</Badge>
+            </div>
+            {/* 첨부 파일 레일 */}
+            <div className="mt-1 flex flex-wrap gap-2">
+              <div className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1 text-xs text-muted-foreground shadow-sm">
+                <span aria-hidden="true">📎</span>
+                <span>분기별_계획안.pdf</span>
+              </div>
+            </div>
+            {/* 회의 제안 패널 */}
+            <div className="mt-3 w-full rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-blue-700">회의 제안</h3>
+                  <p className="mt-0.5 text-xs text-blue-600/80">다음 주 화요일 오후 2시 - 일정 확인이 필요합니다.</p>
+                </div>
+                <Button size="sm" variant="outline" className="h-7 text-xs border-blue-500/30 text-blue-700 bg-white hover:bg-blue-50">
+                  일정 확인
+                </Button>
+              </div>
+            </div>
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">

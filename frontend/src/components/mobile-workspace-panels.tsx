@@ -134,3 +134,46 @@ export function MobileSearchPanel() {
 export function MobileCalendarPanel() {
   return <MobileApiPanel copy={mobileCalendarCopy} />;
 }
+
+
+export function MobileReplyReviewPanel() {
+  return (
+    <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-4 shadow-sm mt-4">
+      <p className="text-xs font-bold text-purple-700">답장 리뷰</p>
+      <h2 className="mt-2 text-lg font-black text-foreground">답장 초안 검토</h2>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">작성된 답장 초안을 확인하고 전송합니다.</p>
+      <div className="mt-4 rounded-xl bg-card p-3 border border-border">
+        <p className="text-xs text-muted-foreground">정중하게 일정 확인 요청하는 내용...</p>
+      </div>
+      <div className="mt-4 flex gap-2">
+        <button className="h-9 flex-1 rounded-xl bg-purple-600 text-sm font-bold text-white">전송</button>
+      </div>
+    </div>
+  );
+}
+
+export function MobileSourceDrawerPanel() {
+  return (
+    <div className="rounded-2xl border border-primary/15 bg-card p-4 shadow-sm mt-4">
+      <p className="text-xs font-bold text-primary">원본 근거</p>
+      <h2 className="mt-2 text-lg font-black text-foreground">맥락 원문 보기</h2>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">종합된 맥락의 근거가 되는 원본 메일과 파일입니다.</p>
+      <div className="mt-4 rounded-xl bg-secondary/30 p-3 border border-border">
+        <p className="text-xs text-muted-foreground font-semibold">참조: 분기별_계획안.pdf</p>
+      </div>
+    </div>
+  );
+}
+
+export function MobileScheduleConfirmationPanel() {
+  return (
+    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm mt-4">
+      <p className="text-xs font-bold text-emerald-700">일정 확정</p>
+      <h2 className="mt-2 text-lg font-black text-foreground">일정 조율 완료</h2>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">제안된 일정이 캘린더에 확정되었습니다.</p>
+      <div className="mt-4 flex gap-2">
+        <button className="h-9 flex-1 rounded-xl bg-emerald-600 text-sm font-bold text-white">캘린더 확인</button>
+      </div>
+    </div>
+  );
+}

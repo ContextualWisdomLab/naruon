@@ -1,0 +1,49 @@
+$ next dev --webpack
+▲ Next.js 16.2.12 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.2:3000
+✓ Ready in 528ms
+- Experiments (use with caution):
+  · cpus: 2
+  · staticGenerationMaxConcurrency: 2
+  · staticGenerationMinPagesPerWorker: 50
+
+○ Compiling /mail ...
+ GET /mail 200 in 14.5s (next.js: 14.0s, application-code: 552ms)
+ GET /mail 200 in 207ms (next.js: 92ms, application-code: 115ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/network/graph 503 in 1377ms (next.js: 1326ms, application-code: 51ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/emails 503 in 2.8s (next.js: 2.7s, application-code: 54ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/network/graph 503 in 32ms (next.js: 21ms, application-code: 10ms)
+[browser] Failed to load network graph: ApiClientError: API request failed (src/components/NetworkGraph.tsx:166:17)
+[browser] Failed to load network graph: ApiClientError: API request failed (src/components/NetworkGraph.tsx:166:17)
+ GET /mail 200 in 377ms (next.js: 8ms, application-code: 369ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/emails 503 in 68ms (next.js: 33ms, application-code: 35ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/network/graph 503 in 12ms (next.js: 3ms, application-code: 9ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/network/graph 503 in 19ms (next.js: 3ms, application-code: 15ms)
+[browser] Failed to load network graph: ApiClientError: API request failed (src/components/NetworkGraph.tsx:166:17)
+[browser] Failed to load network graph: ApiClientError: API request failed (src/components/NetworkGraph.tsx:166:17)
+ GET /mail?id=1 200 in 477ms (next.js: 11ms, application-code: 466ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/emails 503 in 101ms (next.js: 69ms, application-code: 32ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/network/graph 503 in 41ms (next.js: 10ms, application-code: 31ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/network/graph 503 in 39ms (next.js: 9ms, application-code: 31ms)
+[browser] Failed to load network graph: ApiClientError: API request failed (src/components/NetworkGraph.tsx:166:17)
+[browser] Failed to load network graph: ApiClientError: API request failed (src/components/NetworkGraph.tsx:166:17)
+ GET /mail 200 in 136ms (next.js: 5ms, application-code: 131ms)
+ GET /mail?id=1 200 in 198ms (next.js: 4ms, application-code: 194ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/emails 503 in 41ms (next.js: 30ms, application-code: 11ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/network/graph 503 in 31ms (next.js: 3ms, application-code: 28ms)
+proxy_fetch_failed { error_type: 'TypeError' }
+ GET /api/network/graph 503 in 20ms (next.js: 3ms, application-code: 17ms)
+[browser] Failed to load network graph: ApiClientError: API request failed (src/components/NetworkGraph.tsx:166:17)
+[browser] Failed to load network graph: ApiClientError: API request failed (src/components/NetworkGraph.tsx:166:17)
