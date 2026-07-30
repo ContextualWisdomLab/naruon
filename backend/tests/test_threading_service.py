@@ -181,3 +181,65 @@ def test_extract_reference_ids_normalizes_folded_whitespace_and_dedupes():
     # The first two are the same id split over a fold boundary, so only two
     # distinct references remain, in header order.
     assert extract_reference_ids(header) == ["a@x.com", "b@x.com"]
+
+
+@pytest.mark.asyncio
+async def test_multi_id_in_reply_to_threads_on_any_existing_parent():
+    # RFC 5322 section 3.6.4: In-Reply-To is 1*msg-id, so it may carry more than
+    # one parent id (a reply that joins two messages). Threading must consider
+    # every parent, not treat the whole header as one opaque id -- otherwise a
+    # multi-id In-Reply-To never matches an existing thread and the reply splits
+    # off on its own.
+    session = _SequentialSession([[("<older@example.com>", "thread-xyz")]])
+
+    thread_id = await assign_thread_id(
+        session,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": "<newer@example.com> <older@example.com>",
+            "references": None,
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert thread_id == "thread-xyz"
+
+
+@pytest.mark.asyncio
+async def test_multi_id_in_reply_to_fallback_uses_first_parent_as_root():
+    session = _SequentialSession([[]])
+
+    thread_id = await assign_thread_id(
+        session,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": "<first@example.com> <second@example.com>",
+            "references": None,
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert thread_id == "first@example.com"
+
+
+@pytest.mark.asyncio
+async def test_in_reply_to_with_cfws_comment_extracts_bare_msg_id():
+    # RFC 5322 sections 3.6.4 / 3.2.2 permit CFWS (e.g. a trailing comment) around
+    # a msg-id. The comment text must not leak into the id, or the reply is
+    # threaded/deduped against a garbage id and splits from its parent thread.
+    session = _SequentialSession([[("<parent@example.com>", "thread-123")]])
+
+    thread_id = await assign_thread_id(
+        session,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": "<parent@example.com> (sent from my phone)",
+            "references": None,
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert thread_id == "thread-123"
