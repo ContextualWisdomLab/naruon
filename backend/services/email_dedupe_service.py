@@ -1,3 +1,10 @@
+"""Email de-duplication fingerprints and the Fellegi-Sunter decision classifier.
+
+This module is the deterministic core the import/IMAP paths compose to decide
+whether an incoming email is a duplicate of a stored one, keeping strong
+(auto-merge) evidence gated on genuine Date provenance (naruon#1086).
+"""
+
 import datetime
 from dataclasses import dataclass
 from typing import Literal
@@ -17,6 +24,14 @@ DedupeDecision = Literal["auto_link", "review_required", "distinct"]
 
 @dataclass(frozen=True)
 class EmailDedupeCandidate:
+    """An incoming email reduced to the fields the dedupe decision needs.
+
+    ``date_provenance`` mirrors the parser's classification of the ``date``
+    field (``parsed`` for a genuine RFC822 Date, otherwise a synthetic
+    collection-time fallback); only ``parsed`` may seed a strong auto-dedupe
+    match (naruon#1086).
+    """
+
     candidate_key: str
     message_id: str | None = None
     sender: str | None = None
@@ -28,6 +43,7 @@ class EmailDedupeCandidate:
 
 
 def _date_to_fingerprint_value(value: datetime.datetime | None) -> str:
+    """Render a datetime as its ISO-8601 fingerprint token (``""`` when None)."""
     if value is None:
         return ""
     return value.isoformat()
@@ -40,6 +56,11 @@ def strong_email_fingerprint(
     date: datetime.datetime | None,
     body: str | None,
 ) -> str | None:
+    """Return the strong (sender+subject+Date+body) auto-dedupe fingerprint.
+
+    Requires a body; ``None`` for an empty body so bodyless rows cannot collapse
+    to a shared hash. Callers gate this on genuine Date provenance.
+    """
     if not body:
         return None
     return generate_email_fingerprint(
@@ -53,6 +74,7 @@ def strong_email_fingerprint(
 
 
 def candidate_message_lookup_values(candidate: EmailDedupeCandidate) -> set[str]:
+    """Return the bracketed and bare Message-ID lookup forms (empty if none)."""
     normalized = normalize_message_id(candidate.message_id)
     if not normalized:
         return set()
@@ -60,6 +82,7 @@ def candidate_message_lookup_values(candidate: EmailDedupeCandidate) -> set[str]
 
 
 def candidate_strong_fingerprint(candidate: EmailDedupeCandidate) -> str | None:
+    """Return the candidate's strong fingerprint (see strong_email_fingerprint)."""
     return strong_email_fingerprint(
         sender=candidate.sender,
         subject=candidate.subject,
@@ -69,10 +92,13 @@ def candidate_strong_fingerprint(candidate: EmailDedupeCandidate) -> str | None:
 
 
 def email_strong_fingerprint(email_row: Email) -> str | None:
-    # A stored row may seed a strong (auto-dedupe) fingerprint only when its
-    # date is genuinely parsed sender metadata; rows with a synthetic or
-    # unknown-provenance date are excluded so they cannot manufacture a strong
-    # duplicate match (naruon#1086).
+    """Return a stored row's strong fingerprint, gated on genuine Date provenance.
+
+    A stored row may seed a strong (auto-dedupe) fingerprint only when its date
+    is genuinely parsed sender metadata; rows with a synthetic or
+    unknown-provenance date are excluded so they cannot manufacture a strong
+    duplicate match (naruon#1086).
+    """
     if getattr(email_row, "date_provenance", None) != "parsed":
         return None
     return strong_email_fingerprint(
@@ -89,11 +115,13 @@ def content_email_fingerprint(
     subject: str | None,
     body: str | None,
 ) -> str | None:
-    # A date-independent identity signal: sender + subject + body only. Unlike
-    # the strong fingerprint it does not include the Date, so it survives an
-    # untrustworthy Date provenance (naruon#1086) and can flag a probable
-    # duplicate that the strong path deliberately withholds. Requires a body so
-    # empty-body rows cannot collapse to a shared hash.
+    """Return a Date-independent content fingerprint (sender+subject+body).
+
+    Unlike the strong fingerprint it omits the Date, so it survives an
+    untrustworthy Date provenance (naruon#1086) and can flag a probable
+    duplicate that the strong path deliberately withholds. Requires a body so
+    empty-body rows cannot collapse to a shared hash.
+    """
     if not body:
         return None
     return generate_email_fingerprint(
@@ -107,6 +135,7 @@ def content_email_fingerprint(
 
 
 def candidate_content_fingerprint(candidate: EmailDedupeCandidate) -> str | None:
+    """Return the candidate's Date-independent content fingerprint."""
     return content_email_fingerprint(
         sender=candidate.sender,
         subject=candidate.subject,
@@ -115,6 +144,7 @@ def candidate_content_fingerprint(candidate: EmailDedupeCandidate) -> str | None
 
 
 def email_content_fingerprint(email_row: Email) -> str | None:
+    """Return a stored row's Date-independent content fingerprint."""
     return content_email_fingerprint(
         sender=email_row.sender,
         subject=email_row.subject,
