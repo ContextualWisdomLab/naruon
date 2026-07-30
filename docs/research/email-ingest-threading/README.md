@@ -1,14 +1,15 @@
 # Email Ingest & Threading — Standards Basis and Design Rationale
 
-This pack grounds the RFC 5322 email-ingest correctness work on
+This pack grounds the email-ingest correctness work on
 `ContextualWisdomLab/naruon#1192`
 (`backend/services/threading_service.py`, `backend/services/email_parser.py`):
 Message-ID interior-whitespace normalization, unknown-zone (`-0000`) date
-normalization, and In-Reply-To `1*msg-id` (multi-parent + CFWS) parsing.
+normalization, In-Reply-To `1*msg-id` (multi-parent + CFWS) parsing, and
+RFC 2047 encoded-word decoding of non-ASCII display names.
 
-## Standards basis (RFC 5322, Internet Message Format)
+## Standards basis (RFC 5322 message format + RFC 2047 header encoding)
 
-Each fix is anchored to a specific clause of the message-format standard:
+Each fix is anchored to a specific clause of the relevant standard:
 
 - **Header unfolding** — RFC 5322 §2.2.3. When a folded header is rejoined,
   interior whitespace/tabs can survive. `normalize_message_id` collapses that
@@ -28,6 +29,15 @@ Each fix is anchored to a specific clause of the message-format standard:
   that case; `_extract_date` treats the unknown zone as UTC so every ingested
   date is timezone-aware and safe to sort and to store in a `timestamptz`
   column.
+- **Non-ASCII display names** — RFC 2047 (MIME Part Three) defines the
+  `=?charset?enc?text?=` encoded-word so non-ASCII text can appear in structured
+  headers. `From` / `To` / `Reply-To` display names arrive header-decoded under
+  `email.policy.default`, so `_sanitize_address_display_text` must store the
+  decoded name and must **not** re-encode it. `email.utils.formataddr` re-encodes
+  any non-ASCII display name back into an encoded-word, which stored a garbled
+  `=?utf-8?...?=` value for every non-ASCII (e.g. Korean) sender/recipient;
+  `_format_display_address` keeps the decoded name literal while preserving
+  formataddr's RFC 5322 quoting/escaping for display-name specials.
 
 ## Design rationale — header-based, precision-first threading
 
@@ -63,6 +73,9 @@ The cited papers are bookmarked in the shared alphaXiv library folder
 
 - Resnick, P. (Ed.). (2008). *Internet message format* (RFC 5322). RFC Editor.
   https://www.rfc-editor.org/rfc/rfc5322.txt
+- Moore, K. (1996). *MIME (Multipurpose Internet Mail Extensions) part three:
+  Message header extensions for non-ASCII text* (RFC 2047). RFC Editor.
+  https://www.rfc-editor.org/rfc/rfc2047.txt
 - Kooti, F., Aiello, L. M., Grbovic, M., Lerman, K., & Mantrach, A. (2015).
   *Evolution of conversations in the age of email overload* [Preprint]. arXiv.
   https://arxiv.org/abs/1504.00704
@@ -86,7 +99,8 @@ The cited papers are bookmarked in the shared alphaXiv library folder
 
 ## Governance notes
 
-- Work item: `ContextualWisdomLab/naruon#1192` (RFC 5322 email-ingest
+- Work item: `ContextualWisdomLab/naruon#1192` (RFC 5322 / RFC 2047 email-ingest
   correctness + coverage).
 - Verification: threading/parser suites pass with `--noconftest`;
-  `threading_service.py` at 100% and `email_parser.py` at 98% branch coverage.
+  `threading_service.py` at 100% and `email_parser.py` at 98% branch coverage
+  (the RFC 2047 `_format_display_address` helper is fully covered).
