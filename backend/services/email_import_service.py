@@ -3,6 +3,7 @@ import datetime
 from email import policy as email_policy
 import hashlib
 import logging
+from collections import defaultdict
 import mailbox
 import os
 import stat
@@ -575,7 +576,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
     segments_by_source: dict[
         tuple[str, str],
         list[ContentSegmentRecord],
-    ] = {}
+    ] = defaultdict(list)
     for segment in sorted(
         email_obj.content_segments,
         key=lambda item: (
@@ -585,10 +586,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             item.segment_path,
         ),
     ):
-        segments_by_source.setdefault(
-            (segment.source_kind, segment.source_record_uid),
-            [],
-        ).append(segment)
+        segments_by_source[(segment.source_kind, segment.source_record_uid)].append(segment)
         add_edge(
             edge_kind="node_has_segment",
             edge_path=f"{segment.content_node.node_path}/has/{segment.segment_path}",
