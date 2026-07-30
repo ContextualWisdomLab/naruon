@@ -95,6 +95,7 @@ async def process_fetched_email(
         recipients=recipients,
         subject=subject,
         date=persisted_date,
+        date_provenance=email_data.get("date_provenance", "unknown"),
         body=email_data.get("body", ""),
         is_read=is_read,
         embedding=[0.0] * 1536,

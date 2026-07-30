@@ -524,6 +524,45 @@ Date: not-a-real-date"""
     assert parsed["date"].tzinfo is not None
 
 
+def test_parse_eml_marks_whitespace_only_date_as_missing():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <whitespace-date@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Whitespace-only date
+Date:    """
+        )
+    )
+
+    # A Date header that is only whitespace carries no sender metadata, so it is
+    # treated as missing (not invalid) and the fallback is not promoted.
+    assert parsed["date_provenance"] == "missing"
+    assert parsed["header_date"] is None
+    assert parsed["date"].tzinfo is not None
+
+
+def test_parse_eml_normalizes_minus_zero_zone_to_utc():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <minus-zero-zone@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Minus-zero timezone
+Date: Sun, 01 Jan 2023 12:00:00 -0000"""
+        )
+    )
+
+    # RFC 5322 "-0000" ("no timezone info") makes parsedate_to_datetime return a
+    # naive datetime; the parser must normalize it to UTC so the documented
+    # timezone-aware contract holds for every parsed header.
+    assert parsed["date_provenance"] == "parsed"
+    assert parsed["header_date"] is not None
+    assert parsed["header_date"].tzinfo is not None
+    assert parsed["header_date"].utcoffset() == datetime.timedelta(0)
+    assert parsed["date"].tzinfo is not None
+
+
 def test_parse_eml_marks_embedded_message_id_provenance():
     parsed = parse_eml_bytes(
         _eml_with(

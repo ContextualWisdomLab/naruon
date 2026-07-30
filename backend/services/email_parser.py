@@ -170,6 +170,12 @@ def _extract_date_with_provenance(
 
     if header_date is None:
         return fallback, None, "invalid"
+    if header_date.tzinfo is None:
+        # ``parsedate_to_datetime`` returns a naive datetime for an RFC 5322
+        # ``-0000`` zone ("no timezone information"); normalize it to UTC so the
+        # timezone-aware contract this function documents holds for every parsed
+        # header, including ``-0000``.
+        header_date = header_date.replace(tzinfo=datetime.timezone.utc)
     return header_date, header_date, "parsed"
 
 
