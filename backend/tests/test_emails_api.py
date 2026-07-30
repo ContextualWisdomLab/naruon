@@ -938,6 +938,30 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "upload_filename",
+    [
+        "%00message.eml",
+        "%0amessage.eml",
+        "secret.eml%00.zip",
+        "payload.exe",
+    ],
+)
+async def test_import_email_files_rejects_invalid_canonical_filename(
+    client: AsyncClient,
+    upload_filename: str,
+):
+    response = await client.post(
+        "/api/emails/import-files",
+        files=[("files", (upload_filename, b"not accepted", "application/octet-stream"))],
+        headers={"X-Organization-Id": "org-acme"},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "invalid_file_type"}
+
+
+@pytest.mark.asyncio
 async def test_import_email_files_skips_duplicate_message_id(client: AsyncClient):
     from db.session import get_db
 

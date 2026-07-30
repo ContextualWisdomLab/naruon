@@ -19,7 +19,7 @@ from email import message_from_bytes, policy
 from email.parser import BytesHeaderParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from zipfile import BadZipFile, ZipFile
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +27,11 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from core.env_paths import operator_home  # noqa: E402
+from core.local_http import (  # noqa: E402
+    LocalHTTPValidationError,
+    validate_local_request_target,
+    validate_loopback_http_origin,
+)
 
 SESSION_COOKIE_NAME = "naruon_session"
 SUPPORTED_SUFFIXES = {".eml", ".emlx", ".mbox", ".zip"}
@@ -34,6 +39,81 @@ MATCH_SEPARATORS = str.maketrans("", "", " \t\r\n-_./\\()[]{}:;·ㆍ")
 SEARCH_RETRY_DEFAULT_ATTEMPTS = 3
 SEARCH_RETRY_DEFAULT_DELAY_SECONDS = 0.75
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+MAX_PRIVATE_MAIL_FILE_BYTES = 64 * 1024 * 1024
+MAX_ARCHIVE_ENTRIES = 10_000
+
+
+def _validated_operator_path(
+    path: Path,
+    *,
+    kind: str,
+    must_exist: bool,
+) -> Path:
+    home = operator_home().resolve(strict=False)
+    candidate = path.expanduser()
+    lexical_candidate = candidate if candidate.is_absolute() else Path.cwd() / candidate
+    try:
+        relative_parts = lexical_candidate.relative_to(home).parts
+    except ValueError:
+        relative_parts = ()
+    current = home
+    for part in relative_parts:
+        current /= part
+        if current.is_symlink():
+            raise SystemExit(f"{kind}_symlink_not_allowed")
+    try:
+        resolved = candidate.resolve(strict=must_exist)
+    except OSError as exc:
+        raise SystemExit(f"{kind}_invalid") from exc
+    if not resolved.is_relative_to(home):
+        raise SystemExit(f"{kind}_outside_operator_home")
+    if must_exist and not resolved.is_dir():
+        raise SystemExit(f"{kind}_missing")
+    return resolved
+
+
+def _validated_cache_directory() -> Path:
+    home = operator_home()
+    lexical_cache_root = home / ".cache" / "naruon"
+    if (home / ".cache").is_symlink() or lexical_cache_root.is_symlink():
+        raise SystemExit("private_mail_cache_root_invalid")
+    cache_root = lexical_cache_root.resolve(strict=False)
+    if not cache_root.is_relative_to(home):
+        raise SystemExit("private_mail_cache_root_invalid")
+    configured = os.environ.get("NARUON_PRIVATE_MAIL_CACHE")
+    if configured not in {None, "", "default"}:
+        raise SystemExit("private_mail_cache_profile_invalid")
+    candidate = cache_root / "private-mail-upload-cache"
+    if candidate.is_symlink():
+        raise SystemExit("private_mail_cache_symlink_not_allowed")
+    resolved = candidate.resolve(strict=False)
+    if not resolved.is_relative_to(cache_root):
+        raise SystemExit("private_mail_cache_outside_naruon_cache")
+    cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if cache_root.is_symlink() or not cache_root.is_dir():
+        raise SystemExit("private_mail_cache_root_invalid")
+    resolved.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if resolved.is_symlink() or not resolved.is_dir():
+        raise SystemExit("private_mail_cache_invalid")
+    return resolved
+
+
+def _validated_local_base_url(base_url: str) -> tuple[str, str, int]:
+    try:
+        validated = validate_loopback_http_origin(base_url)
+    except LocalHTTPValidationError as exc:
+        raise SystemExit(str(exc)) from exc
+    return validated.origin, validated.hostname, validated.port
+
+
+def _validated_request_target(path: str) -> str:
+    try:
+        return validate_local_request_target(
+            path,
+            allowed_exact_paths=frozenset({"/auth/session"}),
+        )
+    except LocalHTTPValidationError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _b64_json(value: dict[str, object]) -> str:
@@ -62,8 +142,7 @@ def _signed_token(secret: str) -> str:
 
 
 def _private_files(mail_dir: Path, limit: int) -> list[Path]:
-    if not mail_dir.is_dir():
-        raise SystemExit("mail_dir_missing")
+    mail_dir = _validated_operator_path(mail_dir, kind="mail_dir", must_exist=True)
     try:
         next(mail_dir.iterdir(), None)
     except PermissionError as exc:
@@ -73,12 +152,27 @@ def _private_files(mail_dir: Path, limit: int) -> list[Path]:
 
     picked: list[Path] = []
     for root, dirs, files in os.walk(mail_dir, followlinks=False):
-        dirs[:] = [item for item in dirs if not item.startswith(".")]
+        root_path = Path(root).resolve(strict=True)
+        if not root_path.is_relative_to(mail_dir):
+            raise SystemExit("mail_path_outside_mail_dir")
+        dirs[:] = [
+            item
+            for item in dirs
+            if not item.startswith(".") and not (root_path / item).is_symlink()
+        ]
         for name in sorted(files):
-            path = Path(root, name)
+            candidate = root_path / name
+            if candidate.is_symlink():
+                continue
+            try:
+                path = candidate.resolve(strict=True)
+            except OSError:
+                continue
+            if not path.is_relative_to(mail_dir):
+                raise SystemExit("mail_path_outside_mail_dir")
             if path.suffix.lower() not in SUPPORTED_SUFFIXES:
                 continue
-            if not path.is_file() or path.is_symlink():
+            if not path.is_file() or path.stat().st_size > MAX_PRIVATE_MAIL_FILE_BYTES:
                 continue
             picked.append(path)
             if len(picked) >= limit:
@@ -104,8 +198,7 @@ def _header_text(raw: bytes) -> str:
     except Exception:
         return ""
     return "\n".join(
-        str(msg.get(name, ""))
-        for name in ("Subject", "From", "To", "Cc", "Date")
+        str(msg.get(name, "")) for name in ("Subject", "From", "To", "Cc", "Date")
     )
 
 
@@ -119,13 +212,15 @@ def _message_text(raw: bytes, max_parse_bytes: int) -> str:
     except Exception:
         return "\n".join(parts)
 
-    parts.extend([
-        str(msg.get("Subject", "")),
-        str(msg.get("From", "")),
-        str(msg.get("To", "")),
-        str(msg.get("Cc", "")),
-        str(msg.get("Date", "")),
-    ])
+    parts.extend(
+        [
+            str(msg.get("Subject", "")),
+            str(msg.get("From", "")),
+            str(msg.get("To", "")),
+            str(msg.get("Cc", "")),
+            str(msg.get("Date", "")),
+        ]
+    )
     if msg.is_multipart():
         for part in msg.walk():
             filename = part.get_filename()
@@ -224,6 +319,8 @@ def _selected_upload_files(
         def add_raw(raw: bytes) -> None:
             if len(selected) >= limit:
                 return
+            if len(raw) > MAX_PRIVATE_MAIL_FILE_BYTES:
+                return
             path = temp_dir / f"hit_{len(selected) + 1:03d}.eml"
             path.write_bytes(raw)
             selected.append(path)
@@ -264,11 +361,18 @@ def _selected_upload_files(
                 except (OSError, BadZipFile):
                     continue
                 with archive:
-                    for info in archive.infolist():
+                    entries = archive.infolist()
+                    if len(entries) > MAX_ARCHIVE_ENTRIES:
+                        continue
+                    for info in entries:
                         if len(selected) >= limit:
                             break
                         entry_suffix = Path(info.filename).suffix.lower()
-                        if info.is_dir() or entry_suffix not in {".eml", ".emlx"}:
+                        if (
+                            info.is_dir()
+                            or entry_suffix not in {".eml", ".emlx"}
+                            or info.file_size > MAX_PRIVATE_MAIL_FILE_BYTES
+                        ):
                             continue
                         try:
                             raw = archive.read(info)
@@ -282,19 +386,10 @@ def _selected_upload_files(
                             add_raw(raw)
 
         persistent: list[Path] = []
-        final_dir = Path(
-            os.environ.get(
-                "NARUON_PRIVATE_MAIL_CACHE",
-                str(
-                    operator_home()
-                    / ".cache"
-                    / "naruon"
-                    / "private-mail-upload-cache"
-                ),
-            )
-        )
-        final_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        final_dir = _validated_cache_directory()
         for old_hit in final_dir.glob("hit_*.eml"):
+            if old_hit.is_symlink() or not old_hit.is_file():
+                raise SystemExit("private_mail_cache_entry_invalid")
             old_hit.unlink()
         for index, path in enumerate(selected, start=1):
             final_path = final_dir / f"hit_{index:03d}.eml"
@@ -315,26 +410,30 @@ def _request(
     timeout: float = 120.0,
     use_cookie_only: bool = False,
 ) -> tuple[int, bytes]:
-    parsed = urlsplit(base_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise SystemExit("base-url must be http(s)")
-    cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
-    conn = cls(parsed.hostname, parsed.port, timeout=timeout)
+    origin, hostname, port = _validated_local_base_url(base_url)
+    request_target = _validated_request_target(path)
+    scheme = urlsplit(origin).scheme
+    cls = (
+        http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
+    )
+    conn = cls(hostname, port, timeout=timeout)
     headers = {
         "Cookie": f"{SESSION_COOKIE_NAME}={token}",
-        "Origin": base_url,
-        "Referer": f"{base_url}/",
+        "Origin": origin,
+        "Referer": f"{origin}/",
     }
     if not use_cookie_only:
         headers["Authorization"] = f"Bearer {token}"
     if content_type:
         headers["Content-Type"] = content_type
     try:
-        conn.request(method, path, body=body, headers=headers)
+        conn.request(method, request_target, body=body, headers=headers)
         resp = conn.getresponse()
         return resp.status, resp.read()
-    except OSError as exc:
-        raise _RequestNetworkError(f"request transport error to {base_url}: {exc}") from exc
+    except (OSError, http.client.HTTPException) as exc:
+        raise _RequestNetworkError(
+            "request transport error to local Naruon endpoint"
+        ) from exc
     finally:
         conn.close()
 
@@ -636,8 +735,7 @@ def _print_session_sync_hints(base_url: str, token: str, *, enabled: bool) -> No
         return
 
     print(
-        "session_token="
-        + token,
+        "session_token=" + token,
     )
     print("브라우저 동일 세션 동기화 방법:")
     print(
@@ -681,7 +779,9 @@ def _print_session_check_summary(claims: dict[str, object] | None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mail-dir", required=True, type=Path)
-    parser.add_argument("--base-url", default=os.environ.get("LIVE_BASE_URL", "http://127.0.0.1:18080"))
+    parser.add_argument(
+        "--base-url", default=os.environ.get("LIVE_BASE_URL", "http://127.0.0.1:18080")
+    )
     parser.add_argument(
         "--api-base-url",
         help="Optional override when frontend and backend ports differ",
@@ -690,20 +790,26 @@ def main() -> None:
         "--frontend-base-url",
         help="Optional override when frontend and backend ports differ",
     )
-    parser.add_argument("--session-secret", default=os.environ.get("LIVE_E2E_SESSION_SECRET", ""))
+    parser.add_argument(
+        "--session-secret", default=os.environ.get("LIVE_E2E_SESSION_SECRET", "")
+    )
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=10)
     parser.add_argument("--query", action="append", default=[])
     parser.add_argument("--match-mode", choices=["exact", "all-terms"], default="exact")
     parser.add_argument("--llm-smoke", action="store_true")
     parser.add_argument("--print-session-token", action="store_true")
-    parser.add_argument("--search-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS)
+    parser.add_argument(
+        "--search-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS
+    )
     parser.add_argument(
         "--search-retry-delay-seconds",
         type=float,
         default=SEARCH_RETRY_DEFAULT_DELAY_SECONDS,
     )
-    parser.add_argument("--inbox-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS)
+    parser.add_argument(
+        "--inbox-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS
+    )
     parser.add_argument(
         "--inbox-retry-delay-seconds",
         type=float,
@@ -739,7 +845,9 @@ def main() -> None:
         progress_every=max(0, args.progress_every),
     )
     if not files:
-        raise SystemExit("no matching supported .eml/.mbox/.zip messages found or directory is not readable")
+        raise SystemExit(
+            "no matching supported .eml/.mbox/.zip messages found or directory is not readable"
+        )
 
     try:
         token = _signed_token(args.session_secret)
@@ -777,7 +885,9 @@ def main() -> None:
             limit=api_limit,
             min_count=visible_min_count,
             attempts=args.inbox_retry_attempts if expected_min_count > 0 else 1,
-            delay_seconds=args.inbox_retry_delay_seconds if expected_min_count > 0 else 0.0,
+            delay_seconds=args.inbox_retry_delay_seconds
+            if expected_min_count > 0
+            else 0.0,
             timeout=120.0,
         )
         frontend_inbox_count = 0
@@ -858,7 +968,10 @@ def main() -> None:
                 if isinstance(candidate, dict):
                     target_id = candidate.get("id")
         if args.llm_smoke and target_id is not None:
-            status, raw = _request(api_base_url, token, "GET", f"/api/emails/{target_id}")
+            safe_target_id = quote(str(target_id), safe="")
+            status, raw = _request(
+                api_base_url, token, "GET", f"/api/emails/{safe_target_id}"
+            )
             detail = _json_or_empty(status, raw)
             body_text = str(detail.get("body", ""))
             summary = _post_json(
