@@ -136,6 +136,14 @@ def _extract_date(msg: Message) -> datetime.datetime:
 
     if not parsed_date:
         parsed_date = datetime.datetime.now(datetime.timezone.utc)
+    elif parsed_date.tzinfo is None:
+        # RFC 5322 section 3.3: a "-0000" zone means the time zone is unknown,
+        # for which parsedate_to_datetime returns a naive datetime. Every other
+        # branch here yields a timezone-aware datetime, and mixing naive with
+        # aware datetimes raises TypeError on comparison/sorting and misbinds the
+        # instant when stored in a timestamptz column. Treat the unknown zone as
+        # UTC so the returned value is always timezone-aware.
+        parsed_date = parsed_date.replace(tzinfo=datetime.timezone.utc)
     return parsed_date
 
 

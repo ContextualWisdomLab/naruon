@@ -325,6 +325,33 @@ Test."""
         os.unlink(temp_path2)
 
 
+def test_parse_eml_unknown_timezone_date_is_timezone_aware():
+    # RFC 5322 section 3.3: a "-0000" zone means the time zone is unknown, for
+    # which parsedate_to_datetime returns a *naive* datetime. Every other parse
+    # path yields an aware datetime, so the parser must normalize this to aware
+    # too -- otherwise sorting/comparing it against another message's date raises
+    # "can't compare offset-naive and offset-aware datetimes" and it misbinds the
+    # instant in a timestamptz column.
+    eml_content = b"""Message-ID: <unknownzone@test.com>
+From: test@test.com
+To: recipient@test.com
+Subject: Unknown zone
+Date: Mon, 27 Apr 2026 10:00:00 -0000
+
+Test."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
+        f.write(eml_content)
+        temp_path = f.name
+
+    try:
+        parsed = parse_eml(temp_path)
+        assert parsed["date"].tzinfo is not None
+        # must not raise offset-naive/aware TypeError
+        assert parsed["date"] <= datetime.datetime.now(datetime.timezone.utc)
+    finally:
+        os.unlink(temp_path)
+
+
 def test_parse_eml_io_error():
     with pytest.raises(EmailParseError):
         parse_eml("/path/to/nonexistent/file.eml")
