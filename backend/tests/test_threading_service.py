@@ -1,6 +1,10 @@
 import pytest
 
-from services.threading_service import assign_thread_id
+from services.threading_service import (
+    assign_thread_id,
+    extract_reference_ids,
+    normalize_message_id,
+)
 
 
 class _Result:
@@ -143,3 +147,37 @@ async def test_existing_thread_lookup_is_scoped_to_owner_and_organization():
     query_text = str(session.queries[-1]).lower()
     assert "email_records.user_id" in query_text
     assert "email_records.organization_id" in query_text
+
+
+def test_normalize_message_id_strips_brackets_and_outer_whitespace():
+    assert normalize_message_id("<abc@example.com>") == "abc@example.com"
+    assert normalize_message_id("  <abc@example.com>  ") == "abc@example.com"
+    assert normalize_message_id("< abc@example.com >") == "abc@example.com"
+    assert normalize_message_id("<<abc@example.com>>") == "abc@example.com"
+    assert normalize_message_id("abc@example.com") == "abc@example.com"
+
+
+def test_normalize_message_id_handles_empty_and_none():
+    assert normalize_message_id(None) is None
+    assert normalize_message_id("") is None
+    assert normalize_message_id("   ") is None
+    assert normalize_message_id("<>") is None
+
+
+def test_normalize_message_id_collapses_interior_unfolding_whitespace():
+    # RFC 5322 section 2.2.3 header unfolding can leave interior whitespace when
+    # a folded Message-ID is rejoined; RFC 5322 section 3.6.4 msg-id carries
+    # none, so the folded and unfolded forms must normalize to the same value or
+    # dedup/threading would treat one message as two.
+    canonical = normalize_message_id("<abc@example.com>")
+    assert normalize_message_id("<abc@ example.com>") == canonical
+    assert normalize_message_id("<abc @example.com>") == canonical
+    assert normalize_message_id("<abc@\r\n example.com>") == canonical
+    assert normalize_message_id("<abc@\texample.com>") == canonical
+
+
+def test_extract_reference_ids_normalizes_folded_whitespace_and_dedupes():
+    header = "<a@x.com> <a@ x.com>\r\n <b@x.com>"
+    # The first two are the same id split over a fold boundary, so only two
+    # distinct references remain, in header order.
+    assert extract_reference_ids(header) == ["a@x.com", "b@x.com"]

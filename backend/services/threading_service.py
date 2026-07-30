@@ -31,11 +31,20 @@ def generate_email_fingerprint(
 
 
 def normalize_message_id(value: str | None) -> str | None:
-    """Return the canonical persisted form for a Message-ID-like header."""
+    """Return the canonical persisted form for a Message-ID-like header.
+
+    A Message-ID (RFC 5322 section 3.6.4) carries no interior whitespace, but
+    header unfolding (RFC 5322 section 2.2.3) can leave interior spaces or tabs
+    when a folded header is rejoined -- e.g. ``<abc@\\r\\n example.com>`` unfolds
+    to ``<abc@ example.com>``. Collapsing all interior whitespace keeps the
+    folded and unfolded forms of the same Message-ID equal, so de-duplication
+    and threading never split one message into two over a fold boundary.
+    """
     if value is None:
         return None
 
-    normalized = str(value).strip().strip("<>").strip()
+    stripped = str(value).strip().strip("<>")
+    normalized = "".join(stripped.split())
     return normalized or None
 
 
