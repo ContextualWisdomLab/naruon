@@ -1,3 +1,4 @@
+import base64
 import datetime
 import os
 import tempfile
@@ -8,6 +9,7 @@ import pytest
 from services.email_parser import (
     _attachment_part_content,
     _extract_thread_id,
+    _format_display_address,
     _sanitize_address_display_text,
     _sanitize_nul,
     parse_eml,
@@ -114,6 +116,79 @@ Plain body"""
         assert parsed["reply_to"] == "reply@test.com"
     finally:
         os.unlink(temp_path)
+
+
+def test_parse_eml_stores_non_ascii_display_names_decoded():
+    # RFC 2047: non-ASCII From/To/Reply-To display names arrive as encoded-words
+    # (e.g. =?UTF-8?B?...?=). policy.default header-decodes them; the stored
+    # display fields must keep the decoded text rather than re-encoding it back
+    # into an encoded-word (formataddr's behavior), which would render every
+    # non-ASCII sender/recipient as garbled =?utf-8?...?= bytes in the UI.
+    from_name = "박성호"
+    to_name = "김천"
+    reply_name = "응답"
+    subject_text = "회 테스트"
+
+    def encoded_word(text: str) -> bytes:
+        token = base64.b64encode(text.encode("utf-8")).decode("ascii")
+        return f"=?UTF-8?B?{token}?=".encode("ascii")
+
+    eml_content = (
+        b"Message-ID: <i18n@test.com>\r\n"
+        b"From: " + encoded_word(from_name) + b" <sender@example.com>\r\n"
+        b"To: " + encoded_word(to_name) + b" <recipient@test.com>\r\n"
+        b"Reply-To: " + encoded_word(reply_name) + b" <reply@test.com>\r\n"
+        b"Subject: " + encoded_word(subject_text) + b"\r\n"
+        b"Date: Mon, 27 Apr 2026 10:00:00 +0000\r\n"
+        b"\r\n"
+        b"Plain body"
+    )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
+        f.write(eml_content)
+        temp_path = f.name
+
+    try:
+        parsed = parse_eml(temp_path)
+        assert parsed["sender"] == f"{from_name} <sender@example.com>"
+        assert parsed["recipients"] == f"{to_name} <recipient@test.com>"
+        assert parsed["reply_to"] == f"{reply_name} <reply@test.com>"
+        assert parsed["subject"] == subject_text
+        assert "=?" not in parsed["sender"]
+        assert "=?" not in parsed["recipients"]
+    finally:
+        os.unlink(temp_path)
+
+
+def test_sanitize_address_display_text_keeps_decoded_unicode_and_quotes_specials():
+    # A decoded non-ASCII name stays literal (formataddr would re-encode it).
+    assert (
+        _sanitize_address_display_text("박성호 <sender@example.com>")
+        == "박성호 <sender@example.com>"
+    )
+    # A display name containing an RFC 5322 special is quoted so a ", "-joined
+    # multi-address value stays unambiguous.
+    assert (
+        _sanitize_address_display_text('"Doe, John" <j@x.com>')
+        == '"Doe, John" <j@x.com>'
+    )
+    # Multiple addresses with mixed scripts are each formatted and comma-joined.
+    assert (
+        _sanitize_address_display_text("박성호 <a@x.com>, Bob <b@x.com>")
+        == "박성호 <a@x.com>, Bob <b@x.com>"
+    )
+
+
+def test_format_display_address_escapes_quotes_and_handles_empty_name():
+    # No display name -> bare address.
+    assert _format_display_address("", "a@x.com") == "a@x.com"
+    # Non-ASCII name kept literal.
+    assert _format_display_address("박성호", "s@x.com") == "박성호 <s@x.com>"
+    # Embedded quotes/backslashes are escaped inside the quoted-string, matching
+    # email.utils.formataddr's escaping.
+    assert (
+        _format_display_address('Fancy "Q"', "q@x.com") == '"Fancy \\"Q\\"" <q@x.com>'
+    )
 
 
 def test_parse_eml_strips_active_html_from_attachment_display_fields():
