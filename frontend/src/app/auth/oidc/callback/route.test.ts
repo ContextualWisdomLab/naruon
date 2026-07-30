@@ -106,7 +106,7 @@ describe("/auth/oidc/callback route", () => {
     expect(setCookie).toContain("Max-Age=0");
     expect(setCookie).not.toContain("verifier-123");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(httpsRequestMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+    expect(httpsRequestMock.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
       agent: false,
       method: "GET",
       servername: "api.naruon.net",

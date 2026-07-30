@@ -83,10 +83,11 @@ describe("/api runtime proxy route", () => {
       request_body: '{"state":"open"}',
     });
     expect(httpsRequestMock).toHaveBeenCalledWith(
-      expect.any(URL),
       expect.objectContaining({
         agent: false,
-        lookup: expect.any(Function),
+        family: 4,
+        hostname: "8.8.8.8",
+        path: "/api/tasks?limit=1",
         servername: "api.naruon.net",
       }),
       expect.any(Function),

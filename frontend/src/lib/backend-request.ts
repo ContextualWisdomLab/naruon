@@ -6,7 +6,7 @@ import {
   type RequestOptions,
 } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { BlockList, isIP, type LookupFunction } from "node:net";
+import { BlockList, isIP } from "node:net";
 import { Readable } from "node:stream";
 
 import { trustedBackendOrigin } from "@/lib/backend-url";
@@ -210,54 +210,6 @@ export async function resolveBackendAddresses(
   );
 }
 
-export function createPinnedBackendLookup(
-  expectedHostname: string,
-  addresses: readonly BackendResolvedAddress[],
-): LookupFunction {
-  if (addresses.length === 0) {
-    throw new Error("Backend origin requires a pinned IP address");
-  }
-
-  return ((
-    hostname: string,
-    options: unknown,
-    callback: (...args: unknown[]) => void,
-  ) => {
-    if (normalizeHostname(hostname) !== normalizeHostname(expectedHostname)) {
-      callback(
-        new Error("Backend pinned lookup rejected an unexpected hostname"),
-      );
-      return;
-    }
-    const requestedFamily =
-      typeof options === "object" &&
-      options !== null &&
-      "family" in options &&
-      (options.family === 4 || options.family === 6)
-        ? options.family
-        : 0;
-    const eligible = addresses.filter(
-      ({ family }) => requestedFamily === 0 || family === requestedFamily,
-    );
-    if (eligible.length === 0) {
-      callback(
-        new Error("Backend origin has no address in the requested family"),
-      );
-      return;
-    }
-    const wantsAll =
-      typeof options === "object" &&
-      options !== null &&
-      "all" in options &&
-      options.all === true;
-    if (wantsAll) {
-      callback(null, eligible);
-      return;
-    }
-    callback(null, eligible[0].address, eligible[0].family);
-  }) as LookupFunction;
-}
-
 function assertTrustedTarget(target: URL): void {
   const trustedOrigin = trustedBackendOrigin();
   if (
@@ -326,18 +278,25 @@ function endRequest(
 function performPinnedRequest(
   target: URL,
   init: RequestInit,
-  lookup: LookupFunction,
+  address: BackendResolvedAddress,
 ): Promise<Response> {
   if (init.redirect !== undefined && init.redirect !== "manual") {
     throw new Error("Trusted backend redirects must be handled manually");
   }
 
   const method = (init.method ?? "GET").toUpperCase();
+  const headers = outgoingHeaders(init.headers);
+  // Never let a caller select a different virtual host on the pinned backend.
+  headers.host = target.host;
   const requestOptions: RequestOptions = {
     agent: false,
-    headers: outgoingHeaders(init.headers),
-    lookup,
+    family: address.family,
+    headers,
+    hostname: address.address,
     method,
+    path: `${target.pathname}${target.search}`,
+    port: target.port || undefined,
+    protocol: target.protocol,
     signal: init.signal ?? undefined,
   };
 
@@ -368,7 +327,6 @@ function performPinnedRequest(
     const request =
       target.protocol === "https:"
         ? httpsRequest(
-            target,
             {
               ...requestOptions,
               servername: isIP(normalizeHostname(target))
@@ -377,7 +335,7 @@ function performPinnedRequest(
             },
             handleResponse,
           )
-        : httpRequest(target, requestOptions, handleResponse);
+        : httpRequest(requestOptions, handleResponse);
     request.once("error", reject);
 
     try {
@@ -395,13 +353,10 @@ export async function fetchTrustedBackend(
 ): Promise<Response> {
   assertTrustedTarget(target);
   const addresses = await resolveBackendAddresses(target);
-  const hostname = normalizeHostname(target);
-  // A one-shot Node request cannot reuse a socket opened outside this policy.
-  // Its lookup callback can return only the addresses validated above, while
-  // the original URL preserves the Host header and HTTPS SNI hostname.
-  return performPinnedRequest(
-    target,
-    init,
-    createPinnedBackendLookup(hostname, addresses),
-  );
+  const address =
+    addresses.find(({ family }) => family === 4) ?? addresses[0]!;
+  // Connect directly to the validated literal address. Host and SNI retain the
+  // configured authority, while no second DNS lookup or URL-derived hostname
+  // can redirect the socket.
+  return performPinnedRequest(target, init, address);
 }

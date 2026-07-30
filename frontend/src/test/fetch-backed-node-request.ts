@@ -13,10 +13,20 @@ type ResponseHandler = (response: IncomingMessage) => void;
  */
 export function createFetchBackedNodeRequest() {
   return (
-    target: URL,
     options: RequestOptions,
     handleResponse: ResponseHandler,
   ): ClientRequest => {
+    const headers = new Headers(options.headers as HeadersInit);
+    const authority =
+      headers.get("host") ??
+      `${String(options.hostname ?? "")}${
+        options.port ? `:${String(options.port)}` : ""
+      }`;
+    const target = new URL(
+      `${String(options.protocol ?? "http:")}//${authority}${String(
+        options.path ?? "/",
+      )}`,
+    );
     const events = new EventEmitter();
     const request = events as unknown as ClientRequest;
     let destroyed = false;
@@ -33,7 +43,7 @@ export function createFetchBackedNodeRequest() {
         .then(() =>
           globalThis.fetch(target, {
             body: body as BodyInit | undefined,
-            headers: new Headers(options.headers as HeadersInit),
+            headers,
             method: options.method,
             signal: options.signal,
           }),

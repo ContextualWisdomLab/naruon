@@ -109,10 +109,11 @@ describe("/auth/session route", () => {
     expect(setCookie).not.toContain("attacker-fixed-session");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(httpsRequestMock).toHaveBeenCalledWith(
-      expect.any(URL),
       expect.objectContaining({
         agent: false,
-        lookup: expect.any(Function),
+        family: 4,
+        hostname: "8.8.8.8",
+        path: "/api/auth/session",
         servername: "api.naruon.net",
       }),
       expect.any(Function),
@@ -341,7 +342,7 @@ describe("/auth/session route", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [input] = fetchMock.mock.calls[0];
     expect(String(input)).toBe("http://127.0.0.1:8000/api/auth/session");
-    expect(httpRequestMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+    expect(httpRequestMock.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
       agent: false,
       method: "GET",
       signal: expect.any(AbortSignal),
@@ -386,7 +387,7 @@ describe("/auth/session route", () => {
     expect(String(input)).toBe(
       "https://[2001:4860:4860::8888]:8443/api/auth/session",
     );
-    expect(httpsRequestMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+    expect(httpsRequestMock.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
       agent: false,
       method: "GET",
       servername: undefined,

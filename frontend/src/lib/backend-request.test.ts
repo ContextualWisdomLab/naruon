@@ -3,7 +3,6 @@ import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  createPinnedBackendLookup,
   fetchTrustedBackend,
   resolveBackendAddresses,
   type BackendDnsLookup,
@@ -217,148 +216,6 @@ describe("backend destination pinning", () => {
     await rejection;
   });
 
-  it("returns only prevalidated addresses and rejects another hostname", async () => {
-    const pinnedLookup = createPinnedBackendLookup(
-      "api.naruon.net",
-      [{ address: "8.8.8.8", family: 4 }],
-    );
-    const invokeLookup = pinnedLookup as unknown as (
-      hostname: string,
-      options: { all: false; family: number },
-      callback: (
-        error: Error | null,
-        address: string,
-        family: number,
-      ) => void,
-    ) => void;
-
-    await expect(
-      new Promise<{ address: string; family: number }>((resolve, reject) => {
-        invokeLookup(
-          "api.naruon.net",
-          { all: false, family: 0 },
-          (error, address, family) => {
-            if (error) reject(error);
-            else resolve({ address, family });
-          },
-        );
-      }),
-    ).resolves.toEqual({ address: "8.8.8.8", family: 4 });
-
-    await expect(
-      new Promise<void>((resolve, reject) => {
-        invokeLookup(
-          "attacker.example",
-          { all: false, family: 0 },
-          (error) => {
-            if (error) reject(error);
-            else resolve();
-          },
-        );
-      }),
-    ).rejects.toThrow("unexpected hostname");
-  });
-
-  it("supports all-address lookup and rejects empty or unavailable families", async () => {
-    expect(() => createPinnedBackendLookup("api.naruon.net", [])).toThrow(
-      "requires a pinned IP address",
-    );
-
-    const pinnedLookup = createPinnedBackendLookup("api.naruon.net", [
-      { address: "8.8.8.8", family: 4 },
-      { address: "2001:4860:4860::8888", family: 6 },
-    ]) as unknown as (
-      hostname: string,
-      options: unknown,
-      callback: (...args: unknown[]) => void,
-    ) => void;
-
-    await expect(
-      new Promise<readonly { address: string; family: number }[]>(
-        (resolve, reject) => {
-          pinnedLookup(
-            "api.naruon.net",
-            { all: true, family: 6 },
-            (error, addresses) => {
-              if (error) reject(error);
-              else
-                resolve(
-                  addresses as readonly { address: string; family: number }[],
-                );
-            },
-          );
-        },
-      ),
-    ).resolves.toEqual([
-      { address: "2001:4860:4860::8888", family: 6 },
-    ]);
-
-    await expect(
-      new Promise<void>((resolve, reject) => {
-        pinnedLookup(
-          "api.naruon.net",
-          { all: false, family: 5 },
-          (error) => {
-            if (error) reject(error);
-            else resolve();
-          },
-        );
-      }),
-    ).resolves.toBeUndefined();
-
-    const ipv4OnlyLookup = createPinnedBackendLookup("api.naruon.net", [
-      { address: "8.8.8.8", family: 4 },
-    ]) as unknown as (
-      hostname: string,
-      options: unknown,
-      callback: (...args: unknown[]) => void,
-    ) => void;
-    await expect(
-      new Promise<void>((resolve, reject) => {
-        ipv4OnlyLookup(
-          "api.naruon.net",
-          { all: false, family: 6 },
-          (error) => {
-            if (error) reject(error);
-            else resolve();
-          },
-        );
-      }),
-    ).rejects.toThrow("no address in the requested family");
-  });
-
-  it("normalizes bracketed IPv6 hostnames in the pinned lookup", async () => {
-    const pinnedLookup = createPinnedBackendLookup(
-      "2001:4860:4860::8888",
-      [{ address: "2001:4860:4860::8888", family: 6 }],
-    );
-    const invokeLookup = pinnedLookup as unknown as (
-      hostname: string,
-      options: { all: false; family: number },
-      callback: (
-        error: Error | null,
-        address: string,
-        family: number,
-      ) => void,
-    ) => void;
-
-    await expect(
-      new Promise<{ address: string; family: number }>((resolve, reject) => {
-        invokeLookup(
-          "[2001:4860:4860::8888]",
-          { all: false, family: 6 },
-          (error, address, family) => {
-            if (error) reject(error);
-            else resolve({ address, family });
-          },
-        );
-      }),
-    ).resolves.toEqual({
-      address: "2001:4860:4860::8888",
-      family: 6,
-    });
-  });
-
   it.each([
     "https://other.example/api/tasks",
     "https://user@api.naruon.net/api/tasks",
@@ -375,14 +232,14 @@ describe("backend destination pinning", () => {
   });
 
   it("wires validated DNS answers into a one-shot HTTPS request", async () => {
-    vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
+    vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net:8443");
     systemLookupMock.mockResolvedValue([
       { address: "8.8.8.8", family: 4 },
       { address: "2001:4860:4860::8888", family: 6 },
     ]);
     const requestEnd = vi.fn();
     const requestOnce = vi.fn();
-    httpsRequestMock.mockImplementation((_target, _options, callback) => {
+    httpsRequestMock.mockImplementation((_options, callback) => {
       const incoming = Readable.from([]) as Readable & {
         rawHeaders: string[];
         statusCode: number;
@@ -398,10 +255,15 @@ describe("backend destination pinning", () => {
         once: requestOnce,
       };
     });
-    const target = new URL("https://api.naruon.net/api/tasks");
+    const target = new URL(
+      "https://api.naruon.net:8443/api/tasks?state=ready",
+    );
 
     const response = await fetchTrustedBackend(target, {
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        Host: "attacker.example",
+      },
       redirect: "manual",
     });
 
@@ -410,21 +272,31 @@ describe("backend destination pinning", () => {
       verbatim: true,
     });
     expect(httpsRequestMock).toHaveBeenCalledOnce();
-    const [fetchedTarget, requestOptions] = httpsRequestMock.mock.calls[0] as [
-      URL,
+    const [requestOptions] = httpsRequestMock.mock.calls[0] as [
       {
         agent: boolean;
+        family: number;
         headers: Record<string, string>;
-        lookup: ReturnType<typeof createPinnedBackendLookup>;
+        hostname: string;
         method: string;
+        path: string;
+        port: string;
+        protocol: string;
         servername: string;
       },
     ];
-    expect(fetchedTarget).toBe(target);
     expect(requestOptions).toMatchObject({
       agent: false,
-      headers: { accept: "application/json" },
+      family: 4,
+      headers: {
+        accept: "application/json",
+        host: "api.naruon.net:8443",
+      },
+      hostname: "8.8.8.8",
       method: "GET",
+      path: "/api/tasks?state=ready",
+      port: "8443",
+      protocol: "https:",
       servername: "api.naruon.net",
     });
     expect(requestEnd).toHaveBeenCalledWith();
@@ -432,27 +304,43 @@ describe("backend destination pinning", () => {
     expect(response.status).toBe(204);
     expect(response.headers.get("x-backend")).toBe("pinned");
 
-    const invokeLookup = requestOptions.lookup as unknown as (
-      hostname: string,
-      options: { all: false; family: number },
-      callback: (
-        error: Error | null,
-        address: string,
-        family: number,
-      ) => void,
-    ) => void;
-    await expect(
-      new Promise<{ address: string; family: number }>((resolve, reject) => {
-        invokeLookup(
-          "api.naruon.net",
-          { all: false, family: 0 },
-          (error, address, family) => {
-            if (error) reject(error);
-            else resolve({ address, family });
-          },
-        );
-      }),
-    ).resolves.toEqual({ address: "8.8.8.8", family: 4 });
+  });
+
+  it("uses a validated IPv6 literal when no IPv4 answer exists", async () => {
+    vi.stubEnv("BACKEND_INTERNAL_URL", "https://api.naruon.net");
+    systemLookupMock.mockResolvedValue([
+      { address: "2001:4860:4860::8888", family: 6 },
+    ]);
+    httpsRequestMock.mockImplementation((_options, callback) => {
+      const incoming = Readable.from([]) as Readable & {
+        rawHeaders: string[];
+        statusCode: number;
+        statusMessage: string;
+      };
+      incoming.rawHeaders = [];
+      incoming.statusCode = 204;
+      incoming.statusMessage = "No Content";
+      callback(incoming);
+      return {
+        destroy: vi.fn(),
+        end: vi.fn(),
+        once: vi.fn(),
+      };
+    });
+
+    await fetchTrustedBackend(
+      new URL("https://api.naruon.net/api/tasks"),
+      { redirect: "manual" },
+    );
+
+    expect(httpsRequestMock.mock.calls[0]?.[0]).toMatchObject({
+      family: 6,
+      headers: { host: "api.naruon.net" },
+      hostname: "2001:4860:4860::8888",
+      path: "/api/tasks",
+      protocol: "https:",
+      servername: "api.naruon.net",
+    });
   });
 
   it("uses the HTTP transport for Compose and preserves an empty status text", async () => {
@@ -462,7 +350,7 @@ describe("backend destination pinning", () => {
       { address: "172.18.0.4", family: 4 },
     ]);
     const requestEnd = vi.fn();
-    httpRequestMock.mockImplementation((_target, _options, callback) => {
+    httpRequestMock.mockImplementation((_options, callback) => {
       const incoming = Readable.from([]) as Readable & {
         rawHeaders: string[];
         statusCode: number;
@@ -489,6 +377,14 @@ describe("backend destination pinning", () => {
 
     expect(httpRequestMock).toHaveBeenCalledOnce();
     expect(httpsRequestMock).not.toHaveBeenCalled();
+    expect(httpRequestMock.mock.calls[0]?.[0]).toMatchObject({
+      family: 4,
+      headers: { host: "backend:8000" },
+      hostname: "172.18.0.4",
+      path: "/api/tasks",
+      port: "8000",
+      protocol: "http:",
+    });
     expect(requestEnd).toHaveBeenCalledWith("state=ready");
     expect(response.status).toBe(205);
     expect(response.statusText).toBe("");
@@ -502,7 +398,7 @@ describe("backend destination pinning", () => {
       { address: "8.8.8.8", family: 4 },
     ]);
     const requestEnd = vi.fn();
-    httpsRequestMock.mockImplementation((_target, _options, callback) => {
+    httpsRequestMock.mockImplementation((_options, callback) => {
       const incoming = Readable.from([Buffer.from("created")]) as Readable & {
         rawHeaders: string[];
         statusCode: number;
@@ -539,7 +435,7 @@ describe("backend destination pinning", () => {
       { address: "8.8.8.8", family: 4 },
     ]);
     const requestEnd = vi.fn();
-    httpsRequestMock.mockImplementation((_target, _options, callback) => {
+    httpsRequestMock.mockImplementation((_options, callback) => {
       const incoming = Readable.from([]) as Readable & {
         rawHeaders: string[];
         statusCode: number;
@@ -613,7 +509,7 @@ describe("backend destination pinning", () => {
       { address: "8.8.8.8", family: 4 },
     ]);
     const responseDestroy = vi.fn();
-    httpsRequestMock.mockImplementation((_target, _options, callback) => {
+    httpsRequestMock.mockImplementation((_options, callback) => {
       const incoming = Readable.from([]) as Readable & {
         destroy: () => void;
         rawHeaders: string[];
