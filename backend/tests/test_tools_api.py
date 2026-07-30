@@ -102,6 +102,103 @@ def test_get_tool_success():
     assert data["name"] == "이메일 맥락 요약 (Thread Summarizer)"
 
 
+
+
+def test_pii_masker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "My email is test@example.com and phone is 010-1234-5678."}}
+        )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert "test@example.com" not in result["masked_text"]
+    assert "010-1234-5678" not in result["masked_text"]
+    assert "[EMAIL]" in result["masked_text"]
+    assert "[PHONE]" in result["masked_text"]
+
+def test_email_priority_evaluator_urgent():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_priority_evaluator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "This is an urgent request for the project."}}
+        )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["priority_score"] == 9
+    assert "긴급" in result["reason"]
+
+def test_email_priority_evaluator_important():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_priority_evaluator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "This is an important request with a deadline."}}
+        )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["priority_score"] == 7
+    assert "중요" in result["reason"]
+
+def test_email_priority_evaluator_normal():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_priority_evaluator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "This is just a normal email about weather."}}
+        )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["priority_score"] == 3
+    assert "일반적인 이메일" in result["reason"]
+
+def test_text_case_converter_upper():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/text_case_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world", "mode": "upper"}}
+        )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["converted_text"] == "HELLO WORLD"
+
+def test_text_case_converter_lower():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/text_case_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "HELLO WORLD", "mode": "lower"}}
+        )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["converted_text"] == "hello world"
+
+def test_text_case_converter_title():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/text_case_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world", "mode": "title"}}
+        )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["converted_text"] == "Hello World"
+
+def test_text_case_converter_default():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/text_case_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "Hello World", "mode": "invalid"}}
+        )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["converted_text"] == "Hello World"
+
+
 def test_get_tool_not_found():
     with TestClient(app) as client:
         response = client.get(

@@ -821,6 +821,81 @@ registry.register(
 )
 
 
+
+async def pii_masker_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    # Mask emails
+    text = re.sub(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', '[EMAIL]', text)
+    # Mask phone numbers (simple format like 010-1234-5678, 02-123-4567, etc.)
+    text = re.sub(r'\b\d{2,3}[-\.]?\d{3,4}[-\.]?\d{4}\b', '[PHONE]', text)
+    return {"masked_text": text}
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스킹 (PII Masker)",
+        description="이메일 주소 및 전화번호 등 민감한 개인정보를 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
+
+async def email_priority_evaluator_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "").lower()
+    score = 3
+    reason = "일반적인 이메일"
+
+    urgent_keywords = ["urgent", "asap", "긴급", "즉시", "빨리"]
+    important_keywords = ["important", "중요", "deadline", "마감"]
+
+    if any(k in text for k in urgent_keywords):
+        score = 9
+        reason = "긴급을 요하는 키워드 포함"
+    elif any(k in text for k in important_keywords):
+        score = 7
+        reason = "중요 또는 마감 관련 키워드 포함"
+
+    return {"priority_score": score, "reason": reason}
+
+registry.register(
+    ToolInfo(
+        code="email_priority_evaluator",
+        name="이메일 중요도 판별기 (Email Priority Evaluator)",
+        description="이메일 내용을 분석하여 1~10점 사이의 중요도 점수와 사유를 반환합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    email_priority_evaluator_handler,
+)
+
+async def text_case_converter_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    mode = params.get("mode", "lower")
+
+    if mode == "upper":
+        converted = text.upper()
+    elif mode == "lower":
+        converted = text.lower()
+    elif mode == "title":
+        converted = text.title()
+    else:
+        converted = text
+
+    return {"converted_text": converted}
+
+registry.register(
+    ToolInfo(
+        code="text_case_converter",
+        name="텍스트 대소문자 변환기 (Text Case Converter)",
+        description="텍스트를 대문자, 소문자, 또는 단어 첫 글자 대문자로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "mode": "string"},
+    ),
+    text_case_converter_handler,
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """

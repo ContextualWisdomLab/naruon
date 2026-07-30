@@ -1,4 +1,10 @@
 ## [Unreleased]
+
+### Added
+- `pii_masker` (개인정보 마스킹): 이메일 주소 및 전화번호 등 민감한 개인정보를 마스킹 처리하는 도구를 추가했습니다.
+- `email_priority_evaluator` (이메일 중요도 판별기): 이메일 내용을 분석하여 1~10점 사이의 중요도 점수와 사유를 반환하는 도구를 추가했습니다.
+- `text_case_converter` (텍스트 대소문자 변환기): 텍스트를 대문자, 소문자, 또는 단어 첫 글자 대문자로 변환하는 유틸리티 도구를 추가했습니다.
+
 ### 보안 패치 (CodeQL extended current-head)
 
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
