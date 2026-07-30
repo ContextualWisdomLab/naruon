@@ -381,6 +381,41 @@ def test_extract_thread_id_uses_first_reference_from_long_header():
     assert _extract_thread_id(msg, "<message@test.com>") == "<root@test.com>"
 
 
+def test_parse_eml_decodes_rfc2047_encoded_word_address_display_names():
+    """RFC 2047 §6.2 requires encoded-words in a displayed header to be shown
+    in their decoded form. The From/To/Reply-To display fields are display
+    surfaces, so a ``=?UTF-8?B?...?=`` (B) or ``=?UTF-8?Q?...?=`` (Q) display
+    name must be decoded to human-readable text and must NOT leak back into the
+    stored/displayed value as a raw encoded-word.
+    """
+    eml_content = (
+        b"Message-ID: <rfc2047@test.com>\n"
+        b"From: =?UTF-8?B?7ZmN6ri464+Z?= <hong@test.com>\n"
+        b"To: =?UTF-8?B?7ZmN6ri464+Z?= <a@test.com>, "
+        b"=?UTF-8?Q?Bj=C3=B6rn?= <b@test.com>\n"
+        b"Reply-To: =?UTF-8?Q?Bj=C3=B6rn?= <reply@test.com>\n"
+        b"Subject: RFC 2047 address display\n"
+        b"Date: Mon, 27 Apr 2026 10:00:00 +0000\n"
+        b"\n"
+        b"Body"
+    )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
+        f.write(eml_content)
+        temp_path = f.name
+
+    try:
+        parsed = parse_eml(temp_path)
+        assert parsed["sender"] == "홍길동 <hong@test.com>"
+        assert parsed["recipients"] == "홍길동 <a@test.com>, Björn <b@test.com>"
+        assert parsed["reply_to"] == "Björn <reply@test.com>"
+        assert "=?" not in parsed["sender"]
+        assert "=?" not in parsed["recipients"]
+        assert "=?" not in parsed["reply_to"]
+    finally:
+        os.unlink(temp_path)
+
+
 def test_parse_eml_extracts_reply_to_header():
     eml_content = b"""Message-ID: <reply-to@test.com>
 From: Sender Name <sender@test.com>

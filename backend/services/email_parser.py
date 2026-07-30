@@ -2,12 +2,19 @@ from email import message_from_binary_file, message_from_bytes, policy
 from email.message import Message
 from pathlib import Path
 import datetime
-from email.utils import formataddr, getaddresses
+import re
+from email.utils import getaddresses
 from email.utils import parsedate_to_datetime
 from typing import NotRequired, TypedDict
 from .attachment_parser import parse_email_attachment
 from .exceptions import EmailParseError
 from .text_safety import strip_html_markup
+
+# Mirrors ``email.utils`` display-name quoting so an already-decoded display
+# name keeps identical formatting for ASCII values while avoiding RFC 2047
+# re-encoding (see ``_format_address_display``).
+_ADDRESS_SPECIALS_RE = re.compile(r'[][\\()<>@,:;".]')
+_ADDRESS_ESCAPE_RE = re.compile(r'[\\"]')
 
 
 class EmailData(TypedDict):
@@ -39,13 +46,30 @@ def _sanitize_display_text(text: str) -> str:
     return strip_html_markup(_sanitize_nul(text))
 
 
+def _format_address_display(display_name: str, address: str) -> str:
+    """Render ``display_name <address>`` for a display field.
+
+    Unlike ``email.utils.formataddr``, this never re-encodes a non-ASCII
+    display name into an RFC 2047 encoded-word: these fields are display
+    surfaces and RFC 2047 §6.2 requires encoded-words to be shown decoded.
+    Quoting/escaping matches ``formataddr`` so ASCII values are unchanged.
+    """
+    if not display_name:
+        return address
+    escaped = _ADDRESS_ESCAPE_RE.sub(r"\\\g<0>", display_name)
+    quotes = '"' if _ADDRESS_SPECIALS_RE.search(display_name) else ""
+    return f"{quotes}{escaped}{quotes} <{address}>"
+
+
 def _sanitize_address_display_text(text: str) -> str:
     sanitized_parts: list[str] = []
     for display_name, address in getaddresses([text]):
         safe_display_name = _sanitize_display_text(display_name).strip()
         safe_address = _sanitize_nul(address).strip()
         if safe_address:
-            sanitized_parts.append(formataddr((safe_display_name, safe_address)))
+            sanitized_parts.append(
+                _format_address_display(safe_display_name, safe_address)
+            )
         elif safe_display_name:
             sanitized_parts.append(safe_display_name)
     if sanitized_parts:
