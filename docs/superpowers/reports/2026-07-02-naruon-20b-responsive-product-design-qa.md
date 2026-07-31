@@ -30,7 +30,7 @@ Destination:
 ## Command
 
 ```bash
-NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE=/tmp/naruon-full-product-responsive-qa \
+NARUON_FULL_PRODUCT_SCREENSHOT_DIR=/tmp/naruon-full-product-responsive-qa \
 NARUON_FULL_PRODUCT_VIEWPORTS=desktop,mobile \
 pnpm --dir frontend run full:smoke
 ```

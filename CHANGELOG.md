@@ -1,17 +1,4 @@
 ## [Unreleased]
-### 보안 패치 (CodeQL extended current-head)
-
-- CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
-- OIDC token endpoint는 운영 환경에서 서버 전용 `OIDC_ALLOWED_HOSTS` 정확 호스트 allowlist를 필수로 적용합니다. hostname의 모든 DNS 결과가 공인 주소인지 검증한 뒤 해당 주소 집합을 native HTTP(S) 연결의 `lookup`에 고정하고, 원래 issuer hostname은 Host/TLS SNI로 유지해 사설 주소 해석과 DNS rebinding 사이의 TOCTOU를 차단합니다. 실패 로그는 입력 URL·token 대신 고정된 configuration/DNS·transport/response/backend-verification reason code만 남깁니다.
-- Trivy 2026-07-26 DB에서 새로 확인된 Next.js High 4건·Medium 5건(`CVE-2026-64641`–`CVE-2026-64649`)과 PostCSS High 1건(`GHSA-r28c-9q8g-f849`)을 제거하기 위해 Next.js/`eslint-config-next`를 `16.2.11`, PostCSS를 `8.5.18`로 갱신했습니다. 두 버전은 각 취약점의 최초 수정 버전이며 저장소의 release-age 정책을 우회하지 않습니다.
-- `pnpm audit`가 개발 도구 체인에서 추가 탐지한 `brace-expansion <=5.0.7` High DoS(`GHSA-mh99-v99m-4gvg`)는 `5.0.8` 전역 override로 제거했습니다. CommonJS default export를 기대하는 legacy `minimatch 3.1.5`에는 `expand` named export도 수용하는 최소 pnpm 패치를 적용해 ESLint/glob 동작을 보존합니다.
-- root·frontend Docker build의 frozen install 계층이 pnpm manifest와 함께 `frontend/patches`를 먼저 복사하도록 수정해, 이미지 검증에서도 lockfile의 patched dependency를 동일하게 재현합니다.
-- Scorecard SARIF normalizer는 고정 workspace artifact로 정규화되는 `./scorecard-results.sarif`와 절대 경로를 동일하게 허용하면서 symlink·workspace 이탈은 계속 거부합니다. 도구 실행 실패 API는 CR/LF·제어 문자를 escape하고 500자로 제한하며, 로그에는 raw 도구 코드·예외 text 대신 SHA-256 기반 코드·traceback 상관 식별자만 기록합니다.
-- 백엔드 origin 보안 경계를 `frontend/src/lib/backend-url.ts`의 단일 생성기로 통합해 API proxy·session·OIDC callback이 같은 검증을 사용합니다. UI smoke의 새 `NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE` 이름은 실제 selector 의미를 드러내며, 기존 `..._SCREENSHOT_DIR`은 호환 alias로 계속 지원합니다.
-- PR governance의 CodeRabbit issue-summary 분류는 실제 pre-merge 실패·blocking finding·actionable comment 신호만 차단하고, current-head SHA가 포함된 `Review limit reached` 같은 운영 quota 안내는 소스 결함으로 오분류하지 않습니다. check-run 결론과 inline review comment 검사는 그대로 유지됩니다.
-- 제품 이벤트 ID의 `Math.random()` fallback을 Web Crypto 기반 UUID/128-bit 난수로 교체하고, 개인 메일 smoke·live HTTP·Scorecard SARIF 경로에 home/workspace containment, symlink·크기·ZIP entry 제한, loopback endpoint allowlist를 적용했습니다. 도구 실패 로그는 사용자 입력 대신 고정 event와 예외 유형만 기록합니다.
-- 검증: 백엔드 `1560 passed, 32 skipped`(`PYTHONWARNINGS=error`), 프런트 `385 passed`, ESLint, Ruff, TypeScript, Next.js production build, 변경 Python 대상 Bandit Medium 이상 검사, Trivy Medium 이상 검사와 정확한 hash/lock 입력의 OSV 검사가 통과했습니다. GitHub hosted CodeQL/SARIF current-head 결과는 PR checks에서 별도로 확인합니다.
-
 ### 마이그레이션 정합성 (Alembic single-head 복구)
 
 - Alembic 마이그레이션 그래프의 head가 둘로 갈라져(`0011_email_read_state` — `email_records.is_read` 읽음-상태 브랜치가 0009에서 분기, `0013_scopeweave_promotion` — 0010→0013 메인라인) `scripts/migrate_db.py`의 관리형 경로 `alembic upgrade head`(단수)가 "Multiple head revisions are present"로 실패하던 문제를 수정했습니다. 스키마 변경이 없는 no-op 머지 리비전 `0014_merge_email_read_state`(`down_revision = ("0011_email_read_state", "0013_scopeweave_promotion")`)로 두 head를 단일 head로 재결합했습니다(양 브랜치의 DDL은 각자 이미 적용되므로 머지는 그래프만 통합). 재발 방지 가드로 `tests/test_alembic_migrations.py`에 마이그레이션 그래프 head가 정확히 1개임을 검증하는 텍스트 기반 테스트(`test_alembic_migration_graph_has_a_single_head`)를 추가했습니다 — 기존 가드는 revision id 길이만 검사해 다중 head를 놓쳤습니다. 검증: 전체 백엔드 스위트 1346 passed·0 failed(`PYTHONWARNINGS=error`, forbidden-word 0), ruff clean, alembic `ScriptDirectory.get_heads()` == 1.
