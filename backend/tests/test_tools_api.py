@@ -1235,8 +1235,7 @@ async def test_meeting_agenda_generator_handler():
 
 
 
-@pytest.mark.asyncio
-async def test_execute_link_extractor():
+def test_execute_link_extractor():
     with TestClient(app) as client:
         # 정상 작동 케이스
         response = client.post(
@@ -1248,8 +1247,7 @@ async def test_execute_link_extractor():
         data = response.json()
         assert data["status"] == "success"
         urls = data["result"]["urls"]
-        assert "https://example.com" in urls
-        assert "www.test.org" in urls
+        assert urls == ["https://example.com", "www.test.org"]
         assert data["result"]["count"] == 2
 
         # 링크가 없는 케이스
@@ -1264,8 +1262,7 @@ async def test_execute_link_extractor():
         assert len(data_no_link["result"]["urls"]) == 0
         assert data_no_link["result"]["count"] == 0
 
-@pytest.mark.asyncio
-async def test_execute_pii_redactor():
+def test_execute_pii_redactor():
     with TestClient(app) as client:
         # 이메일 마스킹 케이스
         response = client.post(
