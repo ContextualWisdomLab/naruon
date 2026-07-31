@@ -8,6 +8,7 @@ workflow governance before a release branch can land.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import importlib.util
@@ -239,7 +240,11 @@ def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
         seen_keys: dict[str, int] = {}
         workflow_lines = workflow_path.read_text(encoding="utf-8").splitlines()
         for line_number, line in enumerate(workflow_lines, 1):
-            if not line or line.startswith((" ", "\t")) or line.lstrip().startswith("#"):
+            if (
+                not line
+                or line.startswith((" ", "\t"))
+                or line.lstrip().startswith("#")
+            ):
                 continue
             match = top_level_key.match(line)
             if not match:
@@ -392,8 +397,8 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     assert "${{ github.head_ref || github.ref_name }}" not in (
         log_dependency_review_script
     )
-    assert 'printf \'Base ref: %s\\n\' "$BASE_REF"' in log_dependency_review_script
-    assert 'printf \'Head ref: %s\\n\' "$HEAD_REF"' in log_dependency_review_script
+    assert "printf 'Base ref: %s\\n' \"$BASE_REF\"" in log_dependency_review_script
+    assert "printf 'Head ref: %s\\n' \"$HEAD_REF\"" in log_dependency_review_script
 
     pre_commit = read_repo_text(".pre-commit-config.yaml")
     assert "https://github.com/gitleaks/gitleaks" in pre_commit
@@ -485,6 +490,7 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
 
 def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sarif_path = tmp_path / "scorecard-results.sarif"
     sarif_path.write_text(
@@ -509,11 +515,12 @@ def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
     ensure_scorecard_module = importlib.util.module_from_spec(spec)
     sys.modules["ensure_scorecard"] = ensure_scorecard_module
     spec.loader.exec_module(ensure_scorecard_module)
+    monkeypatch.chdir(tmp_path)
 
     sarif_path.chmod(0o444)
     try:
-        for _ in range(2):
-            ret = ensure_scorecard_module.main([str(normalizer), str(sarif_path)])
+        for argument in (str(sarif_path), "./scorecard-results.sarif"):
+            ret = ensure_scorecard_module.main([str(normalizer), argument])
             assert ret == 0, f"Scorecard script failed with {ret}"
     finally:
         sarif_path.chmod(0o644)
@@ -533,7 +540,43 @@ def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
     assert branch_protection_run["results"] == []
 
 
-def test_review_automation_uses_central_required_workflows_without_local_copies() -> None:
+def test_scorecard_sarif_normalizer_rejects_escape_links_and_large_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "scorecard-results.sarif"
+    outside.write_text('{"runs": []}', encoding="utf-8")
+    normalizer = REPO_ROOT / "scripts/ci/ensure_scorecard_sarif_categories.py"
+    spec = importlib.util.spec_from_file_location(
+        "ensure_scorecard_security", normalizer
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.chdir(workspace)
+
+    assert module.main([str(normalizer), str(outside)]) == 65
+
+    expected = workspace / "scorecard-results.sarif"
+    expected.symlink_to(outside)
+    assert module.main([str(normalizer), str(expected)]) == 65
+    expected.unlink()
+
+    outside_before = outside.read_bytes()
+    os.link(outside, expected)
+    assert module.main([str(normalizer), str(expected)]) == 65
+    assert outside.read_bytes() == outside_before
+    expected.unlink()
+
+    expected.write_bytes(b" " * (module.MAX_SARIF_BYTES + 1))
+    assert module.main([str(normalizer), str(expected)]) == 65
+
+
+def test_review_automation_uses_central_required_workflows_without_local_copies() -> (
+    None
+):
     readme = read_repo_text("README.md")
     normalized_readme = " ".join(readme.split())
     architecture = read_repo_text("ARCHITECTURE.md")
@@ -567,8 +610,7 @@ def test_review_automation_uses_central_required_workflows_without_local_copies(
     assert "This repository does not carry repo-local" in normalized_readme
     assert "OpenCode, Strix, or merge-scheduler workflow copies" in normalized_readme
     assert (
-        "branch updates, auto-merge, and mechanical merge actions"
-        in normalized_readme
+        "branch updates, auto-merge, and mechanical merge actions" in normalized_readme
     )
     assert "central required workflows" in architecture
     assert "ContextualWisdomLab/.github" in architecture
@@ -696,9 +738,15 @@ def test_kubernetes_deployments_use_restricted_runtime_security_contexts() -> No
     db_statefulset = read_repo_text("k8s/db-statefulset.yaml")
     frontend_deployment = read_repo_text("k8s/frontend-deployment.yaml")
 
-    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-backend" in backend_deployment
+    assert (
+        "image: ghcr.io/contextualwisdomlab/ai_email_client-backend"
+        in backend_deployment
+    )
     assert "image: docker.io/pgvector/pgvector:pg16" in db_statefulset
-    assert "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend" in frontend_deployment
+    assert (
+        "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend"
+        in frontend_deployment
+    )
 
     for manifest in (backend_deployment, db_statefulset, frontend_deployment):
         assert "namespace: naruon-dev" in manifest

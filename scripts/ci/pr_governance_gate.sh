@@ -31,6 +31,7 @@ PR_CHECKS_ERROR_FILE="$(mktemp)"
 ISSUE_COMMENTS_ERROR_FILE="$(mktemp)"
 REVIEW_COMMENTS_ERROR_FILE="$(mktemp)"
 OPENCODE_REVIEWS_ERROR_FILE="$(mktemp)"
+COMMIT_STATUS_ERROR_FILE="$(mktemp)"
 RUN_DETAILS_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID:-unknown}"
 
 cleanup_temp_files() {
@@ -38,7 +39,8 @@ cleanup_temp_files() {
     "$PR_CHECKS_ERROR_FILE" \
     "$ISSUE_COMMENTS_ERROR_FILE" \
     "$REVIEW_COMMENTS_ERROR_FILE" \
-    "$OPENCODE_REVIEWS_ERROR_FILE"
+    "$OPENCODE_REVIEWS_ERROR_FILE" \
+    "$COMMIT_STATUS_ERROR_FILE"
 }
 
 trap cleanup_temp_files EXIT
@@ -318,7 +320,16 @@ else
 fi
 
 CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potential issue|actionable comment|actionable comments'
+CODERABBIT_ISSUE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|actionable comments?|changes requested|request changes'
+CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|changes requested|request changes'
+CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
+COMMIT_STATUS_JSON='{"statuses":[]}'
+if ! COMMIT_STATUS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
+  printf 'commit status lookup failed:\n'
+  printf '%s\n' "$(<"$COMMIT_STATUS_ERROR_FILE")" | sed 's/^/    /'
+  add_blocker 'Current-head commit statuses could not be read; see the workflow run log.'
+fi
 CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
   [.check_runs[]
     | select(
@@ -327,7 +338,15 @@ CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
         or (.name | test("CodeRabbit|coderabbit|GitHub Code Quality|github-code-quality"; "i"))
       )]'
 )"
-CODERABBIT_COUNT="$(printf '%s' "$CODERABBIT_MATCHES" | jq 'length')"
+CODERABBIT_STATUS_MATCHES="$(printf '%s' "$COMMIT_STATUS_JSON" | jq '
+  [.statuses[]
+    | select((.context // "") | test("CodeRabbit|coderabbit|GitHub Code Quality|github-code-quality"; "i"))]
+  | group_by((.context // "") | ascii_downcase)
+  | map(sort_by(.updated_at // .created_at // "") | last)
+')"
+CODERABBIT_CHECK_COUNT="$(printf '%s' "$CODERABBIT_MATCHES" | jq 'length')"
+CODERABBIT_STATUS_COUNT="$(printf '%s' "$CODERABBIT_STATUS_MATCHES" | jq 'length')"
+CODERABBIT_COUNT=$((CODERABBIT_CHECK_COUNT + CODERABBIT_STATUS_COUNT))
 if [ "$CODERABBIT_COUNT" = "0" ]; then
   if ! OPENCODE_REVIEWS_JSON="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" 2>"$OPENCODE_REVIEWS_ERROR_FILE")"; then
     printf 'OpenCode review lookup failed:\n'
@@ -354,6 +373,7 @@ if [ "$CODERABBIT_COUNT" = "0" ]; then
   fi
 else
   CODERABBIT_PENDING="$(printf '%s' "$CODERABBIT_MATCHES" | jq '[.[] | select(.status != "completed")] | length')"
+  CODERABBIT_STATUS_PENDING="$(printf '%s' "$CODERABBIT_STATUS_MATCHES" | jq '[.[] | select((.state // "" | ascii_downcase) == "pending")] | length')"
   CODERABBIT_FAILED="$(printf '%s' "$CODERABBIT_MATCHES" | jq --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
     [.[]
       | select(.status == "completed")
@@ -370,9 +390,20 @@ else
           end)]
     | length'
   )"
+  CODERABBIT_STATUS_FAILED="$(printf '%s' "$CODERABBIT_STATUS_MATCHES" | jq '[.[] | select((.state // "" | ascii_downcase) as $state | $state == "error" or $state == "failure")] | length')"
+  CODERABBIT_STATUS_UNKNOWN="$(printf '%s' "$CODERABBIT_STATUS_MATCHES" | jq '[.[] | select((.state // "" | ascii_downcase) as $state | ["success", "pending", "error", "failure"] | index($state) | not)] | length')"
   if [ "$CODERABBIT_FAILED" != "0" ]; then
     add_blocker "Current-head CodeRabbit check has a blocking conclusion on ${HEAD_REF_OID}."
-  elif [ "$CODERABBIT_PENDING" != "0" ]; then
+  fi
+  if [ "$CODERABBIT_STATUS_FAILED" != "0" ]; then
+    add_blocker "Current-head CodeRabbit commit status has a blocking conclusion on ${HEAD_REF_OID}."
+  fi
+  if [ "$CODERABBIT_STATUS_UNKNOWN" != "0" ]; then
+    add_blocker "Current-head CodeRabbit commit status has an unrecognized state on ${HEAD_REF_OID}."
+  fi
+  if [ "$CODERABBIT_FAILED" != "0" ] || [ "$CODERABBIT_STATUS_FAILED" != "0" ] || [ "$CODERABBIT_STATUS_UNKNOWN" != "0" ]; then
+    :
+  elif [ "$CODERABBIT_PENDING" != "0" ] || [ "$CODERABBIT_STATUS_PENDING" != "0" ]; then
     add_waiting "Waiting for current-head CodeRabbit evidence on ${HEAD_REF_OID}."
   fi
 fi
@@ -382,10 +413,22 @@ if ! ISSUE_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues
   printf '%s\n' "$(<"$ISSUE_COMMENTS_ERROR_FILE")" | sed 's/^/    /'
   add_blocker 'PR issue comments could not be read; see the workflow run log.'
 else
-  CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s --arg head_sha "$HEAD_SHA" --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
+  CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s \
+    --arg head_sha "$HEAD_SHA" \
+    --arg pattern "$CODERABBIT_ISSUE_BLOCKING_PATTERN" \
+    --arg substantive_pattern "$CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN" \
+    --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" '
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
-      | select((.body // "") | test($pattern; "i"))
+      | select(
+          (.body // "") as $body
+          | ($body | split("<details>")[0]) as $summary
+          | ($body | test($pattern; "i"))
+            and (
+              (($body | test($no_actionable_pattern; "i")) | not)
+              or ($summary | test($substantive_pattern; "i"))
+            )
+        )
       | select((.body // "") | contains($head_sha))]
     | length'
   )"

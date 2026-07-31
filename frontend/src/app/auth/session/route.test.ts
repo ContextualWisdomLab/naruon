@@ -239,6 +239,121 @@ describe("/auth/session route", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("does not fetch when backend configuration is not a bare trusted origin", async () => {
+    vi.stubEnv(
+      "BACKEND_INTERNAL_URL",
+      "https://api.naruon.net/session?target=http://169.254.169.254",
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const token = signedFixtureToken({
+      sub: "user-2",
+      org: "org-beta",
+      workspace: "workspace-beta",
+    });
+
+    const response = await GET(
+      new NextRequest("https://app.naruon.net/auth/session", {
+        headers: { Cookie: `naruon_session=${token}` },
+      }),
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      authenticated: false,
+      claims: {
+        userId: null,
+        organizationId: null,
+        workspaceId: null,
+      },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows only the exact loopback backend in non-production", async () => {
+    vi.stubEnv("BACKEND_INTERNAL_URL", "http://127.0.0.1:8000");
+    vi.stubEnv("ALLOW_DOCKER_BACKEND_INTERNAL_URL", "1");
+    const token = signedFixtureToken({
+      sub: "local-user",
+      org: "local-org",
+      workspace: "local-workspace",
+    });
+    const fetchMock = vi
+      .fn<
+        (
+          input: URL | RequestInfo,
+          init?: RequestInit,
+        ) => Promise<Response>
+      >()
+      .mockResolvedValue(Response.json({
+        user_id: "local-user",
+        organization_id: "local-org",
+        workspace_id: "local-workspace",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await GET(
+      new NextRequest("http://localhost:3000/auth/session", {
+        headers: { Cookie: `naruon_session=${token}` },
+      }),
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      authenticated: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(String(input)).toBe("http://127.0.0.1:8000/api/auth/session");
+    expect(init).toEqual(expect.objectContaining({
+      cache: "no-store",
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    }));
+  });
+
+  it("preserves a validated global IPv6 backend authority", async () => {
+    vi.stubEnv(
+      "BACKEND_INTERNAL_URL",
+      "https://[2001:4860:4860::8888]:8443",
+    );
+    const token = signedFixtureToken({
+      sub: "ipv6-user",
+      org: "ipv6-org",
+      workspace: "ipv6-workspace",
+    });
+    const fetchMock = vi
+      .fn<
+        (
+          input: URL | RequestInfo,
+          init?: RequestInit,
+        ) => Promise<Response>
+      >()
+      .mockResolvedValue(Response.json({
+        user_id: "ipv6-user",
+        organization_id: "ipv6-org",
+        workspace_id: "ipv6-workspace",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await GET(
+      new NextRequest("https://app.naruon.net/auth/session", {
+        headers: { Cookie: `naruon_session=${token}` },
+      }),
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      authenticated: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(String(input)).toBe(
+      "https://[2001:4860:4860::8888]:8443/api/auth/session",
+    );
+    expect(init).toEqual(expect.objectContaining({
+      redirect: "manual",
+      signal: expect.any(AbortSignal),
+    }));
+  });
+
   it("rejects forged tokens that the backend verifier does not accept", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(
       { detail: "Authentication required" },
