@@ -212,32 +212,6 @@ export function NavLink({
   );
 }
 
-function PrimaryNavLink({
-  label,
-  href,
-  icon: Icon,
-}: {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
-}) {
-  const pathname = usePathname();
-  const searchParams = useCurrentSearchParams();
-  const active = isActivePath(pathname, href, '', searchParams);
-
-  return (
-    <Link
-      href={href}
-      aria-current={active ? 'page' : undefined}
-      className={`inline-flex h-10 shrink-0 whitespace-nowrap items-center gap-2 rounded-xl px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-        active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
-      }`}
-    >
-      <Icon className="size-4" aria-hidden={true} />
-      {label}
-    </Link>
-  );
-}
 
 function HeaderActionButton({
   label,
@@ -333,7 +307,17 @@ export function DashboardLayout({
         Skip to main content
       </a>
 
-      {/* Sidebar removed to match branding assets */}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground xl:flex">
+        <div className="flex h-16 shrink-0 items-center gap-3 px-6">
+          <Image src="/brand/naruon-symbol.svg" alt="Naruon" width={32} height={32} style={{ width: '32px', height: '32px' }} />
+          <span className="text-lg font-black tracking-tight">Naruon</span>
+        </div>
+        <nav aria-label="Primary workspace navigation" className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+          {primaryNavItems.map((item) => (
+            <NavLink key={item.href} {...item} />
+          ))}
+        </nav>
+      </aside>
 
       <main id="main-content" className="flex min-w-0 flex-1 flex-col overflow-hidden pb-16 lg:pb-0">
         <header aria-label="Naruon workspace header" className="flex min-h-16 items-center gap-3 border-b border-border/70 bg-card/85 px-4 backdrop-blur-xl lg:px-6">
@@ -349,15 +333,10 @@ export function DashboardLayout({
           >
             <Menu className="size-5" aria-hidden="true" />
           </button>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 xl:hidden">
             <Image src="/brand/naruon-symbol.svg" alt="Naruon" width={32} height={32} style={{ width: '32px', height: '32px' }} />
             <span className="text-lg font-black tracking-tight">Naruon</span>
           </div>
-          <nav aria-label="Primary workspace navigation" className="hidden max-w-[44vw] items-center gap-1 overflow-x-auto xl:flex 2xl:max-w-none">
-            {primaryNavItems.map((item) => (
-              <PrimaryNavLink key={item.href} {...item} />
-            ))}
-          </nav>
           <div className="relative hidden min-w-0 flex-1 items-center rounded-2xl border border-border bg-background/80 px-4 py-2 text-sm text-muted-foreground shadow-inner shadow-slate-950/[0.02] xl:flex">
             <label htmlFor="global-search-input" className="sr-only">맥락 검색</label>
             <Search className="mr-2 size-4 text-primary" aria-hidden="true" />
