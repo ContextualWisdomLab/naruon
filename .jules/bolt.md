@@ -10,3 +10,6 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+## 2025-10-23 - Optimizing dictionary presence tracking with sets
+**Learning:** Using a dictionary solely to track boolean presence (`has_sent_message = {}` then `has_sent_message[key] = True`) and checking presence with `.get(key, False)` is semantically loose and slightly less memory efficient than using a `set` with the `in` operator. While both provide O(1) membership lookups, sets clearly communicate intent.
+**Action:** When a dictionary is solely used to track boolean presence, replace it with a `set` and use the `in` operator instead of `.get(key, False)`.
