@@ -43,7 +43,7 @@
     "eslint-config-next": "16.2.12",
     "fast-check": "^4.9.0",
     "jsdom": "^29.1.1",
-    "postcss": "^8.5.23",
+    "postcss": "^8.5.25",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },
@@ -54,6 +54,11 @@
   },
   "resolutions": {
     "postcss": "^8.5.16",
-    "undici": "7.28.0"
+    "undici": "7.28.0",
+    "sharp": "0.35.3",
+    "next>sharp": "0.35.3",
+    "brace-expansion": "^2.0.1",
+    "minimatch": "^9.0.3",
+    "@eslint/config-array": "^0.19.2"
   }
 }
