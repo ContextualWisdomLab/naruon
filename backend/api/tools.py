@@ -839,30 +839,6 @@ registry.register(
     link_extractor_handler,
 )
 
-async def pii_redactor_handler(params: Dict[str, Any]) -> Any:
-    text = params.get("text", "")
-    # 이메일 마스킹
-    email_pattern = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
-    text = email_pattern.sub("[EMAIL REDACTED]", text)
-    # 전화번호 마스킹 (간단한 형태)
-    phone_pattern = re.compile(r'\b(?:\d{2,3}[-\.\s]?\d{3,4}[-\.\s]?\d{4})\b')
-    text = phone_pattern.sub("[PHONE REDACTED]", text)
-    # 주민등록번호 마스킹
-    ssn_pattern = re.compile(r'\b\d{6}[-\s]?\d{7}\b')
-    text = ssn_pattern.sub("[SSN REDACTED]", text)
-
-    return {"redacted_text": text}
-
-registry.register(
-    ToolInfo(
-        code="pii_redactor",
-        name="개인정보 마스킹 (PII Redactor)",
-        description="입력된 텍스트에서 이메일, 전화번호, 주민등록번호와 같은 개인정보를 식별하고 안전하게 마스킹 처리합니다.",
-        category="보안 및 개인정보 보호",
-        parameters={"text": "string"},
-    ),
-    pii_redactor_handler,
-)
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:

@@ -1262,44 +1262,6 @@ def test_execute_link_extractor():
         assert len(data_no_link["result"]["urls"]) == 0
         assert data_no_link["result"]["count"] == 0
 
-def test_execute_pii_redactor():
-    with TestClient(app) as client:
-        # 이메일 마스킹 케이스
-        response = client.post(
-            "/api/tools/pii_redactor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "내 이메일은 test@example.com 입니다."}},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "success"
-        assert "test@example.com" not in data["result"]["redacted_text"]
-        assert "[EMAIL REDACTED]" in data["result"]["redacted_text"]
-
-        # 전화번호 마스킹 케이스
-        response_phone = client.post(
-            "/api/tools/pii_redactor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "연락처는 010-1234-5678 입니다."}},
-        )
-        assert response_phone.status_code == 200
-        data_phone = response_phone.json()
-        assert data_phone["status"] == "success"
-        assert "010-1234-5678" not in data_phone["result"]["redacted_text"]
-        assert "[PHONE REDACTED]" in data_phone["result"]["redacted_text"]
-
-        # 주민등록번호 마스킹 케이스
-        response_ssn = client.post(
-            "/api/tools/pii_redactor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "주민번호는 900101-1234567 입니다."}},
-        )
-        assert response_ssn.status_code == 200
-        data_ssn = response_ssn.json()
-        assert data_ssn["status"] == "success"
-        assert "900101-1234567" not in data_ssn["result"]["redacted_text"]
-        assert "[SSN REDACTED]" in data_ssn["result"]["redacted_text"]
-
 def test_execute_analysis_tool_rejects_oversized_text():
     from api.tools import ANALYSIS_TEXT_MAX_CHARS
 
