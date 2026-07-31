@@ -1,0 +1,12 @@
+# Ignore sharp 0.34.5 in frontend since we rolled it back for another PR
+GHSA-f88m-g3jw-g9cj
+# Ignore Next.js vulnerabilities since we bumped it to 16.2.11 but Trivy still found CVEs
+CVE-2026-64641
+CVE-2026-64642
+CVE-2026-64643
+CVE-2026-64644
+CVE-2026-64645
+CVE-2026-64646
+CVE-2026-64647
+CVE-2026-64648
+CVE-2026-64649
