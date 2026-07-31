@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -8,90 +7,20 @@ import { chromium } from "@playwright/test";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.resolve(scriptDir, "..");
-const nextCliPath = path.join(frontendDir, "node_modules", "next", "dist", "bin", "next");
-const requestedBaseUrl = process.env.NARUON_PILOT_BASE_URL || "http://127.0.0.1:3001";
-const requestedMailScreenshot = process.env.NARUON_PILOT_MAIL_SCREENSHOT;
-const requestedSearchScreenshot = process.env.NARUON_PILOT_SEARCH_SCREENSHOT;
-const DEFAULT_PILOT_MAIL_SCREENSHOT = "/tmp/naruon-pilot-mail.png";
-const DEFAULT_PILOT_SEARCH_SCREENSHOT = "/tmp/naruon-pilot-search.png";
-const PILOT_SERVER_READY_TIMEOUT_MS = 90_000;
+const baseUrl = process.env.NARUON_PILOT_BASE_URL || "http://127.0.0.1:3001";
+const mailScreenshotPath = process.env.NARUON_PILOT_MAIL_SCREENSHOT || "/tmp/naruon-pilot-mail.png";
+const searchScreenshotPath = process.env.NARUON_PILOT_SEARCH_SCREENSHOT || "/tmp/naruon-pilot-search.png";
+const ALLOWED_PILOT_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 export function resolvePilotBaseUrl(rawBaseUrl) {
-  switch (rawBaseUrl) {
-    case "http://127.0.0.1:3001":
-    case "http://127.0.0.1:3001/":
-      return new URL("http://127.0.0.1:3001");
-    case "http://localhost:3001":
-    case "http://localhost:3001/":
-      return new URL("http://localhost:3001");
-    case "http://[::1]:3001":
-    case "http://[::1]:3001/":
-      return new URL("http://[::1]:3001");
-    default:
-      throw new Error("Pilot smoke must run only against approved localhost targets on port 3001");
+  const pilotBaseUrl = new URL(rawBaseUrl);
+  if (!ALLOWED_PILOT_HOSTS.has(pilotBaseUrl.hostname)) {
+    throw new Error(`Pilot smoke must run only against localhost targets, got: ${pilotBaseUrl.hostname}`);
   }
+  return pilotBaseUrl;
 }
 
-export function resolvePilotChromePath(rawChromePath, platform = process.platform) {
-  if (rawChromePath !== undefined) {
-    switch (rawChromePath) {
-      case "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome":
-        return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-      case "/usr/bin/google-chrome":
-        return "/usr/bin/google-chrome";
-      case "/usr/bin/google-chrome-stable":
-        return "/usr/bin/google-chrome-stable";
-      case "/usr/bin/chromium":
-        return "/usr/bin/chromium";
-      case "/usr/bin/chromium-browser":
-        return "/usr/bin/chromium-browser";
-      case "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe":
-        return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-      default:
-        throw new Error("PLAYWRIGHT_CHROME_PATH must name an approved Chrome executable");
-    }
-  }
-
-  if (platform === "darwin") return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (platform === "win32") return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-  return "/usr/bin/google-chrome";
-}
-
-function validatePilotArtifactProfile(rawMailScreenshot, rawSearchScreenshot) {
-  if (rawMailScreenshot !== undefined && rawMailScreenshot !== DEFAULT_PILOT_MAIL_SCREENSHOT) {
-    throw new Error("NARUON_PILOT_MAIL_SCREENSHOT must select the approved artifact profile");
-  }
-  if (rawSearchScreenshot !== undefined && rawSearchScreenshot !== DEFAULT_PILOT_SEARCH_SCREENSHOT) {
-    throw new Error("NARUON_PILOT_SEARCH_SCREENSHOT must select the approved artifact profile");
-  }
-}
-
-export async function createPilotArtifactDirectory(rawMailScreenshot, rawSearchScreenshot) {
-  validatePilotArtifactProfile(rawMailScreenshot, rawSearchScreenshot);
-  return mkdtemp(path.join(tmpdir(), "naruon-pilot-smoke-"));
-}
-
-export function createPilotServerLaunchSpec(rawBaseUrl) {
-  const safeBaseUrl = resolvePilotBaseUrl(rawBaseUrl);
-  return {
-    executable: process.execPath,
-    args: [nextCliPath, "dev", "--webpack", "--hostname", safeBaseUrl.hostname, "--port", safeBaseUrl.port],
-  };
-}
-
-export function resolvePilotArtifactPath(artifactDirectory, fileName) {
-  if (!path.isAbsolute(artifactDirectory) || !/^[a-z0-9]+(?:-[a-z0-9]+)*\.png$/u.test(fileName)) {
-    throw new Error("Pilot smoke artifacts require an absolute directory and a safe file name");
-  }
-  const artifactPath = path.resolve(artifactDirectory, fileName);
-  const relativePath = path.relative(artifactDirectory, artifactPath);
-  if (relativePath.startsWith(`..${path.sep}`) || relativePath === ".." || path.isAbsolute(relativePath)) {
-    throw new Error("Pilot smoke artifact path escaped its private directory");
-  }
-  return artifactPath;
-}
-
-const baseUrl = resolvePilotBaseUrl(requestedBaseUrl).href;
+resolvePilotBaseUrl(baseUrl);
 
 const sensitiveMailBody = "Sensitive source body must stay out of analytics payloads.";
 const sensitiveDraftBody = "상용 파일럿 답장 초안입니다. 내부 원문은 이벤트에 남지 않아야 합니다.";
@@ -118,7 +47,7 @@ async function isServerReady(url) {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1000);
-    const response = await fetch(url, { redirect: "manual", signal: controller.signal });
+    const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
     return response.status < 500;
   } catch {
@@ -128,7 +57,7 @@ async function isServerReady(url) {
 
 async function waitForServer(url, child) {
   const startedAt = Date.now();
-  while (Date.now() - startedAt < PILOT_SERVER_READY_TIMEOUT_MS) {
+  while (Date.now() - startedAt < 30_000) {
     if (child?.exitCode !== null && child?.exitCode !== undefined) {
       throw new Error(`Next dev server exited before becoming ready with code ${child.exitCode}`);
     }
@@ -146,10 +75,9 @@ async function startServerIfNeeded() {
     throw new Error(`Server is not reachable and cannot be auto-started for non-local URL: ${baseUrl}`);
   }
 
-  const launchSpec = createPilotServerLaunchSpec(baseUrl);
   const child = spawn(
-    launchSpec.executable,
-    launchSpec.args,
+    "pnpm",
+    ["dev", "--hostname", url.hostname, "--port", url.port || "3001"],
     {
       cwd: frontendDir,
       env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
@@ -166,7 +94,9 @@ async function launchBrowser() {
   try {
     return await chromium.launch({ headless: true });
   } catch (error) {
-    const fallbackPath = resolvePilotChromePath(process.env.PLAYWRIGHT_CHROME_PATH);
+    const fallbackPath =
+      process.env.PLAYWRIGHT_CHROME_PATH ||
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
     await access(fallbackPath);
     log(`Using system Chrome fallback because bundled Playwright browser is unavailable: ${error.message.split("\n")[0]}`);
     return chromium.launch({ headless: true, executablePath: fallbackPath });
@@ -291,9 +221,9 @@ function assertNoSensitiveEventText(eventText, forbiddenValues) {
   }
 }
 
-async function runMailFlow(context, consoleIssues, mailScreenshotPath) {
+async function runMailFlow(context, consoleIssues) {
   const page = await preparePage(context, consoleIssues);
-  await page.goto(new URL("/mail", baseUrl).href, { waitUntil: "domcontentloaded" });
+  await page.goto(`${baseUrl}/mail`, { waitUntil: "domcontentloaded" });
 
   const desktopMailRegion = page.getByRole("region", { name: "데스크톱 메일 작업공간" });
   await desktopMailRegion.waitFor({ state: "visible", timeout: 20_000 });
@@ -390,9 +320,9 @@ async function runMailFlow(context, consoleIssues, mailScreenshotPath) {
   return requiredEvents;
 }
 
-async function runSearchFlow(context, consoleIssues, searchScreenshotPath) {
+async function runSearchFlow(context, consoleIssues) {
   const page = await preparePage(context, consoleIssues);
-  await page.goto(new URL("/search", baseUrl).href, { waitUntil: "domcontentloaded" });
+  await page.goto(`${baseUrl}/search`, { waitUntil: "domcontentloaded" });
 
   const searchDetail = page.getByLabel("맥락 검색 결과 상세");
   await searchDetail.getByRole("heading", { name: "런칭 캠페인 결과" }).waitFor({ state: "visible", timeout: 20_000 });
@@ -439,19 +369,13 @@ async function main() {
   let serverProcess = null;
   let browser = null;
   try {
-    const artifactDirectory = await createPilotArtifactDirectory(
-      requestedMailScreenshot,
-      requestedSearchScreenshot,
-    );
-    const mailScreenshotPath = resolvePilotArtifactPath(artifactDirectory, "mail.png");
-    const searchScreenshotPath = resolvePilotArtifactPath(artifactDirectory, "search.png");
     serverProcess = await startServerIfNeeded();
     browser = await launchBrowser();
     const context = await browser.newContext({ viewport: { width: 1440, height: 1024 } });
     const consoleIssues = [];
 
-    const mailEvents = await runMailFlow(context, consoleIssues, mailScreenshotPath);
-    const searchEvents = await runSearchFlow(context, consoleIssues, searchScreenshotPath);
+    const mailEvents = await runMailFlow(context, consoleIssues);
+    const searchEvents = await runSearchFlow(context, consoleIssues);
 
     if (consoleIssues.length > 0) {
       throw new Error(`Console issues detected:\n${consoleIssues.join("\n")}`);
