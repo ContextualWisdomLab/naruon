@@ -48,12 +48,12 @@
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "postcss": "^8.5.16",
+    "postcss": "^8.5.23",
     "undici": "7.28.0",
     "uuid": "^14.0.0"
   },
   "resolutions": {
-    "postcss": "^8.5.16",
+    "postcss": "^8.5.23",
     "undici": "7.28.0"
   }
 }
