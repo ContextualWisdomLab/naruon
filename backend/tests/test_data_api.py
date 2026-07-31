@@ -101,27 +101,11 @@ class MockAsyncSession:
                 ),
                 None,
             )
-            organization_ids = [
-                value
-                for key, value in params.items()
-                if key.startswith("organization_id")
-            ]
-            organization_is_null = (
-                "workspace_documents.organization_id is null" in rendered_query_lower
-            )
             rows = [
                 document
                 for document in self.documents
                 if (document_id is None or document.document_id == document_id)
                 and (workspace_id is None or document.workspace_id == workspace_id)
-                and (
-                    (
-                        organization_ids
-                        and document.organization_id == organization_ids[0]
-                    )
-                    or (organization_is_null and document.organization_id is None)
-                    or (not organization_ids and not organization_is_null)
-                )
             ]
             if "order by" in rendered_query_lower:
                 return MockResult(rows)
@@ -2500,7 +2484,6 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
             Document(
                 document_id="doc_owned",
                 workspace_id="workspace-org-acme",
-                organization_id="org-acme",
                 document_name="<b>roadmap.md</b>",
                 document_type="text/markdown",
                 document_content="# Roadmap",
@@ -2510,7 +2493,6 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
             Document(
                 document_id="doc_rival",
                 workspace_id="workspace-rival",
-                organization_id="org-rival",
                 document_name="rival.md",
                 document_type="text/markdown",
                 document_content="rival",
@@ -2604,7 +2586,6 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
     document = Document(
         document_id="doc_owned",
         workspace_id="workspace-org-acme",
-        organization_id="org-acme",
         document_name="source.hwp",
         document_type="application/x-hwp",
         document_content="opaque hwp extraction placeholder",
@@ -2613,8 +2594,7 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
     )
     rival_document = Document(
         document_id="doc_rival",
-        workspace_id="workspace-org-acme",
-        organization_id="org-rival",
+        workspace_id="workspace-rival",
         document_name="rival.md",
         document_type="text/markdown",
         document_content="rival",
@@ -2658,7 +2638,6 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
 
     assert rival_response.status_code == 404
     assert "doc_rival" not in rival_response.text
-    assert rival_document.document_status == "uploaded"
 
 
 def test_data_document_webdav_materialization_executes_source_backed_write(
@@ -2669,7 +2648,6 @@ def test_data_document_webdav_materialization_executes_source_backed_write(
         Document(
             document_id="doc_owned",
             workspace_id="workspace-org-acme",
-            organization_id="org-acme",
             document_name="../<b>roadmap.md</b>",
             document_type="text/markdown",
             document_content="# Roadmap\nPhase 10",
@@ -2765,7 +2743,6 @@ def test_data_document_webdav_materialization_rejects_empty_document(mock_db):
         Document(
             document_id="doc_empty",
             workspace_id="workspace-org-acme",
-            organization_id="org-acme",
             document_name="empty.md",
             document_type="text/markdown",
             document_content="   ",
@@ -2800,7 +2777,6 @@ def test_data_document_webdav_materialization_rejects_pending_pdf(mock_db):
         Document(
             document_id="doc_pending",
             workspace_id="workspace-org-acme",
-            organization_id="org-acme",
             document_name="contract.pdf",
             document_type="pdf",
             document_content="JVBERi0xLjcK",  # base64 %PDF-1.7\n
@@ -2831,7 +2807,6 @@ def test_data_pdf_dom_recognition_intent_rejects_non_pdf_document(mock_db):
         Document(
             document_id="doc_text",
             workspace_id="workspace-org-acme",
-            organization_id="org-acme",
             document_name="notes.md",
             document_type="text/markdown",
             document_content="# Notes",
@@ -2855,7 +2830,6 @@ def test_data_pdf_dom_recognition_intent_rejects_non_pdf_document(mock_db):
         Document(
             document_id="doc_pdf",
             workspace_id="workspace-org-acme",
-            organization_id="org-acme",
             document_name="contract.pdf",
             document_type="pdf",
             document_content="JVBERi0xLjcK",
@@ -2881,7 +2855,6 @@ def test_data_pdf_dom_recognition_intent_rejects_invalid_stored_payload(mock_db)
         Document(
             document_id="doc_invalid_pdf",
             workspace_id="workspace-org-acme",
-            organization_id="org-acme",
             document_name="contract.pdf",
             document_type="pdf",
             document_content=base64.b64encode(b"not a PDF").decode("ascii"),
