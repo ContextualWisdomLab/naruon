@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { fetchTrustedBackend } from "@/lib/backend-request";
 import { trustedBackendOrigin } from "@/lib/backend-url";
 import { SESSION_COOKIE_NAME, normalizeSessionToken } from "@/lib/session-cookie";
 
@@ -278,10 +279,7 @@ async function proxyApiRequest(
 
   let response: Response;
   try {
-    // `target` is rebuilt by trustedBackendOrigin() from operator-only runtime
-    // configuration, then constrained to the validated API path/query above.
-    // codeql[js/request-forgery]
-    response = await fetch(target, init);
+    response = await fetchTrustedBackend(target, init);
   } catch (error) {
     // If the backend isn't available (e.g. during build), return a 503 instead of throwing
     console.error("proxy_fetch_failed", proxyFailureDetails(error));

@@ -1,3 +1,4 @@
+import { fetchTrustedBackend } from "@/lib/backend-request";
 import { trustedBackendOrigin } from "@/lib/backend-url";
 
 const BACKEND_SESSION_PROBE_TIMEOUT_MS = 15_000;
@@ -7,7 +8,7 @@ export async function fetchTrustedBackendSession(
 ): Promise<unknown | null> {
   try {
     const target = new URL("/api/auth/session", trustedBackendOrigin());
-    const response = await fetch(target, {
+    const response = await fetchTrustedBackend(target, {
       method: "GET",
       headers: {
         Accept: "application/json",
