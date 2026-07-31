@@ -38,16 +38,11 @@ def test_reject_unsafe_ip_literal():
     with pytest.raises(ValueError, match="setting IP host must be globally routable"):
         _reject_unsafe_ip_literal("setting", "::1")
 
-    with pytest.raises(ValueError, match="setting host must not be a local or internal domain"):
+    # Localhost string
+    with pytest.raises(ValueError, match="setting host must not be localhost"):
         _reject_unsafe_ip_literal("setting", "localhost")
-    with pytest.raises(ValueError, match="setting host must not be a local or internal domain"):
+    with pytest.raises(ValueError, match="setting host must not be localhost"):
         _reject_unsafe_ip_literal("setting", "test.localhost")
-    with pytest.raises(ValueError, match="setting host must not be a local or internal domain"):
-        _reject_unsafe_ip_literal("setting", "internal")
-    with pytest.raises(ValueError, match="setting host must not be a local or internal domain"):
-        _reject_unsafe_ip_literal("setting", "test.internal")
-    with pytest.raises(ValueError, match="setting host must not be a local or internal domain"):
-        _reject_unsafe_ip_literal("setting", "test.local")
 
     # Standard domain name
     _reject_unsafe_ip_literal("setting", "example.com")

@@ -350,20 +350,13 @@ const BLOCKED_PAYLOAD_FIELD_NAMES = new Set([
 const localProductEventBuffer: RecordedProductEvent[] = [];
 const LOCAL_PRODUCT_EVENT_BUFFER_LIMIT = 200;
 
+function createFallbackEventId() {
+  return `${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`;
+}
+
 export function createProductEventId(prefix = "product_evt"): string {
-  const secureRandom = globalThis.crypto;
-  if (!secureRandom) {
-    throw new Error("Web Crypto is required for product event identifiers");
-  }
-  if (typeof secureRandom.randomUUID === "function") {
-    return `${prefix}_${secureRandom.randomUUID()}`;
-  }
-  const bytes = new Uint8Array(16);
-  secureRandom.getRandomValues(bytes);
-  const randomId = Array.from(bytes, (value) =>
-    value.toString(16).padStart(2, "0"),
-  ).join("");
-  return `${prefix}_${randomId}`;
+  const randomId = globalThis.crypto?.randomUUID?.();
+  return randomId ? `${prefix}_${randomId}` : `${prefix}_${createFallbackEventId()}`;
 }
 
 export function bucketTextLength(value: string): "empty" | "1_20" | "21_80" | "81_200" | "201_plus" {

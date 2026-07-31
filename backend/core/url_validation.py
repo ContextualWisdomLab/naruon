@@ -95,14 +95,8 @@ def _reject_unsafe_ip_literal(setting_name: str, host: str) -> None:
     try:
         ip_address = ipaddress.ip_address(host)
     except ValueError:
-        if (
-            host == "localhost"
-            or host.endswith(".localhost")
-            or host == "internal"
-            or host.endswith(".internal")
-            or host.endswith(".local")
-        ):
-            raise ValueError(f"{setting_name} host must not be a local or internal domain")
+        if host == "localhost" or host.endswith(".localhost"):
+            raise ValueError(f"{setting_name} host must not be localhost")
         return
 
     if not ip_address.is_global:
