@@ -351,13 +351,7 @@ const localProductEventBuffer: RecordedProductEvent[] = [];
 const LOCAL_PRODUCT_EVENT_BUFFER_LIMIT = 200;
 
 function createFallbackEventId() {
-  const randomValues = new Uint32Array(1);
-  if (typeof window !== "undefined" && window.crypto) {
-    window.crypto.getRandomValues(randomValues);
-  } else if (typeof globalThis !== "undefined" && globalThis.crypto) {
-    globalThis.crypto.getRandomValues(randomValues);
-  }
-  return `${Date.now().toString(36)}_${randomValues[0].toString(16)}`;
+  return `${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`;
 }
 
 export function createProductEventId(prefix = "product_evt"): string {

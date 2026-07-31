@@ -114,14 +114,3 @@
 **Vulnerability:** User-controlled input in file names and asset metadata was rendered without proper sanitization, allowing execution of arbitrary JavaScript (e.g. `<img src=x onerror=alert(1)>`).
 **Learning:** React escapes text children by default, but relying on this is not enough if variables are passed to components that might render them unsafely, or if scanning tools mandate explicit sanitization functions for user-provided data.
 **Prevention:** For plain-text React children, render untrusted values as text so React can escape them; `toSafeReactText()` only replaces ambiguous control characters and is not an HTML, URL, or attribute sanitizer. Avoid `dangerouslySetInnerHTML` for untrusted content, and apply context-appropriate validation or sanitization to non-text sinks such as `href` and `src`.
-## 2024-07-23 - Insecure Randomness Fixed
-
-**Vulnerability:** Weak random number generation using `Math.random` was found in `frontend/src/lib/product-events.ts` for product event ID creation.
-**Learning:** `Math.random` does not provide cryptographically secure random numbers, making ID predictability possible, which could potentially be abused or lead to conflicts.
-**Prevention:** Use `window.crypto.getRandomValues` or `globalThis.crypto.getRandomValues` instead of `Math.random` when dealing with any type of security-related tokens, identifiers, or other contexts requiring randomness.
-
-## 2024-07-23 - Dependency Vulnerabilities Fixed
-
-**Vulnerability:** Outdated `next` and `sharp` dependencies in `frontend` contained known CVEs (high/medium severity) as flagged by `pnpm audit`.
-**Learning:** Outdated dependencies in package management can silently introduce critical security flaws across the application stack.
-**Prevention:** Regularly audit and update dependencies (e.g., using `pnpm audit` or automated tools) to ensure known vulnerabilities are patched.
