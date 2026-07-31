@@ -1,8 +1,4 @@
 ## [Unreleased]
-- `backend/api/tools.py`에 새롭고 유용한 기능 2개(`pii_redactor`, `reading_time_estimator`)를 기획 및 추가하였으며, 관련된 모든 테스트 코드를 작성하여 100% 테스트 커버리지를 달성 및 유지하였습니다.
-
-- `backend/api/tools.py`의 `_detect_text_language`와 `sentiment_analyzer_handler`에 대한 테스트 케이스 추가 (테스트 커버리지 100% 달성)
-
 ### 마이그레이션 정합성 (Alembic single-head 복구)
 
 - Alembic 마이그레이션 그래프의 head가 둘로 갈라져(`0011_email_read_state` — `email_records.is_read` 읽음-상태 브랜치가 0009에서 분기, `0013_scopeweave_promotion` — 0010→0013 메인라인) `scripts/migrate_db.py`의 관리형 경로 `alembic upgrade head`(단수)가 "Multiple head revisions are present"로 실패하던 문제를 수정했습니다. 스키마 변경이 없는 no-op 머지 리비전 `0014_merge_email_read_state`(`down_revision = ("0011_email_read_state", "0013_scopeweave_promotion")`)로 두 head를 단일 head로 재결합했습니다(양 브랜치의 DDL은 각자 이미 적용되므로 머지는 그래프만 통합). 재발 방지 가드로 `tests/test_alembic_migrations.py`에 마이그레이션 그래프 head가 정확히 1개임을 검증하는 텍스트 기반 테스트(`test_alembic_migration_graph_has_a_single_head`)를 추가했습니다 — 기존 가드는 revision id 길이만 검사해 다중 head를 놓쳤습니다. 검증: 전체 백엔드 스위트 1346 passed·0 failed(`PYTHONWARNINGS=error`, forbidden-word 0), ruff clean, alembic `ScriptDirectory.get_heads()` == 1.
@@ -2691,9 +2687,6 @@
 - `docker compose down`
 
 ## [Unreleased]
-
-- `backend/api/tools.py`의 `_detect_text_language`와 `sentiment_analyzer_handler`에 대한 테스트 케이스 추가 (테스트 커버리지 100% 달성)
-
 ### Added
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환

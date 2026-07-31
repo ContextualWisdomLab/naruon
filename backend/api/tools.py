@@ -1,6 +1,4 @@
 import base64
-import re
-
 import inspect
 import json
 import logging
@@ -605,52 +603,6 @@ registry.register(
         parameters={"draft_content": "string"},
     ),
     grammar_checker_handler,
-)
-
-
-
-async def pii_redactor_handler(params: Dict[str, Any]) -> Any:
-    """Redact basic PII (emails, phone numbers) from text."""
-    text = params.get("text", "")
-    # Simple regex for email and a basic phone pattern
-    redacted = re.sub(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[REDACTED_EMAIL]", text)
-    redacted = re.sub(r"\b\d{3}[-.]?\d{3,4}[-.]?\d{4}\b", "[REDACTED_PHONE]", redacted)
-    return {"redacted_text": redacted}
-
-
-registry.register(
-    ToolInfo(
-        code="pii_redactor",
-        name="개인정보 비식별화 (PII Redactor)",
-        description="이메일과 전화번호 등 간단한 개인정보를 마스킹 처리합니다.",
-        category="보안",
-        parameters={"text": "string"},
-    ),
-    pii_redactor_handler,
-)
-
-
-async def reading_time_estimator_handler(params: Dict[str, Any]) -> Any:
-    """Estimate reading time based on word count."""
-    text = params.get("text", "")
-    words = len(text.split())
-    # Assume 200 words per minute average reading speed
-    reading_time_minutes = max(1, round(words / 200)) if words > 0 else 0
-    return {
-        "word_count": words,
-        "estimated_minutes": reading_time_minutes,
-    }
-
-
-registry.register(
-    ToolInfo(
-        code="reading_time_estimator",
-        name="읽기 시간 계산기 (Reading Time Estimator)",
-        description="텍스트의 단어 수를 기반으로 예상 읽기 시간을 분 단위로 계산합니다.",
-        category="유틸리티",
-        parameters={"text": "string"},
-    ),
-    reading_time_estimator_handler,
 )
 
 
