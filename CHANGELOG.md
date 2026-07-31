@@ -1,4 +1,8 @@
 ## [Unreleased]
+### 백엔드 도구 확장 (Backend Tools Expansion)
+
+- **링크 추출기 (Link Extractor)** 및 **개인정보 마스킹 (PII Redactor)** 도구를 `backend/api/tools.py`에 새롭게 추가하여 AI 허브 등에서 활용 가능한 텍스트 처리 능력을 강화하였습니다. `Link Extractor`는 텍스트에서 URL 목록과 그 개수를 추출하며, `PII Redactor`는 이메일, 전화번호, 주민등록번호와 같은 중요 개인정보를 식별해 안전하게 마스킹 처리합니다.
+- `backend/tests/test_tools_api.py`에 새로 추가된 두 도구에 대한 자동화 테스트 코드를 작성하였고 엣지 케이스까지 모두 포괄하여 `api.tools` 모듈의 100% 테스트 커버리지를 보장합니다.
 ### 보안 패치 (CodeQL extended current-head)
 
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
