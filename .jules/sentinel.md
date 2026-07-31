@@ -124,3 +124,8 @@
 **Vulnerability:** The `_safe_upload_filename` in `email_import_service.py` checked for path traversals (like `..`) but did not convert backslashes (`\`) to forward slashes (`/`), meaning that Windows-style path traversal attacks (like `..\..\upload` or encoded versions) could bypass the check.
 **Learning:** Checking for traversal sequences using `pathlib.Path.name` may leave the result vulnerable if the input path can contain Windows-style path separators but the program interprets it dynamically or decodes payloads using backslashes.
 **Prevention:** Always convert backslashes to forward slashes before parsing filenames.
+
+## 2026-07-29 - Prevent SSRF via Local/Internal Domains
+**Vulnerability:** The URL validation logic correctly blocked non-global IP addresses and `localhost`, but failed to block internal domain extensions such as `.internal` or `.local` (or exact matches for `internal`). This could allow attackers to bypass SSRF protections by resolving these internal top-level domains.
+**Learning:** Checking for `localhost` alone is insufficient to prevent SSRF against internal network resources, as modern environments and protocols utilize `.internal` and `.local` domains for internal routing.
+**Prevention:** Always explicitly check and block domains matching `.internal`, `.local`, or `internal` (alongside `localhost`) when validating URLs for global reachability to prevent SSRF bypasses.
