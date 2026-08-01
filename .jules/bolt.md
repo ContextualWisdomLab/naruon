@@ -10,3 +10,7 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+
+## 2024-08-01 - O(N) Array Generation and Mapping in React Grids
+**Learning:** Inline array generation and mapping (e.g., `Array.from({ length: 35 }).map(...)`) inside the JSX return function of grid components like CalendarMonthView causes O(N) recalculations on every render, which can block the main thread during unrelated state updates.
+**Action:** Wrap inline array generation and element mapping within a `useMemo` hook, especially for fixed-size grid components, ensuring that DOM elements are only regenerated when necessary dependencies (like `monthEventsByDay`) change.
