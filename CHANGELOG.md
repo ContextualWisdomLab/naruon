@@ -66,6 +66,7 @@
 
 ### 코드 건강성 개선 (Code Health)
 
+- 백엔드 그룹화 루프에 `defaultdict(list)`를 적용해 기존 순서와 응답을 보존하면서 `setdefault`가 매 반복마다 만들던 미사용 빈 리스트 할당을 피했습니다.
 - `WorkspaceHome`의 작업 완료 토글과 Reply SLA 팔로업 생성 로직을 `useTasks` hook으로 분리하고, 화면 쪽 formatter를 주입해 작업 제목 정규화 로직 중복을 방지했습니다.
 - `backend/api/security.py`에서 사용하지 않는 `from __future__ import annotations` 구문을 제거하고 조건 표현식을 정리했습니다.
 - `backend/alembic/env.py`에서 사용하지 않는 `from __future__ import annotations` 구문을 제거해 Alembic 환경 설정 코드를 간결하게 정리했습니다.
