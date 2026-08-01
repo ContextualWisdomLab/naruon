@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
@@ -612,9 +612,9 @@ def _candidate_groups(
     *,
     scope: ProjectGraphQueryScope,
 ) -> tuple[_CandidateGroup, ...]:
-    records_by_email: dict[int, list[ProjectGraphObjectRecord]] = {}
+    records_by_email: dict[int, list[ProjectGraphObjectRecord]] = defaultdict(list)
     for record in records:
-        records_by_email.setdefault(record.email_id, []).append(record)
+        records_by_email[record.email_id].append(record)
 
     groups: list[_CandidateGroup] = []
     for group_records in records_by_email.values():
@@ -632,7 +632,9 @@ def _candidate_groups(
             if explicit_candidate is not None
             else _synthetic_project_uid(group_records, scope=scope)
         )
-        groups.append(_CandidateGroup(project_uid=project_uid, records=tuple(group_records)))
+        groups.append(
+            _CandidateGroup(project_uid=project_uid, records=tuple(group_records))
+        )
     return tuple(groups)
 
 
@@ -842,9 +844,9 @@ def _relation_summary(
     ``relation_count`` descending with a ``relation_type``-ascending tie-break so
     the result is deterministic regardless of relation iteration order.
     """
-    grouped: dict[str, list[ProjectTraceRelation]] = {}
+    grouped: dict[str, list[ProjectTraceRelation]] = defaultdict(list)
     for relation in relations:
-        grouped.setdefault(relation.relation_type, []).append(relation)
+        grouped[relation.relation_type].append(relation)
     type_summaries = [
         ProjectRelationTypeSummary(
             relation_type=relation_type,
