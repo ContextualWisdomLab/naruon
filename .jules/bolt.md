@@ -10,3 +10,8 @@
 ## 2024-05-24 - Memoizing inline array maps
 **Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render.
 **Action:** Wrap inline JSX elements that map over arrays (e.g., lists of tasks) in a `useMemo` hook with specific dependencies.
+
+## 2025-02-12 - Avoided unused setdefault list allocations in grouping loops
+
+**Learning:** `dict.setdefault(key, []).append(value)` evaluates the empty-list default on every iteration, including when the key already exists. In grouping loops, `defaultdict(list)` avoids those transient unused list allocations while preserving insertion order.
+**Action:** Use `defaultdict(list)` when missing keys are intentionally initialized with lists. Keep `setdefault` when its eager-default behavior or an ordinary `dict` is part of the required contract, and benchmark before claiming a material end-to-end improvement.
