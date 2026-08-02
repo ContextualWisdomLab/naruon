@@ -40,7 +40,7 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
         <div className="flex gap-3 items-center">
           <Video className="size-5 text-muted-foreground shrink-0" />
           <p className="text-sm font-semibold">{selectedDetailEvent?.location ?? '장소 없음'}</p>
-          <button type="button" aria-label={`${selectedDetailEvent?.location ?? '장소'} 위치 보기`} className="text-xs text-primary font-semibold ml-auto hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">위치 보기</button>
+          <Button type="button" variant="link" aria-label={`${selectedDetailEvent?.location ?? '장소'} 위치 보기`} className="ml-auto p-0 h-auto text-xs font-semibold rounded-sm">위치 보기</Button>
         </div>
         <div className="flex gap-3 items-start">
           <Users className="size-5 text-muted-foreground shrink-0" />
@@ -80,9 +80,9 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
       </div>
 
       <div className="mt-8 flex gap-3">
-        <button type="button" aria-label="출시 회의 일정 삭제" className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">삭제</button>
-        <button type="button" aria-label="출시 회의 일정 복사" className="flex-1 rounded-lg border border-border bg-background py-2 text-sm font-bold shadow-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">복사</button>
-        <button type="button" aria-label="출시 회의 일정 수정" className="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90">수정</button>
+        <Button type="button" variant="outline" aria-label={`${selectedDetailEvent?.title ?? '선택한'} 일정 삭제`} className="flex-1">삭제</Button>
+        <Button type="button" variant="outline" aria-label={`${selectedDetailEvent?.title ?? '선택한'} 일정 복사`} className="flex-1">복사</Button>
+        <Button type="button" aria-label={`${selectedDetailEvent?.title ?? '선택한'} 일정 수정`} className="flex-1">수정</Button>
       </div>
     </aside>
   );
