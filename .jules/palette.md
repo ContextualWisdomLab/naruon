@@ -77,3 +77,7 @@
 ## 2026-06-25 - Use semantic type="search" with custom clear buttons
 **Learning:** Using `type="search"` on input fields improves mobile UX by rendering a semantic search keyboard (with a "Search" submit button instead of "Go/Enter"). However, when adding a custom clear button ('X') using UI components or Tailwind CSS, the native webkit clear button overlaps with it.
 **Action:** When implementing search fields, always use `type="search"` instead of `type="text"` to get the semantic keyboard benefits. To prevent visual overlaps with custom clear icons, add the `[&::-webkit-search-cancel-button]:hidden` Tailwind utility class to hide the native webkit clear button.
+
+## 2024-10-18 - Dynamic ARIA Labels
+**Learning:** Hardcoded ARIA labels in mockups should be replaced with data-driven values (e.g., `${event.title} 삭제`) for accurate screen reader announcements.
+**Action:** Always check interactive elements for static mock-up labels and replace them with dynamic props.
