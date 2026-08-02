@@ -15,3 +15,7 @@
 
 **Learning:** `dict.setdefault(key, []).append(value)` evaluates the empty-list default on every iteration, including when the key already exists. In grouping loops, `defaultdict(list)` avoids those transient unused list allocations while preserving insertion order.
 **Action:** Use `defaultdict(list)` when missing keys are intentionally initialized with lists. Keep `setdefault` when its eager-default behavior or an ordinary `dict` is part of the required contract, and benchmark before claiming a material end-to-end improvement.
+
+## 2026-08-02 - [React 렌더링 최적화] 캘린더 그리드 메모이제이션 적용
+**Learning:** To prevent O(N) re-renders blocking the main thread during unrelated state updates in React, inline array generation and mapping (e.g., `Array.from({ length: 35 }).map(...)`) within JSX should be wrapped inside a `useMemo` hook, especially for grid components like calendars.
+**Action:** Extract large inline JSX mappings that derive from state/props into `useMemo` hooks to prevent recreation of elements on every parent re-render.
