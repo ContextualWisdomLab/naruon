@@ -187,12 +187,21 @@ def _message_id_for(parsed: EmailData, content: bytes) -> str:
 
 
 def _email_fingerprint(parsed: EmailData, persisted_date: datetime.datetime) -> str:
-    strong_fingerprint = strong_email_fingerprint(
-        sender=parsed.get("sender"),
-        subject=parsed.get("subject"),
-        date=persisted_date,
-        body=parsed.get("body"),
-    )
+    # A strong (auto-dedupe-eligible) fingerprint may only be seeded from a
+    # genuinely-parsed sender Date. When the Date header was missing or invalid
+    # (date_provenance != "parsed"), ``persisted_date`` is a synthetic
+    # collection-time fallback, not original metadata, so it must not produce a
+    # strong duplicate key — the email falls through to the weak fallback
+    # fingerprint (which, carrying the distinct collection time, cannot
+    # manufacture a false duplicate) (naruon#1086).
+    strong_fingerprint = None
+    if parsed.get("date_provenance") == "parsed":
+        strong_fingerprint = strong_email_fingerprint(
+            sender=parsed.get("sender"),
+            subject=parsed.get("subject"),
+            date=persisted_date,
+            body=parsed.get("body"),
+        )
     if strong_fingerprint:
         return strong_fingerprint
     return generate_email_fingerprint(
@@ -325,6 +334,7 @@ def _build_email_object(
         in_reply_to=parsed.get("in_reply_to"),
         references=parsed.get("references"),
         date=persisted_date,
+        date_provenance=parsed.get("date_provenance", "unknown"),
         body=parsed.get("body", ""),
         embedding=fitted_embeddings[0] if fitted_embeddings else _zero_embedding(),
     )

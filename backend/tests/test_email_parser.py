@@ -5,7 +5,12 @@ from email.message import Message
 from unittest.mock import patch
 
 import pytest
-from services.email_parser import _extract_thread_id, _sanitize_nul, parse_eml
+from services.email_parser import (
+    _extract_thread_id,
+    _sanitize_nul,
+    parse_eml,
+    parse_eml_bytes,
+)
 from services.exceptions import EmailParseError
 
 
@@ -462,3 +467,125 @@ def test_sanitize_display_text():
 
     # None value (falls back to _sanitize_nul which converts None to "")
     assert _sanitize_display_text(None) == ""
+
+
+def _eml_with(headers: str) -> bytes:
+    """Build minimal EML bytes with the given header block and a plain body."""
+    return (headers.strip() + "\n\nBody text.").encode("utf-8")
+
+
+def test_parse_eml_marks_valid_date_as_parsed_with_original_header_date():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <parsed-date@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Valid date
+Date: Mon, 27 Apr 2026 10:00:00 +0000"""
+        )
+    )
+
+    expected = datetime.datetime(2026, 4, 27, 10, 0, 0, tzinfo=datetime.timezone.utc)
+    assert parsed["date_provenance"] == "parsed"
+    assert parsed["header_date"] == expected
+    # The effective (storage) date equals the genuine header date, not a fallback.
+    assert parsed["date"] == expected
+
+
+def test_parse_eml_marks_missing_date_without_promoting_the_fallback():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <missing-date@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: No date header"""
+        )
+    )
+
+    assert parsed["date_provenance"] == "missing"
+    # No original sender date exists; only a collection-time fallback is stored.
+    assert parsed["header_date"] is None
+    assert parsed["date"].tzinfo is not None
+
+
+def test_parse_eml_marks_invalid_date_without_promoting_the_fallback():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <invalid-date@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Unparseable date
+Date: not-a-real-date"""
+        )
+    )
+
+    assert parsed["date_provenance"] == "invalid"
+    assert parsed["header_date"] is None
+    assert parsed["date"].tzinfo is not None
+
+
+def test_parse_eml_marks_whitespace_only_date_as_missing():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <whitespace-date@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Whitespace-only date
+Date:    """
+        )
+    )
+
+    # A Date header that is only whitespace carries no sender metadata, so it is
+    # treated as missing (not invalid) and the fallback is not promoted.
+    assert parsed["date_provenance"] == "missing"
+    assert parsed["header_date"] is None
+    assert parsed["date"].tzinfo is not None
+
+
+def test_parse_eml_normalizes_minus_zero_zone_to_utc():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <minus-zero-zone@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Minus-zero timezone
+Date: Sun, 01 Jan 2023 12:00:00 -0000"""
+        )
+    )
+
+    # RFC 5322 "-0000" ("no timezone info") makes parsedate_to_datetime return a
+    # naive datetime; the parser must normalize it to UTC so the documented
+    # timezone-aware contract holds for every parsed header.
+    assert parsed["date_provenance"] == "parsed"
+    assert parsed["header_date"] is not None
+    assert parsed["header_date"].tzinfo is not None
+    assert parsed["header_date"].utcoffset() == datetime.timedelta(0)
+    assert parsed["date"].tzinfo is not None
+
+
+def test_parse_eml_marks_embedded_message_id_provenance():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """Message-ID: <embedded-id@test.com>
+From: sender@test.com
+To: recipient@test.com
+Subject: Has message id
+Date: Mon, 27 Apr 2026 10:00:00 +0000"""
+        )
+    )
+
+    assert parsed["message_id_provenance"] == "embedded"
+
+
+def test_parse_eml_marks_missing_message_id_provenance():
+    parsed = parse_eml_bytes(
+        _eml_with(
+            """From: sender@test.com
+To: recipient@test.com
+Subject: No message id
+Date: Mon, 27 Apr 2026 10:00:00 +0000"""
+        )
+    )
+
+    assert parsed["message_id"] == ""
+    assert parsed["message_id_provenance"] == "missing"
