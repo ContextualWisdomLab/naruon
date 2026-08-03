@@ -1,0 +1,110 @@
+name: Dispatch Naruon PR review queue
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dispatch-naruon-pr-review-queue
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    if: github.event.pull_request.head.ref == 'claude/contextualwisdomlab-audit-governance-qyxe67'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout dispatcher branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
+        with:
+          ref: claude/contextualwisdomlab-audit-governance-qyxe67
+          fetch-depth: 0
+
+      - name: Exchange OpenCode app token
+        id: app-token
+        shell: bash
+        env:
+          OIDC_AUDIENCE: opencode-github-action
+          OPENCODE_API_BASE_URL: https://api.opencode.ai
+        run: |
+          set -euo pipefail
+          request_url="${ACTIONS_ID_TOKEN_REQUEST_URL}"
+          separator='&'
+          case "$request_url" in
+            *\?*) ;;
+            *) separator='?' ;;
+          esac
+          oidc_response="$(
+            curl -fsS \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${request_url}${separator}audience=${OIDC_AUDIENCE}"
+          )"
+          oidc_token="$(jq -r '.value // empty' <<<"$oidc_response")"
+          test -n "$oidc_token"
+          token_response="$(
+            curl -fsS \
+              -X POST \
+              -H "Authorization: Bearer ${oidc_token}" \
+              "${OPENCODE_API_BASE_URL}/exchange_github_app_token"
+          )"
+          app_token="$(jq -r '.token // empty' <<<"$token_response")"
+          test -n "$app_token"
+          echo "::add-mask::$app_token"
+          echo "token=$app_token" >>"$GITHUB_OUTPUT"
+
+      - name: Dispatch targeted scheduler runs
+        shell: bash
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          for pr_number in 1192 1194 1195 1203 1206 1210 1211 1214 1215; do
+            payload="$(
+              jq -cn \
+                --arg pr_number "$pr_number" \
+                '{
+                  event_type: "merge-scheduler",
+                  client_payload: {
+                    target_repository: "ContextualWisdomLab/naruon",
+                    pr_number: $pr_number,
+                    base_branch: "develop",
+                    trigger_reviews: true,
+                    review_dispatch_limit: "-1",
+                    branch_update_limit: "-1",
+                    enable_auto_merge: true,
+                    merge_mode: "direct_or_auto",
+                    update_branches: true
+                  }
+                }'
+            )"
+            curl -fsS \
+              -X POST \
+              -H "Authorization: Bearer ${APP_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/ContextualWisdomLab/.github/dispatches \
+              -d "$payload"
+          done
+
+      - name: Remove one-shot dispatcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -- .github/workflows/pr-review-dispatch-1195.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/pr-review-dispatch-1195.yml
+          git commit -m "chore(ci): remove one-shot PR review dispatcher"
+          git push origin HEAD:claude/contextualwisdomlab-audit-governance-qyxe67
