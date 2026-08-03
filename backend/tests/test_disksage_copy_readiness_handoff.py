@@ -124,6 +124,29 @@ def test_main_preserves_valid_disksage_failure_protocol(tmp_path, capsys, exit_c
     assert json.loads(capsys.readouterr().out) == payload
 
 
+def test_main_accepts_bounded_redacted_usage_stderr_from_rust_contract(
+    tmp_path, capsys
+):
+    payload = {
+        "ok": False,
+        "error_code": "naruon-copy-readiness-verifier-usage-invalid",
+    }
+    verifier = _python_verifier(
+        tmp_path / "verifier",
+        "import json, sys\n"
+        f"print(json.dumps({payload!r}, sort_keys=True))\n"
+        "print('sensitive usage detail', file=sys.stderr)\n"
+        "raise SystemExit(64)\n",
+    )
+    readiness = tmp_path / "readiness.json"
+
+    assert handoff.main(_handoff_args(verifier, readiness)) == 64
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == payload
+    assert captured.err == ""
+    assert "sensitive usage detail" not in captured.out
+
+
 def test_main_rejects_duplicate_json_object_names_without_leakage(tmp_path, capsys):
     success_json = json.dumps(_success_payload(), sort_keys=True)
     ambiguous_success = success_json.replace(
@@ -351,6 +374,40 @@ def test_main_rejects_short_snapshot_write_without_execution(
         "ok": False,
         "error_code": "disksage-verifier-snapshot-failed",
     }
+
+
+def test_main_completes_repeated_short_snapshot_writes(tmp_path, monkeypatch, capsys):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    readiness = tmp_path / "readiness.json"
+    original_open = Path.open
+
+    class OneByteWriter:
+        def __init__(self, destination):
+            self.destination = destination
+
+        def __enter__(self):
+            self.destination.__enter__()
+            return self
+
+        def __exit__(self, *exc_info):
+            return self.destination.__exit__(*exc_info)
+
+        def fileno(self):
+            return self.destination.fileno()
+
+        def write(self, data):
+            return self.destination.write(data[:1])
+
+    def one_byte_snapshot_open(path, *open_args, **open_kwargs):
+        destination = original_open(path, *open_args, **open_kwargs)
+        if path.parent.name.startswith("naruon-disksage-verifier-"):
+            return OneByteWriter(destination)
+        return destination
+
+    monkeypatch.setattr(Path, "open", one_byte_snapshot_open)
+
+    assert handoff.main(_handoff_args(verifier, readiness)) == 0
+    assert json.loads(capsys.readouterr().out) == _success_payload()
 
 
 @pytest.mark.parametrize("replacement", ["symlink", "fifo"])
@@ -692,7 +749,7 @@ def test_main_kills_oversized_output_without_echoing_it(tmp_path, capsys, stream
     assert "sensitive-path" not in encoded
 
 
-def test_main_kills_process_group_on_timeout(tmp_path, monkeypatch, capsys):
+def test_main_kills_original_process_group_on_timeout(tmp_path, monkeypatch, capsys):
     child_pid_path = tmp_path / "child.pid"
     verifier = tmp_path / "verifier"
     verifier.write_text(
@@ -721,7 +778,7 @@ def test_main_kills_process_group_on_timeout(tmp_path, monkeypatch, capsys):
             break
         time.sleep(0.02)
     else:
-        pytest.fail("verifier descendant survived process-group timeout kill")
+        pytest.fail("verifier process-group member survived timeout kill")
 
 
 def test_cli_reserializes_rust_protocol_instead_of_forwarding_raw_output(tmp_path):

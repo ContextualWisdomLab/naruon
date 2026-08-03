@@ -107,7 +107,7 @@ def _verifier_is_executable_regular_file(path: Path) -> bool:
 
 @contextmanager
 def _verified_verifier_snapshot(path: Path, expected_sha256: str) -> Iterator[Path]:
-    """Materialize and execute only the exact verifier bytes approved by digest."""
+    """Snapshot a fully materialized local verifier and bind its bytes to a digest."""
     if not _verifier_is_executable_regular_file(path):
         raise HandoffError("disksage-verifier-unavailable", EXIT_VERIFIER_UNAVAILABLE)
 
@@ -195,7 +195,7 @@ def _verified_verifier_snapshot(path: Path, expected_sha256: str) -> Iterator[Pa
 
 
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
-    """Best-effort kill and reap a verifier and every descendant in its session."""
+    """Best-effort kill and reap the verifier's original process group."""
 
     if os.name == "posix":
         try:
@@ -296,7 +296,7 @@ def _run_bounded_verifier(verifier: Path, readiness: Path) -> VerifierResult:
             if not stream.closed:
                 stream.close()
 
-    # A verifier is not permitted to leave background descendants behind.
+    # Reap the verifier and kill anything left in its original process group.
     _terminate_process_group(process)
     return VerifierResult(
         returncode=returncode,
@@ -329,8 +329,6 @@ def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 def _decode_protocol(result: VerifierResult) -> dict[str, object]:
     """Decode and validate the verifier's exact success or failure wire contract."""
 
-    if result.stderr:
-        raise HandoffError("disksage-verifier-protocol-invalid")
     try:
         payload = json.loads(
             result.stdout.decode("utf-8"), object_pairs_hook=_unique_json_object
@@ -342,7 +340,8 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
 
     if result.returncode == 0:
         valid = (
-            frozenset(payload) == SUCCESS_FIELDS
+            not result.stderr
+            and frozenset(payload) == SUCCESS_FIELDS
             and payload.get("ok") is True
             and payload.get("schema_kind") == "disksage.naruon.cloud-copy-readiness"
             and type(payload.get("schema_version")) is int
@@ -390,8 +389,8 @@ def main(argv: list[str] | None = None) -> int:
         "--verifier-sha256",
         required=True,
         help=(
-            "Expected lowercase SHA-256 of the DiskSage verifier approved by "
-            "the operator or a trusted public evidence artifact."
+            "Expected lowercase SHA-256 of a fully materialized local DiskSage "
+            "verifier approved by the operator or a trusted public evidence artifact."
         ),
     )
     parser.add_argument("readiness", help="Absolute readiness JSON file path.")
