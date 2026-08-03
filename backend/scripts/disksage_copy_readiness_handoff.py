@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -13,11 +16,14 @@ import selectors
 import signal
 import stat
 import subprocess
+import tempfile
 import time
 from typing import NoReturn
 
 
 VERIFIER_TIMEOUT_SECONDS = 10
+MAX_VERIFIER_BYTES = 256 * 1024 * 1024
+VERIFIER_COPY_CHUNK_BYTES = 1024 * 1024
 MAX_STDOUT_BYTES = 64 * 1024
 MAX_STDERR_BYTES = 8 * 1024
 EXIT_USAGE = 64
@@ -87,6 +93,95 @@ def _verifier_is_executable_regular_file(path: Path) -> bool:
     except OSError:
         return False
     return stat.S_ISREG(metadata.st_mode) and os.access(path, os.X_OK)
+
+
+@contextmanager
+def _verified_verifier_snapshot(path: Path, expected_sha256: str) -> Iterator[Path]:
+    """Materialize and execute only the exact verifier bytes approved by digest."""
+    if not _verifier_is_executable_regular_file(path):
+        raise HandoffError("disksage-verifier-unavailable", EXIT_VERIFIER_UNAVAILABLE)
+
+    open_flags = os.O_RDONLY
+    open_flags |= getattr(os, "O_CLOEXEC", 0)
+    open_flags |= getattr(os, "O_NOFOLLOW", 0)
+    open_flags |= getattr(os, "O_NONBLOCK", 0)
+    try:
+        source_fd = os.open(path, open_flags)
+    except OSError as error:
+        raise HandoffError(
+            "disksage-verifier-unavailable", EXIT_VERIFIER_UNAVAILABLE
+        ) from error
+
+    try:
+        source_metadata = os.fstat(source_fd)
+        if (
+            not stat.S_ISREG(source_metadata.st_mode)
+            or source_metadata.st_mode & 0o111 == 0
+            or source_metadata.st_size > MAX_VERIFIER_BYTES
+        ):
+            raise HandoffError(
+                "disksage-verifier-unavailable", EXIT_VERIFIER_UNAVAILABLE
+            )
+
+        try:
+            snapshot_directory = tempfile.TemporaryDirectory(
+                prefix="naruon-disksage-verifier-"
+            )
+        except OSError as error:
+            raise HandoffError("disksage-verifier-snapshot-failed") from error
+
+        try:
+            snapshot = Path(snapshot_directory.name) / "verifier"
+            digest = hashlib.sha256()
+            copied_bytes = 0
+            try:
+                with snapshot.open("xb", buffering=0) as destination:
+                    while True:
+                        chunk = os.read(source_fd, VERIFIER_COPY_CHUNK_BYTES)
+                        if not chunk:
+                            break
+                        copied_bytes += len(chunk)
+                        if copied_bytes > MAX_VERIFIER_BYTES:
+                            raise HandoffError(
+                                "disksage-verifier-unavailable",
+                                EXIT_VERIFIER_UNAVAILABLE,
+                            )
+                        pending = memoryview(chunk)
+                        while pending:
+                            written = destination.write(pending)
+                            if (
+                                written is None
+                                or written <= 0
+                                or written > len(pending)
+                            ):
+                                raise OSError(
+                                    "verifier snapshot write made no progress"
+                                )
+                            pending = pending[written:]
+                        digest.update(chunk)
+                    os.fsync(destination.fileno())
+                snapshot.chmod(stat.S_IRUSR | stat.S_IXUSR)
+            except HandoffError:
+                raise
+            except OSError as error:
+                raise HandoffError("disksage-verifier-snapshot-failed") from error
+
+            if digest.hexdigest() != expected_sha256:
+                raise HandoffError(
+                    "disksage-verifier-provenance-mismatch",
+                    EXIT_VERIFIER_UNAVAILABLE,
+                )
+            yield snapshot
+        finally:
+            try:
+                snapshot_directory.cleanup()
+            except OSError as error:
+                raise HandoffError("disksage-verifier-snapshot-failed") from error
+    finally:
+        try:
+            os.close(source_fd)
+        except OSError:
+            pass
 
 
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
@@ -258,21 +353,30 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Absolute path to disksage-naruon-copy-readiness-verify.",
     )
+    parser.add_argument(
+        "--verifier-sha256",
+        required=True,
+        help=(
+            "Expected lowercase SHA-256 of the DiskSage verifier approved by "
+            "the operator or a trusted public evidence artifact."
+        ),
+    )
     parser.add_argument("readiness", help="Absolute readiness JSON file path.")
     try:
         args = parser.parse_args(argv)
         verifier = Path(args.verifier)
         readiness = Path(args.readiness)
-        if not _verifier_is_executable_regular_file(verifier):
-            raise HandoffError(
-                "disksage-verifier-unavailable", EXIT_VERIFIER_UNAVAILABLE
-            )
+        if not _is_lower_hex_64(args.verifier_sha256):
+            raise HandoffError("disksage-verifier-sha256-invalid", EXIT_USAGE)
         if not readiness.is_absolute():
             raise HandoffError(
                 "naruon-copy-readiness-input-path-not-absolute", EXIT_USAGE
             )
-        result = _run_bounded_verifier(verifier, readiness)
-        payload = _decode_protocol(result)
+        with _verified_verifier_snapshot(
+            verifier, args.verifier_sha256
+        ) as verified_verifier:
+            result = _run_bounded_verifier(verified_verifier, readiness)
+            payload = _decode_protocol(result)
     except HandoffError as error:
         _print_json({"ok": False, "error_code": error.error_code})
         return error.exit_code

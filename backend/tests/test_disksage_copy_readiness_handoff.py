@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -51,6 +52,25 @@ def _json_verifier(path: Path, payload: dict[str, object], exit_code: int) -> Pa
     )
 
 
+def _verifier_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _handoff_args(
+    verifier: Path | str, readiness: Path | str, *, expected_sha256: str | None = None
+) -> list[str]:
+    verifier_path = Path(verifier)
+    if expected_sha256 is None:
+        expected_sha256 = _verifier_sha256(verifier_path)
+    return [
+        "--verifier",
+        str(verifier),
+        "--verifier-sha256",
+        expected_sha256,
+        str(readiness),
+    ]
+
+
 def test_main_delegates_to_absolute_verifier_without_shell_env_or_input_read(
     tmp_path, monkeypatch, capsys
 ):
@@ -65,7 +85,7 @@ def test_main_delegates_to_absolute_verifier_without_shell_env_or_input_read(
     readiness = tmp_path / "does not need to exist.json"
     monkeypatch.setenv("NARUON_HANDOFF_SECRET", "must-not-reach-child")
 
-    assert handoff.main(["--verifier", str(verifier), str(readiness)]) == 0
+    assert handoff.main(_handoff_args(verifier, readiness)) == 0
     assert json.loads(capsys.readouterr().out) == _success_payload()
     assert not (tmp_path / "must-not-exist").exists()
 
@@ -79,7 +99,7 @@ def test_main_preserves_valid_disksage_failure_protocol(tmp_path, capsys, exit_c
     verifier = _json_verifier(tmp_path / "verifier", payload, exit_code)
     readiness = tmp_path / "readiness.json"
 
-    assert handoff.main(["--verifier", str(verifier), str(readiness)]) == exit_code
+    assert handoff.main(_handoff_args(verifier, readiness)) == exit_code
     assert json.loads(capsys.readouterr().out) == payload
 
 
@@ -93,26 +113,225 @@ def test_main_rejects_relative_or_untrusted_paths(tmp_path, capsys):
     symlink = tmp_path / "verifier-link"
     symlink.symlink_to(target)
 
-    assert handoff.main(["--verifier", "relative", str(readiness)]) == 66
+    assert (
+        handoff.main(_handoff_args("relative", readiness, expected_sha256="0" * 64))
+        == 66
+    )
     assert json.loads(capsys.readouterr().out) == {
         "ok": False,
         "error_code": "disksage-verifier-unavailable",
     }
-    assert handoff.main(["--verifier", str(symlink), str(readiness)]) == 66
+    assert handoff.main(_handoff_args(symlink, readiness)) == 66
     assert json.loads(capsys.readouterr().out) == {
         "ok": False,
         "error_code": "disksage-verifier-unavailable",
     }
     for invalid_verifier in (non_executable, directory):
-        assert handoff.main(["--verifier", str(invalid_verifier), str(readiness)]) == 66
+        assert (
+            handoff.main(
+                _handoff_args(invalid_verifier, readiness, expected_sha256="0" * 64)
+            )
+            == 66
+        )
         assert json.loads(capsys.readouterr().out) == {
             "ok": False,
             "error_code": "disksage-verifier-unavailable",
         }
-    assert handoff.main(["--verifier", str(target), "private.json"]) == 64
+    assert handoff.main(_handoff_args(target, "private.json")) == 64
     assert json.loads(capsys.readouterr().out) == {
         "ok": False,
         "error_code": "naruon-copy-readiness-input-path-not-absolute",
+    }
+
+
+def test_main_requires_valid_verifier_digest(tmp_path, capsys):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    readiness = tmp_path / "readiness.json"
+
+    assert handoff.main(["--verifier", str(verifier), str(readiness)]) == 64
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-handoff-usage-invalid",
+    }
+    assert (
+        handoff.main(_handoff_args(verifier, readiness, expected_sha256="NOT-A-SHA256"))
+        == 64
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-sha256-invalid",
+    }
+
+
+def test_main_rejects_verifier_provenance_mismatch_without_execution(tmp_path, capsys):
+    executed = tmp_path / "executed"
+    verifier = _python_verifier(
+        tmp_path / "verifier",
+        f"from pathlib import Path\nPath({str(executed)!r}).touch()\n",
+    )
+    readiness = tmp_path / "readiness.json"
+
+    assert (
+        handoff.main(_handoff_args(verifier, readiness, expected_sha256="0" * 64)) == 66
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-provenance-mismatch",
+    }
+    assert not executed.exists()
+
+
+def test_main_executes_digest_bound_private_snapshot(tmp_path, monkeypatch, capsys):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    original_bytes = verifier.read_bytes()
+    readiness = tmp_path / "readiness.json"
+
+    def fake_run(snapshot: Path, received_readiness: Path) -> handoff.VerifierResult:
+        assert snapshot != verifier
+        assert snapshot.parent != verifier.parent
+        assert snapshot.read_bytes() == original_bytes
+        assert received_readiness == readiness
+        verifier.write_bytes(b"tampered after provenance verification")
+        assert snapshot.read_bytes() == original_bytes
+        return handoff.VerifierResult(0, json.dumps(_success_payload()).encode(), b"")
+
+    monkeypatch.setattr(handoff, "_run_bounded_verifier", fake_run)
+
+    assert handoff.main(_handoff_args(verifier, readiness)) == 0
+    assert json.loads(capsys.readouterr().out) == _success_payload()
+
+
+def test_main_normalizes_snapshot_creation_failure_without_leakage(
+    tmp_path, monkeypatch, capsys
+):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    readiness = tmp_path / "readiness.json"
+    args = _handoff_args(verifier, readiness)
+
+    def fail_temporary_directory(*_args, **_kwargs):
+        raise OSError("private temp path must not leak")
+
+    monkeypatch.setattr(
+        handoff.tempfile, "TemporaryDirectory", fail_temporary_directory
+    )
+
+    assert handoff.main(args) == 70
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-snapshot-failed",
+    }
+    assert captured.err == ""
+    assert "private temp path" not in captured.out
+
+
+def test_main_normalizes_snapshot_cleanup_failure_without_leakage(
+    tmp_path, monkeypatch, capsys
+):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    readiness = tmp_path / "readiness.json"
+    args = _handoff_args(verifier, readiness)
+    original_temporary_directory = handoff.tempfile.TemporaryDirectory
+
+    class CleanupFailure:
+        def __init__(self, *temp_args, **temp_kwargs):
+            self.delegate = original_temporary_directory(*temp_args, **temp_kwargs)
+            self.name = self.delegate.name
+
+        def cleanup(self):
+            self.delegate.cleanup()
+            raise OSError("private cleanup path must not leak")
+
+    monkeypatch.setattr(handoff.tempfile, "TemporaryDirectory", CleanupFailure)
+
+    assert handoff.main(args) == 70
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-snapshot-failed",
+    }
+    assert captured.err == ""
+    assert "private cleanup path" not in captured.out
+
+
+def test_main_rejects_short_snapshot_write_without_execution(
+    tmp_path, monkeypatch, capsys
+):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    readiness = tmp_path / "readiness.json"
+    args = _handoff_args(verifier, readiness)
+    original_open = Path.open
+
+    class ShortWriter:
+        def __init__(self, destination):
+            self.destination = destination
+            self.first_write = True
+
+        def __enter__(self):
+            self.destination.__enter__()
+            return self
+
+        def __exit__(self, *exc_info):
+            return self.destination.__exit__(*exc_info)
+
+        def fileno(self):
+            return self.destination.fileno()
+
+        def write(self, data):
+            if self.first_write:
+                self.first_write = False
+                return self.destination.write(data[:1])
+            return 0
+
+    def short_snapshot_open(path, *open_args, **open_kwargs):
+        destination = original_open(path, *open_args, **open_kwargs)
+        if path.parent.name.startswith("naruon-disksage-verifier-"):
+            return ShortWriter(destination)
+        return destination
+
+    monkeypatch.setattr(Path, "open", short_snapshot_open)
+
+    def must_not_execute(*_args, **_kwargs):
+        pytest.fail("a short verifier snapshot was executed")
+
+    monkeypatch.setattr(handoff, "_run_bounded_verifier", must_not_execute)
+
+    assert handoff.main(args) == 70
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-snapshot-failed",
+    }
+
+
+@pytest.mark.parametrize("replacement", ["symlink", "fifo"])
+def test_main_rejects_path_replacement_after_precheck(
+    tmp_path, monkeypatch, capsys, replacement
+):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    replacement_target = _json_verifier(
+        tmp_path / "replacement-target", _success_payload(), 0
+    )
+    readiness = tmp_path / "readiness.json"
+    args = _handoff_args(verifier, readiness)
+    original_check = handoff._verifier_is_executable_regular_file
+
+    def approve_then_replace(path: Path) -> bool:
+        assert original_check(path)
+        path.unlink()
+        if replacement == "symlink":
+            path.symlink_to(replacement_target)
+        else:
+            os.mkfifo(path, mode=0o700)
+        return True
+
+    monkeypatch.setattr(
+        handoff, "_verifier_is_executable_regular_file", approve_then_replace
+    )
+
+    assert handoff.main(args) == 66
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-unavailable",
     }
 
 
@@ -132,7 +351,7 @@ def test_main_rejects_mismatched_or_extended_protocol_without_leakage(
     verifier = _json_verifier(tmp_path / "verifier", payload, exit_code)
     readiness = tmp_path / "private-readiness.json"
 
-    assert handoff.main(["--verifier", str(verifier), str(readiness)]) == 70
+    assert handoff.main(_handoff_args(verifier, readiness)) == 70
     encoded = capsys.readouterr().out
     assert json.loads(encoded) == {
         "ok": False,
@@ -173,7 +392,7 @@ def test_main_kills_oversized_output_without_echoing_it(tmp_path, capsys, stream
     )
     readiness = tmp_path / "readiness.json"
 
-    assert handoff.main(["--verifier", str(verifier), str(readiness)]) == 70
+    assert handoff.main(_handoff_args(verifier, readiness)) == 70
     encoded = capsys.readouterr().out
     assert json.loads(encoded) == {
         "ok": False,
@@ -197,7 +416,7 @@ def test_main_kills_process_group_on_timeout(tmp_path, monkeypatch, capsys):
     readiness = tmp_path / "readiness.json"
     monkeypatch.setattr(handoff, "VERIFIER_TIMEOUT_SECONDS", 2)
 
-    assert handoff.main(["--verifier", str(verifier), str(readiness)]) == 70
+    assert handoff.main(_handoff_args(verifier, readiness)) == 70
     assert json.loads(capsys.readouterr().out) == {
         "ok": False,
         "error_code": "disksage-verifier-timeout",
@@ -228,6 +447,8 @@ def test_cli_reserializes_rust_protocol_instead_of_forwarding_raw_output(tmp_pat
             str(SCRIPT_PATH),
             "--verifier",
             str(verifier),
+            "--verifier-sha256",
+            _verifier_sha256(verifier),
             str(readiness),
         ],
         check=False,
