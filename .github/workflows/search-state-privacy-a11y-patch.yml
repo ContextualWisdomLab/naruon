@@ -1,0 +1,488 @@
+name: Search state privacy and accessibility patch
+
+on:
+  push:
+    branches:
+      - fix/search-state-privacy-a11y
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out patch branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6.0.1
+        with:
+          ref: fix/search-state-privacy-a11y
+
+      - name: Apply search UX, privacy, and accessibility changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          component_path = Path("frontend/src/components/SearchLayout.tsx")
+          component = component_path.read_text()
+
+          helper_anchor = '''function resultTitle(result: SearchResultItem) {
+              return result.subject?.trim() || "(제목 없음)";
+          }
+          '''.replace("          ", "")
+          helper_replacement = '''function maskEmail(value: string) {
+              const [localPart, domainPart] = value.split("@", 2);
+              if (!localPart || !domainPart) return value;
+              const maskedLength = Math.max(3, localPart.length - 1);
+              return `${localPart[0]}${"*".repeat(maskedLength)}@${domainPart}`;
+          }
+
+
+          export function senderRelationshipKey(
+              relationship: SenderRelationship,
+          ): string {
+              return JSON.stringify([
+                  relationship.sender_email,
+                  relationship.source_message_id,
+                  relationship.source_thread_id,
+              ]);
+          }
+
+
+          function resultTitle(result: SearchResultItem) {
+              return result.subject?.trim() || "(제목 없음)";
+          }
+          '''.replace("          ", "")
+          if component.count(helper_anchor) != 1:
+              raise SystemExit("result helper anchor not found exactly once")
+          component = component.replace(helper_anchor, helper_replacement, 1)
+
+          old_key = '          key={`${relationship.sender_email}:${relationship.source_message_id ?? "global"}:${relationship.source_thread_id ?? "none"}`}\n'
+          new_key = '          key={senderRelationshipKey(relationship)}\n'
+          if component.count(old_key) != 1:
+              raise SystemExit("relationship key anchor not found exactly once")
+          component = component.replace(old_key, new_key, 1)
+
+          old_sender = '                {relationship.sender_email}\n'
+          new_sender = '                {maskEmail(relationship.sender_email)}\n'
+          if component.count(old_sender) != 1:
+              raise SystemExit("sender display anchor not found exactly once")
+          component = component.replace(old_sender, new_sender, 1)
+
+          old_parent = '                {relationship.parent_sender_email ?? "사용자 직접 관계"}\n'
+          new_parent = '''                {relationship.parent_sender_email
+                    ? maskEmail(relationship.parent_sender_email)
+                    : "사용자 직접 관계"}
+          '''.replace("          ", "")
+          if component.count(old_parent) != 1:
+              raise SystemExit("parent sender anchor not found exactly once")
+          component = component.replace(old_parent, new_parent, 1)
+
+          result_start = component.index(
+              "  // ⚡ Bolt: Wrap search results in useMemo"
+          )
+          result_end = component.index("\n\n  return (", result_start)
+          result_block = '''  // Memoize the rendered result list so unrelated detail-panel state changes
+          // do not rebuild a potentially long collection of result elements.
+          const resultList = useMemo(
+              () => (
+                  <div className="divide-y divide-border">
+                      {loading ? (
+                          <div
+                              role="status"
+                              aria-live="polite"
+                              className="m-4 flex flex-col items-center justify-center rounded-lg bg-secondary/10 p-8 text-center text-muted-foreground"
+                          >
+                              <Loader2
+                                  className="mb-3 size-6 animate-spin text-primary/60"
+                                  aria-hidden="true"
+                              />
+                              <p className="text-sm font-semibold">
+                                  맥락 검색 결과를 불러오는 중입니다
+                              </p>
+                          </div>
+                      ) : error ? (
+                          <div
+                              role="alert"
+                              className="m-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm font-semibold text-destructive"
+                          >
+                              <AlertCircle
+                                  className="mr-2 inline size-4"
+                                  aria-hidden="true"
+                              />
+                              {error}
+                          </div>
+                      ) : filteredResults.length === 0 ? (
+                          <div
+                              role="status"
+                              aria-live="polite"
+                              className="m-4 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border/50 bg-secondary/10 p-8 text-center"
+                          >
+                              <div className="mb-3 rounded-full bg-secondary/50 p-3 ring-1 ring-border">
+                                  <Search
+                                      className="size-5 text-muted-foreground"
+                                      aria-hidden="true"
+                                  />
+                              </div>
+                              <p className="text-sm font-bold text-foreground">
+                                  맥락 검색 결과가 없습니다
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                  검색어를 변경하거나 필터를 조정해 보세요.
+                              </p>
+                          </div>
+                      ) : (
+                          filteredResults.map((result) => (
+                              <SearchResultItemComponent
+                                  key={result.id}
+                                  result={result}
+                                  isActive={activeResult?.id === result.id}
+                                  confidence={confidencePercent(result.score)}
+                                  onSelect={setActiveResultId}
+                              />
+                          ))
+                      )}
+                  </div>
+              ),
+              [loading, error, filteredResults, activeResult?.id, setActiveResultId],
+          );
+          '''.replace("          ", "")
+          component = component[:result_start] + result_block + component[result_end:]
+          component_path.write_text(component)
+
+          test_content = '''/* @vitest-environment jsdom */
+          import React, { act } from "react";
+          import { createRoot, type Root } from "react-dom/client";
+          import { afterEach, describe, expect, it, vi } from "vitest";
+
+          vi.mock("next/dynamic", () => ({
+            default: () => function MockDynamic() {
+              return <div>mock graph</div>;
+            },
+          }));
+
+          vi.mock("next/link", () => ({
+            default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
+              <a href={href} {...props}>{children}</a>
+            ),
+          }));
+
+          vi.mock("lucide-react", () => ({
+            AlertCircle: () => <svg aria-hidden="true" />,
+            CalendarDays: () => <svg aria-hidden="true" />,
+            CheckCircle2: () => <svg aria-hidden="true" />,
+            Clock: () => <svg aria-hidden="true" />,
+            CornerDownRight: () => <svg aria-hidden="true" />,
+            FileText: () => <svg aria-hidden="true" />,
+            Loader2: () => <svg aria-hidden="true" />,
+            Mail: () => <svg aria-hidden="true" />,
+            Network: () => <svg aria-hidden="true" />,
+            Search: () => <svg aria-hidden="true" />,
+            Sparkles: () => <svg aria-hidden="true" />,
+            X: () => <svg aria-hidden="true" />,
+          }));
+
+          import { SearchLayout, senderRelationshipKey } from "./SearchLayout";
+          import {
+            clearRecordedProductEvents,
+            getRecordedProductEvents,
+          } from "@/lib/product-events";
+
+          function jsonResponse(body: unknown) {
+            return new Response(JSON.stringify(body), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          async function flushAsyncWork() {
+            for (let index = 0; index < 5; index += 1) {
+              await act(async () => {
+                await Promise.resolve();
+                await new Promise((resolve) => setTimeout(resolve, 0));
+              });
+            }
+          }
+
+          async function waitForCondition(condition: () => boolean) {
+            for (let index = 0; index < 20; index += 1) {
+              if (condition()) return;
+              await flushAsyncWork();
+            }
+            throw new Error("waitForCondition timed out after 20 attempts");
+          }
+
+          function setInputValue(input: HTMLInputElement, value: string) {
+            const valueSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype,
+              "value",
+            )?.set;
+            valueSetter?.call(input, value);
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+
+          describe("SearchLayout product events", () => {
+            let root: Root | null = null;
+            let container: HTMLDivElement | null = null;
+
+            afterEach(() => {
+              if (root) {
+                act(() => root?.unmount());
+              }
+              root = null;
+              container?.remove();
+              container = null;
+              vi.unstubAllGlobals();
+              clearRecordedProductEvents();
+            });
+
+            it("encodes nullable relationship key fields without sentinel collisions", () => {
+              const relationship = {
+                sender_email: "same@example.com",
+                parent_sender_email: null,
+                relationship_type: "sender_context",
+                confidence_score: 0.91,
+                next_action: "Review",
+                action_reason: "Evidence",
+              };
+
+              expect(
+                senderRelationshipKey({
+                  ...relationship,
+                  source_message_id: null,
+                  source_thread_id: null,
+                }),
+              ).not.toBe(
+                senderRelationshipKey({
+                  ...relationship,
+                  source_message_id: "global",
+                  source_thread_id: "none",
+                }),
+              );
+            });
+
+            it("announces the loading state and hides its decorative icon", async () => {
+              vi.stubGlobal("crypto", {
+                randomUUID: vi.fn(
+                  () =>
+                    "11111111-2222-4333-8444-555555555555" as `${string}-${string}-${string}-${string}-${string}`,
+                ),
+                getRandomValues: <T extends ArrayBufferView | null>(array: T) => array,
+              });
+              let resolveSearch: ((response: Response) => void) | undefined;
+              const pendingSearch = new Promise<Response>((resolve) => {
+                resolveSearch = resolve;
+              });
+              vi.stubGlobal("fetch", vi.fn(() => pendingSearch));
+
+              container = document.createElement("div");
+              document.body.appendChild(container);
+              root = createRoot(container);
+
+              await act(async () => {
+                root?.render(<SearchLayout />);
+              });
+              await waitForCondition(
+                () =>
+                  container?.textContent?.includes(
+                    "맥락 검색 결과를 불러오는 중입니다",
+                  ) ?? false,
+              );
+
+              const loadingStatus = Array.from(
+                container.querySelectorAll<HTMLElement>('[role="status"]'),
+              ).find((element) =>
+                element.textContent?.includes(
+                  "맥락 검색 결과를 불러오는 중입니다",
+                ),
+              );
+              expect(loadingStatus).toBeDefined();
+              expect(loadingStatus?.getAttribute("aria-live")).toBe("polite");
+              const decorativeIcons = Array.from(
+                loadingStatus?.querySelectorAll<SVGElement>("svg") ?? [],
+              );
+              expect(decorativeIcons.length).toBeGreaterThan(0);
+              expect(
+                decorativeIcons.every(
+                  (icon) => icon.getAttribute("aria-hidden") === "true",
+                ),
+              ).toBe(true);
+
+              await act(async () => {
+                resolveSearch?.(jsonResponse({ results: [] }));
+                await pendingSearch;
+              });
+              await waitForCondition(
+                () =>
+                  container?.textContent?.includes("맥락 검색 결과가 없습니다") ??
+                  false,
+              );
+            });
+
+            it("announces an empty result set as a polite status", async () => {
+              vi.stubGlobal("crypto", {
+                randomUUID: vi.fn(
+                  () =>
+                    "11111111-2222-4333-8444-555555555555" as `${string}-${string}-${string}-${string}-${string}`,
+                ),
+                getRandomValues: <T extends ArrayBufferView | null>(array: T) => array,
+              });
+              vi.stubGlobal(
+                "fetch",
+                vi.fn(() => Promise.resolve(jsonResponse({ results: [] }))),
+              );
+
+              container = document.createElement("div");
+              document.body.appendChild(container);
+              root = createRoot(container);
+
+              await act(async () => {
+                root?.render(<SearchLayout />);
+              });
+              await waitForCondition(
+                () =>
+                  container?.textContent?.includes("맥락 검색 결과가 없습니다") ?? false,
+              );
+
+              const emptyStatus = Array.from(
+                container.querySelectorAll<HTMLElement>('[role="status"]'),
+              ).find((element) =>
+                element.textContent?.includes("맥락 검색 결과가 없습니다"),
+              );
+              expect(emptyStatus).toBeDefined();
+              expect(emptyStatus?.getAttribute("aria-live")).toBe("polite");
+            });
+
+            it("records context search submit, result open, and result action events without raw query text", async () => {
+              const randomUUID = vi.fn(
+                () =>
+                  "11111111-2222-4333-8444-555555555555" as `${string}-${string}-${string}-${string}-${string}`,
+              );
+              vi.stubGlobal("crypto", {
+                randomUUID,
+                getRandomValues: <T extends ArrayBufferView | null>(array: T) => array,
+              });
+              const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+                const url = String(input);
+                if (url.endsWith("/api/search")) {
+                  const body = JSON.parse(String(init?.body ?? "{}")) as { query?: string };
+                  const isContractSearch = body.query === "계약";
+                  return Promise.resolve(jsonResponse({
+                    results: [{
+                      id: isContractSearch ? 202 : 101,
+                      source_message_id: isContractSearch ? "<contract-source@example.com>" : "<launch-source@example.com>",
+                      subject: isContractSearch ? "계약 검토 결과" : "런칭 캠페인 결과",
+                      sender: "pm@example.com",
+                      date: "2026-05-20T09:00:00Z",
+                      snippet: "검색 결과에서 관계 캡처 액션을 실행할 수 있습니다.",
+                      thread_id: isContractSearch ? "thread-contract" : "thread-launch",
+                      reply_count: 2,
+                      score: 0.93,
+                    }],
+                  }));
+                }
+                if (url.includes("/api/ontology/relationships?")) {
+                  return Promise.resolve(jsonResponse([]));
+                }
+                if (url.endsWith("/api/ontology/relationships/capture-source")) {
+                  return Promise.resolve(jsonResponse({
+                    sender_email: "alpha@example.test",
+                    parent_sender_email: "beta@example.test",
+                    source_message_id: "<contract-source@example.com>",
+                    source_thread_id: "thread-contract",
+                    relationship_type: "sender_context",
+                    confidence_score: 0.91,
+                    next_action: "계약 검토 담당자를 확인합니다.",
+                    action_reason: "검색 결과 원본 메시지의 후속 조치입니다.",
+                  }));
+                }
+                throw new Error(`Unexpected fetch: ${url}`);
+              });
+              vi.stubGlobal("fetch", fetchMock);
+
+              container = document.createElement("div");
+              document.body.appendChild(container);
+              root = createRoot(container);
+
+              await act(async () => {
+                root?.render(<SearchLayout />);
+              });
+              await waitForCondition(() => container?.textContent?.includes("런칭 캠페인 결과") ?? false);
+
+              expect(getRecordedProductEvents().some((event) =>
+                event.name === "context_search_result_opened" &&
+                event.payload.result_id === 101,
+              )).toBe(true);
+
+              const input = container.querySelector<HTMLInputElement>("#search-input");
+              const form = input?.closest("form");
+              expect(input).not.toBeNull();
+              expect(form).not.toBeNull();
+
+              await act(async () => {
+                setInputValue(input as HTMLInputElement, "계약");
+                form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+              });
+              await waitForCondition(() => container?.textContent?.includes("계약 검토 결과") ?? false);
+
+              expect(getRecordedProductEvents().some((event) =>
+                event.name === "context_search_submitted" &&
+                event.payload.surface === "context_search" &&
+                event.payload.query_length_bucket === "1_20" &&
+                event.payload.search_session_id ===
+                  "context_search_session_11111111-2222-4333-8444-555555555555",
+              )).toBe(true);
+              expect(getRecordedProductEvents().some((event) =>
+                event.name === "context_search_result_opened" &&
+                event.payload.result_id === 202 &&
+                event.payload.rank_bucket === "top_1",
+              )).toBe(true);
+
+              await waitForCondition(() => Array.from(container?.querySelectorAll<HTMLButtonElement>("button") ?? []).some(
+                (button) => button.textContent?.includes("발신자 관계 캡처") && !button.disabled,
+              ));
+              const captureButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+                (button) => button.textContent?.includes("발신자 관계 캡처") && !button.disabled,
+              );
+              expect(captureButton?.textContent).toContain("발신자 관계 캡처");
+
+              await act(async () => {
+                captureButton?.click();
+              });
+              await waitForCondition(() => fetchMock.mock.calls.some(([input]) =>
+                String(input).endsWith("/api/ontology/relationships/capture-source"),
+              ));
+              await waitForCondition(() => getRecordedProductEvents().some((event) => event.name === "context_search_result_action_created"));
+              await waitForCondition(
+                () => container?.textContent?.includes("a****@example.test") ?? false,
+              );
+
+              expect(container.textContent).toContain("b***@example.test");
+              expect(container.textContent).not.toContain("alpha@example.test");
+              expect(container.textContent).not.toContain("beta@example.test");
+              expect(getRecordedProductEvents().some((event) =>
+                event.name === "context_search_result_action_created" &&
+                event.payload.result_id === 202 &&
+                event.payload.action_type === "relation_capture" &&
+                event.payload.source_backlink_present === true,
+              )).toBe(true);
+              expect(JSON.stringify(getRecordedProductEvents())).not.toContain("계약");
+            });
+          });
+          '''.replace("          ", "")
+          Path("frontend/src/components/SearchLayout.test.tsx").write_text(test_content)
+          PY
+
+      - name: Commit patch and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/search-state-privacy-a11y-patch.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(search): improve state feedback and mask relationship emails"
+          git push origin HEAD:fix/search-state-privacy-a11y
