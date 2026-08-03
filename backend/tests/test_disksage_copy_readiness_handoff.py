@@ -1,7 +1,9 @@
 import hashlib
+import inspect
 import json
 import os
 from pathlib import Path
+import runpy
 import shlex
 import subprocess
 import sys
@@ -52,6 +54,13 @@ def _json_verifier(path: Path, payload: dict[str, object], exit_code: int) -> Pa
     )
 
 
+def _raw_json_verifier(path: Path, raw_json: str, exit_code: int) -> Path:
+    return _python_verifier(
+        path,
+        f"import sys\nsys.stdout.write({raw_json!r})\nraise SystemExit({exit_code})\n",
+    )
+
+
 def _verifier_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -69,6 +78,18 @@ def _handoff_args(
         expected_sha256,
         str(readiness),
     ]
+
+
+def test_module_level_runtime_surface_has_docstrings():
+    undocumented = sorted(
+        name
+        for name, value in vars(handoff).items()
+        if getattr(value, "__module__", None) == handoff.__name__
+        and (inspect.isfunction(value) or inspect.isclass(value))
+        and not (isinstance(value.__doc__, str) and value.__doc__.strip())
+    )
+
+    assert undocumented == []
 
 
 def test_main_delegates_to_absolute_verifier_without_shell_env_or_input_read(
@@ -101,6 +122,35 @@ def test_main_preserves_valid_disksage_failure_protocol(tmp_path, capsys, exit_c
 
     assert handoff.main(_handoff_args(verifier, readiness)) == exit_code
     assert json.loads(capsys.readouterr().out) == payload
+
+
+def test_main_rejects_duplicate_json_object_names_without_leakage(tmp_path, capsys):
+    success_json = json.dumps(_success_payload(), sort_keys=True)
+    ambiguous_success = success_json.replace(
+        '"provider": "icloud"',
+        '"provider": "sensitive-private-value", "provider": "icloud"',
+    )
+    ambiguous_failure = (
+        '{"ok":false,"error_code":"sensitive-private-value",'
+        '"error_code":"naruon-copy-readiness-fingerprint-invalid"}'
+    )
+
+    for index, (raw_json, exit_code) in enumerate(
+        ((ambiguous_success, 0), (ambiguous_failure, 65))
+    ):
+        verifier = _raw_json_verifier(
+            tmp_path / f"verifier-{index}", raw_json, exit_code
+        )
+        readiness = tmp_path / f"readiness-{index}.json"
+
+        assert handoff.main(_handoff_args(verifier, readiness)) == 70
+        captured = capsys.readouterr()
+        assert json.loads(captured.out) == {
+            "ok": False,
+            "error_code": "disksage-verifier-protocol-invalid",
+        }
+        assert captured.err == ""
+        assert "sensitive-private-value" not in captured.out
 
 
 def test_main_rejects_relative_or_untrusted_paths(tmp_path, capsys):
@@ -335,6 +385,246 @@ def test_main_rejects_path_replacement_after_precheck(
     }
 
 
+def test_verifier_preflight_handles_lstat_failure(tmp_path):
+    assert not handoff._verifier_is_executable_regular_file(tmp_path / "missing")
+
+
+def test_snapshot_rejects_growth_beyond_bound_and_swallows_close_failure(
+    tmp_path, monkeypatch
+):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    expected_sha256 = _verifier_sha256(verifier)
+    original_fstat = handoff.os.fstat
+    source_stat_hidden = False
+
+    def hide_source_size(file_descriptor):
+        nonlocal source_stat_hidden
+        metadata = original_fstat(file_descriptor)
+        if source_stat_hidden:
+            return metadata
+        source_stat_hidden = True
+        values = list(metadata)
+        values[6] = 0
+        return os.stat_result(values)
+
+    monkeypatch.setattr(handoff.os, "fstat", hide_source_size)
+    monkeypatch.setattr(handoff, "MAX_VERIFIER_BYTES", 1)
+
+    with pytest.raises(handoff.HandoffError) as error:
+        with handoff._verified_verifier_snapshot(verifier, expected_sha256):
+            pytest.fail("an oversized growing verifier snapshot was yielded")
+
+    assert error.value.error_code == "disksage-verifier-unavailable"
+
+    monkeypatch.setattr(handoff, "MAX_VERIFIER_BYTES", 256 * 1024 * 1024)
+    monkeypatch.setattr(handoff.os, "fstat", original_fstat)
+    original_open = handoff.os.open
+    original_close = handoff.os.close
+    source_file_descriptor = None
+
+    def record_source_open(path, flags, *args, **kwargs):
+        nonlocal source_file_descriptor
+        file_descriptor = original_open(path, flags, *args, **kwargs)
+        if Path(path) == verifier:
+            source_file_descriptor = file_descriptor
+        return file_descriptor
+
+    def close_then_fail(file_descriptor):
+        original_close(file_descriptor)
+        if file_descriptor == source_file_descriptor:
+            raise OSError("close failure must be ignored")
+
+    monkeypatch.setattr(handoff.os, "open", record_source_open)
+    monkeypatch.setattr(handoff.os, "close", close_then_fail)
+    with handoff._verified_verifier_snapshot(verifier, expected_sha256) as snapshot:
+        assert snapshot.read_bytes() == verifier.read_bytes()
+
+
+class _TerminationProcess:
+    def __init__(self, *, polls=(), waits=(), kill_error=False):
+        self.pid = 4242
+        self._polls = list(polls)
+        self._waits = list(waits)
+        self.kill_error = kill_error
+        self.kill_count = 0
+
+    def poll(self):
+        return self._polls.pop(0)
+
+    def kill(self):
+        self.kill_count += 1
+        if self.kill_error:
+            raise OSError("kill failed")
+
+    def wait(self, timeout):
+        outcome = self._waits.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+def test_terminate_process_group_covers_platform_and_reap_failures(monkeypatch):
+    monkeypatch.setattr(handoff.os, "name", "nt")
+    kill_failure = _TerminationProcess(polls=[None], waits=[0], kill_error=True)
+    handoff._terminate_process_group(kill_failure)
+    assert kill_failure.kill_count == 1
+
+    already_exited = _TerminationProcess(polls=[0], waits=[0])
+    handoff._terminate_process_group(already_exited)
+    assert already_exited.kill_count == 0
+
+    monkeypatch.setattr(handoff.os, "name", "posix")
+    monkeypatch.setattr(handoff.os, "killpg", lambda *_args: None)
+    timeout = subprocess.TimeoutExpired("verifier", 1)
+    repeated_timeout = _TerminationProcess(
+        polls=[None], waits=[timeout, timeout], kill_error=True
+    )
+    handoff._terminate_process_group(repeated_timeout)
+    assert repeated_timeout.kill_count == 1
+
+    completed_during_timeout = _TerminationProcess(polls=[0], waits=[timeout, 0])
+    handoff._terminate_process_group(completed_during_timeout)
+    assert completed_during_timeout.kill_count == 0
+
+    wait_failure = _TerminationProcess(waits=[OSError("wait failed")])
+    handoff._terminate_process_group(wait_failure)
+
+
+def test_run_bounded_verifier_normalizes_spawn_and_selector_failures(
+    tmp_path, monkeypatch
+):
+    original_popen = subprocess.Popen
+
+    def spawn_failure(*_args, **_kwargs):
+        raise OSError("private executable path")
+
+    monkeypatch.setattr(handoff.subprocess, "Popen", spawn_failure)
+    with pytest.raises(handoff.HandoffError) as error:
+        handoff._run_bounded_verifier(Path("/verifier"), Path("/readiness"))
+    assert error.value.error_code == "disksage-verifier-exec-failed"
+
+    verifier = _python_verifier(tmp_path / "verifier", "import time\ntime.sleep(30)\n")
+    monkeypatch.setattr(handoff.subprocess, "Popen", original_popen)
+
+    class RegisterFailureSelector:
+        def register(self, *_args, **_kwargs):
+            raise OSError("selector registration failed")
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(handoff.selectors, "DefaultSelector", RegisterFailureSelector)
+    with pytest.raises(handoff.HandoffError) as error:
+        handoff._run_bounded_verifier(verifier, tmp_path / "readiness.json")
+    assert error.value.error_code == "disksage-verifier-exec-failed"
+
+
+def test_run_bounded_verifier_handles_immediate_deadline(tmp_path, monkeypatch):
+    verifier = _python_verifier(tmp_path / "verifier", "import time\ntime.sleep(30)\n")
+    monkeypatch.setattr(handoff, "VERIFIER_TIMEOUT_SECONDS", 0)
+
+    with pytest.raises(handoff.HandoffError) as error:
+        handoff._run_bounded_verifier(verifier, tmp_path / "readiness.json")
+
+    assert error.value.error_code == "disksage-verifier-timeout"
+
+
+def test_run_bounded_verifier_retries_nonblocking_read(tmp_path, monkeypatch):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    original_selector = handoff.selectors.DefaultSelector
+    original_read = handoff.os.read
+    state = {"block_next_read": False, "injected": False}
+
+    class BlockingOnceSelector:
+        def __init__(self):
+            self.delegate = original_selector()
+
+        def __getattr__(self, name):
+            return getattr(self.delegate, name)
+
+        def select(self, *args, **kwargs):
+            events = self.delegate.select(*args, **kwargs)
+            if events and not state["injected"]:
+                state["injected"] = True
+                state["block_next_read"] = True
+            return events
+
+    def read_once_blocking(file_descriptor, size):
+        if state["block_next_read"]:
+            state["block_next_read"] = False
+            raise BlockingIOError
+        return original_read(file_descriptor, size)
+
+    monkeypatch.setattr(handoff.selectors, "DefaultSelector", BlockingOnceSelector)
+    monkeypatch.setattr(handoff.os, "read", read_once_blocking)
+
+    result = handoff._run_bounded_verifier(verifier, tmp_path / "readiness.json")
+
+    assert state["injected"]
+    assert handoff._decode_protocol(result) == _success_payload()
+
+
+def test_run_bounded_verifier_rejects_deadline_after_stream_drain(
+    tmp_path, monkeypatch
+):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    original_selector = handoff.selectors.DefaultSelector
+    state = {"streams_drained": False}
+
+    class DrainAwareSelector:
+        def __init__(self):
+            self.delegate = original_selector()
+
+        def __getattr__(self, name):
+            return getattr(self.delegate, name)
+
+        def get_map(self):
+            mapping = self.delegate.get_map()
+            if not mapping:
+                state["streams_drained"] = True
+            return mapping
+
+    def monotonic():
+        return 100.0 if state["streams_drained"] else 0.0
+
+    monkeypatch.setattr(handoff.selectors, "DefaultSelector", DrainAwareSelector)
+    monkeypatch.setattr(handoff, "monotonic", monotonic)
+
+    with pytest.raises(handoff.HandoffError) as error:
+        handoff._run_bounded_verifier(verifier, tmp_path / "readiness.json")
+
+    assert error.value.error_code == "disksage-verifier-timeout"
+
+
+def test_run_bounded_verifier_normalizes_wait_timeout(tmp_path, monkeypatch):
+    verifier = _json_verifier(tmp_path / "verifier", _success_payload(), 0)
+    original_popen = handoff.subprocess.Popen
+
+    class WaitTimeoutOnce:
+        def __init__(self, delegate):
+            self.delegate = delegate
+            self.timed_out = False
+
+        def __getattr__(self, name):
+            return getattr(self.delegate, name)
+
+        def wait(self, timeout):
+            if not self.timed_out:
+                self.timed_out = True
+                raise subprocess.TimeoutExpired("verifier", timeout)
+            return self.delegate.wait(timeout=timeout)
+
+    def wrapped_popen(*args, **kwargs):
+        return WaitTimeoutOnce(original_popen(*args, **kwargs))
+
+    monkeypatch.setattr(handoff.subprocess, "Popen", wrapped_popen)
+
+    with pytest.raises(handoff.HandoffError) as error:
+        handoff._run_bounded_verifier(verifier, tmp_path / "readiness.json")
+
+    assert error.value.error_code == "disksage-verifier-timeout"
+
+
 @pytest.mark.parametrize(
     ("payload", "exit_code"),
     [
@@ -366,6 +656,7 @@ def test_main_rejects_mismatched_or_extended_protocol_without_leakage(
     [
         handoff.VerifierResult(0, b"not-json", b""),
         handoff.VerifierResult(0, b"\xff", b""),
+        handoff.VerifierResult(0, b"[]", b""),
         handoff.VerifierResult(0, b"{}", b""),
         handoff.VerifierResult(0, json.dumps(_success_payload()).encode(), b"warning"),
         handoff.VerifierResult(
@@ -459,3 +750,16 @@ def test_cli_reserializes_rust_protocol_instead_of_forwarding_raw_output(tmp_pat
     assert result.returncode == 65
     assert json.loads(result.stdout) == payload
     assert result.stderr == ""
+
+
+def test_script_entrypoint_exits_through_redacted_usage_protocol(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT_PATH)])
+
+    with pytest.raises(SystemExit) as exit_status:
+        runpy.run_path(str(SCRIPT_PATH), run_name="__main__")
+
+    assert exit_status.value.code == 64
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-handoff-usage-invalid",
+    }

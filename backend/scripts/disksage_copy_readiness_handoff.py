@@ -17,7 +17,7 @@ import signal
 import stat
 import subprocess
 import tempfile
-import time
+from time import monotonic
 from typing import NoReturn
 
 
@@ -63,6 +63,8 @@ ERROR_CODE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 
 class HandoffError(Exception):
+    """Carry a redacted stable error code and process exit status to the CLI boundary."""
+
     def __init__(self, error_code: str, exit_code: int = EXIT_EXECUTION_FAILED):
         super().__init__(error_code)
         self.error_code = error_code
@@ -70,22 +72,30 @@ class HandoffError(Exception):
 
 
 class HandoffArgumentParser(argparse.ArgumentParser):
+    """Convert argparse diagnostics into the handoff's fixed redacted error protocol."""
+
     def error(self, _message: str) -> NoReturn:
         raise HandoffError("disksage-handoff-usage-invalid", EXIT_USAGE)
 
 
 @dataclass(frozen=True)
 class VerifierResult:
+    """Hold bounded verifier transport output before strict protocol decoding."""
+
     returncode: int
     stdout: bytes
     stderr: bytes
 
 
 def _print_json(payload: dict[str, object]) -> None:
+    """Serialize one deterministic JSON object to the operator-facing stdout channel."""
+
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
 def _verifier_is_executable_regular_file(path: Path) -> bool:
+    """Preflight an absolute, non-symlink, executable regular verifier path."""
+
     if not path.is_absolute():
         return False
     try:
@@ -185,6 +195,8 @@ def _verified_verifier_snapshot(path: Path, expected_sha256: str) -> Iterator[Pa
 
 
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    """Best-effort kill and reap a verifier and every descendant in its session."""
+
     if os.name == "posix":
         try:
             os.killpg(process.pid, signal.SIGKILL)
@@ -212,6 +224,8 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
 
 
 def _run_bounded_verifier(verifier: Path, readiness: Path) -> VerifierResult:
+    """Run a digest-bound verifier snapshot with bounded time, output, and authority."""
+
     try:
         process = subprocess.Popen(
             [str(verifier), str(readiness)],
@@ -235,13 +249,13 @@ def _run_bounded_verifier(verifier: Path, readiness: Path) -> VerifierResult:
         "stderr": (process.stderr, MAX_STDERR_BYTES),
     }
     buffers = {"stdout": bytearray(), "stderr": bytearray()}
-    deadline = time.monotonic() + VERIFIER_TIMEOUT_SECONDS
+    deadline = monotonic() + VERIFIER_TIMEOUT_SECONDS
     try:
         for name, (stream, _limit) in streams.items():
             os.set_blocking(stream.fileno(), False)
             selector.register(stream, selectors.EVENT_READ, name)
         while selector.get_map():
-            remaining = deadline - time.monotonic()
+            remaining = deadline - monotonic()
             if remaining <= 0:
                 raise HandoffError("disksage-verifier-timeout")
             events = selector.select(timeout=remaining)
@@ -263,7 +277,7 @@ def _run_bounded_verifier(verifier: Path, readiness: Path) -> VerifierResult:
                 if len(buffers[name]) > limit:
                     raise HandoffError("disksage-verifier-output-too-large")
 
-        remaining = deadline - time.monotonic()
+        remaining = deadline - monotonic()
         if remaining <= 0:
             raise HandoffError("disksage-verifier-timeout")
         try:
@@ -292,6 +306,8 @@ def _run_bounded_verifier(verifier: Path, readiness: Path) -> VerifierResult:
 
 
 def _is_lower_hex_64(value: object) -> bool:
+    """Return whether a value is exactly one lowercase SHA-256 hexadecimal string."""
+
     return (
         type(value) is str
         and len(value) == 64
@@ -299,11 +315,26 @@ def _is_lower_hex_64(value: object) -> bool:
     )
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Build a JSON object while rejecting every duplicate member name."""
+
+    payload: dict[str, object] = {}
+    for name, value in pairs:
+        if name in payload:
+            raise ValueError("duplicate-json-object-name")
+        payload[name] = value
+    return payload
+
+
 def _decode_protocol(result: VerifierResult) -> dict[str, object]:
+    """Decode and validate the verifier's exact success or failure wire contract."""
+
     if result.stderr:
         raise HandoffError("disksage-verifier-protocol-invalid")
     try:
-        payload = json.loads(result.stdout.decode("utf-8"))
+        payload = json.loads(
+            result.stdout.decode("utf-8"), object_pairs_hook=_unique_json_object
+        )
     except (UnicodeDecodeError, ValueError, RecursionError) as error:
         raise HandoffError("disksage-verifier-protocol-invalid") from error
     if type(payload) is not dict:
@@ -342,6 +373,8 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Validate CLI authority, run the verifier snapshot, and emit only safe JSON."""
+
     parser = HandoffArgumentParser(
         description=(
             "Verify a DiskSage Naruon cloud-copy readiness envelope with the "
