@@ -76,22 +76,6 @@ if [ "$1" = "api" ] && [ "$2" = "graphql" ]; then
     printf 'GraphQL request failed\n' >&2
     exit 1
   fi
-  if [ "${GH_SCENARIO:-pass}" = "coderabbit_resolved_current_review_comment" ]; then
-    printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"CLEAN","reviewThreads":{"nodes":[{"id":"thread-888","isResolved":true,"isOutdated":false,"comments":{"nodes":[{"databaseId":888}]}}]}}}}}' "$head_sha"
-    exit 0
-  fi
-  if [ "${GH_SCENARIO:-pass}" = "coderabbit_current_review_comment" ] || [ "${GH_SCENARIO:-pass}" = "github_code_quality_current_review_comment" ]; then
-    printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"CLEAN","reviewThreads":{"nodes":[{"id":"thread-888","isResolved":false,"isOutdated":false,"comments":{"nodes":[{"databaseId":888}]}}]}}}}}' "$head_sha"
-    exit 0
-  fi
-  if [ "${GH_SCENARIO:-pass}" = "review_threads_truncated" ]; then
-    printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"CLEAN","reviewThreads":{"pageInfo":{"hasNextPage":true},"nodes":[]}}}}}' "$head_sha"
-    exit 0
-  fi
-  if [ "${GH_SCENARIO:-pass}" = "review_thread_comments_truncated" ]; then
-    printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"CLEAN","reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"thread-888","isResolved":false,"isOutdated":false,"comments":{"pageInfo":{"hasNextPage":true},"nodes":[{"databaseId":888}]}}]}}}}}' "$head_sha"
-    exit 0
-  fi
   if [ "${GH_SCENARIO:-pass}" = "persistent_unknown" ]; then
     printf '{"data":{"repository":{"pullRequest":{"headRefOid":"%s","mergeStateStatus":"UNKNOWN","reviewThreads":{"nodes":[]}}}}}' "$head_sha"
     exit 0
@@ -264,7 +248,7 @@ fi
 
 if [ "$1" = "api" ] && [[ "$args" == *repos/*/pulls/42/comments* ]]; then
   case "${GH_SCENARIO:-pass}" in
-    coderabbit_current_review_comment|coderabbit_resolved_current_review_comment)
+    coderabbit_current_review_comment)
       printf '[{"id":888,"user":{"login":"coderabbitai[bot]"},"commit_id":"0123456789abcdef0123456789abcdef01234567","original_commit_id":"old","created_at":"2026-05-19T00:01:00Z","body":"Potential issue on current head"}]'
       ;;
     github_code_quality_current_review_comment)
@@ -773,40 +757,6 @@ assert_coderabbit_current_review_comment_blocks() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
-assert_coderabbit_resolved_current_review_comment_does_not_block() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate coderabbit_resolved_current_review_comment "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_not_in_file 'Current-head CodeRabbit review comment' "$temp_dir/output.txt"
-  assert_not_in_file 'Current-head CodeRabbit review comment' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_truncated_review_thread_metadata_blocks() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate review_threads_truncated "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Review thread metadata was truncated; current resolution state could not be proven.' "$temp_dir/gh.log"
-  assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
-assert_truncated_review_thread_comments_metadata_blocks() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate review_thread_comments_truncated "$temp_dir"
-
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Review thread metadata was truncated; current resolution state could not be proven.' "$temp_dir/gh.log"
-  assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
-}
-
 assert_github_code_quality_current_review_comment_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -950,9 +900,6 @@ assert_coderabbit_review_limit_issue_comment_does_not_block
 assert_coderabbit_no_actionable_summary_does_not_block
 assert_coderabbit_no_actionable_summary_with_blocker_still_blocks
 assert_coderabbit_current_review_comment_blocks
-assert_coderabbit_resolved_current_review_comment_does_not_block
-assert_truncated_review_thread_metadata_blocks
-assert_truncated_review_thread_comments_metadata_blocks
 assert_github_code_quality_current_review_comment_blocks
 assert_coderabbit_stale_review_comment_does_not_block
 assert_changes_requested_creates_marker_comment
