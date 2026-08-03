@@ -1,4 +1,4 @@
-FROM ollama/ollama@sha256:509fdf54e23bd50d87af646cb51c0a7a203d6a83cc4d6695b3b08c5be1c62c0a
+FROM ollama/ollama@sha256:4dea9fb511947e24a84237bb636b0203abcb2ff0d3fbc7b4ff865deb91362131
 
 ENV OLLAMA_MODELS=/usr/share/ollama/.ollama/models
 
