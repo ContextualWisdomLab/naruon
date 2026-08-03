@@ -576,6 +576,31 @@ def test_run_bounded_verifier_normalizes_spawn_and_selector_failures(
     assert error.value.error_code == "disksage-verifier-exec-failed"
 
 
+@pytest.mark.parametrize("missing_pipe", ["stdout", "stderr"])
+def test_run_bounded_verifier_fails_closed_when_spawn_omits_pipe(
+    monkeypatch, missing_pipe
+):
+    class MissingPipeProcess:
+        pid = 4242
+        stdout = None if missing_pipe == "stdout" else object()
+        stderr = None if missing_pipe == "stderr" else object()
+
+    process = MissingPipeProcess()
+    terminated = []
+    monkeypatch.setattr(handoff.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        handoff,
+        "_terminate_process_group",
+        lambda candidate: terminated.append(candidate),
+    )
+
+    with pytest.raises(handoff.HandoffError) as error:
+        handoff._run_bounded_verifier(Path("/verifier"), Path("/readiness"))
+
+    assert error.value.error_code == "disksage-verifier-exec-failed"
+    assert terminated == [process]
+
+
 def test_run_bounded_verifier_handles_immediate_deadline(tmp_path, monkeypatch):
     verifier = _python_verifier(tmp_path / "verifier", "import time\ntime.sleep(30)\n")
     monkeypatch.setattr(handoff, "VERIFIER_TIMEOUT_SECONDS", 0)

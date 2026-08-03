@@ -15,7 +15,9 @@ import re
 import selectors
 import signal
 import stat
-import subprocess
+
+# Bandit B404: subprocess is required for the digest-bound verifier process boundary.
+import subprocess  # nosec B404
 import tempfile
 from time import monotonic
 from typing import NoReturn
@@ -191,6 +193,7 @@ def _verified_verifier_snapshot(path: Path, expected_sha256: str) -> Iterator[Pa
         try:
             os.close(source_fd)
         except OSError:
+            # Preserve any earlier provenance or snapshot failure during best-effort teardown.
             pass
 
 
@@ -201,11 +204,13 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except OSError:
+            # The process group may already have exited before best-effort containment runs.
             pass
     elif process.poll() is None:
         try:
             process.kill()
         except OSError:
+            # A concurrent exit makes the fallback kill unnecessary.
             pass
     try:
         process.wait(timeout=1)
@@ -214,12 +219,15 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
             try:
                 process.kill()
             except OSError:
+                # The process may have exited between poll and the fallback kill.
                 pass
         try:
             process.wait(timeout=1)
         except subprocess.TimeoutExpired:
+            # The bounded cleanup has exhausted its final reap attempt; never block the caller.
             pass
     except OSError:
+        # A concurrently reaped process has already satisfied the teardown objective.
         pass
 
 
@@ -227,7 +235,8 @@ def _run_bounded_verifier(verifier: Path, readiness: Path) -> VerifierResult:
     """Run a digest-bound verifier snapshot with bounded time, output, and authority."""
 
     try:
-        process = subprocess.Popen(
+        # Bandit B603: the executable is a digest-bound private snapshot and shell stays disabled.
+        process = subprocess.Popen(  # nosec B603
             [str(verifier), str(readiness)],
             shell=False,
             stdin=subprocess.DEVNULL,
@@ -241,8 +250,9 @@ def _run_bounded_verifier(verifier: Path, readiness: Path) -> VerifierResult:
     except OSError as error:
         raise HandoffError("disksage-verifier-exec-failed") from error
 
-    assert process.stdout is not None
-    assert process.stderr is not None
+    if process.stdout is None or process.stderr is None:
+        _terminate_process_group(process)
+        raise HandoffError("disksage-verifier-exec-failed")
     selector = selectors.DefaultSelector()
     streams = {
         "stdout": (process.stdout, MAX_STDOUT_BYTES),
