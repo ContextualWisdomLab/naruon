@@ -420,9 +420,10 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert records[0].tool_code_fingerprint == hashlib.sha256(
-        hostile_code.encode("utf-8")
-    ).hexdigest()[:12]
+    assert (
+        records[0].tool_code_fingerprint
+        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
+    )
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -1273,6 +1274,7 @@ def test_execute_analysis_tool_rejects_oversized_text():
         ),
     }
 
+
 def test_uuid_generator_tool():
     app.dependency_overrides.clear()
     token = _signed_session_token()
@@ -1316,6 +1318,7 @@ def test_uuid_generator_tool():
         assert data["status"] == "failed"
         assert data["error_code"] == "unsupported_uuid_version"
 
+
 def test_hash_generator_tool():
     app.dependency_overrides.clear()
     token = _signed_session_token()
@@ -1329,7 +1332,10 @@ def test_hash_generator_tool():
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
-        assert data["result"]["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        assert (
+            data["result"]["hash"]
+            == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
 
         # Test md5
         response = client.post(
@@ -1362,7 +1368,10 @@ def test_hash_generator_tool():
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
-        assert data["result"]["hash"] == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+        assert (
+            data["result"]["hash"]
+            == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+        )
 
         # Test invalid algorithm
         response = client.post(
@@ -1387,6 +1396,7 @@ def test_hash_generator_tool():
         assert "result" not in data
         assert data["error_code"] == "invalid_tool_parameter_type"
         assert "Invalid tool parameter type" in data["message"]
+
 
 def test_uuid_generator_version_must_be_integer():
     with TestClient(app) as client:
