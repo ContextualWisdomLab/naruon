@@ -1,0 +1,51 @@
+name: PR 1214 scope repair
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-1214-scope-repair
+  cancel-in-progress: true
+
+jobs:
+  repair-scope:
+    if: github.event.pull_request.head.ref == 'bolt/optimize-has-sent-message-1619297502038066172'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout the pull-request branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
+        with:
+          ref: bolt/optimize-has-sent-message-1619297502038066172
+          fetch-depth: 0
+
+      - name: Restore unrelated develop changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin develop
+          git checkout origin/develop -- \
+            .jules/palette.md \
+            frontend/src/components/calendar/CalendarMonthView.tsx \
+            frontend/src/components/calendar/CalendarSidebarRight.tsx \
+            scripts/ci/pr_governance_gate.sh \
+            scripts/ci/test_pr_governance_gate.sh
+          rm -- .github/workflows/pr-1214-scope-repair.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(scope): retain current develop governance and calendar behavior"
+          git push origin HEAD:bolt/optimize-has-sent-message-1619297502038066172
