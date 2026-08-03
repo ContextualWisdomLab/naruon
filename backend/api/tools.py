@@ -9,6 +9,7 @@ import urllib.parse
 from collections import Counter
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
 
 import httpx
 from core.url_validation import (
@@ -854,6 +855,67 @@ def create_tool(tool_data: ToolCreate) -> ToolInfo:
     registry.register(tool_info, handler)
     return tool_info
 
+
+async def date_calculator_handler(params: Dict[str, Any]) -> Any:
+    """Calculate a new date by adding or subtracting days from a base date."""
+    base_date_str = params.get("base_date", "")
+    try:
+        base_date = datetime.strptime(base_date_str, "%Y-%m-%d")
+    except ValueError:
+        base_date = datetime.now()
+
+    days = int(params.get("days", 0))
+    result_date = base_date + timedelta(days=days)
+    return {"result_date": result_date.strftime("%Y-%m-%d")}
+
+registry.register(
+    ToolInfo(
+        code="date_calculator",
+        name="날짜 계산기 (Date Calculator)",
+        description="기준 날짜에 특정 일수를 더하거나 빼서 새로운 날짜를 계산합니다.",
+        category="유틸리티",
+        parameters={"base_date": "string", "days": "integer"},
+    ),
+    date_calculator_handler,
+)
+
+async def currency_converter_handler(params: Dict[str, Any]) -> Any:
+    """Convert an amount from one currency to another using mock rates."""
+    amount = float(params.get("amount", 0.0))
+    from_currency = params.get("from_currency", "USD").upper()
+    to_currency = params.get("to_currency", "KRW").upper()
+
+    # Mock exchange rates relative to USD
+    rates = {
+        "USD": 1.0,
+        "KRW": 1350.0,
+        "EUR": 0.92,
+        "JPY": 150.0,
+    }
+
+    if from_currency not in rates or to_currency not in rates:
+        return {"error": "Unsupported currency. Supported: USD, KRW, EUR, JPY"}
+
+    amount_in_usd = amount / rates[from_currency]
+    converted_amount = amount_in_usd * rates[to_currency]
+
+    return {
+        "amount": amount,
+        "from_currency": from_currency,
+        "to_currency": to_currency,
+        "converted_amount": round(converted_amount, 2)
+    }
+
+registry.register(
+    ToolInfo(
+        code="currency_converter",
+        name="환율 변환기 (Currency Converter)",
+        description="주요 통화 간의 금액을 변환합니다 (USD, KRW, EUR, JPY 지원).",
+        category="유틸리티",
+        parameters={"amount": "number", "from_currency": "string", "to_currency": "string"},
+    ),
+    currency_converter_handler,
+)
 
 @router.get("/tools/{code}", response_model=ToolInfo)
 def get_tool(code: str) -> ToolInfo:

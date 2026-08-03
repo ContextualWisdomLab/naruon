@@ -1,4 +1,7 @@
 ## [Unreleased]
+### 신규 도구 추가 (New Tools)
+
+- 툴 레지스트리에 날짜 계산기 (`date_calculator`) 및 환율 변환기 (`currency_converter`) 도구를 추가했습니다. 사용자의 요구에 따라 기능을 직접 기획하고 구현하여 생산성을 향상시켰습니다.
 ### 보안 패치 (CodeQL extended current-head)
 
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.

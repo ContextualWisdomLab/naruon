@@ -1252,3 +1252,56 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_date_calculator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/date_calculator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"base_date": "2023-10-25", "days": 5}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["result_date"] == "2023-10-30"
+
+@pytest.mark.asyncio
+async def test_date_calculator_tool_invalid_date():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/date_calculator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"base_date": "invalid-date", "days": 1}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    # Should use current date
+
+@pytest.mark.asyncio
+async def test_currency_converter_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/currency_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"amount": 100, "from_currency": "USD", "to_currency": "KRW"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["converted_amount"] == 135000.0
+
+@pytest.mark.asyncio
+async def test_currency_converter_tool_unsupported():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/currency_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"amount": 100, "from_currency": "XYZ", "to_currency": "KRW"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "error" in data["result"]
