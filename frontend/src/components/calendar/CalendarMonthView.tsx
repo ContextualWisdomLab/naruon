@@ -20,9 +20,8 @@ export function CalendarMonthView({ visibleMonthEvents }: Props) {
     return grouped;
   }, [visibleMonthEvents]);
 
-  // Optimization: Memoize the generation of the 35 calendar grid cells to prevent
-  // O(N*M) recreation of DOM nodes during unrelated parent state changes (e.g., view mode).
-  // Expected impact: ~90% reduction in commit time when unrelated state changes occur.
+  // Memoize the React element array so unrelated parent renders can reuse
+  // the 35-cell grid while monthEventsByDay is unchanged.
   const gridCells = useMemo(() => {
     return Array.from({ length: 35 }).map((_, i) => {
       const dayEvents = monthEventsByDay.get(i) ?? [];
