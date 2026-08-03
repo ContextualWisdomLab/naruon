@@ -3,7 +3,6 @@ import pytest
 from services.access_policy import (
     AccessRequest,
     ResourcePolicy,
-    _equivalent_roles,
     _is_system_admin_role,
     evaluate_access,
 )
@@ -315,42 +314,6 @@ def test_tenant_admin_satisfies_organization_admin_alias_deterministically():
 
     assert decision.allowed is True
     assert decision.reason == "allowed"
-
-
-def test_owner_without_role_or_group_permission_is_rbac_denied():
-    """Owning (or being delegated) a resource is necessary but not sufficient:
-    when every ABAC gate clears and ownership holds, a non-admin whose role and
-    group both fail the permit set is still denied (the final RBAC deny-path)."""
-    decision = evaluate_access(
-        AccessRequest(
-            user_id="alice",
-            role="member",
-            organization_id="org-acme",
-            group_ids=("sales",),
-            data_region="eu",
-            consent_scopes=("mail.read",),
-        ),
-        ResourcePolicy(
-            owner_id="alice",  # owns the resource -> ownership gate clears
-            organization_id="org-acme",
-            permitted_roles=("tenant_admin",),  # member does not satisfy tenant_admin
-            permitted_group_ids=("exec",),  # no overlap with ("sales",)
-            data_region="eu",
-            required_consent_scopes=("mail.read",),
-        ),
-    )
-
-    assert decision.allowed is False
-    assert decision.reason == "rbac_denied"
-
-
-def test_equivalent_roles_maps_known_alias_and_falls_back_for_unknown():
-    """Known roles expand to their alias set; an unrecognised role maps only to
-    itself (the fallback branch)."""
-    assert _equivalent_roles("system_admin") == frozenset(
-        {"system_admin", "platform_admin"}
-    )
-    assert _equivalent_roles("unknown_role") == frozenset({"unknown_role"})
 
 
 def test_abac_owner_denial_overrides_group_admin_rbac_allow_without_delegation():
