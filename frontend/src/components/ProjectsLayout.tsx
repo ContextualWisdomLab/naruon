@@ -681,6 +681,7 @@ export function ProjectsLayout() {
                         type="button"
                         onClick={handleConfirmCandidate}
                         disabled={confirmSubmitting || candidateConfirmed}
+                        aria-busy={confirmSubmitting}
                         className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
                       >
                         {candidateConfirmed ? '프로젝트 후보 확정됨' : confirmSubmitting ? '확정 저장 중' : '프로젝트 후보 확정'}
