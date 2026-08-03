@@ -2,7 +2,8 @@ from email import message_from_binary_file, message_from_bytes, policy
 from email.message import Message
 from pathlib import Path
 import datetime
-from email.utils import formataddr, getaddresses
+import re
+from email.utils import getaddresses
 from email.utils import parsedate_to_datetime
 from typing import NotRequired, TypedDict
 from .attachment_parser import parse_email_attachment
@@ -39,13 +40,39 @@ def _sanitize_display_text(text: str) -> str:
     return strip_html_markup(_sanitize_nul(text))
 
 
+# Mirror email.utils.formataddr's RFC 5322 display-name quoting: the specials
+# that force a quoted-string, and the characters escaped inside one.
+_ADDRESS_SPECIALS_RE = re.compile(r'[()<>@,;:\\".\[\]]')
+_ADDRESS_QUOTED_ESCAPE_RE = re.compile(r'["\\]')
+
+
+def _format_display_address(display_name: str, address: str) -> str:
+    """Formats an already-decoded display name and address for storage.
+
+    Mirrors ``email.utils.formataddr`` quoting for RFC 5322 special characters
+    but keeps ``display_name`` literal instead of re-encoding a non-ASCII name
+    as an RFC 2047 encoded-word. The ``From``/``To``/``Reply-To`` headers arrive
+    already header-decoded (``policy.default``), and these values are stored for
+    human display, not re-emitted as message headers, so ``formataddr`` would
+    corrupt a decoded name (e.g. Korean) back into ``=?utf-8?b?...?=``.
+    """
+    if not display_name:
+        return address
+    if _ADDRESS_SPECIALS_RE.search(display_name):
+        escaped_name = _ADDRESS_QUOTED_ESCAPE_RE.sub(r"\\\g<0>", display_name)
+        return f'"{escaped_name}" <{address}>'
+    return f"{display_name} <{address}>"
+
+
 def _sanitize_address_display_text(text: str) -> str:
     sanitized_parts: list[str] = []
     for display_name, address in getaddresses([text]):
         safe_display_name = _sanitize_display_text(display_name).strip()
         safe_address = _sanitize_nul(address).strip()
         if safe_address:
-            sanitized_parts.append(formataddr((safe_display_name, safe_address)))
+            sanitized_parts.append(
+                _format_display_address(safe_display_name, safe_address)
+            )
         elif safe_display_name:
             sanitized_parts.append(safe_display_name)
     if sanitized_parts:
@@ -136,6 +163,14 @@ def _extract_date(msg: Message) -> datetime.datetime:
 
     if not parsed_date:
         parsed_date = datetime.datetime.now(datetime.timezone.utc)
+    elif parsed_date.tzinfo is None:
+        # RFC 5322 section 3.3: a "-0000" zone means the time zone is unknown,
+        # for which parsedate_to_datetime returns a naive datetime. Every other
+        # branch here yields a timezone-aware datetime, and mixing naive with
+        # aware datetimes raises TypeError on comparison/sorting and misbinds the
+        # instant when stored in a timestamptz column. Treat the unknown zone as
+        # UTC so the returned value is always timezone-aware.
+        parsed_date = parsed_date.replace(tzinfo=datetime.timezone.utc)
     return parsed_date
 
 
