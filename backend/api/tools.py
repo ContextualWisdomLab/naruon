@@ -4,8 +4,10 @@ import inspect
 import json
 import logging
 import re
+import secrets
 import unicodedata
 import urllib.parse
+import uuid
 from collections import Counter
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
@@ -25,6 +27,22 @@ router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
+
+
+class ToolOptionError(ValueError):
+    """A tool option failure with a stable machine-readable code."""
+
+    def __init__(self, error_code: str, message: str):
+        super().__init__(message)
+        self.error_code = error_code
+
+
+class ToolValidationError(ValueError):
+    """A tool request validation failure with a stable machine-readable code."""
+
+    def __init__(self, error_code: str, message: str):
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def _tool_code_fingerprint(code: str) -> str:
@@ -125,8 +143,11 @@ class ExecuteRequest(BaseModel):
 
 class ExecuteResponse(BaseModel):
     status: str = Field(..., description="실행 상태 (예: success, failed)")
-    result: Any = Field(..., description="실행 결과 데이터")
+    result: Any = Field(default=None, description="실행 결과 데이터")
     message: Optional[str] = Field(default=None, description="결과 메시지")
+    error_code: Optional[str] = Field(
+        default=None, description="실패 유형을 나타내는 안정적인 오류 코드"
+    )
 
 
 class ToolRegistry:
@@ -159,27 +180,42 @@ class ToolRegistry:
 
     def _validate_parameters(self, code: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(params, dict):
-            raise ValueError("Tool parameters must be an object")
+            raise ToolValidationError(
+            "invalid_tool_parameters",
+            "Tool parameters must be an object",
+        )
 
         tool_info = self._tools.get(code)
         schema = tool_info.parameters if tool_info else None
         if not schema:
             if params:
-                raise ValueError("Tool does not accept parameters")
+                raise ToolValidationError(
+                "tool_parameters_not_supported",
+                "Tool does not accept parameters",
+            )
             return {}
 
         unexpected_keys = set(params) - set(schema)
         if unexpected_keys:
-            raise ValueError("Unexpected tool parameter")
+            raise ToolValidationError(
+            "unexpected_tool_parameter",
+            "Unexpected tool parameter",
+        )
 
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
             if key not in params:
-                raise ValueError("Missing required tool parameter")
+                raise ToolValidationError(
+                "missing_tool_parameter",
+                "Missing required tool parameter",
+            )
             value = params[key]
             expected_type = _parameter_type_name(descriptor)
             if not _parameter_matches_type(value, expected_type):
-                raise ValueError("Invalid tool parameter type")
+                raise ToolValidationError(
+                "invalid_tool_parameter_type",
+                "Invalid tool parameter type",
+            )
             validated[key] = value
         return validated
 
@@ -821,6 +857,73 @@ registry.register(
 )
 
 
+
+async def uuid_generator_handler(params: Dict[str, Any]) -> Any:
+    """
+    Generates a UUID based on the specified version.
+    Supports UUIDv4 (random) and UUIDv1 (timestamp-based).
+    For UUIDv1, the node (MAC address) is randomized to ensure privacy.
+    """
+    version = params.get("version", 4)
+    if version == 1:
+        random_multicast_node = secrets.randbits(48) | (1 << 40)
+        return {
+            "uuid": str(uuid.uuid1(node=random_multicast_node))  # nosemgrep
+        }
+    if version == 4:
+        return {"uuid": str(uuid.uuid4())}
+    raise ToolOptionError(
+        "unsupported_uuid_version",
+        f"Unsupported UUID version: {version}",
+    )
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Any:
+    """
+    Generates a hash for the provided text using the specified algorithm.
+    Supported algorithms: MD5, SHA1, SHA256, SHA512.
+    Note: MD5 and SHA1 are included for interoperability purposes only and should not be used for security.
+    """
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    if algorithm == "sha256":
+        hash_obj = hashlib.sha256(text.encode("utf-8"))
+    elif algorithm == "md5":
+        hash_obj = hashlib.md5(text.encode("utf-8"), usedforsecurity=False)
+    elif algorithm == "sha1":
+        hash_obj = hashlib.sha1(text.encode("utf-8"), usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha512":
+        hash_obj = hashlib.sha512(text.encode("utf-8"))
+    else:
+        raise ToolOptionError(
+            "unsupported_hash_algorithm",
+            f"Unsupported hash algorithm: {algorithm}",
+        )
+
+    return {"hash": hash_obj.hexdigest()}
+
+registry.register(
+    ToolInfo(
+        code="uuid_generator",
+        name="UUID 생성기",
+        description="지정된 버전(1 또는 4)의 UUID를 생성합니다.",
+        category="유틸리티",
+        parameters={"version": "integer"},
+    ),
+    uuid_generator_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기",
+        description="입력된 텍스트에 대해 지정된 알고리즘(MD5, SHA1, SHA256, SHA512)으로 해시 값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
@@ -911,7 +1014,11 @@ def delete_tool(code: str) -> None:
     registry.unregister(code)
 
 
-@router.post("/tools/{code}/execute", response_model=ExecuteResponse)
+@router.post(
+    "/tools/{code}/execute",
+    response_model=ExecuteResponse,
+    response_model_exclude_none=True,
+)
 async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
     """
     특정 도구를 실행합니다.
@@ -940,4 +1047,5 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
             status="failed",
             result=None,
             message=_safe_tool_failure_message(e),
+            error_code=getattr(e, "error_code", None),
         )

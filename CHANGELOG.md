@@ -1,4 +1,8 @@
 ## [Unreleased]
+### 새로운 유틸리티 도구 추가 (UUID/해시 생성기)
+
+- `backend/api/tools.py`에 `uuid_generator`와 `hash_generator` 두 가지 유틸리티 도구를 추가했습니다. UUID(버전 1, 4) 생성 및 해시(MD5, SHA1, SHA256, SHA512) 생성을 지원하며, 관련된 테스트 코드를 `backend/tests/test_tools_api.py`에 추가하여 100% 커버리지를 달성했습니다.
+
 ### 보안 패치 (CodeQL extended current-head)
 
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
