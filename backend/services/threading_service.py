@@ -31,16 +31,32 @@ def generate_email_fingerprint(
 
 
 def normalize_message_id(value: str | None) -> str | None:
-    """Return the canonical persisted form for a Message-ID-like header."""
+    """Return the canonical persisted form for a Message-ID-like header.
+
+    A Message-ID (RFC 5322 section 3.6.4) carries no interior whitespace, but
+    header unfolding (RFC 5322 section 2.2.3) can leave interior spaces or tabs
+    when a folded header is rejoined -- e.g. ``<abc@\\r\\n example.com>`` unfolds
+    to ``<abc@ example.com>``. Collapsing all interior whitespace keeps the
+    folded and unfolded forms of the same Message-ID equal, so de-duplication
+    and threading never split one message into two over a fold boundary.
+    """
     if value is None:
         return None
 
-    normalized = str(value).strip().strip("<>").strip()
+    stripped = str(value).strip().strip("<>")
+    normalized = "".join(stripped.split())
     return normalized or None
 
 
 def extract_reference_ids(value: str | None) -> list[str]:
-    """Extract canonical message IDs from a References header in header order."""
+    """Extract canonical message IDs from a ``1*msg-id`` header in header order.
+
+    RFC 5322 defines both References (section 3.6.4) and In-Reply-To
+    (section 3.6.4) as ``1*msg-id`` -- one or more angle-bracketed Message-IDs,
+    each optionally surrounded by CFWS -- so this extractor applies to either
+    header. Ids are canonicalized with :func:`normalize_message_id` and
+    de-duplicated while preserving header order.
+    """
     if not value:
         return []
 
@@ -107,19 +123,21 @@ async def assign_thread_id(
     Determine the thread_id for a new email based on in_reply_to and references.
     If no existing match is found, generate a new thread_id.
     """
-    in_reply_to = normalize_message_id(email_data.get("in_reply_to"))
+    # In-Reply-To (RFC 5322 section 3.6.4) is 1*msg-id, exactly like References,
+    # and each id may be wrapped in CFWS. Parse it with the same multi-id
+    # extractor rather than treating the whole header as one opaque Message-ID,
+    # so a reply that names several parents -- or a single id trailed by a
+    # comment -- still threads onto an existing ancestor instead of splitting off.
+    in_reply_to_ids = extract_reference_ids(email_data.get("in_reply_to"))
     references = extract_reference_ids(email_data.get("references"))
 
     existing_candidates = []
     # Optimization: Use a set for O(1) membership checks to prevent O(n^2) deduplication of candidates
     seen = set()
-    if in_reply_to:
-        existing_candidates.append(in_reply_to)
-        seen.add(in_reply_to)
-    for ref in references:
-        if ref not in seen:
-            seen.add(ref)
-            existing_candidates.append(ref)
+    for candidate in (*in_reply_to_ids, *references):
+        if candidate not in seen:
+            seen.add(candidate)
+            existing_candidates.append(candidate)
 
     if existing_candidates:
         thread_ids_by_message_id = await _find_existing_thread_ids(
@@ -138,8 +156,8 @@ async def assign_thread_id(
     if references:
         return references[0]
 
-    if in_reply_to:
-        return in_reply_to
+    if in_reply_to_ids:
+        return in_reply_to_ids[0]
 
     msg_id = normalize_message_id(email_data.get("message_id"))
     if msg_id:
