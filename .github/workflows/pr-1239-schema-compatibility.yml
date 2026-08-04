@@ -109,6 +109,7 @@ jobs:
           python -m pip install --disable-pip-version-check --require-hashes \
             -r backend/requirements-hashes.txt
           cd backend
+          python -m ruff format scripts/disksage_copy_readiness_handoff.py tests/test_disksage_copy_readiness_handoff.py
           python -m ruff check scripts/disksage_copy_readiness_handoff.py tests/test_disksage_copy_readiness_handoff.py
           python -m ruff format --check scripts/disksage_copy_readiness_handoff.py tests/test_disksage_copy_readiness_handoff.py
           python -m pytest -q tests/test_disksage_copy_readiness_handoff.py
