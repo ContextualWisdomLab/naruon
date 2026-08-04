@@ -716,7 +716,7 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
         == 2
     )
     assert (
-        "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0"
+        "docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0"
         in workflow
     )
     assert (
