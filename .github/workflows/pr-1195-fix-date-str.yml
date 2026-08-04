@@ -64,17 +64,18 @@ jobs:
               )
               if block_start < 0:
                   raise SystemExit("IMAP synthetic date cleanup block not found")
-              replacement = '''          date_string_block = (
-              "    if hasattr(date_obj, \\\"isoformat\\\"):\\n"
-              "        date_str = date_obj.isoformat()\\n"
-              "    else:\\n"
-              "        date_str = str(date_obj) if date_obj else \\\"\\\"\\n"
-          )
-          if date_string_block in text:
-              text = text.replace(date_string_block, "", 1)
-          elif "date_str =" in text:
-              raise SystemExit("IMAP synthetic date string block changed unexpectedly")
-'''
+              replacement = (
+                  "          date_string_block = (\n"
+                  '              "    if hasattr(date_obj, \\\"isoformat\\\"):\\\\n"\n'
+                  '              "        date_str = date_obj.isoformat()\\\\n"\n'
+                  '              "    else:\\\\n"\n'
+                  '              "        date_str = str(date_obj) if date_obj else \\\"\\\"\\\\n"\n'
+                  "          )\n"
+                  "          if date_string_block in text:\n"
+                  '              text = text.replace(date_string_block, "", 1)\n'
+                  '          elif "date_str =" in text:\n'
+                  '              raise SystemExit("IMAP synthetic date string block changed unexpectedly")\n'
+              )
               text = text[:block_start] + replacement + text[marker_end:]
 
           path.write_text(text, encoding="utf-8")
