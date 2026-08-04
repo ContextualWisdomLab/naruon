@@ -1,0 +1,321 @@
+name: PR 1210 finalize search state UX
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types: [synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-1210-finalize-search-state-ux
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: ${{ github.event.pull_request.head.ref == 'palette-search-ux-1540952545160159263' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout pull request branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
+        with:
+          ref: palette-search-ux-1540952545160159263
+          fetch-depth: 0
+
+      - name: Implement collision-safe keys and accessible state cards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("frontend/src/components/SearchLayout.tsx")
+          text = path.read_text(encoding="utf-8")
+
+          key_anchor = '''function ontologySourceKey(result: SearchResultItem | null) {
+            if (!result) return null;
+            return `${result.id}:${result.source_message_id ?? ""}:${result.thread_id ?? ""}`;
+          }
+          '''
+          key_helper = '''function ontologySourceKey(result: SearchResultItem | null) {
+            if (!result) return null;
+            return `${result.id}:${result.source_message_id ?? ""}:${result.thread_id ?? ""}`;
+          }
+
+          export function senderRelationshipRenderKey(
+            senderEmail: string,
+            sourceMessageId: string | null,
+            sourceThreadId: string | null,
+          ) {
+            return JSON.stringify([senderEmail, sourceMessageId, sourceThreadId]);
+          }
+          '''
+          if "export function senderRelationshipRenderKey" not in text:
+              if text.count(key_anchor) != 1:
+                  raise SystemExit("ontology source-key anchor not found exactly once")
+              text = text.replace(key_anchor, key_helper, 1)
+
+          old_key = '''          key={`${relationship.sender_email}:${relationship.source_message_id ?? "global"}:${relationship.source_thread_id ?? "none"}`}
+          '''
+          new_key = '''          key={senderRelationshipRenderKey(
+            relationship.sender_email,
+            relationship.source_message_id,
+            relationship.source_thread_id,
+          )}
+          '''
+          if new_key not in text:
+              if text.count(old_key) != 1:
+                  raise SystemExit("relationship render-key anchor not found exactly once")
+              text = text.replace(old_key, new_key, 1)
+
+          old_loading = '''        <div
+          role="status"
+          aria-live="polite"
+          className="p-5 text-sm font-semibold text-muted-foreground"
+        >
+          맥락 검색 결과를 불러오는 중입니다.
+        </div>
+          '''
+          new_loading = '''        <div
+          className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/20 py-12 text-center"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="mb-4 rounded-full bg-muted p-3">
+            <Loader2
+              className="size-5 animate-spin text-muted-foreground"
+              aria-hidden="true"
+            />
+          </div>
+          <p className="text-sm font-bold text-foreground">
+            맥락 검색 결과를 불러오는 중입니다
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            관련 메일과 근거를 안전하게 정렬하고 있습니다.
+          </p>
+        </div>
+          '''
+          if 'aria-busy="true"' not in text:
+              if text.count(old_loading) != 1:
+                  raise SystemExit("search loading-state anchor not found exactly once")
+              text = text.replace(old_loading, new_loading, 1)
+
+          old_empty = '''        <div className="p-5 text-sm font-semibold text-muted-foreground">
+          맥락 검색 결과가 없습니다.
+        </div>
+          '''
+          new_empty = '''        <div
+          className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/20 py-12 text-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="mb-4 rounded-full bg-muted p-3">
+            <Search
+              className="size-5 text-muted-foreground"
+              aria-hidden="true"
+            />
+          </div>
+          <p className="text-sm font-bold text-foreground">
+            맥락 검색 결과가 없습니다
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            검색어를 변경하거나 필터를 조정해 보세요.
+          </p>
+        </div>
+          '''
+          if "검색어를 변경하거나 필터를 조정해 보세요." not in text:
+              if text.count(old_empty) != 1:
+                  raise SystemExit("search empty-state anchor not found exactly once")
+              text = text.replace(old_empty, new_empty, 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          cat > frontend/src/components/SearchLayout.states.test.tsx <<'EOF'
+          /* @vitest-environment jsdom */
+          import React, { act } from "react";
+          import { createRoot, type Root } from "react-dom/client";
+          import { afterEach, describe, expect, it, vi } from "vitest";
+
+          vi.mock("next/dynamic", () => ({
+            default: () => function MockDynamic() {
+              return <div>mock graph</div>;
+            },
+          }));
+
+          vi.mock("next/link", () => ({
+            default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
+              <a href={href} {...props}>{children}</a>
+            ),
+          }));
+
+          vi.mock("lucide-react", () => ({
+            AlertCircle: () => <svg aria-hidden="true" />,
+            CalendarDays: () => <svg aria-hidden="true" />,
+            CheckCircle2: () => <svg aria-hidden="true" />,
+            Clock: () => <svg aria-hidden="true" />,
+            CornerDownRight: () => <svg aria-hidden="true" />,
+            FileText: () => <svg aria-hidden="true" />,
+            Loader2: () => <svg data-testid="loader" aria-hidden="true" />,
+            Mail: () => <svg aria-hidden="true" />,
+            Network: () => <svg aria-hidden="true" />,
+            Search: () => <svg data-testid="search" aria-hidden="true" />,
+            Sparkles: () => <svg aria-hidden="true" />,
+            X: () => <svg aria-hidden="true" />,
+          }));
+
+          import {
+            SearchLayout,
+            senderRelationshipRenderKey,
+          } from "./SearchLayout";
+
+          function jsonResponse(body: unknown) {
+            return new Response(JSON.stringify(body), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          async function flushAsyncWork() {
+            for (let index = 0; index < 5; index += 1) {
+              await act(async () => {
+                await Promise.resolve();
+                await new Promise((resolve) => setTimeout(resolve, 0));
+              });
+            }
+          }
+
+          describe("SearchLayout state contracts", () => {
+            let root: Root | null = null;
+            let container: HTMLDivElement | null = null;
+
+            afterEach(() => {
+              if (root) act(() => root?.unmount());
+              root = null;
+              container?.remove();
+              container = null;
+              vi.unstubAllGlobals();
+            });
+
+            it("keeps null relationship provenance distinct from literal sentinel text", () => {
+              expect(
+                senderRelationshipRenderKey("pm@example.com", null, null),
+              ).not.toBe(
+                senderRelationshipRenderKey(
+                  "pm@example.com",
+                  "global",
+                  "none",
+                ),
+              );
+            });
+
+            it("announces loading and empty result states without replacing raw content", async () => {
+              let resolveSearch: ((response: Response) => void) | undefined;
+              const pendingSearch = new Promise<Response>((resolve) => {
+                resolveSearch = resolve;
+              });
+              vi.stubGlobal("fetch", vi.fn(() => pendingSearch));
+
+              container = document.createElement("div");
+              document.body.appendChild(container);
+              root = createRoot(container);
+
+              await act(async () => {
+                root?.render(<SearchLayout />);
+              });
+
+              const loadingStatus = container.querySelector<HTMLElement>(
+                '[role="status"][aria-busy="true"]',
+              );
+              expect(loadingStatus?.getAttribute("aria-live")).toBe("polite");
+              expect(loadingStatus?.textContent).toContain(
+                "맥락 검색 결과를 불러오는 중입니다",
+              );
+              expect(
+                loadingStatus?.querySelector('[data-testid="loader"]'),
+              ).not.toBeNull();
+
+              await act(async () => {
+                resolveSearch?.(jsonResponse({ results: [] }));
+                await pendingSearch;
+              });
+              await flushAsyncWork();
+
+              const emptyStatus = Array.from(
+                container.querySelectorAll<HTMLElement>('[role="status"]'),
+              ).find((element) =>
+                element.textContent?.includes("맥락 검색 결과가 없습니다"),
+              );
+              expect(emptyStatus?.getAttribute("aria-live")).toBe("polite");
+              expect(emptyStatus?.hasAttribute("aria-busy")).toBe(false);
+              expect(emptyStatus?.textContent).toContain(
+                "검색어를 변경하거나 필터를 조정해 보세요.",
+              );
+              expect(
+                emptyStatus?.querySelector('[data-testid="search"]'),
+              ).not.toBeNull();
+            });
+          });
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("CHANGELOG.md")
+          text = path.read_text(encoding="utf-8")
+          section = '''### 맥락 검색 상태 피드백과 관계 key 안전성
+
+- 검색 로딩·빈 결과를 `role="status"`와 polite live region이 있는 시각적 상태 카드로 제공하고, 로딩 중에는 `aria-busy`를 노출합니다.
+- nullable 관계 provenance를 JSON tuple로 구조적으로 인코딩해 실제 `global`·`none` 문자열과 React key가 충돌하지 않게 했습니다.
+
+'''
+          if section not in text:
+              marker = "## [Unreleased]\n"
+              if text.count(marker) != 1:
+                  raise SystemExit("Unreleased changelog marker not found exactly once")
+              text = text.replace(marker, marker + section, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Install and validate the frontend
+        shell: bash
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          NEXT_BUILD_CPUS: "2"
+          POSTCSS_WORKERS: "1"
+          DISABLE_POSTCSS_WORKERS: "true"
+        run: |
+          set -euo pipefail
+          corepack pnpm@11.5.3 --version
+          cd frontend
+          corepack pnpm@11.5.3 install --frozen-lockfile
+          corepack pnpm@11.5.3 exec vitest run \
+            src/components/SearchLayout.test.tsx \
+            src/components/SearchLayout.states.test.tsx
+          corepack pnpm@11.5.3 test
+          corepack pnpm@11.5.3 run lint
+          corepack pnpm@11.5.3 run typecheck
+          corepack pnpm@11.5.3 run build
+
+      - name: Commit verified product changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md frontend/src/components/SearchLayout.tsx frontend/src/components/SearchLayout.states.test.tsx
+          git commit -m "feat(search): add accessible loading and empty states"
+          git push origin HEAD:palette-search-ux-1540952545160159263
