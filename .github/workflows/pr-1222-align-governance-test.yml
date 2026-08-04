@@ -1,0 +1,84 @@
+name: PR 1222 align action-version governance assertion
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types: [synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-1222-align-action-version-governance
+  cancel-in-progress: true
+
+jobs:
+  align:
+    if: ${{ github.event.pull_request.head.ref == 'dependabot/github_actions/github-actions-f2ccb4ebe5' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      PYTHONWARNINGS: error
+      DISABLE_BACKGROUND_WORKERS: "1"
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout pull request branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dependabot/github_actions/github-actions-f2ccb4ebe5
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Install hash-locked backend dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check --require-hashes
+          -r backend/requirements-hashes.txt
+
+      - name: Update and verify the release-governance contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/tests/test_release_governance.py")
+          text = path.read_text(encoding="utf-8")
+          old = "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0"
+          new = "docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0"
+          if new not in text:
+              if text.count(old) != 1:
+                  raise SystemExit("docker login governance anchor not found exactly once")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+          cd backend
+          python -m ruff check tests/test_release_governance.py
+          python -m ruff format --check tests/test_release_governance.py
+          python -m pytest -q tests/test_release_governance.py
+          python -m pytest -q
+
+      - name: Commit the verified assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/tests/test_release_governance.py
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(governance): align updated action versions"
+            git push origin HEAD:dependabot/github_actions/github-actions-f2ccb4ebe5
+          fi
