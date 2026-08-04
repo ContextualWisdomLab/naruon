@@ -355,7 +355,7 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
             and payload.get("ok") is True
             and payload.get("schema_kind") == "disksage.naruon.cloud-copy-readiness"
             and type(payload.get("schema_version")) is int
-            and payload.get("schema_version") == 3
+            and payload.get("schema_version") == 4
             and payload.get("provider") in PROVIDERS
             and payload.get("readiness_state") in READINESS_STATES
             and type(payload.get("candidate_count")) is int
