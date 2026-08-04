@@ -1,0 +1,138 @@
+name: PR 1239 review fix
+
+on:
+  push:
+    branches:
+      - fix/disksage-schema-v4-current
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-1239-review-fix
+  cancel-in-progress: true
+
+jobs:
+  fix-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      PYTHONWARNINGS: error
+      DISABLE_BACKGROUND_WORKERS: "1"
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact pull request branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/disksage-schema-v4-current
+          fetch-depth: 0
+
+      - name: Apply compatibility review fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          script_path = Path("backend/scripts/disksage_copy_readiness_handoff.py")
+          script = script_path.read_text(encoding="utf-8")
+          providers_anchor = 'PROVIDERS = frozenset({"icloud", "onedrive", "google-drive"})\n'
+          versions_line = 'SUPPORTED_SCHEMA_VERSIONS = frozenset({3, 4})\n'
+          if versions_line not in script:
+              if script.count(providers_anchor) != 1:
+                  raise SystemExit("provider constant anchor not found exactly once")
+              script = script.replace(
+                  providers_anchor,
+                  providers_anchor + versions_line,
+                  1,
+              )
+          old_check = '            and payload.get("schema_version") == 4\n'
+          new_check = (
+              '            and payload.get("schema_version") '
+              'in SUPPORTED_SCHEMA_VERSIONS\n'
+          )
+          if new_check not in script:
+              if script.count(old_check) != 1:
+                  raise SystemExit("schema version validation anchor not found exactly once")
+              script = script.replace(old_check, new_check, 1)
+          script_path.write_text(script, encoding="utf-8")
+
+          test_path = Path("backend/tests/test_disksage_copy_readiness_handoff.py")
+          tests = test_path.read_text(encoding="utf-8")
+          rejection_v3 = '        ({**_success_payload(), "schema_version": 3}, 0),\n'
+          rejection_v5 = '        ({**_success_payload(), "schema_version": 5}, 0),\n'
+          if rejection_v5 not in tests:
+              if tests.count(rejection_v3) != 1:
+                  raise SystemExit("unsupported-version test anchor not found exactly once")
+              tests = tests.replace(rejection_v3, rejection_v5, 1)
+          insertion_anchor = '''@pytest.mark.parametrize(
+              ("payload", "exit_code"),
+          '''.replace("          ", "")
+          compatibility_test = '''@pytest.mark.parametrize("schema_version", [3, 4])
+          def test_protocol_decoder_accepts_supported_schema_versions(schema_version):
+              """Accept the deployed v3 contract and the WAL-bound v4 contract."""
+              payload = {**_success_payload(), "schema_version": schema_version}
+              result = handoff.VerifierResult(
+                  0,
+                  json.dumps(payload, sort_keys=True).encode("utf-8"),
+                  b"",
+              )
+
+              assert handoff._decode_protocol(result) == payload
+
+
+          '''.replace("          ", "")
+          if "test_protocol_decoder_accepts_supported_schema_versions" not in tests:
+              if tests.count(insertion_anchor) != 1:
+                  raise SystemExit("protocol parameterization anchor not found exactly once")
+              tests = tests.replace(
+                  insertion_anchor,
+                  compatibility_test + insertion_anchor,
+                  1,
+              )
+          test_path.write_text(tests, encoding="utf-8")
+          PY
+          git diff --check
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Install and verify focused contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --require-hashes \
+            -r backend/requirements-hashes.txt
+          cd backend
+          python -m ruff check \
+            scripts/disksage_copy_readiness_handoff.py \
+            tests/test_disksage_copy_readiness_handoff.py
+          python -m ruff format --check \
+            scripts/disksage_copy_readiness_handoff.py \
+            tests/test_disksage_copy_readiness_handoff.py
+          python -m pytest -q tests/test_disksage_copy_readiness_handoff.py
+
+      - name: Publish verified review fix and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -- .github/workflows/pr-1239-review-fix.yml
+          git add \
+            backend/scripts/disksage_copy_readiness_handoff.py \
+            backend/tests/test_disksage_copy_readiness_handoff.py
+          git diff --cached --check
+          git commit -m "fix(disksage): preserve v3 readiness compatibility"
+          git push origin HEAD:fix/disksage-schema-v4-current
