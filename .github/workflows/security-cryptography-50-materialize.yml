@@ -1,0 +1,247 @@
+name: Materialize cryptography 50 security remediation
+
+on:
+  push:
+    branches:
+      - fix/cryptography-50-bleichenbacher
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-cryptography-50-materialize
+  cancel-in-progress: true
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      PYTHONWARNINGS: error
+      DISABLE_BACKGROUND_WORKERS: "1"
+      UV_VERSION: "0.11.29"
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout remediation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/cryptography-50-bleichenbacher
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            backend/uv.lock
+            backend/requirements-hashes.txt
+            requirements-strix-ci-hashes.txt
+
+      - name: Install supported Python runtimes
+        run: uv python install 3.13 3.14
+
+      - name: Add the failing security-contract test first
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          test_path = Path("backend/tests/test_release_governance.py")
+          text = test_path.read_text(encoding="utf-8")
+          text = text.replace("cryptography==49.0.0", "cryptography==50.0.0")
+          test_name = "test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed"
+          if test_name not in text:
+              text += '''
+
+
+def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
+    """Require every governed Python surface to use the first oracle-safe release."""
+    backend_requirements = read_repo_text("backend/requirements.txt")
+    backend_project = read_repo_text("backend/pyproject.toml")
+    backend_lock = read_repo_text("backend/uv.lock")
+    backend_hashes = read_repo_text("backend/requirements-hashes.txt")
+    strix_requirements = read_repo_text("requirements-strix-ci.txt")
+    strix_hashes = read_repo_text("requirements-strix-ci-hashes.txt")
+
+    governed_text = "\n".join(
+        (
+            backend_requirements,
+            backend_project,
+            backend_lock,
+            backend_hashes,
+            strix_requirements,
+            strix_hashes,
+        )
+    )
+    assert "cryptography==49.0.0" not in governed_text
+    assert "cryptography==50.0.0" in backend_requirements
+    assert '"cryptography==50.0.0"' in backend_project
+    assert "cryptography==50.0.0" in backend_hashes
+    assert "cryptography==50.0.0" in strix_requirements
+    assert "cryptography==50.0.0" in strix_hashes
+    assert re.search(
+        r'(?ms)^\[\[package\]\]\nname = "cryptography"\nversion = "50\\.0\\.0"$',
+        backend_lock,
+    )
+'''
+          test_path.write_text(text, encoding="utf-8")
+          PY
+          set +e
+          uv run --project backend --frozen python -m pytest -q \
+            backend/tests/test_release_governance.py::test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed
+          red_status=$?
+          set -e
+          if [ "$red_status" -eq 0 ]; then
+            echo "::error::The security regression test unexpectedly passed before remediation."
+            exit 1
+          fi
+
+      - name: Update direct security constraints and changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          governed_paths = (
+              Path("backend/requirements.txt"),
+              Path("backend/pyproject.toml"),
+              Path("requirements-strix-ci.txt"),
+          )
+          for path in governed_paths:
+              text = path.read_text(encoding="utf-8")
+              count = text.count("cryptography==49.0.0")
+              if count != 1:
+                  raise SystemExit(f"expected one cryptography 49 pin in {path}, found {count}")
+              path.write_text(
+                  text.replace("cryptography==49.0.0", "cryptography==50.0.0", 1),
+                  encoding="utf-8",
+              )
+
+          changelog_path = Path("CHANGELOG.md")
+          changelog = changelog_path.read_text(encoding="utf-8")
+          bullet = (
+              "- `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 "
+              "EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 "
+              "Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 "
+              "제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 "
+              "버전으로 동기화했습니다.\n"
+          )
+          if bullet not in changelog:
+              marker = "### 보안 패치 (CodeQL extended current-head)\n\n"
+              if changelog.count(marker) != 1:
+                  raise SystemExit("Unreleased security changelog marker not found exactly once")
+              changelog = changelog.replace(marker, marker + bullet, 1)
+          changelog_path.write_text(changelog, encoding="utf-8")
+          PY
+
+      - name: Regenerate uv and pip hash locks
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd backend
+            uv lock --upgrade-package cryptography
+            uv lock --check
+          )
+          uv pip compile \
+            --generate-hashes \
+            --python-version 3.14 \
+            --python-platform x86_64-manylinux_2_28 \
+            --upgrade-package cryptography \
+            --output-file backend/requirements-hashes.txt \
+            backend/requirements.txt
+          uv pip compile \
+            --generate-hashes \
+            --python-version 3.13 \
+            --python-platform x86_64-manylinux_2_28 \
+            --upgrade-package cryptography \
+            --output-file requirements-strix-ci-hashes.txt \
+            requirements-strix-ci.txt
+
+      - name: Verify deterministic locks and focused security contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -F 'cryptography==49.0.0' \
+            backend/requirements.txt \
+            backend/pyproject.toml \
+            backend/uv.lock \
+            backend/requirements-hashes.txt \
+            requirements-strix-ci.txt \
+            requirements-strix-ci-hashes.txt \
+            backend/tests/test_release_governance.py
+          grep -F 'cryptography==50.0.0' backend/requirements.txt
+          grep -F 'cryptography==50.0.0' backend/requirements-hashes.txt
+          grep -F 'cryptography==50.0.0' requirements-strix-ci.txt
+          grep -F 'cryptography==50.0.0' requirements-strix-ci-hashes.txt
+          grep -A2 -F 'name = "cryptography"' backend/uv.lock | grep -F 'version = "50.0.0"'
+          uv run --project backend --locked ruff check tests/test_release_governance.py
+          uv run --project backend --locked ruff format --check tests/test_release_governance.py
+          uv run --project backend --locked python -m pytest -q tests/test_release_governance.py
+
+      - name: Verify hash-locked runtime installation on Python 3.14
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv venv --python 3.14 .venv-security-backend
+          uv pip install \
+            --python .venv-security-backend/bin/python \
+            --require-hashes \
+            -r backend/requirements-hashes.txt
+          .venv-security-backend/bin/python - <<'PY'
+          import cryptography
+
+          assert cryptography.__version__ == "50.0.0"
+          PY
+
+      - name: Verify hash-locked Strix CI installation on Python 3.13
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv venv --python 3.13 .venv-security-strix
+          uv pip install \
+            --python .venv-security-strix/bin/python \
+            --require-hashes \
+            -r requirements-strix-ci-hashes.txt
+          .venv-security-strix/bin/python - <<'PY'
+          import cryptography
+
+          assert cryptography.__version__ == "50.0.0"
+          PY
+
+      - name: Run the full backend regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --project backend --locked python -m pytest -q
+
+      - name: Commit verified remediation and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .venv-security-backend .venv-security-strix
+          rm -- .github/workflows/security-cryptography-50-materialize.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            CHANGELOG.md \
+            backend/pyproject.toml \
+            backend/uv.lock \
+            backend/requirements.txt \
+            backend/requirements-hashes.txt \
+            backend/tests/test_release_governance.py \
+            requirements-strix-ci.txt \
+            requirements-strix-ci-hashes.txt \
+            .github/workflows/security-cryptography-50-materialize.yml
+          git commit -m "fix(security): upgrade cryptography to 50.0.0"
+          git push origin HEAD:fix/cryptography-50-bleichenbacher
