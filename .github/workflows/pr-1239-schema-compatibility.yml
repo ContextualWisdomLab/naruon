@@ -2,9 +2,10 @@ name: PR 1239 schema compatibility repair
 
 # One-shot current-head repair; the final verified commit removes this workflow.
 on:
-  push:
+  pull_request:
     branches:
-      - fix/disksage-schema-v4-current
+      - develop
+    types: [synchronize, ready_for_review]
 
 permissions:
   contents: read
@@ -15,6 +16,7 @@ concurrency:
 
 jobs:
   repair:
+    if: ${{ github.event.pull_request.head.ref == 'fix/disksage-schema-v4-current' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
