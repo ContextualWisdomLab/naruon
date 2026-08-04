@@ -66,16 +66,23 @@ jobs:
               tests = tests.replace(old_rejection, new_rejection, 1)
 
           marker = '@pytest.mark.parametrize("exit_code", [64, 65])\n'
-          regression = '''@pytest.mark.parametrize("schema_version", [3, 4])
-def test_protocol_decoder_accepts_supported_schema_versions(schema_version):
-    """Accept the deployed v3 contract and the WAL-consistent v4 contract."""
-    payload = {**_success_payload(), "schema_version": schema_version}
-    result = handoff.VerifierResult(0, json.dumps(payload).encode(), b"")
-
-    assert handoff._decode_protocol(result) == payload
-
-
-'''
+          regression = "\n".join(
+              [
+                  '@pytest.mark.parametrize("schema_version", [3, 4])',
+                  "def test_protocol_decoder_accepts_supported_schema_versions(schema_version):",
+                  '    """Accept the deployed v3 contract and the WAL-consistent v4 contract."""',
+                  '    payload = {**_success_payload(), "schema_version": schema_version}',
+                  "    result = handoff.VerifierResult(",
+                  "        0,",
+                  '        json.dumps(payload).encode("utf-8"),',
+                  '        b"",',
+                  "    )",
+                  "",
+                  "    assert handoff._decode_protocol(result) == payload",
+                  "",
+                  "",
+              ]
+          )
           if "test_protocol_decoder_accepts_supported_schema_versions" not in tests:
               if tests.count(marker) != 1:
                   raise SystemExit(
