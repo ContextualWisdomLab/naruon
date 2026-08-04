@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
 from db.models import Email
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
 from typing import Literal
@@ -692,6 +692,13 @@ class SendEmailRequest(BaseModel):
     body: str
     in_reply_to: str | None = None  # O3: email threading support
     references: str | None = None
+
+    @field_validator("to", "subject", "in_reply_to", "references", mode="before")
+    @classmethod
+    def _reject_crlf(cls, value: str | None) -> str | None:
+        if isinstance(value, str) and (chr(10) in value or chr(13) in value):
+            raise ValueError("Newlines are not allowed in email headers")
+        return value
 
 
 @router.post("/send")

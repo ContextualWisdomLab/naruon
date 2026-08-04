@@ -129,3 +129,7 @@
 **Vulnerability:** The URL validation logic correctly blocked non-global IP addresses and `localhost`, but failed to block internal domain extensions such as `.internal` or `.local` (or exact matches for `internal`). This could allow attackers to bypass SSRF protections by resolving these internal top-level domains.
 **Learning:** Checking for `localhost` alone is insufficient to prevent SSRF against internal network resources, as modern environments and protocols utilize `.internal` and `.local` domains for internal routing.
 **Prevention:** Always explicitly check and block domains matching `.internal`, `.local`, or `internal` (alongside `localhost`) when validating URLs for global reachability to prevent SSRF bypasses.
+## 2024-05-24 - [Fix CRLF Injection in Email Sending]
+**Vulnerability:** Email header injection (CRLF) via the `SendEmailRequest` fields, specifically `subject`, `to`, `in_reply_to`, and `references`. Relying solely on Pydantic's regex `pattern` constraint may be insufficient in certain validation bypass scenarios or context edge cases.
+**Learning:** Pydantic regex patterns alone might not block header injection reliably across all user-controlled email header fields.
+**Prevention:** To prevent email header injection (CRLF) vulnerabilities, do not rely solely on Pydantic regex patterns. Always use `@field_validator` with explicit `mode="before"` string matching to reject `chr(10)` and `chr(13)` across all user-controlled email header fields.
