@@ -111,6 +111,19 @@ def test_main_delegates_to_absolute_verifier_without_shell_env_or_input_read(
     assert not (tmp_path / "must-not-exist").exists()
 
 
+@pytest.mark.parametrize("schema_version", [3, 4])
+def test_protocol_decoder_accepts_supported_schema_versions(schema_version):
+    """Accept the deployed v3 contract and the WAL-consistent v4 contract."""
+    payload = {**_success_payload(), "schema_version": schema_version}
+    result = handoff.VerifierResult(
+        0,
+        json.dumps(payload).encode("utf-8"),
+        b"",
+    )
+
+    assert handoff._decode_protocol(result) == payload
+
+
 @pytest.mark.parametrize("exit_code", [64, 65])
 def test_main_preserves_valid_disksage_failure_protocol(tmp_path, capsys, exit_code):
     payload = {
@@ -711,7 +724,7 @@ def test_run_bounded_verifier_normalizes_wait_timeout(tmp_path, monkeypatch):
     ("payload", "exit_code"),
     [
         ({**_success_payload(), "private_path": "/private/source"}, 0),
-        ({**_success_payload(), "schema_version": 3}, 0),
+        ({**_success_payload(), "schema_version": 5}, 0),
         ({"ok": False, "error_code": "invalid"}, 0),
         (_success_payload(), 65),
         ({"ok": False, "error_code": "invalid/path"}, 65),
