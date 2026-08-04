@@ -25,7 +25,7 @@ def _success_payload() -> dict[str, object]:
     return {
         "ok": True,
         "schema_kind": "disksage.naruon.cloud-copy-readiness",
-        "schema_version": 3,
+        "schema_version": 4,
         "provider": "icloud",
         "readiness_state": "blocked",
         "candidate_count": 19,
@@ -711,6 +711,7 @@ def test_run_bounded_verifier_normalizes_wait_timeout(tmp_path, monkeypatch):
     ("payload", "exit_code"),
     [
         ({**_success_payload(), "private_path": "/private/source"}, 0),
+        ({**_success_payload(), "schema_version": 3}, 0),
         ({"ok": False, "error_code": "invalid"}, 0),
         (_success_payload(), 65),
         ({"ok": False, "error_code": "invalid/path"}, 65),
