@@ -1,4 +1,11 @@
 ## [Unreleased]
+### 분석 및 보안 유틸리티 도구 4종
+
+- `text_statistics_analyzer`가 Unicode 공백을 구분해 문자·단어·문장 통계를 제공합니다.
+- `json_formatter`가 RFC 8259에 없는 NaN·Infinity 값을 거부하면서 JSON 유효성 검사와 정렬을 제공합니다.
+- `password_generator`가 `secrets` 기반 난수를 사용하고 활성화된 각 문자 집합을 최소 한 번 포함합니다.
+- `url_extractor`가 HTTP(S)와 bracketed IPv6 URL을 추출하고 문장 끝 구두점을 안전하게 제거합니다.
+
 ### 보안 패치 (CodeQL extended current-head)
 
 - `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 버전으로 동기화했습니다. Strix 잠금은 `google-cloud-aiplatform==1.160.0`의 `<7` 제약을 위반하던 `protobuf==7.35.1`을 이미 검증된 `6.33.6`으로 복구해 다시 해석·설치 가능하게 했습니다.

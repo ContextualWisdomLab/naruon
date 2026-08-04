@@ -1,6 +1,8 @@
 import base64
 import hashlib
 import inspect
+import string
+import secrets
 import json
 import logging
 import re
@@ -174,8 +176,13 @@ class ToolRegistry:
 
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
+            required = not isinstance(descriptor, dict) or bool(
+                descriptor.get("required", True)
+            )
             if key not in params:
-                raise ValueError("Missing required tool parameter")
+                if required:
+                    raise ValueError("Missing required tool parameter")
+                continue
             value = params[key]
             expected_type = _parameter_type_name(descriptor)
             if not _parameter_matches_type(value, expected_type):
@@ -188,6 +195,7 @@ registry = ToolRegistry()
 
 
 # Initialize default tools
+
 
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
@@ -245,6 +253,7 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
         "tone_score": 85,
     }
 
+
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
@@ -272,7 +281,10 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if source_phrase in lowered_text and translated_phrase not in translated_terms:
+            if (
+                source_phrase in lowered_text
+                and translated_phrase not in translated_terms
+            ):
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -291,7 +303,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     normalized_domain = sender_domain.lower()
     phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
     spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
+    phishing_hits = sorted(
+        term for term in phishing_terms if term in normalized_content
+    )
     spam_hits = sorted(term for term in spam_terms if term in normalized_content)
     suspicious_domain = (
         normalized_domain.endswith((".ru", ".zip", ".tk"))
@@ -314,7 +328,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
         warnings.append(f"sender domain looks suspicious: {sender_domain}")
     return {
         "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
+        "is_phishing": bool(
+            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
+        ),
         "risk_score": risk_score,
         "warnings": warnings,
     }
@@ -339,7 +355,15 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
+    negative_terms = {
+        "disappointed",
+        "urgent",
+        "issue",
+        "problem",
+        "bad",
+        "불만",
+        "문제",
+    }
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -533,6 +557,7 @@ registry.register(
     tone_analyzer_handler,
 )
 
+
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -544,6 +569,7 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
+
 
 registry.register(
     ToolInfo(
@@ -818,6 +844,161 @@ registry.register(
         parameters={"discussion_context": "string"},
     ),
     meeting_agenda_generator_handler,
+)
+
+
+async def text_statistics_analyzer_handler(params: Dict[str, Any]) -> Any:
+    """Analyze text and return character, word, and sentence counts."""
+    text = params.get("text", "")
+    char_count = len(text)
+    char_count_no_spaces = sum(not character.isspace() for character in text)
+    word_count = len(text.split())
+
+    sentences = [sentence for sentence in re.split(r"[.!?]+", text) if sentence.strip()]
+    sentence_count = len(sentences)
+
+    return {
+        "char_count": char_count,
+        "char_count_no_spaces": char_count_no_spaces,
+        "word_count": word_count,
+        "sentence_count": sentence_count,
+    }
+
+
+registry.register(
+    ToolInfo(
+        code="text_statistics_analyzer",
+        name="텍스트 통계 분석기 (Text Statistics Analyzer)",
+        description="텍스트의 글자 수(공백 포함/제외), 단어 수, 문장 수를 분석합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    text_statistics_analyzer_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Any:
+    """Format strict RFC 8259 JSON without accepting non-finite constants."""
+    raw_json = params.get("json_string", "")
+
+    def reject_constant(constant: str) -> None:
+        position = max(0, raw_json.find(constant))
+        raise json.JSONDecodeError(
+            f"Non-standard JSON constant: {constant}", raw_json, position
+        )
+
+    try:
+        parsed = json.loads(raw_json, parse_constant=reject_constant)
+        formatted = json.dumps(parsed, indent=4, ensure_ascii=False)
+        return {"is_valid": True, "formatted_json": formatted, "error": None}
+    except json.JSONDecodeError as exc:
+        return {"is_valid": False, "formatted_json": None, "error": str(exc)}
+
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열의 유효성을 검사하고 보기 좋게 정렬합니다.",
+        category="개발 도구",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
+
+
+async def password_generator_handler(params: Dict[str, Any]) -> Any:
+    """Generate a random password satisfying every enabled character pool."""
+    length = params.get("length", 16)
+    if not isinstance(length, int) or length < 8 or length > 128:
+        length = 16
+
+    include_lowercase = params.get("include_lowercase", True)
+    include_uppercase = params.get("include_uppercase", True)
+    include_numbers = params.get("include_numbers", True)
+    include_symbols = params.get("include_symbols", True)
+
+    character_pools: list[str] = []
+    if include_lowercase:
+        character_pools.append(string.ascii_lowercase)
+    if include_uppercase:
+        character_pools.append(string.ascii_uppercase)
+    if include_numbers:
+        character_pools.append(string.digits)
+    if include_symbols:
+        character_pools.append("!@#$%^&*()_+-=[]{}|;:,.<>?")
+
+    if not character_pools:
+        character_pools.append(string.ascii_lowercase)
+
+    password_characters = [secrets.choice(pool) for pool in character_pools]
+    all_characters = "".join(character_pools)
+    password_characters.extend(
+        secrets.choice(all_characters) for _ in range(length - len(password_characters))
+    )
+    secrets.SystemRandom().shuffle(password_characters)
+    password = "".join(password_characters)
+    return {"password": password, "length": length}
+
+
+registry.register(
+    ToolInfo(
+        code="password_generator",
+        name="비밀번호 생성기 (Password Generator)",
+        description="안전한 무작위 비밀번호를 생성합니다.",
+        category="보안",
+        parameters={
+            "length": {"type": "integer", "required": False},
+            "include_lowercase": {"type": "boolean", "required": False},
+            "include_uppercase": {"type": "boolean", "required": False},
+            "include_numbers": {"type": "boolean", "required": False},
+            "include_symbols": {"type": "boolean", "required": False},
+        },
+    ),
+    password_generator_handler,
+)
+
+
+_URL_CANDIDATE_PATTERN = re.compile(
+    r"https?://(?:\[[^\]\s]+\]|[^\s:/?#<>\"']+)"
+    r"(?::\d{1,5})?(?:[/?#][^\s<>\"']*)?",
+    re.IGNORECASE,
+)
+
+
+def _trim_extracted_url(candidate: str) -> str:
+    """Remove prose punctuation without removing balanced URL delimiters."""
+    url = candidate.rstrip(".,;!")
+    delimiter_pairs = {")": "(", "]": "[", "}": "{"}
+    while url and url[-1] in delimiter_pairs:
+        closing = url[-1]
+        opening = delimiter_pairs[closing]
+        if url.count(opening) >= url.count(closing):
+            break
+        url = url[:-1]
+    return url
+
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Any:
+    """Extract HTTP and HTTPS URLs, including bracketed IPv6 hosts."""
+    text = params.get("text", "")
+    urls = [
+        trimmed
+        for match in _URL_CANDIDATE_PATTERN.finditer(text)
+        if (trimmed := _trim_extracted_url(match.group(0)))
+    ]
+    return {"urls": urls, "count": len(urls)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에서 모든 URL을 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
 )
 
 

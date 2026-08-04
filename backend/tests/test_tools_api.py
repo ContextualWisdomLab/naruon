@@ -399,9 +399,10 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert records[0].tool_code_fingerprint == hashlib.sha256(
-        hostile_code.encode("utf-8")
-    ).hexdigest()[:12]
+    assert (
+        records[0].tool_code_fingerprint
+        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
+    )
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -1252,3 +1253,180 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_text_statistics_analyzer_handler():
+    from api.tools import text_statistics_analyzer_handler
+
+    result = await text_statistics_analyzer_handler(
+        {"text": "Hello world! How are you today? I am fine."}
+    )
+    assert result["char_count"] == 42
+    assert result["char_count_no_spaces"] == 34
+    assert result["word_count"] == 9
+    assert result["sentence_count"] == 3
+
+    empty_result = await text_statistics_analyzer_handler({"text": ""})
+    assert empty_result["char_count"] == 0
+    assert empty_result["char_count_no_spaces"] == 0
+    assert empty_result["word_count"] == 0
+    assert empty_result["sentence_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_handler():
+    from api.tools import json_formatter_handler
+
+    result = await json_formatter_handler({"json_string": '{"a": 1, "b": "hello"}'})
+    assert result["is_valid"] is True
+    assert "hello" in result["formatted_json"]
+    assert result["error"] is None
+
+    bad_result = await json_formatter_handler({"json_string": '{"a": 1, "b": "hello"'})
+    assert bad_result["is_valid"] is False
+    assert bad_result["formatted_json"] is None
+    assert bad_result["error"] is not None
+
+
+@pytest.mark.asyncio
+async def test_password_generator_handler():
+    from api.tools import password_generator_handler
+
+    result = await password_generator_handler(
+        {
+            "length": 16,
+            "include_uppercase": True,
+            "include_numbers": True,
+            "include_symbols": True,
+        }
+    )
+    assert result["length"] == 16
+    assert len(result["password"]) == 16
+
+    result_default = await password_generator_handler({})
+    assert result_default["length"] == 16
+    assert len(result_default["password"]) == 16
+
+    result_invalid = await password_generator_handler({"length": -1})
+    assert result_invalid["length"] == 16
+    assert len(result_invalid["password"]) == 16
+
+
+@pytest.mark.asyncio
+async def test_url_extractor_handler():
+    from api.tools import url_extractor_handler
+
+    result = await url_extractor_handler(
+        {"text": "Check out https://google.com and http://example.org today."}
+    )
+    assert result["count"] == 2
+    # Check explicitly at specific indices instead of full array iteration to avoid codeql complaints
+    assert result["urls"][0] == "https://google.com"
+    assert result["urls"][1] == "http://example.org"
+
+    result_empty = await url_extractor_handler({"text": "No URLs here!"})
+    assert result_empty["count"] == 0
+    assert result_empty["urls"] == []
+
+
+@pytest.mark.asyncio
+async def test_password_generator_handler_no_characters2():
+    from api.tools import password_generator_handler
+
+    result = await password_generator_handler(
+        {
+            "length": 16,
+            "include_lowercase": False,
+            "include_uppercase": False,
+            "include_numbers": False,
+            "include_symbols": False,
+        }
+    )
+
+    # Should fallback to lowercase
+    import string
+
+    assert all(c in string.ascii_lowercase for c in result["password"])
+
+
+@pytest.mark.asyncio
+async def test_password_generator_handler_no_characters():
+    from api.tools import password_generator_handler
+
+    result = await password_generator_handler(
+        {
+            "length": 16,
+            "include_uppercase": False,
+            "include_numbers": False,
+            "include_symbols": False,
+        }
+    )
+
+    # Should fallback to lowercase
+    import string
+
+    assert all(c in string.ascii_lowercase for c in result["password"])
+
+
+@pytest.mark.asyncio
+async def test_text_statistics_excludes_all_unicode_whitespace():
+    from api.tools import text_statistics_analyzer_handler
+
+    result = await text_statistics_analyzer_handler({"text": "A \r\n\t\u00a0B\u0085C"})
+    assert result["char_count_no_spaces"] == 3
+
+
+@pytest.mark.asyncio
+async def test_password_generator_guarantees_every_enabled_pool():
+    from api.tools import password_generator_handler
+    import string
+
+    result = await password_generator_handler(
+        {
+            "length": 32,
+            "include_lowercase": True,
+            "include_uppercase": True,
+            "include_numbers": True,
+            "include_symbols": True,
+        }
+    )
+    password = result["password"]
+
+    assert len(password) == 32
+    assert any(character in string.ascii_lowercase for character in password)
+    assert any(character in string.ascii_uppercase for character in password)
+    assert any(character in string.digits for character in password)
+    assert any(character in "!@#$%^&*()_+-=[]{}|;:,.<>?" for character in password)
+
+
+@pytest.mark.asyncio
+async def test_password_generator_respects_single_pool_and_safe_fallback():
+    from api.tools import password_generator_handler
+    import string
+
+    digits_only = await password_generator_handler(
+        {
+            "length": 12,
+            "include_lowercase": False,
+            "include_uppercase": False,
+            "include_numbers": True,
+            "include_symbols": False,
+        }
+    )
+    fallback = await password_generator_handler(
+        {
+            "length": 12,
+            "include_lowercase": False,
+            "include_uppercase": False,
+            "include_numbers": False,
+            "include_symbols": False,
+        }
+    )
+
+    assert len(digits_only["password"]) == 12
+    assert all(character in string.digits for character in digits_only["password"])
+    assert len(fallback["password"]) == 12
+    assert all(
+        character in string.ascii_lowercase for character in fallback["password"]
+    )
