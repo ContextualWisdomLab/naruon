@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import importlib.util
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -174,8 +175,45 @@ def test_strix_ci_requirements_use_security_quality_clean_pins() -> None:
     strix_ci_requirements = read_repo_text("requirements-strix-ci.txt")
 
     assert "strix-agent==1.0.4" in strix_ci_requirements
-    assert "cryptography==49.0.0" in strix_ci_requirements
+    assert "google-cloud-aiplatform==1.160.0" in strix_ci_requirements
+    assert "cryptography==50.0.0" in strix_ci_requirements
+    assert "protobuf==6.33.6" in strix_ci_requirements
     assert "python-multipart==0.0.32" in strix_ci_requirements
+
+
+def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
+    """Require every governed Python surface to use the first oracle-safe release."""
+    backend_requirements = read_repo_text("backend/requirements.txt")
+    backend_project_text = read_repo_text("backend/pyproject.toml")
+    backend_project = tomllib.loads(backend_project_text)
+    backend_lock = tomllib.loads(read_repo_text("backend/uv.lock"))
+    backend_hashes = read_repo_text("backend/requirements-hashes.txt")
+    strix_requirements = read_repo_text("requirements-strix-ci.txt")
+    strix_hashes = read_repo_text("requirements-strix-ci-hashes.txt")
+
+    def pins(text: str, package: str) -> list[str]:
+        return re.findall(rf"(?m)^{re.escape(package)}==[^\s\\]+", text)
+
+    for governed_text in (
+        backend_requirements,
+        backend_hashes,
+        strix_requirements,
+        strix_hashes,
+    ):
+        assert pins(governed_text, "cryptography") == ["cryptography==50.0.0"]
+    assert [
+        dependency
+        for dependency in backend_project["project"]["dependencies"]
+        if dependency.startswith("cryptography")
+    ] == ["cryptography==50.0.0"]
+    cryptography_versions = {
+        package["version"]
+        for package in backend_lock["package"]
+        if package["name"] == "cryptography"
+    }
+    assert cryptography_versions == {"50.0.0"}
+    assert pins(strix_requirements, "protobuf") == ["protobuf==6.33.6"]
+    assert pins(strix_hashes, "protobuf") == ["protobuf==6.33.6"]
 
 
 def test_changelog_follows_keep_a_changelog_for_initial_korean_release() -> None:
