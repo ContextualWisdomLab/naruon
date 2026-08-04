@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import time
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -14,10 +15,12 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
+    ExecuteResponse,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
     ToolRegistry,
+    ToolValidationError,
     _parameter_type_name,
     _safe_tool_failure_message,
     execute_tool,
@@ -198,6 +201,11 @@ async def test_execute_tone_analyzer():
     assert data["result"]["tone_score"] == 85
 
 
+def test_execute_response_result_is_optional_in_openapi():
+    schema = ExecuteResponse.model_json_schema()
+    assert "result" not in schema.get("required", [])
+
+
 def test_execute_tool_rejects_unexpected_parameter():
     with TestClient(app) as client:
         response = client.post(
@@ -214,7 +222,8 @@ def test_execute_tool_rejects_unexpected_parameter():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
-    assert data["result"] is None
+    assert "result" not in data
+    assert data["error_code"] == "unexpected_tool_parameter"
     assert "Unexpected tool parameter" in data["message"]
 
 
@@ -229,7 +238,8 @@ def test_execute_tool_rejects_invalid_parameter_type():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
-    assert data["result"] is None
+    assert "result" not in data
+    assert data["error_code"] == "invalid_tool_parameter_type"
     assert "Invalid tool parameter type" in data["message"]
 
 
@@ -257,6 +267,8 @@ def test_execute_tool_rejects_missing_required_parameter():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
+    assert "result" not in data
+    assert data["error_code"] == "missing_tool_parameter"
     assert "Missing required tool parameter" in data["message"]
 
 
@@ -284,7 +296,16 @@ def test_execute_tool_no_parameters_accepted():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
+    assert "result" not in data
+    assert data["error_code"] == "tool_parameters_not_supported"
     assert "Tool does not accept parameters" in data["message"]
+
+
+def test_registry_validation_error_has_a_stable_code_for_non_objects():
+    with pytest.raises(ToolValidationError) as exc_info:
+        registry._validate_parameters("thread_summarizer", "not_a_dict")
+
+    assert exc_info.value.error_code == "invalid_tool_parameters"
 
 
 def test_execute_tool_not_a_dict_parameter():
@@ -362,7 +383,7 @@ async def test_execute_tool_handler_error():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
-    assert data["result"] is None
+    assert "result" not in data
     assert "Simulated error" in data["message"]
 
 
@@ -399,9 +420,10 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert records[0].tool_code_fingerprint == hashlib.sha256(
-        hostile_code.encode("utf-8")
-    ).hexdigest()[:12]
+    assert (
+        records[0].tool_code_fingerprint
+        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
+    )
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -476,7 +498,7 @@ def test_validate_parameters_missing_required():
         category="C",
         parameters={"req1": "string"},
     )
-    with pytest.raises(ValueError, match="Missing required tool parameter"):
+    with pytest.raises(ToolValidationError, match="Missing required tool parameter"):
         r._validate_parameters("req_params", {})
 
 
@@ -544,7 +566,7 @@ async def test_base64_decoder_tool_invalid_input():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
-    assert data["result"] is None
+    assert "result" not in data
     assert "Invalid Base64 string" in data["message"]
 
 
@@ -1247,8 +1269,146 @@ def test_execute_analysis_tool_rejects_oversized_text():
     assert response.status_code == 200
     assert response.json() == {
         "status": "failed",
-        "result": None,
         "message": (
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+def test_uuid_generator_tool():
+    app.dependency_overrides.clear()
+    token = _signed_session_token()
+    with TestClient(app) as client:
+        # Test default (version 4)
+        response = client.post(
+            "/api/tools/uuid_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"version": 4}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert "uuid" in data["result"]
+        assert len(data["result"]["uuid"]) == 36
+        assert uuid.UUID(data["result"]["uuid"]).version == 4
+
+        # Test version 1
+        response = client.post(
+            "/api/tools/uuid_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"version": 1}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert "uuid" in data["result"]
+        assert len(data["result"]["uuid"]) == 36
+        parsed_uuid = uuid.UUID(data["result"]["uuid"])
+        assert parsed_uuid.version == 1
+        assert parsed_uuid.node & (1 << 40)
+
+        # Test invalid version
+        response = client.post(
+            "/api/tools/uuid_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"version": 3}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert data["error_code"] == "unsupported_uuid_version"
+
+
+def test_hash_generator_tool():
+    app.dependency_overrides.clear()
+    token = _signed_session_token()
+    with TestClient(app) as client:
+        # Test default (sha256)
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"text": "hello", "algorithm": "sha256"}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert (
+            data["result"]["hash"]
+            == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
+
+        # Test md5
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"text": "hello", "algorithm": "md5"}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["result"]["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+        # Test sha1
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"text": "hello", "algorithm": "sha1"}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["result"]["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+
+        # Test sha512
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"text": "hello", "algorithm": "sha512"}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert (
+            data["result"]["hash"]
+            == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+        )
+
+        # Test invalid algorithm
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"text": "hello", "algorithm": "sha3"}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert data["error_code"] == "unsupported_hash_algorithm"
+
+        # Test invalid text type
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"parameters": {"text": 123}},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert "result" not in data
+        assert data["error_code"] == "invalid_tool_parameter_type"
+        assert "Invalid tool parameter type" in data["message"]
+
+
+def test_uuid_generator_version_must_be_integer():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/uuid_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"version": 1.0}},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "result" not in data
+    assert data["error_code"] == "invalid_tool_parameter_type"
+    assert "Invalid tool parameter type" in data["message"]
