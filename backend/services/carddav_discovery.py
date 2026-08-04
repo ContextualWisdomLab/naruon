@@ -29,7 +29,8 @@ import logging
 import socket
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from unicodedata import category
+from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -42,6 +43,8 @@ SrvResolver = Callable[[str], list[tuple[str, int]]]
 # character strings (one joined string per record), or an empty iterable.
 TxtResolver = Callable[[str], list[str]]
 HttpClientFactory = Callable[[], Any]
+
+_MAX_CONTEXT_PATH_DECODE_ROUNDS = 5
 
 
 @dataclass(frozen=True)
@@ -224,18 +227,30 @@ def _txt_context_path(records: list[str]) -> str | None:
             if key.strip().lower() != "path":
                 continue
             path = value.strip()
+            decoded_path = path
+            for _ in range(_MAX_CONTEXT_PATH_DECODE_ROUNDS):
+                next_path = unquote(decoded_path)
+                if next_path == decoded_path:
+                    break
+                decoded_path = next_path
+            else:
+                # Reject values that still change after the decode budget. This
+                # keeps over-encoded traversal payloads from hiding another
+                # interpretation beyond the validation boundary.
+                if unquote(decoded_path) != decoded_path:
+                    continue
             if (
-                path.startswith("/")
-                and "://" not in path
-                and "\\" not in path
-                and "?" not in path
-                and "#" not in path
+                decoded_path.startswith("/")
+                and "://" not in decoded_path
+                and "\\" not in decoded_path
+                and "?" not in decoded_path
+                and "#" not in decoded_path
                 and all(
-                    segment not in {".", ".."} for segment in path.split("/")
+                    segment not in {".", ".."} for segment in decoded_path.split("/")
                 )
-                and all(ord(ch) >= 32 and ord(ch) != 127 for ch in path)
+                and all(category(ch) != "Cc" for ch in decoded_path)
             ):
-                return path
+                return decoded_path
     return None
 
 

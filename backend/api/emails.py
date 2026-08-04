@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
 from db.models import Email
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
 from typing import Literal
@@ -692,6 +692,16 @@ class SendEmailRequest(BaseModel):
     body: str
     in_reply_to: str | None = None  # O3: email threading support
     references: str | None = None
+
+    @field_validator("to", "subject", "in_reply_to", "references", mode="before")
+    @classmethod
+    def reject_crlf(cls, value: object) -> object:
+        """Reject SMTP header injection via CR/LF before pattern validation."""
+        if value is None:
+            return value
+        if isinstance(value, str) and ("\r" in value or "\n" in value):
+            raise ValueError("Email header fields must not contain newlines")
+        return value
 
 
 @router.post("/send")
