@@ -821,6 +821,42 @@ registry.register(
 )
 
 
+async def url_extractor_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
+    return {"urls": urls}
+
+async def pii_anonymizer_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    # Mask email
+    text = re.sub(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', '[EMAIL]', text)
+    # Mask phone number (simple pattern)
+    text = re.sub(r'\d{3}-\d{3,4}-\d{4}', '[PHONE]', text)
+    return {"anonymized_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에서 URL을 추출합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="pii_anonymizer",
+        name="개인정보 마스킹 (PII Anonymizer)",
+        description="텍스트에서 이메일과 전화번호 등의 개인정보를 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_anonymizer_handler,
+)
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """

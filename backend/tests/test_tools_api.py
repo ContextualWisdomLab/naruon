@@ -1252,3 +1252,54 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+def test_url_extractor_success():
+    client = TestClient(app)
+    response = client.post(
+        "/api/tools/url_extractor/execute",
+        headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        json={"parameters": {"text": "자세한 정보는 https://example.com 에서 확인하세요. 또한 http://test.org 도 참고 바랍니다."}},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["result"]["urls"]) == 2
+    assert data["result"]["urls"][0] == "https://example.com"
+    assert data["result"]["urls"][1] == "http://test.org"
+
+def test_url_extractor_no_url():
+    client = TestClient(app)
+    response = client.post(
+        "/api/tools/url_extractor/execute",
+        headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        json={"parameters": {"text": "여기는 URL이 없는 텍스트입니다."}},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["result"]["urls"]) == 0
+
+def test_pii_anonymizer_success():
+    client = TestClient(app)
+    response = client.post(
+        "/api/tools/pii_anonymizer/execute",
+        headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        json={"parameters": {"text": "제 이메일은 test@example.com이고, 전화번호는 010-1234-5678입니다."}},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["anonymized_text"] == "제 이메일은 [EMAIL]이고, 전화번호는 [PHONE]입니다."
+
+def test_pii_anonymizer_no_pii():
+    client = TestClient(app)
+    response = client.post(
+        "/api/tools/pii_anonymizer/execute",
+        headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        json={"parameters": {"text": "개인정보가 없는 안전한 텍스트입니다."}},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["anonymized_text"] == "개인정보가 없는 안전한 텍스트입니다."
