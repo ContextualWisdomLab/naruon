@@ -38,40 +38,46 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path(".github/workflows/pr-1195-fix-source-dedupe.yml")
           text = path.read_text(encoding="utf-8")
 
-          old_assertion = (
-              "          final_assertion = '    assert imported[0][\\\"subject\\\"] "
-              "== \\\"POP3 import\\\"\\n'\n"
+          assertion_pattern = re.compile(
+              r'(?m)^(?P<indent>\s*)final_assertion\s*=\s*.*POP3 import.*$'
           )
-          new_assertion = (
-              "          final_assertion = '    assert imported[0][\\\"email_data\\\"]"
-              "[\\\"subject\\\"] == \\\"POP3 import\\\"\\n'\n"
-          )
-          if text.count(old_assertion) != 1:
+          assertion_matches = list(assertion_pattern.finditer(text))
+          if len(assertion_matches) != 1:
               raise RuntimeError(
-                  "expected one obsolete POP3 assertion anchor, found "
-                  f"{text.count(old_assertion)}"
+                  "expected one POP3 assertion definition, found "
+                  f"{len(assertion_matches)}"
               )
-          text = text.replace(old_assertion, new_assertion, 1)
+          assertion_indent = assertion_matches[0].group("indent")
+          assertion_replacement = (
+              assertion_indent
+              + 'final_assertion = \'    assert imported[0]["email_data"]'
+              + '["subject"] == "POP3 import"\\n\''
+          )
+          text = assertion_pattern.sub(assertion_replacement, text, count=1)
 
-          commit_line = (
-              '          git commit -m "fix(email): bind untrusted-date dedupe '
-              'to raw source"\n'
+          commit_pattern = re.compile(
+              r'(?m)^(?P<indent>\s*)git commit -m '
+              r'"fix\(email\): bind untrusted-date dedupe to raw source"$'
           )
-          self_delete = (
-              "          git rm -- "
-              ".github/workflows/pr-1195-fix-source-dedupe.yml\n"
-              + commit_line
-          )
-          if text.count(commit_line) != 1:
+          commit_matches = list(commit_pattern.finditer(text))
+          if len(commit_matches) != 1:
               raise RuntimeError(
-                  "expected one final commit line, found "
-                  f"{text.count(commit_line)}"
+                  "expected one final commit command, found "
+                  f"{len(commit_matches)}"
               )
-          text = text.replace(commit_line, self_delete, 1)
+          commit_indent = commit_matches[0].group("indent")
+          commit_replacement = (
+              commit_indent
+              + "git rm -- .github/workflows/pr-1195-fix-source-dedupe.yml\n"
+              + commit_indent
+              + 'git commit -m "fix(email): bind untrusted-date dedupe to raw source"'
+          )
+          text = commit_pattern.sub(commit_replacement, text, count=1)
           path.write_text(text, encoding="utf-8")
           PY
 
