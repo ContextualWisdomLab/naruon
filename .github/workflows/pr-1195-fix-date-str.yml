@@ -1,0 +1,86 @@
+name: PR 1195 repair finalizer date cleanup
+
+on:
+  push:
+    branches:
+      - claude/contextualwisdomlab-audit-governance-qyxe67
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-1195-repair-finalizer-date-cleanup
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: claude/contextualwisdomlab-audit-governance-qyxe67
+          fetch-depth: 0
+
+      - name: Make empty-string removal explicit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/workflows/pr-1195-source-identity-finalize.yml")
+          text = path.read_text(encoding="utf-8")
+          old = '''          text = replace_once(
+              text,
+              "    if hasattr(date_obj, \\\"isoformat\\\"):\\n"
+              "        date_str = date_obj.isoformat()\\n"
+              "    else:\\n"
+              "        date_str = str(date_obj) if date_obj else \\\"\\\"\\n",
+              "",
+              "IMAP synthetic date string",
+          )
+          '''
+          new = '''          date_string_block = (
+              "    if hasattr(date_obj, \\\"isoformat\\\"):\\n"
+              "        date_str = date_obj.isoformat()\\n"
+              "    else:\\n"
+              "        date_str = str(date_obj) if date_obj else \\\"\\\"\\n"
+          )
+          if date_string_block in text:
+              text = text.replace(date_string_block, "", 1)
+          elif "date_str =" in text:
+              raise SystemExit("IMAP synthetic date string block changed unexpectedly")
+          '''
+          if new not in text:
+              if text.count(old) != 1:
+                  raise SystemExit(
+                      f"expected one broken date-removal block, found {text.count(old)}"
+                  )
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+          ruby -e 'require "yaml"; YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true)' \
+            .github/workflows/pr-1195-source-identity-finalize.yml
+          git diff --check
+
+      - name: Publish repaired finalizer and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -- .github/workflows/pr-1195-fix-date-str.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/pr-1195-source-identity-finalize.yml
+          git diff --cached --check
+          git commit -m "fix(ci): remove stale IMAP date identity state"
+          git push origin HEAD:claude/contextualwisdomlab-audit-governance-qyxe67
