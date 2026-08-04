@@ -1,19 +1,21 @@
 name: Materialize cryptography 50 security remediation
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/cryptography-50-bleichenbacher
+      - develop
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
 
 concurrency:
-  group: security-cryptography-50-materialize
+  group: security-cryptography-50-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   materialize:
+    if: ${{ github.event.pull_request.head.ref == 'fix/cryptography-50-bleichenbacher' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -52,7 +54,7 @@ jobs:
           fi
 
       - name: Add and prove the failing security contract
-        if: steps.state.outputs.required == 'true'
+        if: ${{ steps.state.outputs.required == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -115,7 +117,7 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
           fi
 
       - name: Update governed security constraints and changelog
-        if: steps.state.outputs.required == 'true'
+        if: ${{ steps.state.outputs.required == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -155,7 +157,7 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
           PY
 
       - name: Regenerate uv and pip hash locks
-        if: steps.state.outputs.required == 'true'
+        if: ${{ steps.state.outputs.required == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -180,7 +182,7 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
             requirements-strix-ci.txt
 
       - name: Verify deterministic locks and focused governance
-        if: steps.state.outputs.required == 'true'
+        if: ${{ steps.state.outputs.required == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -206,7 +208,7 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
           )
 
       - name: Verify hash-locked backend installation
-        if: steps.state.outputs.required == 'true'
+        if: ${{ steps.state.outputs.required == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -222,7 +224,7 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
           PY
 
       - name: Verify hash-locked Strix CI installation
-        if: steps.state.outputs.required == 'true'
+        if: ${{ steps.state.outputs.required == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -238,7 +240,7 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
           PY
 
       - name: Run the full backend regression suite
-        if: steps.state.outputs.required == 'true'
+        if: ${{ steps.state.outputs.required == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -246,7 +248,7 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
           uv run --locked python -m pytest -q
 
       - name: Commit verified remediation
-        if: steps.state.outputs.required == 'true'
+        if: ${{ steps.state.outputs.required == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
