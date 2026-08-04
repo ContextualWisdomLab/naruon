@@ -1,9 +1,10 @@
 name: PR 1195 repair source-dedupe materializer
 
 on:
-  push:
+  pull_request:
     branches:
-      - claude/contextualwisdomlab-audit-governance-qyxe67
+      - develop
+    types: [synchronize, ready_for_review]
 
 permissions:
   contents: read
@@ -14,7 +15,7 @@ concurrency:
 
 jobs:
   repair:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'claude/contextualwisdomlab-audit-governance-qyxe67'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
