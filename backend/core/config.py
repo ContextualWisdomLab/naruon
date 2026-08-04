@@ -101,6 +101,7 @@ class Settings(BaseSettings):
     # operator is permitted to promote work items to (SSRF host allowlist).
     ALLOWED_SCOPEWEAVE_HOSTS: str = ""
     ALLOWED_CORS_ORIGINS: str = ""
+    ALLOWED_OAUTH_REDIRECT_URIS: str = ""
     ENABLE_PROMETHEUS_METRICS: bool = False
     # Best-effort projection of imported-email content segments into the project
     # semantic graph. Off by default; failure never affects email import.

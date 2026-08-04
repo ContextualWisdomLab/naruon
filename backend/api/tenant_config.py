@@ -190,6 +190,25 @@ def _validate_imap_config(imap_server: str | None, imap_port: int | None) -> Non
         ) from exc
 
 
+def _validate_oauth_redirect_uri(uri: str | None) -> None:
+    if not uri:
+        return
+    try:
+        from core.config import settings
+        allowed = [u.strip() for u in settings.ALLOWED_OAUTH_REDIRECT_URIS.split(",") if u.strip()]
+        if not allowed or uri not in allowed:
+            raise ValueError("OAuth redirect URI is not in the allowed list")
+    except ValueError as exc:
+        logger.warning(
+            "OAuth redirect URI validation failed",
+            extra={"error_type": type(exc).__name__},
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OAuth redirect URI configuration",
+        ) from exc
+
+
 def _validate_pop3_config(pop3_server: str | None, pop3_port: int | None) -> None:
     try:
         if pop3_server is not None and pop3_port is not None:
@@ -222,6 +241,9 @@ def validate_mail_config_update(
     _validate_smtp_config(smtp_server, smtp_port)
     _validate_imap_config(imap_server, imap_port)
     _validate_pop3_config(pop3_server, pop3_port)
+
+    oauth_redirect_uri = _field_value(config_data, db_config, "oauth_redirect_uri")
+    _validate_oauth_redirect_uri(oauth_redirect_uri)
 
 
 @router.post("")

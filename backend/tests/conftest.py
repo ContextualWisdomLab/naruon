@@ -67,12 +67,15 @@ def dev_auth_dependency_overrides():
         if user_id is None:
             raise HTTPException(status_code=401, detail="Authentication required")
         organization_id = _normalize_header_value(x_organization_id)
+        role = _derive_test_role(_normalize_header_value(x_user_role))
+        verifier = "server" if role in {"tenant_admin", "organization_admin", "admin"} else "override"
         return AuthContext(
             user_id=user_id,
-            role=_derive_test_role(_normalize_header_value(x_user_role)),
+            role=role,
             organization_id=organization_id,
             group_ids=_parse_group_ids(_normalize_header_value(x_group_ids)),
             workspace_id=_derive_workspace_id(user_id, organization_id),
+            session_verifier=verifier,
         )
 
     async def test_current_user(

@@ -15,13 +15,10 @@ router = APIRouter(prefix="/dav", tags=["dav"])
 
 
 def _normalize_dav_authorization_path(path: str) -> str:
-    normalized_path = path.replace("\\", "/")
-    for _ in range(100):
-        decoded_path = unquote(normalized_path).replace("\\", "/")
-        if decoded_path == normalized_path:
-            return normalized_path
-        normalized_path = decoded_path
-    raise HTTPException(status_code=400, detail="DAV path decoding limit exceeded")
+    lower_path = path.replace("\\", "/").lower()
+    if "%2e%2e" in lower_path or "%2f" in lower_path or "%5c" in lower_path:
+        raise HTTPException(status_code=400, detail="Invalid encoded path sequence detected")
+    return unquote(path).replace("\\", "/")
 
 
 def _dav_path_owner_user_id(path: str) -> str | None:

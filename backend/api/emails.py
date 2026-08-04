@@ -322,8 +322,7 @@ async def get_emails(
 
     reply_counts = defaultdict(int)
     thread_messages = defaultdict(list)
-    # ⚡ Bolt: Use a set instead of a dict for boolean tracking to improve semantics and reduce memory.
-    has_sent_message = set()
+    has_sent_message = {}
 
     if grouped:
         thread_lookup: set[str] = set()
@@ -348,13 +347,13 @@ async def get_emails(
             reply_counts[group_key] += 1
             if is_sent_folder and group_key not in has_sent_message:
                 if message_is_from_user(email, user_addresses):
-                    has_sent_message.add(group_key)
+                    has_sent_message[group_key] = True
 
     if is_sent_folder:
         visible_groups = [
             email
             for group_key, email in grouped.items()
-            if group_key in has_sent_message
+            if has_sent_message.get(group_key, False)
         ]
     else:
         visible_groups = list(grouped.values())

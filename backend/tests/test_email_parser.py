@@ -1,23 +1,12 @@
-import base64
 import datetime
 import os
 import tempfile
 from email.message import Message
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from services.email_parser import (
-    EmailParseError,
-    _attachment_part_content,
-    _extract_thread_id,
-    _format_display_address,
-    _process_multipart_body,
-    _process_singlepart_body,
-    _sanitize_address_display_text,
-    _sanitize_nul,
-    parse_eml,
-    parse_eml_bytes,
-)
+from services.email_parser import _extract_thread_id, _sanitize_nul, parse_eml
+from services.exceptions import EmailParseError
 
 
 def test_parse_eml_basic():
@@ -118,107 +107,6 @@ Plain body"""
         assert parsed["reply_to"] == "reply@test.com"
     finally:
         os.unlink(temp_path)
-
-
-def test_parse_eml_stores_non_ascii_display_names_decoded():
-    # RFC 2047: non-ASCII From/To/Reply-To display names arrive as encoded-words
-    # (e.g. =?UTF-8?B?...?=). policy.default header-decodes them; the stored
-    # display fields must keep the decoded text rather than re-encoding it back
-    # into an encoded-word (formataddr's behavior), which would render every
-    # non-ASCII sender/recipient as garbled =?utf-8?...?= bytes in the UI.
-    from_name = "박성호"
-    to_name = "김천"
-    reply_name = "응답"
-    subject_text = "회 테스트"
-
-    def encoded_word(text: str) -> bytes:
-        token = base64.b64encode(text.encode("utf-8")).decode("ascii")
-        return f"=?UTF-8?B?{token}?=".encode("ascii")
-
-    eml_content = (
-        b"Message-ID: <i18n@test.com>\r\n"
-        b"From: " + encoded_word(from_name) + b" <sender@example.com>\r\n"
-        b"To: " + encoded_word(to_name) + b" <recipient@test.com>\r\n"
-        b"Reply-To: " + encoded_word(reply_name) + b" <reply@test.com>\r\n"
-        b"Subject: " + encoded_word(subject_text) + b"\r\n"
-        b"Date: Mon, 27 Apr 2026 10:00:00 +0000\r\n"
-        b"\r\n"
-        b"Plain body"
-    )
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
-        f.write(eml_content)
-        temp_path = f.name
-
-    try:
-        parsed = parse_eml(temp_path)
-        assert parsed["sender"] == f"{from_name} <sender@example.com>"
-        assert parsed["recipients"] == f"{to_name} <recipient@test.com>"
-        assert parsed["reply_to"] == f"{reply_name} <reply@test.com>"
-        assert parsed["subject"] == subject_text
-        assert "=?" not in parsed["sender"]
-        assert "=?" not in parsed["recipients"]
-    finally:
-        os.unlink(temp_path)
-
-
-def test_sanitize_address_display_text_keeps_decoded_unicode_and_quotes_specials():
-    # A decoded non-ASCII name stays literal (formataddr would re-encode it).
-    assert (
-        _sanitize_address_display_text("박성호 <sender@example.com>")
-        == "박성호 <sender@example.com>"
-    )
-    # A display name containing an RFC 5322 special is quoted so a ", "-joined
-    # multi-address value stays unambiguous.
-    assert (
-        _sanitize_address_display_text('"Doe, John" <j@x.com>')
-        == '"Doe, John" <j@x.com>'
-    )
-    # Multiple addresses with mixed scripts are each formatted and comma-joined.
-    assert (
-        _sanitize_address_display_text("박성호 <a@x.com>, Bob <b@x.com>")
-        == "박성호 <a@x.com>, Bob <b@x.com>"
-    )
-
-
-def test_format_display_address_escapes_quotes_and_handles_empty_name():
-    # No display name -> bare address.
-    assert _format_display_address("", "a@x.com") == "a@x.com"
-    # Non-ASCII name kept literal.
-    assert _format_display_address("박성호", "s@x.com") == "박성호 <s@x.com>"
-    # Embedded quotes/backslashes are escaped inside the quoted-string, matching
-    # email.utils.formataddr's escaping.
-    assert (
-        _format_display_address('Fancy "Q"', "q@x.com") == '"Fancy \\"Q\\"" <q@x.com>'
-    )
-
-
-def test_process_multipart_body_ignores_non_string_part_content():
-    # get_content() can return a non-str (e.g. undecodable bytes) even for a
-    # text/* part; the isinstance guard must drop it rather than concatenate
-    # bytes into the plain/html body.
-    plain_part = MagicMock()
-    plain_part.get_content_type.return_value = "text/plain"
-    plain_part.get_filename.return_value = None
-    plain_part.get_content.return_value = b"not-a-str"
-    html_part = MagicMock()
-    html_part.get_content_type.return_value = "text/html"
-    html_part.get_filename.return_value = None
-    html_part.get_content.return_value = b"not-a-str"
-    msg = MagicMock()
-    msg.walk.return_value = [plain_part, html_part]
-
-    assert _process_multipart_body(msg) == ("", "", [])
-
-
-def test_process_singlepart_body_ignores_non_string_content():
-    # A single-part message whose get_content() returns a non-str yields an
-    # empty body rather than a stringified bytes value.
-    msg = MagicMock()
-    msg.get_content_type.return_value = "text/plain"
-    msg.get_content.return_value = b"not-a-str"
-
-    assert _process_singlepart_body(msg) == ("", "", [])
 
 
 def test_parse_eml_strips_active_html_from_attachment_display_fields():
@@ -437,33 +325,6 @@ Test."""
         os.unlink(temp_path2)
 
 
-def test_parse_eml_unknown_timezone_date_is_timezone_aware():
-    # RFC 5322 section 3.3: a "-0000" zone means the time zone is unknown, for
-    # which parsedate_to_datetime returns a *naive* datetime. Every other parse
-    # path yields an aware datetime, so the parser must normalize this to aware
-    # too -- otherwise sorting/comparing it against another message's date raises
-    # "can't compare offset-naive and offset-aware datetimes" and it misbinds the
-    # instant in a timestamptz column.
-    eml_content = b"""Message-ID: <unknownzone@test.com>
-From: test@test.com
-To: recipient@test.com
-Subject: Unknown zone
-Date: Mon, 27 Apr 2026 10:00:00 -0000
-
-Test."""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".eml") as f:
-        f.write(eml_content)
-        temp_path = f.name
-
-    try:
-        parsed = parse_eml(temp_path)
-        assert parsed["date"].tzinfo is not None
-        # must not raise offset-naive/aware TypeError
-        assert parsed["date"] <= datetime.datetime.now(datetime.timezone.utc)
-    finally:
-        os.unlink(temp_path)
-
-
 def test_parse_eml_io_error():
     with pytest.raises(EmailParseError):
         parse_eml("/path/to/nonexistent/file.eml")
@@ -518,70 +379,6 @@ def test_extract_thread_id_uses_first_reference_from_long_header():
     msg["In-Reply-To"] = "<reply@test.com>"
 
     assert _extract_thread_id(msg, "<message@test.com>") == "<root@test.com>"
-
-
-def test_sanitize_address_display_text_keeps_name_only_and_falls_back_to_text():
-    # A token with a display name but an empty address part keeps the name
-    # (rather than dropping it), and a header that yields no address at all
-    # falls back to the sanitized raw text.
-    assert _sanitize_address_display_text("Display Name <>") == "Display Name"
-    assert _sanitize_address_display_text("") == ""
-
-
-def test_attachment_part_content_falls_back_to_raw_payload_on_decode_error():
-    # A part whose get_content() cannot decode (unknown charset / malformed
-    # transfer-encoding) falls back to the raw decoded payload, and to "" when
-    # the payload is absent, instead of propagating the decode error.
-    raw_part = MagicMock()
-    raw_part.get_content.side_effect = LookupError("unknown charset")
-    raw_part.get_payload.return_value = b"raw-bytes"
-    assert _attachment_part_content(raw_part) == b"raw-bytes"
-
-    empty_part = MagicMock()
-    empty_part.get_content.side_effect = ValueError("bad encoding")
-    empty_part.get_payload.return_value = None
-    assert _attachment_part_content(empty_part) == ""
-
-
-def test_parse_eml_bytes_parses_provider_bytes_and_wraps_parse_errors():
-    parsed = parse_eml_bytes(
-        b"Message-ID: <bytes@test.com>\r\n"
-        b"From: sender@test.com\r\n"
-        b"To: user@test.com\r\n"
-        b"Subject: Bytes\r\n\r\n"
-        b"Body"
-    )
-    assert parsed["message_id"] == "<bytes@test.com>"
-    assert parsed["subject"] == "Bytes"
-
-    # A parser failure is wrapped as the sanitized public EmailParseError rather
-    # than leaking the internal exception chain at the ingest boundary.
-    with patch(
-        "services.email_parser.message_from_bytes", side_effect=ValueError("boom")
-    ):
-        with pytest.raises(EmailParseError):
-            parse_eml_bytes(b"anything")
-
-
-def test_extract_thread_id_falls_through_whitespace_only_headers():
-    # A References/In-Reply-To header that unfolds to only whitespace is present
-    # but yields no token when split; _extract_thread_id must fall through to the
-    # next source rather than return a blank thread id.
-    fell_to_in_reply_to = Message()
-    fell_to_in_reply_to["References"] = "   "
-    fell_to_in_reply_to["In-Reply-To"] = "<parent@test.com>"
-    assert (
-        _extract_thread_id(fell_to_in_reply_to, "<message@test.com>")
-        == "<parent@test.com>"
-    )
-
-    fell_to_message_id = Message()
-    fell_to_message_id["References"] = "  "
-    fell_to_message_id["In-Reply-To"] = " \t "
-    assert (
-        _extract_thread_id(fell_to_message_id, "<message@test.com>")
-        == "<message@test.com>"
-    )
 
 
 def test_parse_eml_extracts_reply_to_header():

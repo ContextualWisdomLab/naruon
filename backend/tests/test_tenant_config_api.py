@@ -195,8 +195,9 @@ def test_validate_mail_config_update_revalidates_existing_mail_hosts(monkeypatch
             imap_server="imap.example.com",
             imap_port=None,
             pop3_server="pop3.example.com",
-            pop3_port=None,
-        ),
+                pop3_port=None,
+                oauth_redirect_uri=None,
+            ),
     )
 
     assert calls == [

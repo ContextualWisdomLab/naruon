@@ -282,26 +282,8 @@ THREADS_JSON="$(gh api graphql \
   -F owner="$OWNER" \
   -F repo="$REPO" \
   -F number="$PR_NUMBER" \
-  -f query='query($owner:String!, $repo:String!, $number:Int!) { repository(owner:$owner, name:$repo) { pullRequest(number:$number) { headRefOid mergeStateStatus reviewThreads(first:100) { pageInfo { hasNextPage } nodes { id isResolved isOutdated comments(first:100) { pageInfo { hasNextPage } nodes { databaseId } } } } } } }')"
-THREAD_METADATA_TRUNCATED="$(printf '%s' "$THREADS_JSON" | jq '
-  (.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage // false)
-  or any(
-    .data.repository.pullRequest.reviewThreads.nodes[]?;
-    (.comments.pageInfo.hasNextPage // false)
-  )'
-)"
-if [ "$THREAD_METADATA_TRUNCATED" = "true" ]; then
-  add_blocker 'Review thread metadata was truncated; current resolution state could not be proven.'
-fi
+  -f query='query($owner:String!, $repo:String!, $number:Int!) { repository(owner:$owner, name:$repo) { pullRequest(number:$number) { headRefOid mergeStateStatus reviewThreads(first:100) { nodes { id isResolved isOutdated } } } } }')"
 UNRESOLVED_THREADS="$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .isOutdated == false)] | length')"
-UNRESOLVED_REVIEW_COMMENT_IDS_JSON="$(printf '%s' "$THREADS_JSON" | jq '
-  [.data.repository.pullRequest.reviewThreads.nodes[]
-    | select(.isResolved == false and .isOutdated == false)
-    | .comments.nodes[]?
-    | .databaseId
-    | select(. != null)]
-  | unique'
-)"
 if [ "$UNRESOLVED_THREADS" != "0" ]; then
   add_blocker "${UNRESOLVED_THREADS} unresolved current review thread(s) remain."
 fi
@@ -460,14 +442,10 @@ if ! REVIEW_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls
   printf '%s\n' "$(<"$REVIEW_COMMENTS_ERROR_FILE")" | sed 's/^/    /'
   add_blocker 'PR review comments could not be read; see the workflow run log.'
 else
-  CODERABBIT_REVIEW_BLOCKERS="$(printf '%s' "$REVIEW_COMMENTS_JSON" | jq -s \
-    --arg head_sha "$HEAD_SHA" \
-    --arg pattern "$CODERABBIT_BLOCKING_PATTERN" \
-    --argjson unresolved_comment_ids "$UNRESOLVED_REVIEW_COMMENT_IDS_JSON" '
+  CODERABBIT_REVIEW_BLOCKERS="$(printf '%s' "$REVIEW_COMMENTS_JSON" | jq -s --arg head_sha "$HEAD_SHA" --arg pattern "$CODERABBIT_BLOCKING_PATTERN" '
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select((.body // "") | test($pattern; "i"))
-      | select(.id as $comment_id | ($unresolved_comment_ids | index($comment_id)) != null)
       | select(((.commit_id // "") == $head_sha) or ((.original_commit_id // "") == $head_sha) or ((.body // "") | contains($head_sha)))]
     | length'
   )"

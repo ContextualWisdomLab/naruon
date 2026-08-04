@@ -98,6 +98,10 @@ class _PinnedOIDCJWKSClient(PyJWKClient):
                             f"OIDC JWKS endpoint returned {response.status}"
                         )
                     jwk_set = json.loads(response_body.decode("utf-8"))
+                    if "keys" in jwk_set:
+                        for key in jwk_set["keys"]:
+                            if key.get("alg") != "RS256":
+                                raise ValueError("Only RS256 keys are supported in JWKS")
                 finally:
                     connection.close()
                 if self.jwk_set_cache is not None:
@@ -165,6 +169,10 @@ class AuthContext:
     group_ids: tuple[str, ...]
     workspace_id: str
     session_verifier: SessionVerifier = field(default="override", compare=False)
+
+    def __post_init__(self):
+        if self.role in TENANT_ADMIN_ROLES and self.session_verifier != "server":
+            raise ValueError("Admin roles require server session_verifier")
 
 
 def ensure_organization_access(auth_context: AuthContext, organization_id: str) -> None:
@@ -512,7 +520,7 @@ def _auth_context_from_session_payload(
     if role_value not in ALLOWED_ROLES:
         raise _authentication_error()
     role = cast(RoleName, role_value)
-    if role in TENANT_ADMIN_ROLES and session_verifier not in ("server", "override"):
+    if role in TENANT_ADMIN_ROLES and session_verifier != "server":
         raise _authentication_error()
     organization_id = _optional_string_claim(payload, "org")
     if organization_id is None:
