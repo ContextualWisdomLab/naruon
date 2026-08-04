@@ -216,6 +216,60 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
     assert pins(strix_hashes, "protobuf") == ["protobuf==6.33.6"]
 
 
+def test_frontend_postcss_lock_is_cve_2026_69153_fixed() -> None:
+    """Keep every manifest and lock surface on the first currently governed fix."""
+    frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
+    frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+
+    assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
+    assert frontend_package["overrides"]["postcss"] == "8.5.24"
+    assert frontend_package["resolutions"]["postcss"] == "8.5.24"
+    assert frontend_workspace["overrides"]["postcss"] == "8.5.24"
+    assert frontend_lock["overrides"]["postcss"] == "8.5.24"
+    assert frontend_lock["importers"]["."]["devDependencies"]["postcss"] == {
+        "specifier": "8.5.24",
+        "version": "8.5.24",
+    }
+
+    for section in ("packages", "snapshots"):
+        postcss_keys = [
+            package
+            for package in frontend_lock[section]
+            if package.startswith("postcss@")
+        ]
+        assert postcss_keys == ["postcss@8.5.24"]
+
+
+def test_frontend_tooling_lock_uses_current_audit_fixed_transitive_versions() -> None:
+    """Keep newly disclosed audit fixes aligned across manifest and pnpm lock."""
+    frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
+    frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+
+    assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
+    for dependency, expected_version in (
+        ("brace-expansion", "5.0.9"),
+        ("undici", "8.9.0"),
+    ):
+        assert frontend_package["overrides"][dependency] == expected_version
+        assert frontend_package["resolutions"][dependency] == expected_version
+        assert frontend_workspace["overrides"][dependency] == expected_version
+        assert frontend_lock["overrides"][dependency] == expected_version
+
+        for section in ("packages", "snapshots"):
+            locked_keys = [
+                package
+                for package in frontend_lock[section]
+                if package.startswith(f"{dependency}@")
+            ]
+            assert locked_keys == [f"{dependency}@{expected_version}"]
+
+    assert [
+        package for package in frontend_lock["packages"] if package.startswith("jsdom@")
+    ] == ["jsdom@30.0.1"]
+
+
 def test_changelog_follows_keep_a_changelog_for_initial_korean_release() -> None:
     changelog = read_repo_text("CHANGELOG.md")
 
