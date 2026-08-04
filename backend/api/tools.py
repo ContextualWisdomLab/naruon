@@ -910,9 +910,9 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Any:
     elif algorithm == "md5":
         hash_obj = hashlib.md5(text.encode("utf-8"), usedforsecurity=False)
     elif algorithm == "sha1":
-        hash_obj = hashlib.sha1(
+        hash_obj = hashlib.sha1(  # nosemgrep
             text.encode("utf-8"), usedforsecurity=False
-        )  # nosemgrep
+        )
     elif algorithm == "sha512":
         hash_obj = hashlib.sha512(text.encode("utf-8"))
     else:
