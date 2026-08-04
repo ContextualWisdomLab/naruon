@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import importlib.util
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -174,8 +175,99 @@ def test_strix_ci_requirements_use_security_quality_clean_pins() -> None:
     strix_ci_requirements = read_repo_text("requirements-strix-ci.txt")
 
     assert "strix-agent==1.0.4" in strix_ci_requirements
-    assert "cryptography==49.0.0" in strix_ci_requirements
+    assert "google-cloud-aiplatform==1.160.0" in strix_ci_requirements
+    assert "cryptography==50.0.0" in strix_ci_requirements
+    assert "protobuf==6.33.6" in strix_ci_requirements
     assert "python-multipart==0.0.32" in strix_ci_requirements
+
+
+def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
+    """Require every governed Python surface to use the first oracle-safe release."""
+    backend_requirements = read_repo_text("backend/requirements.txt")
+    backend_project_text = read_repo_text("backend/pyproject.toml")
+    backend_project = tomllib.loads(backend_project_text)
+    backend_lock = tomllib.loads(read_repo_text("backend/uv.lock"))
+    backend_hashes = read_repo_text("backend/requirements-hashes.txt")
+    strix_requirements = read_repo_text("requirements-strix-ci.txt")
+    strix_hashes = read_repo_text("requirements-strix-ci-hashes.txt")
+
+    def pins(text: str, package: str) -> list[str]:
+        return re.findall(rf"(?m)^{re.escape(package)}==[^\s\\]+", text)
+
+    for governed_text in (
+        backend_requirements,
+        backend_hashes,
+        strix_requirements,
+        strix_hashes,
+    ):
+        assert pins(governed_text, "cryptography") == ["cryptography==50.0.0"]
+    assert [
+        dependency
+        for dependency in backend_project["project"]["dependencies"]
+        if dependency.startswith("cryptography")
+    ] == ["cryptography==50.0.0"]
+    cryptography_versions = {
+        package["version"]
+        for package in backend_lock["package"]
+        if package["name"] == "cryptography"
+    }
+    assert cryptography_versions == {"50.0.0"}
+    assert pins(strix_requirements, "protobuf") == ["protobuf==6.33.6"]
+    assert pins(strix_hashes, "protobuf") == ["protobuf==6.33.6"]
+
+
+def test_frontend_postcss_lock_is_cve_2026_69153_fixed() -> None:
+    """Keep every manifest and lock surface on the first currently governed fix."""
+    frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
+    frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+
+    assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
+    assert frontend_package["overrides"]["postcss"] == "8.5.24"
+    assert frontend_package["resolutions"]["postcss"] == "8.5.24"
+    assert frontend_workspace["overrides"]["postcss"] == "8.5.24"
+    assert frontend_lock["overrides"]["postcss"] == "8.5.24"
+    assert frontend_lock["importers"]["."]["devDependencies"]["postcss"] == {
+        "specifier": "8.5.24",
+        "version": "8.5.24",
+    }
+
+    for section in ("packages", "snapshots"):
+        postcss_keys = [
+            package
+            for package in frontend_lock[section]
+            if package.startswith("postcss@")
+        ]
+        assert postcss_keys == ["postcss@8.5.24"]
+
+
+def test_frontend_tooling_lock_uses_current_audit_fixed_transitive_versions() -> None:
+    """Keep newly disclosed audit fixes aligned across manifest and pnpm lock."""
+    frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
+    frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+
+    assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
+    for dependency, expected_version in (
+        ("brace-expansion", "5.0.9"),
+        ("undici", "8.9.0"),
+    ):
+        assert frontend_package["overrides"][dependency] == expected_version
+        assert frontend_package["resolutions"][dependency] == expected_version
+        assert frontend_workspace["overrides"][dependency] == expected_version
+        assert frontend_lock["overrides"][dependency] == expected_version
+
+        for section in ("packages", "snapshots"):
+            locked_keys = [
+                package
+                for package in frontend_lock[section]
+                if package.startswith(f"{dependency}@")
+            ]
+            assert locked_keys == [f"{dependency}@{expected_version}"]
+
+    assert [
+        package for package in frontend_lock["packages"] if package.startswith("jsdom@")
+    ] == ["jsdom@30.0.1"]
 
 
 def test_changelog_follows_keep_a_changelog_for_initial_korean_release() -> None:
