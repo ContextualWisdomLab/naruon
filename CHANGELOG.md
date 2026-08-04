@@ -1,11 +1,14 @@
 ## [Unreleased]
+### 새로운 유틸리티 도구 추가 (UUID/해시 생성기)
+
+- `backend/api/tools.py`에 `uuid_generator`와 `hash_generator` 두 가지 유틸리티 도구를 추가했습니다. UUID(버전 1, 4) 생성 및 해시(MD5, SHA1, SHA256, SHA512) 생성을 지원하며, 관련된 테스트 코드를 `backend/tests/test_tools_api.py`에 추가하여 100% 커버리지를 달성했습니다.
+
 ### 보안 패치 (CodeQL extended current-head)
 
-- `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 버전으로 동기화했습니다. Strix 잠금은 `google-cloud-aiplatform==1.160.0`의 `<7` 제약을 위반하던 `protobuf==7.35.1`을 이미 검증된 `6.33.6`으로 복구해 다시 해석·설치 가능하게 했습니다.
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
 - OIDC token endpoint는 운영 환경에서 서버 전용 `OIDC_ALLOWED_HOSTS` 정확 호스트 allowlist를 필수로 적용합니다. hostname의 모든 DNS 결과가 공인 주소인지 검증한 뒤 해당 주소 집합을 native HTTP(S) 연결의 `lookup`에 고정하고, 원래 issuer hostname은 Host/TLS SNI로 유지해 사설 주소 해석과 DNS rebinding 사이의 TOCTOU를 차단합니다. 실패 로그는 입력 URL·token 대신 고정된 configuration/DNS·transport/response/backend-verification reason code만 남깁니다.
-- Trivy 2026-07-26 DB에서 새로 확인된 Next.js High 4건·Medium 5건(`CVE-2026-64641`–`CVE-2026-64649`)과 PostCSS High 1건(`GHSA-r28c-9q8g-f849`)을 제거하기 위해 Next.js/`eslint-config-next`를 `16.2.11`, PostCSS를 `8.5.18`로 갱신했습니다. 이후 2026-08-04 DB가 `8.5.18`에서 추가 탐지한 PostCSS Medium(`CVE-2026-69153`, 최초 수정 `8.5.23`)도 제거하도록 manifest·workspace override·lock을 `8.5.24`로 동기화했으며 저장소의 release-age 정책을 우회하지 않습니다.
-- `pnpm audit`가 개발 도구 체인에서 추가 탐지한 `brace-expansion <=5.0.7` High DoS(`GHSA-mh99-v99m-4gvg`)와 이후 `5.0.8`까지 영향을 주는 우회형 High DoS(`GHSA-rgw5-rvv9-x895`)는 `5.0.9` 전역 override로 제거했습니다. CommonJS default export를 기대하는 legacy `minimatch 3.1.5`에는 `expand` named export도 수용하는 최소 pnpm 패치를 적용해 ESLint/glob 동작을 보존합니다. 같은 감사에서 확인된 `undici 7.28.0`의 High 1건·Moderate 4건(`GHSA-4cwx-7wf7-3272` 등)은 `jsdom 30.0.1` 및 release-age 정책을 통과하는 `undici 8.9.0`으로 갱신했습니다.
+- Trivy 2026-07-26 DB에서 새로 확인된 Next.js High 4건·Medium 5건(`CVE-2026-64641`–`CVE-2026-64649`)과 PostCSS High 1건(`GHSA-r28c-9q8g-f849`)을 제거하기 위해 Next.js/`eslint-config-next`를 `16.2.11`, PostCSS를 `8.5.18`로 갱신했습니다. 두 버전은 각 취약점의 최초 수정 버전이며 저장소의 release-age 정책을 우회하지 않습니다.
+- `pnpm audit`가 개발 도구 체인에서 추가 탐지한 `brace-expansion <=5.0.7` High DoS(`GHSA-mh99-v99m-4gvg`)는 `5.0.8` 전역 override로 제거했습니다. CommonJS default export를 기대하는 legacy `minimatch 3.1.5`에는 `expand` named export도 수용하는 최소 pnpm 패치를 적용해 ESLint/glob 동작을 보존합니다.
 - root·frontend Docker build의 frozen install 계층이 pnpm manifest와 함께 `frontend/patches`를 먼저 복사하도록 수정해, 이미지 검증에서도 lockfile의 patched dependency를 동일하게 재현합니다.
 - Scorecard SARIF normalizer는 고정 workspace artifact로 정규화되는 `./scorecard-results.sarif`와 절대 경로를 동일하게 허용하면서 symlink·workspace 이탈은 계속 거부합니다. 도구 실행 실패 API는 CR/LF·제어 문자를 escape하고 500자로 제한하며, 로그에는 raw 도구 코드·예외 text 대신 SHA-256 기반 코드·traceback 상관 식별자만 기록합니다.
 - 백엔드 origin 보안 경계를 `frontend/src/lib/backend-url.ts`의 단일 생성기로 통합해 API proxy·session·OIDC callback이 같은 검증을 사용합니다. UI smoke의 새 `NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE` 이름은 실제 selector 의미를 드러내며, 기존 `..._SCREENSHOT_DIR`은 호환 alias로 계속 지원합니다.
