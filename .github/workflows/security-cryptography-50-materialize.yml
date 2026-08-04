@@ -45,7 +45,6 @@ jobs:
 
       - name: Detect whether materialization is required
         id: state
-        shell: bash
         run: |
           if grep -Fq 'cryptography==50.0.0' backend/requirements.txt; then
             echo 'required=false' >> "$GITHUB_OUTPUT"
@@ -55,54 +54,9 @@ jobs:
 
       - name: Add and prove the failing security contract
         if: ${{ steps.state.outputs.required == 'true' }}
-        shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          test_path = Path("backend/tests/test_release_governance.py")
-          text = test_path.read_text(encoding="utf-8")
-          if "import tomllib\n" not in text:
-              text = text.replace("import sys\n", "import sys\nimport tomllib\n", 1)
-          test_name = "test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed"
-          if test_name not in text:
-              text += '''
-
-
-def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
-    """Require every governed Python surface to use the first oracle-safe release."""
-    backend_requirements = read_repo_text("backend/requirements.txt")
-    backend_project = read_repo_text("backend/pyproject.toml")
-    backend_lock = tomllib.loads(read_repo_text("backend/uv.lock"))
-    backend_hashes = read_repo_text("backend/requirements-hashes.txt")
-    strix_requirements = read_repo_text("requirements-strix-ci.txt")
-    strix_hashes = read_repo_text("requirements-strix-ci-hashes.txt")
-
-    governed_text = "\n".join(
-        (
-            backend_requirements,
-            backend_project,
-            backend_hashes,
-            strix_requirements,
-            strix_hashes,
-        )
-    )
-    assert "cryptography==49.0.0" not in governed_text
-    assert "cryptography==50.0.0" in backend_requirements
-    assert '"cryptography==50.0.0"' in backend_project
-    assert "cryptography==50.0.0" in backend_hashes
-    assert "cryptography==50.0.0" in strix_requirements
-    assert "cryptography==50.0.0" in strix_hashes
-    cryptography_versions = {
-        package["version"]
-        for package in backend_lock["package"]
-        if package["name"] == "cryptography"
-    }
-    assert cryptography_versions == {"50.0.0"}
-'''
-          test_path.write_text(text, encoding="utf-8")
-          PY
+          python .github/scripts/materialize_cryptography_50.py add-test
           set +e
           (
             cd backend
@@ -118,47 +72,10 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
 
       - name: Update governed security constraints and changelog
         if: ${{ steps.state.outputs.required == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          governed_paths = (
-              Path("backend/requirements.txt"),
-              Path("backend/pyproject.toml"),
-              Path("requirements-strix-ci.txt"),
-              Path("backend/tests/test_release_governance.py"),
-          )
-          for path in governed_paths:
-              text = path.read_text(encoding="utf-8")
-              if "cryptography==49.0.0" not in text:
-                  raise SystemExit(f"cryptography 49 pin is missing from {path}")
-              path.write_text(
-                  text.replace("cryptography==49.0.0", "cryptography==50.0.0"),
-                  encoding="utf-8",
-              )
-
-          changelog_path = Path("CHANGELOG.md")
-          changelog = changelog_path.read_text(encoding="utf-8")
-          bullet = (
-              "- `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 "
-              "EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 "
-              "Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 "
-              "제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 "
-              "버전으로 동기화했습니다.\n"
-          )
-          if bullet not in changelog:
-              marker = "### 보안 패치 (CodeQL extended current-head)\n\n"
-              if changelog.count(marker) != 1:
-                  raise SystemExit("Unreleased security changelog marker not found exactly once")
-              changelog = changelog.replace(marker, marker + bullet, 1)
-          changelog_path.write_text(changelog, encoding="utf-8")
-          PY
+        run: python .github/scripts/materialize_cryptography_50.py apply
 
       - name: Regenerate uv and pip hash locks
         if: ${{ steps.state.outputs.required == 'true' }}
-        shell: bash
         run: |
           set -euo pipefail
           (
@@ -183,7 +100,6 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
 
       - name: Verify deterministic locks and focused governance
         if: ${{ steps.state.outputs.required == 'true' }}
-        shell: bash
         run: |
           set -euo pipefail
           ! grep -R -F 'cryptography==49.0.0' \
@@ -194,10 +110,6 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
             requirements-strix-ci.txt \
             requirements-strix-ci-hashes.txt \
             backend/tests/test_release_governance.py
-          grep -F 'cryptography==50.0.0' backend/requirements.txt
-          grep -F 'cryptography==50.0.0' backend/requirements-hashes.txt
-          grep -F 'cryptography==50.0.0' requirements-strix-ci.txt
-          grep -F 'cryptography==50.0.0' requirements-strix-ci-hashes.txt
           (
             cd backend
             uv run --locked ruff check --fix tests/test_release_governance.py
@@ -209,7 +121,6 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
 
       - name: Verify hash-locked backend installation
         if: ${{ steps.state.outputs.required == 'true' }}
-        shell: bash
         run: |
           set -euo pipefail
           uv venv --python 3.14 .venv-security-backend
@@ -217,15 +128,11 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
             --python .venv-security-backend/bin/python \
             --require-hashes \
             -r backend/requirements-hashes.txt
-          .venv-security-backend/bin/python - <<'PY'
-          import cryptography
-
-          assert cryptography.__version__ == "50.0.0"
-          PY
+          .venv-security-backend/bin/python -c \
+            'import cryptography; assert cryptography.__version__ == "50.0.0"'
 
       - name: Verify hash-locked Strix CI installation
         if: ${{ steps.state.outputs.required == 'true' }}
-        shell: bash
         run: |
           set -euo pipefail
           uv venv --python 3.13 .venv-security-strix
@@ -233,23 +140,15 @@ def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
             --python .venv-security-strix/bin/python \
             --require-hashes \
             -r requirements-strix-ci-hashes.txt
-          .venv-security-strix/bin/python - <<'PY'
-          import cryptography
-
-          assert cryptography.__version__ == "50.0.0"
-          PY
+          .venv-security-strix/bin/python -c \
+            'import cryptography; assert cryptography.__version__ == "50.0.0"'
 
       - name: Run the full backend regression suite
         if: ${{ steps.state.outputs.required == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd backend
-          uv run --locked python -m pytest -q
+        run: cd backend && uv run --locked python -m pytest -q
 
       - name: Commit verified remediation
         if: ${{ steps.state.outputs.required == 'true' }}
-        shell: bash
         run: |
           set -euo pipefail
           rm -rf .venv-security-backend .venv-security-strix
