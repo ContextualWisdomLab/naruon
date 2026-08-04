@@ -47,19 +47,25 @@ jobs:
           source = source_path.read_text(encoding="utf-8")
           old = '            and payload.get("schema_version") == 4\n'
           new = '            and payload.get("schema_version") in (3, 4)\n'
-          if source.count(old) != 1:
-              raise SystemExit(f"expected one schema-version anchor, found {source.count(old)}")
-          source_path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          if new not in source:
+              if source.count(old) != 1:
+                  raise SystemExit(
+                      f"expected one schema-version anchor, found {source.count(old)}"
+                  )
+              source = source.replace(old, new, 1)
+          source_path.write_text(source, encoding="utf-8")
 
           test_path = Path("backend/tests/test_disksage_copy_readiness_handoff.py")
           tests = test_path.read_text(encoding="utf-8")
           old_rejection = '        ({**_success_payload(), "schema_version": 3}, 0),\n'
           new_rejection = '        ({**_success_payload(), "schema_version": 5}, 0),\n'
-          if tests.count(old_rejection) != 1:
-              raise SystemExit(
-                  f"expected one obsolete-version rejection, found {tests.count(old_rejection)}"
-              )
-          tests = tests.replace(old_rejection, new_rejection, 1)
+          if new_rejection not in tests:
+              if tests.count(old_rejection) != 1:
+                  raise SystemExit(
+                      "expected one obsolete-version rejection, found "
+                      f"{tests.count(old_rejection)}"
+                  )
+              tests = tests.replace(old_rejection, new_rejection, 1)
 
           marker = '@pytest.mark.parametrize("exit_code", [64, 65])\n'
           regression = '''@pytest.mark.parametrize("schema_version", [3, 4])
@@ -72,12 +78,22 @@ def test_protocol_decoder_accepts_supported_schema_versions(schema_version):
 
 
 '''
-          if regression not in tests:
+          if "test_protocol_decoder_accepts_supported_schema_versions" not in tests:
               if tests.count(marker) != 1:
-                  raise SystemExit(f"expected one insertion marker, found {tests.count(marker)}")
+                  raise SystemExit(
+                      f"expected one insertion marker, found {tests.count(marker)}"
+                  )
               tests = tests.replace(marker, regression + marker, 1)
           test_path.write_text(tests, encoding="utf-8")
           PY
+          git diff --check
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
 
       - name: Install and validate focused backend scope
         shell: bash
