@@ -66,3 +66,5 @@ jobs:
           git add .github/workflows/pr-1195-source-identity-finalize.yml
           git commit -m "ci(pr-1195): repair empty replacement guard"
           git push origin HEAD:claude/contextualwisdomlab-audit-governance-qyxe67
+
+# The second synchronize event lets GitHub discover this newly added workflow.
