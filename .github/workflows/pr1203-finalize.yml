@@ -1,0 +1,289 @@
+name: PR 1203 container provenance finalizer
+
+on:
+  push:
+    branches:
+      - codex/docker-base-current
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr-1203-container-provenance-finalizer
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONWARNINGS: error
+      DISABLE_BACKGROUND_WORKERS: "1"
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout pull-request branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Materialize current-develop provenance contract
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin develop
+
+          # Preserve every current-develop security regression and add the
+          # provenance contract in a focused file instead of replacing stale
+          # snapshots of shared governance tests.
+          git show origin/develop:backend/tests/test_release_governance.py > backend/tests/test_release_governance.py
+          git show origin/develop:backend/tests/test_repo_hygiene.py > backend/tests/test_repo_hygiene.py
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583":
+                  "deae974a69e140f44f434ab29cb519fb5f8fe250fd364b8ca446bd0761acdc6a",
+              "6345fbc18bd73a1e16404be681dbc6fd291a027cab43ed541abe78c4c81051b0":
+                  "4dea9fb511947e24a84237bb636b0203abcb2ff0d3fbc7b4ff865deb91362131",
+          }
+          governed = (
+              Path("Dockerfile"),
+              Path("frontend/Dockerfile"),
+              Path("Dockerfile.ollama"),
+              Path(".github/workflows/docker-publish.yml"),
+          )
+          for path in governed:
+              text = path.read_text(encoding="utf-8")
+              for previous, current in replacements.items():
+                  text = text.replace(previous, current)
+              path.write_text(text, encoding="utf-8")
+
+          for previous in replacements:
+              assert all(
+                  previous not in path.read_text(encoding="utf-8") for path in governed
+              ), f"stale digest remains: {previous}"
+          PY
+
+          cat > backend/tests/test_container_provenance_contract.py <<'PYTEST'
+          """Regression contracts for immutable container and dependency provenance."""
+
+          from __future__ import annotations
+
+          import json
+          import re
+          from pathlib import Path
+
+          import yaml
+
+          REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+          NODE_DIGEST = "deae974a69e140f44f434ab29cb519fb5f8fe250fd364b8ca446bd0761acdc6a"
+          OLLAMA_DIGEST = "4dea9fb511947e24a84237bb636b0203abcb2ff0d3fbc7b4ff865deb91362131"
+
+
+          def read_repository_text(relative_path: str) -> str:
+              """Return UTF-8 repository text for a governed path."""
+              return (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
+
+
+          def first_base_reference(dockerfile: str) -> str:
+              """Extract the first immutable tag-and-digest Dockerfile reference."""
+              declaration = re.search(
+                  r"^FROM (?P<value>.+)$", dockerfile, flags=re.MULTILINE
+              )
+              assert declaration is not None, "Dockerfile must declare a base image"
+              match = re.fullmatch(
+                  r"(?P<reference>[A-Za-z0-9._/-]+(?::[A-Za-z0-9._-]+)?"
+                  r"@sha256:[0-9a-f]{64})(?: AS [A-Za-z0-9._-]+)?",
+                  declaration.group("value"),
+              )
+              assert match is not None, "first stage must use an immutable digest"
+              return match.group("reference")
+
+
+          def test_shared_container_bases_and_oci_metadata_remain_synchronized() -> None:
+              """Keep shared runtimes and OCI base annotations on identical digests."""
+              root = read_repository_text("Dockerfile")
+              frontend = read_repository_text("frontend/Dockerfile")
+              connector = read_repository_text("connector/Dockerfile")
+              ollama = read_repository_text("Dockerfile.ollama")
+
+              root_python = first_base_reference(root)
+              assert first_base_reference(connector) == root_python
+              node_reference = f"node:26-slim@sha256:{NODE_DIGEST}"
+              assert f"FROM {node_reference} AS frontend-builder" in root
+              assert first_base_reference(frontend) == node_reference
+              assert (
+                  f'ARG OCI_IMAGE_BASE_DIGEST="sha256:{NODE_DIGEST}"' in frontend
+              )
+              assert (
+                  "ARG OCI_IMAGE_BASE_NAME=\"docker.io/library/"
+                  f"{node_reference}\"" in frontend
+              )
+              assert first_base_reference(ollama) == (
+                  f"ollama/ollama@sha256:{OLLAMA_DIGEST}"
+              )
+
+
+          def test_publish_workflow_derives_and_verifies_container_provenance() -> None:
+              """Require build metadata and multi-platform checks from actual bases."""
+              workflow = read_repository_text(".github/workflows/docker-publish.yml")
+
+              assert workflow.count("base_dockerfile: Dockerfile") == 4
+              assert workflow.count("base_dockerfile: frontend/Dockerfile") == 2
+              assert workflow.count('base_digest="${base_reference##*@}"') == 2
+              assert workflow.count(
+                  'base_name="docker.io/library/$base_reference"'
+              ) == 2
+              assert "Resolve pinned Ollama base manifest" in workflow
+              assert "docker buildx imagetools inspect" in workflow
+              assert "linux/amd64 linux/arm64" in workflow
+              assert OLLAMA_DIGEST in workflow
+
+
+          def test_supply_chain_dependency_pins_remain_exact_and_lock_aligned() -> None:
+              """Preserve every security pin that predates this container-only change."""
+              backend = read_repository_text("backend/requirements.txt")
+              strix = read_repository_text("requirements-strix-ci.txt")
+              strix_hashes = read_repository_text("requirements-strix-ci-hashes.txt")
+              package = json.loads(read_repository_text("frontend/package.json"))
+              workspace = yaml.safe_load(
+                  read_repository_text("frontend/pnpm-workspace.yaml")
+              )
+              lock = yaml.safe_load(read_repository_text("frontend/pnpm-lock.yaml"))
+
+              assert "protobuf==7.35.1" in backend
+              assert "protobuf==6.33.6" in strix
+              assert "protobuf==6.33.6" in strix_hashes
+              assert package["devDependencies"]["postcss"] == "8.5.24"
+              assert package["devDependencies"]["jsdom"] == "^30.0.1"
+              assert workspace["overrides"]["postcss"] == "8.5.24"
+              assert lock["overrides"]["postcss"] == "8.5.24"
+
+              for dependency, version in (
+                  ("brace-expansion", "5.0.9"),
+                  ("undici", "8.9.0"),
+              ):
+                  assert package["overrides"][dependency] == version
+                  assert package["resolutions"][dependency] == version
+                  assert workspace["overrides"][dependency] == version
+                  assert lock["overrides"][dependency] == version
+                  for section in ("packages", "snapshots"):
+                      assert [
+                          key
+                          for key in lock[section]
+                          if key.startswith(f"{dependency}@")
+                      ] == [f"{dependency}@{version}"]
+
+              assert [
+                  key for key in lock["packages"] if key.startswith("jsdom@")
+              ] == ["jsdom@30.0.1"]
+          PYTEST
+
+          cat > docs/operations/container-provenance-contract.md <<'DOC'
+          # Container provenance contract
+
+          Naruon container images must be reproducible from reviewable, immutable base-image inputs.
+
+          ## Required invariants
+
+          - Every production `FROM` instruction uses both a human-readable image tag and a full `sha256` digest.
+          - The root, backend, connector, and frontend Dockerfiles keep shared Python and Node base references synchronized where the runtime contract is shared.
+          - OCI `org.opencontainers.image.base.name` and `org.opencontainers.image.base.digest` annotations are derived from the actual first Dockerfile stage rather than duplicated constants.
+          - Published multi-platform images preserve annotations at both the manifest and index levels.
+          - Pull-request validation resolves the pinned Ollama manifest and fails closed when either `linux/amd64` or `linux/arm64` is absent.
+          - Dependency and image security pins remain governed by repository tests; a dependency upgrade must update its hash-locked artifact and the corresponding regression contract together.
+
+          ## Change procedure
+
+          1. Update the tag-and-digest reference in the canonical Dockerfile.
+          2. Synchronize every Dockerfile that shares that runtime.
+          3. Regenerate affected hash locks without weakening `--require-hashes` installation.
+          4. Update `CHANGELOG.md` when the runtime or published artifact changes.
+          5. Run release-governance, repository-hygiene, application, image-build, and security checks on the exact pull-request head.
+          6. Merge only after independent review confirms that the OCI annotations describe the image that is actually built.
+
+          A mutable tag by itself, a digest without its reviewable tag, or an annotation that does not match the first stage violates this contract.
+
+          ## Standards and research basis
+
+          - The OCI Image Format Specification defines content-addressable manifests, optional multi-platform image indexes, and interoperable image metadata. Naruon's manifest and index validation follows that model rather than treating a mutable tag as artifact identity.
+          - SLSA version 1.2 is the current approved cross-industry supply-chain specification. Its source and build provenance model motivates binding review, build inputs, attestations, and verification to immutable revisions and digests.
+          - The in-toto research demonstrates why an end-to-end chain of authenticated supply-chain evidence is needed: integrity can be lost at any independent build or delivery step even when the final artifact itself appears valid.
+
+          ### References (APA 7th edition)
+
+          Open Containers Initiative. (2025). *Open Container Initiative image format specification*. https://specs.opencontainers.org/image-spec/
+
+          SLSA Community. (2025). *Supply-chain Levels for Software Artifacts specification* (Version 1.2). https://slsa.dev/spec/v1.2/
+
+          Torres-Arias, S., Afzali, H., Kuppusamy, T. K., Curtmola, R., & Cappos, J. (2019). in-toto: Providing farm-to-table guarantees for bits and bytes. In *28th USENIX Security Symposium (USENIX Security 19)* (pp. 1393–1410). USENIX Association. https://doi.org/10.5555/3361338.3361435
+          DOC
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("CHANGELOG.md")
+          text = path.read_text(encoding="utf-8")
+          heading = "## [Unreleased]\n"
+          entry = (
+              "### 컨테이너 공급망 출처 및 재현성\n\n"
+              "- Python 3.14, Node 26, Ollama 기반 이미지를 최신 검증된 manifest-list digest로 동기화하고, 실제 첫 `FROM`에서 OCI base name/digest를 파생합니다. amd64·arm64 manifest 존재, shared Dockerfile digest 일치, SLSA 1.2·OCI Image Spec·in-toto 근거와 기존 dependency security pin 보존을 exact-head 회귀 계약으로 고정했습니다.\n\n"
+          )
+          if entry not in text:
+              assert text.startswith(heading)
+              text = heading + entry + text[len(heading):]
+              path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Install exact backend test dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check --require-hashes
+          -r backend/requirements-hashes.txt
+
+      - name: Verify focused provenance and preserved governance contracts
+        run: |
+          set -euo pipefail
+          python -m ruff check \
+            backend/tests/test_container_provenance_contract.py \
+            backend/tests/test_release_governance.py \
+            backend/tests/test_repo_hygiene.py
+          python -m pytest \
+            backend/tests/test_container_provenance_contract.py \
+            backend/tests/test_release_governance.py \
+            backend/tests/test_repo_hygiene.py -q
+          git diff --check
+
+      - name: Publish verified branch and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/pr1203-finalize.yml
+          git config user.name "opencode-agent[bot]"
+          git config user.email "219766164+opencode-agent[bot]@users.noreply.github.com"
+          git add \
+            .github/workflows/docker-publish.yml \
+            CHANGELOG.md \
+            Dockerfile \
+            Dockerfile.ollama \
+            backend/tests/test_container_provenance_contract.py \
+            backend/tests/test_release_governance.py \
+            backend/tests/test_repo_hygiene.py \
+            docs/operations/container-provenance-contract.md \
+            frontend/Dockerfile
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix(containers): preserve provenance and security pin contracts"
+          git push origin HEAD:codex/docker-base-current
