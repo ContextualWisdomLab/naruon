@@ -96,3 +96,5 @@ jobs:
           git add backend/tests/test_release_governance.py
           git commit -m "test(frontend): align PostCSS governance to 8.5.25"
           git push origin HEAD:dependabot/npm_and_yarn/frontend/frontend-npm-6c49e239bc
+
+# Trigger exact-head governance repair; this temporary workflow deletes itself after verification.
