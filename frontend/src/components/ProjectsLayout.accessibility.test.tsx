@@ -106,6 +106,7 @@ describe("ProjectsLayout accessibility", () => {
       (button) => button.textContent?.includes("프로젝트 후보 확정"),
     );
     expect(confirmButton).toBeDefined();
+    expect(confirmButton?.disabled).toBe(false);
     expect(confirmButton?.getAttribute("aria-busy")).toBe("false");
 
     await act(async () => {
@@ -126,6 +127,7 @@ describe("ProjectsLayout accessibility", () => {
       await pendingConfirmation;
     });
 
+    expect(confirmButton?.disabled).toBe(true);
     expect(confirmButton?.getAttribute("aria-busy")).toBe("false");
     expect(confirmButton?.textContent).toContain("프로젝트 후보 확정됨");
   });
