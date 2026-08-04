@@ -50,7 +50,7 @@ def test_ollama_dockerfile_keeps_pulled_models_available_to_runtime_user():
 
     assert (
         "FROM ollama/ollama@sha256:"
-        "509fdf54e23bd50d87af646cb51c0a7a203d6a83cc4d6695b3b08c5be1c62c0a"
+        "6345fbc18bd73a1e16404be681dbc6fd291a027cab43ed541abe78c4c81051b0"
         in dockerfile
     )
     assert "FROM ollama/ollama:latest\n" not in dockerfile
