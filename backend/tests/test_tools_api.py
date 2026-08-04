@@ -15,7 +15,6 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
-    ExecuteResponse,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
@@ -202,7 +201,8 @@ async def test_execute_tone_analyzer():
 
 
 def test_execute_response_result_is_optional_in_openapi():
-    schema = ExecuteResponse.model_json_schema()
+    schema = app.openapi()["components"]["schemas"]["ExecuteResponse"]
+
     assert "result" not in schema.get("required", [])
 
 
