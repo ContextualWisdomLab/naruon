@@ -1,0 +1,68 @@
+name: PR 1195 finalizer bootstrap
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types: [synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-1195-finalizer-bootstrap
+  cancel-in-progress: true
+
+jobs:
+  repair-finalizer:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'claude/contextualwisdomlab-audit-governance-qyxe67'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact pull request branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: claude/contextualwisdomlab-audit-governance-qyxe67
+          fetch-depth: 0
+
+      - name: Repair empty-replacement idempotence guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow_path = Path(
+              ".github/workflows/pr-1195-source-identity-finalize.yml"
+          )
+          text = workflow_path.read_text(encoding="utf-8")
+          old = "if new in text:"
+          new = "if new and new in text:"
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(
+                  f"expected exactly one empty-replacement guard, found {count}"
+              )
+          workflow_path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          git rm -- .github/workflows/pr-1195-finalizer-bootstrap.yml
+          git diff --check
+
+      - name: Publish repaired finalizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/pr-1195-source-identity-finalize.yml
+          git commit -m "ci(pr-1195): repair empty replacement guard"
+          git push origin HEAD:claude/contextualwisdomlab-audit-governance-qyxe67
