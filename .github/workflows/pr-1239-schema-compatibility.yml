@@ -1,5 +1,6 @@
 name: PR 1239 schema compatibility repair
 
+# One-shot current-head repair; the final verified commit removes this workflow.
 on:
   pull_request:
     branches:
