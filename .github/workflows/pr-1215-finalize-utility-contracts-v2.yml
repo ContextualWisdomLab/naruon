@@ -1,4 +1,4 @@
-name: PR 1215 finalize utility contracts
+name: PR 1215 finalize utility contracts v2
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pr-1215-finalize-utility-contracts
+  group: pr-1215-finalize-utility-contracts-v2
   cancel-in-progress: true
 
 jobs:
@@ -53,21 +53,24 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           tests = Path("backend/tests/test_tools_api.py")
           test_text = tests.read_text(encoding="utf-8")
           if "import inspect\n" not in test_text:
               test_text = test_text.replace("import hmac\n", "import hmac\nimport inspect\n", 1)
-          test_text = test_text.replace(
-              "    ExecuteRequest,\n",
-              "    ExecuteRequest,\n    ExecuteResponse,\n",
-              1,
-          )
-          test_text = test_text.replace(
-              "    ToolValidationError,\n",
-              "    ToolValidationError,\n    hash_generator_handler,\n",
-              1,
-          )
+          if "    ExecuteResponse,\n" not in test_text:
+              test_text = test_text.replace(
+                  "    ExecuteRequest,\n",
+                  "    ExecuteRequest,\n    ExecuteResponse,\n",
+                  1,
+              )
+          if "    hash_generator_handler,\n" not in test_text:
+              test_text = test_text.replace(
+                  "    ToolValidationError,\n",
+                  "    ToolValidationError,\n    hash_generator_handler,\n",
+                  1,
+              )
           old_schema = '''def test_execute_response_result_is_optional_in_openapi():
               schema = app.openapi()["components"]["schemas"]["ExecuteResponse"]
 
@@ -97,18 +100,17 @@ jobs:
 
           tools = Path("backend/api/tools.py")
           tool_text = tools.read_text(encoding="utf-8")
-          old_sha1 = 'hash_obj = hashlib.sha1(text.encode("utf-8"), usedforsecurity=False)  # nosemgrep'
-          new_sha1 = (
-              'hash_obj = hashlib.sha1(  # nosemgrep: '
-              'python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 '
-              '-- interoperability-only digest\n'
-              '            text.encode("utf-8"), usedforsecurity=False\n'
-              '        )'
+          pattern = re.compile(
+              r'''hash_obj = hashlib\.sha1\(\s*text\.encode\("utf-8"\),\s*usedforsecurity=False\s*\)\s*# nosemgrep''',
+              re.MULTILINE,
           )
-          if new_sha1 not in tool_text:
-              if tool_text.count(old_sha1) != 1:
-                  raise SystemExit("SHA-1 interoperability anchor not found exactly once")
-              tool_text = tool_text.replace(old_sha1, new_sha1, 1)
+          replacement = '''hash_obj = hashlib.sha1(  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 -- interoperability-only digest
+              text.encode("utf-8"), usedforsecurity=False
+          )'''
+          if replacement not in tool_text:
+              tool_text, count = pattern.subn(replacement, tool_text, count=1)
+              if count != 1:
+                  raise SystemExit(f"SHA-1 interoperability anchor count: {count}")
           tools.write_text(tool_text, encoding="utf-8")
           PY
           cd backend
@@ -125,17 +127,20 @@ jobs:
           python -m pytest -q tests/test_tools_api.py \
             --cov=api.tools --cov-report=term-missing --cov-fail-under=100
 
-      - name: Commit verified fix and remove temporary workflow
+      - name: Commit verified fix and remove temporary workflows
         shell: bash
         run: |
           set -euo pipefail
-          rm -- .github/workflows/pr-1215-finalize-utility-contracts.yml
+          rm -f -- \
+            .github/workflows/pr-1215-finalize-utility-contracts.yml \
+            .github/workflows/pr-1215-finalize-utility-contracts-v2.yml
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
             backend/api/tools.py \
             backend/tests/test_tools_api.py \
-            .github/workflows/pr-1215-finalize-utility-contracts.yml
+            .github/workflows/pr-1215-finalize-utility-contracts.yml \
+            .github/workflows/pr-1215-finalize-utility-contracts-v2.yml
           git commit -m "fix(tools): isolate schema and interoperability contracts"
           git push origin HEAD:feature/add-utility-tools-11760471479253023845
