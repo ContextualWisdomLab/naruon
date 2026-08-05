@@ -1310,4 +1310,42 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("답장 전송에 실패했습니다.");
   });
+
+  it("renders desktop high-density variants (participant list, attachment rail) and meeting proposal panel", async () => {
+    const email = {
+      id: 30,
+      message_id: "<ui-density@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "UI Density",
+      date: "2026-05-18T10:00:00Z",
+      body: "High density UI",
+      schedule_conflict: true,
+      requires_reply: true,
+      attachments: ["proposal.pdf", "schedule.xlsx"],
+    };
+    const fetchMock = vi.fn((input) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/30")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={30} />); });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("sender@example.com, user@example.com");
+    expect(container.textContent).toContain("참여자");
+    expect(container.textContent).toContain("첨부파일");
+    expect(container.textContent).toContain("proposal.pdf");
+    expect(container.textContent).toContain("회의 제안 확인");
+    expect(container.querySelector(".hidden.md\\:flex")).not.toBeNull();
+  });
 });

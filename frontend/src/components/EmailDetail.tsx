@@ -29,6 +29,7 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  attachments?: string[];
 };
 interface LlmData {
   summary: string;
@@ -567,6 +568,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
   const safeEmailSender = toMailDisplayText(email.sender, '보낸 사람');
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
+  const safeRecipients = toMailDisplayText((email as ThreadEmailData & { recipients?: string }).recipients || email.sender, '참여자 없음');
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
 
@@ -628,9 +630,21 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             <div className="line-clamp-1 text-xs">
               <span className="text-muted-foreground">{safeEmailSender}</span>
             </div>
-            <div className="line-clamp-1 text-xs text-muted-foreground">
+            <div className="line-clamp-1 text-xs text-muted-foreground sm:hidden">
               답장 주소: {safeReplyTo}
             </div>
+            <div className="hidden sm:block text-xs text-muted-foreground">
+              <span className="font-semibold mr-1">참여자:</span>
+              <span className="break-all">{safeEmailSender}, {safeRecipients}</span>
+            </div>
+            {email.attachments && email.attachments.length > 0 && (
+              <div className="hidden md:flex items-center gap-2 mt-2">
+                <span className="text-xs font-semibold text-muted-foreground">첨부파일:</span>
+                {email.attachments.map((file, idx) => (
+                  <Badge key={idx} variant="secondary" className="text-[10px] py-0 px-2 h-5">{file}</Badge>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -649,6 +663,17 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
+          {email.schedule_conflict && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-50 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-emerald-800">회의 제안 확인</h3>
+                  <p className="text-xs text-emerald-600/80 mt-1">이메일에 포함된 회의 일정을 캘린더와 조율합니다.</p>
+                </div>
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-8 px-3 text-xs">일정 조율</Button>
+              </div>
+            </div>
+          )}
           <DecisionPointCard
             title="맥락 종합"
             icon={<span aria-hidden="true">✦</span>}
