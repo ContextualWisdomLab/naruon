@@ -645,7 +645,7 @@ registry.register(
 
 async def url_extractor_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
-    urls = re.findall(r"https?://\S+", text)
+    urls = re.findall(r"https?://[^\s,.]+(?:[.,][^\s,.]+)*", text)
     return {"urls": urls, "url_count": len(urls)}
 
 registry.register(
@@ -687,8 +687,10 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Any:
         h = hashlib.md5(usedforsecurity=False)  # nosemgrep
     elif algorithm == "sha1":
         h = hashlib.sha1(usedforsecurity=False)  # nosemgrep
-    else:
+    elif algorithm == "sha256":
         h = hashlib.sha256()
+    else:
+        raise ValueError("Unsupported hash algorithm")
 
     h.update(text.encode("utf-8"))
     return {"hash": h.hexdigest(), "algorithm": algorithm}

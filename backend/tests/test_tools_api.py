@@ -1261,16 +1261,16 @@ def test_execute_url_extractor():
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={
                 "parameters": {
-                    "text": "Checkout my new website: https://example.com and http://test.org for more info."
+                    "text": "Checkout my new website: https://example.com. and http://test.org, for more info."
                 }
             },
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert "https://example.com" in data["result"]["urls"]
-    assert "http://test.org" in data["result"]["urls"]
     assert data["result"]["url_count"] == 2
+    assert data["result"]["urls"][0] == "https://example.com"
+    assert data["result"]["urls"][1] == "http://test.org"
 
 def test_execute_pii_redactor():
     with TestClient(app) as client:
@@ -1343,3 +1343,20 @@ def test_execute_hash_generator():
     assert data3["status"] == "success"
     # echo -n "hello" | sha1sum -> aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d
     assert data3["result"]["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+
+    with TestClient(app) as client:
+        response4 = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "hello",
+                    "algorithm": "sha512"
+                }
+            },
+        )
+    assert response4.status_code == 200
+    data4 = response4.json()
+    assert data4["status"] == "failed"
+    assert "Unsupported hash algorithm" in data4["message"]
+    assert data4.get("result") is None
