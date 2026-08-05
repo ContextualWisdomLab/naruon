@@ -1,0 +1,123 @@
+name: Repair PR 1245 selected-source writeback v3
+
+on:
+  push:
+    branches:
+      - fix/email-detail-responsive-surface-maintainer
+    paths:
+      - .github/workflows/repair-pr1245-selected-source-v3.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-pr1245-selected-source-v3
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  repair:
+    if: >-
+      github.repository == 'ContextualWisdomLab/naruon' &&
+      github.actor != 'github-actions[bot]' &&
+      github.ref == 'refs/heads/fix/email-detail-responsive-surface-maintainer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Check out exact trigger
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify exact parent and transformer
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test "$(git rev-parse HEAD^)" = "77b9185e309fe88bcb76820f7443aee3906e2a3b"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -m py_compile \
+            scripts/ci/repair_pr1245_review.py \
+            scripts/ci/patch_pr1245_repair_script.py
+          python3 scripts/ci/patch_pr1245_repair_script.py
+          python3 -m py_compile scripts/ci/repair_pr1245_review.py
+
+      - name: Install pnpm
+        run: corepack enable pnpm
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frozen dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      - name: Preserve failing contracts before production repair
+        shell: bash --noprofile --norc {0}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/repair_pr1245_review.py tests
+          set +e
+          cd frontend
+          pnpm exec vitest run src/components/EmailDetail.test.tsx >"${RUNNER_TEMP}/pr1245-red.log" 2>&1
+          status=$?
+          set -e
+          cat "${RUNNER_TEMP}/pr1245-red.log"
+          test "$status" -ne 0
+
+      - name: Apply bounded production and doctoring repair
+        run: |
+          python3 scripts/ci/repair_pr1245_review.py production
+          git diff --check
+
+      - name: Run focused and full frontend verification
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          cd frontend
+          pnpm exec vitest run src/components/EmailDetail.test.tsx
+          pnpm test
+          pnpm run typecheck
+          pnpm run lint
+          pnpm run coverage
+
+      - name: Build production frontend
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          NEXT_BUILD_CPUS: "2"
+          POSTCSS_WORKERS: "1"
+          DISABLE_POSTCSS_WORKERS: "true"
+        run: cd frontend && pnpm run build
+
+      - name: Publish verified repair and remove temporary machinery
+        env:
+          PUSH_TOKEN: ${{ github.token }}
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          rm -f \
+            .github/workflows/repair-pr1245-selected-source.yml \
+            .github/workflows/repair-pr1245-selected-source-v2.yml \
+            .github/workflows/repair-pr1245-selected-source-v3.yml \
+            scripts/ci/repair_pr1245_review.py \
+            scripts/ci/patch_pr1245_repair_script.py
+          test ! -e .github/workflows/repair-pr1245-review.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 1
+          git commit -m "fix(email-detail): require selected writeback source"
+          auth_header="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth_header"
+          git -c http.extraheader="AUTHORIZATION: basic ${auth_header}" \
+            push origin "HEAD:refs/heads/fix/email-detail-responsive-surface-maintainer"
