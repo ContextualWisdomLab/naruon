@@ -1252,3 +1252,94 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+def test_execute_url_extractor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Checkout my new website: https://example.com and http://test.org for more info."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "https://example.com" in data["result"]["urls"]
+    assert "http://test.org" in data["result"]["urls"]
+    assert data["result"]["url_count"] == 2
+
+def test_execute_pii_redactor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_redactor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "내 이메일은 test@example.com 이고, 전화번호는 010-1234-5678입니다."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "test@example.com" not in data["result"]["redacted_text"]
+    assert "010-1234-5678" not in data["result"]["redacted_text"]
+    assert "[REDACTED EMAIL]" in data["result"]["redacted_text"]
+    assert "[REDACTED PHONE]" in data["result"]["redacted_text"]
+
+def test_execute_hash_generator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "hello",
+                    "algorithm": "sha256"
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    # echo -n "hello" | sha256sum -> 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+    assert data["result"]["hash"] == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    assert data["result"]["algorithm"] == "sha256"
+
+    with TestClient(app) as client:
+        response2 = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "hello",
+                    "algorithm": "md5"
+                }
+            },
+        )
+    assert response2.status_code == 200
+    data2 = response2.json()
+    assert data2["status"] == "success"
+    # echo -n "hello" | md5sum -> 5d41402abc4b2a76b9719d911017c592
+    assert data2["result"]["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+    with TestClient(app) as client:
+        response3 = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "hello",
+                    "algorithm": "sha1"
+                }
+            },
+        )
+    assert response3.status_code == 200
+    data3 = response3.json()
+    assert data3["status"] == "success"
+    # echo -n "hello" | sha1sum -> aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d
+    assert data3["result"]["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
