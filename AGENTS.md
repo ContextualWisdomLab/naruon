@@ -74,12 +74,12 @@ in this repo.
 - The org is an ecosystem around **naruon** (the hub: email/PIM that
   DOM-decomposes emails/files into a persisted knowledge graph). Its components
   are each a **standalone program that must ALSO work as a git submodule**,
-  grown separately and together: **waf-ids-ai-soc** = WAF/IDS/AI SOC/LB/APIM;
+  grown separately and together: **wardnet** = WAF/IDS/AI SOC/LB/APIM;
   **clearfolio** = document viewer; **pg-erd-cloud** = ERD tool;
   **contextual-orchestrator** = LLM cost/perf/upstream-LB gateway (beyond
   LiteLLM); **codec-carver** = STT/omni-modal speech-video codec;
   **fast-mlsirm** = LLM-as-a-Judge calibration + evaluation-item quality (uses
-  aFIPC FIPC + kaefa item-fit); **feelanet-adfs** = passwordless SSO
+  aFIPC FIPC + kaefa item-fit); **keyverse** = passwordless SSO
   (OIDC/SCIM/ADFS/LDAP/FIDO2/OAuth2.1, eliminate passwords); **newsdom-api** =
   PDF→DOM sidecar; **semantic-data-portal** = upper ontology/catalog/governance
   plane with its own graph engine.
@@ -686,3 +686,11 @@ in this repo.
 - **Goal**: Actively manage tasks to ensure open PR counts converge to 0.
 
 - When the gate exhausts fallbacks after the primary model produces a finding at or above threshold and then fails with a retryable error (like `NOT_FOUND`), ensure the final output explicitly reports `Strix quick scan failed with a non-recoverable error.` to prevent downgrading the finding to pass or misleadingly reporting an unavailability error.
+
+## Code-owner review gates — disabled (on hold)
+
+As of 2026-08-04, code-owner review requirements (`require_code_owner_reviews` in branch
+protection, `require_code_owner_review` in rulesets) are disabled across the ContextualWisdomLab
+org: there is a single maintainer (solo developer), so a code-owner approval gate can never be
+satisfied. This is ON HOLD until the org has multiple maintainers — do NOT re-enable these
+settings or add CODEOWNERS-based merge gates before then.
