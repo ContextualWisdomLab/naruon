@@ -105,7 +105,7 @@ def test_canonical_dockerfiles_use_synchronized_tag_and_digest_pins() -> None:
         flags=re.MULTILINE,
     )
 
-    assert re.fullmatch(r"python:3\.14-slim@sha256:[0-9a-f]{{64}}", root_python)
+    assert re.fullmatch(r"python:3[.]14-slim@sha256:[0-9a-f]{{64}}", root_python)
     assert connector_python == root_python
     assert node_match is not None
     assert node_match.group("reference") == f"node:26-slim@sha256:{{NODE_DIGEST}}"
@@ -172,10 +172,17 @@ def update_changelog() -> None:
 '''
     if section in text:
         return
-    marker = "## [Unreleased]\n"
-    if text.count(marker) != 1:
-        raise SystemExit("CHANGELOG.md: expected one Unreleased marker")
-    target.write_text(text.replace(marker, marker + section, 1), encoding="utf-8")
+    marker = "## [Unreleased]"
+    marker_index = text.find(marker)
+    if marker_index < 0 or text[:marker_index].strip("\ufeff\r\n \t"):
+        raise SystemExit("CHANGELOG.md: Unreleased must be the first heading")
+    heading_end = text.find("\n", marker_index)
+    if heading_end < 0:
+        raise SystemExit("CHANGELOG.md: Unreleased heading has no line terminator")
+    target.write_text(
+        text[: heading_end + 1] + section + text[heading_end + 1 :],
+        encoding="utf-8",
+    )
 
 
 def write_doctoring() -> None:
