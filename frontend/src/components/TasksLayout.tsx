@@ -306,6 +306,25 @@ export function TasksLayout() {
     [ticketTasks],
   );
 
+  // ⚡ Bolt: Wrap my tasks list in useMemo to prevent O(N) re-renders
+  // 🎯 Why: Inline mapping of arrays inside JSX causes recalculation on every render and blocks the main thread.
+  const myTasksList = useMemo(() => (
+    filteredTicketTasks.length > 0 ? filteredTicketTasks.map(task => (
+      <button key={task.id} type="button" className="flex w-full items-center justify-between p-4 rounded-xl border border-border bg-card text-left shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}>
+        <div className="flex items-center gap-4">
+          <div className={`size-3 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
+          <div>
+            <h3 className="font-bold text-sm">{safeTaskTitle(task.title)}</h3>
+            <p className="text-xs text-muted-foreground mt-1">근거: {getTaskEvidenceLabel(task)} | 원본: {getTaskSourceLabel(task.source_type)}</p>
+          </div>
+        </div>
+        <span className={`px-2 py-1 rounded-full text-xs font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-secondary text-secondary-foreground'}`}>{taskStatusLabels[task.status]}</span>
+      </button>
+    )) : (
+      <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground">서명 세션에 연결된 내 작업이 없습니다.</p>
+    )
+  ), [filteredTicketTasks, setSelectedTaskId, setViewMode]);
+
   // ⚡ Bolt: Wrap Kanban columns in useMemo to prevent O(N) re-renders
   // 🎯 Why: Mapping over potentially large lists of tasks by status blocks the main thread during unrelated state updates.
   const kanbanBoard = useMemo(() => (
@@ -684,20 +703,7 @@ export function TasksLayout() {
         {viewMode === '내 작업' && (
           <div className="space-y-4 max-w-4xl mx-auto">
             <h2 className="font-bold text-lg mb-4">내 작업</h2>
-            {filteredTicketTasks.length > 0 ? filteredTicketTasks.map(task => (
-              <button key={task.id} type="button" className="flex w-full items-center justify-between p-4 rounded-xl border border-border bg-card text-left shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}>
-                <div className="flex items-center gap-4">
-                  <div className={`size-3 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-                  <div>
-                    <h3 className="font-bold text-sm">{safeTaskTitle(task.title)}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">근거: {getTaskEvidenceLabel(task)} | 원본: {getTaskSourceLabel(task.source_type)}</p>
-                  </div>
-                </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-secondary text-secondary-foreground'}`}>{taskStatusLabels[task.status]}</span>
-              </button>
-            )) : (
-              <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground">서명 세션에 연결된 내 작업이 없습니다.</p>
-            )}
+            {myTasksList}
           </div>
         )}
 
