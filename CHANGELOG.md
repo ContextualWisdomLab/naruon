@@ -34,10 +34,6 @@
   - `reply_drafter`: 이전 맥락을 기반으로 답장 초안 자동 생성
   - `sentiment_analyzer`: 이메일의 전반적인 감정(긍정/부정) 분석
   - `grammar_checker`: 작성된 이메일 초안의 문법과 철자 교정
-- **추가 도구 구현 완료**: 다음과 같은 3가지 유용한 도구를 추가로 개발하여 등록했습니다.
-  - `url_extractor`: 사용자 텍스트 본문 내에서 URL(https/http)을 정규식으로 추출하고 집계합니다.
-  - `pii_redactor`: 이메일과 전화번호 같은 개인정보(PII)를 자동으로 식별하고 비식별화 처리(Masking)합니다. 한국어 텍스트와 호환되도록 명시적 경계(Lookaround)를 사용했습니다.
-  - `hash_generator`: 입력 텍스트의 해시값(SHA256, SHA1, MD5 등)을 생성하며, Bandit 검사 보안 규칙(`usedforsecurity=False`)을 준수합니다.
 - 각 신규 도구 핸들러에 대해 100% 테스트 커버리지를 보장하는 개별 테스트를 `backend/tests/test_tools_api.py`에 추가했습니다.
 - `text_analyzer`, `base64_encoder`, `base64_decoder` 등의 실용적인 유틸리티 도구들을 추가했습니다.
 
