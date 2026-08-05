@@ -5,6 +5,8 @@ from db.models import TenantConfig
 
 
 def tenant_config_owner_filters(user_id: str, organization_id: str | None):
+    # Only allow access to tenant config if organization_id matches,
+    # or user_id matches. If organization_id is provided, the config MUST have that organization_id.
     organization_filter = (
         TenantConfig.organization_id == organization_id
         if organization_id is not None

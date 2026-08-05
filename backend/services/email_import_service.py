@@ -56,7 +56,7 @@ MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 8
-SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
+SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".msg", ".mbox", ".zip"})
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
 logger = logging.getLogger(__name__)
 

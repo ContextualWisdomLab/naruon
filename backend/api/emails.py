@@ -664,6 +664,8 @@ async def get_email_thread(
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(get_auth_context),
 ):
+    if ".." in thread_id or thread_id.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid thread ID")
     # Ensure auth context validates the request payload and scopes access
     lookup_values = thread_lookup_values(thread_id)
     result = await db.execute(
@@ -722,6 +724,14 @@ async def send_email_endpoint(
             smtp_username = tenant_config.smtp_username
             smtp_password = tenant_config.smtp_password
             validate_smtp_destination(smtp_server, smtp_port)
+            from core.config import settings
+            import services.email_client as ec
+            allowed_hosts = ec._parse_allowed_smtp_hosts()
+            allowed_ports = ec._parse_allowed_smtp_ports()
+            if allowed_hosts and smtp_server not in allowed_hosts:
+                raise ValueError("SMTP host not allowed")
+            if allowed_ports and smtp_port not in allowed_ports:
+                raise ValueError("SMTP port not allowed")
         except Exception as exc:
             if "ENCRYPTION_KEY is required" in str(exc):
                 raise HTTPException(
