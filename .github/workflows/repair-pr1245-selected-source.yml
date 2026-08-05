@@ -38,11 +38,15 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
 
-      - name: Verify immutable parent and repair script
+      - name: Verify immutable parent and correct transformer
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
-          test "$(git rev-parse HEAD^)" = "abd29678bc745ca4fb02ac112c67752b9628e42f"
+          test "$(git rev-parse HEAD^)" = "64fd96187b77a4b98b9eeade79cfc81ebf4e69d2"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -m py_compile \
+            scripts/ci/repair_pr1245_review.py \
+            scripts/ci/patch_pr1245_repair_script.py
+          python3 scripts/ci/patch_pr1245_repair_script.py
           python3 -m py_compile scripts/ci/repair_pr1245_review.py
 
       - name: Install pnpm
@@ -102,7 +106,8 @@ jobs:
         run: |
           rm -f \
             .github/workflows/repair-pr1245-selected-source.yml \
-            scripts/ci/repair_pr1245_review.py
+            scripts/ci/repair_pr1245_review.py \
+            scripts/ci/patch_pr1245_repair_script.py
           test ! -e .github/workflows/repair-pr1245-review.yml
           git diff --check
           git config user.name "github-actions[bot]"
