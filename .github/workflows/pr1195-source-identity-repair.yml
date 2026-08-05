@@ -1,0 +1,585 @@
+name: PR 1195 source identity repair
+
+on:
+  push:
+    branches:
+      - claude/contextualwisdomlab-audit-governance-qyxe67
+    paths:
+      - .github/workflows/pr1195-source-identity-repair.yml
+
+concurrency:
+  group: pr1195-source-identity-repair
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    if: ${{ github.repository == 'ContextualWisdomLab/naruon' && github.ref == 'refs/heads/claude/contextualwisdomlab-audit-governance-qyxe67' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      PYTHONWARNINGS: error
+      DISABLE_BACKGROUND_WORKERS: "1"
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact pull request branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: claude/contextualwisdomlab-audit-governance-qyxe67
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Install hash-locked backend dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check --require-hashes
+          -r backend/requirements-hashes.txt
+
+      - name: Add source-identity regressions and prove RED
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > backend/tests/test_source_bound_email_dedupe.py <<'PY'
+          """Regression tests for source-bound fallback email identities."""
+
+          import datetime
+          from unittest.mock import AsyncMock, MagicMock
+
+          import pytest
+
+          from services.email_dedupe_service import (
+              canonical_email_source_content,
+              source_email_fingerprint,
+              strong_email_fingerprint,
+          )
+          from services.email_import_service import _email_fingerprint
+          from services.imap_worker import process_fetched_email
+
+
+          def test_source_email_fingerprint_is_stable_content_bound_and_domain_separated() -> None:
+              """Hash equal sources equally while separating content and source domains."""
+              first = source_email_fingerprint(b"same source")
+              assert first == source_email_fingerprint(b"same source")
+              assert first != source_email_fingerprint(b"different source")
+              assert first != source_email_fingerprint(
+                  b"same source", source_kind="canonical"
+              )
+              assert len(first) == 64
+
+
+          def test_canonical_source_content_excludes_collection_date() -> None:
+              """Keep synthetic collection time outside direct-caller identity."""
+              base = {
+                  "message_id": "<message@example.com>",
+                  "sender": "sender@example.com",
+                  "recipients": ["one@example.com", "two@example.com"],
+                  "subject": "Subject",
+                  "body": "Body",
+                  "attachments": [{"filename": "note.txt", "content": b"note"}],
+              }
+              first = {
+                  **base,
+                  "date": datetime.datetime(
+                      2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc
+                  ),
+                  "date_provenance": "missing",
+              }
+              second = {
+                  **base,
+                  "date": datetime.datetime(
+                      2026, 8, 4, 7, 30, tzinfo=datetime.timezone.utc
+                  ),
+                  "date_provenance": "invalid",
+              }
+              assert canonical_email_source_content(first) == canonical_email_source_content(
+                  second
+              )
+              assert canonical_email_source_content(first) != canonical_email_source_content(
+                  {**second, "body": "Different body"}
+              )
+
+
+          def test_import_fingerprint_uses_trusted_date_or_raw_source() -> None:
+              """Use strong Date evidence only when provenance is genuinely parsed."""
+              persisted_date = datetime.datetime(
+                  2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc
+              )
+              fields = {
+                  "message_id": "",
+                  "sender": "sender@example.com",
+                  "subject": "Same subject",
+                  "body": "Same parsed body",
+                  "recipients": "recipient@example.com",
+              }
+              first_source = b"From: sender@example.com\r\n\r\nFirst raw body"
+              second_source = b"From: sender@example.com\r\n\r\nSecond raw body"
+              strong = strong_email_fingerprint(
+                  sender=fields["sender"],
+                  subject=fields["subject"],
+                  date=persisted_date,
+                  body=fields["body"],
+              )
+              assert strong is not None
+              assert (
+                  _email_fingerprint(
+                      {**fields, "date_provenance": "parsed"},
+                      persisted_date,
+                      first_source,
+                  )
+                  == strong
+              )
+              for provenance in ("missing", "invalid"):
+                  first = _email_fingerprint(
+                      {**fields, "date_provenance": provenance},
+                      persisted_date,
+                      first_source,
+                  )
+                  second = _email_fingerprint(
+                      {**fields, "date_provenance": provenance},
+                      persisted_date,
+                      second_source,
+                  )
+                  assert first == source_email_fingerprint(first_source)
+                  assert second == source_email_fingerprint(second_source)
+                  assert first != second
+
+
+          def test_direct_fallback_is_collection_time_independent() -> None:
+              """Give callers without raw bytes a stable non-date fallback identity."""
+              parsed = {
+                  "message_id": "",
+                  "sender": "sender@example.com",
+                  "recipients": "recipient@example.com",
+                  "subject": "Direct",
+                  "body": "Body",
+                  "date_provenance": "missing",
+              }
+              first_time = datetime.datetime(
+                  2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc
+              )
+              second_time = first_time + datetime.timedelta(hours=1)
+              assert _email_fingerprint(parsed, first_time) == _email_fingerprint(
+                  parsed, second_time
+              )
+              assert _email_fingerprint(parsed, first_time) != _email_fingerprint(
+                  {**parsed, "body": "Different body"}, second_time
+              )
+
+
+          @pytest.mark.asyncio
+          async def test_missing_date_messages_use_raw_source_not_collection_time(
+              monkeypatch: pytest.MonkeyPatch,
+          ) -> None:
+              """Do not merge different raw messages collected at the same instant."""
+              session = AsyncMock()
+              session.add = MagicMock()
+              query_result = MagicMock()
+              query_result.scalar_one_or_none.return_value = None
+              session.execute.return_value = query_result
+              monkeypatch.setattr(
+                  "services.imap_worker.assign_thread_id",
+                  AsyncMock(side_effect=("thread-first", "thread-second")),
+              )
+              monkeypatch.setattr(
+                  "services.imap_worker.is_self_sent_email",
+                  lambda _email, _owners: False,
+              )
+
+              collected_at = datetime.datetime(
+                  2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc
+              )
+              common = {
+                  "subject": "Same subject",
+                  "date": collected_at,
+                  "date_provenance": "missing",
+                  "sender": "sender@example.com",
+                  "recipients": "recipient@example.com",
+                  "message_id": "",
+              }
+              first_source = b"From: sender@example.com\r\n\r\nFirst raw body"
+              second_source = b"From: sender@example.com\r\n\r\nSecond raw body"
+
+              await process_fetched_email(
+                  session,
+                  {**common, "body": "First body"},
+                  "owner@example.com",
+                  "org-acme",
+                  source_content=first_source,
+              )
+              await process_fetched_email(
+                  session,
+                  {**common, "body": "Second body"},
+                  "owner@example.com",
+                  "org-acme",
+                  source_content=second_source,
+              )
+
+              first_email = session.add.call_args_list[0].args[0]
+              second_email = session.add.call_args_list[1].args[0]
+              assert first_email.date == collected_at
+              assert second_email.date == collected_at
+              assert first_email.fingerprint == source_email_fingerprint(first_source)
+              assert second_email.fingerprint == source_email_fingerprint(second_source)
+              assert first_email.fingerprint != second_email.fingerprint
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          parser_test = Path("backend/tests/test_email_parser_provenance.py")
+          text = parser_test.read_text(encoding="utf-8")
+          old = '    return (headers.strip() + "\\n\\nBody text.").encode("utf-8")\n'
+          new = '    return (headers.strip("\\r\\n") + "\\n\\nBody text.").encode("utf-8")\n'
+          if old not in text:
+              raise SystemExit("email parser fixture anchor missing")
+          parser_test.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          imap_test = Path("backend/tests/test_imap_worker.py")
+          text = imap_test.read_text(encoding="utf-8")
+          anchor = '    assert kwargs["owner_addresses"] == ["imap-user@example.com"]\n'
+          replacement = anchor + '    assert kwargs["source_content"] == raw_message\n'
+          if replacement not in text:
+              if anchor not in text:
+                  raise SystemExit("IMAP raw-source assertion anchor missing")
+              text = text.replace(anchor, replacement, 1)
+          imap_test.write_text(text, encoding="utf-8")
+
+          pop3_test = Path("backend/tests/test_pop3_worker.py")
+          text = pop3_test.read_text(encoding="utf-8")
+          old_signature = '''    async def fake_process_fetched_email(
+              db_session, email_data, user_id, organization_id, owner_addresses=None
+          ):
+'''
+          new_signature = '''    async def fake_process_fetched_email(
+              db_session,
+              email_data,
+              user_id,
+              organization_id,
+              owner_addresses=None,
+              source_content=None,
+          ):
+'''
+          if new_signature not in text:
+              if old_signature not in text:
+                  raise SystemExit("POP3 fake processor signature anchor missing")
+              text = text.replace(old_signature, new_signature, 1)
+          old_item = '                "owner_addresses": owner_addresses,\n'
+          new_item = old_item + '                "source_content": source_content,\n'
+          if new_item not in text:
+              if old_item not in text:
+                  raise SystemExit("POP3 imported record anchor missing")
+              text = text.replace(old_item, new_item, 1)
+          old_assert = '    assert imported[0]["owner_addresses"] == ["pop3-user@example.com"]\n'
+          new_assert = old_assert + '    assert imported[0]["source_content"] == raw_message\n'
+          if new_assert not in text:
+              if old_assert not in text:
+                  raise SystemExit("POP3 raw-source assertion anchor missing")
+              text = text.replace(old_assert, new_assert, 1)
+          pop3_test.write_text(text, encoding="utf-8")
+          PY
+
+          set +e
+          (
+            cd backend
+            python -m pytest -q tests/test_source_bound_email_dedupe.py
+          )
+          red_status=$?
+          set -e
+          if [ "$red_status" -eq 0 ]; then
+            echo "::error::Source-bound dedupe regressions unexpectedly passed before remediation."
+            exit 1
+          fi
+
+      - name: Bind untrusted-Date identity to immutable source content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if new in text:
+                  return text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one anchor, found {count}")
+              return text.replace(old, new, 1)
+
+
+          dedupe_path = Path("backend/services/email_dedupe_service.py")
+          text = dedupe_path.read_text(encoding="utf-8")
+          text = replace_once(
+              text,
+              "import datetime\nfrom collections.abc import Iterable\n",
+              "import datetime\nimport hashlib\nimport json\nfrom collections.abc import Iterable, Mapping\n",
+              "dedupe imports",
+          )
+          helper = '''_CANONICAL_SOURCE_FIELDS = (
+              "message_id",
+              "sender",
+              "recipients",
+              "subject",
+              "body",
+              "reply_to",
+              "in_reply_to",
+              "references",
+              "attachments",
+          )
+
+
+          def canonical_email_source_content(email_data: Mapping[str, object]) -> bytes:
+              """Serialize stable parsed fields when raw transport bytes are unavailable.
+
+              Collection-time ``date`` values and their provenance are deliberately
+              excluded. Transport-backed paths should provide exact RFC822 bytes.
+              """
+              payload = {
+                  field: email_data.get(field) for field in _CANONICAL_SOURCE_FIELDS
+              }
+              return json.dumps(
+                  payload,
+                  ensure_ascii=False,
+                  sort_keys=True,
+                  separators=(",", ":"),
+                  default=str,
+              ).encode("utf-8", errors="surrogatepass")
+
+
+          def source_email_fingerprint(
+              source_content: bytes,
+              *,
+              source_kind: Literal["raw", "canonical"] = "raw",
+          ) -> str:
+              """Return a domain-separated SHA-256 identity for stable source bytes."""
+              digest = hashlib.sha256()
+              digest.update(b"naruon-email-source-v1\\0")
+              digest.update(source_kind.encode("ascii"))
+              digest.update(b"\\0")
+              digest.update(source_content)
+              return digest.hexdigest()
+
+
+          '''.replace("          ", "")
+          if "def source_email_fingerprint" not in text:
+              text = replace_once(
+                  text,
+                  "def strong_email_fingerprint(\n",
+                  helper + "def strong_email_fingerprint(\n",
+                  "dedupe helper insertion",
+              )
+          dedupe_path.write_text(text, encoding="utf-8")
+
+          import_path = Path("backend/services/email_import_service.py")
+          text = import_path.read_text(encoding="utf-8")
+          text = replace_once(
+              text,
+              "from services.email_dedupe_service import strong_email_fingerprint\n",
+              "from services.email_dedupe_service import (\n"
+              "    canonical_email_source_content,\n"
+              "    source_email_fingerprint,\n"
+              "    strong_email_fingerprint,\n"
+              ")\n",
+              "import-service dedupe import",
+          )
+          start = text.index("def _email_fingerprint(")
+          end = text.index("\n\n\nasync def _find_existing_email", start)
+          replacement = '''def _email_fingerprint(
+              parsed: EmailData,
+              persisted_date: datetime.datetime,
+              source_content: bytes | None = None,
+          ) -> str:
+              """Return trusted-Date evidence or a source-bound fallback identity.
+
+              ``persisted_date`` remains the storage timestamp and participates in
+              duplicate evidence only when it came from a valid sender ``Date``.
+              """
+              strong_fingerprint = None
+              if parsed.get("date_provenance") == "parsed":
+                  strong_fingerprint = strong_email_fingerprint(
+                      sender=parsed.get("sender"),
+                      subject=parsed.get("subject"),
+                      date=persisted_date,
+                      body=parsed.get("body"),
+                  )
+              if strong_fingerprint:
+                  return strong_fingerprint
+              source_identity = (
+                  source_content
+                  if source_content is not None
+                  else canonical_email_source_content(parsed)
+              )
+              return source_email_fingerprint(
+                  source_identity,
+                  source_kind="raw" if source_content is not None else "canonical",
+              )
+          '''.replace("          ", "").rstrip()
+          text = text[:start] + replacement + text[end:]
+          text = replace_once(
+              text,
+              "    fingerprint = _email_fingerprint(parsed, persisted_date)\n",
+              "    fingerprint = _email_fingerprint(parsed, persisted_date, content)\n",
+              "import fingerprint call",
+          )
+          text = text.replace("    generate_email_fingerprint,\n", "", 1)
+          import_path.write_text(text, encoding="utf-8")
+
+          imap_path = Path("backend/services/imap_worker.py")
+          text = imap_path.read_text(encoding="utf-8")
+          text = replace_once(
+              text,
+              "from services.email_dedupe_service import strong_email_fingerprint\n",
+              "from services.email_dedupe_service import (\n"
+              "    canonical_email_source_content,\n"
+              "    source_email_fingerprint,\n"
+              "    strong_email_fingerprint,\n"
+              ")\n",
+              "IMAP dedupe import",
+          )
+          text = replace_once(
+              text,
+              "from services.threading_service import assign_thread_id, generate_email_fingerprint\n",
+              "from services.threading_service import assign_thread_id\n",
+              "IMAP threading import",
+          )
+          old_signature = '''    owner_addresses: Iterable[str] | None = None,
+              is_read: bool = True,
+          ):
+              subject = email_data.get("subject", "")
+          '''.replace("          ", "")
+          new_signature = '''    owner_addresses: Iterable[str] | None = None,
+              is_read: bool = True,
+              source_content: bytes | None = None,
+          ) -> Email:
+              """Persist one fetched email with provenance-safe identity."""
+              subject = email_data.get("subject", "")
+          '''.replace("          ", "")
+          text = replace_once(text, old_signature, new_signature, "IMAP signature")
+          fingerprint_start = text.index("    # Seed the strong")
+          fingerprint_end = text.index("\n\n    # Check if duplicate", fingerprint_start)
+          fingerprint_block = '''    # Seed strong duplicate evidence only from a genuinely parsed Date.
+              strong_fingerprint = None
+              if email_data.get("date_provenance") == "parsed":
+                  strong_fingerprint = strong_email_fingerprint(
+                      sender=sender,
+                      subject=subject,
+                      date=persisted_date,
+                      body=email_data.get("body", ""),
+                  )
+              source_identity = (
+                  source_content
+                  if source_content is not None
+                  else canonical_email_source_content(email_data)
+              )
+              fingerprint = strong_fingerprint or source_email_fingerprint(
+                  source_identity,
+                  source_kind="raw" if source_content is not None else "canonical",
+              )
+          '''.replace("          ", "").rstrip()
+          text = text[:fingerprint_start] + fingerprint_block + text[fingerprint_end:]
+          text = replace_once(
+              text,
+              "                        is_read=is_read,\n                    )\n",
+              "                        is_read=is_read,\n"
+              "                        source_content=raw_message,\n"
+              "                    )\n",
+              "IMAP raw-source propagation",
+          )
+          imap_path.write_text(text, encoding="utf-8")
+
+          pop3_path = Path("backend/services/pop3_worker.py")
+          text = pop3_path.read_text(encoding="utf-8")
+          text = replace_once(
+              text,
+              "                        owner_addresses=owner_addresses,\n                    )\n",
+              "                        owner_addresses=owner_addresses,\n"
+              "                        source_content=raw_message,\n"
+              "                    )\n",
+              "POP3 raw-source propagation",
+          )
+          pop3_path.write_text(text, encoding="utf-8")
+
+          changelog_path = Path("CHANGELOG.md")
+          text = changelog_path.read_text(encoding="utf-8")
+          text = text.replace(
+              "strong key를 만들지 않고 weak fallback fingerprint(수집 시각이 매번 달라 거짓 중복을 만들 수 없음)로 내려갑니다",
+              "strong key를 만들지 않고 원본 RFC822 바이트의 domain-separated SHA-256(원문이 없는 직접 호출자는 Date를 제외한 canonical source projection)로 내려갑니다",
+          )
+          text = text.replace(
+              "import·IMAP 두 생성 경로 모두 파서 provenance를 영속화합니다.",
+              "import·IMAP·POP3 생성 경로 모두 파서 provenance를 영속화하고 원본 transport bytes를 fallback identity에 전달합니다.",
+          )
+          changelog_path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Verify focused and realistic email pipelines
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m ruff format \
+            backend/services/email_dedupe_service.py \
+            backend/services/email_import_service.py \
+            backend/services/imap_worker.py \
+            backend/services/pop3_worker.py \
+            backend/tests/test_source_bound_email_dedupe.py \
+            backend/tests/test_email_import_service.py \
+            backend/tests/test_email_parser_provenance.py \
+            backend/tests/test_imap_worker.py \
+            backend/tests/test_pop3_worker.py
+          python -m ruff check \
+            backend/services/email_dedupe_service.py \
+            backend/services/email_import_service.py \
+            backend/services/imap_worker.py \
+            backend/services/pop3_worker.py \
+            backend/tests/test_source_bound_email_dedupe.py \
+            backend/tests/test_email_import_service.py \
+            backend/tests/test_email_parser_provenance.py \
+            backend/tests/test_imap_worker.py \
+            backend/tests/test_pop3_worker.py
+          (
+            cd backend
+            python -m pytest -q \
+              tests/test_source_bound_email_dedupe.py \
+              tests/test_email_parser_provenance.py \
+              tests/test_email_dedupe_service.py \
+              tests/test_email_import_service.py \
+              tests/test_imap_worker.py \
+              tests/test_pop3_worker.py
+          )
+          git diff --check
+
+      - name: Commit verified remediation and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/pr1195-source-identity-repair.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            CHANGELOG.md \
+            backend/services/email_dedupe_service.py \
+            backend/services/email_import_service.py \
+            backend/services/imap_worker.py \
+            backend/services/pop3_worker.py \
+            backend/tests/test_source_bound_email_dedupe.py \
+            backend/tests/test_email_import_service.py \
+            backend/tests/test_email_parser_provenance.py \
+            backend/tests/test_imap_worker.py \
+            backend/tests/test_pop3_worker.py \
+            .github/workflows/pr1195-source-identity-repair.yml
+          git commit -m "fix(email): bind fallback dedupe to immutable source"
+          git push origin HEAD:claude/contextualwisdomlab-audit-governance-qyxe67
