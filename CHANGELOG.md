@@ -1,4 +1,7 @@
 ## [Unreleased]
+
+### Fixed
+- Bound missing/invalid-Date email deduplication fallbacks to immutable RFC822 source bytes (or a deterministic Date-free canonical projection), including import, IMAP, and POP3 paths, so collection timestamps cannot create false duplicate identities.
 ### 이메일 메타데이터 provenance 기반 (dedupe 근거 분리 · naruon#1086 파서 계층)
 
 - `backend/services/email_parser.py`가 RFC822 `Date`·`Message-ID` 근거를 명시적으로 노출합니다. `date_provenance`(`parsed`/`missing`/`invalid`)와 원본 헤더 날짜(`header_date`, 부재·파싱 실패 시 `None`)를 저장용 `date`(파싱값 또는 수집 시각 fallback)와 분리하고, `message_id_provenance`(`embedded`/`missing`)를 추가했습니다. 합성 수집 시각이 원본 발신 메타데이터로 오인되지 않으므로 fingerprint dedupe가 진짜 발신 근거에만 의존할 수 있습니다. `date`의 기존 의미(파싱값-또는-fallback)는 그대로 유지되어 하위 호환입니다.

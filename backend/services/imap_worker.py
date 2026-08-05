@@ -10,14 +10,18 @@ from sqlalchemy import select
 from db.models import Email, TenantConfig
 from db.session import AsyncSessionLocal
 from services.email_client import validate_imap_destination
-from services.email_dedupe_service import strong_email_fingerprint
+from services.email_dedupe_service import (
+    canonical_email_source_content,
+    source_email_fingerprint,
+    strong_email_fingerprint,
+)
 from services.email_parser import EmailData, parse_eml_bytes
 from services.exceptions import EmailParseError
 from services.knowledge_extractor import (
     extract_knowledge_from_self_sent,
     is_self_sent_email,
 )
-from services.threading_service import assign_thread_id, generate_email_fingerprint
+from services.threading_service import assign_thread_id
 
 
 async def process_fetched_email(
@@ -27,13 +31,11 @@ async def process_fetched_email(
     organization_id: str | None,
     owner_addresses: Iterable[str] | None = None,
     is_read: bool = True,
-):
+    source_content: bytes | None = None,
+) -> Email:
+    """Persist one fetched email with provenance-safe identity."""
     subject = email_data.get("subject", "")
     date_obj = email_data.get("date")
-    if hasattr(date_obj, "isoformat"):
-        date_str = date_obj.isoformat()
-    else:
-        date_str = str(date_obj) if date_obj else ""
     if isinstance(date_obj, datetime.datetime):
         persisted_date = (
             date_obj.astimezone(datetime.timezone.utc)
@@ -50,9 +52,7 @@ async def process_fetched_email(
         else str(recipients_list or "")
     )
 
-    # Seed the strong (auto-dedupe) fingerprint only from a genuinely-parsed
-    # Date; a synthetic collection-time fallback must not manufacture a strong
-    # duplicate key, so it falls through to the weak fallback (naruon#1086).
+    # Seed strong duplicate evidence only from a genuinely parsed Date.
     strong_fingerprint = None
     if email_data.get("date_provenance") == "parsed":
         strong_fingerprint = strong_email_fingerprint(
@@ -61,8 +61,14 @@ async def process_fetched_email(
             date=persisted_date,
             body=email_data.get("body", ""),
         )
-    fingerprint = strong_fingerprint or generate_email_fingerprint(
-        subject, date_str, sender, recipients
+    source_identity = (
+        source_content
+        if source_content is not None
+        else canonical_email_source_content(email_data)
+    )
+    fingerprint = strong_fingerprint or source_email_fingerprint(
+        source_identity,
+        source_kind="raw" if source_content is not None else "canonical",
     )
 
     # Check if duplicate
@@ -107,6 +113,7 @@ async def process_fetched_email(
         await extract_knowledge_from_self_sent(session, new_email, owner_addresses)
     return new_email
 
+
 logger = logging.getLogger(__name__)
 MAX_IMAP_FETCH_MESSAGES = 10
 
@@ -121,7 +128,11 @@ def flags_indicate_seen(fetch_data) -> bool:
     for item in fetch_data or []:
         parts = item if isinstance(item, (tuple, list)) else (item,)
         for part in parts:
-            raw = part if isinstance(part, bytes) else str(part).encode("utf-8", "replace")
+            raw = (
+                part
+                if isinstance(part, bytes)
+                else str(part).encode("utf-8", "replace")
+            )
             upper = raw.upper()
             if b"FLAGS" in upper and b"\\SEEN" in upper:
                 return True
@@ -226,7 +237,7 @@ class ImapSyncWorker:
                 config.user_id,
             )
             return 0
-        
+
         logger.info(
             "Connecting to IMAP server %s:%s for user %s",
             imap_server,
@@ -261,6 +272,7 @@ class ImapSyncWorker:
         if imap_server is None or imap_port is None:
             imap_server, imap_port = self._validated_destination(config)
         import ssl
+
         ssl_context = ssl.create_default_context()
         imap_client = aioimaplib.IMAP4_SSL(
             imap_server, imap_port, ssl_context=ssl_context
@@ -343,6 +355,7 @@ class ImapSyncWorker:
                         config.organization_id,
                         owner_addresses=owner_addresses,
                         is_read=is_read,
+                        source_content=raw_message,
                     )
                     imported_count += 1
                 await session.commit()
@@ -397,6 +410,4 @@ class ImapSyncWorker:
         header_block = value.split(b"\r\n\r\n", maxsplit=1)[0]
         if header_block == value:
             header_block = value.split(b"\n\n", maxsplit=1)[0]
-        return b":" in header_block and (
-            b"\r\n\r\n" in value or b"\n\n" in value
-        )
+        return b":" in header_block and (b"\r\n\r\n" in value or b"\n\n" in value)

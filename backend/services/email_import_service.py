@@ -28,7 +28,11 @@ from db.models import (
 from services.archive import extract_backup_async
 from services.batch_embedding_service import try_batch_import_embeddings
 from services.content_graph import ParseResult, parse_content
-from services.email_dedupe_service import strong_email_fingerprint
+from services.email_dedupe_service import (
+    canonical_email_source_content,
+    source_email_fingerprint,
+    strong_email_fingerprint,
+)
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
@@ -46,7 +50,6 @@ from services.project_graph.extractor_registry import (
 )
 from services.threading_service import (
     assign_thread_id,
-    generate_email_fingerprint,
     normalize_message_id,
 )
 
@@ -186,14 +189,16 @@ def _message_id_for(parsed: EmailData, content: bytes) -> str:
     )
 
 
-def _email_fingerprint(parsed: EmailData, persisted_date: datetime.datetime) -> str:
-    # A strong (auto-dedupe-eligible) fingerprint may only be seeded from a
-    # genuinely-parsed sender Date. When the Date header was missing or invalid
-    # (date_provenance != "parsed"), ``persisted_date`` is a synthetic
-    # collection-time fallback, not original metadata, so it must not produce a
-    # strong duplicate key — the email falls through to the weak fallback
-    # fingerprint (which, carrying the distinct collection time, cannot
-    # manufacture a false duplicate) (naruon#1086).
+def _email_fingerprint(
+    parsed: EmailData,
+    persisted_date: datetime.datetime,
+    source_content: bytes | None = None,
+) -> str:
+    """Return trusted-Date evidence or a source-bound fallback identity.
+
+    ``persisted_date`` remains the storage timestamp and participates in
+    duplicate evidence only when it came from a valid sender ``Date``.
+    """
     strong_fingerprint = None
     if parsed.get("date_provenance") == "parsed":
         strong_fingerprint = strong_email_fingerprint(
@@ -204,11 +209,14 @@ def _email_fingerprint(parsed: EmailData, persisted_date: datetime.datetime) -> 
         )
     if strong_fingerprint:
         return strong_fingerprint
-    return generate_email_fingerprint(
-        parsed.get("subject"),
-        persisted_date.isoformat(),
-        parsed.get("sender"),
-        parsed.get("recipients"),
+    source_identity = (
+        source_content
+        if source_content is not None
+        else canonical_email_source_content(parsed)
+    )
+    return source_email_fingerprint(
+        source_identity,
+        source_kind="raw" if source_content is not None else "canonical",
     )
 
 
@@ -404,7 +412,11 @@ def _fallback_attachment_parser_key(
         return "calendar"
     if parse_content_type == "text/html":
         return "html"
-    if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
+    if parse_content_type in {
+        "text/markdown",
+        "text/x-markdown",
+        "application/markdown",
+    }:
         return "markdown"
     if parse_content_type == "text/plain":
         return "plain_text"
@@ -596,9 +608,9 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             item.segment_path,
         ),
     ):
-        segments_by_source[
-            (segment.source_kind, segment.source_record_uid)
-        ].append(segment)
+        segments_by_source[(segment.source_kind, segment.source_record_uid)].append(
+            segment
+        )
         add_edge(
             edge_kind="node_has_segment",
             edge_path=f"{segment.content_node.node_path}/has/{segment.segment_path}",
@@ -613,8 +625,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="segment_next",
                 edge_path=(
-                    f"{source_segment.segment_path}/next/"
-                    f"{target_segment.segment_path}"
+                    f"{source_segment.segment_path}/next/{target_segment.segment_path}"
                 ),
                 source_kind=source_segment.source_kind,
                 source_record_uid=source_segment.source_record_uid,
@@ -638,8 +649,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="heading_contains_segment",
                 edge_path=(
-                    f"{heading_segment.segment_path}/contains/"
-                    f"{segment.segment_path}"
+                    f"{heading_segment.segment_path}/contains/{segment.segment_path}"
                 ),
                 source_kind=segment.source_kind,
                 source_record_uid=segment.source_record_uid,
@@ -825,7 +835,7 @@ async def _import_single_eml(
     message_id = _message_id_for(parsed, content)
     parsed["message_id"] = message_id
     persisted_date = _utc_datetime(parsed.get("date"))
-    fingerprint = _email_fingerprint(parsed, persisted_date)
+    fingerprint = _email_fingerprint(parsed, persisted_date, content)
 
     existing_email = await _find_existing_email(
         session,

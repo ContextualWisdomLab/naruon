@@ -7,7 +7,7 @@ from services.email_parser import parse_eml_bytes
 
 def _eml_with(headers: str) -> bytes:
     """Build minimal EML bytes with the given header block and a plain body."""
-    return (headers.strip() + "\n\nBody text.").encode("utf-8")
+    return (headers.strip("\r\n") + "\n\nBody text.").encode("utf-8")
 
 
 def test_parse_eml_marks_valid_date_as_parsed_with_original_header_date() -> None:

@@ -6,7 +6,9 @@ whether an incoming email is a duplicate of a stored one, keeping strong
 """
 
 import datetime
-from collections.abc import Iterable
+import hashlib
+import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -48,6 +50,49 @@ def _date_to_fingerprint_value(value: datetime.datetime | None) -> str:
     if value is None:
         return ""
     return value.isoformat()
+
+
+_CANONICAL_SOURCE_FIELDS = (
+    "message_id",
+    "sender",
+    "recipients",
+    "subject",
+    "body",
+    "reply_to",
+    "in_reply_to",
+    "references",
+    "attachments",
+)
+
+
+def canonical_email_source_content(email_data: Mapping[str, object]) -> bytes:
+    """Serialize stable parsed fields when raw transport bytes are unavailable.
+
+    Collection-time ``date`` values and their provenance are deliberately
+    excluded. Transport-backed paths should provide exact RFC822 bytes.
+    """
+    payload = {field: email_data.get(field) for field in _CANONICAL_SOURCE_FIELDS}
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8", errors="surrogatepass")
+
+
+def source_email_fingerprint(
+    source_content: bytes,
+    *,
+    source_kind: Literal["raw", "canonical"] = "raw",
+) -> str:
+    """Return a domain-separated SHA-256 identity for stable source bytes."""
+    digest = hashlib.sha256()
+    digest.update(b"naruon-email-source-v1\0")
+    digest.update(source_kind.encode("ascii"))
+    digest.update(b"\0")
+    digest.update(source_content)
+    return digest.hexdigest()
 
 
 def strong_email_fingerprint(

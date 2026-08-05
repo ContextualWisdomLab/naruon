@@ -14,14 +14,14 @@ from services.email_import_service import _email_fingerprint
 from services.imap_worker import process_fetched_email
 
 
-def test_source_email_fingerprint_is_stable_content_bound_and_domain_separated() -> None:
+def test_source_email_fingerprint_is_stable_content_bound_and_domain_separated() -> (
+    None
+):
     """Hash equal sources equally while separating content and source domains."""
     first = source_email_fingerprint(b"same source")
     assert first == source_email_fingerprint(b"same source")
     assert first != source_email_fingerprint(b"different source")
-    assert first != source_email_fingerprint(
-        b"same source", source_kind="canonical"
-    )
+    assert first != source_email_fingerprint(b"same source", source_kind="canonical")
     assert len(first) == 64
 
 
@@ -37,16 +37,12 @@ def test_canonical_source_content_excludes_collection_date() -> None:
     }
     first = {
         **base,
-        "date": datetime.datetime(
-            2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc
-        ),
+        "date": datetime.datetime(2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc),
         "date_provenance": "missing",
     }
     second = {
         **base,
-        "date": datetime.datetime(
-            2026, 8, 4, 7, 30, tzinfo=datetime.timezone.utc
-        ),
+        "date": datetime.datetime(2026, 8, 4, 7, 30, tzinfo=datetime.timezone.utc),
         "date_provenance": "invalid",
     }
     assert canonical_email_source_content(first) == canonical_email_source_content(
@@ -59,9 +55,7 @@ def test_canonical_source_content_excludes_collection_date() -> None:
 
 def test_import_fingerprint_uses_trusted_date_or_raw_source() -> None:
     """Use strong Date evidence only when provenance is genuinely parsed."""
-    persisted_date = datetime.datetime(
-        2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc
-    )
+    persisted_date = datetime.datetime(2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc)
     fields = {
         "message_id": "",
         "sender": "sender@example.com",
@@ -112,9 +106,7 @@ def test_direct_fallback_is_collection_time_independent() -> None:
         "body": "Body",
         "date_provenance": "missing",
     }
-    first_time = datetime.datetime(
-        2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc
-    )
+    first_time = datetime.datetime(2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc)
     second_time = first_time + datetime.timedelta(hours=1)
     assert _email_fingerprint(parsed, first_time) == _email_fingerprint(
         parsed, second_time
@@ -143,9 +135,7 @@ async def test_missing_date_messages_use_raw_source_not_collection_time(
         lambda _email, _owners: False,
     )
 
-    collected_at = datetime.datetime(
-        2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc
-    )
+    collected_at = datetime.datetime(2026, 8, 4, 6, 30, tzinfo=datetime.timezone.utc)
     common = {
         "subject": "Same subject",
         "date": collected_at,
