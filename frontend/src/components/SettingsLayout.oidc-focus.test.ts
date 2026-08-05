@@ -7,11 +7,13 @@ const settingsLayoutSource = readFileSync(
 );
 
 function buttonSource(label: string): string {
-  const labelIndex = settingsLayoutSource.indexOf(`>${label}</button>`);
+  const labelIndex = settingsLayoutSource.indexOf(label);
   expect(labelIndex).toBeGreaterThan(-1);
   const openingButtonIndex = settingsLayoutSource.lastIndexOf("<button", labelIndex);
+  const closingButtonIndex = settingsLayoutSource.indexOf("</button>", labelIndex);
   expect(openingButtonIndex).toBeGreaterThan(-1);
-  return settingsLayoutSource.slice(openingButtonIndex, labelIndex);
+  expect(closingButtonIndex).toBeGreaterThan(labelIndex);
+  return settingsLayoutSource.slice(openingButtonIndex, closingButtonIndex);
 }
 
 describe("SettingsLayout OIDC keyboard focus contract", () => {
