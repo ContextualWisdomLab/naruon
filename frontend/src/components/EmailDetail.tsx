@@ -29,6 +29,8 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  recipients?: string;
+  attachments?: string[];
 };
 interface LlmData {
   summary: string;
@@ -567,6 +569,8 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
   const safeEmailSender = toMailDisplayText(email.sender, '보낸 사람');
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
+  const safeRecipients = toMailDisplayText(email.recipients || email.sender, '참여자 없음');
+  const safeParticipants = Array.from(new Set([safeEmailSender, safeRecipients])).join(', ');
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
 
@@ -628,9 +632,30 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             <div className="line-clamp-1 text-xs">
               <span className="text-muted-foreground">{safeEmailSender}</span>
             </div>
-            <div className="line-clamp-1 text-xs text-muted-foreground">
+            <div className="line-clamp-1 text-xs text-muted-foreground sm:hidden">
               답장 주소: {safeReplyTo}
             </div>
+            <div className="text-xs text-muted-foreground">
+              <span className="mr-1 font-semibold">참여자:</span>
+              <span className="break-all">{safeParticipants}</span>
+            </div>
+            {email.attachments && email.attachments.length > 0 && (
+              <div
+                aria-label="첨부파일"
+                className="mt-2 flex min-w-0 items-center gap-2 overflow-x-auto pb-1"
+              >
+                <span className="shrink-0 text-xs font-semibold text-muted-foreground">첨부파일:</span>
+                {email.attachments.map((file, idx) => (
+                  <Badge
+                    key={`${file}-${idx}`}
+                    variant="secondary"
+                    className="h-5 shrink-0 px-2 py-0 text-[10px]"
+                  >
+                    {toMailDisplayText(file, '첨부파일')}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -649,6 +674,26 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
+          {email.schedule_conflict && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-emerald-800 dark:text-emerald-200">회의 제안 확인</h3>
+                  <p className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">이메일에 포함된 회의 일정을 캘린더와 조율합니다.</p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleSyncCalendar}
+                  disabled={isSyncing || actionItems.length === 0}
+                  aria-busy={isSyncing}
+                  className="h-8 rounded-xl bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700"
+                >
+                  {isSyncing && <Loader2 className="mr-2 h-3 w-3 animate-spin" aria-hidden="true" />}
+                  {isSyncing ? "조율 중" : "일정 조율"}
+                </Button>
+              </div>
+            </div>
+          )}
           <DecisionPointCard
             title="맥락 종합"
             icon={<span aria-hidden="true">✦</span>}
@@ -712,7 +757,11 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   </Button>
                 )}
                 {syncStatus && (
-                  <span className={`self-center text-xs ${syncStatus.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+                  <span
+                    role="status"
+                    aria-live="polite"
+                    className={`self-center text-xs ${syncStatus.type === 'success' ? 'text-green-600' : 'text-red-500'}`}
+                  >
                     {syncStatus.message}
                   </span>
                 )}
