@@ -37,13 +37,26 @@ jobs:
       - name: Verify ancestry and apply bounded repair
         run: |
           set -euo pipefail
-          expected_parent="7077d23a503d1f6c76b87350151c810503b89086"
+          expected_parent="3e5703c4566c9b327ecfc29bc4b73a7c11d9582d"
           actual_parent="$(git rev-parse HEAD^)"
           if [ "$actual_parent" != "$expected_parent" ]; then
             printf '::error::Finalizer trigger parent moved: expected %s, got %s.\n' "$expected_parent" "$actual_parent"
             exit 1
           fi
           test -f scripts/ci/repair_pr_1203_provenance.py
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/ci/repair_pr_1203_provenance.py")
+          text = path.read_text(encoding="utf-8")
+          old = r'r"python:3\.14-slim@sha256:[0-9a-f]{{64}}"'
+          new = r'r"python:3[.]14-slim@sha256:[0-9a-f]{{64}}"'
+          if text.count(old) != 1:
+              raise SystemExit(
+                  "temporary provenance repair no longer contains the reviewed regex literal"
+              )
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           python3 scripts/ci/repair_pr_1203_provenance.py
 
       - name: Set up current stable Python
