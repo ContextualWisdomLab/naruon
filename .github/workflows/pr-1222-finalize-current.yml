@@ -46,6 +46,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           checkout_sha = "3d3c42e5aac5ba805825da76410c181273ba90b1"
           replacements = {
@@ -86,6 +87,7 @@ jobs:
           ]
 
           def disable_checkout_credential_persistence(path: Path) -> None:
+              """Set checkout credential persistence to false in one workflow."""
               lines = path.read_text(encoding="utf-8").splitlines()
               index = 0
               while index < len(lines):
@@ -102,10 +104,7 @@ jobs:
                       candidate = lines[block_end]
                       candidate_stripped = candidate.lstrip()
                       candidate_indent = len(candidate) - len(candidate_stripped)
-                      if (
-                          candidate_stripped.startswith("- ")
-                          and candidate_indent <= use_indent
-                      ):
+                      if candidate_stripped.startswith("- ") and candidate_indent <= use_indent:
                           break
                       block_end += 1
 
@@ -121,8 +120,7 @@ jobs:
                           position
                           for position in range(index + 1, block_end)
                           if lines[position].strip() == "with:"
-                          and len(lines[position]) - len(lines[position].lstrip())
-                          == with_indent
+                          and len(lines[position]) - len(lines[position].lstrip()) == with_indent
                       ),
                       None,
                   )
@@ -151,61 +149,64 @@ jobs:
           )
           if marker not in governance:
               raise SystemExit("Could not locate the GitHub Action governance insertion point")
-          exact_contract = '''    assert governed_workflows, "no governed GitHub workflows found"
+          exact_contract = dedent(
+              '''\
+                  assert governed_workflows, "no governed GitHub workflows found"
 
-    expected_action_refs = {
-        "actions/checkout": (
-            "3d3c42e5aac5ba805825da76410c181273ba90b1",
-            "v7.0.1",
-        ),
-        "actions/setup-python": (
-            "5fda3b95a4ea91299a34e894583c3862153e4b97",
-            "v7.0.0",
-        ),
-        "actions/setup-node": (
-            "820762786026740c76f36085b0efc47a31fe5020",
-            "v7.0.0",
-        ),
-        "github/codeql-action/upload-sarif": (
-            "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
-            "v4.37.4",
-        ),
-        "docker/login-action": (
-            "dbcb813823bdd20940b903addbd779551569679f",
-            "v4.6.0",
-        ),
-    }
-    governed_source = "\\n".join(
-        workflow_path.read_text(encoding="utf-8")
-        for workflow_path in governed_workflows
-    )
-    for action_name, (expected_sha, expected_version) in expected_action_refs.items():
-        expected_reference = f"uses: {action_name}@{expected_sha} # {expected_version}"
-        assert expected_reference in governed_source, (
-            f"missing exact governed action reference: {expected_reference}"
-        )
-        matching_sha_lines = [
-            line.strip()
-            for line in governed_source.splitlines()
-            if f"uses: {action_name}@{expected_sha}" in line
-        ]
-        assert matching_sha_lines
-        assert all(
-            line.endswith(f"# {expected_version}") for line in matching_sha_lines
-        ), "\\n".join(matching_sha_lines)
+                  expected_action_refs = {
+                      "actions/checkout": (
+                          "3d3c42e5aac5ba805825da76410c181273ba90b1",
+                          "v7.0.1",
+                      ),
+                      "actions/setup-python": (
+                          "5fda3b95a4ea91299a34e894583c3862153e4b97",
+                          "v7.0.0",
+                      ),
+                      "actions/setup-node": (
+                          "820762786026740c76f36085b0efc47a31fe5020",
+                          "v7.0.0",
+                      ),
+                      "github/codeql-action/upload-sarif": (
+                          "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
+                          "v4.37.4",
+                      ),
+                      "docker/login-action": (
+                          "dbcb813823bdd20940b903addbd779551569679f",
+                          "v4.6.0",
+                      ),
+                  }
+                  governed_source = "\\n".join(
+                      workflow_path.read_text(encoding="utf-8")
+                      for workflow_path in governed_workflows
+                  )
+                  for action_name, (expected_sha, expected_version) in expected_action_refs.items():
+                      expected_reference = f"uses: {action_name}@{expected_sha} # {expected_version}"
+                      assert expected_reference in governed_source, (
+                          f"missing exact governed action reference: {expected_reference}"
+                      )
+                      matching_sha_lines = [
+                          line.strip()
+                          for line in governed_source.splitlines()
+                          if f"uses: {action_name}@{expected_sha}" in line
+                      ]
+                      assert matching_sha_lines
+                      assert all(
+                          line.endswith(f"# {expected_version}") for line in matching_sha_lines
+                      ), "\\n".join(matching_sha_lines)
 
-    obsolete_action_shas = {
-        "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
-        "ece7cb06caefa5fff74198d8649806c4678c61a1",
-        "48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e",
-        "99df26d4f13ea111d4ec1a7dddef6063f76b97e9",
-        "af1e73f918a031802d376d3c8bbc3fe56130a9b0",
-    }
-    for obsolete_sha in obsolete_action_shas:
-        assert f"@{obsolete_sha}" not in governed_source
+                  obsolete_action_shas = {
+                      "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+                      "ece7cb06caefa5fff74198d8649806c4678c61a1",
+                      "48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e",
+                      "99df26d4f13ea111d4ec1a7dddef6063f76b97e9",
+                      "af1e73f918a031802d376d3c8bbc3fe56130a9b0",
+                  }
+                  for obsolete_sha in obsolete_action_shas:
+                      assert f"@{obsolete_sha}" not in governed_source
 
-    unpinned_major_refs: list[str] = []
-'''
+                  unpinned_major_refs: list[str] = []
+              '''
+          )
           governance_path.write_text(
               governance.replace(marker, exact_contract, 1),
               encoding="utf-8",
