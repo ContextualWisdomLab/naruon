@@ -1311,7 +1311,7 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("답장 전송에 실패했습니다.");
   });
 
-  it("renders desktop high-density variants (participant list, attachment rail) and meeting proposal panel", async () => {
+  it("renders responsive participant and attachment evidence and executes the meeting action", async () => {
     const email = {
       id: 30,
       message_id: "<ui-density@example.com>",
@@ -1325,11 +1325,20 @@ describe("EmailDetail", () => {
       requires_reply: true,
       attachments: ["proposal.pdf", "schedule.xlsx"],
     };
-    const fetchMock = vi.fn((input) => {
+    const actionItem = "Review project meeting on 2026-05-19";
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/emails/30")) return Promise.resolve(jsonResponse(email));
       if (url.endsWith("/api/llm/summarize")) {
-        return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [] }));
+        return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [actionItem] }));
+      }
+      if (url.endsWith("/api/calendar/writeback-intent") && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({
+          target_source_id: "caldav_source_primary",
+          protocol: "caldav",
+          provider_write_executed: false,
+          provenance: { source_provider: "Fastmail" },
+        }));
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -1339,13 +1348,34 @@ describe("EmailDetail", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     await act(async () => { root?.render(<EmailDetail emailId={30} />); });
-    await flushAsyncWork();
+    await act(async () => { await flushAsyncWork(); });
 
     expect(container.textContent).toContain("sender@example.com, user@example.com");
     expect(container.textContent).toContain("참여자");
-    expect(container.textContent).toContain("첨부파일");
     expect(container.textContent).toContain("proposal.pdf");
     expect(container.textContent).toContain("회의 제안 확인");
-    expect(container.querySelector(".hidden.md\\:flex")).not.toBeNull();
+
+    const attachmentRail = container.querySelector<HTMLElement>('[aria-label="첨부파일"]');
+    expect(attachmentRail).not.toBeNull();
+    expect(attachmentRail?.classList.contains("hidden")).toBe(false);
+    expect(attachmentRail?.classList.contains("overflow-x-auto")).toBe(true);
+
+    const scheduleButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("일정 조율"),
+    );
+    expect(scheduleButton?.disabled).toBe(false);
+    await act(async () => {
+      scheduleButton?.click();
+      await flushAsyncWork();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/calendar/writeback-intent",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ action: "create", summary: actionItem }),
+      }),
+    );
+    expect(container.textContent).toContain("1개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.");
   });
 });
