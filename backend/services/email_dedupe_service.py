@@ -8,6 +8,7 @@ whether an incoming email is a duplicate of a stored one, keeping strong
 import datetime
 import hashlib
 import json
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
@@ -65,19 +66,56 @@ _CANONICAL_SOURCE_FIELDS = (
 )
 
 
+def _validate_canonical_source_value(value: object, *, path: str) -> None:
+    """Reject values outside the deterministic JSON-native EmailData surface.
+
+    Silent ``str()`` coercion is unsafe for identity material because distinct
+    runtime types can render to the same text. Parsed canonical-source fields
+    therefore accept only JSON-native scalars, lists, and string-keyed mappings;
+    every nested value is checked before serialization.
+    """
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise TypeError(f"{path}: non-finite floats are not canonical")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_canonical_source_value(item, path=f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(
+                    f"{path}: canonical mapping keys must be strings, got "
+                    f"{type(key).__name__}"
+                )
+            _validate_canonical_source_value(item, path=f"{path}.{key}")
+        return
+    raise TypeError(
+        f"{path}: unsupported canonical email source value type "
+        f"{type(value).__name__}"
+    )
+
+
 def canonical_email_source_content(email_data: Mapping[str, object]) -> bytes:
     """Serialize stable parsed fields when raw transport bytes are unavailable.
 
     Collection-time ``date`` values and their provenance are deliberately
-    excluded. Transport-backed paths should provide exact RFC822 bytes.
+    excluded. Transport-backed paths should provide exact RFC822 bytes. Values
+    outside the parsed ``EmailData`` JSON surface fail closed rather than being
+    string-coerced into potentially colliding identities.
     """
     payload = {field: email_data.get(field) for field in _CANONICAL_SOURCE_FIELDS}
+    for field, value in payload.items():
+        _validate_canonical_source_value(value, path=field)
     return json.dumps(
         payload,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
-        default=str,
+        allow_nan=False,
     ).encode("utf-8", errors="surrogatepass")
 
 
