@@ -40,6 +40,9 @@ identity.
   identity.
 - Canonical fallback identity excludes effective collection timestamps and
   provenance flags.
+- Canonical fallback serialization accepts only deterministic JSON-native parsed
+  values and rejects bytes, unordered collections, custom objects, non-string
+  mapping keys, and non-finite numbers instead of coercing them with `str()`.
 - IMAP and POP3 pass source bytes through the persistence boundary.
 - POP3 source reconstruction restores CRLF after every `RETR` message line.
 - Existing rows remain conservatively classified when provenance is unknown.
@@ -57,6 +60,14 @@ provider action is introduced.
 Fellegi, I. P., & Sunter, A. B. (1969). A theory for record linkage. *Journal
 of the American Statistical Association, 64*(328), 1183–1210.
 https://doi.org/10.1080/01621459.1969.10501049
+
+Fellegi and Sunter formalize record linkage by comparing field-level evidence
+under match and non-match hypotheses. The resulting evidence score is evaluated
+against two decision thresholds: sufficiently strong evidence produces a link,
+sufficiently weak evidence produces a non-link, and the intermediate region is
+reserved for clerical review. Naruon maps those three outcomes to `auto_link`,
+`distinct`, and `review_required` while keeping provenance-gated evidence out of
+the automatic-link region.
 
 Myers, J., & Rose, M. (1996). *Post Office Protocol—Version 3* (RFC 1939;
 STD 53). Internet Engineering Task Force. https://doi.org/10.17487/RFC1939
