@@ -14,6 +14,10 @@ from services.email_import_service import _email_fingerprint
 from services.imap_worker import process_fetched_email
 
 
+class _UnsupportedCanonicalValue:
+    """Represent a value that the parsed EmailData contract never permits."""
+
+
 def test_source_email_fingerprint_is_stable_content_bound_and_domain_separated() -> (
     None
 ):
@@ -33,7 +37,7 @@ def test_canonical_source_content_excludes_collection_date() -> None:
         "recipients": ["one@example.com", "two@example.com"],
         "subject": "Subject",
         "body": "Body",
-        "attachments": [{"filename": "note.txt", "content": b"note"}],
+        "attachments": [{"filename": "note.txt", "content": "note"}],
     }
     first = {
         **base,
@@ -51,6 +55,34 @@ def test_canonical_source_content_excludes_collection_date() -> None:
     assert canonical_email_source_content(first) != canonical_email_source_content(
         {**second, "body": "Different body"}
     )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "unsupported_value"),
+    [
+        ("body", b"raw bytes"),
+        ("subject", _UnsupportedCanonicalValue()),
+        ("attachments", [{"content": b"nested raw bytes"}]),
+        ("attachments", [{"tags": {"unordered", "values"}}]),
+    ],
+)
+def test_canonical_source_content_rejects_unsupported_values(
+    field_name: str,
+    unsupported_value: object,
+) -> None:
+    """Reject non-EmailData values instead of coercing colliding strings."""
+    email_data: dict[str, object] = {
+        "message_id": "<message@example.com>",
+        "sender": "sender@example.com",
+        "recipients": "recipient@example.com",
+        "subject": "Subject",
+        "body": "Body",
+        "attachments": [],
+        field_name: unsupported_value,
+    }
+
+    with pytest.raises(TypeError, match=field_name):
+        canonical_email_source_content(email_data)
 
 
 def test_import_fingerprint_uses_trusted_date_or_raw_source() -> None:
