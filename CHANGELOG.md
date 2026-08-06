@@ -1,4 +1,10 @@
 ## [Unreleased]
+
+### 기능 추가 (도구 모음 확장)
+
+- `pii_masker` (개인정보 마스커): 이메일, 전화번호, 주민등록번호 등 텍스트 내의 민감한 정보를 식별하여 `[MASKED]`로 치환하는 도구를 추가했습니다.
+- `profanity_filter` (비속어 필터): 텍스트 내 특정 비속어를 식별하여 `***`로 치환하고, 필터링 여부를 반환하는 도구를 추가했습니다.
+- `link_safety_verifier` (링크 안전성 검증기): URL의 HTTPS 사용 여부 및 의심스러운 도메인을 검사하여 위험도를 평가하고 반환하는 도구를 추가했습니다.
 ### 보안 패치 (CodeQL extended current-head)
 
 - `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 버전으로 동기화했습니다. Strix 잠금은 `google-cloud-aiplatform==1.160.0`의 `<7` 제약을 위반하던 `protobuf==7.35.1`을 이미 검증된 `6.33.6`으로 복구해 다시 해석·설치 가능하게 했습니다.

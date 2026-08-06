@@ -963,6 +963,84 @@ def test_execute_email_translator():
     assert data["result"]["source_language_detected"] == "en"
 
 
+
+def test_execute_pii_masker():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_masker/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "My email is test@example.com, phone is 010-1234-5678, and RRN is 900101-1234567."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "test@example.com" not in data["result"]["masked_text"]
+    assert "010-1234-5678" not in data["result"]["masked_text"]
+    assert "900101-1234567" not in data["result"]["masked_text"]
+    assert "[MASKED]" in data["result"]["masked_text"]
+
+
+
+def test_execute_profanity_filter():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/profanity_filter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "이런 존나 병신 같은 상황이 있나."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["has_profanity"] is True
+    assert "존나" not in data["result"]["filtered_text"]
+    assert "병신" not in data["result"]["filtered_text"]
+    assert "***" in data["result"]["filtered_text"]
+
+
+
+def test_execute_link_safety_verifier():
+    with TestClient(app) as client:
+        response_high = client.post(
+            "/api/tools/link_safety_verifier/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "url": "http://secure-login.tk/path"
+                }
+            },
+        )
+        response_low = client.post(
+            "/api/tools/link_safety_verifier/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "url": "https://example.com/path"
+                }
+            },
+        )
+    assert response_high.status_code == 200
+    data_high = response_high.json()
+    assert data_high["status"] == "success"
+    assert data_high["result"]["is_https"] is False
+    assert data_high["result"]["has_suspicious_domain"] is True
+    assert data_high["result"]["risk_level"] == "High"
+
+    assert response_low.status_code == 200
+    data_low = response_low.json()
+    assert data_low["status"] == "success"
+    assert data_low["result"]["is_https"] is True
+    assert data_low["result"]["has_suspicious_domain"] is False
+    assert data_low["result"]["risk_level"] == "Low"
+
+
 def test_execute_spam_phishing_detector():
     with TestClient(app) as client:
         response = client.post(

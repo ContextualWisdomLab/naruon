@@ -186,8 +186,8 @@ class ToolRegistry:
 
 registry = ToolRegistry()
 
-
 # Initialize default tools
+
 
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
@@ -245,6 +245,7 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
         "tone_score": 85,
     }
 
+
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
@@ -272,7 +273,10 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if source_phrase in lowered_text and translated_phrase not in translated_terms:
+            if (
+                source_phrase in lowered_text
+                and translated_phrase not in translated_terms
+            ):
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -291,7 +295,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     normalized_domain = sender_domain.lower()
     phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
     spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
+    phishing_hits = sorted(
+        term for term in phishing_terms if term in normalized_content
+    )
     spam_hits = sorted(term for term in spam_terms if term in normalized_content)
     suspicious_domain = (
         normalized_domain.endswith((".ru", ".zip", ".tk"))
@@ -314,7 +320,9 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
         warnings.append(f"sender domain looks suspicious: {sender_domain}")
     return {
         "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
+        "is_phishing": bool(
+            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
+        ),
         "risk_score": risk_score,
         "warnings": warnings,
     }
@@ -339,7 +347,15 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
+    negative_terms = {
+        "disappointed",
+        "urgent",
+        "issue",
+        "problem",
+        "bad",
+        "불만",
+        "문제",
+    }
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -533,6 +549,7 @@ registry.register(
     tone_analyzer_handler,
 )
 
+
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -544,6 +561,7 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
+
 
 registry.register(
     ToolInfo(
@@ -597,7 +615,6 @@ registry.register(
     base64_decoder_handler,
 )
 
-
 registry.register(
     ToolInfo(
         code="email_translator",
@@ -642,6 +659,116 @@ registry.register(
     sentiment_analyzer_handler,
 )
 
+
+async def pii_masker_handler(params: Dict[str, Any]) -> Any:
+    text = params.get("text", "")
+    masked_text = text
+
+    email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    masked_text = re.sub(email_pattern, "[MASKED]", masked_text)
+
+    phone_pattern = r"01[016789]-?\d{3,4}-?\d{4}"
+    masked_text = re.sub(phone_pattern, "[MASKED]", masked_text)
+
+    rrn_pattern = r"\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[-]?\d{7}"
+    masked_text = re.sub(rrn_pattern, "[MASKED]", masked_text)
+
+    return {
+        "masked_text": masked_text,
+        "original_length": len(text),
+        "masked_length": len(masked_text),
+    }
+
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스커 (PII Masker)",
+        description="텍스트 내의 이메일, 전화번호, 주민등록번호 등 민감한 개인정보를 [MASKED] 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
+
+
+async def profanity_filter_handler(params: dict[str, Any]) -> Any:
+    text = params.get("text", "")
+
+    # 예시 비속어 목록 (실제 환경에서는 더 방대한 DB 사용)
+    profanity_list = [
+        "개새끼",
+        "씨발",
+        "미친",
+        "존나",
+        "병신",
+        "지랄",
+        "fuck",
+        "shit",
+        "bitch",
+        "asshole",
+    ]
+
+    filtered_text = text
+    has_profanity = False
+
+    for word in profanity_list:
+        if word in filtered_text.lower():
+            has_profanity = True
+            # 대소문자 구분 없이 대체하기 위해 정규식 사용
+            pattern = re.compile(re.escape(word), re.IGNORECASE)
+            filtered_text = pattern.sub("***", filtered_text)
+
+    return {"filtered_text": filtered_text, "has_profanity": has_profanity}
+
+
+registry.register(
+    ToolInfo(
+        code="profanity_filter",
+        name="비속어 필터 (Profanity Filter)",
+        description="텍스트 내의 비속어를 검출하고 ***로 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    profanity_filter_handler,
+)
+
+
+async def link_safety_verifier_handler(params: dict[str, Any]) -> Any:
+    url = params.get("url", "")
+
+    is_https = url.startswith("https://")
+    has_suspicious_domain = False
+
+    normalized_url = url.lower()
+    suspicious_domains = [".ru", ".tk", ".zip", ".xyz", "free-", "login-", "secure-"]
+    for domain in suspicious_domains:
+        if domain in normalized_url:
+            has_suspicious_domain = True
+            break
+
+    risk_level = "Low"
+    if not is_https or has_suspicious_domain:
+        risk_level = "High" if not is_https and has_suspicious_domain else "Medium"
+
+    return {
+        "is_https": is_https,
+        "has_suspicious_domain": has_suspicious_domain,
+        "risk_level": risk_level,
+    }
+
+
+registry.register(
+    ToolInfo(
+        code="link_safety_verifier",
+        name="링크 안전성 검증기 (Link Safety Verifier)",
+        description="전달된 URL의 HTTPS 여부와 의심스러운 도메인을 검사하여 위험도를 평가합니다.",
+        category="보안",
+        parameters={"url": "string"},
+    ),
+    link_safety_verifier_handler,
+)
+
 registry.register(
     ToolInfo(
         code="grammar_checker",
@@ -652,7 +779,6 @@ registry.register(
     ),
     grammar_checker_handler,
 )
-
 
 ANALYSIS_TEXT_MAX_CHARS = 100_000
 _ANALYSIS_TOKEN_PATTERN = re.compile(r"[^\W_]+(?:['’][^\W_]+)?", re.UNICODE)
