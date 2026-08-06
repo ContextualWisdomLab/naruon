@@ -26,59 +26,72 @@ def _replace_once(source: str, old: str, new: str, *, label: str) -> str:
     return source.replace(old, new, 1)
 
 
+def _indented(value: str, spaces: int) -> str:
+    """Indent a dedented source block while preserving one trailing newline."""
+    prefix = " " * spaces
+    lines = value.strip("\n").splitlines()
+    return "\n".join(f"{prefix}{line}" if line else line for line in lines) + "\n"
+
+
 def _repair_source_registry_lifecycle() -> None:
     """Key source state to the active email without synchronous effect resets."""
     source = EMAIL_DETAIL.read_text(encoding="utf-8")
-    old_state = dedent(
-        '''
-          const [writebackSources, setWritebackSources] = useState<CalendarWritebackSource[]>([]);
-          const [selectedWritebackSourceId, setSelectedWritebackSourceId] = useState('');
-          const [sourceLoadStatus, setSourceLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
-        '''
+    old_state = _indented(
+        dedent(
+            '''
+            const [writebackSources, setWritebackSources] = useState<CalendarWritebackSource[]>([]);
+            const [selectedWritebackSourceId, setSelectedWritebackSourceId] = useState('');
+            const [sourceLoadStatus, setSourceLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+            '''
+        ),
+        2,
     )
-    new_state = dedent(
-        '''
-          type CalendarSourceLoadStatus = 'idle' | 'loading' | 'ready' | 'error';
-          type CalendarSourceState = {
-            contextKey: string;
-            sources: CalendarWritebackSource[];
-            selectedSourceId: string;
-            status: CalendarSourceLoadStatus;
-          };
-          const actionItemCount = llmData?.action_items.length ?? 0;
-          const sourceContextIsActionable = email?.id === emailId && actionItemCount > 0;
-          const sourceContextKey = `${emailId ?? 'none'}:${email?.id ?? 'none'}:${sourceContextIsActionable ? 'actionable' : 'idle'}`;
-          const [loadedCalendarSourceState, setLoadedCalendarSourceState] = useState<CalendarSourceState>(() => ({
-            contextKey: sourceContextKey,
-            sources: [],
-            selectedSourceId: '',
-            status: sourceContextIsActionable ? 'loading' : 'idle',
-          }));
-          const calendarSourceState: CalendarSourceState = loadedCalendarSourceState.contextKey === sourceContextKey
-            ? loadedCalendarSourceState
-            : {
-                contextKey: sourceContextKey,
-                sources: [],
-                selectedSourceId: '',
-                status: sourceContextIsActionable ? 'loading' : 'idle',
-              };
-          const writebackSources = calendarSourceState.sources;
-          const selectedWritebackSourceId = calendarSourceState.selectedSourceId;
-          const sourceLoadStatus = calendarSourceState.status;
-          const setSelectedWritebackSourceId = useCallback((selectedSourceId: string) => {
-            setLoadedCalendarSourceState((current) => {
-              const activeState = current.contextKey === sourceContextKey
-                ? current
-                : {
-                    contextKey: sourceContextKey,
-                    sources: [],
-                    selectedSourceId: '',
-                    status: sourceContextIsActionable ? 'loading' as const : 'idle' as const,
-                  };
-              return { ...activeState, selectedSourceId };
-            });
-          }, [sourceContextIsActionable, sourceContextKey]);
-        '''
+    new_state = _indented(
+        dedent(
+            '''
+            type CalendarSourceLoadStatus = 'idle' | 'loading' | 'ready' | 'error';
+            type CalendarSourceState = {
+              contextKey: string;
+              sources: CalendarWritebackSource[];
+              selectedSourceId: string;
+              status: CalendarSourceLoadStatus;
+            };
+            const actionItemCount = llmData?.action_items.length ?? 0;
+            const sourceContextIsActionable = email?.id === emailId && actionItemCount > 0;
+            const sourceContextKey = `${emailId ?? 'none'}:${email?.id ?? 'none'}:${sourceContextIsActionable ? 'actionable' : 'idle'}`;
+            const [loadedCalendarSourceState, setLoadedCalendarSourceState] = useState<CalendarSourceState>(() => ({
+              contextKey: sourceContextKey,
+              sources: [],
+              selectedSourceId: '',
+              status: sourceContextIsActionable ? 'loading' : 'idle',
+            }));
+            const calendarSourceState: CalendarSourceState = loadedCalendarSourceState.contextKey === sourceContextKey
+              ? loadedCalendarSourceState
+              : {
+                  contextKey: sourceContextKey,
+                  sources: [],
+                  selectedSourceId: '',
+                  status: sourceContextIsActionable ? 'loading' : 'idle',
+                };
+            const writebackSources = calendarSourceState.sources;
+            const selectedWritebackSourceId = calendarSourceState.selectedSourceId;
+            const sourceLoadStatus = calendarSourceState.status;
+            const setSelectedWritebackSourceId = useCallback((selectedSourceId: string) => {
+              setLoadedCalendarSourceState((current) => {
+                const activeState = current.contextKey === sourceContextKey
+                  ? current
+                  : {
+                      contextKey: sourceContextKey,
+                      sources: [],
+                      selectedSourceId: '',
+                      status: sourceContextIsActionable ? 'loading' as const : 'idle' as const,
+                    };
+                return { ...activeState, selectedSourceId };
+              });
+            }, [sourceContextIsActionable, sourceContextKey]);
+            '''
+        ),
+        2,
     )
     source = _replace_once(
         source,
@@ -87,80 +100,86 @@ def _repair_source_registry_lifecycle() -> None:
         label="calendar source keyed state",
     )
 
-    old_effect = dedent(
-        '''
-          useEffect(() => {
-            let isMounted = true;
-            const actionItemCount = llmData?.action_items.length ?? 0;
-            setWritebackSources([]);
-            setSelectedWritebackSourceId('');
+    old_effect = _indented(
+        dedent(
+            '''
+            useEffect(() => {
+              let isMounted = true;
+              const actionItemCount = llmData?.action_items.length ?? 0;
+              setWritebackSources([]);
+              setSelectedWritebackSourceId('');
 
-            if (emailId === null || actionItemCount === 0) {
-              setSourceLoadStatus('idle');
+              if (emailId === null || actionItemCount === 0) {
+                setSourceLoadStatus('idle');
+                return () => {
+                  isMounted = false;
+                };
+              }
+
+              setSourceLoadStatus('loading');
+              void apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources')
+                .then((sources) => {
+                  if (!isMounted) return;
+                  if (!Array.isArray(sources)) {
+                    throw new Error('Invalid calendar source registry response');
+                  }
+                  setWritebackSources(sources.filter(isCustomerOwnedWritableSource));
+                  setSelectedWritebackSourceId('');
+                  setSourceLoadStatus('ready');
+                })
+                .catch(() => {
+                  if (!isMounted) return;
+                  setWritebackSources([]);
+                  setSelectedWritebackSourceId('');
+                  setSourceLoadStatus('error');
+                });
+
               return () => {
                 isMounted = false;
               };
-            }
-
-            setSourceLoadStatus('loading');
-            void apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources')
-              .then((sources) => {
-                if (!isMounted) return;
-                if (!Array.isArray(sources)) {
-                  throw new Error('Invalid calendar source registry response');
-                }
-                setWritebackSources(sources.filter(isCustomerOwnedWritableSource));
-                setSelectedWritebackSourceId('');
-                setSourceLoadStatus('ready');
-              })
-              .catch(() => {
-                if (!isMounted) return;
-                setWritebackSources([]);
-                setSelectedWritebackSourceId('');
-                setSourceLoadStatus('error');
-              });
-
-            return () => {
-              isMounted = false;
-            };
-          }, [emailId, llmData]);
-        '''
+            }, [emailId, llmData]);
+            '''
+        ),
+        2,
     )
-    new_effect = dedent(
-        '''
-          useEffect(() => {
-            if (!sourceContextIsActionable) return;
+    new_effect = _indented(
+        dedent(
+            '''
+            useEffect(() => {
+              if (!sourceContextIsActionable) return;
 
-            let isMounted = true;
-            const requestedContextKey = sourceContextKey;
-            void apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources')
-              .then((sources) => {
-                if (!isMounted) return;
-                if (!Array.isArray(sources)) {
-                  throw new Error('Invalid calendar source registry response');
-                }
-                setLoadedCalendarSourceState({
-                  contextKey: requestedContextKey,
-                  sources: sources.filter(isCustomerOwnedWritableSource),
-                  selectedSourceId: '',
-                  status: 'ready',
+              let isMounted = true;
+              const requestedContextKey = sourceContextKey;
+              void apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources')
+                .then((sources) => {
+                  if (!isMounted) return;
+                  if (!Array.isArray(sources)) {
+                    throw new Error('Invalid calendar source registry response');
+                  }
+                  setLoadedCalendarSourceState({
+                    contextKey: requestedContextKey,
+                    sources: sources.filter(isCustomerOwnedWritableSource),
+                    selectedSourceId: '',
+                    status: 'ready',
+                  });
+                })
+                .catch(() => {
+                  if (!isMounted) return;
+                  setLoadedCalendarSourceState({
+                    contextKey: requestedContextKey,
+                    sources: [],
+                    selectedSourceId: '',
+                    status: 'error',
+                  });
                 });
-              })
-              .catch(() => {
-                if (!isMounted) return;
-                setLoadedCalendarSourceState({
-                  contextKey: requestedContextKey,
-                  sources: [],
-                  selectedSourceId: '',
-                  status: 'error',
-                });
-              });
 
-            return () => {
-              isMounted = false;
-            };
-          }, [sourceContextIsActionable, sourceContextKey]);
-        '''
+              return () => {
+                isMounted = false;
+              };
+            }, [sourceContextIsActionable, sourceContextKey]);
+            '''
+        ),
+        2,
     )
     source = _replace_once(
         source,
@@ -169,30 +188,36 @@ def _repair_source_registry_lifecycle() -> None:
         label="calendar source asynchronous effect",
     )
 
-    old_reset = dedent(
-        '''
-              setIsSyncing(false);
-              setIsCreatingTask(false);
-              setSyncStatus(null);
-              setWritebackSources([]);
-              setSelectedWritebackSourceId('');
-              setSourceLoadStatus('idle');
-              setTaskStatus(null);
-        '''
+    old_reset = _indented(
+        dedent(
+            '''
+            setIsSyncing(false);
+            setIsCreatingTask(false);
+            setSyncStatus(null);
+            setWritebackSources([]);
+            setSelectedWritebackSourceId('');
+            setSourceLoadStatus('idle');
+            setTaskStatus(null);
+            '''
+        ),
+        6,
     )
-    new_reset = dedent(
-        '''
-              setIsSyncing(false);
-              setIsCreatingTask(false);
-              setSyncStatus(null);
-              setLoadedCalendarSourceState({
-                contextKey: '',
-                sources: [],
-                selectedSourceId: '',
-                status: 'idle',
-              });
-              setTaskStatus(null);
-        '''
+    new_reset = _indented(
+        dedent(
+            '''
+            setIsSyncing(false);
+            setIsCreatingTask(false);
+            setSyncStatus(null);
+            setLoadedCalendarSourceState({
+              contextKey: '',
+              sources: [],
+              selectedSourceId: '',
+              status: 'idle',
+            });
+            setTaskStatus(null);
+            '''
+        ),
+        6,
     )
     source = _replace_once(
         source,
