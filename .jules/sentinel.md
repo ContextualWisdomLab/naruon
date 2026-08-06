@@ -129,3 +129,7 @@
 **Vulnerability:** The URL validation logic correctly blocked non-global IP addresses and `localhost`, but failed to block internal domain extensions such as `.internal` or `.local` (or exact matches for `internal`). This could allow attackers to bypass SSRF protections by resolving these internal top-level domains.
 **Learning:** Checking for `localhost` alone is insufficient to prevent SSRF against internal network resources, as modern environments and protocols utilize `.internal` and `.local` domains for internal routing.
 **Prevention:** Always explicitly check and block domains matching `.internal`, `.local`, or `internal` (alongside `localhost`) when validating URLs for global reachability to prevent SSRF bypasses.
+## 2026-08-06 - Bandit False Positive on PyYAML SafeLoader Subclasses
+**Vulnerability:** Bandit incorrectly flags `yaml.load(..., Loader=UniqueKeyLoader)` as a Medium severity `B506` issue.
+**Learning:** Bandit statically detects any use of `yaml.load()` as a vulnerability, even if the provided `Loader` explicitly inherits from `yaml.SafeLoader` (like `class UniqueKeyLoader(yaml.SafeLoader)`). This is a known limitation of static analysis tools that do not evaluate class inheritance chains.
+**Prevention:** When creating custom YAML loaders that inherit from `SafeLoader`, explicitly suppress the `B506` warning with `# nosec B506` on the `yaml.load` call to prevent CI pipeline failures while maintaining actual safety.

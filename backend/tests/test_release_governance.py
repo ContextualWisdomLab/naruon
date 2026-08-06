@@ -391,7 +391,7 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
     duplicates: list[str] = []
     for workflow_path in governed_workflows:
         try:
-            yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
+            yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)  # nosec B506
         except AssertionError as exc:
             duplicates.append(f"{workflow_path.relative_to(REPO_ROOT)}: {exc}")
 
