@@ -15,7 +15,11 @@
 
 **Learning:** `dict.setdefault(key, []).append(value)` evaluates the empty-list default on every iteration, including when the key already exists. In grouping loops, `defaultdict(list)` avoids those transient unused list allocations while preserving insertion order.
 **Action:** Use `defaultdict(list)` when missing keys are intentionally initialized with lists. Keep `setdefault` when its eager-default behavior or an ordinary `dict` is part of the required contract, and benchmark before claiming a material end-to-end improvement.
-## 2025-02-12 - Wrap array rendering loops with useMemo
+## 2025-02-12 - Rejected Unmeasured useMemo Optimization for Component Arrays
 
-**Learning:** Mapping over arrays of properties inside a React functional component's render execution directly causes O(N) evaluations when unrelated state (like input queries or tab switches) updates the component.
-**Action:** Always wrap `.map()` calls that output elements in a `useMemo` block with exact prop array dependencies in large lists, especially if they are passed as props to avoid blocking the main thread on every re-render.
+**Learning:** An attempt was made to memoize inline array maps in `CalendarWeekView.tsx` and `CalendarCandidateView.tsx` using `useMemo` to prevent O(N) re-renders. However, this PR was rejected because:
+1. Memoizing JSX does not remove React reconciliation generally, retains element trees, and adds dependency bookkeeping overhead.
+2. `useMemo` only helps when each array reference remains unchanged across unrelated parent renders, which was not demonstrated.
+3. Unmeasured optimizations lacking Profiler traces, interaction latency, or frame evidence are premature.
+4. The previous rule to "always memoize mapped JSX" was an unsafe generalization.
+**Action:** Never apply `useMemo` to array mapping rendering paths blindly. Always profile the actual components first. If a real bottleneck exists, prefer stabilizing selectors/props, memoizing component boundaries, or virtualizing large ranges over micro-optimizing small component grids. Keep the simpler render path until Profiler evidence dictates otherwise.
