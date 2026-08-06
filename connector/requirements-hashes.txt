@@ -1,4 +1,7 @@
+# Hashes cover the PyPI source distribution and the CPython 3.14 manylinux x86_64 wheel.
 # Regenerate with:
-#   python3 -m pip download --only-binary=:all: --no-deps --platform manylinux_2_28_x86_64 --python-version 314 --implementation cp --abi cp314 websockets==16.1
-websockets==16.1 \
-    --hash=sha256:8e9c4e369fc181b2d41a99e01477215cecdc8546a39f7d41a59cc0a7065a0b09
+#   python3 -m pip download --no-deps --no-binary=:all: websockets==17.0.1
+#   python3 -m pip download --only-binary=:all: --no-deps --platform manylinux_2_28_x86_64 --python-version 314 --implementation cp --abi cp314 websockets==17.0.1
+websockets==17.0.1 \
+    --hash=sha256:5baa9bc0dfbae8c507e51c8cf1b6d4628086f7a87bbd3a9952bd5f035451f1cc \
+    --hash=sha256:72d7f2a5aeb4e82daa4ee18f125b4277f427033359be5c745ad709608446cc2c
