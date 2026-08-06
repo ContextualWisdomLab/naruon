@@ -1,4 +1,4 @@
-name: Finalize PR 1245 calendar source repair v3
+name: Finalize PR 1245 calendar source repair
 
 on:
   push:
@@ -6,12 +6,13 @@ on:
       - fix/email-detail-responsive-surface-maintainer
     paths:
       - .github/workflows/finalize-pr1245-calendar-source-v3.yml
+      - scripts/ci/finalize_pr1245_calendar_source_repair.py
 
 permissions:
   contents: read
 
 concurrency:
-  group: finalize-pr1245-calendar-source-v3
+  group: finalize-pr1245-calendar-source
   cancel-in-progress: false
 
 env:
@@ -32,7 +33,14 @@ jobs:
       - name: Harden runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            registry.npmjs.org:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
 
       - name: Checkout exact trigger without persisted credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,72 +63,43 @@ jobs:
           cd frontend
           pnpm install --frozen-lockfile
 
-      - name: Materialize the reviewed source-confirmation boundary if required
+      - name: Verify the reviewed product contract is red for the expected reason
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
-          run_focused() {
-            (
-              cd frontend
-              pnpm exec vitest run \
-                src/components/EmailDetail.calendar-writeback.test.tsx \
-                src/components/EmailDetail.test.tsx
-            )
-          }
-
-          if ! run_focused; then
-            test -f scripts/ci/apply_pr1245_calendar_source_repair.py
-            python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("scripts/ci/apply_pr1245_calendar_source_repair.py")
-          source = path.read_text(encoding="utf-8")
-
-          old_render = '    render_action_items = "  const actionItems = llmData?.action_items ?? [];\\n"\n'
-          new_render = (
-              '    render_action_items = (\n'
-              '        "  const confidencePercent = toConfidencePercent(llmData?.confidence);\\n"\n'
-              '        "  const actionItems = llmData?.action_items ?? [];\\n"\n'
-              '    )\n'
-          )
-          if old_render in source:
-              source = source.replace(old_render, new_render, 1)
-
-          start_marker = "    conflict_action_end = _block(\n"
-          end_marker = '        label="meeting source confirmation panel",\n    )\n'
-          if start_marker in source:
-              start = source.index(start_marker)
-              end = source.index(end_marker, start) + len(end_marker)
-              replacement = '''    conflict_action_end = (
-              '                  {isSyncing ? "조율 중" : "일정 조율"}\\n'
-              '                </Button>\\n'
-              '              </div>\\n'
-              '            </div>\\n'
-              '          )}\\n'
-          )
-          source = _replace_once(
-              source,
-              conflict_action_end,
-              (
-                  '                  {isSyncing ? "조율 중" : "일정 조율"}\\n'
-                  '                </Button>\\n'
-                  '              </div>\\n'
-                  '              <div className="mt-3">{calendarSourceSelector}</div>\\n'
-                  '            </div>\\n'
-                  '          )}\\n'
-              ),
-              label="meeting source confirmation panel",
-          )
-'''
-              source = source[:start] + replacement + source[end:]
-
-          path.write_text(source, encoding="utf-8")
-          PY
-            python3 scripts/ci/apply_pr1245_calendar_source_repair.py
-            run_focused
+          set +e
+          (
+            cd frontend
+            pnpm exec vitest run src/components/EmailDetail.calendar-writeback.test.tsx
+          ) >"${RUNNER_TEMP}/pr1245-red.log" 2>&1
+          status=$?
+          set -e
+          cat "${RUNNER_TEMP}/pr1245-red.log"
+          test "$status" -ne 0
+          grep -F "requires an explicit server-authorized source" "${RUNNER_TEMP}/pr1245-red.log"
+          grep -F "selectCalendarSource" "${RUNNER_TEMP}/pr1245-red.log"
+          if grep -Eq '(Timeout|Fatal|Warn|Denied)' "${RUNNER_TEMP}/pr1245-red.log"; then
+            echo '::error::The red-stage evidence contains a forbidden failure mode.'
+            exit 1
           fi
+
+      - name: Materialize the reviewed source-confirmation boundary
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python3 -m py_compile \
+            scripts/ci/finalize_pr1245_calendar_source_repair.py \
+            scripts/ci/apply_pr1245_calendar_source_repair.py
+          python3 scripts/ci/finalize_pr1245_calendar_source_repair.py
           git diff --check
 
-      - name: Verify product trust and UX boundaries
+      - name: Verify focused product behavior is green
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          cd frontend
+          pnpm exec vitest run \
+            src/components/EmailDetail.calendar-writeback.test.tsx \
+            src/components/EmailDetail.test.tsx
+
+      - name: Verify durable trust and UX boundaries
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           python3 - <<'PY'
@@ -153,10 +132,11 @@ jobs:
             .github/workflows/reopen-pr1245-calendar-source.yml \
             .github/workflows/finalize-pr1245-calendar-source-v2.yml \
             .github/workflows/finalize-pr1245-calendar-source-v3.yml \
-            scripts/ci/apply_pr1245_calendar_source_repair.py
+            scripts/ci/apply_pr1245_calendar_source_repair.py \
+            scripts/ci/finalize_pr1245_calendar_source_repair.py
           git diff --check
 
-      - name: Verify complete frontend acceptance on durable final tree
+      - name: Verify complete frontend acceptance on the durable tree
         shell: bash --noprofile --norc -e -o pipefail {0}
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -167,9 +147,6 @@ jobs:
           NEXT_STATIC_GENERATION_MIN_PAGES_PER_WORKER: "100"
         run: |
           cd frontend
-          pnpm exec vitest run \
-            src/components/EmailDetail.calendar-writeback.test.tsx \
-            src/components/EmailDetail.test.tsx
           pnpm test
           pnpm run typecheck
           pnpm run lint
@@ -181,9 +158,10 @@ jobs:
           test ! -e .github/workflows/finalize-pr1245-calendar-source-v2.yml
           test ! -e .github/workflows/finalize-pr1245-calendar-source-v3.yml
           test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
+          test ! -e scripts/ci/finalize_pr1245_calendar_source_repair.py
           git diff --check
 
-      - name: Publish exact verified durable product tree
+      - name: Publish the exact verified durable product tree
         env:
           EXPECTED_HEAD: ${{ github.sha }}
           SOURCE_BRANCH: fix/email-detail-responsive-surface-maintainer
