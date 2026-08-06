@@ -306,7 +306,7 @@ async def get_emails(
         select(Email)
         .join(ranked_heads, ranked_heads.c.head_id == Email.id)
         .where(ranked_heads.c.thread_rank == 1)
-        .order_by(Email.date.desc())
+        .order_by(Email.date.desc(), Email.id.desc())
         .limit(head_candidate_limit)
     )
     head_emails = list(result.scalars().all())
@@ -768,4 +768,4 @@ async def send_email_endpoint(
         logger.error(f"Error sending email: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail="An internal error occurred while sending the email"
-        )
+        ) from e
