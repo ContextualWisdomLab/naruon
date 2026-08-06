@@ -1,3 +1,0 @@
-The CI failed in the Strix penetration test step with:
-`Tool cd not found in agent strix`
-This is caused by an error in the strix penetration testing agent when it attempted to call the `cd` tool, which is not available to it. We need to check if there is an `AGENTS.md` file or other configuration that tells the `strix` agent how to navigate or perform operations.
