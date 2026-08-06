@@ -44,6 +44,10 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Enable pinned package manager shim
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: corepack enable pnpm
+
       - name: Set up Node.js 24
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -54,7 +58,6 @@ jobs:
       - name: Install frozen frontend dependencies
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
-          corepack enable pnpm
           cd frontend
           pnpm install --frozen-lockfile
 
