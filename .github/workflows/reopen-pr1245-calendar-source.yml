@@ -41,7 +41,7 @@ jobs:
       - name: Verify exact RED lineage and bounded reopen trigger
         env:
           RED_HEAD: e086f752f8a5640c36ba1405524233c79ff9b4a7
-          PRIOR_HEAD: 4ef7082b837fbf1ba1fb2bb9d5c66ffdb74d33ff
+          PRIOR_HEAD: 1dcd1b830c7cd36abcbc1facd951f66079b37717
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
@@ -81,6 +81,22 @@ jobs:
       - name: Apply reviewed source-confirmation repair
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/ci/apply_pr1245_calendar_source_repair.py")
+          source = path.read_text(encoding="utf-8")
+          old = '    render_action_items = "  const actionItems = llmData?.action_items ?? [];\\n"\n'
+          new = (
+              '    render_action_items = (\n'
+              '        "  const confidencePercent = toConfidencePercent(llmData?.confidence);\\n"\n'
+              '        "  const actionItems = llmData?.action_items ?? [];\\n"\n'
+              '    )\n'
+          )
+          if source.count(old) != 1:
+              raise SystemExit("expected one rendered action-item marker declaration")
+          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          PY
           python3 scripts/ci/apply_pr1245_calendar_source_repair.py
           test ! -e .github/workflows/reopen-pr1245-calendar-source.yml
           test ! -e .github/workflows/repair-pr1245-calendar-source.yml
