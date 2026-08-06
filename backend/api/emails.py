@@ -264,6 +264,47 @@ class EmailFileImportResponse(BaseModel):
     audit_event: Literal["email.file_import.completed"]
 
 
+
+async def _fetch_thread_metadata(
+    db: AsyncSession,
+    owner_filters: tuple,
+    grouped: dict,
+    is_sent_folder: bool,
+    user_addresses: set[str],
+) -> tuple[dict, dict, dict]:
+    reply_counts = defaultdict(int)
+    thread_messages = defaultdict(list)
+    has_sent_message = {}
+    if not grouped:
+        return reply_counts, thread_messages, has_sent_message
+
+    thread_lookup: set[str] = set()
+    for group_key in grouped:
+        thread_lookup.update(thread_lookup_values(group_key))
+    messages_result = await db.execute(
+        select(Email)
+        .where(
+            *owner_filters,
+            or_(
+                Email.thread_id.in_(thread_lookup),
+                Email.message_id.in_(thread_lookup),
+            ),
+        )
+        .order_by(Email.date.desc())
+    )
+    for email in messages_result.scalars().all():
+        group_key = canonical_thread_key(email)
+        if group_key not in grouped:
+            continue
+        thread_messages[group_key].append(email)
+        reply_counts[group_key] += 1
+        if is_sent_folder and group_key not in has_sent_message:
+            if message_is_from_user(email, user_addresses):
+                has_sent_message[group_key] = True
+
+    return reply_counts, thread_messages, has_sent_message
+
+
 @router.get("", response_model=dict[str, list[EmailListItem]])
 async def get_emails(
     limit: int = Query(default=50, ge=1, le=200),
@@ -320,34 +361,9 @@ async def get_emails(
         if group_key not in grouped:
             grouped[group_key] = email
 
-    reply_counts = defaultdict(int)
-    thread_messages = defaultdict(list)
-    has_sent_message = {}
-
-    if grouped:
-        thread_lookup: set[str] = set()
-        for group_key in grouped:
-            thread_lookup.update(thread_lookup_values(group_key))
-        messages_result = await db.execute(
-            select(Email)
-            .where(
-                *owner_filters,
-                or_(
-                    Email.thread_id.in_(thread_lookup),
-                    Email.message_id.in_(thread_lookup),
-                ),
-            )
-            .order_by(Email.date.desc())
-        )
-        for email in messages_result.scalars().all():
-            group_key = canonical_thread_key(email)
-            if group_key not in grouped:
-                continue
-            thread_messages[group_key].append(email)
-            reply_counts[group_key] += 1
-            if is_sent_folder and group_key not in has_sent_message:
-                if message_is_from_user(email, user_addresses):
-                    has_sent_message[group_key] = True
+    reply_counts, thread_messages, has_sent_message = await _fetch_thread_metadata(
+        db, owner_filters, grouped, is_sent_folder, user_addresses
+    )
 
     if is_sent_folder:
         visible_groups = [
