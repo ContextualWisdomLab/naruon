@@ -19,6 +19,7 @@ from api.llm_providers import router as llm_providers_router
 from api.prompts import router as prompts_router
 from api.tasks import router as tasks_router
 from api.tools import router as tools_router
+from api.link_safety import register_link_safety_verifier
 from api.ontology import router as ontology_router
 from api.observability import router as observability_router
 from api.runner_ws import manager as runner_manager
@@ -48,6 +49,7 @@ newsdom_recognition_worker = NewsdomRecognitionWorker()
 provider_writeback_retry_worker = ProviderWritebackRetryWorker(
     runner_manager.dispatch_command,
 )
+register_link_safety_verifier()
 
 DISABLE_WORKERS = os.environ.get("DISABLE_BACKGROUND_WORKERS") == "1"
 PRIVATE_API_DEPENDENCIES = [Depends(get_auth_context)]
