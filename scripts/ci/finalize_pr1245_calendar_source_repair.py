@@ -1,8 +1,8 @@
 """Finalize the reviewed PR 1245 repair helper before executing it.
 
-This one-shot bridge corrects two exact, previously reviewed source anchors in
-the branch-local repair module, runs that module, and is removed by the
-verification workflow before the durable product commit is published.
+This one-shot bridge corrects exact, previously reviewed source anchors in the
+branch-local repair module, runs that module, and is removed by the verification
+workflow before the durable product commit is published.
 """
 
 from __future__ import annotations
@@ -70,7 +70,43 @@ def main() -> None:
         "        label=\"meeting source confirmation panel\",\n"
         "    )\n"
     )
-    REPAIR_SCRIPT.write_text(source[:start] + replacement + source[end:], encoding="utf-8")
+    source = source[:start] + replacement + source[end:]
+
+    ambiguous_confirmation = (
+        "    source = _replace_once(\n"
+        "        source,\n"
+        "        \"    expect(container.textContent).toContain(\"\n"
+        "        \"\\\"1개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.\\\");\\n\",\n"
+        "        \"    expect(container.textContent).toContain(\"\n"
+        "        \"\\\"1개 일정 반영 의도를 Fastmail 원본에 요청했습니다.\\\");\\n\",\n"
+        "        label=\"responsive-test source confirmation status\",\n"
+        "    )\n"
+    )
+    deterministic_confirmation = (
+        "    confirmation_before = (\n"
+        "        \"    expect(container.textContent).toContain(\"\n"
+        "        \"\\\"1개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.\\\");\\n\"\n"
+        "    )\n"
+        "    confirmation_after = (\n"
+        "        \"    expect(container.textContent).toContain(\"\n"
+        "        \"\\\"1개 일정 반영 의도를 Fastmail 원본에 요청했습니다.\\\");\\n\"\n"
+        "    )\n"
+        "    confirmation_count = source.count(confirmation_before)\n"
+        "    if confirmation_count != 2:\n"
+        "        raise RuntimeError(\n"
+        "            \"expected exactly two responsive-test source confirmation \"\n"
+        "            f\"status fragments, observed {confirmation_count}\"\n"
+        "        )\n"
+        "    source = source.replace(confirmation_before, confirmation_after)\n"
+    )
+    source = _replace_once(
+        source,
+        ambiguous_confirmation,
+        deterministic_confirmation,
+        label="responsive confirmation multiplicity repair",
+    )
+
+    REPAIR_SCRIPT.write_text(source, encoding="utf-8")
     runpy.run_path(str(REPAIR_SCRIPT), run_name="__main__")
 
 
