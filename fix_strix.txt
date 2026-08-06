@@ -1,0 +1,6 @@
+The error `Tool cd not found in agent strix` occurred during the Strix penetration test.
+Looking at the error trace, this happens when Strix processes a response from the LLM model. It seems the model tried to call a tool named `cd`, which is not registered with the agent.
+Since Strix is an external package (installed in `.venv`), and the CI runs it via `strix` command, the best way to fix this is to configure the agent's prompts or instructions to not use the `cd` tool, or ensure the test scope doesn't trigger the need for `cd`.
+However, we can't directly modify the `strix` package's source code easily if it's installed via pip during CI.
+
+Wait, Strix is configured via `strix` command. Let's see if there is any Strix configuration in the repository.
