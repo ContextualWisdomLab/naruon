@@ -12,8 +12,12 @@ ARG OCI_IMAGE_LICENSES="LicenseRef-Naruon-Proprietary"
 ARG OCI_IMAGE_REF_NAME=""
 ARG OCI_IMAGE_TITLE="naruon frontend"
 ARG OCI_IMAGE_DESCRIPTION="Naruon Next.js frontend runtime image"
-ARG OCI_IMAGE_BASE_DIGEST="sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583"
-ARG OCI_IMAGE_BASE_NAME="docker.io/library/node:26-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583"
+ARG OCI_IMAGE_BASE_DIGEST
+ARG OCI_IMAGE_BASE_NAME
+
+# The release workflow derives these values from this file's exact FROM line.
+# An omitted value fails the build instead of publishing a stale annotation.
+RUN test -n "$OCI_IMAGE_BASE_DIGEST" && test -n "$OCI_IMAGE_BASE_NAME"
 
 LABEL org.opencontainers.image.created="${OCI_IMAGE_CREATED}" \
       org.opencontainers.image.authors="${OCI_IMAGE_AUTHORS}" \
