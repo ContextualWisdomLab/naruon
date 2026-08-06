@@ -737,13 +737,26 @@ registry.register(
 async def link_safety_verifier_handler(params: dict[str, Any]) -> Any:
     url = params.get("url", "")
 
+    if ".." in url or "//" in url.split("://")[-1]:
+        return {
+            "is_https": False,
+            "has_suspicious_domain": True,
+            "risk_level": "High",
+            "warnings": ["Path traversal or malformed URL detected"],
+        }
+
     is_https = url.startswith("https://")
     has_suspicious_domain = False
 
-    normalized_url = url.lower()
+    try:
+        parsed_url = urllib.parse.urlparse(url)
+        normalized_domain = parsed_url.hostname.lower() if parsed_url.hostname else ""
+    except Exception:
+        normalized_domain = ""
+
     suspicious_domains = [".ru", ".tk", ".zip", ".xyz", "free-", "login-", "secure-"]
     for domain in suspicious_domains:
-        if domain in normalized_url:
+        if domain in normalized_domain:
             has_suspicious_domain = True
             break
 
