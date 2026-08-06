@@ -1,0 +1,144 @@
+name: Reopen PR 1245 calendar source repair
+
+on:
+  pull_request:
+    types: [reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reopen-pr1245-calendar-source
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  repair:
+    if: >-
+      github.repository == 'ContextualWisdomLab/naruon' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'fix/email-detail-responsive-surface-maintainer'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Check out exact reopened head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact RED lineage and bounded reopen trigger
+        env:
+          RED_HEAD: e086f752f8a5640c36ba1405524233c79ff9b4a7
+          PRIOR_HEAD: 05b9122e6bcfaa5c20c5e413d6c84ff30ff3aa1f
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test "$(git rev-parse HEAD^)" = "$PRIOR_HEAD"
+          git merge-base --is-ancestor "$RED_HEAD" HEAD
+          mapfile -t trigger_delta < <(git diff --name-only "$PRIOR_HEAD" HEAD)
+          test "${#trigger_delta[@]}" -eq 1
+          test "${trigger_delta[0]}" = ".github/workflows/reopen-pr1245-calendar-source.yml"
+          test -f scripts/ci/apply_pr1245_calendar_source_repair.py
+          test -f .github/workflows/repair-pr1245-calendar-source.yml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frozen frontend dependencies
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          corepack enable pnpm
+          cd frontend
+          pnpm install --frozen-lockfile
+
+      - name: Preserve the exact failing product contract
+        shell: bash --noprofile --norc {0}
+        run: |
+          set -uo pipefail
+          cd frontend
+          pnpm exec vitest run src/components/EmailDetail.calendar-writeback.test.tsx \
+            >"${RUNNER_TEMP}/pr1245-red.log" 2>&1
+          status=$?
+          cat "${RUNNER_TEMP}/pr1245-red.log"
+          test "$status" -eq 1
+          grep -F '4 failed' "${RUNNER_TEMP}/pr1245-red.log"
+          grep -F 'expected null not to be null' "${RUNNER_TEMP}/pr1245-red.log"
+
+      - name: Apply reviewed source-confirmation repair
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python3 scripts/ci/apply_pr1245_calendar_source_repair.py
+          rm -f .github/workflows/reopen-pr1245-calendar-source.yml
+          test ! -e .github/workflows/reopen-pr1245-calendar-source.yml
+          test ! -e .github/workflows/repair-pr1245-calendar-source.yml
+          test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
+          git diff --check
+
+      - name: Verify focused and complete frontend behavior
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          NEXT_BUILD_CPUS: "2"
+          POSTCSS_WORKERS: "1"
+          DISABLE_POSTCSS_WORKERS: "true"
+        run: |
+          cd frontend
+          pnpm exec vitest run \
+            src/components/EmailDetail.calendar-writeback.test.tsx \
+            src/components/EmailDetail.test.tsx
+          pnpm test
+          pnpm run typecheck
+          pnpm run lint
+          pnpm run coverage
+          pnpm run build
+
+      - name: Verify durable final-tree boundaries
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test ! -e .github/workflows/reopen-pr1245-calendar-source.yml
+          test ! -e .github/workflows/repair-pr1245-calendar-source.yml
+          test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
+          grep -F 'role="region"' frontend/src/components/EmailDetail.tsx
+          grep -F 'aria-label="일정 원본 선택"' frontend/src/components/EmailDetail.tsx
+          grep -F 'target_source_id: selectedSource.source_id' frontend/src/components/EmailDetail.tsx
+          grep -F 'Promise.allSettled' frontend/src/components/EmailDetail.tsx
+          grep -F 'calendar_event_id: null' frontend/src/components/EmailDetail.tsx
+          grep -F 'source conflict' docs/doctoring/email-detail-responsive-action-surface.md
+          git diff --check
+
+      - name: Publish verified product commit
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          SOURCE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PUSH_TOKEN: ${{ github.token }}
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          remote_head="$(git ls-remote origin "refs/heads/${SOURCE_BRANCH}" | cut -f1)"
+          test "$remote_head" = "$EXPECTED_HEAD"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo '::error::No verified product change was produced.'; exit 1; }
+          git commit -m "fix(email-detail): require explicit calendar source"
+          auth_header="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth_header"
+          git -c http.extraheader="AUTHORIZATION: basic ${auth_header}" \
+            push --force-with-lease="refs/heads/${SOURCE_BRANCH}:${EXPECTED_HEAD}" \
+            origin "HEAD:refs/heads/${SOURCE_BRANCH}"
