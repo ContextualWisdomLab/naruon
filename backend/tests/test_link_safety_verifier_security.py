@@ -75,13 +75,20 @@ def _classify(url: str) -> dict[str, object]:
         "https://example.com/%2e%2e/private",
         "https:///hostless",
         "https://[malformed",
+        "https://example.com:99999/account",
+        "https://example.com:not-a-port/account",
     ],
 )
 def test_link_safety_verifier_rejects_malformed_or_traversal_urls(url: str) -> None:
-    """Encoded traversal and malformed HTTPS-looking inputs are never Low risk."""
+    """Traversal, malformed authority, and invalid ports fail closed."""
     result = _classify(url)
 
-    assert result["risk_level"] != "Low"
+    assert result == {
+        "is_https": False,
+        "has_suspicious_domain": True,
+        "risk_level": "High",
+        "warnings": ["Path traversal or malformed URL detected"],
+    }
 
 
 def test_link_safety_verifier_preserves_valid_https_classification() -> None:
