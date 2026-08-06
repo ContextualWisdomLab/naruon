@@ -129,6 +129,3 @@
 **Vulnerability:** The URL validation logic correctly blocked non-global IP addresses and `localhost`, but failed to block internal domain extensions such as `.internal` or `.local` (or exact matches for `internal`). This could allow attackers to bypass SSRF protections by resolving these internal top-level domains.
 **Learning:** Checking for `localhost` alone is insufficient to prevent SSRF against internal network resources, as modern environments and protocols utilize `.internal` and `.local` domains for internal routing.
 **Prevention:** Always explicitly check and block domains matching `.internal`, `.local`, or `internal` (alongside `localhost`) when validating URLs for global reachability to prevent SSRF bypasses.
-## 2024-05-27 - Reflected XSS in WebSocket Acknowledgment
-**Learning:** Returning unvalidated user input via WebSocket endpoints (e.g., `websocket.send_text(f"Naruon ack: {data}")`) introduces a Reflected XSS vulnerability, as malicious payloads can be executed by the client.
-**Action:** When confirming receipt of a message over a WebSocket, respond with a static acknowledgment string (e.g., `"Naruon ack"`) instead of reflecting the user's input, avoiding the need for complex sanitization.

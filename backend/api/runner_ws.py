@@ -470,7 +470,7 @@ async def runner_endpoint(websocket: WebSocket, token: str):
             await manager.touch(connection_key)
             if await manager.handle_runner_message(connection_key, data):
                 continue
-            await websocket.send_text("Naruon ack")
+            await websocket.send_text(f"Naruon ack: {data}")
     except WebSocketDisconnect:
         pass
     finally:

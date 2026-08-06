@@ -194,7 +194,7 @@ def test_runner_ws_accepts_signed_session_and_registered_token(monkeypatch):
             "/ws/runner/nrn_registered-token", headers=_valid_session_headers()
         ) as websocket:
             websocket.send_text("ping")
-            assert websocket.receive_text() == "Naruon ack"
+            assert websocket.receive_text() == "Naruon ack: ping"
             snapshot = runner_ws.manager.snapshot("org-acme", "workspace-org-acme")
             assert snapshot.connection_state == "connected"
             assert snapshot.active_connection_count == 1
