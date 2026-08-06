@@ -81,17 +81,23 @@ def thread_reply_candidate(
     thread_messages: list[Email],
     user_addresses: set[str],
     is_chronological: bool = False,
+    is_descending: bool = False,
 ) -> Email | None:
     if not user_addresses:
         return None
 
-    ordered_messages = (
-        reversed(thread_messages)
-        if is_chronological
-        else sorted(
-            thread_messages, key=lambda item: (item.date, item.id or 0), reverse=True
+    if is_descending:
+        ordered_messages = thread_messages
+    else:
+        ordered_messages = (
+            reversed(thread_messages)
+            if is_chronological
+            else sorted(
+                thread_messages,
+                key=lambda item: (item.date, item.id or 0),
+                reverse=True,
+            )
         )
-    )
 
     latest_external_date = None
     for message in ordered_messages:
@@ -114,9 +120,14 @@ def thread_reply_candidate(
 
 
 def thread_requires_reply(
-    thread_messages: list[Email], user_addresses: set[str]
+    thread_messages: list[Email], user_addresses: set[str], is_descending: bool = False
 ) -> bool:
-    return thread_reply_candidate(thread_messages, user_addresses) is not None
+    return (
+        thread_reply_candidate(
+            thread_messages, user_addresses, is_descending=is_descending
+        )
+        is not None
+    )
 
 
 async def check_missing_replies(

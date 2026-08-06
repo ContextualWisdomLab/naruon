@@ -15,3 +15,7 @@
 
 **Learning:** `dict.setdefault(key, []).append(value)` evaluates the empty-list default on every iteration, including when the key already exists. In grouping loops, `defaultdict(list)` avoids those transient unused list allocations while preserving insertion order.
 **Action:** Use `defaultdict(list)` when missing keys are intentionally initialized with lists. Keep `setdefault` when its eager-default behavior or an ordinary `dict` is part of the required contract, and benchmark before claiming a material end-to-end improvement.
+
+## 2025-02-12 - Eliminated O(N log N) Sorting in Reply Tracking Candidates
+**Learning:** In the email threading loop, lists were being reversed with `list(reversed(...))` to check for `requires_reply`. Then `thread_reply_candidate` would redundantly run an O(N log N) `sorted()` pass over the list. Reversing and re-sorting already ordered lists from the database is unnecessary CPU and memory overhead.
+**Action:** Always ensure database queries sort comprehensively (e.g. adding ID as a secondary sort tie-breaker). Then, pass sort direction flags (like `is_descending=True`) to internal helpers to allow them to bypass purely redundant in-memory reversing and sorting operations.
