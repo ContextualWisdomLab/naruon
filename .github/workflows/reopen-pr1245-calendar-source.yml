@@ -41,7 +41,7 @@ jobs:
       - name: Verify exact RED lineage and bounded reopen trigger
         env:
           RED_HEAD: e086f752f8a5640c36ba1405524233c79ff9b4a7
-          PRIOR_HEAD: 1dcd1b830c7cd36abcbc1facd951f66079b37717
+          PRIOR_HEAD: c6cb20356f14988b954b75a9c45c678886215d86
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
@@ -86,16 +86,77 @@ jobs:
 
           path = Path("scripts/ci/apply_pr1245_calendar_source_repair.py")
           source = path.read_text(encoding="utf-8")
-          old = '    render_action_items = "  const actionItems = llmData?.action_items ?? [];\\n"\n'
-          new = (
+
+          old_action_items = '    render_action_items = "  const actionItems = llmData?.action_items ?? [];\\n"\n'
+          new_action_items = (
               '    render_action_items = (\n'
               '        "  const confidencePercent = toConfidencePercent(llmData?.confidence);\\n"\n'
               '        "  const actionItems = llmData?.action_items ?? [];\\n"\n'
               '    )\n'
           )
-          if source.count(old) != 1:
+          if source.count(old_action_items) != 1:
               raise SystemExit("expected one rendered action-item marker declaration")
-          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          source = source.replace(old_action_items, new_action_items, 1)
+
+          conflict_start = source.index("    conflict_action_end = _block(\n")
+          conflict_end = source.index("\n    footer_button = _block(\n", conflict_start)
+          conflict_replacement = """    source = _replace_once(
+              source,
+              "                  {isSyncing ? \\\"조율 중\\\" : \\\"일정 조율\\\"}\\n"
+              "                </Button>\\n"
+              "              </div>\\n"
+              "            </div>\\n"
+              "          )}\\n",
+              "                  {isSyncing ? \\\"조율 중\\\" : \\\"일정 조율\\\"}\\n"
+              "                </Button>\\n"
+              "              </div>\\n"
+              "              <div className=\\\"mt-3\\\">{calendarSourceSelector}</div>\\n"
+              "            </div>\\n"
+              "          )}\\n",
+              label="meeting source confirmation panel",
+          )
+          """
+          source = source[:conflict_start] + conflict_replacement + source[conflict_end:]
+
+          footer_start = source.index("    footer_button = _block(\n")
+          footer_end = source.index("\n    action_card_body = _block(\n", footer_start)
+          footer_replacement = """    source = _replace_once(
+              source,
+              "                  <Button>\\n",
+              "                  <Button>\\n",
+              label="action-card button anchor preflight",
+          )
+          source = _replace_once(
+              source,
+              "                    disabled={isSyncing}\\n"
+              "                    aria-busy={isSyncing}\\n"
+              "                    className=\\\"h-9 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700\\\"\\n",
+              "                    disabled={isCalendarWritebackDisabled}\\n"
+              "                    aria-busy={isSyncing}\\n"
+              "                    className=\\\"h-9 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700\\\"\\n",
+              label="action-card calendar button",
+          )
+          """
+          source = source[:footer_start] + footer_replacement + source[footer_end:]
+
+          action_start = source.index("    action_card_body = _block(\n")
+          action_end = source.index("\n    EMAIL_DETAIL_PATH.write_text", action_start)
+          action_replacement = """    source = _replace_once(
+              source,
+              "          >\\n"
+              "            {llmData ? (\\n"
+              "              actionItems.length > 0 ? (\\n",
+              "          >\\n"
+              "            {!email.schedule_conflict && actionItems.length > 0 ? (\\n"
+              "              <div className=\\\"mb-3\\\">{calendarSourceSelector}</div>\\n"
+              "            ) : null}\\n"
+              "            {llmData ? (\\n"
+              "              actionItems.length > 0 ? (\\n",
+              label="non-conflict source confirmation panel",
+          )
+          """
+          source = source[:action_start] + action_replacement + source[action_end:]
+          path.write_text(source, encoding="utf-8")
           PY
           python3 scripts/ci/apply_pr1245_calendar_source_repair.py
           test ! -e .github/workflows/reopen-pr1245-calendar-source.yml
