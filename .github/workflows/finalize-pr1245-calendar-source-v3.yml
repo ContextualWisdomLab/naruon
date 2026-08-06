@@ -1,0 +1,207 @@
+name: Finalize PR 1245 calendar source repair v3
+
+on:
+  push:
+    branches:
+      - fix/email-detail-responsive-surface-maintainer
+    paths:
+      - .github/workflows/finalize-pr1245-calendar-source-v3.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finalize-pr1245-calendar-source-v3
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  finalize:
+    if: >-
+      github.repository == 'ContextualWisdomLab/naruon' &&
+      github.actor == 'seonghobae' &&
+      github.ref == 'refs/heads/fix/email-detail-responsive-surface-maintainer'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact trigger without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frozen frontend dependencies
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          corepack enable pnpm
+          cd frontend
+          pnpm install --frozen-lockfile
+
+      - name: Materialize the reviewed source-confirmation boundary if required
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          run_focused() {
+            (
+              cd frontend
+              pnpm exec vitest run \
+                src/components/EmailDetail.calendar-writeback.test.tsx \
+                src/components/EmailDetail.test.tsx
+            )
+          }
+
+          if ! run_focused; then
+            test -f scripts/ci/apply_pr1245_calendar_source_repair.py
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/ci/apply_pr1245_calendar_source_repair.py")
+          source = path.read_text(encoding="utf-8")
+
+          old_render = '    render_action_items = "  const actionItems = llmData?.action_items ?? [];\\n"\n'
+          new_render = (
+              '    render_action_items = (\n'
+              '        "  const confidencePercent = toConfidencePercent(llmData?.confidence);\\n"\n'
+              '        "  const actionItems = llmData?.action_items ?? [];\\n"\n'
+              '    )\n'
+          )
+          if old_render in source:
+              source = source.replace(old_render, new_render, 1)
+
+          start_marker = "    conflict_action_end = _block(\n"
+          end_marker = '        label="meeting source confirmation panel",\n    )\n'
+          if start_marker in source:
+              start = source.index(start_marker)
+              end = source.index(end_marker, start) + len(end_marker)
+              replacement = '''    conflict_action_end = (
+              '                  {isSyncing ? "조율 중" : "일정 조율"}\\n'
+              '                </Button>\\n'
+              '              </div>\\n'
+              '            </div>\\n'
+              '          )}\\n'
+          )
+          source = _replace_once(
+              source,
+              conflict_action_end,
+              (
+                  '                  {isSyncing ? "조율 중" : "일정 조율"}\\n'
+                  '                </Button>\\n'
+                  '              </div>\\n'
+                  '              <div className="mt-3">{calendarSourceSelector}</div>\\n'
+                  '            </div>\\n'
+                  '          )}\\n'
+              ),
+              label="meeting source confirmation panel",
+          )
+'''
+              source = source[:start] + replacement + source[end:]
+
+          path.write_text(source, encoding="utf-8")
+          PY
+            python3 scripts/ci/apply_pr1245_calendar_source_repair.py
+            run_focused
+          fi
+          git diff --check
+
+      - name: Verify product trust and UX boundaries
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path("frontend/src/components/EmailDetail.tsx").read_text(encoding="utf-8")
+          required = (
+              'role="region"',
+              'aria-label="첨부파일"',
+              'aria-label="일정 원본 선택"',
+              "target_source_id: selectedSource.source_id",
+              "Promise.allSettled",
+              "calendar_event_id: null",
+              "isCustomerOwnedWritableSource",
+              "sourceLoadStatus !== 'ready'",
+          )
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              raise SystemExit(f"calendar-source product boundary is incomplete: {missing}")
+          doctoring = Path("docs/doctoring/email-detail-responsive-action-surface.md").read_text(encoding="utf-8")
+          if "source conflict" not in doctoring.lower():
+              raise SystemExit("doctoring does not record source-conflict behavior")
+          PY
+
+      - name: Remove every PR 1245 one-shot writer and repair helper
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          rm -f \
+            .github/workflows/repair-pr1245-calendar-source.yml \
+            .github/workflows/reopen-pr1245-calendar-source.yml \
+            .github/workflows/finalize-pr1245-calendar-source-v2.yml \
+            .github/workflows/finalize-pr1245-calendar-source-v3.yml \
+            scripts/ci/apply_pr1245_calendar_source_repair.py
+          git diff --check
+
+      - name: Verify complete frontend acceptance on durable final tree
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          NEXT_BUILD_CPUS: "2"
+          POSTCSS_WORKERS: "1"
+          DISABLE_POSTCSS_WORKERS: "true"
+          NEXT_STATIC_GENERATION_MAX_CONCURRENCY: "1"
+          NEXT_STATIC_GENERATION_MIN_PAGES_PER_WORKER: "100"
+        run: |
+          cd frontend
+          pnpm exec vitest run \
+            src/components/EmailDetail.calendar-writeback.test.tsx \
+            src/components/EmailDetail.test.tsx
+          pnpm test
+          pnpm run typecheck
+          pnpm run lint
+          pnpm run coverage
+          pnpm run build
+          cd ..
+          test ! -e .github/workflows/repair-pr1245-calendar-source.yml
+          test ! -e .github/workflows/reopen-pr1245-calendar-source.yml
+          test ! -e .github/workflows/finalize-pr1245-calendar-source-v2.yml
+          test ! -e .github/workflows/finalize-pr1245-calendar-source-v3.yml
+          test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
+          git diff --check
+
+      - name: Publish exact verified durable product tree
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+          SOURCE_BRANCH: fix/email-detail-responsive-surface-maintainer
+          PUSH_TOKEN: ${{ secrets.PR_REVIEW_MERGE_TOKEN || github.token }}
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          remote_head="$(git ls-remote origin "refs/heads/${SOURCE_BRANCH}" | cut -f1)"
+          test "$remote_head" = "$EXPECTED_HEAD"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo '::error::No durable product change was produced.'; exit 1; }
+          git commit -m "fix(email-detail): require explicit calendar source"
+          test -n "$PUSH_TOKEN"
+          auth_header="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth_header"
+          git -c http.extraheader="AUTHORIZATION: basic ${auth_header}" \
+            push --force-with-lease="refs/heads/${SOURCE_BRANCH}:${EXPECTED_HEAD}" \
+            origin "HEAD:refs/heads/${SOURCE_BRANCH}"
