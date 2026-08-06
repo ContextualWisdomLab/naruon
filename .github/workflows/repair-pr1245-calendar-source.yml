@@ -44,25 +44,37 @@ jobs:
       - name: Verify exact RED lineage and bounded trigger
         env:
           RED_HEAD: e086f752f8a5640c36ba1405524233c79ff9b4a7
-          SCRIPT_COMMIT: 70959ee4c192dff80acd1c2cfa5ac7084bdd51a7
+          PRIOR_HEAD: 8499f3f61723d81be2aae3123597896d377ec988
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git rev-parse HEAD^)" = "$SCRIPT_COMMIT"
+          test "$(git rev-parse HEAD^)" = "$PRIOR_HEAD"
           git merge-base --is-ancestor "$RED_HEAD" HEAD
-          test "$(git hash-object scripts/ci/apply_pr1245_calendar_source_repair.py)" = \
-            "$(git rev-parse "${SCRIPT_COMMIT}:scripts/ci/apply_pr1245_calendar_source_repair.py")"
-          mapfile -t trigger_delta < <(git diff --name-only "$SCRIPT_COMMIT" HEAD)
+          mapfile -t trigger_delta < <(git diff --name-only "$PRIOR_HEAD" HEAD)
           test "${#trigger_delta[@]}" -eq 1
           test "${trigger_delta[0]}" = ".github/workflows/repair-pr1245-calendar-source.yml"
+          test -f scripts/ci/apply_pr1245_calendar_source_repair.py
+          test -f .github/workflows/reopen-pr1245-calendar-source.yml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frozen frontend dependencies
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          corepack enable pnpm
+          cd frontend
+          pnpm install --frozen-lockfile
 
       - name: Preserve the exact failing product contract
         shell: bash --noprofile --norc {0}
         run: |
           set -uo pipefail
-          corepack enable pnpm
           cd frontend
-          pnpm install --frozen-lockfile
           pnpm exec vitest run src/components/EmailDetail.calendar-writeback.test.tsx \
             >"${RUNNER_TEMP}/pr1245-red.log" 2>&1
           status=$?
@@ -71,20 +83,55 @@ jobs:
           grep -F '4 failed' "${RUNNER_TEMP}/pr1245-red.log"
           grep -F 'expected null not to be null' "${RUNNER_TEMP}/pr1245-red.log"
 
+      - name: Correct the reviewed variable-indentation source marker
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/ci/apply_pr1245_calendar_source_repair.py")
+          source = path.read_text(encoding="utf-8")
+          start_marker = "    conflict_action_end = _block(\n"
+          end_marker = "    footer_button = _block(\n"
+          if source.count(start_marker) != 1 or source.count(end_marker) != 1:
+              raise SystemExit("calendar conflict-panel markers are not unique")
+          start = source.index(start_marker)
+          end = source.index(end_marker, start)
+          replacement = '''    conflict_action_end = (
+              '                  {isSyncing ? "조율 중" : "일정 조율"}\\n'
+              '                </Button>\\n'
+              '              </div>\\n'
+              '            </div>\\n'
+              '          )}\\n'
+          )
+          conflict_action_replacement = (
+              '                  {isSyncing ? "조율 중" : "일정 조율"}\\n'
+              '                </Button>\\n'
+              '              </div>\\n'
+              '              <div className="mt-3">{calendarSourceSelector}</div>\\n'
+              '            </div>\\n'
+              '          )}\\n'
+          )
+          source = _replace_once(
+              source,
+              conflict_action_end,
+              conflict_action_replacement,
+              label="meeting source confirmation panel",
+          )
+
+'''
+          path.write_text(source[:start] + replacement + source[end:], encoding="utf-8")
+          PY
+          python3 -m compileall -q scripts/ci/apply_pr1245_calendar_source_repair.py
+
       - name: Apply reviewed source-confirmation repair
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           python3 scripts/ci/apply_pr1245_calendar_source_repair.py
           test ! -e .github/workflows/repair-pr1245-calendar-source.yml
+          test ! -e .github/workflows/reopen-pr1245-calendar-source.yml
           test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
           git diff --check
-
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: "24"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Verify focused and complete frontend behavior
         shell: bash --noprofile --norc -e -o pipefail {0}
@@ -94,9 +141,7 @@ jobs:
           POSTCSS_WORKERS: "1"
           DISABLE_POSTCSS_WORKERS: "true"
         run: |
-          corepack enable pnpm
           cd frontend
-          pnpm install --frozen-lockfile
           pnpm exec vitest run \
             src/components/EmailDetail.calendar-writeback.test.tsx \
             src/components/EmailDetail.test.tsx
@@ -110,6 +155,7 @@ jobs:
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           test ! -e .github/workflows/repair-pr1245-calendar-source.yml
+          test ! -e .github/workflows/reopen-pr1245-calendar-source.yml
           test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
           grep -F 'role="region"' frontend/src/components/EmailDetail.tsx
           grep -F 'aria-label="일정 원본 선택"' frontend/src/components/EmailDetail.tsx
@@ -117,8 +163,6 @@ jobs:
           grep -F 'Promise.allSettled' frontend/src/components/EmailDetail.tsx
           grep -F 'calendar_event_id: null' frontend/src/components/EmailDetail.tsx
           grep -F 'source conflict' docs/doctoring/email-detail-responsive-action-surface.md
-          python3 -m compileall -q \
-            frontend/src/components/EmailDetail.calendar-writeback.test.tsx >/dev/null 2>&1 || true
           git diff --check
 
       - name: Publish verified product commit
