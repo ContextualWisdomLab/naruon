@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, Users, Paperclip, Calendar, History, AlertTriangle, BarChart3, Network, Target } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -646,7 +646,8 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
         </div>
       </div>
       <Separator />
-      <ScrollArea className="flex-1">
+      <div className="flex flex-1 min-h-0">
+      <ScrollArea className="flex-1 border-r border-border">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
           <DecisionPointCard
@@ -672,6 +673,12 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
               </div>
             ) : null}
           </DecisionPointCard>
+
+          <DecisionPointCard title="관련 맥락" icon={<Network className="w-4 h-4" aria-hidden="true" />} empty={true} emptyMessage="추가적인 관련 맥락이 없습니다.">{null}</DecisionPointCard>
+          <DecisionPointCard title="신뢰도 및 진행도" icon={<BarChart3 className="w-4 h-4" aria-hidden="true" />} empty={true} emptyMessage="신뢰도/진행도를 평가할 정보가 부족합니다.">{null}</DecisionPointCard>
+          <DecisionPointCard title="의사결정 사항" icon={<Target className="w-4 h-4" aria-hidden="true" />} empty={true} emptyMessage="명시적인 의사결정 사항이 없습니다.">{null}</DecisionPointCard>
+          <DecisionPointCard title="위험/이슈" icon={<AlertTriangle className="w-4 h-4" aria-hidden="true" />} empty={true} emptyMessage="발견된 위험이나 이슈가 없습니다.">{null}</DecisionPointCard>
+          <DecisionPointCard title="관련 담당자" icon={<Users className="w-4 h-4" aria-hidden="true" />} empty={true} emptyMessage="자동으로 추출된 담당자가 없습니다.">{null}</DecisionPointCard>
 
           <DecisionPointCard
             title="실행 항목"
@@ -869,6 +876,25 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
           </DecisionPointCard>
         </div>
       </ScrollArea>
+      <aside className="w-80 shrink-0 overflow-y-auto bg-card p-5 hidden xl:block space-y-6">
+        <div>
+          <h3 className="text-sm font-bold flex items-center gap-2 mb-3"><Users className="w-4 h-4 text-primary" /> 참여자</h3>
+          <div className="space-y-3"><div className="flex items-center gap-3"><div className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{safeEmailSender.charAt(0).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-foreground">{safeEmailSender}</p><p className="truncate text-xs text-muted-foreground">보낸 사람</p></div></div></div>
+        </div>
+        <div>
+          <h3 className="text-sm font-bold flex items-center gap-2 mb-3"><Paperclip className="w-4 h-4 text-primary" /> 첨부 파일</h3>
+          <div className="rounded-xl border border-border bg-background p-4 text-xs text-muted-foreground">첨부 파일이 없습니다.</div>
+        </div>
+        <div>
+          <h3 className="text-sm font-bold flex items-center gap-2 mb-3"><Calendar className="w-4 h-4 text-primary" /> 일정 제안</h3>
+          <div className="rounded-xl border border-border bg-background p-4 text-xs text-muted-foreground">제안된 일정이 없습니다.</div>
+        </div>
+        <div>
+          <h3 className="text-sm font-bold flex items-center gap-2 mb-3"><History className="w-4 h-4 text-primary" /> 과거 스레드</h3>
+          {conversationMessages.length > 1 ? (<div className="space-y-2">{conversationMessages.filter(m => m.id !== email.id).slice(0, 3).map(m => (<div key={m.id} className="rounded-lg border border-border bg-background p-3 hover:bg-secondary/20 cursor-pointer"><p className="text-xs font-semibold text-foreground truncate">{m.subject || "(제목 없음)"}</p><p className="text-[10px] text-muted-foreground mt-1 truncate">{m.sender}</p></div>))}</div>) : (<div className="rounded-xl border border-border bg-background p-4 text-xs text-muted-foreground">관련된 과거 메일이 없습니다.</div>)}
+        </div>
+      </aside>
+      </div>
       <SourceDrawer
         open={sourceDrawerOpen}
         title="맥락 종합 근거"
