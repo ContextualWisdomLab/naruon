@@ -268,10 +268,17 @@ class EmailFileImportResponse(BaseModel):
 async def _fetch_thread_metadata(
     db: AsyncSession,
     owner_filters: tuple,
-    grouped: dict,
+    grouped: dict[str, Email],
     is_sent_folder: bool,
     user_addresses: set[str],
-) -> tuple[dict, dict, dict]:
+) -> tuple[dict[str, int], dict[str, list[Email]], dict[str, bool]]:
+    """
+    Fetch additional thread details for a grouped set of emails from the database.
+
+    This helper retrieves all related messages for the given thread heads,
+    calculates how many replies each thread has, groups the messages by thread,
+    and checks if the current user has sent any message in the thread.
+    """
     reply_counts = defaultdict(int)
     thread_messages = defaultdict(list)
     has_sent_message = {}
