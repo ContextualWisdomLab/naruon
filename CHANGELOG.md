@@ -2,7 +2,7 @@
 ### EmailDetail 반응형 실행 표면
 
 - 참여자와 첨부파일 증거를 모바일·데스크톱에서 동일하게 확인할 수 있도록 반응형 스크롤 레일과 명시적 접근성 이름을 추가했습니다.
-- 일정 충돌 패널의 `일정 조율` 버튼을 기존 calendar writeback intent에 연결하고 loading·disabled·live-status 상태를 검증합니다.
+- 일정 충돌 패널의 `일정 조율` 버튼을 기존 calendar writeback intent에 연결하고, 서명된 서버 목록에서 사용자가 명시적으로 선택한 opaque `target_source_id`만 전송하며, source conflict 재확인·부분 실패·loading·disabled·live-status 상태를 검증합니다.
 - UI PR에 섞인 thread ID, SMTP allowlist, `.msg` import, tenant scope backend 변경은 정확한 `develop` 기준으로 제거했습니다.
 
 ### 보안 패치 (CodeQL extended current-head)

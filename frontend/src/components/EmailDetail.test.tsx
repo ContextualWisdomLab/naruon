@@ -834,75 +834,113 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("캘린더에 반영할 실행 항목이 없습니다.");
   });
 
-  it("waits for context synthesis action items before requesting a server-authoritative calendar writeback intent", async () => {
-    const email: TestEmail = {
-      id: 9,
-      message_id: "<calendar-command@example.com>",
-      thread_id: null,
-      sender: "calendar@example.com",
-      recipients: "user@example.com",
-      subject: "Calendar command",
-      date: "2026-05-17T10:00:00Z",
-      body: "Please sync the launch meeting.",
-    };
-    const summaryResponse = deferred<ReturnType<typeof jsonResponse>>();
 
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/9")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return summaryResponse.promise;
-      if (url.endsWith("/api/calendar/writeback-intent")) {
-        expect(init?.method).toBe("POST");
-        expect(JSON.parse(String(init?.body))).toEqual({ action: "create", summary: "출시 회의 일정 잡기" });
-        return Promise.resolve(jsonResponse({
-          workspace_id: "default",
-          target_source_id: "caldav-primary",
-          protocol: "caldav",
-          writeback_mode: "customer_owned",
-          requires_if_match: false,
-          if_match: null,
-          provenance: {
-            created_by: "default",
-            source_provider: "Customer CalDAV",
-            source_protocol: "caldav",
-          },
-          audit_event: "calendar.writeback_intent.created",
-        }));
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
+it("waits for context synthesis and explicit source confirmation before requesting a server-authoritative calendar writeback intent", async () => {
+  const email: TestEmail = {
+    id: 9,
+    message_id: "<calendar-command@example.com>",
+    thread_id: null,
+    sender: "calendar@example.com",
+    recipients: "user@example.com",
+    subject: "Calendar command",
+    date: "2026-05-17T10:00:00Z",
+    body: "Please sync the launch meeting.",
+  };
+  const summaryResponse = deferred<ReturnType<typeof jsonResponse>>();
 
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<EmailDetail emailId={9} actionCommand={{ id: 2, action: "calendar-sync" }} />);
-    });
-    await flushAsyncWork();
-
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/writeback-intent"))).toHaveLength(0);
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/sync"))).toHaveLength(0);
-
-    await act(async () => {
-      summaryResponse.resolve(jsonResponse({ summary: "회의 일정", action_items: ["출시 회의 일정 잡기"] }));
-      await summaryResponse.promise;
-    });
-    await flushAsyncWork();
-
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/writeback-intent"))).toHaveLength(1);
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/sync"))).toHaveLength(0);
-    expect(container.textContent).toContain("1개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.");
-    expect(container.textContent).not.toContain("Customer CalDAV");
-    expect(container.textContent).not.toContain("caldav-primary");
-    expect(container.textContent).not.toContain("calendar.writeback_intent.created");
-    expect(getRecordedProductEvents().some((event) =>
-      event.name === "calendar_reflected" &&
-      event.payload.calendar_candidate_id === "mail-calendar:9" &&
-      event.payload.provider_write_executed === false,
-    )).toBe(true);
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/api/emails/9")) return Promise.resolve(jsonResponse(email));
+    if (url.endsWith("/api/llm/summarize")) return summaryResponse.promise;
+    if (url.endsWith("/api/calendar/writeback-sources")) {
+      return Promise.resolve(jsonResponse([{
+        source_id: "caldav_source_primary",
+        provider: "Fastmail",
+        protocol: "caldav",
+        owner_id: "owner_primary",
+        organization_id: null,
+        capabilities: ["read", "write", "etag"],
+        writeback_enabled: true,
+        etag: "etag-primary",
+      }]));
+    }
+    if (url.endsWith("/api/calendar/writeback-intent")) {
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        action: "create",
+        summary: "출시 회의 일정 잡기",
+        target_source_id: "caldav_source_primary",
+      });
+      return Promise.resolve(jsonResponse({
+        workspace_id: "default",
+        target_source_id: "caldav_source_primary",
+        protocol: "caldav",
+        writeback_mode: "customer_owned",
+        requires_if_match: true,
+        if_match: "etag-primary",
+        provenance: {
+          created_by: "default",
+          source_provider: "Fastmail",
+          source_protocol: "caldav",
+        },
+        audit_event: "calendar.writeback_intent.created",
+        provider_write_executed: false,
+      }));
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
   });
+  vi.stubGlobal("fetch", fetchMock);
+
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+
+  await act(async () => {
+    root?.render(<EmailDetail emailId={9} actionCommand={{ id: 2, action: "calendar-sync" }} />);
+  });
+  await flushAsyncWork();
+
+  expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/writeback-intent"))).toHaveLength(0);
+  expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/sync"))).toHaveLength(0);
+
+  await act(async () => {
+    summaryResponse.resolve(jsonResponse({ summary: "회의 일정", action_items: ["출시 회의 일정 잡기"] }));
+    await summaryResponse.promise;
+  });
+  await waitForCondition(() =>
+    container?.querySelector('select[aria-label="일정 원본 선택"]') !== null,
+  );
+
+  expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/writeback-intent"))).toHaveLength(0);
+  const sourceSelect = container.querySelector<HTMLSelectElement>(
+    'select[aria-label="일정 원본 선택"]',
+  );
+  expect(sourceSelect).not.toBeNull();
+  act(() => {
+    if (!sourceSelect) return;
+    sourceSelect.value = "caldav_source_primary";
+    sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  const scheduleButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (button) => button.textContent?.includes("일정 반영"),
+  );
+  expect(scheduleButton?.disabled).toBe(false);
+  act(() => scheduleButton?.click());
+  await flushAsyncWork();
+
+  expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/writeback-intent"))).toHaveLength(1);
+  expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/api/calendar/sync"))).toHaveLength(0);
+  expect(container.textContent).toContain("1개 일정 반영 의도를 Fastmail 원본에 요청했습니다.");
+  expect(container.textContent).not.toContain("caldav_source_primary");
+  expect(container.textContent).not.toContain("calendar.writeback_intent.created");
+  expect(getRecordedProductEvents().some((event) =>
+    event.name === "calendar_reflected" &&
+    event.payload.calendar_candidate_id === "mail-calendar:9" &&
+    event.payload.calendar_event_id === null &&
+    event.payload.provider_write_executed === false,
+  )).toBe(true);
+});
 
   it("ignores a late draft response after the selected email changes", async () => {
     const emailA: TestEmail = {
@@ -1332,6 +1370,18 @@ describe("EmailDetail", () => {
       if (url.endsWith("/api/llm/summarize")) {
         return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [actionItem] }));
       }
+      if (url.endsWith("/api/calendar/writeback-sources")) {
+        return Promise.resolve(jsonResponse([{
+          source_id: "caldav_source_primary",
+          provider: "Fastmail",
+          protocol: "caldav",
+          owner_id: "owner_primary",
+          organization_id: null,
+          capabilities: ["read", "write", "etag"],
+          writeback_enabled: true,
+          etag: "etag-primary",
+        }]));
+      }
       if (url.endsWith("/api/calendar/writeback-intent") && init?.method === "POST") {
         return Promise.resolve(jsonResponse({
           target_source_id: "caldav_source_primary",
@@ -1355,10 +1405,20 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("proposal.pdf");
     expect(container.textContent).toContain("회의 제안 확인");
 
-    const attachmentRail = container.querySelector<HTMLElement>('[aria-label="첨부파일"]');
+    const attachmentRail = container.querySelector<HTMLElement>('[role="region"][aria-label="첨부파일"]');
     expect(attachmentRail).not.toBeNull();
     expect(attachmentRail?.classList.contains("hidden")).toBe(false);
     expect(attachmentRail?.classList.contains("overflow-x-auto")).toBe(true);
+
+    const sourceSelect = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="일정 원본 선택"]',
+    );
+    expect(sourceSelect).not.toBeNull();
+    act(() => {
+      if (!sourceSelect) return;
+      sourceSelect.value = "caldav_source_primary";
+      sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
 
     const scheduleButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
       (button) => button.textContent?.includes("일정 조율"),
@@ -1373,9 +1433,13 @@ describe("EmailDetail", () => {
       "/api/calendar/writeback-intent",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ action: "create", summary: actionItem }),
+        body: JSON.stringify({
+          action: "create",
+          summary: actionItem,
+          target_source_id: "caldav_source_primary",
+        }),
       }),
     );
-    expect(container.textContent).toContain("1개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.");
+    expect(container.textContent).toContain("1개 일정 반영 의도를 Fastmail 원본에 요청했습니다.");
   });
 });

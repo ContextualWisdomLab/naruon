@@ -6,8 +6,13 @@ The email detail view exposes participants and attachment names at every viewpor
 size. Attachments use a horizontally scrollable, explicitly named region so a
 small viewport does not silently remove source evidence. The meeting-conflict
 panel reuses the existing calendar writeback-intent handler rather than rendering
-an inert call-to-action. Loading, disabled, and polite live-status states remain
-in the same product surface.
+an inert call-to-action. The user must select an opaque source returned by the
+signed server registry before the action is enabled; every intent carries that
+exact `target_source_id`, and a source conflict clears the selection so the user
+must confirm the current source again. Mixed batch outcomes preserve successful
+intents, report the failed count, and never relabel a source identifier as a
+provider calendar-event identifier. Loading, disabled, and polite live-status
+states remain in the same product surface.
 
 Unrelated backend changes are excluded from this UI slice. Thread identifier,
 SMTP destination, import-format, and tenant-scope policy changes require their
@@ -28,9 +33,13 @@ manual usability evidence.
 
 - The participant list renders without an unsafe type assertion.
 - The attachment rail is present and not hidden on small viewports.
-- The meeting action is disabled when no extracted action item exists.
-- Activating the meeting action sends the exact writeback-intent request.
-- Successful writeback intent produces a polite live status.
+- The meeting action is disabled when no extracted action item exists, while the
+  request is pending, or until one current server-authorized source is confirmed.
+- Activating the meeting action sends the exact opaque `target_source_id` with
+  every writeback-intent request.
+- A `409` source conflict clears confirmation and requires explicit reselection.
+- Complete and partial batches produce distinct polite status evidence, and
+  analytics never treat `target_source_id` as a provider event identifier.
 - The three unrelated backend files are byte-identical to the exact PR base.
 - Frontend focused tests, full tests, lint, type checking, coverage collection,
   and production build run before the verified commit is published.
