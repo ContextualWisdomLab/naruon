@@ -142,6 +142,41 @@ def test_thread_requires_reply_returns_true_when_candidate_exists():
         minutes=0,
     )
     assert thread_requires_reply([sent_message], USER_ADDRESSES) is True
+    assert thread_requires_reply([sent_message], USER_ADDRESSES, is_descending=True) is True
+
+def test_thread_requires_reply_deterministic_equal_timestamps():
+    from services.reply_tracking_service import thread_requires_reply
+
+    # User message with lower ID, external reply with higher ID
+    user_sent = make_email("1", sender="me@example.com", recipients="client@example.com", minutes=0)
+    user_sent.id = 1
+    user_sent.date = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+
+    external_reply = make_email("2", sender="client@example.com", recipients="me@example.com", minutes=0)
+    external_reply.id = 2
+    external_reply.date = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+
+    # Default sorting path (chronological, assumes older messages earlier)
+    # The external reply has higher ID, so it comes later.
+    assert thread_requires_reply([user_sent, external_reply], USER_ADDRESSES) is False
+    # Trusted descending fast path
+    assert thread_requires_reply([external_reply, user_sent], USER_ADDRESSES, is_descending=True) is False
+
+    # External message with lower ID, user message with higher ID
+    external_reply_2 = make_email("1", sender="client@example.com", recipients="me@example.com", minutes=0)
+    external_reply_2.id = 1
+    external_reply_2.date = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+
+    user_sent_2 = make_email("2", sender="me@example.com", recipients="client@example.com", minutes=0)
+    user_sent_2.id = 2
+    user_sent_2.date = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+
+    # Default sorting path (chronological, assumes older messages earlier)
+    # The user message has higher ID, so it comes later and needs a reply.
+    assert thread_requires_reply([external_reply_2, user_sent_2], USER_ADDRESSES) is True
+    # Trusted descending fast path
+    assert thread_requires_reply([user_sent_2, external_reply_2], USER_ADDRESSES, is_descending=True) is True
+
 
 
 def test_thread_requires_reply_returns_false_when_no_candidate():
