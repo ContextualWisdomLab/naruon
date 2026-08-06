@@ -35,7 +35,7 @@ jobs:
           egress-policy: audit
 
       - name: Check out exact repair trigger
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -44,7 +44,7 @@ jobs:
       - name: Verify exact RED lineage and bounded trigger
         env:
           RED_HEAD: e086f752f8a5640c36ba1405524233c79ff9b4a7
-          PRIOR_HEAD: 8499f3f61723d81be2aae3123597896d377ec988
+          PRIOR_HEAD: 41e1f927feabc6b5e254913d21ed9f6a1faa0228
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
@@ -54,7 +54,6 @@ jobs:
           test "${#trigger_delta[@]}" -eq 1
           test "${trigger_delta[0]}" = ".github/workflows/repair-pr1245-calendar-source.yml"
           test -f scripts/ci/apply_pr1245_calendar_source_repair.py
-          test -f .github/workflows/reopen-pr1245-calendar-source.yml
 
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -83,7 +82,7 @@ jobs:
           grep -F '4 failed' "${RUNNER_TEMP}/pr1245-red.log"
           grep -F 'expected null not to be null' "${RUNNER_TEMP}/pr1245-red.log"
 
-      - name: Correct the reviewed variable-indentation source marker
+      - name: Correct the reviewed conflict-panel source marker
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           python3 - <<'PY'
