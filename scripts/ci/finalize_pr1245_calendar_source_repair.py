@@ -126,7 +126,7 @@ def _repair_action_command_test() -> None:
             });
 
             const scheduleButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-              (button) => button.textContent?.includes("일정 조율"),
+              (button) => button.textContent?.includes("일정 반영"),
             );
             expect(scheduleButton?.disabled).toBe(false);
             act(() => scheduleButton?.click());
