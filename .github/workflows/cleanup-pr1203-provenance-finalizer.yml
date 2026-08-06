@@ -1,0 +1,102 @@
+name: Cleanup PR 1203 provenance machinery
+
+on:
+  push:
+    branches:
+      - codex/docker-base-current
+    paths:
+      - .github/workflows/cleanup-pr1203-provenance-finalizer.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cleanup-pr1203-provenance-finalizer
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONWARNINGS: error
+
+jobs:
+  verify-and-clean:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Check out exact trigger
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Remove temporary machinery before verification
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          rm -f \
+            .github/workflows/pr1203-finalize.yml \
+            scripts/ci/repair_pr_1203_provenance.py \
+            .github/workflows/cleanup-pr1203-provenance-finalizer.yml
+          git diff --check
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Install hash-locked backend dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+
+      - name: Verify provenance and repository governance
+        working-directory: backend
+        run: |
+          python -m pytest -q \
+            tests/test_container_provenance_contract.py \
+            tests/test_release_governance.py \
+            tests/test_repo_hygiene.py
+          python -m ruff check \
+            tests/test_container_provenance_contract.py \
+            tests/test_release_governance.py \
+            tests/test_repo_hygiene.py
+
+      - name: Validate workflows and final diff
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for path in (
+              Path('.github/workflows/docker-publish.yml'),
+          ):
+              yaml.safe_load(path.read_text(encoding='utf-8'))
+          PY
+          test ! -e .github/workflows/pr1203-finalize.yml
+          test ! -e scripts/ci/repair_pr_1203_provenance.py
+          test ! -e .github/workflows/cleanup-pr1203-provenance-finalizer.yml
+          git diff --check
+
+      - name: Publish verified cleanup
+        env:
+          PUSH_TOKEN: ${{ github.token }}
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 1
+          git commit -m 'chore(ci): remove completed PR 1203 machinery'
+          auth_header="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth_header"
+          git -c http.extraheader="AUTHORIZATION: basic ${auth_header}" \
+            push origin 'HEAD:codex/docker-base-current'
