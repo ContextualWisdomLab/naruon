@@ -39,6 +39,7 @@ async def link_safety_verifier_handler(params: dict[str, Any]) -> dict[str, Any]
     try:
         parsed_url = urlparse(raw_url)
         normalized_domain = parsed_url.hostname.lower() if parsed_url.hostname else ""
+        parsed_url.port
     except ValueError:
         return _high_risk_result()
 
