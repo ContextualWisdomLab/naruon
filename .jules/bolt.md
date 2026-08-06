@@ -15,3 +15,7 @@
 
 **Learning:** `dict.setdefault(key, []).append(value)` evaluates the empty-list default on every iteration, including when the key already exists. In grouping loops, `defaultdict(list)` avoids those transient unused list allocations while preserving insertion order.
 **Action:** Use `defaultdict(list)` when missing keys are intentionally initialized with lists. Keep `setdefault` when its eager-default behavior or an ordinary `dict` is part of the required contract, and benchmark before claiming a material end-to-end improvement.
+## 2025-02-12 - Wrap array rendering loops with useMemo
+
+**Learning:** Mapping over arrays of properties inside a React functional component's render execution directly causes O(N) evaluations when unrelated state (like input queries or tab switches) updates the component.
+**Action:** Always wrap `.map()` calls that output elements in a `useMemo` block with exact prop array dependencies in large lists, especially if they are passed as props to avoid blocking the main thread on every re-render.
