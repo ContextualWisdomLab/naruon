@@ -44,7 +44,7 @@ jobs:
       - name: Verify exact RED lineage and bounded trigger
         env:
           RED_HEAD: e086f752f8a5640c36ba1405524233c79ff9b4a7
-          PRIOR_HEAD: 41e1f927feabc6b5e254913d21ed9f6a1faa0228
+          PRIOR_HEAD: 482725ebeaac2e7c382aaff9506f61d581afc398
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
@@ -96,29 +96,32 @@ jobs:
               raise SystemExit("calendar conflict-panel markers are not unique")
           start = source.index(start_marker)
           end = source.index(end_marker, start)
-          replacement = '''    conflict_action_end = (
-              '                  {isSyncing ? "조율 중" : "일정 조율"}\\n'
-              '                </Button>\\n'
-              '              </div>\\n'
-              '            </div>\\n'
-              '          )}\\n'
+          replacement = "\n".join(
+              [
+                  "    conflict_action_end = (",
+                  "        '                  {isSyncing ? \"조율 중\" : \"일정 조율\"}\\\\n'",
+                  "        '                </Button>\\\\n'",
+                  "        '              </div>\\\\n'",
+                  "        '            </div>\\\\n'",
+                  "        '          )}\\\\n'",
+                  "    )",
+                  "    conflict_action_replacement = (",
+                  "        '                  {isSyncing ? \"조율 중\" : \"일정 조율\"}\\\\n'",
+                  "        '                </Button>\\\\n'",
+                  "        '              </div>\\\\n'",
+                  "        '              <div className=\"mt-3\">{calendarSourceSelector}</div>\\\\n'",
+                  "        '            </div>\\\\n'",
+                  "        '          )}\\\\n'",
+                  "    )",
+                  "    source = _replace_once(",
+                  "        source,",
+                  "        conflict_action_end,",
+                  "        conflict_action_replacement,",
+                  "        label=\"meeting source confirmation panel\",",
+                  "    )",
+                  "",
+              ]
           )
-          conflict_action_replacement = (
-              '                  {isSyncing ? "조율 중" : "일정 조율"}\\n'
-              '                </Button>\\n'
-              '              </div>\\n'
-              '              <div className="mt-3">{calendarSourceSelector}</div>\\n'
-              '            </div>\\n'
-              '          )}\\n'
-          )
-          source = _replace_once(
-              source,
-              conflict_action_end,
-              conflict_action_replacement,
-              label="meeting source confirmation panel",
-          )
-
-'''
           path.write_text(source[:start] + replacement + source[end:], encoding="utf-8")
           PY
           python3 -m compileall -q scripts/ci/apply_pr1245_calendar_source_repair.py
