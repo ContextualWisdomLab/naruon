@@ -1,0 +1,143 @@
+name: Repair PR 1245 calendar source boundary
+
+on:
+  push:
+    branches:
+      - fix/email-detail-responsive-surface-maintainer
+    paths:
+      - .github/workflows/repair-pr1245-calendar-source.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repair-pr1245-calendar-source
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  repair:
+    if: >-
+      github.repository == 'ContextualWisdomLab/naruon' &&
+      github.actor == 'seonghobae' &&
+      github.ref == 'refs/heads/fix/email-detail-responsive-surface-maintainer'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Check out exact repair trigger
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact RED lineage and bounded trigger
+        env:
+          RED_HEAD: e086f752f8a5640c36ba1405524233c79ff9b4a7
+          SCRIPT_COMMIT: 70959ee4c192dff80acd1c2cfa5ac7084bdd51a7
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "$SCRIPT_COMMIT"
+          git merge-base --is-ancestor "$RED_HEAD" HEAD
+          test "$(git hash-object scripts/ci/apply_pr1245_calendar_source_repair.py)" = \
+            "$(git rev-parse "${SCRIPT_COMMIT}:scripts/ci/apply_pr1245_calendar_source_repair.py")"
+          mapfile -t trigger_delta < <(git diff --name-only "$SCRIPT_COMMIT" HEAD)
+          test "${#trigger_delta[@]}" -eq 1
+          test "${trigger_delta[0]}" = ".github/workflows/repair-pr1245-calendar-source.yml"
+
+      - name: Preserve the exact failing product contract
+        shell: bash --noprofile --norc {0}
+        run: |
+          set -uo pipefail
+          corepack enable pnpm
+          cd frontend
+          pnpm install --frozen-lockfile
+          pnpm exec vitest run src/components/EmailDetail.calendar-writeback.test.tsx \
+            >"${RUNNER_TEMP}/pr1245-red.log" 2>&1
+          status=$?
+          cat "${RUNNER_TEMP}/pr1245-red.log"
+          test "$status" -eq 1
+          grep -F '4 failed' "${RUNNER_TEMP}/pr1245-red.log"
+          grep -F 'expected null not to be null' "${RUNNER_TEMP}/pr1245-red.log"
+
+      - name: Apply reviewed source-confirmation repair
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python3 scripts/ci/apply_pr1245_calendar_source_repair.py
+          test ! -e .github/workflows/repair-pr1245-calendar-source.yml
+          test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
+          git diff --check
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Verify focused and complete frontend behavior
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          NEXT_BUILD_CPUS: "2"
+          POSTCSS_WORKERS: "1"
+          DISABLE_POSTCSS_WORKERS: "true"
+        run: |
+          corepack enable pnpm
+          cd frontend
+          pnpm install --frozen-lockfile
+          pnpm exec vitest run \
+            src/components/EmailDetail.calendar-writeback.test.tsx \
+            src/components/EmailDetail.test.tsx
+          pnpm test
+          pnpm run typecheck
+          pnpm run lint
+          pnpm run coverage
+          pnpm run build
+
+      - name: Verify durable final-tree boundaries
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test ! -e .github/workflows/repair-pr1245-calendar-source.yml
+          test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
+          grep -F 'role="region"' frontend/src/components/EmailDetail.tsx
+          grep -F 'aria-label="일정 원본 선택"' frontend/src/components/EmailDetail.tsx
+          grep -F 'target_source_id: selectedSource.source_id' frontend/src/components/EmailDetail.tsx
+          grep -F 'Promise.allSettled' frontend/src/components/EmailDetail.tsx
+          grep -F 'calendar_event_id: null' frontend/src/components/EmailDetail.tsx
+          grep -F 'source conflict' docs/doctoring/email-detail-responsive-action-surface.md
+          python3 -m compileall -q \
+            frontend/src/components/EmailDetail.calendar-writeback.test.tsx >/dev/null 2>&1 || true
+          git diff --check
+
+      - name: Publish verified product commit
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+          SOURCE_BRANCH: fix/email-detail-responsive-surface-maintainer
+          PUSH_TOKEN: ${{ github.token }}
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          remote_head="$(git ls-remote origin "refs/heads/${SOURCE_BRANCH}" | cut -f1)"
+          test "$remote_head" = "$EXPECTED_HEAD"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo '::error::No verified product change was produced.'; exit 1; }
+          git commit -m "fix(email-detail): require explicit calendar source"
+          auth_header="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth_header"
+          git -c http.extraheader="AUTHORIZATION: basic ${auth_header}" \
+            push --force-with-lease="refs/heads/${SOURCE_BRANCH}:${EXPECTED_HEAD}" \
+            origin "HEAD:refs/heads/${SOURCE_BRANCH}"
