@@ -150,3 +150,12 @@ def test_validate_https_url_host_details(mock_resolve):
 def test_validate_https_url_host(mock_details):
     validate_https_url_host("setting", "https://example.com", frozenset({"example.com"}), "ALLOWED_HOSTS")
     mock_details.assert_called_once_with("setting", "https://example.com", frozenset({"example.com"}), "ALLOWED_HOSTS")
+
+def test_validate_https_url_host_details_traversal():
+    with pytest.raises(ValueError, match="path traversal"):
+        validate_https_url_host_details(
+            "Test URL",
+            "https://example.com/../path",
+            frozenset(["example.com"]),
+            "TEST_ALLOWED_HOSTS",
+        )

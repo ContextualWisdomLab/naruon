@@ -56,7 +56,13 @@ def validate_https_url_host_details(
     allowed_hosts: frozenset[str],
     allowed_hosts_setting_name: str,
 ) -> ValidatedHTTPSURLHost:
+    import urllib.parse
+
     parsed = urlsplit(url_value)
+    unquoted = urllib.parse.unquote(parsed.path)
+    if ".." in unquoted or "//" in unquoted:
+        raise ValueError(f"{setting_name} must not contain path traversal")
+
     if parsed.scheme.lower() != "https":
         raise ValueError(f"{setting_name} must use https")
     if parsed.username or parsed.password:
@@ -102,7 +108,9 @@ def _reject_unsafe_ip_literal(setting_name: str, host: str) -> None:
             or host.endswith(".internal")
             or host.endswith(".local")
         ):
-            raise ValueError(f"{setting_name} host must not be a local or internal domain")
+            raise ValueError(
+                f"{setting_name} host must not be a local or internal domain"
+            )
         return
 
     if not ip_address.is_global:
