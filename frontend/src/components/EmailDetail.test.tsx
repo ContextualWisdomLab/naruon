@@ -44,15 +44,6 @@ vi.mock("@/components/ui/input", () => ({
 
 vi.mock("lucide-react", () => ({
   MessagesSquare: () => <svg aria-hidden="true" />,
-  Users: () => <svg aria-hidden="true" />,
-  Paperclip: () => <svg aria-hidden="true" />,
-  Calendar: () => <svg aria-hidden="true" />,
-  History: () => <svg aria-hidden="true" />,
-  AlertTriangle: () => <svg aria-hidden="true" />,
-  CheckCircle2: () => <svg aria-hidden="true" />,
-  BarChart3: () => <svg aria-hidden="true" />,
-  Network: () => <svg aria-hidden="true" />,
-  Target: () => <svg aria-hidden="true" />,
   AlertCircle: () => <svg aria-hidden="true" />,
   ExternalLink: () => <svg aria-hidden="true" />,
   FileText: () => <svg aria-hidden="true" />,
