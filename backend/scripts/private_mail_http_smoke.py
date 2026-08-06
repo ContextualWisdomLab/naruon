@@ -202,8 +202,25 @@ def _header_text(raw: bytes) -> str:
     )
 
 
-def _extract_text_parts(msg, raw: bytes) -> list[str]:
-    parts = []
+def _message_text(raw: bytes, max_parse_bytes: int) -> str:
+    parts = [_header_text(raw), _decoded_probe(raw, max_parse_bytes)]
+    if len(raw) > max_parse_bytes:
+        return "\n".join(parts)
+
+    try:
+        msg = message_from_bytes(raw, policy=policy.default)
+    except Exception:
+        return "\n".join(parts)
+
+    parts.extend(
+        [
+            str(msg.get("Subject", "")),
+            str(msg.get("From", "")),
+            str(msg.get("To", "")),
+            str(msg.get("Cc", "")),
+            str(msg.get("Date", "")),
+        ]
+    )
     if msg.is_multipart():
         for part in msg.walk():
             filename = part.get_filename()
@@ -225,29 +242,6 @@ def _extract_text_parts(msg, raw: bytes) -> list[str]:
             content = raw.decode("utf-8", errors="ignore")
         if isinstance(content, str):
             parts.append(content)
-    return parts
-
-
-def _message_text(raw: bytes, max_parse_bytes: int) -> str:
-    parts = [_header_text(raw), _decoded_probe(raw, max_parse_bytes)]
-    if len(raw) > max_parse_bytes:
-        return "\n".join(parts)
-
-    try:
-        msg = message_from_bytes(raw, policy=policy.default)
-    except Exception:
-        return "\n".join(parts)
-
-    parts.extend(
-        [
-            str(msg.get("Subject", "")),
-            str(msg.get("From", "")),
-            str(msg.get("To", "")),
-            str(msg.get("Cc", "")),
-            str(msg.get("Date", "")),
-        ]
-    )
-    parts.extend(_extract_text_parts(msg, raw))
     return "\n".join(parts)
 
 
