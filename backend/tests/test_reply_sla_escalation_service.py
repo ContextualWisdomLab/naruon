@@ -1,4 +1,3 @@
-import pytest
 from db.models import Email
 from services.reply_sla_escalation_service import canonical_reply_sla_thread_key
 
