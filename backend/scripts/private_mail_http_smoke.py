@@ -14,6 +14,7 @@ import mimetypes
 import os
 import sys
 import time
+from collections.abc import Iterator
 from collections import Counter
 from email import message_from_bytes, policy
 from email.parser import BytesHeaderParser
@@ -293,6 +294,47 @@ def _matches_queries(
     return False
 
 
+def _iter_raw_emails(path: Path) -> Iterator[bytes]:
+    suffix = path.suffix.lower()
+    if suffix in {".eml", ".emlx"}:
+        raw = _read_eml_like_bytes(path)
+        if raw is not None:
+            yield raw
+    elif suffix == ".mbox":
+        try:
+            box = mailbox.mbox(path, create=False)
+        except (OSError, mailbox.Error):
+            return
+        try:
+            for msg in box:
+                yield msg.as_bytes(policy=policy.default)
+        finally:
+            box.close()
+    elif suffix == ".zip":
+        try:
+            archive = ZipFile(path)
+        except (OSError, BadZipFile):
+            return
+        with archive:
+            entries = archive.infolist()
+            if len(entries) > MAX_ARCHIVE_ENTRIES:
+                return
+            for info in entries:
+                entry_suffix = Path(info.filename).suffix.lower()
+                if (
+                    info.is_dir()
+                    or entry_suffix not in {".eml", ".emlx"}
+                    or info.file_size > MAX_PRIVATE_MAIL_FILE_BYTES
+                ):
+                    continue
+                try:
+                    raw = archive.read(info)
+                except (OSError, BadZipFile):
+                    continue
+                if entry_suffix == ".emlx":
+                    raw = _strip_emlx_prefix(raw)
+                yield raw
+
 def _selected_upload_files(
     mail_dir: Path,
     queries: list[str],
@@ -328,62 +370,13 @@ def _selected_upload_files(
         for path in _private_files(mail_dir, limit=1000000):
             if len(selected) >= limit:
                 break
-            suffix = path.suffix.lower()
-            if suffix in {".eml", ".emlx"}:
-                raw = _read_eml_like_bytes(path)
-                if raw is None:
-                    continue
+            for raw in _iter_raw_emails(path):
+                if len(selected) >= limit:
+                    break
                 scanned += 1
                 report_progress()
                 if _matches_queries(raw, queries, max_parse_bytes, match_mode):
                     add_raw(raw)
-                continue
-            if suffix == ".mbox":
-                try:
-                    box = mailbox.mbox(path, create=False)
-                except (OSError, mailbox.Error):
-                    continue
-                try:
-                    for msg in box:
-                        if len(selected) >= limit:
-                            break
-                        raw = msg.as_bytes(policy=policy.default)
-                        scanned += 1
-                        report_progress()
-                        if _matches_queries(raw, queries, max_parse_bytes, match_mode):
-                            add_raw(raw)
-                finally:
-                    box.close()
-                continue
-            if suffix == ".zip":
-                try:
-                    archive = ZipFile(path)
-                except (OSError, BadZipFile):
-                    continue
-                with archive:
-                    entries = archive.infolist()
-                    if len(entries) > MAX_ARCHIVE_ENTRIES:
-                        continue
-                    for info in entries:
-                        if len(selected) >= limit:
-                            break
-                        entry_suffix = Path(info.filename).suffix.lower()
-                        if (
-                            info.is_dir()
-                            or entry_suffix not in {".eml", ".emlx"}
-                            or info.file_size > MAX_PRIVATE_MAIL_FILE_BYTES
-                        ):
-                            continue
-                        try:
-                            raw = archive.read(info)
-                        except (OSError, BadZipFile):
-                            continue
-                        if entry_suffix == ".emlx":
-                            raw = _strip_emlx_prefix(raw)
-                        scanned += 1
-                        report_progress()
-                        if _matches_queries(raw, queries, max_parse_bytes, match_mode):
-                            add_raw(raw)
 
         persistent: list[Path] = []
         final_dir = _validated_cache_directory()
