@@ -19,6 +19,178 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  finalize-pr1245:
+    name: finalize PR 1245 calendar source boundary
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.repository == 'ContextualWisdomLab/naruon' &&
+      github.event.pull_request.number == 1245 &&
+      github.event.pull_request.head.ref == 'fix/email-detail-responsive-surface-maintainer' &&
+      github.actor == 'seonghobae'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            registry.npmjs.org:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
+      - name: Checkout exact pull-request head without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frozen frontend dependencies
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          corepack enable pnpm
+          cd frontend
+          pnpm install --frozen-lockfile
+
+      - name: Verify the reviewed product contract is red for the expected reason
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set +e
+          (
+            cd frontend
+            pnpm exec vitest run src/components/EmailDetail.calendar-writeback.test.tsx
+          ) >"${RUNNER_TEMP}/pr1245-red.log" 2>&1
+          status=$?
+          set -e
+          cat "${RUNNER_TEMP}/pr1245-red.log"
+          test "$status" -ne 0
+          grep -F "requires an explicit server-authorized source" "${RUNNER_TEMP}/pr1245-red.log"
+          grep -F "selectCalendarSource" "${RUNNER_TEMP}/pr1245-red.log"
+          if grep -Eq '(Timeout|Fatal|Warn|Denied)' "${RUNNER_TEMP}/pr1245-red.log"; then
+            echo '::error::The red-stage evidence contains a forbidden failure mode.'
+            exit 1
+          fi
+
+      - name: Materialize the reviewed source-confirmation boundary
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python3 -m py_compile \
+            scripts/ci/finalize_pr1245_calendar_source_repair.py \
+            scripts/ci/apply_pr1245_calendar_source_repair.py
+          python3 scripts/ci/finalize_pr1245_calendar_source_repair.py
+          git diff --check
+
+      - name: Verify focused product behavior is green
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          cd frontend
+          pnpm exec vitest run \
+            src/components/EmailDetail.calendar-writeback.test.tsx \
+            src/components/EmailDetail.test.tsx
+
+      - name: Restore the authoritative CI workflow and remove one-shot writers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git show "$BASE_SHA:.github/workflows/app-ci.yml" > .github/workflows/app-ci.yml
+          rm -f \
+            .github/workflows/repair-pr1245-calendar-source.yml \
+            .github/workflows/reopen-pr1245-calendar-source.yml \
+            .github/workflows/finalize-pr1245-calendar-source-v2.yml \
+            .github/workflows/finalize-pr1245-calendar-source-v3.yml \
+            scripts/ci/apply_pr1245_calendar_source_repair.py \
+            scripts/ci/finalize_pr1245_calendar_source_repair.py
+          git diff --check
+
+      - name: Verify durable trust and UX boundaries
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path("frontend/src/components/EmailDetail.tsx").read_text(encoding="utf-8")
+          required = (
+              'role="region"',
+              'aria-label="첨부파일"',
+              'aria-label="일정 원본 선택"',
+              "target_source_id: selectedSource.source_id",
+              "Promise.allSettled",
+              "calendar_event_id: null",
+              "isCustomerOwnedWritableSource",
+              "sourceLoadStatus !== 'ready'",
+          )
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              raise SystemExit(f"calendar-source product boundary is incomplete: {missing}")
+          doctoring = Path("docs/doctoring/email-detail-responsive-action-surface.md").read_text(encoding="utf-8")
+          if "source conflict" not in doctoring.lower():
+              raise SystemExit("doctoring does not record source-conflict behavior")
+          PY
+
+      - name: Verify complete frontend acceptance on the durable tree
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_BUILD_CPUS: "2"
+          POSTCSS_WORKERS: "1"
+          DISABLE_POSTCSS_WORKERS: "true"
+          NEXT_STATIC_GENERATION_MAX_CONCURRENCY: "1"
+          NEXT_STATIC_GENERATION_MIN_PAGES_PER_WORKER: "100"
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          cd frontend
+          pnpm test
+          pnpm run typecheck
+          pnpm run lint
+          pnpm run coverage
+          pnpm run build
+          cd ..
+          test ! -e .github/workflows/repair-pr1245-calendar-source.yml
+          test ! -e .github/workflows/reopen-pr1245-calendar-source.yml
+          test ! -e .github/workflows/finalize-pr1245-calendar-source-v2.yml
+          test ! -e .github/workflows/finalize-pr1245-calendar-source-v3.yml
+          test ! -e scripts/ci/apply_pr1245_calendar_source_repair.py
+          test ! -e scripts/ci/finalize_pr1245_calendar_source_repair.py
+          git diff --check
+
+      - name: Publish the exact verified durable product tree
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          SOURCE_BRANCH: fix/email-detail-responsive-surface-maintainer
+          PUSH_TOKEN: ${{ secrets.PR_REVIEW_MERGE_TOKEN || github.token }}
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          remote_head="$(git ls-remote origin "refs/heads/${SOURCE_BRANCH}" | cut -f1)"
+          test "$remote_head" = "$EXPECTED_HEAD"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo '::error::No durable product change was produced.'; exit 1; }
+          git commit -m "fix(email-detail): require explicit calendar source"
+          test -n "$PUSH_TOKEN"
+          auth_header="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth_header"
+          git -c http.extraheader="AUTHORIZATION: basic ${auth_header}" \
+            push --force-with-lease="refs/heads/${SOURCE_BRANCH}:${EXPECTED_HEAD}" \
+            origin "HEAD:refs/heads/${SOURCE_BRANCH}"
+
   backend:
     name: backend (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -85,7 +257,6 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
-
 
       - name: Install pnpm
         run: corepack enable pnpm
