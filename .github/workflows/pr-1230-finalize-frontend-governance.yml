@@ -24,21 +24,31 @@ jobs:
     env:
       PYTHONWARNINGS: error
       DISABLE_BACKGROUND_WORKERS: "1"
+      TARGET_BRANCH: dependabot/npm_and_yarn/frontend/frontend-npm-6c49e239bc
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
 
-      - name: Checkout the exact pull-request branch
+      - name: Checkout the exact triggering head without persisted credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: dependabot/npm_and_yarn/frontend/frontend-npm-6c49e239bc
+          ref: ${{ github.sha }}
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
+
+      - name: Verify exact trigger identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          test "$GITHUB_REF_NAME" = "$TARGET_BRANCH"
 
       - name: Align the permanent PostCSS governance contract
+        shell: bash
         run: |
+          set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
@@ -48,6 +58,8 @@ jobs:
           if occurrences == 0:
               raise SystemExit("Expected the stale PostCSS 8.5.24 governance values")
           source = source.replace('"8.5.24"', '"8.5.25"')
+          if '"8.5.24"' in source:
+              raise SystemExit("A stale PostCSS governance value remains")
           path.write_text(source, encoding="utf-8")
           PY
 
@@ -59,7 +71,9 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install the exact frontend closure
+        shell: bash
         run: |
+          set -euo pipefail
           corepack enable pnpm
           corepack prepare pnpm@11.5.3 --activate
           cd frontend
@@ -68,7 +82,9 @@ jobs:
           pnpm why postcss
 
       - name: Verify frontend lint, types, tests, coverage, and production build
+        shell: bash
         run: |
+          set -euo pipefail
           cd frontend
           pnpm run lint
           pnpm run typecheck
@@ -84,14 +100,20 @@ jobs:
           cache-dependency-path: backend/requirements-hashes.txt
 
       - name: Verify the release-governance regression
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
           python -m ruff check backend/tests/test_release_governance.py
           python -m pytest backend/tests/test_release_governance.py -q
           git diff --check
 
-      - name: Commit only verified permanent changes and remove this workflow
+      - name: Commit verified permanent changes and remove this workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           rm .github/workflows/pr-1230-finalize-frontend-governance.yml
           git diff --check
           test "$(git status --short | wc -l)" -eq 2
@@ -101,7 +123,25 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A -- backend/tests/test_release_governance.py .github/workflows/pr-1230-finalize-frontend-governance.yml
           git diff --cached --check
+          test "$(git diff --cached --name-only | wc -l)" -eq 2
+          git diff --cached --name-only | grep -Fx 'backend/tests/test_release_governance.py'
+          git diff --cached --name-only | grep -Fx '.github/workflows/pr-1230-finalize-frontend-governance.yml'
           git commit -m "test(frontend): align PostCSS governance to 8.5.25"
-          git push origin HEAD:dependabot/npm_and_yarn/frontend/frontend-npm-6c49e239bc
 
-# Trigger exact-head governance repair; this temporary workflow deletes itself after verification.
+          expected_origin="https://github.com/${GITHUB_REPOSITORY}.git"
+          askpass="$(mktemp)"
+          trap 'rm -f "$askpass"' EXIT
+          cat >"$askpass" <<'SH'
+          #!/usr/bin/env sh
+          case "${1:-}" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "${GH_TOKEN:?}" ;;
+            *) exit 1 ;;
+          esac
+          SH
+          chmod 700 "$askpass"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 \
+            git -c core.hooksPath=/dev/null push \
+              "$expected_origin" "HEAD:refs/heads/${TARGET_BRANCH}"
+
+# Trigger exact-head governance repair v2; this temporary workflow deletes itself after verification.
