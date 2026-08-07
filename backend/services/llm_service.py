@@ -10,7 +10,7 @@ from core.exceptions import LLMServiceError
 from services.circuit_breaker import provider_circuit_breaker
 from services.retry import retry_transient
 from pydantic import BaseModel, Field
-from services.llm_provider_urls import build_llm_provider_http_client
+from services.egressweave_llm_adapter import build_llm_provider_http_client
 
 logger = logging.getLogger(__name__)
 
