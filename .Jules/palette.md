@@ -1,3 +1,0 @@
-## 2024-08-07 - Add aria-labels to meeting proposal buttons
-**Learning:** Buttons that only have generic text like "제안하기" (Propose) or numbered options like "1안" without context can be unclear to screen reader users when navigating by buttons. Using a screen-reader-only (`sr-only`) span provides clear and actionable context while preserving the reading order of the visible date and time.
-**Action:** Always ensure that buttons within complex components (like meeting proposals) have explicit context (e.g., using `sr-only` spans) if the visible text alone isn't sufficiently descriptive out of context.
