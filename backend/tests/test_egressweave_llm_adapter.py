@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from core.config import settings
-from services import egressweave_llm_adapter
+from services import egressweave_llm_adapter, llm_service
 
 
 class _SentinelClient:
@@ -134,6 +134,14 @@ async def test_local_opt_in_does_not_authorize_unlisted_localhost(
         )
 
     assert called is False
+
+
+def test_llm_service_routes_through_application_owned_egressweave_adapter() -> None:
+    """Primary summary/translation/reply calls must consume the new adapter seam."""
+    assert (
+        llm_service.build_llm_provider_http_client
+        is egressweave_llm_adapter.build_llm_provider_http_client
+    )
 
 
 def test_adapter_uses_only_egressweave_public_network_boundary() -> None:
