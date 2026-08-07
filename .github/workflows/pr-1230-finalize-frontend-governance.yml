@@ -12,13 +12,15 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   finalize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
     env:
       PYTHONWARNINGS: error
       DISABLE_BACKGROUND_WORKERS: "1"
@@ -63,6 +65,7 @@ jobs:
           cd frontend
           pnpm install --frozen-lockfile
           test "$(pnpm exec node -p \"require('postcss/package.json').version\")" = "8.5.25"
+          pnpm why postcss
 
       - name: Verify frontend lint, types, tests, coverage, and production build
         run: |
@@ -71,7 +74,7 @@ jobs:
           pnpm run typecheck
           pnpm run test
           pnpm run coverage
-          pnpm run build
+          POSTCSS_WORKERS=1 DISABLE_POSTCSS_WORKERS=true pnpm run build
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -87,13 +90,17 @@ jobs:
           python -m pytest backend/tests/test_release_governance.py -q
           git diff --check
 
-      - name: Commit only verified permanent changes
+      - name: Commit only verified permanent changes and remove this workflow
         run: |
           rm .github/workflows/pr-1230-finalize-frontend-governance.yml
           git diff --check
+          test "$(git status --short | wc -l)" -eq 2
+          git status --short | grep -F ' M backend/tests/test_release_governance.py'
+          git status --short | grep -F ' D .github/workflows/pr-1230-finalize-frontend-governance.yml'
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add backend/tests/test_release_governance.py
+          git add -A -- backend/tests/test_release_governance.py .github/workflows/pr-1230-finalize-frontend-governance.yml
+          git diff --cached --check
           git commit -m "test(frontend): align PostCSS governance to 8.5.25"
           git push origin HEAD:dependabot/npm_and_yarn/frontend/frontend-npm-6c49e239bc
 
