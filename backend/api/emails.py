@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from db.session import get_db
 from db.models import Email
 from pydantic import BaseModel, EmailStr, Field
+from pydantic import field_validator
 import datetime
 import time
 from typing import Literal
@@ -692,6 +693,14 @@ class SendEmailRequest(BaseModel):
     body: str
     in_reply_to: str | None = None  # O3: email threading support
     references: str | None = None
+
+    @field_validator("in_reply_to", "references", mode="before")
+    @classmethod
+    def _prevent_crlf_injection(cls, value: str | None) -> str | None:
+        if isinstance(value, str):
+            if "\r" in value or "\n" in value:
+                raise ValueError("Email header fields must not contain newlines")
+        return value
 
 
 @router.post("/send")
