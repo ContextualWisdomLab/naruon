@@ -399,9 +399,10 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert records[0].tool_code_fingerprint == hashlib.sha256(
-        hostile_code.encode("utf-8")
-    ).hexdigest()[:12]
+    assert (
+        records[0].tool_code_fingerprint
+        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
+    )
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -1252,3 +1253,101 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_url_extractor_handler():
+    from api.tools import url_extractor_handler
+
+    result = await url_extractor_handler(
+        {
+            "text": "Check out https://example.com and http://test.org/path?q=1 for more info."
+        }
+    )
+    assert result["url_count"] == 2
+    assert "https://example.com" in result["urls"]
+    assert "http://test.org/path?q=1" in result["urls"]
+
+    result_empty = await url_extractor_handler({"text": "No links here!"})
+    assert result_empty["url_count"] == 0
+    assert result_empty["urls"] == []
+
+
+def test_execute_url_extractor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "Visit https://google.com today!"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["url_count"] == 1
+    assert data["result"]["urls"] == ["https://google.com"]
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_handler():
+    from api.tools import hash_generator_handler
+
+    # md5
+    res_md5 = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
+    assert res_md5["algorithm"] == "md5"
+    assert res_md5["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+    # sha1
+    res_sha1 = await hash_generator_handler({"text": "hello", "algorithm": "sha1"})
+    assert res_sha1["algorithm"] == "sha1"
+    assert res_sha1["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+
+    # sha256 (default)
+    res_sha256 = await hash_generator_handler({"text": "hello", "algorithm": "sha256"})
+    assert res_sha256["algorithm"] == "sha256"
+    assert (
+        res_sha256["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+    # sha512
+    res_sha512 = await hash_generator_handler({"text": "hello", "algorithm": "sha512"})
+    assert res_sha512["algorithm"] == "sha512"
+    assert (
+        res_sha512["hash"]
+        == "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+    )
+
+    # unknown (fallback to sha256)
+    res_unknown = await hash_generator_handler(
+        {"text": "hello", "algorithm": "unknown"}
+    )
+    assert res_unknown["algorithm"] == "unknown"
+    assert (
+        res_unknown["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+    # default parameter
+    res_default = await hash_generator_handler({"text": "hello"})
+    assert res_default["algorithm"] == "sha256"
+    assert (
+        res_default["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+
+def test_execute_hash_generator():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "test", "algorithm": "sha256"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["algorithm"] == "sha256"
+    assert (
+        data["result"]["hash"]
+        == "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    )
