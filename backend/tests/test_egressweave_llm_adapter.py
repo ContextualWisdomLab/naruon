@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -152,13 +153,44 @@ def test_adapter_uses_only_egressweave_public_network_boundary() -> None:
     assert "from egressweave import" in source
 
 
-def test_runtime_dependency_is_pinned_to_reviewed_egressweave_commit() -> None:
-    """Naruon must bind compatibility to the exact reviewed EgressWeave tree."""
+def test_runtime_dependency_uses_hashed_released_egressweave_distribution() -> None:
+    """Runtime integration must use one released version with local SHA-256 hashes."""
     requirements = Path("requirements.txt")
+    lockfile = Path("requirements-hashes.txt")
     if not requirements.exists():
         requirements = Path("backend/requirements.txt")
-    text = requirements.read_text(encoding="utf-8")
-    assert (
-        "egressweave @ git+https://github.com/ContextualWisdomLab/EgressWeave.git"
-        "@10d0c51daf2ad278d66f43be479df8cf6b08ba6d"
-    ) in text
+        lockfile = Path("backend/requirements-hashes.txt")
+
+    requirement_text = requirements.read_text(encoding="utf-8")
+    version_match = re.search(
+        r"(?m)^egressweave==(?P<version>[0-9]+\.[0-9]+\.[0-9]+)$",
+        requirement_text,
+    )
+    assert version_match is not None, (
+        "EgressWeave must be consumed from a released immutable distribution; "
+        "direct VCS/source-archive pins are not an accepted runtime boundary"
+    )
+
+    locked_version = version_match.group("version")
+    lock_lines = lockfile.read_text(encoding="utf-8").splitlines()
+    package_prefix = f"egressweave=={locked_version} "
+    package_index = next(
+        (index for index, line in enumerate(lock_lines) if line.startswith(package_prefix)),
+        None,
+    )
+    assert package_index is not None, "released EgressWeave must be present in the hash lock"
+
+    hash_lines: list[str] = []
+    for line in lock_lines[package_index + 1 :]:
+        if line.startswith("    --hash=sha256:"):
+            hash_lines.append(line)
+            continue
+        if line.startswith("    ") or line.startswith("#") or not line:
+            continue
+        break
+
+    assert hash_lines, "EgressWeave runtime distribution must have local SHA-256 hashes"
+    assert all(
+        re.fullmatch(r"    --hash=sha256:[0-9a-f]{64}(?: \\)?", line)
+        for line in hash_lines
+    )
