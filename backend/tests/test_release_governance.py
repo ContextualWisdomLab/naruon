@@ -345,10 +345,28 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
         construct_mapping,
     )
 
+    # Verify that UniqueKeyLoader is strictly a subclass of SafeLoader so that `# nosec B506`
+    # suppression is genuinely justified according to PyYAML safety contracts.
+    assert issubclass(UniqueKeyLoader, yaml.SafeLoader), (
+        "UniqueKeyLoader must inherit from SafeLoader to suppress B506"
+    )
+    # Ensure that Python object instantiation tags (like !!python/object) are safely
+    # rejected rather than executed.
+    with pytest.raises(yaml.constructor.ConstructorError):
+        yaml.load("!!python/object/apply:os.system ['echo pwned']", Loader=UniqueKeyLoader)  # nosec B506
+    # Ensure normal valid YAML loading still works
+    assert yaml.load("a: 1\nb: 2", Loader=UniqueKeyLoader) == {"a": 1, "b": 2}  # nosec B506
+    # Ensure the duplicate key prevention still works
+    with pytest.raises(AssertionError, match="duplicate mapping key 'a'"):
+        yaml.load("a: 1\na: 2", Loader=UniqueKeyLoader)  # nosec B506
+
     duplicates: list[str] = []
     for workflow_path in governed_workflows:
         try:
-            yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
+            # We explicitly pass UniqueKeyLoader (which inherits from SafeLoader).
+            # Bandit B506 blindly flags yaml.load() regardless of the Loader argument.
+            # This is a verified false positive.
+            yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)  # nosec B506
         except AssertionError as exc:
             duplicates.append(f"{workflow_path.relative_to(REPO_ROOT)}: {exc}")
 
