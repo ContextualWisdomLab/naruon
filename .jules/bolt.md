@@ -15,3 +15,7 @@
 
 **Learning:** `dict.setdefault(key, []).append(value)` evaluates the empty-list default on every iteration, including when the key already exists. In grouping loops, `defaultdict(list)` avoids those transient unused list allocations while preserving insertion order.
 **Action:** Use `defaultdict(list)` when missing keys are intentionally initialized with lists. Keep `setdefault` when its eager-default behavior or an ordinary `dict` is part of the required contract, and benchmark before claiming a material end-to-end improvement.
+## 2026-07-20 - Set Membership Over Dictionary Truthiness
+
+**Learning:** When using a dictionary purely to track the presence of keys (e.g. `has_sent_message[key] = True`), checking for presence with `.get(key, False)` carries unnecessary semantic and memory overhead. Sets in Python provide a cleaner `key in set_name` syntax for boolean presence checks and slightly reduced memory footprint, while maintaining O(1) time complexity.
+**Action:** When tracking unique occurrences or boolean presence of items where the value itself doesn't carry additional information, use a `set` and its `.add()` and `in` operators instead of a `dict` mapping to `True` or `False`.
