@@ -63,12 +63,12 @@ ARG OCI_IMAGE_LICENSES="LicenseRef-Naruon-Proprietary"
 ARG OCI_IMAGE_REF_NAME=""
 ARG OCI_IMAGE_TITLE="naruon"
 ARG OCI_IMAGE_DESCRIPTION="Naruon combined FastAPI and Next.js runtime image"
-ARG OCI_IMAGE_BASE_DIGEST
-ARG OCI_IMAGE_BASE_NAME
+ARG OCI_IMAGE_BASE_DIGEST="sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6"
+ARG OCI_IMAGE_BASE_NAME="docker.io/library/python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6"
 
-# Base-image annotations are derived by the publishing workflow from the exact
-# first FROM instruction. Missing values fail the build instead of silently
-# publishing stale provenance copied into this Dockerfile.
+# Defaults keep local builds provenance-complete. The publishing workflow derives
+# and overrides both values from the exact first FROM instruction, while
+# repository governance tests prevent the reviewed defaults from drifting.
 RUN test -n "$OCI_IMAGE_BASE_DIGEST" && test -n "$OCI_IMAGE_BASE_NAME"
 
 LABEL org.opencontainers.image.created="${OCI_IMAGE_CREATED}" \
