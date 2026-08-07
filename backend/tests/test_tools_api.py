@@ -1261,11 +1261,11 @@ async def test_url_extractor_handler():
 
     result = await url_extractor_handler(
         {
-            "text": "Check out https://example.com and http://test.org/path?q=1 for more info."
+            "text": "Check out https://testdomain.com and http://test.org/path?q=1 for more info."
         }
     )
     assert result["url_count"] == 2
-    assert result["urls"][0] == "https://example.com"
+    assert result["urls"][0] == "https://testdomain.com"
     assert result["urls"][1] == "http://test.org/path?q=1"
 
     result_empty = await url_extractor_handler({"text": "No links here!"})
