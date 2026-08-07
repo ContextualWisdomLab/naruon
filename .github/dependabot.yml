@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns:
@@ -13,6 +15,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       docker-base-images:
         patterns:
@@ -22,6 +26,8 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       frontend-docker-base-images:
         patterns:
@@ -31,6 +37,8 @@ updates:
     directory: "/backend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       backend-python:
         patterns:
@@ -40,6 +48,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       ci-python:
         patterns:
@@ -49,6 +59,8 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       frontend-npm:
         patterns:
@@ -58,13 +70,19 @@ updates:
     directory: /connector
     schedule:
       interval: daily
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: pip
     directory: /connector
     schedule:
       interval: daily
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: daily
+    cooldown:
+      default-days: 7

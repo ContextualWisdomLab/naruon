@@ -2719,6 +2719,4 @@
 - **Note:** CI opencode-review 잡 실행 중 타임아웃 오류(The action 'Run OpenCode PR Review model pool' has timed out after 350 minutes)가 발생했습니다. 반복되는 외부 인프라 타임아웃 문제를 해결하기 위해, 마지막으로 재제출을 시도합니다.
 - **Note:** 추가적인 코드 변경은 없으며, PR 내 자동 분석 커멘트에 대한 답변(CI 실패가 본 PR이 아닌 develop의 기존 이슈임을 인지함)을 남기고 현재 워크플로우를 완료합니다.
 
-## [Unreleased]
-### Added
 - [UX 개선] 캘린더 회의 조율 화면 제안 버튼의 접근성 향상 (스크린 리더 사용자를 위한 sr-only 텍스트 추가 및 불필요한 중복 텍스트 숨김)
