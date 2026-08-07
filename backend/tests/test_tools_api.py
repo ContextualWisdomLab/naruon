@@ -1265,8 +1265,8 @@ async def test_url_extractor_handler():
         }
     )
     assert result["url_count"] == 2
-    assert "https://example.com" in result["urls"]
-    assert "http://test.org/path?q=1" in result["urls"]
+    assert result["urls"][0] == "https://example.com"
+    assert result["urls"][1] == "http://test.org/path?q=1"
 
     result_empty = await url_extractor_handler({"text": "No links here!"})
     assert result_empty["url_count"] == 0
