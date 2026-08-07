@@ -480,9 +480,7 @@ def _expected_acquisition_readiness_kpis():
             "target_percent": 100,
             "target_met": False,
             "status_code": "needs_attention",
-            "guardrail_text": (
-                "Semantic relation source backing must reach target."
-            ),
+            "guardrail_text": ("Semantic relation source backing must reach target."),
             "provider_write_executed": False,
         },
         {
@@ -496,8 +494,7 @@ def _expected_acquisition_readiness_kpis():
             "target_met": False,
             "status_code": "needs_attention",
             "guardrail_text": (
-                "Attachment parser coverage must reach target or have safe "
-                "exceptions."
+                "Attachment parser coverage must reach target or have safe exceptions."
             ),
             "provider_write_executed": False,
         },
@@ -539,9 +536,7 @@ def _expected_acquisition_readiness_kpis():
             "target_percent": 100,
             "target_met": True,
             "status_code": "pass",
-            "guardrail_text": (
-                "Semantic KG evidence must remain provenance-approved."
-            ),
+            "guardrail_text": ("Semantic KG evidence must remain provenance-approved."),
             "provider_write_executed": False,
         },
     ]
@@ -1062,9 +1057,7 @@ def _expected_diligence_close_proof_plan():
                 "Regenerate the evidence snapshot and run python "
                 "scripts/verify_evidence_snapshot.py <snapshot.json>."
             ),
-            "buyer_close_dependency": dependency_by_severity[
-                risk["severity_code"]
-            ],
+            "buyer_close_dependency": dependency_by_severity[risk["severity_code"]],
             "close_gate_status": "blocked",
             "next_action": risk["recommended_next_action"],
             "provider_write_executed": False,
@@ -1346,7 +1339,8 @@ def _expected_diligence_close_traceability_map():
         for item in _expected_diligence_close_artifact_review_queue()
     }
     owner_handoff_by_owner = {
-        item["owner_area"]: item for item in _expected_diligence_close_owner_handoff_queue()
+        item["owner_area"]: item
+        for item in _expected_diligence_close_owner_handoff_queue()
     }
 
     entries = []
@@ -1354,9 +1348,7 @@ def _expected_diligence_close_traceability_map():
         risk_key = proof["proof_key"].removeprefix("proof_")
         risk = risk_by_key[risk_key]
         manifest = manifest_by_file[proof["required_proof_artifact"]]
-        artifact_review = artifact_review_by_artifact[
-            proof["required_proof_artifact"]
-        ]
+        artifact_review = artifact_review_by_artifact[proof["required_proof_artifact"]]
         owner_handoff = owner_handoff_by_owner[proof["owner_area"]]
         entries.append(
             {
@@ -1500,8 +1492,7 @@ def _expected_acquisition_remediation_actions():
                 "Semantic relations need source message or thread evidence."
             ),
             "recommended_next_step": (
-                "Backfill source message or thread links for semantic relation "
-                "records."
+                "Backfill source message or thread links for semantic relation records."
             ),
             "provider_write_executed": False,
         },
@@ -1942,9 +1933,13 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert "verification_handoff" in snapshot["canonical_payload_fields"]
     assert snapshot["verification_handoff"] == _expected_snapshot_verification_handoff()
     assert "evidence_packet_checklist" in snapshot["canonical_payload_fields"]
-    assert snapshot["evidence_packet_checklist"] == _expected_evidence_packet_checklist()
+    assert (
+        snapshot["evidence_packet_checklist"] == _expected_evidence_packet_checklist()
+    )
     assert "data_room_package_manifest" in snapshot["canonical_payload_fields"]
-    assert snapshot["data_room_package_manifest"] == _expected_data_room_package_manifest()
+    assert (
+        snapshot["data_room_package_manifest"] == _expected_data_room_package_manifest()
+    )
     assert "diligence_exception_register" in snapshot["canonical_payload_fields"]
     assert (
         snapshot["diligence_exception_register"]
@@ -1954,31 +1949,29 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
     assert snapshot["diligence_risk_matrix"] == _expected_diligence_risk_matrix()
     assert "diligence_close_proof_plan" in snapshot["canonical_payload_fields"]
     assert (
-        snapshot["diligence_close_proof_plan"]
-        == _expected_diligence_close_proof_plan()
+        snapshot["diligence_close_proof_plan"] == _expected_diligence_close_proof_plan()
     )
     assert "diligence_close_decision_summary" in snapshot["canonical_payload_fields"]
     assert (
         snapshot["diligence_close_decision_summary"]
         == _expected_diligence_close_decision_summary()
     )
-    assert "diligence_close_artifact_review_queue" in (
-        snapshot["canonical_payload_fields"]
+    assert (
+        "diligence_close_artifact_review_queue"
+        in (snapshot["canonical_payload_fields"])
     )
     assert (
         snapshot["diligence_close_artifact_review_queue"]
         == _expected_diligence_close_artifact_review_queue()
     )
-    assert "diligence_close_owner_handoff_queue" in (
-        snapshot["canonical_payload_fields"]
+    assert (
+        "diligence_close_owner_handoff_queue" in (snapshot["canonical_payload_fields"])
     )
     assert (
         snapshot["diligence_close_owner_handoff_queue"]
         == _expected_diligence_close_owner_handoff_queue()
     )
-    assert "diligence_close_traceability_map" in (
-        snapshot["canonical_payload_fields"]
-    )
+    assert "diligence_close_traceability_map" in (snapshot["canonical_payload_fields"])
     assert (
         snapshot["diligence_close_traceability_map"]
         == _expected_diligence_close_traceability_map()
@@ -2269,9 +2262,7 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "executive diligence reviewer"
     ]
     assert owner_handoff_queue[-1]["owner_area"] == "semantic_kg"
-    assert all(
-        item["provider_write_executed"] is False for item in owner_handoff_queue
-    )
+    assert all(item["provider_write_executed"] is False for item in owner_handoff_queue)
     traceability_map = snapshot["diligence_close_traceability_map"]
     assert len(traceability_map) == 6
     assert traceability_map[0] == {
@@ -2317,9 +2308,7 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         "acquisition_readiness_gate.remediation_actions"
     )
     assert traceability_map[-1]["owner_handoff_key"] == "handoff_attachment_parsing"
-    assert all(
-        item["provider_write_executed"] is False for item in traceability_map
-    )
+    assert all(item["provider_write_executed"] is False for item in traceability_map)
     assert "semantic_extraction_manifest" in snapshot["canonical_payload_fields"]
     assert "semantic_relation_evidence_samples" in snapshot["canonical_payload_fields"]
     assert snapshot["parser_manifest_summary"][0] == {
@@ -2334,7 +2323,11 @@ def test_data_quality_evidence_snapshot_returns_shareable_redacted_surface(mock_
         {"source_kind": "attachment", "segment_kind": "heading", "object_count": 2},
     ]
     assert snapshot["knowledge_graph_topology_counts"] == [
-        {"source_kind": "email_body", "edge_kind": "node_has_segment", "object_count": 8},
+        {
+            "source_kind": "email_body",
+            "edge_kind": "node_has_segment",
+            "object_count": 8,
+        },
         {
             "source_kind": "attachment",
             "edge_kind": "heading_contains_segment",
@@ -2885,7 +2878,9 @@ def test_data_pdf_dom_upload_persists_signed_organization_scope(mock_db):
     try:
         response = client.post(
             "/api/data/documents/pdf-dom-recognition",
-            files={"file": ("contract.pdf", b"%PDF-1.7 test", "application/pdf")},
+            files={
+                "file": ("contract.pdf", b"%PDF-1.7 test\n%%EOF\n", "application/pdf")
+            },
             data={"document_name": "contract.pdf"},
         )
     finally:
@@ -2925,16 +2920,12 @@ def test_pending_pdf_document_decoder_rejects_malformed_payloads(monkeypatch):
     with pytest.raises(ValueError, match="valid base64"):
         data_api.decode_pending_pdf_document_bytes(malformed_base64)
 
-    non_pdf = Document(
-        document_content=base64.b64encode(b"not a PDF").decode("ascii")
-    )
+    non_pdf = Document(document_content=base64.b64encode(b"not a PDF").decode("ascii"))
     with pytest.raises(ValueError, match="not a PDF"):
         data_api.decode_pending_pdf_document_bytes(non_pdf)
 
     monkeypatch.setattr(data_api, "_MAX_PDF_DOM_UPLOAD_BYTES", 5)
-    oversized = Document(
-        document_content=base64.b64encode(b"%PDF-1.7").decode("ascii")
-    )
+    oversized = Document(document_content=base64.b64encode(b"%PDF-1.7").decode("ascii"))
     with pytest.raises(ValueError, match="size limit"):
         data_api.decode_pending_pdf_document_bytes(oversized)
 
@@ -3506,7 +3497,9 @@ async def test_data_quality_surface_real_postgres_smoke_uses_signed_scope(
     assert quality_by_key["attachment_parse_coverage"]["issue_count"] == 1
     assert data["semantic_extraction_manifest"][0]["semantic_relation_count"] == 1
     assert data["semantic_extraction_manifest"][0]["source_backed_relation_count"] == 1
-    assert data["semantic_relation_evidence_samples"][0]["relationship_type"] == "Vendor"
+    assert (
+        data["semantic_relation_evidence_samples"][0]["relationship_type"] == "Vendor"
+    )
     assert event_uid in {event["event_uid"] for event in data["connector_events"]}
     asset_names = {asset["display_name"] for asset in data["repository_assets"]}
     assert {"ready.txt", "blank.txt"} <= asset_names
