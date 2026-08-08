@@ -42,3 +42,15 @@ def test_trivy_vulnerability_exceptions_are_documented_and_time_bounded() -> Non
         assert "3.3.17" in text
         assert "npm" in text.lower()
         assert "Remove this exception" in text
+
+
+def test_trivy_exception_parser_binds_documentation_to_each_rule() -> None:
+    """Keep each exception's rationale attached to only that exception."""
+    text = """# first rationale\nCVE-2026-11111 exp:2026-08-16\n\nCVE-2026-22222 exp:2026-08-16\n"""
+
+    exceptions = _parse_trivy_exceptions(text)
+
+    assert exceptions == [
+        ("CVE-2026-11111 exp:2026-08-16", ["first rationale"]),
+        ("CVE-2026-22222 exp:2026-08-16", []),
+    ]
