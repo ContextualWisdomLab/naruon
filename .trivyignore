@@ -1,5 +1,0 @@
-# Temporary exception: Trivy currently reports CVE-2026-67213 for PostCSS's
-# transitive nanoid 3.3.16 and advertises 3.3.17 as the fix. The npm registry's
-# legacy 3.x tag is still 3.3.16, so that remediation is not publishable yet.
-# Remove this exception immediately when a compatible fixed nanoid is available.
-CVE-2026-67213 exp:2026-08-16
