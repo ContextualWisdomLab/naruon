@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, memo, useMemo } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -150,6 +150,18 @@ export function EmailList({
     fetchEmails();
   }, [fetchEmails]);
 
+  // ⚡ Bolt: Memoize email list to prevent O(N) re-renders during unrelated state updates like search input changes
+  const emailListElements = useMemo(() => {
+    return emails.map((email: EmailItem) => (
+      <EmailListItemComponent
+        key={email.id}
+        email={email}
+        selected={selectedEmailId === email.id}
+        onSelectEmail={onSelectEmail}
+      />
+    ));
+  }, [emails, selectedEmailId, onSelectEmail]);
+
   const folderCopy = folder === 'sent'
     ? {
         title: '보낸 메일',
@@ -259,14 +271,7 @@ export function EmailList({
               <p className="mt-1 text-xs leading-5">{folderCopy.emptyBody}</p>
             </div>
           ) : (
-            emails.map((email: EmailItem) => (
-              <EmailListItemComponent
-                key={email.id}
-                email={email}
-                selected={selectedEmailId === email.id}
-                onSelectEmail={onSelectEmail}
-              />
-            ))
+            emailListElements
           )}
         </div>
       </ScrollArea>
