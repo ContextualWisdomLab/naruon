@@ -399,9 +399,10 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert records[0].tool_code_fingerprint == hashlib.sha256(
-        hostile_code.encode("utf-8")
-    ).hexdigest()[:12]
+    assert (
+        records[0].tool_code_fingerprint
+        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
+    )
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -1252,3 +1253,42 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+def test_uppercase_converter_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/uppercase_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["converted_text"] == "HELLO WORLD"
+
+
+def test_lowercase_converter_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/lowercase_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "HELLO WORLD"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["converted_text"] == "hello world"
+
+
+def test_string_length_calculator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/string_length_calculator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["length"] == 11
