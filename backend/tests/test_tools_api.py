@@ -399,9 +399,10 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert records[0].tool_code_fingerprint == hashlib.sha256(
-        hostile_code.encode("utf-8")
-    ).hexdigest()[:12]
+    assert (
+        records[0].tool_code_fingerprint
+        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
+    )
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -1044,6 +1045,46 @@ async def test_mock_handler():
 
     res = await mock_handler({"test": 123})
     assert "123" in res
+
+
+def test_validate_webhook_url_details_success():
+    from api.tools import validate_webhook_url_details
+
+    with patch("api.tools._resolve_global_addresses", return_value=("93.184.216.34",)):
+        result = validate_webhook_url_details("https://example.com/webhook")
+        assert result.normalized_url == "https://example.com/webhook"
+        assert result.hostname == "example.com"
+        assert result.port == 443
+        assert result.addresses == ("93.184.216.34",)
+
+        result_with_port = validate_webhook_url_details(
+            "https://example.com:8443/webhook"
+        )
+        assert result_with_port.normalized_url == "https://example.com:8443/webhook"
+        assert result_with_port.hostname == "example.com"
+        assert result_with_port.port == 8443
+        assert result_with_port.addresses == ("93.184.216.34",)
+
+
+def test_validate_webhook_url_details_errors():
+    from api.tools import validate_webhook_url_details
+
+    with pytest.raises(ValueError, match="Webhook URL must use https"):
+        validate_webhook_url_details("http://example.com/webhook")
+
+    with pytest.raises(ValueError, match="Webhook URL must not include userinfo"):
+        validate_webhook_url_details("https://user:pass@example.com/webhook")
+
+    with pytest.raises(ValueError, match="Webhook URL must not include a fragment"):
+        validate_webhook_url_details("https://example.com/webhook#fragment")
+
+    with pytest.raises(ValueError, match="Webhook URL must include a host"):
+        validate_webhook_url_details("https:///webhook")
+
+    with pytest.raises(
+        ValueError, match="Webhook URL host must not use an internal domain suffix"
+    ):
+        validate_webhook_url_details("https://example.internal/webhook")
 
 
 def test_validate_webhook_url_no_host():
