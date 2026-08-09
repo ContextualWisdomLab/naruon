@@ -501,6 +501,11 @@ in this repo.
   configured, fail closed with `adapter_not_configured` and
   `provider_write_executed=false`; if an adapter is configured, wrap only the
   adapter's actual result in the standard runner response envelope.
+- Dynamic `/api/tools` `POST`/`PATCH`/`DELETE` mutations must remain fail closed
+  until tool metadata and handlers are durably scoped by signed-session tenant
+  and workspace, restricted to an administrative role, and backed by an actual
+  webhook or provider execution target. Never attach a mock handler or report
+  successful execution when no external or local tool work occurred.
 - Calendar UI actions must request `/api/calendar/writeback-intent` with
   server-authoritative source selection and provenance. Do not wire browser
   actions back to legacy `/api/calendar/sync` unless a trusted backend credential

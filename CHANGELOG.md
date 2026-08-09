@@ -1,4 +1,14 @@
 ## [Unreleased]
+### 도구 변경 경계 (Tool Mutation Boundary)
+
+- 프로세스 전역·비영속 레지스트리를 모든 인증 사용자가 변경할 수 있었던
+  `POST /api/tools`, `PATCH /api/tools/{code}`, `DELETE /api/tools/{code}`를
+  OpenAPI에서 숨긴 fail-closed tombstone으로 전환했습니다. 세 경로는 인증 후
+  `501 tool_mutation_not_supported`를 반환하며, 요청 body를 검증하거나 레지스트리를
+  변경하거나 webhook DNS/egress를 시작하지 않습니다. webhook이 없는 사용자 정의
+  도구에 실제 작업 없이 성공을 반환하던 mock handler도 제거했습니다. 도구 목록·상세
+  조회와 기존 내장 도구 실행 계약은 변경하지 않았습니다.
+
 ### 주제 측정 경계 (Topic Measurement)
 
 - STM 결과로 오인될 수 있었던 하드코딩 용어표 기반

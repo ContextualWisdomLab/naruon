@@ -5,10 +5,11 @@ import json
 import os
 import secrets
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
@@ -60,6 +61,20 @@ def _signed_session_token() -> str:
         hashlib.sha256,
     ).digest()
     return f"{signing_input}.{_base64url_encode(signature)}"
+
+
+def _assert_tool_mutation_not_supported(response) -> None:
+    assert response.status_code == 501
+    assert response.json() == {
+        "detail": {
+            "error_code": "tool_mutation_not_supported",
+            "message": (
+                "Dynamic tool mutations are disabled until tenant-scoped "
+                "persistent storage and administrative authorization are "
+                "implemented."
+            ),
+        }
+    }
 
 
 def test_tools_rejects_missing_signed_session():
@@ -563,14 +578,15 @@ async def test_base64_decoder_tool_invalid_input():
     assert "Invalid Base64 string" in data["message"]
 
 
-def test_create_tool_success():
+def test_create_tool_mutation_fails_closed_without_registry_write():
+    code = "new_custom_tool"
     try:
         with TestClient(app) as client:
             response = client.post(
                 "/api/tools",
                 headers={"Authorization": f"Bearer {_signed_session_token()}"},
                 json={
-                    "code": "new_custom_tool",
+                    "code": code,
                     "name": "Custom Tool",
                     "description": "Custom Description",
                     "category": "Custom Category",
@@ -578,257 +594,197 @@ def test_create_tool_success():
                     "is_active": True,
                 },
             )
-        assert response.status_code == 201
-        data = response.json()
-        assert data["code"] == "new_custom_tool"
-
-        tool = registry.get("new_custom_tool")
-        assert tool is not None
-        assert tool.name == "Custom Tool"
+        _assert_tool_mutation_not_supported(response)
+        assert registry.get(code) is None
     finally:
-        registry.unregister("new_custom_tool")
+        registry.unregister(code)
 
 
-def test_create_tool_already_exists():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "code": "thread_summarizer",
-                "name": "Should Fail",
-                "description": "Should Fail",
-                "category": "Test",
-            },
-        )
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Tool with this code already exists"}
-
-
-def test_update_tool_success():
+def test_create_tool_mutation_fails_closed_even_with_safe_webhook():
+    code = "webhook_custom_tool"
     try:
-        registry.register(
-            ToolInfo(
-                code="update_tool",
-                name="Old Name",
-                description="Old Desc",
-                category="Test",
-            ),
-            lambda p: "ok",
-        )
+        with patch("api.tools._resolve_global_addresses") as resolve_addresses:
+            with TestClient(app) as client:
+                response = client.post(
+                    "/api/tools",
+                    headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                    json={
+                        "code": code,
+                        "name": "Webhook Tool",
+                        "description": "Calls an external webhook",
+                        "category": "Custom Category",
+                        "parameters": {"input": "string"},
+                        "webhook_url": "https://example.com/webhook",
+                    },
+                )
+
+        _assert_tool_mutation_not_supported(response)
+        assert registry.get(code) is None
+        resolve_addresses.assert_not_called()
+    finally:
+        registry.unregister(code)
+
+
+def test_update_tool_mutation_fails_closed_without_registry_change():
+    code = "update_tool"
+
+    def handler(_params):
+        return "ok"
+
+    original = ToolInfo(
+        code=code,
+        name="Old Name",
+        description="Old Desc",
+        category="Test",
+    )
+    original_snapshot = original.model_copy(deep=True)
+    try:
+        registry.register(original, handler)
 
         with TestClient(app) as client:
             response = client.patch(
-                "/api/tools/update_tool",
+                f"/api/tools/{code}",
                 headers={"Authorization": f"Bearer {_signed_session_token()}"},
                 json={"name": "New Name", "is_active": False},
             )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["name"] == "New Name"
-        assert data["is_active"] is False
-
-        tool = registry.get("update_tool")
-        assert tool.name == "New Name"
-        assert tool.is_active is False
+        _assert_tool_mutation_not_supported(response)
+        assert registry.get(code) == original_snapshot
+        assert registry._handlers[code] is handler
     finally:
-        registry.unregister("update_tool")
+        registry.unregister(code)
 
 
-def test_update_tool_with_webhook():
+def test_delete_tool_mutation_fails_closed_without_registry_change():
+    code = "delete_tool"
+
+    def handler(_params):
+        return "ok"
+
+    original = ToolInfo(
+        code=code,
+        name="Do Not Delete",
+        description="Do Not Delete",
+        category="Test",
+    )
     try:
-        registry.register(
-            ToolInfo(
-                code="webhook_update_tool",
-                name="Old",
-                description="Old",
-                category="Test",
-            ),
-            lambda p: "ok",
-        )
-
-        with patch(
-            "api.tools._resolve_global_addresses",
-            return_value=("93.184.216.34",),
-        ):
-            with TestClient(app) as client:
-                response = client.patch(
-                    "/api/tools/webhook_update_tool",
-                    headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                    json={"webhook_url": "https://example.com/webhook"},
-                )
-
-        assert response.status_code == 200
-        tool = registry.get("webhook_update_tool")
-        assert tool.webhook_url == "https://example.com/webhook"
-    finally:
-        registry.unregister("webhook_update_tool")
-
-
-def test_update_tool_remove_webhook():
-    try:
-        registry.register(
-            ToolInfo(
-                code="webhook_remove_tool",
-                name="Old",
-                description="Old",
-                category="Test",
-                webhook_url="https://example.com/webhook",
-            ),
-            lambda p: "ok",
-        )
-
-        with TestClient(app) as client:
-            response = client.patch(
-                "/api/tools/webhook_remove_tool",
-                headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                json={"webhook_url": None},
-            )
-
-        assert response.status_code == 200
-        tool = registry.get("webhook_remove_tool")
-        assert tool.webhook_url is None
-    finally:
-        registry.unregister("webhook_remove_tool")
-
-
-def test_update_tool_not_found():
-    with TestClient(app) as client:
-        response = client.patch(
-            "/api/tools/non_existent_tool",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"name": "New Name"},
-        )
-    assert response.status_code == 404
-
-
-def test_delete_tool_success():
-    try:
-        registry.register(
-            ToolInfo(
-                code="delete_tool",
-                name="To Delete",
-                description="To Delete",
-                category="Test",
-            ),
-            lambda p: "ok",
-        )
+        registry.register(original, handler)
 
         with TestClient(app) as client:
             response = client.delete(
-                "/api/tools/delete_tool",
+                f"/api/tools/{code}",
                 headers={"Authorization": f"Bearer {_signed_session_token()}"},
             )
 
-        assert response.status_code == 204
-        assert registry.get("delete_tool") is None
+        _assert_tool_mutation_not_supported(response)
+        assert registry.get(code) == original
+        assert registry._handlers[code] is handler
     finally:
-        registry.unregister("delete_tool")
+        registry.unregister(code)
 
 
-def test_delete_tool_not_found():
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        (
+            "POST",
+            "/api/tools",
+            {
+                "code": "unauthorized_tool",
+                "name": "Unauthorized Tool",
+                "description": "Must not be registered",
+                "category": "Test",
+            },
+        ),
+        ("PATCH", "/api/tools/thread_summarizer", {"name": "Unauthorized"}),
+        ("DELETE", "/api/tools/thread_summarizer", None),
+    ],
+)
+def test_tool_mutation_routes_require_signed_session(method, path, payload):
     with TestClient(app) as client:
-        response = client.delete(
-            "/api/tools/non_existent_tool",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        response = client.request(method, path, json=payload)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication required"}
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/api/tools"),
+        ("PATCH", "/api/tools/non_existent_tool"),
+    ],
+)
+def test_tool_mutation_tombstones_do_not_validate_request_models(method, path):
+    with TestClient(app) as client:
+        response = client.request(
+            method,
+            path,
+            headers={
+                "Authorization": f"Bearer {_signed_session_token()}",
+                "Content-Type": "application/json",
+            },
+            content="{not-json",
         )
-    assert response.status_code == 404
+
+    _assert_tool_mutation_not_supported(response)
+
+
+def test_tool_mutation_routes_are_hidden_from_openapi():
+    from api.tools import router as tools_router
+
+    schema_app = FastAPI()
+    schema_app.include_router(tools_router)
+    paths = schema_app.openapi()["paths"]
+
+    assert "post" not in paths["/api/tools"]
+    assert "patch" not in paths["/api/tools/{code}"]
+    assert "delete" not in paths["/api/tools/{code}"]
 
 
 @pytest.mark.asyncio
 async def test_webhook_handler_success():
-    try:
-        with patch(
-            "api.tools._resolve_global_addresses",
-            return_value=("93.184.216.34",),
-        ):
-            with TestClient(app) as client:
-                client.post(
-                    "/api/tools",
-                    headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                    json={
-                        "code": "webhook_tool",
-                        "name": "Webhook Tool",
-                        "description": "Calls external webhook",
-                        "category": "Test",
-                        "parameters": {"input": "string"},
-                        "webhook_url": "https://example.com/webhook",
-                    },
-                )
+    from api.tools import make_webhook_handler
 
-            with patch("httpx.AsyncClient.post") as mock_post:
-                mock_response = AsyncMock()
-                mock_response.json.return_value = {
-                    "webhook_success": True
-                }  # json() is sync, return_value returns coroutine from AsyncMock, wait...
-                from unittest.mock import MagicMock
+    with patch(
+        "api.tools._resolve_global_addresses",
+        return_value=("93.184.216.34",),
+    ):
+        handler = make_webhook_handler("https://example.com/webhook")
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {"webhook_success": True}
+            mock_response.raise_for_status.return_value = None
+            mock_post.return_value = mock_response
 
-                mock_response.json = MagicMock(return_value={"webhook_success": True})
-                mock_response.raise_for_status = lambda: None
-                mock_post.return_value = mock_response
+            result = await handler({"input": "hello"})
 
-                with TestClient(app) as client:
-                    response = client.post(
-                        "/api/tools/webhook_tool/execute",
-                        headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                        json={"parameters": {"input": "hello"}},
-                    )
-
-                assert response.status_code == 200
-                data = response.json()
-                assert data["status"] == "success"
-                assert data["result"] == {"webhook_success": True}
-
-                mock_post.assert_called_once()
-                args, kwargs = mock_post.call_args
-                assert args[0] == "https://example.com/webhook"
-                assert kwargs["json"] == {"parameters": {"input": "hello"}}
-
-    finally:
-        registry.unregister("webhook_tool")
+    assert result == {"webhook_success": True}
+    mock_post.assert_awaited_once_with(
+        "https://example.com/webhook",
+        json={"parameters": {"input": "hello"}},
+        timeout=10.0,
+    )
 
 
 @pytest.mark.asyncio
 async def test_webhook_handler_http_error():
-    try:
+    from api.tools import make_webhook_handler
+
+    with patch(
+        "api.tools._resolve_global_addresses",
+        return_value=("93.184.216.34",),
+    ):
+        handler = make_webhook_handler("https://example.com/webhook")
         with patch(
-            "api.tools._resolve_global_addresses",
-            return_value=("93.184.216.34",),
+            "httpx.AsyncClient.post",
+            side_effect=httpx.HTTPError("Simulated HTTP Error"),
         ):
-            with TestClient(app) as client:
-                client.post(
-                    "/api/tools",
-                    headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                    json={
-                        "code": "webhook_fail_tool",
-                        "name": "Webhook Fail Tool",
-                        "description": "Calls external webhook",
-                        "category": "Test",
-                        "parameters": {"input": "string"},
-                        "webhook_url": "https://example.com/webhook",
-                    },
-                )
-
-            with patch("httpx.AsyncClient.post") as mock_post:
-                mock_post.side_effect = httpx.HTTPError("Simulated HTTP Error")
-
-                with TestClient(app) as client:
-                    response = client.post(
-                        "/api/tools/webhook_fail_tool/execute",
-                        headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                        json={"parameters": {"input": "hello"}},
-                    )
-
-                assert response.status_code == 200
-                data = response.json()
-                assert data["status"] == "failed"
-                assert (
-                    "Webhook execution failed: Simulated HTTP Error" in data["message"]
-                )
-
-    finally:
-        registry.unregister("webhook_fail_tool")
+            with pytest.raises(
+                ValueError,
+                match="Webhook execution failed: Simulated HTTP Error",
+            ):
+                await handler({"input": "hello"})
 
 
 def test_tool_registry_execute_no_handler():
@@ -897,46 +853,6 @@ def test_validate_parameters_not_dict():
     # Internal registry test to hit line 80
     with pytest.raises(ValueError, match="Tool parameters must be an object"):
         registry._validate_parameters("some_code", "not a dict")  # type: ignore
-
-
-def test_create_tool_unsafe_webhook():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "code": "unsafe_tool",
-                "name": "Unsafe",
-                "description": "Unsafe",
-                "category": "Test",
-                "webhook_url": "http://localhost:8080/admin",
-            },
-        )
-    assert response.status_code == 400
-    assert "Invalid or unsafe webhook URL" in response.json()["detail"]
-
-
-def test_update_tool_unsafe_webhook():
-    try:
-        registry.register(
-            ToolInfo(
-                code="unsafe_update_tool",
-                name="Safe",
-                description="Safe",
-                category="Test",
-            ),
-            lambda p: "ok",
-        )
-        with TestClient(app) as client:
-            response = client.patch(
-                "/api/tools/unsafe_update_tool",
-                headers={"Authorization": f"Bearer {_signed_session_token()}"},
-                json={"webhook_url": "http://169.254.169.254/latest/meta-data/"},
-            )
-        assert response.status_code == 400
-        assert "Invalid or unsafe webhook URL" in response.json()["detail"]
-    finally:
-        registry.unregister("unsafe_update_tool")
 
 
 def test_is_safe_webhook_url_coverage():
@@ -1051,14 +967,6 @@ def test_execute_grammar_checker():
     assert "확인 부탁드립니다" in data["result"]["corrected_text"]
     assert "감사합니다" in data["result"]["corrected_text"]
     assert data["result"]["errors_found"] == 3
-
-
-@pytest.mark.asyncio
-async def test_mock_handler():
-    from api.tools import mock_handler
-
-    res = await mock_handler({"test": 123})
-    assert "123" in res
 
 
 def test_validate_webhook_url_no_host():
