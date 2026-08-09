@@ -506,6 +506,12 @@ in this repo.
   and workspace, restricted to an administrative role, and backed by an actual
   webhook or provider execution target. Never attach a mock handler or report
   successful execution when no external or local tool work occurred.
+- Spam/phishing verdicts must be grounded in source-bound evidence and carry the
+  provider, evidence, and versioned provenance needed to audit the decision. Do
+  not advertise keyword matching or sender-domain suffix heuristics as a
+  phishing/spam detector. When the required provider or evidence is unavailable,
+  fail closed with an explicit typed `unknown`/unavailable result; never return a
+  benign boolean, risk score, or heuristic fallback.
 - Calendar UI actions must request `/api/calendar/writeback-intent` with
   server-authoritative source selection and provenance. Do not wire browser
   actions back to legacy `/api/calendar/sync` unless a trusted backend credential

@@ -256,43 +256,6 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
     }
 
 
-async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
-    """Score an email body for simple spam and phishing risk indicators."""
-    email_content = params.get("email_content", "")
-    sender_domain = params.get("sender_domain", "")
-    normalized_content = email_content.lower()
-    normalized_domain = sender_domain.lower()
-    phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
-    spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
-    spam_hits = sorted(term for term in spam_terms if term in normalized_content)
-    suspicious_domain = (
-        normalized_domain.endswith((".ru", ".zip", ".tk"))
-        or "login" in normalized_domain
-        or "secure-" in normalized_domain
-    )
-    risk_score = min(
-        100,
-        10
-        + (20 * len(phishing_hits))
-        + (15 * len(spam_hits))
-        + (35 if suspicious_domain else 0),
-    )
-    warnings: list[str] = []
-    if phishing_hits:
-        warnings.append(f"phishing keywords detected: {', '.join(phishing_hits)}")
-    if spam_hits:
-        warnings.append(f"spam urgency keywords detected: {', '.join(spam_hits)}")
-    if suspicious_domain:
-        warnings.append(f"sender domain looks suspicious: {sender_domain}")
-    return {
-        "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
-        "risk_score": risk_score,
-        "warnings": warnings,
-    }
-
-
 async def reply_drafter_handler(params: Dict[str, Any]) -> Any:
     """Draft a formal reply using the operator's requested intent."""
     original_email = params.get("original_email", "").strip()
@@ -580,17 +543,6 @@ registry.register(
         parameters={"text": "string", "target_language": "string"},
     ),
     email_translator_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="spam_phishing_detector",
-        name="스팸 및 피싱 탐지기 (Spam & Phishing Detector)",
-        description="이메일 본문과 발신자 도메인을 분석하여 스팸 및 피싱 위험도를 평가합니다.",
-        category="보안",
-        parameters={"email_content": "string", "sender_domain": "string"},
-    ),
-    spam_phishing_detector_handler,
 )
 
 registry.register(
