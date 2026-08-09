@@ -1,14 +1,13 @@
-import pytest
 from db.models import Email
 from api.emails import thread_matches_folder
 
 def test_thread_matches_folder_inbox():
     # It should return True for inbox folder regardless of messages
-    assert thread_matches_folder([], set(), "inbox") == True
+    assert thread_matches_folder([], set(), "inbox")
 
 def test_thread_matches_folder_sent_no_messages():
     # If there are no messages, it should return False for sent folder
-    assert thread_matches_folder([], set(), "sent") == False
+    assert not thread_matches_folder([], set(), "sent")
 
 def test_thread_matches_folder_sent_with_matching_message():
     # Create mock email messages
@@ -33,7 +32,7 @@ def test_thread_matches_folder_sent_with_matching_message():
     )
 
     # Should match because one message is from the user
-    assert thread_matches_folder([non_matching_message, matching_message], user_addresses, "sent") == True
+    assert thread_matches_folder([non_matching_message, matching_message], user_addresses, "sent")
 
 def test_thread_matches_folder_sent_without_matching_message():
     user_addresses = {"user@example.com"}
@@ -57,4 +56,4 @@ def test_thread_matches_folder_sent_without_matching_message():
     )
 
     # Should not match because no message is from the user
-    assert thread_matches_folder([non_matching_message1, non_matching_message2], user_addresses, "sent") == False
+    assert not thread_matches_folder([non_matching_message1, non_matching_message2], user_addresses, "sent")
