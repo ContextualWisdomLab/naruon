@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from unittest.mock import AsyncMock, MagicMock
 
 import defusedxml.ElementTree as ET
 import pytest
