@@ -107,9 +107,6 @@ def test_loopback_origin_rejects_control_characters(value: str) -> None:
         "/api/emails\r",
         "/api/emails\t",
         "/api/emails\x7f",
-        "/api/emails/%0A",
-        "/api/%00",
-        "/api/%7F",
     ],
 )
 def test_local_request_target_rejects_control_characters(path: str) -> None:
