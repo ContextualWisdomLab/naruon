@@ -1261,7 +1261,6 @@ async def test_make_webhook_handler_success():
     from unittest.mock import MagicMock
 
     from unittest.mock import patch, AsyncMock
-    import httpx
 
     with patch("api.tools.validate_webhook_url_details") as mock_validate, patch(
         "api.tools.build_pinned_https_async_client"
