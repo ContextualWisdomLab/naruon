@@ -156,10 +156,11 @@ whose immutable identifier is:
 
 `https://naruon.net/schemas/topic-intelligence/topic-inference-result-v1/2026-08-09.1`
 
-The adapter configuration pins both that `$id` and the SHA-256 digest of the RFC
-8785 canonical schema document. A response repeats the ID, revision, and digest;
-the schema intentionally does not embed its own expected digest because the pin
-is distributed out of band.
+The adapter configuration pins both that `$id` and the `schema_digest`
+construction defined in [Digest contract](#digest-contract). A response repeats
+the ID, revision, and complete canonical-digest record. The schema intentionally
+does not embed its own expected digest value because that value is distributed
+out of band with the adapter configuration.
 
 The envelope is Naruon-owned and requires:
 
@@ -283,14 +284,31 @@ protocol errors. Schema validation alone is insufficient.
 The complete internal inventory is the schema, source snapshot, scientific
 payload, artifact descriptor, artifact manifest, vocabulary, preprocessing,
 design, lineage, model card, validation report, evidence-time manifest,
-covariate snapshot, and design row. Every digest in the internal envelope is:
+covariate snapshot, and design row. Each of those exactly 14 canonical digest
+fields, including `schema_digest`, is a `canonicalDigest` record whose `value`
+is:
 
 `SHA-256(UTF8(domain) || 0x00 || UTF8(RFC8785(value)))`
 
-with lowercase hexadecimal output. Contract digests cover canonical JSON
-descriptors; an upstream manifest may additionally carry a raw-byte artifact
-hash. RFC 8785 does not normalize Unicode, so normalization belongs only to the
-pinned preprocessing contract.
+with lowercase hexadecimal output. `schema_digest` has one construction:
+`domain` is exactly `naruon.topic-inference.schema.v1`, and the formula's
+`value` input is the complete parsed JSON value of the immutable schema resource
+identified by the pinned `$id`, including its annotations and definitions.
+Whitespace, JSON member order, source-file encoding, and other raw-file
+serialization details are therefore not separate schema-digest inputs. The
+adapter's out-of-band pin stores the resulting canonical-digest record, and the
+response repeats that record.
+
+All 14 contract fields bind canonical JSON values. In particular,
+`artifact_digest` binds the fitted-artifact **descriptor**, not the raw fitted
+artifact bytes. An independently published artifact manifest may additionally
+contain a distinct optional raw-byte hash record, but that record must declare
+its algorithm and the exact byte serialization or package it covers. It is
+manifest content protected through `manifest_digest`; it is neither
+`artifact_digest`, a substitute for any canonical field, nor a fifteenth field
+in the inventory. Without that distinct record, the contract makes no raw
+artifact-byte integrity claim. RFC 8785 does not normalize Unicode, so
+normalization belongs only to the pinned preprocessing contract.
 
 The no-covariate canonical representations are fixed:
 
@@ -299,10 +317,13 @@ The no-covariate canonical representations are fixed:
 - `{"columns":[],"values":[]}` under
   `tepp.topic-measurement.design-row.v1`.
 
-A digest verifies retained material but cannot reconstruct it. Reproduction
-requires the authorized source snapshot and every pinned model, vocabulary,
-preprocessing, design, lineage, temporal, covariate, and design-row object to
-remain resolvable under retention policy.
+A canonical digest verifies equality with the exact retained canonical JSON
+value; it does not prove that a descriptor is truthful or complete and cannot
+reconstruct or retrieve the described material. Reproduction requires the
+authorized source snapshot and every pinned model, vocabulary, preprocessing,
+design, lineage, temporal, covariate, and design-row object to remain resolvable
+under retention policy. Raw artifact-byte equality additionally requires the
+separate manifest-owned byte hash described above.
 
 All content-, evidence-, covariate-, membership-, temporal-, design-, and
 label-derived digests are sensitive pseudonymous linkage data. They are never

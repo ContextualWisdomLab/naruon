@@ -155,7 +155,8 @@ digest treatment, and removal of stale platform-plan claims.
 
 - [x] **Step 1: Run Ruff**
 
-Run: `python -m ruff check backend/api/tools.py backend/tests/test_tools_api.py`
+Run:
+`python -m ruff check backend/api/tools.py backend/tests/test_tools_api.py backend/tests/test_topic_intelligence_documentation.py`
 
 Expected: exit 0 and no diagnostics.
 
@@ -170,8 +171,8 @@ Run:
 Expected: exit 0 with no `Timeout`, `Fatal`, `Warn`, or `Denied` output.
 
 Observed after merging the protected-base security remediation, with proxy
-variables removed: `1709 passed, 33 skipped`; the focused tool/documentation
-suite reported `77 passed`.
+variables removed: `1711 passed, 33 skipped`; the focused tool/documentation
+suite reported `79 passed`.
 
 - [x] **Step 3: Inspect the exact diff**
 

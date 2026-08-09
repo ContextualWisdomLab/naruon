@@ -70,7 +70,9 @@ def test_maturity_vocabulary_separates_runtime_truth_from_design() -> None:
 
 
 def test_platform_plan_does_not_claim_live_stm_signals() -> None:
-    plan = _read(REPO_ROOT / "docs" / "planning" / "naruon-platform-plan.md")
+    plan = " ".join(
+        _read(REPO_ROOT / "docs" / "planning" / "naruon-platform-plan.md").split()
+    )
 
     assert "structured topic modeling (STM) feeds search" not in plan
     assert "account, STM topic, past patterns" not in plan
@@ -100,19 +102,53 @@ def test_uml_and_erd_are_conceptual_and_fail_closed() -> None:
     assert data_model.count("```mermaid") >= 3
 
 
-def test_security_treats_every_derived_digest_as_sensitive() -> None:
-    security = _read(DOC_ROOT / "SECURITY.md")
+def test_conceptual_erd_uses_scoped_immutable_identities() -> None:
+    data_model = _read(DOC_ROOT / "DATA_MODEL.md")
+    agents = " ".join(_read(REPO_ROOT / "AGENTS.md").split())
 
-    for digest_source in (
-        "content-",
-        "evidence-",
-        "covariate-",
-        "membership-",
-        "temporal-",
-        "design-",
-        "label-derived digest",
+    for scoped_reference in (
+        "snapshot_ref PK",
+        "model_artifact_ref PK",
+        "component_ref PK",
+        "label_evidence_ref PK",
     ):
-        assert digest_source in security
+        assert scoped_reference in data_model
+
+    for unscoped_identity in (
+        "string document_ref PK",
+        "string model_id PK",
+        "int topic_id PK",
+        "int topic_id FK",
+    ):
+        assert unscoped_identity not in data_model
+
+    assert "must not mark a reusable business identifier" in agents
+    assert "as an unscoped primary or foreign key" in agents
+
+
+def test_digest_contract_defines_one_schema_digest_and_raw_byte_boundary() -> None:
+    contract = " ".join(_read(DOC_ROOT / "API_CONTRACT.md").split())
+    index = " ".join(_read(DOC_ROOT / "README.md").split())
+
+    assert "naruon.topic-inference.schema.v1" in contract
+    assert (
+        "the complete parsed JSON value of the immutable schema resource "
+        "identified by the pinned `$id`"
+    ) in contract
+    assert "exactly 14 canonical digest fields" in contract
+    assert "artifact_digest` binds the fitted-artifact **descriptor**" in contract
+    assert "do not by themselves verify descriptor truth or completeness" in index
+    assert "does not add a canonical digest field to this inventory" in index
+
+
+def test_security_treats_every_derived_digest_as_sensitive() -> None:
+    security = " ".join(_read(DOC_ROOT / "SECURITY.md").split())
+
+    assert (
+        "every content-, evidence-, covariate-, membership-, temporal-, design-, "
+        "or label-derived digest. Such digests are sensitive pseudonymous linkage "
+        "values"
+    ) in security
     assert "sensitive pseudonymous linkage values" in security
     assert "ecological-fallacy" in security
 

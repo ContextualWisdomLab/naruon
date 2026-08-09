@@ -29,26 +29,31 @@ erDiagram
     TOPIC_INFERENCE_REQUEST ||--o| TOPIC_INFERENCE_RESULT : produces
 
     NARUON_DOCUMENT_SNAPSHOT {
-        string document_ref PK
+        string snapshot_ref PK
+        string document_ref
         string snapshot_revision
-        string content_digest
+        string source_snapshot_digest
         datetime knowledge_cutoff_time
     }
     TOPIC_INFERENCE_REQUEST {
         string request_id PK
         string request_revision
+        string snapshot_ref FK
+        string deployment_ref FK
         string evidence_ref
         string scope_binding_ref
         string purpose_code
     }
     TEPP_MODEL_ARTIFACT {
-        string model_id PK
+        string model_artifact_ref PK
+        string model_id
         string model_version
-        string artifact_digest
+        string artifact_descriptor_digest
         string schema_revision
     }
     TEPP_MODEL_DEPLOYMENT {
         string deployment_ref PK
+        string model_artifact_ref FK
         string validation_profile_version
         string deployment_state
     }
@@ -62,13 +67,17 @@ erDiagram
 
 These relationships express authority, not storage foreign keys:
 
-- `NARUON_DOCUMENT_SNAPSHOT` is a server-authoritative immutable view resolved
-  after owner, organization, workspace, purpose, and consent checks.
+- `NARUON_DOCUMENT_SNAPSHOT` is a server-authoritative immutable view. Its
+  opaque `snapshot_ref` binds the exact document reference, snapshot revision,
+  and source-snapshot digest resolved after owner, organization, workspace,
+  purpose, and consent checks.
 - `TOPIC_INFERENCE_REQUEST` binds exactly one snapshot revision to one active
   deployment and one idempotent request revision.
 - `TEPP_MODEL_ARTIFACT` is a conditional expected-upstream evidence role. Naruon
   may consume it only after independent publication and compatibility review; it
   does not currently assign TEPP an obligation or own/mutate such an artifact.
+  Its opaque `model_artifact_ref` binds the exact model ID, model version,
+  artifact-descriptor digest, and schema revision.
 - `TEPP_MODEL_DEPLOYMENT` is Naruon's compatibility/activation record for a
   particular immutable upstream evidence set. A mutable display tag is not an
   identity.
@@ -86,11 +95,17 @@ erDiagram
 
     TOPIC_INFERENCE_RESULT {
         string request_id PK
+        string model_id
+        string model_version
         string result_status
         string scientific_payload_digest
     }
     TOPIC_POSTERIOR_COMPONENT {
-        int topic_id PK
+        string component_ref PK
+        string request_id FK
+        string model_id
+        string model_version
+        int topic_id
         int rank
         number proportion
         number interval_lower
@@ -121,12 +136,33 @@ erDiagram
         string policy_version
     }
     TOPIC_LABEL_EVIDENCE {
-        int topic_id FK
+        string label_evidence_ref PK
+        string component_ref FK
+        string model_id
+        string model_version
+        int topic_id
+        string label_id
         string label_version
-        string opaque_evidence_ref
+        string opaque_evidence_refs
         string review_method
     }
 ```
+
+The `PK` and `FK` labels above are conceptual message identities, not proposed
+SQL columns or additions to the public wire contract. Each opaque reference is
+immutable and resolves only when every bound scope value agrees:
+
+| Entity | Required immutable identity binding | Forbidden unscoped shortcut |
+|---|---|---|
+| Document snapshot | `snapshot_ref` -> (`document_ref`, `snapshot_revision`, `source_snapshot_digest`) | `document_ref` alone |
+| Model artifact | `model_artifact_ref` -> (`model_id`, `model_version`, `artifact_descriptor_digest`, `schema_revision`) | `model_id` or a display tag alone |
+| Posterior component | `component_ref` -> (`request_id`, `model_id`, `model_version`, `topic_id`) | `topic_id`, rank, or label alone |
+| Label evidence | `label_evidence_ref` -> (`model_id`, `model_version`, `topic_id`, `label_id`, `label_version`, `opaque_evidence_refs`) | `topic_id`, `label_id`, or label text alone |
+
+A resolver must fail closed when an opaque reference and its supplied scope tuple
+disagree. Numeric topic identity is reusable only within its exact model ID and
+model version; a result component adds request/result scope, and presentation
+evidence additionally adds label ID and label version.
 
 An `abstained` result has zero `TOPIC_POSTERIOR_COMPONENT` instances, rejected
 diagnostics, and one or more posterior/diagnostic-policy reason codes. Input,
@@ -136,12 +172,14 @@ failures are not represented as abstained results.
 For `inferred`, the fitted artifact count, declared inference count, observed
 diagnostic count, and number of components are equal. For `abstained`, the latter
 three are zero while the fitted artifact count remains unchanged. Numeric topic
-identity is a non-negative JSON integer scoped by model ID and model version.
+identity is a non-negative JSON integer scoped by model ID and model version;
+joins to a result also require its request/result scope.
 
 `TOPIC_LABEL_EVIDENCE` is presentation metadata owned by Naruon. Its relationship
-to a component is referential only: labels cannot become the topic identifier or
-alter any estimate. Agenda generation is not an entity in this model because it
-belongs to a separate downstream authorized contract.
+to a component is referential only: the model ID, model version, numeric topic
+ID, label ID, and label version must all agree, and labels cannot become the
+topic identifier or alter any estimate. Agenda generation is not an entity in
+this model because it belongs to a separate downstream authorized contract.
 
 ## Covariate and temporal evidence
 

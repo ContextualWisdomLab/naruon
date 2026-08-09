@@ -106,11 +106,11 @@ publisher adopted the name or assigned ownership to TEPP.
 
 | Scope | Exact field | Bound evidence |
 | --- | --- | --- |
-| Envelope | `schema_digest` | Closed internal schema document |
+| Envelope | `schema_digest` | Complete parsed immutable schema JSON value named by the pinned `$id`; its sole construction is defined in the API contract |
 | Envelope | `source_snapshot_digest` | Authorized immutable source-snapshot descriptor |
 | Envelope | `tepp_payload_digest` | Complete nested scientific-payload descriptor |
-| Scientific provenance | `artifact_digest` | Fitted-artifact descriptor |
-| Scientific provenance | `manifest_digest` | Artifact manifest |
+| Scientific provenance | `artifact_digest` | Canonical fitted-artifact descriptor, not raw artifact bytes |
+| Scientific provenance | `manifest_digest` | Canonical artifact manifest, including any separately declared optional raw-byte hash record |
 | Scientific provenance | `vocabulary_digest` | Frozen vocabulary |
 | Scientific provenance | `preprocessing_digest` | Frozen preprocessing contract |
 | Scientific provenance | `design_digest` | Statistical design specification |
@@ -125,6 +125,14 @@ Aliases and shortened subsets are not contract-equivalent. Any field addition,
 removal, rename, canonicalization change, or domain-separator change requires a
 new immutable schema revision and synchronized updates to requirements,
 decisions, tests, traceability, and this inventory.
+
+These 14 fields verify equality with exact canonical JSON values under the API
+formula. They do not by themselves verify descriptor truth or completeness,
+evidence availability, authorization, or raw fitted-artifact bytes. Raw-byte
+integrity exists only when an independently published manifest carries a
+distinct optional hash record that declares both its algorithm and the exact
+byte serialization or package covered. That record is not `artifact_digest`
+and does not add a canonical digest field to this inventory.
 
 ## Non-negotiable behavior
 
@@ -142,8 +150,10 @@ input contract but withheld a posterior under a declared diagnostic or posterior
 acceptance rule. Neither path may invoke a lexical, embedding, LLM, default-label,
 or agenda fallback.
 
-Digests verify that bytes and definitions match known evidence; a digest does
-not reconstruct source content. Every content-, evidence-, covariate-,
-membership-, temporal-, design-, and label-derived digest is sensitive
-pseudonymous linkage data. Later reproducibility requires a separately approved,
-resolvable immutable snapshot/evidence reference and retention contract.
+Canonical contract digests verify equality with retained canonical JSON values;
+they do not establish the truth of those values, prove raw-byte equality, or
+reconstruct source content. Every content-, evidence-, covariate-, membership-,
+temporal-, design-, and label-derived digest is sensitive pseudonymous linkage
+data. Later reproducibility requires a separately approved, resolvable immutable
+snapshot/evidence reference and retention contract. Raw fitted-artifact bytes
+also require the separate manifest-owned byte hash described above.
