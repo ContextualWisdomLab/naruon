@@ -7,6 +7,11 @@
   주제 posterior 근거로 사용하지 않는 경계를 문서화했습니다. 현재 Naruon에는
   fitted TEPP 모델 기반 production 주제 측정 API가 없으므로, 모델 부재 시
   기본 라벨이나 템플릿으로 대체하지 않고 fail closed 합니다.
+- 이 경계의 PRD, TRD, ADR, Architecture, API 계약, JSON Schema, UML,
+  개념 ERD, 보안·위협 모델, 테스트·운영 전략, 추적성 및 문서 적합성 평가를
+  `docs/topic-intelligence/`에 하나의 상태 표시 문서 그래프로 정리했습니다.
+  이는 미래 계약의 설계 근거이며, 현재 runtime 구현이나 물리 DB 엔터티가
+  존재한다는 주장이 아닙니다.
 
 ### 보안 패치 (CodeQL extended current-head)
 

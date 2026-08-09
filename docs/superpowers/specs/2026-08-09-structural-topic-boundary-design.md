@@ -1,8 +1,23 @@
 # Structural Topic Boundary Design
 
+**Status:** Active PR deletion design for PR #1297; removal is not
+protected-`develop` behavior until merge. This file's former future-integration
+summary is `SUPERSEDED` by the canonical package below. The Naruon-local policy
+is accepted, the target decisions remain proposed, and runtime topic inference
+is `BLOCKED-UPSTREAM` and unimplemented.
+
+**Canonical documentation graph:**
+[`docs/topic-intelligence/README.md`](../../topic-intelligence/README.md)
+
+That package and its linked ADR index govern maturity, authority, requirements,
+the 14-field digest inventory, and error-versus-abstention semantics. This legacy
+design remains useful for the deletion history only. It does not assign product
+or scientific authority to TEPP or another producer, impose an external
+obligation, record upstream acceptance, or establish a production contract.
+
 ## Context
 
-`backend/api/tools.py` exposes `email_categorizer` and
+Protected `develop` exposes `email_categorizer` and
 `meeting_agenda_generator` as analysis tools, but both derive their outputs from
 small hard-coded Korean/English term lists. The behavior entered in commit
 `c070c8d19f01ccfe46a5ee7e8a577b08e587bb14` as demonstration logic and was
@@ -29,29 +44,46 @@ business label.
    be treated as topic posterior evidence.
 4. Do not add an embedding, LLM, or larger dictionary fallback and do not call
    any such fallback STM.
-5. Reserve corpus-level topic estimation for the Rust-first TEPP
-   `topic_measurement` boundary. Naruon may consume that boundary only after it
-   exposes a versioned, source-backed model artifact and new-document inference
-   contract. Absence of a fitted model must fail closed rather than return
-   `General` or a template agenda.
+5. Keep corpus-level topic estimation outside this Naruon deletion change.
+   TEPP's Rust-first `topic_measurement` architecture is directional evidence,
+   not an assignment of authority. Naruon may evaluate any independently
+   published, compatible fitted-model boundary only after its publisher releases
+   a versioned, source-backed artifact/inference contract and acceptance evidence,
+   and Naruon separately accepts the integration. Until then, absence of a fitted
+   model fails closed rather than returning `General` or a template agenda.
 
-## Future TEPP integration contract
+## Conditional future Naruon acceptance profile
 
-The later integration must carry, at minimum:
+The accepted local policy is [ADR-0001](../../adr/0001-topic-measurement-authority.md).
+The fitted-artifact and agenda target decisions remain proposed in
+[ADR-0002](../../adr/0002-fitted-topic-artifact-consumption.md) and
+[ADR-0003](../../adr/0003-separate-topic-measurement-from-agenda-generation.md).
+The following are conditions Naruon would apply to its own consumption decision;
+they do not govern an upstream publisher.
 
-- immutable document and model-artifact identifiers plus content/vocabulary
-  digests;
+Any later Naruon integration must bind all 14 exact fields in the canonical
+[digest inventory](../../topic-intelligence/README.md#canonical-digest-inventory),
+including the schema, source snapshot, complete scientific payload, artifact,
+manifest, vocabulary, preprocessing, design, lineage, model card, validation
+report, evidence-time manifest, covariate snapshot, and design row. It must also
+carry, at minimum:
+
+- immutable document, snapshot, model, artifact, and contract identities;
 - document, event, assertion, availability, and knowledge-cutoff times;
 - language and multilevel/cross-classified membership covariates;
 - the frozen preprocessing and prevalence/content design specifications;
 - topic proportions that sum to one, posterior uncertainty, inference method,
   model version, and diagnostic status;
 - evidence-backed topic labels kept separate from the numeric topic identity;
-- explicit out-of-vocabulary and model-unavailable errors.
+- explicit input, incompatibility, integrity, availability, and protocol errors;
+  and
+- `abstained` only for a compatible active model's declared posterior or
+  diagnostic-policy rejection, never for an error or fallback.
 
-Agenda generation, if reintroduced, must consume source evidence and the
-versioned posterior through a separate decision/generation boundary. It must not
-map raw words directly to agenda templates.
+If Naruon later accepts and implements agenda generation, that capability must
+consume authorized source evidence and, optionally, a versioned posterior through
+a separate decision/generation boundary. It must not map raw words directly to
+agenda templates. Proposed ADR-0003 is not implementation authorization.
 
 ## Alternatives rejected
 
@@ -60,17 +92,16 @@ map raw words directly to agenda templates.
 - **Use embeddings or an LLM as a drop-in replacement:** potentially useful for
   semantic labeling, but neither is STM and neither supplies the required
   corpus-level estimand or covariate effects.
-- **Fit a model inside each API request:** cannot produce a stable, comparable
-  corpus-level fitted-model contract; a one-document fit is poorly identified
-  and unreproducible across requests.
+- **Fit a model inside each API request:** statistically invalid for a single
+  document, operationally expensive, and incompatible with reproducible model
+  artifacts.
 
 ## Verification
 
-- Before removing the pseudo-model implementation, the new registry contract
-  must be run and recorded RED because the two misleading tool codes are still
-  registered and the retained lexical description is not exact.
-- After removal, the same contract must be run and recorded GREEN: the registry
-  omits both codes and retains the exact lexical term-frequency description.
+- The pre-change regression test failed because the two misleading tool codes
+  were registered.
+- On PR #1297, the registry omits both codes while retaining the
+  explicitly lexical term-frequency utility.
 - Focused tools tests, the complete backend test suite with warnings promoted to
   errors, and Ruff must pass.
 
@@ -80,15 +111,17 @@ Roberts, M. E., Stewart, B. M., & Tingley, D. (2019). stm: An R package for
 structural topic models. *Journal of Statistical Software, 91*(2), 1–40.
 https://doi.org/10.18637/jss.v091.i02
 
-This package paper documents the fitted-model workflow, mixed-membership
-estimates, covariate effects, and new-document inference that distinguish STM
-output from a fixed business label.
+The package paper defines a fitted STM workflow with covariate-aware prevalence
+and content, posterior quantities, and diagnostics. Those requirements are why
+a deterministic term table cannot satisfy the measurement contract.
 
 Roberts, M. E., Stewart, B. M., Tingley, D., Lucas, C., Leder-Luis, J.,
 Gadarian, S. K., Albertson, B., & Rand, D. G. (2014). Structural topic models
 for open-ended survey responses. *American Journal of Political Science,
 58*(4), 1064–1082. https://doi.org/10.1111/ajps.12103
 
-This application paper demonstrates corpus-level topic discovery with
-metadata-conditioned prevalence and content, supporting the covariate-aware
-measurement boundary required here.
+The application paper establishes mixed-membership topics whose prevalence or
+content can vary with document metadata. It grounds the design's separation of
+corpus-level inference from fixed business labels. Redistribution permission
+for either article has not been established; citations, links, and summaries
+are supplied instead of paper copies.

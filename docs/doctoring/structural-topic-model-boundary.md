@@ -76,15 +76,19 @@ Roberts, M. E., Stewart, B. M., & Tingley, D. (2019). stm: An R package for
 structural topic models. *Journal of Statistical Software, 91*(2), 1–40.
 https://doi.org/10.18637/jss.v091.i02
 
-This package paper establishes the fitted-model workflow, mixed-membership
-estimates, covariate effects, and new-document inference used here to reject
-fixed keyword labels as STM output.
+This paper specifies the fitted STM workflow, prevalence/content covariates,
+posterior quantities, and diagnostics implemented by the `stm` package. It
+supports the boundary because a term lookup lacks those fitted-model and
+uncertainty semantics.
 
 Roberts, M. E., Stewart, B. M., Tingley, D., Lucas, C., Leder-Luis, J.,
 Gadarian, S. K., Albertson, B., & Rand, D. G. (2014). Structural topic models
 for open-ended survey responses. *American Journal of Political Science,
 58*(4), 1064–1082. https://doi.org/10.1111/ajps.12103
 
-This application paper shows corpus-level topics whose prevalence and content
-can depend on document metadata, supporting the covariate-aware measurement
-boundary rather than single-request classification.
+This paper introduces STM for open-ended responses and demonstrates how
+document metadata enters topic prevalence/content while documents remain mixed
+memberships. It supports separating corpus-level measurement from fixed-label
+classification. Redistribution permission for either article has not been
+established, so this PR cites, links, and summarizes them without committing
+copies.

@@ -5,6 +5,11 @@
 **Decision owner:** Naruon maintainers
 **Scope:** Naruon's product behavior and any future Naruon adapter. This ADR does not transfer product or scientific authority to TEPP, govern TEPP, or record TEPP's acceptance of a Naruon contract.
 
+**Related records:** the complete documentation graph is indexed in
+[`docs/topic-intelligence/README.md`](../topic-intelligence/README.md). Proposed
+implementation decisions are split into [ADR-0002](0002-fitted-topic-artifact-consumption.md)
+and [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md).
+
 ## Upstream direction evidence
 
 [TEPP's protected-`main` architecture at commit `b8e26aae334397daa1974d4a24c9015cfd682600`](https://github.com/ContextualWisdomLab/TEPP/blob/b8e26aae334397daa1974d4a24c9015cfd682600/ARCHITECTURE.md#bounded-services-and-rust-crates) lists `topic_measurement` and states that its boundaries expose versioned integration contracts. This is direction evidence for Naruon's future-consumption policy only. It is not TEPP's acceptance of this ADR, not a transfer of authority, and not evidence of a production API or contract.
@@ -49,7 +54,10 @@ Rejected because new-document inference must be comparable against a stable fitt
 - A Naruon adapter cannot be proposed until TEPP independently publishes a versioned production artifact/API/contract and its own acceptance evidence.
 - Naruon tests must keep lexical utilities labelled lexical and must fail if removed pseudo-topic registry entries reappear without a locally accepted replacement contract.
 - Any future adapter must carry model/provenance/uncertainty/diagnostic fields rather than only a label string.
-- Product documentation must distinguish `implemented on protected develop`, `active PR`, and `accepted target`; this ADR neither claims that TEPP topic inference exists today nor that TEPP accepted Naruon's consumption policy.
+- Product documentation must distinguish `implemented on protected develop`,
+  `active PR`, `accepted Naruon-local policy`, `proposed target`, and
+  `blocked-upstream`; this ADR neither claims that TEPP topic inference exists
+  today nor that TEPP accepted Naruon's consumption policy.
 
 ## Naruon adapter acceptance criteria
 
