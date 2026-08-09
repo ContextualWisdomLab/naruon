@@ -1,5 +1,7 @@
 # Structural topic-model boundary
 
+**Architecture decision:** [`ADR-0001`](../adr/0001-topic-measurement-authority.md) defines the durable Naruon/TEPP topic-measurement authority boundary. This doctoring record supplies the scientific rationale and evidence; it does not promote the future TEPP integration to protected-branch implementation.
+
 ## Defect record
 
 Naruon previously exposed `email_categorizer` and
@@ -14,9 +16,10 @@ the first merge to `develop` was
 `eae74e215d99af49764a765b74e9679037b8fbbe` (PR #1075). These facts describe
 the observable history, not unrecorded author intent.
 
-The two pseudo-model tools are now removed. `keyword_extractor` remains because
-it honestly exposes deterministic term-frequency extraction. Its output is
-lexical metadata, not topic-posterior evidence.
+The two pseudo-model tools are now removed on PR #1297. `keyword_extractor`
+remains because it honestly exposes deterministic term-frequency extraction. Its
+output is lexical metadata, not topic-posterior evidence. Until PR #1297 merges,
+this removal remains active-PR behavior rather than a protected-`develop` claim.
 
 ## Measurement boundary
 
@@ -48,13 +51,17 @@ new-document posterior contract that includes:
 - frozen preprocessing, retained-token rules, frozen vocabulary, explicit OOV
   handling, and language identification/support status;
 - prevalence/content design specifications and relevant multilevel or
-  cross-classified membership covariates;
+  cross-classified multiple-membership covariates;
 - mixed-membership topic proportions summing to one, inference method,
   posterior uncertainty, diagnostics, and explicit abstention criteria/status;
 - evidence-backed human-readable labels kept separate from numeric topic
   identity; and
 - explicit model-unavailable, incompatible-language, insufficient-retained-
   token, and out-of-vocabulary errors.
+
+The integration is an optional typed service/model-artifact boundary. Naruon must
+not read TEPP's private database, infer model compatibility from a display label,
+or persist a generated human-readable topic label as the numeric topic identity.
 
 Agenda generation, if reintroduced, belongs behind a separate decision and
 generation boundary that consumes source evidence and the versioned posterior.
