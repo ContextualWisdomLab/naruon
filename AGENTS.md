@@ -95,6 +95,17 @@ in this repo.
   knowledge-graph pipeline (DOM decomposition, entity/relation extraction,
   grounded graph retrieval) should ground itself in the relevant layout-analysis
   and knowledge-graph / grounded-retrieval literature.
+
+### Structural topic-model boundary
+
+- Do not implement or describe hard-coded term lists, term frequency,
+  embeddings, or LLM-assigned labels as structural topic modeling (STM).
+  Fixed business labels are not topic-posterior estimates, and the explicitly
+  lexical `keyword_extractor` must not be used as topic evidence.
+- Topic inference requires a versioned fitted TEPP model and its frozen
+  preprocessing and vocabulary contract. If that fitted model is unavailable,
+  fail closed; do not return a default label, template agenda, or substitute
+  keyword/embedding/LLM result presented as STM.
 <!-- END cwl-agent-guidance -->
 
 ## Release governance defaults
