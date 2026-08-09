@@ -250,6 +250,7 @@ def test_frontend_tooling_lock_uses_current_audit_fixed_transitive_versions() ->
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
     for dependency, expected_version in (
         ("brace-expansion", "5.0.9"),
+        ("nanoid", "5.1.6"),
         ("undici", "8.9.0"),
     ):
         assert frontend_package["overrides"][dependency] == expected_version
@@ -314,6 +315,26 @@ def test_github_actions_are_pinned_to_exact_sha() -> None:
 
     assert unpinned_major_refs == [], "\n".join(unpinned_major_refs)
     assert missing_version_comments == [], "\n".join(missing_version_comments)
+
+
+def test_github_workflows_never_push_repository_source_branches() -> None:
+    """Keep branch publication in reviewed clients, not ephemeral Actions jobs."""
+    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
+        WORKFLOW_DIR.glob("*.yaml")
+    )
+    source_publishers: list[str] = []
+
+    for workflow_path in governed_workflows:
+        workflow = workflow_path.read_text(encoding="utf-8")
+        if "contents: write" in workflow and "git push" in workflow:
+            source_publishers.append(
+                workflow_path.relative_to(REPO_ROOT).as_posix()
+            )
+
+    assert source_publishers == [], (
+        "GitHub workflows must not commit or push repository source branches: "
+        + ", ".join(source_publishers)
+    )
 
 
 def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
