@@ -114,7 +114,7 @@ def test_telemetry_setup_success(monkeypatch, caplog):
         "opentelemetry.sdk.trace.TracerProvider"
     ) as mock_provider, patch(
         "opentelemetry.sdk.resources.Resource"
-    ) as mock_resource:
+    ):
 
         telemetry.setup_telemetry(app)
 
