@@ -13,8 +13,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dav", tags=["dav"])
 
+IMPLEMENTED_DAV_METHODS = ("OPTIONS", "PROPFIND")
+
 
 def _normalize_dav_authorization_path(path: str) -> str:
+    """Decode a DAV path within a bounded authorization-normalization loop."""
     normalized_path = path.replace("\\", "/")
     for _ in range(100):
         decoded_path = unquote(normalized_path).replace("\\", "/")
@@ -25,6 +28,7 @@ def _normalize_dav_authorization_path(path: str) -> str:
 
 
 def _dav_path_owner_user_id(path: str) -> str | None:
+    """Return the owner segment for a traversal-safe DAV path."""
     path = _normalize_dav_authorization_path(path)
     if any(segment in {".", ".."} for segment in path.split("/")):
         return None
@@ -36,6 +40,7 @@ def _dav_path_owner_user_id(path: str) -> str | None:
 
 
 def _ensure_dav_owner_scope(path: str, auth_context: AuthContext) -> None:
+    """Require the DAV path owner to match the authenticated user."""
     owner_user_id = _dav_path_owner_user_id(path)
     if owner_user_id is None:
         raise HTTPException(
@@ -51,10 +56,12 @@ def _ensure_dav_owner_scope(path: str, auth_context: AuthContext) -> None:
 
 
 def _dav_path_segments(path: str) -> list[str]:
+    """Return non-empty DAV path segments."""
     return [segment for segment in path.strip("/").split("/") if segment]
 
 
 def _dav_multistatus_xml(responses: list[str]) -> str:
+    """Render one DAV multistatus document from validated response fragments."""
     response_xml = "\n".join(responses)
     if response_xml:
         response_xml = f"\n{response_xml}\n"
@@ -68,6 +75,7 @@ def _dav_response_xml(
     display_name: str,
     is_collection: bool = True,
 ) -> str:
+    """Render one escaped DAV response element."""
     resourcetype = "<D:collection/>" if is_collection else ""
     escaped_href = escape_xml_text(href)
     escaped_display_name = escape_xml_text(display_name)
@@ -84,6 +92,7 @@ def _dav_response_xml(
 
 
 def _dav_xml_response(responses: list[str]) -> Response:
+    """Return a DAV 207 multistatus response."""
     return Response(
         content=_dav_multistatus_xml(responses),
         media_type="application/xml",
@@ -92,6 +101,7 @@ def _dav_xml_response(responses: list[str]) -> Response:
 
 
 def _dav_depth(request: Request) -> str:
+    """Normalize supported DAV Depth values to zero or one."""
     depth = request.headers.get("Depth", "1").strip().lower()
     if depth == "0":
         return "0"
@@ -99,6 +109,7 @@ def _dav_depth(request: Request) -> str:
 
 
 def _project_folder_response(path_owner_user_id: str, folder: dict) -> str:
+    """Render one project-folder collection response."""
     folder_uid = str(folder["folder_uid"])
     project_name = str(folder["project_name"])
     return _dav_response_xml(
@@ -115,6 +126,7 @@ async def _handle_project_propfind(
     auth_context: AuthContext,
     db: AsyncSession,
 ) -> Response:
+    """Return tenant-scoped project collection metadata for PROPFIND."""
     segments = _dav_path_segments(path)
     if len(segments) < 2 or segments[1] != "projects":
         raise HTTPException(status_code=404, detail="DAV collection not found")
@@ -158,73 +170,37 @@ async def _handle_project_propfind(
 
 @router.api_route(
     "/{path:path}",
-    methods=["PROPFIND", "REPORT", "MKCOL", "GET", "PUT", "DELETE", "OPTIONS"],
+    methods=list(IMPLEMENTED_DAV_METHODS),
 )
 async def dav_handler(
     request: Request,
     path: str,
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
-):
-    """
-    Route the authenticated DAV surface that is implemented for this slice.
+) -> Response:
+    """Serve only the authenticated DAV capabilities implemented in production.
 
-    Collection discovery is served from the server-side project registry.
-    Provider-backed writeback stays fail-closed until source capability and
-    ETag/If-Match enforcement are available through signed writeback intents.
+    ScopeWeave-compatible clients can discover project collections through
+    ``PROPFIND``. Provider-backed mutation verbs are deliberately not registered;
+    the framework returns ``405 Method Not Allowed`` rather than advertising a
+    handler that can only return ``501 Not Implemented``.
     """
     _ensure_dav_owner_scope(path, auth_context)
     safe_path = repr(path)[1:-1]
     logger.info("DAV Request: %s /%s", request.method, safe_path)
 
     if request.method == "OPTIONS":
-        headers = {
-            "DAV": "1, 2, 3, calendar-access, addressbook",
-            "Allow": (
-                "OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, COPY, MOVE, MKCOL, "
-                "PROPFIND, PROPPATCH, LOCK, UNLOCK, REPORT"
-            ),
-        }
-        return Response(status_code=200, headers=headers)
-
-    if request.method == "PROPFIND":
-        return await _handle_project_propfind(
-            request=request,
-            path=path,
-            auth_context=auth_context,
-            db=db,
-        )
-
-    if request.method == "PUT":
-        body = await request.body()
-        safe_path = repr(path)[1:-1]
-        logger.info("DAV PUT received %s bytes at /%s", len(body), safe_path)
-        logger.warning(
-            "DAV PUT rejected at /%s: provider-backed DAV writeback is not "
-            "implemented; signed writeback-intent API is required",
-            safe_path,
-        )
         return Response(
-            content=(
-                "Provider-backed DAV writeback is not implemented; use signed "
-                "writeback-intent APIs until source, capability, and "
-                "ETag/If-Match checks are enforced."
-            ),
-            media_type="text/plain",
-            status_code=501,
+            status_code=200,
+            headers={
+                "DAV": "1",
+                "Allow": ", ".join(IMPLEMENTED_DAV_METHODS),
+            },
         )
 
-    logger.warning(
-        "DAV %s rejected at /%s: method is not implemented for the "
-        "provider-backed DAV gateway",
-        request.method,
-        safe_path,
-    )
-    return Response(
-        content=(
-            "Provider-backed DAV method is not implemented; use supported "
-            "PROPFIND/OPTIONS discovery or signed writeback-intent APIs."
-        ),
-        media_type="text/plain",
-        status_code=501,
+    return await _handle_project_propfind(
+        request=request,
+        path=path,
+        auth_context=auth_context,
+        db=db,
     )
