@@ -143,9 +143,12 @@ class ProjectGraphRepository:
         workspace_id: str,
         status_code: str,
     ) -> list[ProjectGraphObjectRecord]:
-        object_uids = tuple(semantic_object.uid for semantic_object in extraction.objects)
+        object_uids = tuple(
+            semantic_object.uid for semantic_object in extraction.objects
+        )
         existing = await self._load_object_map(object_uids)
         records: list[ProjectGraphObjectRecord] = []
+        new_records: list[ProjectGraphObjectRecord] = []
         for semantic_object in extraction.objects:
             primary_segment = segment_map[semantic_object.source_segment_uids[0]]
             record = existing.get(semantic_object.uid)
@@ -170,7 +173,7 @@ class ProjectGraphRepository:
                     created_at=_utcnow(),
                     updated_at=_utcnow(),
                 )
-                self._session.add(record)
+                new_records.append(record)
             else:
                 record.user_id = user_id
                 record.organization_id = organization_id
@@ -189,6 +192,8 @@ class ProjectGraphRepository:
                 record.extractor_version = semantic_object.extractor_version
                 record.updated_at = _utcnow()
             records.append(record)
+        if new_records:
+            self._session.add_all(new_records)
         return records
 
     async def _upsert_edges(
@@ -204,6 +209,7 @@ class ProjectGraphRepository:
         edge_uids = tuple(_edge_uid(edge) for edge in edges)
         existing = await self._load_edge_map(edge_uids)
         records: list[ProjectGraphEdgeRecord] = []
+        new_records: list[ProjectGraphEdgeRecord] = []
         for semantic_edge in edges:
             primary_segment = segment_map[semantic_edge.source_segment_uids[0]]
             record = existing.get(_edge_uid(semantic_edge))
@@ -225,7 +231,7 @@ class ProjectGraphRepository:
                     primary_content_segment_id=primary_segment.content_segment_id,
                     created_at=_utcnow(),
                 )
-                self._session.add(record)
+                new_records.append(record)
             else:
                 record.user_id = user_id
                 record.organization_id = organization_id
@@ -239,6 +245,8 @@ class ProjectGraphRepository:
                 record.target_object = target_object
                 record.primary_content_segment_id = primary_segment.content_segment_id
             records.append(record)
+        if new_records:
+            self._session.add_all(new_records)
         return records
 
     async def _load_object_map(
@@ -310,14 +318,18 @@ def _validate_segment_scope(
     for segment in segments:
         email = segment.email
         expected_workspace_id = (
-            f"workspace-{organization_id}" if organization_id else f"workspace-{user_id}"
+            f"workspace-{organization_id}"
+            if organization_id
+            else f"workspace-{user_id}"
         )
         if (
             email.user_id != user_id
             or email.organization_id != organization_id
             or expected_workspace_id != workspace_id
         ):
-            raise ValueError("Project graph source segment belongs to a different scope")
+            raise ValueError(
+                "Project graph source segment belongs to a different scope"
+            )
 
 
 def _edge_uid(edge: ProjectSemanticEdge) -> str:
@@ -362,7 +374,9 @@ def _apply_projection_updates(
     if "attributes_json" in after_json:
         attributes = after_json["attributes_json"]
         if not isinstance(attributes, Mapping):
-            raise ValueError("Project graph correction attributes_json must be a mapping")
+            raise ValueError(
+                "Project graph correction attributes_json must be a mapping"
+            )
         record.attributes_json = _json_ready(dict(attributes))
     record.updated_at = _utcnow()
 
