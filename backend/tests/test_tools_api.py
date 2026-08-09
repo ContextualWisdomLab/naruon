@@ -27,6 +27,14 @@ from api.tools import (
 from main import app
 
 
+REMOVED_CANNED_SOURCE_DERIVED_TOOL_CODES = (
+    "thread_summarizer",
+    "action_item_extractor",
+    "sender_dag_analytics",
+    "meeting_candidate_finder",
+)
+
+
 def _base64url_encode(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
@@ -105,16 +113,52 @@ def test_get_tools_returns_valid_data():
     assert "is_active" in first_tool
 
 
-def test_get_tool_success():
+def test_get_retained_tool_success():
     with TestClient(app) as client:
         response = client.get(
-            "/api/tools/thread_summarizer",
+            "/api/tools/text_analyzer",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
         )
+
     assert response.status_code == 200
-    data = response.json()
-    assert data["code"] == "thread_summarizer"
-    assert data["name"] == "이메일 맥락 요약 (Thread Summarizer)"
+    assert response.json()["code"] == "text_analyzer"
+
+
+@pytest.mark.parametrize("tool_code", REMOVED_CANNED_SOURCE_DERIVED_TOOL_CODES)
+def test_startup_catalog_omits_canned_source_derived_tools(tool_code):
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/tools",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        )
+
+    assert response.status_code == 200
+    assert tool_code not in {tool["code"] for tool in response.json()}
+
+
+@pytest.mark.parametrize("tool_code", REMOVED_CANNED_SOURCE_DERIVED_TOOL_CODES)
+def test_removed_canned_source_derived_tool_detail_returns_not_found(tool_code):
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/tools/{tool_code}",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Tool not found"}
+
+
+@pytest.mark.parametrize("tool_code", REMOVED_CANNED_SOURCE_DERIVED_TOOL_CODES)
+def test_removed_canned_source_derived_tool_execute_returns_not_found(tool_code):
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/tools/{tool_code}/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {}},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Tool not found"}
 
 
 def test_get_tool_not_found():
@@ -184,70 +228,6 @@ def test_keyword_extractor_is_disclosed_as_lexical_term_frequency():
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_success():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/thread_summarizer/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"thread_id": "123"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert "summary" in data["result"]
-    assert "123" in data["result"]["summary"]
-    assert "key_points" in data["result"]
-    assert "unresolved_questions" in data["result"]
-
-
-@pytest.mark.asyncio
-async def test_execute_action_item_extractor():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/action_item_extractor/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"email_content": "Please review by tomorrow."}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert "action_items" in data["result"]
-    assert len(data["result"]["action_items"]) == 2
-    assert "source_length" in data["result"]
-
-
-@pytest.mark.asyncio
-async def test_execute_sender_dag_analytics():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/sender_dag_analytics/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"sender_email": "test@example.com"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["sender"] == "test@example.com"
-    assert data["result"]["department"] == "엔지니어링 팀"
-
-
-@pytest.mark.asyncio
-async def test_execute_meeting_candidate_finder():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/meeting_candidate_finder/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"email_content": "Let's meet tomorrow at 2pm."}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert "candidates" in data["result"]
-    assert len(data["result"]["candidates"]) == 2
-    assert "context_preview" in data["result"]
-
-
-@pytest.mark.asyncio
 async def test_execute_tone_analyzer():
     with TestClient(app) as client:
         response = client.post(
@@ -272,11 +252,11 @@ async def test_execute_tone_analyzer():
 def test_execute_tool_rejects_unexpected_parameter():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/thread_summarizer/execute",
+            "/api/tools/text_analyzer/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={
                 "parameters": {
-                    "thread_id": "123",
+                    "text": "123",
                     "__proto__": {"polluted": True},
                 }
             },
@@ -292,9 +272,9 @@ def test_execute_tool_rejects_unexpected_parameter():
 def test_execute_tool_rejects_invalid_parameter_type():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/thread_summarizer/execute",
+            "/api/tools/text_analyzer/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"thread_id": ["not", "a", "string"]}},
+            json={"parameters": {"text": ["not", "a", "string"]}},
         )
 
     assert response.status_code == 200
@@ -361,7 +341,7 @@ def test_execute_tool_no_parameters_accepted():
 def test_execute_tool_not_a_dict_parameter():
     with TestClient(app) as client:
         response = client.post(
-            "/api/tools/thread_summarizer/execute",
+            "/api/tools/text_analyzer/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
             json={"parameters": "not_a_dict"},  # type: ignore
         )
@@ -737,8 +717,8 @@ def test_delete_tool_mutation_fails_closed_without_registry_change():
                 "category": "Test",
             },
         ),
-        ("PATCH", "/api/tools/thread_summarizer", {"name": "Unauthorized"}),
-        ("DELETE", "/api/tools/thread_summarizer", None),
+        ("PATCH", "/api/tools/text_analyzer", {"name": "Unauthorized"}),
+        ("DELETE", "/api/tools/text_analyzer", None),
     ],
 )
 def test_tool_mutation_routes_require_signed_session(method, path, payload):

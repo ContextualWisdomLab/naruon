@@ -106,6 +106,15 @@ in this repo.
   preprocessing and vocabulary contract. If that fitted model is unavailable,
   fail closed; do not return a default label, template agenda, or substitute
   keyword/embedding/LLM result presented as STM.
+
+### Source-derived assistant-tool boundary
+
+- Do not generate or advertise summaries, decisions, action items, sender or
+  organizational relationships, or meeting candidates without source-bound
+  evidence and a declared provider implementation. When that evidence/provider
+  is unavailable, omit the capability from the startup catalog and make detail
+  and execution routes fail closed with `404`; never return success with fixed,
+  canned, or template-derived fallback values.
 <!-- END cwl-agent-guidance -->
 
 ## Release governance defaults
