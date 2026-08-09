@@ -1,0 +1,12 @@
+## 🧪 [테스트 커버리지 개선: get_encryption_keyring]
+
+🎯 **What:**
+`backend/db/models.py`의 `get_encryption_keyring` 함수에 대한 테스트 코드를 추가하였습니다. 이전에는 이 함수에 대한 테스트가 누락되어 있었습니다.
+
+📊 **Coverage:**
+* `settings.ENCRYPTION_KEY` 및 `settings.ENCRYPTION_KEY_ID`가 단일로 제공되는 기본(happy path) 시나리오
+* `settings.ENCRYPTION_PREVIOUS_KEYS`에 과거 키가 포함되어 있을 때 적절한 파싱과 다중 키 링 동작을 수행하는 시나리오
+* 필수 키 값이 주어지지 않았을 때 `RuntimeError`를 정상적으로 던지는 오류 처리 시나리오
+
+✨ **Result:**
+새롭게 `backend/tests/test_db_models.py` 파일을 생성하였으며, `monkeypatch`를 통해 안전하게 설정 값들을 교체하며 격리된 테스트 환경을 마련했습니다. 해당 함수에 대한 동작 보증 및 테스트 커버리지를 높여 안정적인 리팩토링이 가능하도록 개선했습니다.
