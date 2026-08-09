@@ -1,0 +1,85 @@
+name: One-shot patched nanoid lock refresh
+
+on:
+  push:
+    branches: [fix/dav-capability-truthfulness-20260809]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-nanoid-lock-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh-verify-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/dav-capability-truthfulness-20260809
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+
+      - name: Activate repository pnpm
+        run: |
+          corepack enable pnpm
+          corepack prepare pnpm@11.5.3 --activate
+
+      - name: Refresh lock and verify patched dependency
+        working-directory: frontend
+        run: |
+          pnpm install --lockfile-only
+          pnpm install --frozen-lockfile
+          resolved="$(pnpm list nanoid --depth 20 --json)"
+          python3 - "$resolved" <<'PY'
+          import json
+          import sys
+
+          payload = json.loads(sys.argv[1])
+          versions = []
+
+          def walk(value):
+              if isinstance(value, dict):
+                  for key, nested in value.items():
+                      if key == "nanoid" and isinstance(nested, dict):
+                          version = nested.get("version")
+                          if isinstance(version, str):
+                              versions.append(version)
+                      walk(nested)
+              elif isinstance(value, list):
+                  for nested in value:
+                      walk(nested)
+
+          walk(payload)
+          if not versions:
+              raise SystemExit("nanoid was not found in the resolved dependency graph")
+          if any(tuple(map(int, version.split(".")[:3])) < (5, 1, 6) for version in versions):
+              raise SystemExit(f"vulnerable nanoid versions remain: {versions}")
+          print(f"verified patched nanoid versions: {sorted(set(versions))}")
+          PY
+          pnpm test
+          pnpm run lint
+          pnpm run typecheck
+
+      - name: Commit verified lock and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/one-shot-nanoid-lock-refresh.yml
+          git add frontend/package.json frontend/pnpm-lock.yaml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(security): lock nanoid 5.1.6'
+          git push origin HEAD:fix/dav-capability-truthfulness-20260809
