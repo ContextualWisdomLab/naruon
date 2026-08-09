@@ -1,0 +1,56 @@
+name: One-shot DAV production contract integration
+
+on:
+  push:
+    branches: [fix/dav-capability-truthfulness-20260809]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-dav-production-contract
+  cancel-in-progress: false
+
+jobs:
+  document-compile-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact branch head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: fix/dav-capability-truthfulness-20260809
+          fetch-depth: 0
+
+      - name: Record the product contract in CHANGELOG
+        shell: python3 {0}
+        run: |
+          from pathlib import Path
+
+          path = Path('CHANGELOG.md')
+          source = path.read_text(encoding='utf-8')
+          anchor = '## [Unreleased]\n'
+          section = '''## [Unreleased]\n\n### DAV 프로덕션 기능 정합성\n\n- DAV 라우터가 실제 구현된 `OPTIONS`·`PROPFIND`만 등록·광고하도록 축소했습니다. GET/PUT/DELETE/MKCOL/REPORT/PROPPATCH/COPY/MOVE/LOCK/UNLOCK의 성공형 501 스텁을 제거해 미지원 동작은 표준 `405 Method Not Allowed`로 처리하고, WebDAV service의 하드코딩된 demo 계정·폴더·성공형 no-op attachment sync API도 삭제했습니다. 계정·폴더·writeback intent는 데이터베이스와 서버 권한 경계에서만 결정됩니다.\n'''
+          if source.count(anchor) != 1:
+              raise SystemExit('expected exactly one Unreleased changelog anchor')
+          path.write_text(source.replace(anchor, section, 1), encoding='utf-8')
+
+      - name: Compile changed Python modules
+        run: |
+          python3 -m compileall -q backend/api/dav.py backend/services/webdav_service.py backend/tests/test_dav_api.py backend/tests/test_dav_sync.py
+
+      - name: Commit verified documentation and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/one-shot-dav-production-contract.yml
+          git add CHANGELOG.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs(changelog): record DAV production contract'
+          git push origin HEAD:fix/dav-capability-truthfulness-20260809
