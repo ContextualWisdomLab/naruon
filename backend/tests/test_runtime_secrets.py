@@ -7,6 +7,7 @@ from core.runtime_secrets import (
     _character_class_count,
     _shannon_entropy_bits,
     validate_auth_session_hmac_secret_value,
+    validate_encryption_key_id,
 )
 
 
@@ -125,3 +126,31 @@ def test_shannon_entropy_bits():
     assert math.isclose(_shannon_entropy_bits("abcd"), 8.0)
     assert math.isclose(_shannon_entropy_bits("abc"), 4.754887502163468)
     assert math.isclose(_shannon_entropy_bits("abcabc"), 9.509775004326936)
+
+
+def test_validate_encryption_key_id_valid():
+    assert validate_encryption_key_id("TEST_SETTING", "primary") == "primary"
+    assert validate_encryption_key_id("TEST_SETTING", "key-1") == "key-1"
+    assert validate_encryption_key_id("TEST_SETTING", "key_2") == "key_2"
+    assert validate_encryption_key_id("TEST_SETTING", "KEY.3") == "KEY.3"
+    assert (
+        validate_encryption_key_id("TEST_SETTING", "  key-with-spaces  ")
+        == "key-with-spaces"
+    )
+    assert validate_encryption_key_id("TEST_SETTING", "a" * 64) == "a" * 64
+
+
+def test_validate_encryption_key_id_invalid():
+    invalid_cases = [
+        "",  # empty
+        "   ",  # only whitespaces
+        "-key",  # starts with hyphen
+        ".key",  # starts with dot
+        "_key",  # starts with underscore
+        "key!",  # invalid character
+        "key@name",  # invalid character
+        "a" * 65,  # too long (65 chars)
+    ]
+    for case in invalid_cases:
+        with pytest.raises(RuntimeError, match="TEST_SETTING must be 1-64 characters"):
+            validate_encryption_key_id("TEST_SETTING", case)
