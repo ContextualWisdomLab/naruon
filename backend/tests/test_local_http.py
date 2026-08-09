@@ -80,3 +80,41 @@ def test_local_request_target_rejects_invalid_percent_encoding(path: str) -> Non
 def test_local_request_target_normalizes_malformed_parser_errors() -> None:
     with pytest.raises(LocalHTTPValidationError, match="local API path"):
         validate_local_request_target("//[::1")
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://[::1]:18080/\n",
+        "http://localhost\x00",
+        "http://\r127.0.0.1",
+        "http://localhost\t",
+        "http://localhost\x7f",
+    ],
+)
+def test_loopback_origin_rejects_control_characters(value: str) -> None:
+    with pytest.raises(
+        LocalHTTPValidationError,
+        match="local HTTP origin contains control characters",
+    ):
+        validate_loopback_http_origin(value)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/emails\n",
+        "/api/\x00emails",
+        "/api/emails\r",
+        "/api/emails\t",
+        "/api/emails\x7f",
+        "/api/emails/%0A",
+        "/api/%00",
+        "/api/%7F",
+    ],
+)
+def test_local_request_target_rejects_control_characters(path: str) -> None:
+    with pytest.raises(
+        LocalHTTPValidationError,
+        match="local request path contains control characters",
+    ):
+        validate_local_request_target(path)
