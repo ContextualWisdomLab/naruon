@@ -1,6 +1,6 @@
 # Structural topic-model boundary
 
-**Architecture decision:** [`ADR-0001`](../adr/0001-topic-measurement-authority.md) defines the durable Naruon/TEPP topic-measurement authority boundary. This doctoring record supplies the scientific rationale and evidence; it does not promote the future TEPP integration to protected-branch implementation.
+**Architecture decision:** [`ADR-0001`](../adr/0001-topic-measurement-authority.md) defines Naruon's local policy for truthful topic-measurement consumption. This doctoring record supplies the scientific rationale and evidence; neither record assigns authority to TEPP, records TEPP acceptance, or promotes a future integration to protected-branch implementation.
 
 ## Defect record
 
@@ -35,15 +35,17 @@ frozen vocabulary and preprocessing. Naruon must not fit a topic model inside a
 single API request, substitute a larger dictionary, or degrade to embeddings or
 LLM labels while calling the result STM.
 
-## Future TEPP contract
+## Potential future Naruon consumption
 
-TEPP is currently only a Rust-first foundation; it exposes no production topic-
-measurement API for Naruon to call. The present change therefore fails closed:
-when a fitted model is unavailable, no default `General` label, agenda template,
-or synthetic posterior is returned.
+Naruon has no independently published TEPP production topic-measurement
+artifact/API/contract or TEPP acceptance evidence to consume. The present change
+therefore fails closed: when a fitted model is unavailable, no default `General`
+label, agenda template, or synthetic posterior is returned.
 
-A future integration must expose a versioned fitted-model artifact and
-new-document posterior contract that includes:
+A future Naruon adapter remains blocked until TEPP independently publishes a
+versioned production fitted-model artifact/API/contract and its own acceptance
+evidence. If Naruon later evaluates such a published contract, its local
+acceptance criteria include:
 
 - immutable document and model-artifact identifiers, model version, and content
   and vocabulary digests;
