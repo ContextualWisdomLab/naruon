@@ -122,7 +122,9 @@ def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
 def test_keyword_extractor_is_disclosed_as_lexical_term_frequency():
     tool = registry.get("keyword_extractor")
     assert tool is not None
-    assert "빈도" in tool.description
+    assert tool.description == (
+        "텍스트 본문에서 빈도와 최초 출현 순으로 반복 용어를 추출합니다."
+    )
 
 
 @pytest.mark.asyncio

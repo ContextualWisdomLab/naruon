@@ -60,16 +60,17 @@ map raw words directly to agenda templates.
 - **Use embeddings or an LLM as a drop-in replacement:** potentially useful for
   semantic labeling, but neither is STM and neither supplies the required
   corpus-level estimand or covariate effects.
-- **Fit a model inside each API request:** statistically invalid for a single
-  document, operationally expensive, and incompatible with reproducible model
-  artifacts.
+- **Fit a model inside each API request:** cannot produce a stable, comparable
+  corpus-level fitted-model contract; a one-document fit is poorly identified
+  and unreproducible across requests.
 
 ## Verification
 
-- A regression test must fail on the current branch because the two misleading
-  tool codes are still registered.
-- After the change, the registry must omit both codes while retaining the
-  explicitly lexical term-frequency utility.
+- Before removing the pseudo-model implementation, the new registry contract
+  must be run and recorded RED because the two misleading tool codes are still
+  registered and the retained lexical description is not exact.
+- After removal, the same contract must be run and recorded GREEN: the registry
+  omits both codes and retains the exact lexical term-frequency description.
 - Focused tools tests, the complete backend test suite with warnings promoted to
   errors, and Ruff must pass.
 
@@ -79,7 +80,15 @@ Roberts, M. E., Stewart, B. M., & Tingley, D. (2019). stm: An R package for
 structural topic models. *Journal of Statistical Software, 91*(2), 1–40.
 https://doi.org/10.18637/jss.v091.i02
 
+This package paper documents the fitted-model workflow, mixed-membership
+estimates, covariate effects, and new-document inference that distinguish STM
+output from a fixed business label.
+
 Roberts, M. E., Stewart, B. M., Tingley, D., Lucas, C., Leder-Luis, J.,
 Gadarian, S. K., Albertson, B., & Rand, D. G. (2014). Structural topic models
 for open-ended survey responses. *American Journal of Political Science,
 58*(4), 1064–1082. https://doi.org/10.1111/ajps.12103
+
+This application paper demonstrates corpus-level topic discovery with
+metadata-conditioned prevalence and content, supporting the covariate-aware
+measurement boundary required here.
