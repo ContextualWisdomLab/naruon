@@ -80,3 +80,23 @@ def test_local_request_target_rejects_invalid_percent_encoding(path: str) -> Non
 def test_local_request_target_normalizes_malformed_parser_errors() -> None:
     with pytest.raises(LocalHTTPValidationError, match="local API path"):
         validate_local_request_target("//[::1")
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "ftp://localhost",
+        "ws://127.0.0.1",
+        "http://",
+        "http://user@localhost",
+        "http://user:pass@localhost",
+        "http://localhost/path",
+        "http://localhost/?q=1",
+        "http://localhost/#frag",
+    ],
+)
+def test_loopback_origin_rejects_invalid_components(value: str) -> None:
+    with pytest.raises(
+        LocalHTTPValidationError,
+        match=r"must be a loopback HTTP\(S\) origin",
+    ):
+        validate_loopback_http_origin(value)
