@@ -399,9 +399,10 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert records[0].tool_code_fingerprint == hashlib.sha256(
-        hostile_code.encode("utf-8")
-    ).hexdigest()[:12]
+    assert (
+        records[0].tool_code_fingerprint
+        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
+    )
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -1252,3 +1253,80 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_make_webhook_handler_success():
+    from api.tools import make_webhook_handler
+    from unittest.mock import MagicMock
+
+    from unittest.mock import patch, AsyncMock
+    import httpx
+
+    with patch("api.tools.validate_webhook_url_details") as mock_validate, patch(
+        "api.tools.build_pinned_https_async_client"
+    ) as mock_build_client:
+
+        mock_validate.return_value = MagicMock(
+            normalized_url="https://example.com/webhook",
+            hostname="example.com",
+            port=443,
+            addresses=["93.184.216.34"],
+        )
+
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"success": True}
+        mock_client.post.return_value = mock_response
+
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = False
+
+        mock_build_client.return_value = mock_client
+
+        handler = make_webhook_handler("https://example.com/webhook")
+
+        result = await handler({"input": "test"})
+
+        assert result == {"success": True}
+        mock_client.post.assert_called_once_with(
+            "https://example.com/webhook",
+            json={"parameters": {"input": "test"}},
+            timeout=10.0,
+        )
+        mock_response.raise_for_status.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_make_webhook_handler_http_error():
+    from api.tools import make_webhook_handler
+    from unittest.mock import MagicMock
+
+    from unittest.mock import patch, AsyncMock
+    import httpx
+
+    with patch("api.tools.validate_webhook_url_details") as mock_validate, patch(
+        "api.tools.build_pinned_https_async_client"
+    ) as mock_build_client:
+
+        mock_validate.return_value = MagicMock(
+            normalized_url="https://example.com/webhook",
+            hostname="example.com",
+            port=443,
+            addresses=["93.184.216.34"],
+        )
+
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = httpx.HTTPError("Simulated HTTP Error")
+
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = False
+
+        mock_build_client.return_value = mock_client
+
+        handler = make_webhook_handler("https://example.com/webhook")
+
+        with pytest.raises(
+            ValueError, match="Webhook execution failed: Simulated HTTP Error"
+        ):
+            await handler({"input": "test"})
