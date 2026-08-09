@@ -45,6 +45,7 @@ class ValidatedSmtpDestination:
     proto: int
     sockaddr: tuple[Any, ...]
 
+
 @dataclass(frozen=True)
 class EmailMessageParams:
     to_address: str
@@ -52,6 +53,7 @@ class EmailMessageParams:
     body: str
     in_reply_to: str | None = None
     references: str | None = None
+
 
 @dataclass(frozen=True)
 class SmtpConfig:
@@ -61,9 +63,10 @@ class SmtpConfig:
     smtp_password: str | None = None
 
 
-
 def generate_oauth2_string(user: str, access_token: str) -> bytes:
     """Generates an OAuth2 string for IMAP/SMTP authentication."""
+    if "\x01" in user or "\x01" in access_token:
+        raise ValueError("Invalid character in user or access token")
     auth_string = f"user={user}\x01auth=Bearer {access_token}\x01\x01"
     return base64.b64encode(auth_string.encode("utf-8"))
 
@@ -102,21 +105,15 @@ def _parse_allowed_ports(
 
 
 def _parse_allowed_smtp_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_SMTP_PORTS, "SMTP", SMTP_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_SMTP_PORTS, "SMTP", SMTP_EGRESS_PORTS)
 
 
 def _parse_allowed_imap_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_IMAP_PORTS, "IMAP", IMAP_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_IMAP_PORTS, "IMAP", IMAP_EGRESS_PORTS)
 
 
 def _parse_allowed_pop3_ports() -> set[int]:
-    return _parse_allowed_ports(
-        settings.ALLOWED_POP3_PORTS, "POP3", POP3_EGRESS_PORTS
-    )
+    return _parse_allowed_ports(settings.ALLOWED_POP3_PORTS, "POP3", POP3_EGRESS_PORTS)
 
 
 def _parse_allowed_smtp_hosts() -> set[str]:
@@ -561,7 +558,9 @@ def build_email_message(
     message["To"] = _validate_email_header_value(message_params.to_address)
     message["Subject"] = _validate_email_header_value(message_params.subject)
     if message_params.in_reply_to:
-        message["In-Reply-To"] = _validate_email_header_value(message_params.in_reply_to)
+        message["In-Reply-To"] = _validate_email_header_value(
+            message_params.in_reply_to
+        )
     if message_params.references:
         message["References"] = _validate_email_header_value(message_params.references)
     message.set_content(message_params.body)
@@ -591,7 +590,9 @@ async def send_email(
         )
         return {"status": "simulated", "simulated": True}
 
-    smtp_destination = validate_smtp_destination(smtp_config.smtp_server, smtp_config.smtp_port)
+    smtp_destination = validate_smtp_destination(
+        smtp_config.smtp_server, smtp_config.smtp_port
+    )
 
     try:
         smtp_socket = await _connect_validated_smtp_socket(smtp_destination)

@@ -129,3 +129,7 @@
 **Vulnerability:** The URL validation logic correctly blocked non-global IP addresses and `localhost`, but failed to block internal domain extensions such as `.internal` or `.local` (or exact matches for `internal`). This could allow attackers to bypass SSRF protections by resolving these internal top-level domains.
 **Learning:** Checking for `localhost` alone is insufficient to prevent SSRF against internal network resources, as modern environments and protocols utilize `.internal` and `.local` domains for internal routing.
 **Prevention:** Always explicitly check and block domains matching `.internal`, `.local`, or `internal` (alongside `localhost`) when validating URLs for global reachability to prevent SSRF bypasses.
+## 2026-08-09 - OAuth2 Delimiter Injection Fix
+**Vulnerability:** OAuth2 string generation for IMAP/SMTP was vulnerable to delimiter injection by passing the `\x01` character in the user or token parameters.
+**Learning:** Attacker-controlled input inserted into protocols with specific delimiter characters can lead to parameter pollution or auth bypass.
+**Prevention:** Always validate or sanitize untrusted inputs specifically looking for protocol control characters like `\x01` in XOAUTH2 before encoding.

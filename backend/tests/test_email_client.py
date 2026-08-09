@@ -18,6 +18,14 @@ def test_generate_oauth2_string():
     assert b"auth=Bearer dummy_token" in decoded
 
 
+def test_generate_oauth2_string_rejects_delimiter():
+    with pytest.raises(ValueError, match="Invalid character in user or access token"):
+        generate_oauth2_string("test@example.com\x01test=test", "dummy_token")
+
+    with pytest.raises(ValueError, match="Invalid character in user or access token"):
+        generate_oauth2_string("test@example.com", "dummy_token\x01\x01")
+
+
 def test_build_email_message_sets_reply_headers():
     params = EmailMessageParams(
         to_address="test@example.com",
@@ -66,7 +74,9 @@ def test_build_email_message_rejects_newlines_in_header_fields(
         kwargs[field_name] = field_value
 
     params = EmailMessageParams(**kwargs)
-    with pytest.raises(ValueError, match="Email header fields must not contain newlines"):
+    with pytest.raises(
+        ValueError, match="Email header fields must not contain newlines"
+    ):
         build_email_message(message_params=params, from_address=from_address)
 
 
@@ -83,7 +93,10 @@ async def test_send_email_logs_sanitized_recipient(caplog):
 
     assert result == {"status": "simulated", "simulated": True}
     messages = [record.getMessage() for record in caplog.records]
-    assert "Simulating sending email to victim@example.com (no SMTP server configured)" in messages
+    assert (
+        "Simulating sending email to victim@example.com (no SMTP server configured)"
+        in messages
+    )
     assert all("\n" not in message and "\r" not in message for message in messages)
 
 
