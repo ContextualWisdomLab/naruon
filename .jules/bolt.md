@@ -19,3 +19,6 @@
 
 **Learning:** When using a dictionary purely to track the presence of keys (e.g. `has_sent_message[key] = True`), checking for presence with `.get(key, False)` carries unnecessary semantic and memory overhead. Sets in Python provide a cleaner `key in set_name` syntax for boolean presence checks and slightly reduced memory footprint, while maintaining O(1) time complexity.
 **Action:** When tracking unique occurrences or boolean presence of items where the value itself doesn't carry additional information, use a `set` and its `.add()` and `in` operators instead of a `dict` mapping to `True` or `False`.
+## 2025-02-12 - Memoizing My Tasks view inside JSX
+**Learning:** Inline mapping of arrays inside JSX in large React components causes O(N) recalculation on every render. Although the `kanbanBoard` in `TasksLayout` was properly memoized, the `myTasksBoard` list was still mapped inline in the React return block, causing main thread blocking when other layout state (like search) was updated.
+**Action:** Always verify that *all* conditional array map rendering blocks are properly wrapped in a `useMemo` hook with all necessary external variables and setters in the dependency array (e.g. `[filteredTicketTasks, setSelectedTaskId, setViewMode]`) to prevent state changes in unrelated components from causing a bottleneck.
