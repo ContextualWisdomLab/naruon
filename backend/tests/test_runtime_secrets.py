@@ -7,7 +7,11 @@ from core.runtime_secrets import (
     _character_class_count,
     _shannon_entropy_bits,
     validate_auth_session_hmac_secret_value,
+    validate_encryption_key_id,
+    build_runtime_encryption_key,
+    RuntimeEncryptionKey,
 )
+from cryptography.fernet import Fernet
 
 
 def test_validate_auth_session_hmac_secret_value_valid():
@@ -125,3 +129,24 @@ def test_shannon_entropy_bits():
     assert math.isclose(_shannon_entropy_bits("abcd"), 8.0)
     assert math.isclose(_shannon_entropy_bits("abc"), 4.754887502163468)
     assert math.isclose(_shannon_entropy_bits("abcabc"), 9.509775004326936)
+
+
+def test_validate_encryption_key_id():
+    assert validate_encryption_key_id("SETTING", "valid_key") == "valid_key"
+    assert validate_encryption_key_id("SETTING", " valid-key.123 ") == "valid-key.123"
+
+    with pytest.raises(RuntimeError, match="must be 1-64 characters"):
+        validate_encryption_key_id("SETTING", "-invalid")
+
+
+def test_build_runtime_encryption_key_valid():
+    key_val = Fernet.generate_key().decode("utf-8")
+    result = build_runtime_encryption_key("MY_SETTING", "my-key", key_val)
+    assert isinstance(result, RuntimeEncryptionKey)
+    assert result.key_id == "my-key"
+    assert isinstance(result.fernet, Fernet)
+
+
+def test_build_runtime_encryption_key_invalid():
+    with pytest.raises(RuntimeError, match="MY_SETTING must be a valid Fernet key"):
+        build_runtime_encryption_key("MY_SETTING", "my-key", "invalid-key-value")
