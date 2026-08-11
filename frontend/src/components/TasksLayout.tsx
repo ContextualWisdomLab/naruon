@@ -370,8 +370,9 @@ export function TasksLayout() {
 
   // ⚡ Bolt: Wrap My Tasks list in useMemo to prevent O(N) re-renders
   // 🎯 Why: Mapping over potentially large lists of filtered tasks blocks the main thread during unrelated state updates.
-  const myTasksList = useMemo(() => (
-    filteredTicketTasks.length > 0 ? filteredTicketTasks.map(task => (
+  const myTasksList = useMemo(() => {
+    if (viewMode !== '내 작업') return null;
+    return filteredTicketTasks.length > 0 ? filteredTicketTasks.map(task => (
       <button key={task.id} type="button" className="flex w-full items-center justify-between p-4 rounded-xl border border-border bg-card text-left shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}>
         <div className="flex items-center gap-4">
           <div className={`size-3 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
@@ -384,8 +385,8 @@ export function TasksLayout() {
       </button>
     )) : (
       <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground">서명 세션에 연결된 내 작업이 없습니다.</p>
-    )
-  ), [filteredTicketTasks, setSelectedTaskId, setViewMode]);
+    );
+  }, [filteredTicketTasks, setSelectedTaskId, setViewMode, viewMode]);
   const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: TaskViewMode) => {
 
     const currentIndex = TASK_VIEW_MODES.indexOf(mode);
