@@ -1117,6 +1117,7 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "member.islnk()" in workflow
     assert "member.isdev()" in workflow
     assert "os.path.commonpath" in workflow
+    assert "if unsafe:" in workflow
     assert "archive.extractall" in workflow
     assert "[ -L \"$governance_script\" ]" in workflow
     assert "tar -xzf \"$trusted_archive\"" not in workflow
