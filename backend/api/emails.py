@@ -693,7 +693,7 @@ class SendEmailRequest(BaseModel):
     in_reply_to: str | None = None  # O3: email threading support
     references: str | None = None
 
-    @field_validator("subject", "in_reply_to", "references", mode="before")
+    @field_validator("to", "subject", "in_reply_to", "references", mode="before")
     @classmethod
     def reject_crlf(cls, v: str | None) -> str | None:
         if isinstance(v, str):
