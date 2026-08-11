@@ -1,4 +1,13 @@
 ## [Unreleased]
+
+### 보안 패치 (Keyverse OIDC claim boundary)
+
+- Keyverse OIDC 세션은 이제 검증된 `iss`, `aud`, `iat`, `exp`, `sub`, `org`,
+  `workspace`, `role` 클레임을 모두 요구합니다. `naruon-web` audience와
+  조직/workspace 경계를 사용하는 명시적 acceptance 회귀 테스트를 추가해
+  `iat`가 빠진 토큰이 HMAC 세션으로 우회되지 않고 401로 종료되는지
+  검증합니다.
+
 ### 보안 패치 (CodeQL extended current-head)
 
 - `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 버전으로 동기화했습니다. Strix 잠금은 `google-cloud-aiplatform==1.160.0`의 `<7` 제약을 위반하던 `protobuf==7.35.1`을 이미 검증된 `6.33.6`으로 복구해 다시 해석·설치 가능하게 했습니다.

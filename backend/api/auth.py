@@ -148,6 +148,7 @@ ADMIN_ROLES = SYSTEM_ADMIN_ROLES | TENANT_ADMIN_ROLES
 SESSION_ISSUER = "naruon-control-plane"
 SESSION_AUDIENCE = "naruon-api"
 JWT_DECODE_REQUIRED_CLAIMS = ("exp", "iss", "aud")
+OIDC_JWT_DECODE_REQUIRED_CLAIMS = (*JWT_DECODE_REQUIRED_CLAIMS, "iat")
 MIN_SESSION_SECRET_BYTES = 32
 MAX_SIGNED_SESSION_EXPIRATION_SECONDS = 12 * 60 * 60
 MAX_SIGNED_SESSION_CLOCK_SKEW_SECONDS = 60
@@ -194,13 +195,14 @@ async def get_auth_context(
 
 def build_auth_context(authorization: str | None = None) -> AuthContext:
     """
-    Build runtime identity from verified signed session material.
+    Build runtime identity from a verified signed bearer session.
 
-    Client-supplied identity metadata is not authentication material. Only a
-    bearer token signed by the configured control-plane HMAC secret can supply
-    identity, role, organization, group, and workspace claims in the runtime
-    dependency path. Endpoint tests that need fixture identities must continue to
-    use explicit FastAPI dependency overrides.
+    Client-supplied identity metadata is not authentication material. A bearer
+    token must be verified by the configured OIDC/JWKS provider or the
+    control-plane HMAC secret before it can supply identity, role, organization,
+    group, and workspace claims in the runtime dependency path. Endpoint tests
+    that need fixture identities must continue to use explicit FastAPI
+    dependency overrides.
     """
     payload, session_verifier = _verify_signed_session_payload(authorization)
     return _auth_context_from_session_payload(payload, session_verifier)
@@ -253,7 +255,7 @@ def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:
                 audience=settings.OIDC_CLIENT_ID,
                 issuer=settings.OIDC_ISSUER_URL,
                 options={
-                    "require": JWT_DECODE_REQUIRED_CLAIMS,
+                    "require": OIDC_JWT_DECODE_REQUIRED_CLAIMS,
                     "verify_signature": True,
                 },
             )
@@ -491,6 +493,8 @@ def _validate_session_metadata(
     if expires_at > now + MAX_SIGNED_SESSION_EXPIRATION_SECONDS:
         raise _authentication_error()
     issued_at = payload.get("iat")
+    if session_verifier == "oidc" and issued_at is None:
+        raise _authentication_error()
     if issued_at is not None:
         if isinstance(issued_at, bool) or not isinstance(issued_at, (int, float)):
             raise _authentication_error()

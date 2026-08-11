@@ -121,9 +121,13 @@
   private-address resolution and DNS-rebinding bypasses. Development HTTP is
   limited to exact `localhost`, `127.0.0.1`, or `::1` loopback endpoints.
 - Browser-side OIDC support does not mint local roles. The IdP token must still
-  satisfy the backend's signed claim contract: verified issuer/audience, subject,
-  explicit non-platform role, organization, groups, workspace, expiry, and no
-  unsupported critical headers.
+  satisfy the backend's signed claim contract: verified issuer, configured
+  audience, subject, `iat` and `exp` NumericDate values, explicit non-platform
+  role, organization, groups, workspace, and no unsupported critical headers.
+- For a Keyverse deployment, configure the exact Keyverse issuer and JWKS URL,
+  the reviewed `naruon-web` audience, and the operator-owned OIDC host allowlist
+  together. The verified `org`, `workspace`, and `role` claims are inputs to
+  Naruon's deny-first ABAC/RBAC policy; their presence alone never grants access.
 
 ## Keycloak/Casdoor decision path
 
