@@ -33,3 +33,20 @@ sessions and does not start the separate Keyverse repository.
 - Keyverse deployment/configuration is an operator concern and is not silently
   replaced by a local fallback.
 - OIDC issuer and JWKS DNS/HTTPS/allowlist protections remain mandatory.
+
+## References
+
+- [RFC 8725: JSON Web Token Best Current
+  Practices](https://www.rfc-editor.org/rfc/rfc8725.html) (IETF, 2020).
+  It requires applications to bind issuer claims to the issuer's cryptographic
+  keys and validate the subject; this supports the explicit issuer, JWKS, and
+  fail-closed checks at the Keyverse boundary.
+- [RFC 9700: Best Current Practice for OAuth 2.0
+  Security](https://www.rfc-editor.org/rfc/rfc9700.html) (IETF, 2025).
+  It recommends exact redirect handling, PKCE/nonce protections, audience
+  restriction, and authorization-server metadata; this supports keeping
+  Keyverse as the production identity authority while retaining HMAC only for
+  controlled smoke tests.
+
+The source PDFs are not bundled because redistribution rights were not
+established; stable links and summaries are provided instead.

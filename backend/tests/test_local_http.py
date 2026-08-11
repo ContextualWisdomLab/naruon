@@ -82,10 +82,12 @@ def test_local_request_target_normalizes_malformed_parser_errors() -> None:
         validate_local_request_target("//[::1")
 
 
-@pytest.mark.parametrize("value", ["http://127.0.0.1:18080/\x00", "http://127.0.0.1/%00"])
-def test_local_http_rejects_nul_characters(value: str) -> None:
+@pytest.mark.parametrize(
+    "origin", ["http://127.0.0.1:18080/\x00", "http://127.0.0.1/%00"]
+)
+def test_local_http_rejects_nul_characters(origin: str) -> None:
     with pytest.raises(LocalHTTPValidationError):
-        validate_loopback_http_origin(value)
+        validate_loopback_http_origin(origin)
 
     with pytest.raises(LocalHTTPValidationError):
-        validate_local_request_target(value, allowed_exact_paths=frozenset())
+        validate_local_request_target("/api/search/%00")

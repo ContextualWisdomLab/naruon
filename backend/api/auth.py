@@ -420,10 +420,12 @@ def _reject_signed_session_admin_payload(payload: dict[str, Any]) -> None:
 def _safe_ascii_claim(value: object) -> str | None:
     if not isinstance(value, str):
         return None
-    normalized = value.strip()
-    if not normalized or not normalized.isascii():
+    if not value.isascii() or any(
+        ord(character) < 32 or ord(character) == 127 for character in value
+    ):
         return None
-    if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+    normalized = value.strip()
+    if not normalized:
         return None
     return normalized
 

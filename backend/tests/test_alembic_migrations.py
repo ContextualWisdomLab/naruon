@@ -1,4 +1,9 @@
+import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import sqlalchemy as sa
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -422,13 +427,131 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.drop_column(" not in revision_text
 
 
-def test_email_read_state_revision_uses_canonical_email_records_table():
+def _load_email_read_state_revision():
     revision_path = BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
-    revision_text = revision_path.read_text()
+    spec = importlib.util.spec_from_file_location(
+        "email_read_state_revision", revision_path
+    )
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+    return revision
+
+
+class _MigrationInspector:
+    def __init__(self, email_columns, *, ownership_table=False):
+        self.email_columns = email_columns
+        self.ownership_table = ownership_table
+
+    def has_table(self, table_name):
+        if table_name == "email_records":
+            return True
+        if table_name == "email_read_state_ownership":
+            return self.ownership_table
+        raise AssertionError(table_name)
+
+    def get_columns(self, table_name):
+        assert table_name == "email_records"
+        return self.email_columns
+
+
+class _MigrationConnection:
+    def __init__(self, *, ownership_record=False):
+        self.ownership_record = ownership_record
+
+    def execute(self, _statement):
+        return SimpleNamespace(
+            first=lambda: ("owned",) if self.ownership_record else None
+        )
+
+
+def _migration_operations(monkeypatch, revision, inspector, connection):
+    calls = []
+    operations = SimpleNamespace(
+        get_bind=lambda: connection,
+        add_column=lambda *args: calls.append(("add_column", args)),
+        create_table=lambda *args: calls.append(("create_table", args)),
+        bulk_insert=lambda *args: calls.append(("bulk_insert", args)),
+        drop_column=lambda *args: calls.append(("drop_column", args)),
+        drop_table=lambda *args: calls.append(("drop_table", args)),
+    )
+    monkeypatch.setattr(revision, "op", operations)
+    monkeypatch.setattr(revision.sa, "inspect", lambda _connection: inspector)
+    return calls
+
+
+def test_email_read_state_revision_adds_and_records_column_ownership(monkeypatch):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector([{"name": "id"}])
+    connection = _MigrationConnection()
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    revision.upgrade()
+
+    assert [name for name, _args in calls] == [
+        "add_column",
+        "create_table",
+        "bulk_insert",
+    ]
+    assert calls[0][1][0] == "email_records"
+    assert calls[0][1][1].name == "is_read"
+    assert calls[0][1][1].nullable is False
+
+
+@pytest.mark.parametrize(
+    "column",
+    [
+        {"name": "is_read", "type": sa.Boolean(), "nullable": False},
+        {"name": "is_read", "type": sa.String(), "nullable": True},
+    ],
+)
+def test_email_read_state_revision_rejects_pre_existing_column(monkeypatch, column):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector([{"name": "id"}, column])
+    connection = _MigrationConnection()
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    with pytest.raises(RuntimeError, match="pre-existing"):
+        revision.upgrade()
+
+    assert calls == []
+
+
+def test_email_read_state_revision_downgrade_only_removes_owned_column(monkeypatch):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector(
+        [{"name": "id"}, {"name": "is_read"}], ownership_table=True
+    )
+    connection = _MigrationConnection(ownership_record=True)
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    revision.downgrade()
+
+    assert [name for name, _args in calls] == ["drop_column", "drop_table"]
+    assert calls[0][1] == ("email_records", "is_read")
+
+
+def test_email_read_state_revision_downgrade_preserves_unowned_column(monkeypatch):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector(
+        [{"name": "id"}, {"name": "is_read"}], ownership_table=False
+    )
+    connection = _MigrationConnection()
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    revision.downgrade()
+
+    assert calls == []
+
+
+def test_email_read_state_revision_uses_canonical_email_records_table():
+    revision_text = (
+        BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    ).read_text()
 
     assert '_EMAIL_TABLE = "email_records"' in revision_text
     assert "inspector.get_columns(_EMAIL_TABLE)" in revision_text
-    assert 'op.add_column(\n            _EMAIL_TABLE' in revision_text
+    assert "op.add_column(\n        _EMAIL_TABLE" in revision_text
 
 
 def test_merge_revision_reconciles_newsdom_provider_branch():

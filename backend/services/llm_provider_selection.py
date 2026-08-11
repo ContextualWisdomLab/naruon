@@ -50,6 +50,14 @@ def _provider_api_key(provider: LLMProvider) -> str | None:
     return None
 
 
+def _is_local_runtime_base_url(base_url: str | None) -> bool:
+    try:
+        hostname = urlsplit(base_url or "").hostname
+    except ValueError:
+        return False
+    return hostname in LOCAL_RUNTIME_HOSTS
+
+
 async def get_active_llm_provider(
     session: AsyncSession,
     organization_id: str | None,
@@ -73,7 +81,12 @@ def _runtime_from_provider(provider: LLMProvider) -> RuntimeLLMProvider | None:
     if not is_llm_provider_configured(provider):
         return None
 
-    api_key = _provider_api_key(provider)
+    if _is_local_runtime_base_url(provider.base_url):
+        if not _is_local_provider(provider):
+            return None
+        api_key = LOCAL_PROVIDER_API_KEY
+    else:
+        api_key = _provider_api_key(provider)
     if not api_key:
         return None
 

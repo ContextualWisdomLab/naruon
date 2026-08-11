@@ -23,6 +23,7 @@ from api.auth import (
     get_current_user,
     is_admin_role,
     is_tenant_admin_role,
+    _safe_ascii_claim,
 )
 from core.config import settings
 from db.session import get_db
@@ -475,6 +476,14 @@ async def test_signed_bearer_session_rejects_non_ascii_claim_values():
         await get_auth_context(authorization=f"Bearer {token}")
 
     assert exc.value.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "claim_value",
+    ("\nalice", "alice\r", "\talice", "alice\t", "\u00a0alice"),
+)
+def test_safe_ascii_claim_rejects_control_or_non_ascii_prefixes(claim_value: str):
+    assert _safe_ascii_claim(claim_value) is None
 
 
 @pytest.mark.asyncio

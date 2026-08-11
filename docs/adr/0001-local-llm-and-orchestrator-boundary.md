@@ -56,3 +56,21 @@ EmbeddingGemma may be separate local OpenAI-compatible endpoints.
   MLX endpoint does not silently pretend to provide embeddings.
 - A local MLX chat server and local llama.cpp embedding server can run
   concurrently without sharing a port or crossing tenant provider boundaries.
+
+## References
+
+- Henrique Schechter Vera et al., [“EmbeddingGemma: Powerful and Lightweight
+  Text Representations”](https://arxiv.org/abs/2509.20354), arXiv:2509.20354
+  (2025). The paper reports a 300M embedding model evaluated across multilingual,
+  English, and code tasks, including quantized and truncated variants; that
+  supports EmbeddingGemma as a low-memory embedding candidate, not as a chat
+  runtime.
+- Niklas Muennighoff et al., [“MTEB: Massive Text Embedding
+  Benchmark”](https://arxiv.org/abs/2210.07316), arXiv:2210.07316 (2023).
+  MTEB spans multiple tasks, datasets, and languages and finds no universal
+  embedding method; this supports measuring the selected local model in
+  Naruon's retrieval workload instead of assuming that a chat model is a good
+  embedder.
+
+The source PDFs are not bundled because redistribution rights were not
+established; stable links and summaries are provided instead.

@@ -54,12 +54,16 @@ def test_safe_upload_filename_fails_closed_beyond_decode_round_limit():
 
 def test_owner_import_lock_key_is_nul_free_and_tuple_stable():
     first = _owner_import_lock_key("user-1", "org-1")
-    second = _owner_import_lock_key("org-1", "user-1")
+    repeat = _owner_import_lock_key("user-1", "org-1")
+    swapped = _owner_import_lock_key("org-1", "user-1")
 
     assert "\x00" not in first
-    assert first != second
+    assert first == repeat
+    assert first != swapped
     with pytest.raises(ValueError, match="NUL"):
         _owner_import_lock_key("user\x00-1", "org-1")
+    with pytest.raises(ValueError, match="NUL"):
+        _owner_import_lock_key("user-1", "org\x00-1")
 
 
 @pytest.mark.parametrize(

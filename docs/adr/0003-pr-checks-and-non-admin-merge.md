@@ -31,3 +31,21 @@
 
 Delivery evidence stays tied to the exact PR head, while human review and the
 repository's normal protection rules retain authority over the final merge.
+
+## References
+
+- Enrico Fregnan, Fernando Petrulio, and Alberto Bacchelli, [“The evolution of
+  the code during review: an investigation on review
+  changes”](https://link.springer.com/article/10.1007/s10664-022-10205-7),
+  *Empirical Software Engineering* (2022). The study examines how code changes
+  evolve through review; this supports repeating review and focused validation
+  after each corrective commit.
+- Santiago Torres-Arias et al., [“in-toto: Providing farm-to-table guarantees
+  for bits and bytes”](https://www.usenix.org/conference/usenixsecurity19/presentation/torres-arias),
+  *USENIX Security Symposium* (2019). The work models independent build and
+  delivery actors and verifies supply-chain integrity end to end; this supports
+  current-commit evidence, trusted workflow materialization, and no merge
+  bypass. The mapping to this PR gate is an engineering inference.
+
+The source PDFs are not bundled because redistribution rights were not
+established; stable links and summaries are provided instead.

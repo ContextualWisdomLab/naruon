@@ -35,3 +35,21 @@ permit path traversal or link-based writes if its assumptions change.
 - A central workflow repository remains the authority for organization-wide
   OpenCode, Strix, and merge-scheduler behavior; Naruon records and verifies
   the contract but does not silently fork or mutate that external source.
+
+## References
+
+- Jerome H. Saltzer and Michael D. Schroeder, [“The Protection of Information
+  in Computer Systems”](https://www.cs.virginia.edu/~evans/cs551/saltzer/),
+  *Proceedings of the IEEE* 63(9) (1975). Least privilege, complete mediation,
+  and separation of privilege support keeping write-capable workflow logic
+  isolated from untrusted pull-request data.
+- Santiago Torres-Arias et al., [“in-toto: Providing farm-to-table guarantees
+  for bits and bytes”](https://www.usenix.org/conference/usenixsecurity19/presentation/torres-arias),
+  *USENIX Security Symposium* (2019). The paper establishes end-to-end
+  provenance for software supply chains; this supports full-SHA trusted-source
+  materialization and current-head evidence.
+- [OWASP Web Security Testing Guide: Test Upload of Malicious
+  Files](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/10-Business_Logic_Testing/09-Test_Upload_of_Malicious_Files).
+  Its archive-directory-traversal example motivates validating archive member
+  paths and links before extraction. No third-party paper PDF is bundled because
+  redistribution rights were not established for these sources.

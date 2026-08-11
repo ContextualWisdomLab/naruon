@@ -37,3 +37,20 @@ only while selecting it as the default.
   semantic judgments require grounded evidence.
 - The test and live-smoke loop becomes part of the correction contract rather
   than an optional postscript.
+
+## References
+
+- Jerome H. Saltzer and Michael D. Schroeder, [“The Protection of Information
+  in Computer Systems”](https://www.cs.virginia.edu/~evans/cs551/saltzer/),
+  *Proceedings of the IEEE* 63(9) (1975). The paper's fail-safe defaults,
+  complete mediation, least privilege, and separation-of-privilege principles
+  support rejecting malformed input before persistence or authorization.
+- Lianmin Zheng et al., [“Judging LLM-as-a-Judge with MT-Bench and Chatbot
+  Arena”](https://arxiv.org/abs/2306.05685), NeurIPS 2023. The paper documents
+  useful agreement with human preferences together with position, verbosity,
+  self-enhancement, and reasoning biases; this supports grounded evidence and
+  explicit provenance rather than keyword matching as an authoritative
+  judgment.
+
+The source PDFs are not bundled because redistribution rights were not
+established; stable links and summaries are provided instead.

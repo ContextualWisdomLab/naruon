@@ -338,6 +338,9 @@ async def test_extract_action_items_and_summary_parses_local_json_content(
         "content"
     ]
     assert "Return only one valid JSON object" in system_content
+    assert mock_openai.chat.completions.create.call_args.kwargs["response_format"] == {
+        "type": "json_object"
+    }
     assert mock_openai.chat.completions.create.call_args.kwargs["extra_body"] == {
         "chat_template_kwargs": {"enable_thinking": False}
     }
