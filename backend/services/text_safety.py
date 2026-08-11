@@ -460,7 +460,7 @@ def strip_html_markup(value: str) -> str:
     cleaned_lines = []
     for line in text.splitlines():
         cleaned_lines.append(_strip_tag_like_segments(line))
-    text = "\n".join(cleaned_lines).strip()
+    text = "\n".join(cleaned_lines).replace("-->", "").strip()
     
     for token, original in placeholders.items():
         text = text.replace(token, original)
