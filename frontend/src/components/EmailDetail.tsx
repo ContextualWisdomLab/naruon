@@ -751,7 +751,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   {conversationMessages.length}개 메시지
                 </Badge>
               </div>
-              <Button size="sm" variant="outline" className="h-7 text-xs bg-white text-muted-foreground hover:text-foreground">
+              <Button size="sm" variant="outline" className="h-7 text-xs bg-white text-muted-foreground hover:text-foreground" title="현재 대화 흐름을 다른 스레드와 병합합니다">
                 다른 스레드 병합
               </Button>
             </div>
@@ -771,7 +771,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">{formatEmailDate(msg.date)}</span>
                       {msg.id !== conversationMessages[0]?.id && (
-                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-red-600 hover:bg-red-50">
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-red-600 hover:bg-red-50" title="이 메시지부터 새로운 스레드로 분리합니다">
                           스레드 분리
                         </Button>
                       )}
