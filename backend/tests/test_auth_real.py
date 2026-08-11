@@ -478,6 +478,28 @@ async def test_signed_bearer_session_rejects_non_ascii_claim_values():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("claim_name", "claim_value"),
+    [
+        ("sub", "alice\x00"),
+        ("org", "org\x00acme"),
+        ("workspace", "workspace\x00org-acme"),
+        ("groups", ["group-1", "group\x00two"]),
+    ],
+)
+async def test_signed_bearer_session_rejects_nul_claim_values(
+    claim_name: str, claim_value: object
+):
+    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+    token = _signed_session_token(_valid_session_payload(**{claim_name: claim_value}))
+
+    with pytest.raises(HTTPException) as exc:
+        await get_auth_context(authorization=f"Bearer {token}")
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_signed_bearer_session_rejects_non_finite_expiration():
     settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
     token = _signed_session_token(_valid_session_payload(exp=float("nan")))

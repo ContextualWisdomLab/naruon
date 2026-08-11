@@ -12,6 +12,7 @@ from services.email_import_service import (
     EMBEDDING_DIMENSION,
     EmailImportEmbeddingProvider,
     _generate_import_embeddings,
+    _owner_import_lock_key,
 )
 
 
@@ -49,6 +50,16 @@ def test_safe_upload_filename_fails_closed_beyond_decode_round_limit():
         encoded_name = encoded_name.replace("%", "%25")
 
     assert email_import_module._safe_upload_filename(encoded_name) == "upload"
+
+
+def test_owner_import_lock_key_is_nul_free_and_tuple_stable():
+    first = _owner_import_lock_key("user-1", "org-1")
+    second = _owner_import_lock_key("org-1", "user-1")
+
+    assert "\x00" not in first
+    assert first != second
+    with pytest.raises(ValueError, match="NUL"):
+        _owner_import_lock_key("user\x00-1", "org-1")
 
 
 @pytest.mark.parametrize(

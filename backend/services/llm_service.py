@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from urllib.parse import urlsplit, urlunsplit
 
 from openai import AsyncOpenAI
@@ -20,6 +21,13 @@ OLLAMA_NATIVE_CHAT_HOSTS = frozenset({"ollama"})
 OLLAMA_NATIVE_CHAT_LOOPBACK_HOSTS = frozenset(
     {"localhost", "localhost.localdomain", "127.0.0.1", "::1"}
 )
+LOCAL_STRUCTURED_OUTPUT_HOSTS = frozenset(
+    {
+        *OLLAMA_NATIVE_CHAT_HOSTS,
+        *OLLAMA_NATIVE_CHAT_LOOPBACK_HOSTS,
+        "host.docker.internal",
+    }
+)
 OLLAMA_NATIVE_CHAT_PORT = 11434
 
 
@@ -35,6 +43,36 @@ class ExtractionResult(BaseModel):
         le=100,
         description="Optional confidence score from 0 to 100",
     )
+
+
+def _parse_extraction_content(content: str | None) -> ExtractionResult:
+    if not content:
+        raise ValueError("LLM returned an empty extraction response")
+    fenced_match = re.search(
+        r"```\s*(?:json)?\s*(.*?)\s*```", content, re.DOTALL | re.IGNORECASE
+    )
+    payload_text = fenced_match.group(1) if fenced_match else content.strip()
+    decoder = json.JSONDecoder()
+    for start, character in enumerate(payload_text):
+        if character != "{":
+            continue
+        try:
+            payload, _ = decoder.raw_decode(payload_text[start:])
+        except json.JSONDecodeError:
+            continue
+        return ExtractionResult.model_validate(payload)
+    raise ValueError("LLM returned invalid extraction JSON")
+
+
+def _is_local_llm_endpoint(validated_base_url: str | None) -> bool:
+    hostname = urlsplit(validated_base_url or "").hostname
+    return settings.ALLOW_LOCAL_LLM_PROVIDERS and hostname in LOCAL_STRUCTURED_OUTPUT_HOSTS
+
+
+def _local_chat_request_kwargs(validated_base_url: str | None) -> dict[str, object]:
+    if not _is_local_llm_endpoint(validated_base_url):
+        return {}
+    return {"extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}
 
 
 async def extract_action_items_and_summary(
@@ -59,36 +97,58 @@ async def extract_action_items_and_summary(
     )
     selected_model = model or settings.OPENAI_MODEL
     try:
-        response = await provider_circuit_breaker.call(
-            validated_base_url or "openai-default",
-            lambda: retry_transient(
-            lambda: client.beta.chat.completions.parse(
-            model=selected_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful assistant. Summarize the email, "
-                        "extract action items, and include a confidence score "
-                        "from 0 to 100 when enough evidence is available."
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful assistant. Summarize the email, extract "
+                    "action items, and include a confidence score from 0 to 100 "
+                    "when enough evidence is available."
+                ),
+            },
+            {"role": "user", "content": email_body},
+        ]
+        if _is_local_llm_endpoint(validated_base_url):
+            messages[0]["content"] += (
+                " Return only one valid JSON object with exactly these keys: "
+                "summary (string), action_items (array of strings), and "
+                "confidence (integer 0-100 or null). Do not include markdown "
+                "or any explanation."
+            )
+            response = await provider_circuit_breaker.call(
+                validated_base_url or "openai-default",
+                lambda: retry_transient(
+                    lambda: client.chat.completions.create(
+                        model=selected_model,
+                        messages=messages,
+                        response_format={"type": "json_object"},
+                        temperature=0,
+                        **_local_chat_request_kwargs(validated_base_url),
                     ),
-                },
-                {"role": "user", "content": email_body},
-            ],
-            response_format=ExtractionResult,
-            ),
-            operation_name="summary extraction",
-            ),
-        )
+                    operation_name="summary extraction",
+                ),
+            )
+            parsed = _parse_extraction_content(response.choices[0].message.content)
+        else:
+            response = await provider_circuit_breaker.call(
+                validated_base_url or "openai-default",
+                lambda: retry_transient(
+                    lambda: client.beta.chat.completions.parse(
+                        model=selected_model,
+                        messages=messages,
+                        response_format=ExtractionResult,
+                    ),
+                    operation_name="summary extraction",
+                ),
+            )
+            parsed = response.choices[0].message.parsed
+            if not parsed:
+                raise ValueError("LLM returned no structured extraction")
     except Exception as e:
         logger.error(f"Error calling LLM API for extraction: {e}")
         raise LLMServiceError(f"LLM API error during extraction: {e}") from e
     finally:
         await client.close()
-
-    parsed = response.choices[0].message.parsed
-    if not parsed:
-        raise RuntimeError("Failed to parse LLM response")
 
     parsed.provenance = f"{provider_name} ({selected_model})"
     return parsed
@@ -142,6 +202,7 @@ async def translate_email_body(
                     model=selected_model,
                     messages=messages,
                     temperature=0.3,
+                    **_local_chat_request_kwargs(validated_base_url),
                 ),
                 operation_name="translation",
             ),
@@ -203,10 +264,11 @@ async def draft_reply(
         response = await provider_circuit_breaker.call(
             validated_base_url or "openai-default",
             lambda: retry_transient(
-                lambda: client.chat.completions.create(
-                    model=selected_model,
-                    messages=messages,
-                ),
+                    lambda: client.chat.completions.create(
+                        model=selected_model,
+                        messages=messages,
+                        **_local_chat_request_kwargs(validated_base_url),
+                    ),
                 operation_name="reply drafting",
             ),
         )

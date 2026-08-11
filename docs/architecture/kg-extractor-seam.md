@@ -59,7 +59,7 @@ authority (mirroring the plan's plugin-context principle, §7.2).
 
 `KgExtractorRegistry` maps the stable `PROJECT_GRAPH_EXTRACTOR` selector value to
 an extractor. `resolve_extractor_chain(selector)` returns an ordered chain whose
-**terminal element is always the deterministic keyword extractor**:
+**terminal element is always the deterministic reference extractor**:
 
 | selector | chain |
 | --- | --- |
@@ -74,8 +74,9 @@ orchestrator endpoint) raises `ExtractorUnavailableError`; a genuine failure
 raises anything else. Both cause the runner to advance to the next extractor.
 Because the deterministic keyword extractor is pure and always produces a result,
 "rule-based extraction is fallback/reference only" is guaranteed *by
-construction* — not by remembering to write a fallback branch. The projection is
-best-effort and never lost.
+construction* — not by remembering to write a fallback branch. The default
+selector is grounded `orchestrator`; `keyword` must be selected explicitly for
+diagnostic/reference use. The projection is best-effort and never lost.
 
 Adding an extractor — including a future plugin on the `kg.extractor` extension
 point — is now `registry.register("selector", MyExtractor())` plus a config
@@ -125,7 +126,7 @@ contextual-orchestrator (see naruon#973).
 
 - `PROJECT_GRAPH_EXTRACTION_ENABLED` (default `false`) — gates whether ingest
   snapshots segments for projection at all.
-- `PROJECT_GRAPH_EXTRACTOR` (default `keyword`) — `keyword` | `llm` |
+- `PROJECT_GRAPH_EXTRACTOR` (default `orchestrator`) — `keyword` | `llm` |
   `orchestrator`.
 - `PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` (default unset) — OpenAI-compatible
   orchestrator endpoint for `orchestrator` routing; HTTPS + allowlisted.

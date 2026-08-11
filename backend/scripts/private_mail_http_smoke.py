@@ -669,6 +669,14 @@ def _fetch_search_snapshot(
     return last_data, 0
 
 
+def _browser_inbox_min_count(
+    imported_count: int, api_inbox_count: int, api_limit: int
+) -> int:
+    if imported_count > 0 and api_inbox_count == 0:
+        raise SystemExit("api inbox did not reflect imported mail")
+    return min(api_inbox_count, api_limit)
+
+
 def _check_frontend_session(base_url: str, token: str) -> dict[str, object] | None:
     try:
         data = _post_json_with_retry(
@@ -724,28 +732,6 @@ def _cleanup_private_cache(files: list[Path]) -> None:
             )
 
 
-def _print_session_sync_hints(base_url: str, token: str, *, enabled: bool) -> None:
-    if not enabled:
-        return
-
-    print(
-        "session_token=" + token,
-    )
-    print("브라우저 동일 세션 동기화 방법:")
-    print(
-        "  1) 브라우저에서 NARUON 앱(origin)으로 접속한 뒤, 개발자 콘솔에서 아래 한 줄 실행:",
-    )
-    print(
-        "     await fetch('/auth/session', {method:'POST', credentials:'same-origin', "
-        "headers:{'content-type':'application/json'}, body: JSON.stringify({access_token: '"
-        + token
-        + "'})});",
-    )
-    safe_origin = base_url.rstrip("/")
-    print(f"     (요청 대상: {safe_origin}/auth/session)")
-    print("  2) 새로고침 후 /mail 또는 /api/emails로 임포트 반영 및 표시 여부 확인")
-
-
 def _print_session_check_summary(claims: dict[str, object] | None) -> None:
     if claims is None:
         print("session_check=skipped(endpoint_not_frontend)")
@@ -784,15 +770,11 @@ def main() -> None:
         "--frontend-base-url",
         help="Optional override when frontend and backend ports differ",
     )
-    parser.add_argument(
-        "--session-secret", default=os.environ.get("LIVE_E2E_SESSION_SECRET", "")
-    )
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=10)
     parser.add_argument("--query", action="append", default=[])
     parser.add_argument("--match-mode", choices=["exact", "all-terms"], default="exact")
     parser.add_argument("--llm-smoke", action="store_true")
-    parser.add_argument("--print-session-token", action="store_true")
     parser.add_argument(
         "--search-retry-attempts", type=int, default=SEARCH_RETRY_DEFAULT_ATTEMPTS
     )
@@ -818,8 +800,9 @@ def main() -> None:
     parser.add_argument("--progress-every", type=int, default=0)
     args = parser.parse_args()
 
-    if not args.session_secret:
-        raise SystemExit("LIVE_E2E_SESSION_SECRET or --session-secret is required")
+    session_secret = os.environ.get("LIVE_E2E_SESSION_SECRET", "")
+    if not session_secret:
+        raise SystemExit("LIVE_E2E_SESSION_SECRET is required")
     if args.limit <= 0 or args.batch_size <= 0 or args.batch_size > 10:
         raise SystemExit("--limit must be positive and --batch-size must be 1..10")
     if args.search_retry_attempts < 1 or args.inbox_retry_attempts < 1:
@@ -844,7 +827,7 @@ def main() -> None:
         )
 
     try:
-        token = _signed_token(args.session_secret)
+        token = _signed_token(session_secret)
         session_claims = _check_frontend_session(frontend_base_url, token)
         _print_session_check_summary(session_claims)
         totals: typing.Counter[str] = Counter()
@@ -871,18 +854,20 @@ def main() -> None:
 
         expected_min_count = totals["imported"]
         api_limit = max(1, min(200, expected_min_count if expected_min_count else 1))
-        visible_min_count = min(expected_min_count, api_limit)
 
         api_inbox, email_count = _fetch_inbox_snapshot(
             api_base_url,
             token,
             limit=api_limit,
-            min_count=visible_min_count,
+            min_count=1 if expected_min_count > 0 else 0,
             attempts=args.inbox_retry_attempts if expected_min_count > 0 else 1,
             delay_seconds=args.inbox_retry_delay_seconds
             if expected_min_count > 0
             else 0.0,
             timeout=120.0,
+        )
+        visible_min_count = _browser_inbox_min_count(
+            expected_min_count, email_count, api_limit
         )
         frontend_inbox_count = 0
         if args.require_browser_visible:
@@ -1000,11 +985,6 @@ def main() -> None:
             f"search_counts={search_counts} frontend_search_counts={frontend_search_counts} "
             f"reason_counts={dict(reasons)} "
             f"llm={llm_status} draft={draft_status}"
-        )
-        _print_session_sync_hints(
-            frontend_base_url,
-            token,
-            enabled=args.print_session_token,
         )
     finally:
         _cleanup_private_cache(files)

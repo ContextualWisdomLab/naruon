@@ -78,6 +78,7 @@ class EmailImportEmbeddingProvider:
     api_key: str
     base_url: str | None
     embedding_model: str
+    embedding_base_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -243,6 +244,17 @@ def _session_uses_postgresql(session: AsyncSession) -> bool:
     return getattr(getattr(bind, "dialect", None), "name", None) == "postgresql"
 
 
+def _owner_import_lock_key(user_id: str, organization_id: str) -> str:
+    """Return a PostgreSQL-text-safe, collision-resistant owner lock key."""
+    if "\x00" in user_id or "\x00" in organization_id:
+        raise ValueError("email import owner identity contains NUL")
+    return hashlib.sha256(
+        user_id.encode("utf-8")
+        + b"\x00"
+        + organization_id.encode("utf-8")
+    ).hexdigest()
+
+
 async def _acquire_owner_import_quota_lock(
     session: AsyncSession, *, user_id: str, organization_id: str
 ) -> bool:
@@ -250,7 +262,7 @@ async def _acquire_owner_import_quota_lock(
         return False
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -269,7 +281,7 @@ async def _release_owner_import_quota_lock(
 ) -> None:
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -729,7 +741,7 @@ async def _extract_project_semantics_for_import(
     OpenAI-compatible provider credentials and enforce segment citations, so
     they cannot introduce uncited claims; a missing credential, an unconfigured
     orchestrator endpoint, or any provider/parse failure degrades down the chain
-    to the deterministic keyword baseline instead of losing the projection.
+    to the deterministic reference extractor instead of losing the projection.
     """
     context = KgExtractorContext(
         api_key=embedding_provider.api_key if embedding_provider else None,
@@ -926,7 +938,8 @@ async def _generate_import_embeddings(
         provider_embeddings = await generate_embeddings(
             texts,
             embedding_provider.api_key,
-            base_url=embedding_provider.base_url,
+            base_url=embedding_provider.embedding_base_url
+            or embedding_provider.base_url,
             model=embedding_provider.embedding_model,
         )
     except (EmbeddingGenerationError, ValueError) as exc:
@@ -943,7 +956,8 @@ async def _generate_import_embeddings(
                 single_embedding = await generate_embeddings(
                     [text],
                     embedding_provider.api_key,
-                    base_url=embedding_provider.base_url,
+                    base_url=embedding_provider.embedding_base_url
+                    or embedding_provider.base_url,
                     model=embedding_provider.embedding_model,
                 )
                 if not single_embedding:

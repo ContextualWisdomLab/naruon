@@ -422,6 +422,15 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.drop_column(" not in revision_text
 
 
+def test_email_read_state_revision_uses_canonical_email_records_table():
+    revision_path = BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    revision_text = revision_path.read_text()
+
+    assert '_EMAIL_TABLE = "email_records"' in revision_text
+    assert "inspector.get_columns(_EMAIL_TABLE)" in revision_text
+    assert 'op.add_column(\n            _EMAIL_TABLE' in revision_text
+
+
 def test_merge_revision_reconciles_newsdom_provider_branch():
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0015_merge_newsdom_email_heads.py"

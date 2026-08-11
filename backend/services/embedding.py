@@ -46,7 +46,11 @@ async def generate_embeddings(
         raise ValueError("OPENAI_API_KEY is not set")
 
     # Instantiate client locally to avoid global state race conditions across tenants
-    configured_base_url = base_url if base_url is not None else settings.OPENAI_BASE_URL
+    configured_base_url = base_url
+    if configured_base_url is None:
+        configured_base_url = (
+            settings.OPENAI_EMBEDDING_BASE_URL or settings.OPENAI_BASE_URL
+        )
     validated_base_url, http_client = await build_llm_provider_http_client(
         configured_base_url
     )

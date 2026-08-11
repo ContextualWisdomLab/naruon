@@ -618,7 +618,8 @@ async def _run_local_engine_batch(
             vectors = await generate_embeddings(
                 part_texts,
                 embedding_provider.api_key,
-                base_url=embedding_provider.base_url,
+                base_url=embedding_provider.embedding_base_url
+                or embedding_provider.base_url,
                 model=model,
             )
             for offset, text_index in enumerate(index_group):

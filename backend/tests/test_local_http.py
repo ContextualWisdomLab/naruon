@@ -80,3 +80,12 @@ def test_local_request_target_rejects_invalid_percent_encoding(path: str) -> Non
 def test_local_request_target_normalizes_malformed_parser_errors() -> None:
     with pytest.raises(LocalHTTPValidationError, match="local API path"):
         validate_local_request_target("//[::1")
+
+
+@pytest.mark.parametrize("value", ["http://127.0.0.1:18080/\x00", "http://127.0.0.1/%00"])
+def test_local_http_rejects_nul_characters(value: str) -> None:
+    with pytest.raises(LocalHTTPValidationError):
+        validate_loopback_http_origin(value)
+
+    with pytest.raises(LocalHTTPValidationError):
+        validate_local_request_target(value, allowed_exact_paths=frozenset())

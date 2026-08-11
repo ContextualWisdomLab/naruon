@@ -51,7 +51,8 @@ async def test_generate_embeddings_success():
         with patch("services.embedding.settings") as mock_settings:
             mock_settings.OPENAI_EMBEDDING_MODEL = "test-model"
             mock_settings.OPENAI_BASE_URL = None
-            
+            mock_settings.OPENAI_EMBEDDING_BASE_URL = None
+
             embeddings = await generate_embeddings(["test1", "test2"], "test-key")
             assert len(embeddings) == 2
             assert embeddings[0] == [0.1, 0.2, 0.3]
@@ -95,6 +96,30 @@ async def test_generate_embeddings_uses_selected_provider_model_and_base_url():
 
 
 @pytest.mark.asyncio
+async def test_generate_embeddings_prefers_embedding_base_url_when_no_explicit_url():
+    with patch(
+        "services.embedding.AsyncOpenAI"
+    ) as mock_async_openai, patch(
+        "services.embedding.build_llm_provider_http_client",
+        new_callable=AsyncMock,
+    ) as mock_build_client:
+        mock_build_client.return_value = ("http://host.docker.internal:8082/v1", AsyncMock())
+        mock_client = mock_async_openai.return_value
+        mock_client.close = AsyncMock()
+        mock_client.embeddings.create = AsyncMock(return_value=AsyncMock(data=[]))
+
+        with patch("services.embedding.settings") as mock_settings:
+            mock_settings.OPENAI_EMBEDDING_BASE_URL = (
+                "http://host.docker.internal:8082/v1"
+            )
+            mock_settings.OPENAI_BASE_URL = "http://host.docker.internal:8080/v1"
+            mock_settings.OPENAI_EMBEDDING_MODEL = "embeddinggemma"
+            await generate_embeddings(["test"], "local-provider")
+
+    mock_build_client.assert_awaited_once_with("http://host.docker.internal:8082/v1")
+
+
+@pytest.mark.asyncio
 async def test_generate_embeddings_api_error():
     with patch(
         "services.embedding.AsyncOpenAI"
@@ -106,6 +131,7 @@ async def test_generate_embeddings_api_error():
         with patch("services.embedding.settings") as mock_settings:
             mock_settings.OPENAI_EMBEDDING_MODEL = "test-model"
             mock_settings.OPENAI_BASE_URL = None
+            mock_settings.OPENAI_EMBEDDING_BASE_URL = None
             
             with pytest.raises(EmbeddingGenerationError, match="Failed to generate embeddings: API error"):
 
