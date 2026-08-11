@@ -250,7 +250,7 @@ def test_frontend_tooling_lock_uses_current_audit_fixed_transitive_versions() ->
     assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
     for dependency, expected_version in (
         ("brace-expansion", "5.0.9"),
-        ("nanoid", "5.1.6"),
+        ("nanoid", "5.1.16"),
         ("undici", "8.9.0"),
     ):
         assert frontend_package["overrides"][dependency] == expected_version
