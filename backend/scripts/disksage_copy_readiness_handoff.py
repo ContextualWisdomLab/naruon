@@ -61,6 +61,10 @@ PROVIDERS = frozenset({"icloud", "onedrive", "google-drive"})
 READINESS_STATES = frozenset(
     {"no-candidates", "blocked", "partially-ready", "ready-without-new-review"}
 )
+# DiskSage schema v4 adds the current production-time and provider-admission fields while
+# retaining the same path-free success contract consumed by this handoff. Keep v3 readable for
+# already-issued evidence records; newer envelopes must be added here deliberately and tested.
+SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4})
 ERROR_CODE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 
@@ -355,7 +359,7 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
             and payload.get("ok") is True
             and payload.get("schema_kind") == "disksage.naruon.cloud-copy-readiness"
             and type(payload.get("schema_version")) is int
-            and payload.get("schema_version") == 3
+            and payload.get("schema_version") in SUPPORTED_READINESS_SCHEMA_VERSIONS
             and payload.get("provider") in PROVIDERS
             and payload.get("readiness_state") in READINESS_STATES
             and type(payload.get("candidate_count")) is int
