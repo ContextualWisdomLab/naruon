@@ -1828,6 +1828,8 @@ def test_send_email_endpoint(mock_send_email, monkeypatch):
         ("in_reply_to", "<parent@example.com>\nBcc: attacker@example.com"),
         ("references", "<root@example.com>\rBcc: attacker@example.com"),
         ("references", "<root@example.com>\nBcc: attacker@example.com"),
+        ("to", "victim@example.com\rBcc: attacker@example.com"),
+        ("to", "victim@example.com\nBcc: attacker@example.com"),
     ],
 )
 @patch("api.emails.send_email", return_value={"status": "simulated", "simulated": True})
