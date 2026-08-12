@@ -92,11 +92,13 @@ jobs:
           cd frontend && pnpm exec vitest run
           src/lib/email-writing.test.ts
           src/lib/email-writing.coverage.test.ts
+          src/lib/email-writing.parser-coverage.test.ts
       - name: Verify frontend contract coverage
         run: >-
           cd frontend && pnpm exec vitest run
           src/lib/email-writing.test.ts
           src/lib/email-writing.coverage.test.ts
+          src/lib/email-writing.parser-coverage.test.ts
           --coverage
           --coverage.include=src/lib/email-writing.ts
           --coverage.reporter=text
