@@ -1,0 +1,51 @@
+name: Email Writing Contracts Lint Fix Once
+
+on:
+  push:
+    branches:
+      - feat/llm-email-writing-contracts
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: email-writing-contracts-lint-fix-once-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repair-backend-lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+      - run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+      - name: Apply only Ruff's deterministic import cleanup
+        run: |
+          cd backend
+          python -m ruff check --fix services/email_writing_contracts.py
+          python -m ruff check services/email_writing_contracts.py tests/test_email_writing_contracts.py
+          python -m pytest -q tests/test_email_writing_contracts.py
+      - name: Publish validated lint repair and remove this workflow
+        env:
+          TARGET_BRANCH: feat/llm-email-writing-contracts
+        run: |
+          set -euo pipefail
+          rm .github/workflows/email-writing-contracts-lint-fix-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/services/email_writing_contracts.py .github/workflows/email-writing-contracts-lint-fix-once.yml
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'fix(email-writing): satisfy strict contract lint'
+          git push origin "HEAD:${TARGET_BRANCH}"
