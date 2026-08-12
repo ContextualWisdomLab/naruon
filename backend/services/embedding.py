@@ -73,9 +73,14 @@ def _provider_endpoint(base_url: str, resource: str) -> str:
     )
 
 
-async def _provider_json(http_client, url: str, payload: dict) -> dict:
+async def _provider_json(
+    http_client,
+    url: str,
+    payload: dict,
+    headers: dict[str, str] | None = None,
+) -> dict:
     """POST one native tokenizer request and validate its JSON object response."""
-    response = await http_client.post(url, json=payload)
+    response = await http_client.post(url, json=payload, headers=headers)
     if response.status_code == 404:
         raise ValueError(
             "embedding provider must expose native /tokenize and /detokenize endpoints"
@@ -116,6 +121,7 @@ async def _split_embedding_inputs_with_provider_tokenizer(
                 "add_special": False,
                 "parse_special": False,
             },
+            headers=headers,
         )
         tokens = token_response.get("tokens")
         if not isinstance(tokens, list) or not all(
@@ -137,6 +143,7 @@ async def _split_embedding_inputs_with_provider_tokenizer(
                 http_client,
                 detokenize_url,
                 {"tokens": token_slice},
+                headers=headers,
             )
             chunk = detokenized.get("content")
             if not isinstance(chunk, str):
