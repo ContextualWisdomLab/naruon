@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, Paperclip, Calendar } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -631,6 +631,21 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             <div className="line-clamp-1 text-xs text-muted-foreground">
               답장 주소: {safeReplyTo}
             </div>
+            {email.participants && email.participants.length > 0 && (
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex -space-x-2">
+                  {email.participants.slice(0, 5).map((p, i) => (
+                    <Avatar key={i} className="h-6 w-6 border-2 border-background shadow-sm">
+                      <AvatarFallback className="text-[10px]">{p.name.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                  ))}
+                </div>
+                {email.participants.length > 5 && (
+                  <span className="text-[10px] text-muted-foreground">+{email.participants.length - 5}</span>
+                )}
+                <span className="text-[10px] text-muted-foreground">참석자 {email.participants.length}명</span>
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -648,6 +663,66 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       <Separator />
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
+
+          {email.attachments && email.attachments.length > 0 && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <h3 className="text-xs font-bold flex items-center gap-2">
+                <Paperclip className="w-3.5 h-3.5 text-muted-foreground" /> 첨부 파일
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {email.attachments.map((file) => (
+                  <div key={file.id} className="flex items-center gap-2 rounded-xl border border-border bg-background/50 px-3 py-2 hover:bg-background transition-colors cursor-pointer">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                      <Paperclip className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium line-clamp-1">{file.filename}</span>
+                      <span className="text-[10px] text-muted-foreground">{Math.round(file.size / 1024)} KB</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {email.meeting_proposal && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
+              <h3 className="text-xs font-bold flex items-center gap-2 text-primary">
+                <Calendar className="w-3.5 h-3.5" /> 회의 제안
+              </h3>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="grid gap-1">
+                  <span className="text-sm font-semibold">{email.meeting_proposal.title}</span>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{email.meeting_proposal.date} {email.meeting_proposal.time}</span>
+                    {email.meeting_proposal.duration && (
+                      <>
+                        <span className="w-1 h-1 rounded-full bg-border" />
+                        <span>{email.meeting_proposal.duration}</span>
+                      </>
+                    )}
+                    {email.meeting_proposal.location && (
+                      <>
+                        <span className="w-1 h-1 rounded-full bg-border" />
+                        <span>{email.meeting_proposal.location}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="h-8 rounded-xl border-red-500/30 text-red-600 hover:bg-red-50 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                    거절
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 rounded-xl text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                    시간 제안
+                  </Button>
+                  <Button size="sm" className="h-8 rounded-xl px-4 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                    수락
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <DecisionPointCard
             title="맥락 종합"
