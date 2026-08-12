@@ -1,4 +1,5 @@
 import openai
+import tiktoken
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import AsyncOpenAI
 from core.config import settings
@@ -8,10 +9,10 @@ from services.circuit_breaker import provider_circuit_breaker
 from services.retry import retry_transient
 
 STORAGE_EMBEDDING_DIMENSION = 1536
-# Keep each request below the smallest local embedding context observed in the
-# supported llama.cpp/EmbeddingGemma runtime. Longer source items are pooled
-# back to one vector per caller input.
-EMBEDDING_INPUT_CHUNK_SIZE = 256
+# Provider-safe token ceiling for the smallest supported local embedding runtime.
+EMBEDDING_INPUT_TOKEN_LIMIT = 256
+# Retain the old name for importers that only need the conservative ceiling.
+EMBEDDING_INPUT_CHUNK_SIZE = EMBEDDING_INPUT_TOKEN_LIMIT
 
 
 def chunk_text(
@@ -40,44 +41,78 @@ def fit_embedding_vector(
     return embedding[:target_dimension]
 
 
+def _embedding_encoding(model: str | None):
+    """Return the selected model tokenizer, with a deterministic local fallback."""
+    selected_model = model or settings.OPENAI_EMBEDDING_MODEL
+    try:
+        return tiktoken.encoding_for_model(selected_model)
+    except (KeyError, ValueError):
+        return tiktoken.get_encoding("cl100k_base")
+
+
 def split_embedding_inputs(
     texts: list[str],
-) -> tuple[list[str], list[tuple[int, int]]]:
+    model: str | None = None,
+) -> tuple[list[str], list[tuple[int, int]], list[int]]:
+    """Split inputs by tokenizer tokens and return token weights per chunk."""
+    encoding = _embedding_encoding(model)
     flattened: list[str] = []
     ranges: list[tuple[int, int]] = []
+    token_weights: list[int] = []
     for text in texts:
-        chunks = chunk_text(
-            text,
-            chunk_size=EMBEDDING_INPUT_CHUNK_SIZE,
-            chunk_overlap=0,
-        ) or [text]
+        tokens = encoding.encode(text, disallowed_special=())
+        if not tokens:
+            chunks = [text]
+            weights = [0]
+        else:
+            chunks = []
+            weights = []
+            for start in range(0, len(tokens), EMBEDDING_INPUT_TOKEN_LIMIT):
+                token_slice = tokens[start : start + EMBEDDING_INPUT_TOKEN_LIMIT]
+                chunks.append(encoding.decode(token_slice))
+                weights.append(len(token_slice))
         start = len(flattened)
         flattened.extend(chunks)
+        token_weights.extend(weights)
         ranges.append((start, len(flattened)))
-    return flattened, ranges
+    return flattened, ranges, token_weights
+
 
 
 def pool_embedding_chunks(
-    embeddings: list[list[float]], ranges: list[tuple[int, int]]
+    embeddings: list[list[float]],
+    ranges: list[tuple[int, int]],
+    token_weights: list[int] | None = None,
 ) -> list[list[float]]:
+    """Pool chunk vectors, weighting each chunk by its tokenizer token count."""
     pooled: list[list[float]] = []
     for start, end in ranges:
         chunks = embeddings[start:end]
         if not chunks:
             pooled.append([])
             continue
+        weights = (
+            token_weights[start:end]
+            if token_weights is not None
+            else [1] * len(chunks)
+        )
+        total_weight = sum(weights) or len(chunks)
         width = max(len(chunk) for chunk in chunks)
         pooled.append(
             [
                 sum(
-                    chunk[index] if index < len(chunk) else 0.0
-                    for chunk in chunks
+                    (
+                        chunk[index] if index < len(chunk) else 0.0
+                    )
+                    * weights[chunk_index]
+                    for chunk_index, chunk in enumerate(chunks)
                 )
-                / len(chunks)
+                / total_weight
                 for index in range(width)
             ]
         )
     return pooled
+
 
 
 async def generate_embeddings(
@@ -89,7 +124,10 @@ async def generate_embeddings(
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY is not set")
 
-    request_texts, input_ranges = split_embedding_inputs(texts)
+    selected_model = model or settings.OPENAI_EMBEDDING_MODEL
+    request_texts, input_ranges, token_weights = split_embedding_inputs(
+        texts, selected_model
+    )
 
     # Instantiate client locally to avoid global state race conditions across tenants
     configured_base_url = base_url
@@ -111,14 +149,16 @@ async def generate_embeddings(
             validated_base_url or "openai-default",
             lambda: retry_transient(
                 lambda: client.embeddings.create(
-                    model=model or settings.OPENAI_EMBEDDING_MODEL,
+                    model=selected_model,
                     input=request_texts,
                 ),
                 operation_name="embedding generation",
             ),
         )
         return pool_embedding_chunks(
-            [data.embedding for data in response.data], input_ranges
+            [data.embedding for data in response.data],
+            input_ranges,
+            token_weights,
         )
     except openai.OpenAIError as e:
         raise EmbeddingGenerationError(f"Failed to generate embeddings: {str(e)}")

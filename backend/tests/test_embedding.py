@@ -1,12 +1,15 @@
 import pytest
+import tiktoken
 import openai
 from unittest.mock import patch, AsyncMock
 from services.embedding import (
-    EMBEDDING_INPUT_CHUNK_SIZE,
+    EMBEDDING_INPUT_TOKEN_LIMIT,
     STORAGE_EMBEDDING_DIMENSION,
     chunk_text,
     fit_embedding_vector,
     generate_embeddings,
+    pool_embedding_chunks,
+    split_embedding_inputs,
 )
 from services.exceptions import EmbeddingGenerationError
 
@@ -31,6 +34,30 @@ def test_fit_embedding_vector_truncates_larger_provider_dimension():
 
     assert len(fitted) == STORAGE_EMBEDDING_DIMENSION
     assert fitted == [0.5] * STORAGE_EMBEDDING_DIMENSION
+
+
+def test_split_embedding_inputs_respects_token_limit_and_returns_weights():
+    flattened, ranges, weights = split_embedding_inputs(
+        ["token " * 600],
+        model="test-model",
+    )
+
+    encoding = tiktoken.get_encoding("cl100k_base")
+    assert ranges == [(0, len(flattened))]
+    assert len(flattened) == len(weights)
+    assert all(
+        0 < weight <= EMBEDDING_INPUT_TOKEN_LIMIT
+        and len(encoding.encode(text, disallowed_special=())) == weight
+        for text, weight in zip(flattened, weights)
+    )
+
+
+def test_pool_embedding_chunks_weights_by_token_count():
+    assert pool_embedding_chunks(
+        [[1.0], [3.0]],
+        [(0, 2)],
+        [1, 3],
+    ) == [[2.5]]
 
 
 @pytest.mark.asyncio
@@ -141,7 +168,7 @@ async def test_generate_embeddings_api_error():
 
 
 @pytest.mark.asyncio
-async def test_generate_embeddings_pools_context_safe_chunks():
+async def test_generate_embeddings_pools_token_safe_chunks():
     with patch("services.embedding.AsyncOpenAI") as mock_async_openai:
         mock_client = mock_async_openai.return_value
         mock_client.close = AsyncMock()
@@ -149,7 +176,12 @@ async def test_generate_embeddings_pools_context_safe_chunks():
         async def create_embeddings(*, model, input):
             assert model == "test-model"
             assert input
-            assert all(len(item) <= EMBEDDING_INPUT_CHUNK_SIZE for item in input)
+            encoding = tiktoken.get_encoding("cl100k_base")
+            assert all(
+                0 < len(encoding.encode(item, disallowed_special=()))
+                <= EMBEDDING_INPUT_TOKEN_LIMIT
+                for item in input
+            )
             response = AsyncMock()
             response.data = [
                 AsyncMock(embedding=[float(index + 1)])
@@ -164,9 +196,10 @@ async def test_generate_embeddings_pools_context_safe_chunks():
             mock_settings.OPENAI_BASE_URL = None
             mock_settings.OPENAI_EMBEDDING_BASE_URL = None
 
-            embeddings = await generate_embeddings(["x" * 600], "test-key")
+            embeddings = await generate_embeddings(["token " * 600], "test-key")
 
-    assert embeddings == [[2.0]]
+    assert len(embeddings) == 1
+    assert embeddings[0][0] >= 1.0
     mock_client.close.assert_awaited_once()
 
 

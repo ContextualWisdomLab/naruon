@@ -407,6 +407,7 @@ def test_alembic_migration_graph_has_a_single_head():
         "revision (down_revision tuple of the heads) so `alembic upgrade head` "
         "is unambiguous"
     )
+    assert "0019_merge_email_read_state_ownership" in heads
 
 
 def test_merge_revision_reconciles_email_read_state_branch():
@@ -428,7 +429,9 @@ def test_merge_revision_reconciles_email_read_state_branch():
 
 
 def _load_email_read_state_revision():
-    revision_path = BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0018_email_read_state_ownership.py"
+    )
     spec = importlib.util.spec_from_file_location(
         "email_read_state_revision", revision_path
     )
@@ -558,13 +561,56 @@ def test_email_read_state_revision_downgrade_preserves_unowned_column(monkeypatc
 
 def test_email_read_state_revision_uses_canonical_email_records_table():
     revision_text = (
-        BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+        BACKEND_ROOT / "alembic" / "versions" / "0018_email_read_state_ownership.py"
     ).read_text()
 
     assert '_EMAIL_TABLE = "email_records"' in revision_text
     assert "inspector.get_columns(_EMAIL_TABLE)" in revision_text
     assert "op.add_column(" in revision_text
     assert "_EMAIL_TABLE," in revision_text
+
+
+def test_published_read_state_revision_is_immutable():
+    revision_text = (
+        BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    ).read_text()
+
+    assert 'revision = "0011_email_read_state"' in revision_text
+    assert 'down_revision = "0009_project_graph_projection"' in revision_text
+    assert 'op.add_column(\n        "emails"' in revision_text
+    assert "email_read_state_ownership" not in revision_text
+
+
+def test_read_state_follow_up_revision_is_after_published_revision():
+    revision_path = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "0018_email_read_state_ownership.py"
+    )
+    revision_text = revision_path.read_text()
+
+    assert revision_path.exists()
+    assert 'revision = "0018_email_read_state_ownership"' in revision_text
+    assert 'down_revision = "0011_email_read_state"' in revision_text
+    assert "_OWNERSHIP_KEY" in revision_text
+
+
+def test_read_state_follow_up_merge_reconciles_current_graph():
+    revision_path = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "0019_merge_email_read_state_ownership.py"
+    )
+    revision_text = revision_path.read_text()
+
+    assert revision_path.exists()
+    assert 'revision = "0019_merge_email_read_state_ownership"' in revision_text
+    assert "down_revision = (" in revision_text
+    assert '"0017_merge_newsdom_carddav_heads"' in revision_text
+    assert '"0018_email_read_state_ownership"' in revision_text
+    assert "op.create_table(" not in revision_text
 
 
 def test_merge_revision_reconciles_newsdom_provider_branch():

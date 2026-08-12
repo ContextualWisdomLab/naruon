@@ -60,7 +60,8 @@ case "${llm_runtime}" in
   mlx|llama.cpp)
     if [ "${llm_runtime}" = "mlx" ]; then
       host_llm_base_url="${NARUON_MLX_BASE_URL:-http://host.docker.internal:8080/v1}"
-      export NARUON_HOST_LLM_BASE_URL="$(container_host_url "${host_llm_base_url}")"
+      NARUON_HOST_LLM_BASE_URL="$(container_host_url "${host_llm_base_url}")" || exit 1
+      export NARUON_HOST_LLM_BASE_URL
       export NARUON_HOST_LLM_ALLOWED_HOSTS="${NARUON_MLX_ALLOWED_LLM_BASE_URL_HOSTS:-host.docker.internal}"
       # mlx-lm serves chat completions but not /v1/embeddings. A local
       # placeholder key enables chat while embedding paths retain the
@@ -70,7 +71,8 @@ case "${llm_runtime}" in
       export NARUON_HOST_LLM_MODEL="${NARUON_MLX_LLM_MODEL:-mlx-community/gemma-4-e4b-it-4bit}"
     else
       host_llm_base_url="${NARUON_LLAMA_CPP_BASE_URL:-http://host.docker.internal:8081/v1}"
-      export NARUON_HOST_LLM_BASE_URL="$(container_host_url "${host_llm_base_url}")"
+      NARUON_HOST_LLM_BASE_URL="$(container_host_url "${host_llm_base_url}")" || exit 1
+      export NARUON_HOST_LLM_BASE_URL
       export NARUON_HOST_LLM_ALLOWED_HOSTS="${NARUON_LLAMA_CPP_ALLOWED_LLM_BASE_URL_HOSTS:-host.docker.internal}"
       export NARUON_HOST_LLM_API_KEY="${NARUON_LLAMA_CPP_API_KEY:-llama.cpp}"
       export NARUON_HOST_LLM_EMBEDDING_MODEL="${NARUON_LLAMA_CPP_EMBEDDING_MODEL:-embeddinggemma}"
@@ -91,7 +93,8 @@ case "${llm_runtime}" in
       fi
     fi
     if [ -n "${embedding_base_url}" ]; then
-      export NARUON_HOST_LLM_EMBEDDING_BASE_URL="$(container_host_url "${embedding_base_url}")"
+      NARUON_HOST_LLM_EMBEDDING_BASE_URL="$(container_host_url "${embedding_base_url}")" || exit 1
+      export NARUON_HOST_LLM_EMBEDDING_BASE_URL
     fi
     compose_files=(
       --file "${repo_root}/docker-compose.yml"

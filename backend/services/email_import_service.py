@@ -441,6 +441,7 @@ def _semantic_embedding_inputs(
 def _pool_source_embeddings(
     embeddings: list[list[float]],
     source_ranges: list[tuple[int, int]],
+    token_weights: list[int] | None = None,
 ) -> list[list[float]]:
     pooled: list[list[float]] = []
     for start, end in source_ranges:
@@ -448,15 +449,24 @@ def _pool_source_embeddings(
         if not source_embeddings:
             pooled.append(_zero_embedding())
             continue
+        weights = (
+            token_weights[start:end]
+            if token_weights is not None
+            else [1] * len(source_embeddings)
+        )
+        total_weight = sum(weights) or len(source_embeddings)
         width = max(len(embedding) for embedding in source_embeddings)
         pooled.append(
             fit_embedding_vector(
                 [
                     sum(
-                        embedding[index] if index < len(embedding) else 0.0
-                        for embedding in source_embeddings
+                        (
+                            embedding[index] if index < len(embedding) else 0.0
+                        )
+                        * weights[embedding_index]
+                        for embedding_index, embedding in enumerate(source_embeddings)
                     )
-                    / len(source_embeddings)
+                    / total_weight
                     for index in range(width)
                 ],
                 EMBEDDING_DIMENSION,
@@ -1092,7 +1102,9 @@ async def _generate_import_embeddings(
 ) -> list[list[float]]:
     if embedding_provider is None:
         return [_zero_embedding() for _ in texts]
-    batch_texts, batch_ranges = split_embedding_inputs(texts)
+    batch_texts, batch_ranges, batch_token_weights = split_embedding_inputs(
+        texts, embedding_provider.embedding_model
+    )
     if batch_context is not None and texts:
         # Bulk import embeddings are latency-tolerant: route them through
         # contextual-orchestrator first. A None result means batch is
@@ -1107,7 +1119,11 @@ async def _generate_import_embeddings(
             dimension=EMBEDDING_DIMENSION,
         )
         if batched is not None:
-            return _pool_source_embeddings(batched, batch_ranges)
+            return _pool_source_embeddings(
+                batched,
+                batch_ranges,
+                batch_token_weights,
+            )
     try:
         provider_embeddings = await generate_embeddings(
             texts,
