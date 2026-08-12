@@ -2,7 +2,6 @@ import pytest
 import tiktoken
 import openai
 from unittest.mock import patch, AsyncMock
-import types
 
 
 class _ProviderResponse:
@@ -130,6 +129,12 @@ async def test_generate_embeddings_uses_selected_provider_model_and_base_url():
         new_callable=AsyncMock,
     ) as mock_build_client:
         mock_http_client = AsyncMock()
+        mock_http_client.post = AsyncMock(
+            side_effect=[
+                _ProviderResponse({"tokens": [1]}),
+                _ProviderResponse({"content": "test"}),
+            ]
+        )
         mock_build_client.return_value = ("http://ollama:11434/v1", mock_http_client)
         mock_client = mock_async_openai.return_value
         mock_client.close = AsyncMock()
@@ -195,7 +200,16 @@ async def test_generate_embeddings_prefers_embedding_base_url_when_no_explicit_u
         "services.embedding.build_llm_provider_http_client",
         new_callable=AsyncMock,
     ) as mock_build_client:
-        mock_build_client.return_value = ("http://host.docker.internal:8082/v1", AsyncMock())
+        mock_http_client = AsyncMock()
+        mock_http_client.post = AsyncMock(
+            side_effect=[
+                _ProviderResponse({"tokens": [1]}),
+                _ProviderResponse({"content": "test"}),
+            ]
+        )
+        mock_build_client.return_value = (
+            "http://host.docker.internal:8082/v1", mock_http_client
+        )
         mock_client = mock_async_openai.return_value
         mock_client.close = AsyncMock()
         mock_client.embeddings.create = AsyncMock(return_value=AsyncMock(data=[]))

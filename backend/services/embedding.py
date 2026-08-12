@@ -2,6 +2,7 @@ import openai
 import tiktoken
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import AsyncOpenAI
+from urllib.parse import urlsplit, urlunsplit
 from core.config import settings
 from services.llm_provider_urls import build_llm_provider_http_client
 from services.exceptions import EmbeddingGenerationError
@@ -49,6 +50,107 @@ def _embedding_encoding(model: str | None):
     except (KeyError, ValueError):
         return tiktoken.get_encoding("cl100k_base")
 
+
+def _requires_provider_tokenizer(model: str, base_url: str | None) -> bool:
+    """Require a native tokenizer for an unknown model on a configured endpoint."""
+    if not base_url:
+        return False
+    try:
+        tiktoken.encoding_for_model(model)
+    except (KeyError, ValueError):
+        return True
+    return False
+
+
+def _provider_endpoint(base_url: str, resource: str) -> str:
+    """Build a root-level llama.cpp tokenizer endpoint from an OpenAI base URL."""
+    parsed = urlsplit(base_url)
+    base_path = parsed.path.rstrip("/")
+    if base_path.endswith("/v1"):
+        base_path = base_path[:-3]
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, f"{base_path}/{resource}", "", "")
+    )
+
+
+async def _provider_json(http_client, url: str, payload: dict) -> dict:
+    """POST one native tokenizer request and validate its JSON object response."""
+    response = await http_client.post(url, json=payload)
+    if response.status_code == 404:
+        raise ValueError(
+            "embedding provider must expose native /tokenize and /detokenize endpoints"
+        )
+    response.raise_for_status()
+    body = response.json()
+    if not isinstance(body, dict):
+        raise ValueError("embedding provider returned a non-object tokenizer response")
+    return body
+
+
+async def _split_embedding_inputs_with_provider_tokenizer(
+    texts: list[str],
+    model: str,
+    base_url: str,
+    http_client,
+    api_key: str,
+) -> tuple[list[str], list[tuple[int, int]], list[int]]:
+    """Split unknown local-model inputs using the provider tokenizer itself."""
+    tokenize_url = _provider_endpoint(base_url, "tokenize")
+    detokenize_url = _provider_endpoint(base_url, "detokenize")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    flattened: list[str] = []
+    ranges: list[tuple[int, int]] = []
+    token_weights: list[int] = []
+    for text in texts:
+        if not text:
+            start = len(flattened)
+            flattened.append(text)
+            token_weights.append(0)
+            ranges.append((start, len(flattened)))
+            continue
+        token_response = await _provider_json(
+            http_client,
+            tokenize_url,
+            {
+                "content": text,
+                "add_special": False,
+                "parse_special": False,
+            },
+        )
+        tokens = token_response.get("tokens")
+        if not isinstance(tokens, list) or not all(
+            isinstance(token, int) and not isinstance(token, bool) for token in tokens
+        ):
+            raise ValueError("embedding provider returned invalid tokenizer tokens")
+        if not tokens:
+            start = len(flattened)
+            flattened.append(text)
+            token_weights.append(0)
+            ranges.append((start, len(flattened)))
+            continue
+        start = len(flattened)
+        for token_start in range(0, len(tokens), EMBEDDING_INPUT_TOKEN_LIMIT):
+            token_slice = tokens[
+                token_start : token_start + EMBEDDING_INPUT_TOKEN_LIMIT
+            ]
+            detokenized = await _provider_json(
+                http_client,
+                detokenize_url,
+                {"tokens": token_slice},
+            )
+            chunk = detokenized.get("content")
+            if not isinstance(chunk, str):
+                raise ValueError(
+                    "embedding provider returned invalid detokenized content"
+                )
+            flattened.append(chunk)
+            token_weights.append(len(token_slice))
+        if "".join(flattened[start:]) != text:
+            raise ValueError(
+                "embedding provider tokenizer did not preserve source text exactly"
+            )
+        ranges.append((start, len(flattened)))
+    return flattened, ranges, token_weights
 
 def split_embedding_inputs(
     texts: list[str],
@@ -137,19 +239,36 @@ async def generate_embeddings(
         raise ValueError("OPENAI_API_KEY is not set")
 
     selected_model = model or settings.OPENAI_EMBEDDING_MODEL
-    request_texts, input_ranges, token_weights = split_embedding_inputs(
-        texts, selected_model
-    )
-
-    # Instantiate client locally to avoid global state race conditions across tenants
     configured_base_url = base_url
     if configured_base_url is None:
         configured_base_url = (
             settings.OPENAI_EMBEDDING_BASE_URL or settings.OPENAI_BASE_URL
         )
+
+    # Instantiate the pinned client before tokenization so unknown local models
+    # use the exact tokenizer loaded by the provider rather than cl100k_base.
     validated_base_url, http_client = await build_llm_provider_http_client(
         configured_base_url
     )
+    try:
+        if _requires_provider_tokenizer(selected_model, validated_base_url):
+            request_texts, input_ranges, token_weights = (
+                await _split_embedding_inputs_with_provider_tokenizer(
+                    texts,
+                    selected_model,
+                    validated_base_url,
+                    http_client,
+                    openai_api_key,
+                )
+            )
+        else:
+            request_texts, input_ranges, token_weights = split_embedding_inputs(
+                texts, selected_model
+            )
+    except Exception:
+        await http_client.aclose()
+        raise
+
     client = AsyncOpenAI(
         api_key=openai_api_key,
         base_url=validated_base_url,

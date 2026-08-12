@@ -55,9 +55,10 @@ EmbeddingGemma may be separate local OpenAI-compatible endpoints.
    policy. Only an oversized semantic segment is further split by the shared
    boundary-aware embedding splitter, with no overlap, before it reaches a
    provider. The current local EmbeddingGemma/llama.cpp contract uses a
-   conservative 256-character request ceiling because the runtime's physical
-   token batch limit is lower than the length of some real mail bodies and
-   attachments.
+   conservative 256-token request ceiling. Unknown local model IDs are split
+   by the provider-native `/tokenize` and `/detokenize` endpoints before the
+   OpenAI-compatible `/v1/embeddings` request, so a tiktoken fallback cannot
+   silently exceed the runtime tokenizer limit.
 10. The existing `Email.embedding` and `Attachment.embedding` columns remain
     source-level compatibility vectors. Import mean-pools segment embeddings
     into one centroid per email or attachment, while the persisted content
@@ -77,8 +78,9 @@ EmbeddingGemma may be separate local OpenAI-compatible endpoints.
   `services.email_import_service` to build the embedding inputs and graph
   records from the same `ParseResult`.
 - Keep `services.embedding.generate_embeddings` as the provider safety boundary
-  for oversized individual semantic segments and retain the existing
-  contextual-orchestrator batch seam.
+  for oversized individual semantic segments, using the native tokenizer API
+  for unknown local models, and retain the existing contextual-orchestrator
+  batch seam.
 - Mean-pool segment vectors back to the existing source-level vector columns.
 
 ### Verification
@@ -111,7 +113,7 @@ EmbeddingGemma may be separate local OpenAI-compatible endpoints.
   English, and code tasks, including quantized and truncated variants; that
   supports EmbeddingGemma as a low-memory embedding candidate, not as a chat
   runtime.
-- Niklas Muennighoff et al., [“MTEB: Massive Text Embedding
+- ggml-org. (2026). [*llama.cpp server REST API*](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) [Computer software]. GitHub. The documented `/tokenize` and `/detokenize` endpoints expose the model-loaded tokenizer and make the 256-token boundary provider-authoritative instead of assuming that a different offline tokenizer is equivalent.\n- Niklas Muennighoff et al., [“MTEB: Massive Text Embedding
   Benchmark”](https://arxiv.org/abs/2210.07316), arXiv:2210.07316 (2023).
   MTEB spans multiple tasks, datasets, and languages and finds no universal
   embedding method; this supports measuring the selected local model in
