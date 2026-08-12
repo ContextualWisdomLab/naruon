@@ -2,6 +2,19 @@ import pytest
 import tiktoken
 import openai
 from unittest.mock import patch, AsyncMock
+import types
+
+
+class _ProviderResponse:
+    def __init__(self, payload):
+        self.status_code = 200
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        return None
 from services.embedding import (
     EMBEDDING_INPUT_TOKEN_LIMIT,
     STORAGE_EMBEDDING_DIMENSION,
@@ -141,6 +154,38 @@ async def test_generate_embeddings_uses_selected_provider_model_and_base_url():
     )
     mock_client.close.assert_awaited_once()
 
+
+@pytest.mark.asyncio
+async def test_generate_embeddings_uses_provider_native_tokenizer_for_local_model():
+    with patch("services.embedding.AsyncOpenAI") as mock_async_openai, patch(
+        "services.embedding.build_llm_provider_http_client",
+        new_callable=AsyncMock,
+    ) as mock_build_client:
+        mock_http_client = AsyncMock()
+        mock_http_client.post = AsyncMock(
+            side_effect=[
+                _ProviderResponse({"tokens": [1, 2, 3]}),
+                _ProviderResponse({"content": "test"}),
+            ]
+        )
+        mock_build_client.return_value = ("http://host.docker.internal:8082/v1", mock_http_client)
+        mock_client = mock_async_openai.return_value
+        mock_client.close = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.data = [AsyncMock(embedding=[0.1, 0.2, 0.3])]
+        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
+
+        embeddings = await generate_embeddings(
+            ["test"],
+            "local-provider",
+            base_url="http://host.docker.internal:8082/v1",
+            model="embeddinggemma",
+        )
+
+    assert embeddings == [[0.1, 0.2, 0.3]]
+    assert mock_http_client.post.await_count == 2
+    assert mock_http_client.post.await_args_list[0].args[0].endswith("/tokenize")
+    assert mock_http_client.post.await_args_list[1].args[0].endswith("/detokenize")
 
 @pytest.mark.asyncio
 async def test_generate_embeddings_prefers_embedding_base_url_when_no_explicit_url():
