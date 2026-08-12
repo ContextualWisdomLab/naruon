@@ -34,7 +34,9 @@ from services.email_import_service import (
     EmailImportEmbeddingProvider,
     _generate_import_embeddings,
 )
-from services.embedding import EMBEDDING_INPUT_CHUNK_SIZE
+import tiktoken
+
+from services.embedding import EMBEDDING_INPUT_TOKEN_LIMIT
 import services.batch_embedding_service as batch_module
 
 
@@ -540,7 +542,12 @@ async def test_generate_import_embeddings_bounds_long_semantic_units_for_batch(
 
     submitted_texts = routed.await_args.args[1]
     assert len(submitted_texts) > 1
-    assert all(len(text) <= EMBEDDING_INPUT_CHUNK_SIZE for text in submitted_texts)
+    encoding = tiktoken.get_encoding("cl100k_base")
+    assert all(
+        0 < len(encoding.encode(text, disallowed_special=()))
+        <= EMBEDDING_INPUT_TOKEN_LIMIT
+        for text in submitted_texts
+    )
     assert result == [
         [
             sum(float(index) for index in range(len(submitted_texts)))

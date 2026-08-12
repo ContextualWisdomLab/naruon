@@ -407,7 +407,7 @@ def test_alembic_migration_graph_has_a_single_head():
         "revision (down_revision tuple of the heads) so `alembic upgrade head` "
         "is unambiguous"
     )
-    assert "0019_merge_email_read_state_ownership" in heads
+    assert "0019_merge_read_state_ownership" in heads
 
 
 def test_merge_revision_reconciles_email_read_state_branch():
@@ -601,12 +601,12 @@ def test_read_state_follow_up_merge_reconciles_current_graph():
         BACKEND_ROOT
         / "alembic"
         / "versions"
-        / "0019_merge_email_read_state_ownership.py"
+        / "0019_merge_read_state_ownership.py"
     )
     revision_text = revision_path.read_text()
 
     assert revision_path.exists()
-    assert 'revision = "0019_merge_email_read_state_ownership"' in revision_text
+    assert 'revision = "0019_merge_read_state_ownership"' in revision_text
     assert "down_revision = (" in revision_text
     assert '"0017_merge_newsdom_carddav_heads"' in revision_text
     assert '"0018_email_read_state_ownership"' in revision_text
