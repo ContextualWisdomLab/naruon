@@ -225,10 +225,9 @@ def pool_embedding_chunks(
                     (
                         chunk[index] if index < len(chunk) else 0.0
                     )
-                    * weights[chunk_index]
+                    * (weights[chunk_index] / total_weight)
                     for chunk_index, chunk in enumerate(chunks)
                 )
-                / total_weight
                 for index in range(width)
             ]
         )
