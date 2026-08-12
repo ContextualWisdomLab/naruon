@@ -69,7 +69,8 @@ jobs:
         run: |
           cd backend
           python -m ruff check \
-            db/models.py \
+            db/email_writing_evidence.py \
+            alembic/env.py \
             alembic/versions/20260812_0001_add_email_writing_review_evidence.py \
             tests/test_email_writing_models.py \
             tests/test_email_writing_migration.py

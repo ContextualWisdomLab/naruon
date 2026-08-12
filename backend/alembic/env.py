@@ -7,6 +7,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from core.config import settings
+from db import email_writing_evidence as _email_writing_evidence
 from db.models import Base
 
 config = context.config

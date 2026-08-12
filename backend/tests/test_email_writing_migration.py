@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
 
-from db.models import (
+from db.email_writing_evidence import (
     DiagnosticFeedbackEvent,
     EmailReviewSession,
     WritingDiagnosticRecord,
@@ -49,6 +49,15 @@ def _load_migration() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_alembic_environment_registers_review_evidence_metadata() -> None:
+    """Autogenerate sees the modular evidence models without editing the legacy file."""
+    environment_source = (BACKEND_ROOT / "alembic" / "env.py").read_text(
+        encoding="utf-8"
+    )
+    assert "email_writing_evidence" in environment_source
+    assert "target_metadata = Base.metadata" in environment_source
 
 
 def test_migration_revision_and_metadata_match_orm_contract() -> None:

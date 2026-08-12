@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from db.models import (
+from db.email_writing_evidence import (
     DiagnosticFeedbackEvent,
     EmailReviewSession,
     WritingDiagnosticRecord,
@@ -180,19 +180,24 @@ def test_review_evidence_round_trip_and_safe_serialization(
     evidence_session.commit()
 
     loaded = evidence_session.query(EmailReviewSession).one()
+    loaded_diagnostic = loaded.writing_diagnostic_records[0]
+    loaded_feedback = loaded_diagnostic.diagnostic_feedback_events[0]
     assert loaded.review_session_id
-    assert loaded.writing_diagnostic_records[0].diagnostic_identifier == (
-        "diagnostic_alpha"
-    )
-    assert (
-        loaded.writing_diagnostic_records[0]
-        .diagnostic_feedback_events[0]
-        .feedback_action
-        == "applied"
-    )
+    assert loaded_diagnostic.diagnostic_identifier == "diagnostic_alpha"
+    assert loaded_feedback.feedback_action == "applied"
 
-    serialized = json.dumps(loaded.to_evidence_dict(), sort_keys=True, default=str)
-    rendered_log = repr(loaded)
+    serialized = json.dumps(
+        [
+            loaded.to_evidence_dict(),
+            loaded_diagnostic.to_evidence_dict(),
+            loaded_feedback.to_evidence_dict(),
+        ],
+        sort_keys=True,
+        default=str,
+    )
+    rendered_log = "\n".join(
+        [repr(loaded), repr(loaded_diagnostic), repr(loaded_feedback)]
+    )
     for forbidden_value in (
         "SECRET_AUTHORED_CONTENT",
         "full draft body",
@@ -204,6 +209,8 @@ def test_review_evidence_round_trip_and_safe_serialization(
     assert "review_session_id" in serialized
     assert "prompt_hash" in serialized
     assert "source_email_id" in serialized
+    assert "candidate_hash" in serialized
+    assert "feedback_action" in serialized
 
 
 def test_review_session_retention_and_owner_indexes_are_queryable(
