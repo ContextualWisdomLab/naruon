@@ -61,10 +61,10 @@ PROVIDERS = frozenset({"icloud", "onedrive", "google-drive"})
 READINESS_STATES = frozenset(
     {"no-candidates", "blocked", "partially-ready", "ready-without-new-review"}
 )
-# DiskSage schema v4 adds the current production-time and provider-admission fields while
-# retaining the same path-free success contract consumed by this handoff. Keep v3 readable for
-# already-issued evidence records; newer envelopes must be added here deliberately and tested.
-SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4})
+# DiskSage schema v5 adds path-free provider-global-sync evidence while retaining the same
+# success contract consumed by this handoff. Keep v3/v4 readable for already-issued evidence
+# records; newer envelopes must be added here deliberately and tested.
+SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4, 5})
 ERROR_CODE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 
