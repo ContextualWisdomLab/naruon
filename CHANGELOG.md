@@ -41,6 +41,7 @@
 - hybrid retrieval의 점수 융합·질의 정규화 프리미티브를 독립 패키지 `rankweave`(PyPI, Apache-2.0)로 분리하고 naruon이 이를 의존성으로 소비하도록 배선했습니다: `backend/services/hybrid_retrieval`의 로컬 `score_fusion.py`·`query_normalization.py`를 삭제하고 해시 고정된 `rankweave==0.1.0`을 `requirements.txt`/`requirements-hashes.txt`에 추가했으며, 패키지 `__init__`은 동일한 8개 심볼을 `rankweave`에서 재수출하는 naruon 측 seam으로 유지됩니다(동작 무변경 — 융합 테스트 26건 통과, `retrieval_channels` 등 기존 소비자는 `services.hybrid_retrieval`에서 계속 import). rankweave는 standalone 제품이자 submodule/의존성으로 재사용 가능한 OSMU("따로, 또 같이") 산출물입니다.
 
 ### 기능 추가 (Features)
+- UUID V4 제너레이터(`uuid_v4_generator`) 도구를 추가하여 런타임에서 범용 고유 식별자 버전 4를 랜덤으로 생성할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
 - **도구 기능 대규모 추가 (naruon#tools)**: 사용자가 직접 사용할 수 있는 새롭고 유용한 5개의 AI/분석 도구를 `backend/api/tools.py`에 구현하고 레지스트리에 등록했습니다.
   - `email_translator`: 이메일 내용을 대상 언어로 번역
   - `spam_phishing_detector`: 이메일의 스팸 및 피싱 위험도를 분석
