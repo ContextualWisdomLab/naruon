@@ -36,6 +36,7 @@ from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
     fit_embedding_vector,
     generate_embeddings,
+    split_embedding_inputs,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
 from services.project_graph import (
@@ -95,6 +96,9 @@ class EmailImportBatchContext:
     session: AsyncSession
     user_id: str
     organization_id: str | None
+
+
+EmailContentParseResults = tuple[ParseResult, tuple[ParseResult | None, ...]]
 
 
 @dataclass
@@ -344,22 +348,151 @@ async def _release_owner_import_quota_lock(
     )
 
 
+def _parse_email_content_results(
+    parsed: EmailData,
+    *,
+    message_id: str,
+    attachment_payloads: list[dict],
+) -> EmailContentParseResults:
+    body_parse_result = parse_content(
+        source_kind="email_body",
+        source_record_uid=_content_graph_source_record_uid("email", message_id),
+        content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
+        content_type=str(parsed.get("body_content_type") or "text/plain"),
+        display_name="Email body",
+    )
+    attachment_parse_results: list[ParseResult | None] = []
+    for attachment_index, attachment_payload in enumerate(attachment_payloads, start=1):
+        if attachment_payload.get("parse_status", "parsed") != "parsed":
+            attachment_parse_results.append(None)
+            continue
+        parse_source_content = str(
+            attachment_payload.get("parse_content")
+            if attachment_payload.get("parse_content") is not None
+            else attachment_payload.get("content") or ""
+        )
+        if not parse_source_content.strip():
+            attachment_parse_results.append(None)
+            continue
+        attachment_parse_results.append(
+            parse_content(
+                source_kind="attachment",
+                source_record_uid=_content_graph_source_record_uid(
+                    "attachment",
+                    message_id,
+                    str(attachment_index),
+                    str(attachment_payload.get("filename") or "attachment.txt"),
+                ),
+                content=parse_source_content,
+                content_type=str(
+                    attachment_payload.get("parse_content_type")
+                    or attachment_payload.get("content_type")
+                    or "text/plain"
+                ),
+                display_name=str(
+                    attachment_payload.get("filename") or "attachment.txt"
+                ),
+            )
+        )
+    return body_parse_result, tuple(attachment_parse_results)
+
+
+def _semantic_embedding_inputs(
+    parsed: EmailData,
+    attachment_payloads: list[dict],
+    parse_results: EmailContentParseResults,
+) -> tuple[list[str], list[tuple[int, int]]]:
+    """Use persisted graph segments as embedding units before provider safety splits.
+
+    ADR: Semantic graph segments are the primary units; the generic embedding
+    boundary splitter remains only a physical context-limit fallback.
+    See: docs/adr/0001-local-llm-and-orchestrator-boundary.md
+    """
+    body_parse_result, attachment_parse_results = parse_results
+    source_results: list[ParseResult | None] = [
+        body_parse_result,
+        *attachment_parse_results,
+    ]
+    source_fallbacks = [
+        str(parsed.get("body") or ""),
+        *(str(attachment.get("content") or "") for attachment in attachment_payloads),
+    ]
+
+    embedding_texts: list[str] = []
+    source_ranges: list[tuple[int, int]] = []
+    for parse_result, fallback_text in zip(source_results, source_fallbacks):
+        semantic_texts = []
+        if parse_result is not None:
+            for segment in parse_result.segments:
+                text = segment.safe_text_content.strip()
+                if not text:
+                    continue
+                if segment.heading_path and segment.segment_kind != "heading":
+                    text = f"{segment.heading_path}\n{text}"
+                semantic_texts.append(text)
+        if not semantic_texts:
+            semantic_texts.append(fallback_text)
+        start = len(embedding_texts)
+        embedding_texts.extend(semantic_texts)
+        source_ranges.append((start, len(embedding_texts)))
+    return embedding_texts, source_ranges
+
+
+def _pool_source_embeddings(
+    embeddings: list[list[float]],
+    source_ranges: list[tuple[int, int]],
+) -> list[list[float]]:
+    pooled: list[list[float]] = []
+    for start, end in source_ranges:
+        source_embeddings = embeddings[start:end]
+        if not source_embeddings:
+            pooled.append(_zero_embedding())
+            continue
+        width = max(len(embedding) for embedding in source_embeddings)
+        pooled.append(
+            fit_embedding_vector(
+                [
+                    sum(
+                        embedding[index] if index < len(embedding) else 0.0
+                        for embedding in source_embeddings
+                    )
+                    / len(source_embeddings)
+                    for index in range(width)
+                ],
+                EMBEDDING_DIMENSION,
+            )
+        )
+    return pooled
+
+
 async def _extract_and_generate_embeddings(
     parsed: EmailData,
     embedding_provider: EmailImportEmbeddingProvider | None,
     batch_context: "EmailImportBatchContext | None" = None,
+    *,
+    message_id: str | None = None,
+    parse_results: EmailContentParseResults | None = None,
 ) -> tuple[list[dict], list[list[float]]]:
     attachment_payloads = list(parsed.get("attachments", []))
-    embedding_texts = [str(parsed.get("body") or "")]
-    embedding_texts.extend(
-        str(attachment.get("content") or "") for attachment in attachment_payloads
+    parse_results = parse_results or _parse_email_content_results(
+        parsed,
+        message_id=str(parsed.get("message_id") or message_id or "email-import"),
+        attachment_payloads=attachment_payloads,
     )
-    fitted_embeddings = await _generate_import_embeddings(
+    embedding_texts, source_ranges = _semantic_embedding_inputs(
+        parsed,
+        attachment_payloads,
+        parse_results,
+    )
+    semantic_embeddings = await _generate_import_embeddings(
         embedding_texts,
         embedding_provider=embedding_provider,
         batch_context=batch_context,
     )
-    return attachment_payloads, fitted_embeddings
+    return attachment_payloads, _pool_source_embeddings(
+        semantic_embeddings,
+        source_ranges,
+    )
 
 
 def _build_email_object(
@@ -373,6 +506,7 @@ def _build_email_object(
     persisted_date: datetime.datetime,
     attachment_payloads: list[dict],
     fitted_embeddings: list[list[float]],
+    parse_results: EmailContentParseResults | None = None,
 ) -> tuple[Email, int]:
     email_obj = Email(
         user_id=user_id,
@@ -434,6 +568,7 @@ def _build_email_object(
         parsed=parsed,
         message_id=message_id,
         attachment_payloads=attachment_payloads,
+        parse_results=parse_results,
     )
     _append_knowledge_graph_edges(email_obj)
 
@@ -469,49 +604,26 @@ def _append_email_content_graph(
     parsed: EmailData,
     message_id: str,
     attachment_payloads: list[dict],
+    parse_results: EmailContentParseResults | None = None,
 ) -> None:
-    body_parse_result = parse_content(
-        source_kind="email_body",
-        source_record_uid=_content_graph_source_record_uid("email", message_id),
-        content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
-        content_type=str(parsed.get("body_content_type") or "text/plain"),
-        display_name="Email body",
+    parse_results = parse_results or _parse_email_content_results(
+        parsed,
+        message_id=message_id,
+        attachment_payloads=attachment_payloads,
     )
+    body_parse_result, attachment_parse_results = parse_results
     _append_parse_result_records(
         email_obj=email_obj,
         attachment_obj=None,
         parse_result=body_parse_result,
     )
 
-    for attachment_index, (attachment_obj, attachment_payload) in enumerate(
-        zip(email_obj.attachments, attachment_payloads),
-        start=1,
+    for attachment_obj, attachment_parse_result in zip(
+        email_obj.attachments,
+        attachment_parse_results,
     ):
-        if attachment_payload.get("parse_status", "parsed") != "parsed":
+        if attachment_parse_result is None:
             continue
-        parse_source_content = str(
-            attachment_payload.get("parse_content")
-            if attachment_payload.get("parse_content") is not None
-            else attachment_payload.get("content") or ""
-        )
-        if not parse_source_content.strip():
-            continue
-        attachment_parse_result = parse_content(
-            source_kind="attachment",
-            source_record_uid=_content_graph_source_record_uid(
-                "attachment",
-                message_id,
-                str(attachment_index),
-                attachment_obj.filename,
-            ),
-            content=parse_source_content,
-            content_type=str(
-                attachment_payload.get("parse_content_type")
-                or attachment_payload.get("content_type")
-                or "text/plain"
-            ),
-            display_name=attachment_obj.filename,
-        )
         _append_parse_result_records(
             email_obj=email_obj,
             attachment_obj=attachment_obj,
@@ -900,8 +1012,18 @@ async def _import_single_eml(
         organization_id=organization_id,
     )
 
+    attachment_payloads = list(parsed.get("attachments", []))
+    parse_results = _parse_email_content_results(
+        parsed,
+        message_id=message_id,
+        attachment_payloads=attachment_payloads,
+    )
     attachment_payloads, fitted_embeddings = await _extract_and_generate_embeddings(
-        parsed, embedding_provider, batch_context
+        parsed,
+        embedding_provider,
+        batch_context,
+        message_id=message_id,
+        parse_results=parse_results,
     )
 
     email_obj, attachment_count = _build_email_object(
@@ -914,6 +1036,7 @@ async def _import_single_eml(
         persisted_date=persisted_date,
         attachment_payloads=attachment_payloads,
         fitted_embeddings=fitted_embeddings,
+        parse_results=parse_results,
     )
 
     project_source_segments = (
@@ -969,6 +1092,7 @@ async def _generate_import_embeddings(
 ) -> list[list[float]]:
     if embedding_provider is None:
         return [_zero_embedding() for _ in texts]
+    batch_texts, batch_ranges = split_embedding_inputs(texts)
     if batch_context is not None and texts:
         # Bulk import embeddings are latency-tolerant: route them through
         # contextual-orchestrator first. A None result means batch is
@@ -976,14 +1100,14 @@ async def _generate_import_embeddings(
         # existing per-request path below.
         batched = await try_batch_import_embeddings(
             batch_context.session,
-            texts,
+            batch_texts,
             embedding_provider=embedding_provider,
             user_id=batch_context.user_id,
             organization_id=batch_context.organization_id,
             dimension=EMBEDDING_DIMENSION,
         )
         if batched is not None:
-            return batched
+            return _pool_source_embeddings(batched, batch_ranges)
     try:
         provider_embeddings = await generate_embeddings(
             texts,

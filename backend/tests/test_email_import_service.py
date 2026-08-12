@@ -563,6 +563,56 @@ async def test_generate_import_embeddings_logs_non_secret_provider_fallback(capl
 
 
 @pytest.mark.asyncio
+async def test_extract_embeddings_uses_graph_segments_before_source_pooling():
+    parsed = {
+        "message_id": "<semantic@example.com>",
+        "body": "Launch\n\nHello team",
+        "body_parse_content": "<h1>Launch</h1><p>Hello team</p>",
+        "body_content_type": "text/html",
+        "attachments": [
+            {
+                "filename": "plan.md",
+                "content": "# Plan\n\nShip graph",
+                "content_type": "text/markdown",
+            }
+        ],
+    }
+    provider = EmailImportEmbeddingProvider(
+        api_key="provider-token",
+        base_url="http://ollama:11434/v1",
+        embedding_model="embeddinggemma",
+    )
+
+    with patch(
+        "services.email_import_service.generate_embeddings",
+        new_callable=AsyncMock,
+        return_value=[
+            [1.0] * EMBEDDING_DIMENSION,
+            [2.0] * EMBEDDING_DIMENSION,
+            [3.0] * EMBEDDING_DIMENSION,
+            [4.0] * EMBEDDING_DIMENSION,
+        ],
+    ) as mock_generate_embeddings:
+        attachment_payloads, source_embeddings = (
+            await email_import_module._extract_and_generate_embeddings(
+                parsed,
+                provider,
+            )
+        )
+
+    assert attachment_payloads == parsed["attachments"]
+    assert mock_generate_embeddings.await_args.args[0] == [
+        "Launch",
+        "Launch\nHello team",
+        "Plan",
+        "Plan\nShip graph",
+    ]
+    assert source_embeddings[0][0] == 1.5
+    assert source_embeddings[1][0] == 3.5
+    assert all(len(embedding) == EMBEDDING_DIMENSION for embedding in source_embeddings)
+
+
+@pytest.mark.asyncio
 async def test_generate_import_embeddings_falls_back_when_provider_circuit_is_open():
     provider = EmailImportEmbeddingProvider(
         api_key="secret-provider-token",

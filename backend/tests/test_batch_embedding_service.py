@@ -34,6 +34,7 @@ from services.email_import_service import (
     EmailImportEmbeddingProvider,
     _generate_import_embeddings,
 )
+from services.embedding import EMBEDDING_INPUT_CHUNK_SIZE
 import services.batch_embedding_service as batch_module
 
 
@@ -510,6 +511,43 @@ async def test_generate_import_embeddings_prefers_batch_context(monkeypatch):
     assert result == batched
     routed.assert_awaited_once()
     # Batch path handled it; the per-item embedding path was never touched.
+    per_item.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_generate_import_embeddings_bounds_long_semantic_units_for_batch(
+    monkeypatch,
+):
+    context = EmailImportBatchContext(
+        session=FakeAsyncSession(), user_id="user-1", organization_id="org-acme"
+    )
+    routed = AsyncMock(
+        side_effect=lambda _session, texts, **_kwargs: [
+            [float(index)] * 1536 for index, _text in enumerate(texts)
+        ]
+    )
+    monkeypatch.setattr(
+        "services.email_import_service.try_batch_import_embeddings", routed
+    )
+    per_item = AsyncMock()
+    monkeypatch.setattr("services.email_import_service.generate_embeddings", per_item)
+
+    result = await _generate_import_embeddings(
+        ["semantic sentence. " * 100],
+        embedding_provider=PROVIDER,
+        batch_context=context,
+    )
+
+    submitted_texts = routed.await_args.args[1]
+    assert len(submitted_texts) > 1
+    assert all(len(text) <= EMBEDDING_INPUT_CHUNK_SIZE for text in submitted_texts)
+    assert result == [
+        [
+            sum(float(index) for index in range(len(submitted_texts)))
+            / len(submitted_texts)
+        ]
+        * 1536
+    ]
     per_item.assert_not_awaited()
 
 

@@ -40,7 +40,7 @@ def fit_embedding_vector(
     return embedding[:target_dimension]
 
 
-def _split_embedding_inputs(
+def split_embedding_inputs(
     texts: list[str],
 ) -> tuple[list[str], list[tuple[int, int]]]:
     flattened: list[str] = []
@@ -57,7 +57,7 @@ def _split_embedding_inputs(
     return flattened, ranges
 
 
-def _pool_embedding_chunks(
+def pool_embedding_chunks(
     embeddings: list[list[float]], ranges: list[tuple[int, int]]
 ) -> list[list[float]]:
     pooled: list[list[float]] = []
@@ -89,7 +89,7 @@ async def generate_embeddings(
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY is not set")
 
-    request_texts, input_ranges = _split_embedding_inputs(texts)
+    request_texts, input_ranges = split_embedding_inputs(texts)
 
     # Instantiate client locally to avoid global state race conditions across tenants
     configured_base_url = base_url
@@ -117,7 +117,7 @@ async def generate_embeddings(
                 operation_name="embedding generation",
             ),
         )
-        return _pool_embedding_chunks(
+        return pool_embedding_chunks(
             [data.embedding for data in response.data], input_ranges
         )
     except openai.OpenAIError as e:

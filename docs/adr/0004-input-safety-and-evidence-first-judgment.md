@@ -37,6 +37,11 @@ only while selecting it as the default.
   compatible pre-existing column is preserved and left unowned; only objects
   created by the migration are recorded and removed on downgrade. Incompatible
   or ambiguous shapes fail before any schema write.
+- Semantic content segments are the primary import embedding units. A physical
+  256-character ceiling is applied only to an oversized segment as a provider
+  safety fallback; source-level vectors are centroids over the segment vectors,
+  while persisted segment provenance remains authoritative for Ontology and
+  Project Graph judgments.
 
 ## Consequences
 
@@ -46,6 +51,9 @@ only while selecting it as the default.
   semantic judgments require grounded evidence.
 - The test and live-smoke loop becomes part of the correction contract rather
   than an optional postscript.
+- Long mail no longer forces the semantic layer to choose arbitrary character
+  windows: the parser's heading/paragraph/structured-field boundaries are
+  preserved before any physical-limit fallback.
 - Real mail tests cover provider context limits, repeated same-owner imports,
   zero residual advisory locks, API visibility, search visibility, and the
   same-origin browser cookie proxy.
