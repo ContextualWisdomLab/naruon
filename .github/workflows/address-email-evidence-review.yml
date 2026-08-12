@@ -114,7 +114,6 @@ jobs:
           git diff --check
           mapfile -t changed_files < <(git diff --name-only | LC_ALL=C sort)
           expected_files=(
-            .github/workflows/email-writing-evidence-tdd.yml
             backend/db/email_writing_evidence.py
             backend/tests/test_email_writing_migration.py
             backend/tests/test_email_writing_models.py
@@ -125,7 +124,7 @@ jobs:
             echo "::error::Evidence review repair changed an unexpected file."
             exit 1
           fi
-      - name: Commit verified review repair and remove one-shot files
+      - name: Commit verified backend review repair
         env:
           BRANCH_NAME: feat/llm-email-writing-review-evidence-task3
         run: |
@@ -133,12 +132,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            .github/workflows/email-writing-evidence-tdd.yml \
             backend/db/email_writing_evidence.py \
             backend/tests/test_email_writing_migration.py \
             backend/tests/test_email_writing_models.py
-          git rm -f \
-            .github/scripts/address_email_evidence_review.py \
-            .github/workflows/address-email-evidence-review.yml
+          git rm -f .github/scripts/address_email_evidence_review.py
           git commit -m "fix(email-writing): address review evidence findings"
           git push origin "HEAD:${BRANCH_NAME}"
