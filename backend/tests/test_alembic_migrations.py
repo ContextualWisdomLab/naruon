@@ -496,7 +496,7 @@ def test_email_read_state_revision_adds_and_records_column_ownership(monkeypatch
         "create_table",
         "bulk_insert",
     ]
-    assert calls[0][1][0] == "emails"
+    assert calls[0][1][0] == "email_records"
     assert calls[0][1][1].name == "is_read"
     assert calls[0][1][1].nullable is False
 
@@ -589,7 +589,7 @@ def test_published_read_state_revision_targets_published_emails_table(monkeypatc
     revision.downgrade()
 
     assert calls[0][0] == "add_column"
-    assert calls[0][1][0] == "email_records"
+    assert calls[0][1][0] == "emails"
     assert calls[0][1][1].name == "is_read"
     assert calls[-1] == ("drop_column", ("emails", "is_read"))
 
