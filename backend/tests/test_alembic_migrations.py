@@ -601,7 +601,7 @@ def test_read_state_follow_up_merge_reconciles_current_graph():
         BACKEND_ROOT
         / "alembic"
         / "versions"
-        / "0019_merge_read_state_ownership.py"
+        / "0019_merge_email_read_state_ownership.py"
     )
     revision_text = revision_path.read_text()
 

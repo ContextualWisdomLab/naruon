@@ -548,13 +548,15 @@ async def test_generate_import_embeddings_bounds_long_semantic_units_for_batch(
         <= EMBEDDING_INPUT_TOKEN_LIMIT
         for text in submitted_texts
     )
-    assert result == [
-        [
-            sum(float(index) for index in range(len(submitted_texts)))
-            / len(submitted_texts)
-        ]
-        * 1536
+    token_weights = [
+        len(encoding.encode(text, disallowed_special=()))
+        for text in submitted_texts
     ]
+    expected_value = sum(
+        float(index) * weight
+        for index, weight in enumerate(token_weights)
+    ) / sum(token_weights)
+    assert result == [[expected_value] * 1536]
     per_item.assert_not_awaited()
 
 
