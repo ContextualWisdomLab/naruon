@@ -19,16 +19,38 @@ def replace_once(path: Path, old: str, new: str, label: str) -> None:
 def update_evidence_serializer() -> None:
     """Remove tenant and sequential email identifiers from public evidence output."""
     path = Path("backend/db/email_writing_evidence.py")
-    old = '''        return {
+    old_session = '''        return {
             "review_session_id": self.review_session_id,
             "owner_user_id": self.owner_user_id,
             "owner_organization_id": self.owner_organization_id,
             "source_email_id": self.source_email_id,
             "revision_algorithm": self.revision_algorithm,'''
-    new = '''        return {
+    new_session = '''        return {
             "review_session_id": self.review_session_id,
             "revision_algorithm": self.revision_algorithm,'''
-    replace_once(path, old, new, "privacy-minimized serializer")
+    replace_once(
+        path,
+        old_session,
+        new_session,
+        "privacy-minimized session serializer",
+    )
+
+    old_feedback = '''        return {
+            "feedback_event_id": self.feedback_event_id,
+            "diagnostic_record_id": self.diagnostic_record_id,
+            "owner_user_id": self.owner_user_id,
+            "owner_organization_id": self.owner_organization_id,
+            "feedback_action": self.feedback_action,'''
+    new_feedback = '''        return {
+            "feedback_event_id": self.feedback_event_id,
+            "diagnostic_record_id": self.diagnostic_record_id,
+            "feedback_action": self.feedback_action,'''
+    replace_once(
+        path,
+        old_feedback,
+        new_feedback,
+        "privacy-minimized feedback serializer",
+    )
 
 
 def update_model_tests() -> None:
