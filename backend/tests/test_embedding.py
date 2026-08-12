@@ -14,6 +14,25 @@ from services.embedding import (
 from services.exceptions import EmbeddingGenerationError
 
 
+def test_split_embedding_inputs_preserves_unicode_at_token_boundaries():
+    """Keep source text intact when a token boundary bisects UTF-8 bytes."""
+    source = "é" * 237 + "😀" * 10
+
+    flattened, ranges, weights = split_embedding_inputs(
+        [source],
+        model="test-model",
+    )
+
+    encoding = tiktoken.get_encoding("cl100k_base")
+    assert ranges == [(0, len(flattened))]
+    assert "".join(flattened) == source
+    assert "\ufffd" not in "".join(flattened)
+    assert all(
+        len(encoding.encode(text, disallowed_special=())) <= EMBEDDING_INPUT_TOKEN_LIMIT
+        for text in flattened
+    )
+    assert sum(weights) == len(encoding.encode(source, disallowed_special=()))
+
 def test_chunk_text():
     text = "This is a long test string. " * 100
     chunks = chunk_text(text, chunk_size=50)

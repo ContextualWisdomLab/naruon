@@ -577,7 +577,8 @@ def test_published_read_state_revision_is_immutable():
 
     assert 'revision = "0011_email_read_state"' in revision_text
     assert 'down_revision = "0009_project_graph_projection"' in revision_text
-    assert 'op.add_column(\n        "emails"' in revision_text
+    assert 'op.add_column(\n        "email_records"' in revision_text
+    assert '"emails"' not in revision_text
     assert "email_read_state_ownership" not in revision_text
 
 
