@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
 from typing import Any, Literal, TypeVar
 
 from pydantic import (
