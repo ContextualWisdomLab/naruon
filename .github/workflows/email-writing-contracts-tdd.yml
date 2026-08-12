@@ -31,6 +31,25 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-hashes.txt
       - run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+      - name: Install hash-verified coverage tool
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/coverage-wheel
+          cat >/tmp/coverage-lock.txt <<'EOF'
+          coverage==7.15.2 --hash=sha256:eb6bcae8d1a9d305351ecb108232441d11c5cfe9de840a04388ba5d2db8d735c
+          EOF
+          python -m pip download \
+            --disable-pip-version-check \
+            --require-hashes \
+            --no-deps \
+            --only-binary=:all: \
+            --platform any \
+            --python-version 3.14 \
+            --implementation py \
+            --abi none \
+            --dest /tmp/coverage-wheel \
+            -r /tmp/coverage-lock.txt
+          python -m pip install --disable-pip-version-check --no-deps /tmp/coverage-wheel/coverage-7.15.2-py3-none-any.whl
       - name: Run strict backend contract tests
         run: |
           cd backend
@@ -62,10 +81,15 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: cd frontend && pnpm install --frozen-lockfile
       - name: Run strict frontend contract tests
-        run: cd frontend && pnpm exec vitest run src/lib/email-writing.test.ts
+        run: >-
+          cd frontend && pnpm exec vitest run
+          src/lib/email-writing.test.ts
+          src/lib/email-writing.coverage.test.ts
       - name: Verify frontend contract coverage
         run: >-
-          cd frontend && pnpm exec vitest run src/lib/email-writing.test.ts
+          cd frontend && pnpm exec vitest run
+          src/lib/email-writing.test.ts
+          src/lib/email-writing.coverage.test.ts
           --coverage
           --coverage.include=src/lib/email-writing.ts
           --coverage.reporter=text
