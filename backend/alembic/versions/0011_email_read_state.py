@@ -29,17 +29,17 @@ def _existing_read_state_column(inspector) -> dict | None:
     )
 
 
-def _reject_pre_existing_read_state(column: dict) -> None:
+def _validate_pre_existing_read_state(column: dict) -> None:
     column_type = column.get("type")
     canonical_shape = (
         isinstance(column_type, sa.Boolean) and column.get("nullable") is False
     )
-    shape_label = "compatible" if canonical_shape else "incompatible"
-    raise RuntimeError(
-        "0011_email_read_state cannot safely claim a pre-existing "
-        f"{shape_label} {_EMAIL_TABLE}.{_READ_STATE_COLUMN} column; "
-        "reconcile the schema before applying this migration"
-    )
+    if not canonical_shape:
+        raise RuntimeError(
+            "0011_email_read_state cannot safely use an incompatible "
+            f"pre-existing {_EMAIL_TABLE}.{_READ_STATE_COLUMN} column; "
+            "reconcile the schema before applying this migration"
+        )
 
 
 def _ownership_record_exists(connection) -> bool:
@@ -68,18 +68,20 @@ def upgrade() -> None:
         raise RuntimeError(f"unexpected pre-existing table {_OWNERSHIP_TABLE}")
 
     existing_column = _existing_read_state_column(inspector)
-    if existing_column is not None:
-        _reject_pre_existing_read_state(existing_column)
+    owns_read_state_column = existing_column is None
+    if owns_read_state_column:
+        op.add_column(
+            _EMAIL_TABLE,
+            sa.Column(
+                _READ_STATE_COLUMN,
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.text("true"),
+            ),
+        )
+    else:
+        _validate_pre_existing_read_state(existing_column)
 
-    op.add_column(
-        _EMAIL_TABLE,
-        sa.Column(
-            _READ_STATE_COLUMN,
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("true"),
-        ),
-    )
     op.create_table(
         _OWNERSHIP_TABLE,
         sa.Column(_OWNERSHIP_KEY_COLUMN, sa.String(length=120), nullable=False),
@@ -92,10 +94,11 @@ def upgrade() -> None:
         _OWNERSHIP_TABLE,
         sa.column(_OWNERSHIP_KEY_COLUMN, sa.String(length=120)),
     )
-    op.bulk_insert(
-        ownership_table,
-        [{_OWNERSHIP_KEY_COLUMN: _OWNERSHIP_KEY}],
-    )
+    if owns_read_state_column:
+        op.bulk_insert(
+            ownership_table,
+            [{_OWNERSHIP_KEY_COLUMN: _OWNERSHIP_KEY}],
+        )
 
 
 def downgrade() -> None:
@@ -103,8 +106,11 @@ def downgrade() -> None:
     inspector = sa.inspect(connection)
     if not inspector.has_table(_OWNERSHIP_TABLE):
         return
-    if not _ownership_record_exists(connection):
-        return
-    if inspector.has_table(_EMAIL_TABLE) and _existing_read_state_column(inspector):
+    owns_read_state_column = _ownership_record_exists(connection)
+    if (
+        owns_read_state_column
+        and inspector.has_table(_EMAIL_TABLE)
+        and _existing_read_state_column(inspector)
+    ):
         op.drop_column(_EMAIL_TABLE, _READ_STATE_COLUMN)
     op.drop_table(_OWNERSHIP_TABLE)

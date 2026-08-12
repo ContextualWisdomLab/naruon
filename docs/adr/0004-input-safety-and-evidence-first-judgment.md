@@ -28,6 +28,15 @@ only while selecting it as the default.
   or to stop investigating.
 - Live smoke tooling must receive session secrets through the environment and
   must never print bearer tokens or console snippets that reproduce them.
+- Import quota locks use a dedicated PostgreSQL connection for the complete
+  import operation. This is required because per-item commits may return an
+  `AsyncSession` connection to the pool; acquisition and release must therefore
+  occur on the same session-level advisory-lock connection, or later imports
+  can wait indefinitely.
+- Schema migrations inspect pre-existing objects before changing them. A
+  compatible pre-existing column is preserved and left unowned; only objects
+  created by the migration are recorded and removed on downgrade. Incompatible
+  or ambiguous shapes fail before any schema write.
 
 ## Consequences
 
@@ -37,6 +46,9 @@ only while selecting it as the default.
   semantic judgments require grounded evidence.
 - The test and live-smoke loop becomes part of the correction contract rather
   than an optional postscript.
+- Real mail tests cover provider context limits, repeated same-owner imports,
+  zero residual advisory locks, API visibility, search visibility, and the
+  same-origin browser cookie proxy.
 
 ## References
 

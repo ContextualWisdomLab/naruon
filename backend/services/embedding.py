@@ -8,6 +8,10 @@ from services.circuit_breaker import provider_circuit_breaker
 from services.retry import retry_transient
 
 STORAGE_EMBEDDING_DIMENSION = 1536
+# Keep each request below the smallest local embedding context observed in the
+# supported llama.cpp/EmbeddingGemma runtime. Longer source items are pooled
+# back to one vector per caller input.
+EMBEDDING_INPUT_CHUNK_SIZE = 256
 
 
 def chunk_text(
@@ -36,6 +40,46 @@ def fit_embedding_vector(
     return embedding[:target_dimension]
 
 
+def _split_embedding_inputs(
+    texts: list[str],
+) -> tuple[list[str], list[tuple[int, int]]]:
+    flattened: list[str] = []
+    ranges: list[tuple[int, int]] = []
+    for text in texts:
+        chunks = chunk_text(
+            text,
+            chunk_size=EMBEDDING_INPUT_CHUNK_SIZE,
+            chunk_overlap=0,
+        ) or [text]
+        start = len(flattened)
+        flattened.extend(chunks)
+        ranges.append((start, len(flattened)))
+    return flattened, ranges
+
+
+def _pool_embedding_chunks(
+    embeddings: list[list[float]], ranges: list[tuple[int, int]]
+) -> list[list[float]]:
+    pooled: list[list[float]] = []
+    for start, end in ranges:
+        chunks = embeddings[start:end]
+        if not chunks:
+            pooled.append([])
+            continue
+        width = max(len(chunk) for chunk in chunks)
+        pooled.append(
+            [
+                sum(
+                    chunk[index] if index < len(chunk) else 0.0
+                    for chunk in chunks
+                )
+                / len(chunks)
+                for index in range(width)
+            ]
+        )
+    return pooled
+
+
 async def generate_embeddings(
     texts: list[str],
     openai_api_key: str,
@@ -44,6 +88,8 @@ async def generate_embeddings(
 ) -> list[list[float]]:
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY is not set")
+
+    request_texts, input_ranges = _split_embedding_inputs(texts)
 
     # Instantiate client locally to avoid global state race conditions across tenants
     configured_base_url = base_url
@@ -65,12 +111,15 @@ async def generate_embeddings(
             validated_base_url or "openai-default",
             lambda: retry_transient(
                 lambda: client.embeddings.create(
-                    model=model or settings.OPENAI_EMBEDDING_MODEL, input=texts
+                    model=model or settings.OPENAI_EMBEDDING_MODEL,
+                    input=request_texts,
                 ),
                 operation_name="embedding generation",
             ),
         )
-        return [data.embedding for data in response.data]
+        return _pool_embedding_chunks(
+            [data.embedding for data in response.data], input_ranges
+        )
     except openai.OpenAIError as e:
         raise EmbeddingGenerationError(f"Failed to generate embeddings: {str(e)}")
     finally:

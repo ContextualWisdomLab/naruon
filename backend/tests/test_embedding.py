@@ -2,6 +2,7 @@ import pytest
 import openai
 from unittest.mock import patch, AsyncMock
 from services.embedding import (
+    EMBEDDING_INPUT_CHUNK_SIZE,
     STORAGE_EMBEDDING_DIMENSION,
     chunk_text,
     fit_embedding_vector,
@@ -137,6 +138,36 @@ async def test_generate_embeddings_api_error():
 
                 await generate_embeddings(["test"], "test-key")
             mock_client.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_generate_embeddings_pools_context_safe_chunks():
+    with patch("services.embedding.AsyncOpenAI") as mock_async_openai:
+        mock_client = mock_async_openai.return_value
+        mock_client.close = AsyncMock()
+
+        async def create_embeddings(*, model, input):
+            assert model == "test-model"
+            assert input
+            assert all(len(item) <= EMBEDDING_INPUT_CHUNK_SIZE for item in input)
+            response = AsyncMock()
+            response.data = [
+                AsyncMock(embedding=[float(index + 1)])
+                for index, _item in enumerate(input)
+            ]
+            return response
+
+        mock_client.embeddings.create = AsyncMock(side_effect=create_embeddings)
+
+        with patch("services.embedding.settings") as mock_settings:
+            mock_settings.OPENAI_EMBEDDING_MODEL = "test-model"
+            mock_settings.OPENAI_BASE_URL = None
+            mock_settings.OPENAI_EMBEDDING_BASE_URL = None
+
+            embeddings = await generate_embeddings(["x" * 600], "test-key")
+
+    assert embeddings == [[2.0]]
+    mock_client.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

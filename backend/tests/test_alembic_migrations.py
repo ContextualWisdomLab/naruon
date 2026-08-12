@@ -498,16 +498,28 @@ def test_email_read_state_revision_adds_and_records_column_ownership(monkeypatch
     assert calls[0][1][1].nullable is False
 
 
-@pytest.mark.parametrize(
-    "column",
-    [
-        {"name": "is_read", "type": sa.Boolean(), "nullable": False},
-        {"name": "is_read", "type": sa.String(), "nullable": True},
-    ],
-)
-def test_email_read_state_revision_rejects_pre_existing_column(monkeypatch, column):
+def test_email_read_state_revision_preserves_compatible_pre_existing_column(
+    monkeypatch,
+):
     revision = _load_email_read_state_revision()
-    inspector = _MigrationInspector([{"name": "id"}, column])
+    inspector = _MigrationInspector(
+        [{"name": "id"}, {"name": "is_read", "type": sa.Boolean(), "nullable": False}]
+    )
+    connection = _MigrationConnection()
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    revision.upgrade()
+
+    assert [name for name, _args in calls] == ["create_table"]
+
+
+def test_email_read_state_revision_rejects_incompatible_pre_existing_column(
+    monkeypatch,
+):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector(
+        [{"name": "id"}, {"name": "is_read", "type": sa.String(), "nullable": True}]
+    )
     connection = _MigrationConnection()
     calls = _migration_operations(monkeypatch, revision, inspector, connection)
 
@@ -534,14 +546,14 @@ def test_email_read_state_revision_downgrade_only_removes_owned_column(monkeypat
 def test_email_read_state_revision_downgrade_preserves_unowned_column(monkeypatch):
     revision = _load_email_read_state_revision()
     inspector = _MigrationInspector(
-        [{"name": "id"}, {"name": "is_read"}], ownership_table=False
+        [{"name": "id"}, {"name": "is_read"}], ownership_table=True
     )
     connection = _MigrationConnection()
     calls = _migration_operations(monkeypatch, revision, inspector, connection)
 
     revision.downgrade()
 
-    assert calls == []
+    assert [name for name, _args in calls] == ["drop_table"]
 
 
 def test_email_read_state_revision_uses_canonical_email_records_table():
@@ -551,7 +563,8 @@ def test_email_read_state_revision_uses_canonical_email_records_table():
 
     assert '_EMAIL_TABLE = "email_records"' in revision_text
     assert "inspector.get_columns(_EMAIL_TABLE)" in revision_text
-    assert "op.add_column(\n        _EMAIL_TABLE" in revision_text
+    assert "op.add_column(" in revision_text
+    assert "_EMAIL_TABLE," in revision_text
 
 
 def test_merge_revision_reconciles_newsdom_provider_branch():

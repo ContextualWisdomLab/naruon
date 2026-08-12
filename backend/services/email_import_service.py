@@ -15,9 +15,10 @@ from tempfile import TemporaryDirectory
 from typing import Literal
 
 from sqlalchemy import bindparam, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from core.config import settings
+from db.session import engine
 from db.models import (
     Attachment,
     ContentNodeRecord,
@@ -27,6 +28,7 @@ from db.models import (
 )
 from services.archive import extract_backup_async
 from services.batch_embedding_service import try_batch_import_embeddings
+from services.circuit_breaker import CircuitOpenError
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
@@ -257,13 +259,35 @@ def _owner_import_lock_key(user_id: str, organization_id: str) -> str:
 
 async def _acquire_owner_import_quota_lock(
     session: AsyncSession, *, user_id: str, organization_id: str
-) -> bool:
+) -> AsyncConnection | bool | None:
     if not _session_uses_postgresql(session):
-        return False
+        return None
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
         "owner_key": _owner_import_lock_key(user_id, organization_id),
     }
+    # session.commit() is intentionally used for each imported item. A
+    # session-level advisory lock acquired through AsyncSession can therefore
+    # be left on a returned pooled connection; keep a dedicated connection for
+    # the whole import so acquisition and release are guaranteed to match.
+    if isinstance(session, AsyncSession):
+        lock_connection = await engine.connect()
+        try:
+            await lock_connection.execute(
+                select(
+                    func.pg_advisory_lock(
+                        func.hashtext(bindparam("namespace_key")),
+                        func.hashtext(bindparam("owner_key")),
+                    )
+                ),
+                lock_params,
+            )
+        except Exception:
+            await lock_connection.close()
+            raise
+        return lock_connection
+
+    # Lightweight PostgreSQL test doubles retain the old query contract.
     await session.execute(
         select(
             func.pg_advisory_lock(
@@ -277,8 +301,34 @@ async def _acquire_owner_import_quota_lock(
 
 
 async def _release_owner_import_quota_lock(
-    session: AsyncSession, *, user_id: str, organization_id: str
+    session: AsyncSession,
+    *,
+    user_id: str,
+    organization_id: str,
+    lock: AsyncConnection | bool | None,
 ) -> None:
+    if lock is not None and lock is not True:
+        lock_params = {
+            "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
+            "owner_key": _owner_import_lock_key(user_id, organization_id),
+        }
+        try:
+            await lock.execute(
+                select(
+                    func.pg_advisory_unlock(
+                        func.hashtext(bindparam("namespace_key")),
+                        func.hashtext(bindparam("owner_key")),
+                    )
+                ),
+                lock_params,
+            )
+            await lock.commit()
+        finally:
+            await lock.close()
+        return
+    if lock is not True:
+        return
+
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
         "owner_key": _owner_import_lock_key(user_id, organization_id),
@@ -942,7 +992,7 @@ async def _generate_import_embeddings(
             or embedding_provider.base_url,
             model=embedding_provider.embedding_model,
         )
-    except (EmbeddingGenerationError, ValueError) as exc:
+    except (CircuitOpenError, EmbeddingGenerationError, ValueError) as exc:
         logger.warning(
             "Email import embedding generation failed; retrying imported content "
             "item by item before zero-vector fallback: "
@@ -967,6 +1017,7 @@ async def _generate_import_embeddings(
                     fit_embedding_vector(single_embedding[0], EMBEDDING_DIMENSION)
                 )
             except (
+                CircuitOpenError,
                 EmbeddingGenerationError,
                 ValueError,
                 TypeError,
@@ -1179,9 +1230,12 @@ async def import_email_uploads(
                     )
                 )
     finally:
-        if lock_acquired:
+        if lock_acquired is not None:
             await _release_owner_import_quota_lock(
-                session, user_id=user_id, organization_id=organization_id
+                session,
+                user_id=user_id,
+                organization_id=organization_id,
+                lock=lock_acquired,
             )
 
     return result

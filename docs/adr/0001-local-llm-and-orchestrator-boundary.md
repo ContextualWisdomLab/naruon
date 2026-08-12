@@ -47,6 +47,12 @@ EmbeddingGemma may be separate local OpenAI-compatible endpoints.
    never copied onto a tenant-configured external provider or an organization
    DB provider, preventing an external tenant API key from being sent to a
    local endpoint.
+8. Embedding requests split each source item into bounded, non-overlapping
+   chunks before calling a provider and mean-pool the returned chunks back to
+   one vector per source item. The current local EmbeddingGemma/llama.cpp
+   contract uses a conservative 256-character request ceiling because the
+   runtime's physical token batch limit is lower than the length of some real
+   mail bodies and attachments.
 
 ## Consequences
 
@@ -56,6 +62,9 @@ EmbeddingGemma may be separate local OpenAI-compatible endpoints.
   MLX endpoint does not silently pretend to provide embeddings.
 - A local MLX chat server and local llama.cpp embedding server can run
   concurrently without sharing a port or crossing tenant provider boundaries.
+- Real mail bodies larger than the local embedding context remain importable;
+  retrieval keeps one fitted vector per email/attachment instead of exposing a
+  provider context error to the import API.
 
 ## References
 

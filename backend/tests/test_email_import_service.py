@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import services.email_import_service as email_import_module
+from services.circuit_breaker import CircuitOpenError
 from services.exceptions import EmailParseError, EmbeddingGenerationError
 from services.email_import_service import (
     EMBEDDING_DIMENSION,
@@ -559,6 +560,65 @@ async def test_generate_import_embeddings_logs_non_secret_provider_fallback(capl
     assert "secret-provider-token" not in caplog.text
     assert "ollama" not in caplog.text
     assert "embeddinggemma" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_generate_import_embeddings_falls_back_when_provider_circuit_is_open():
+    provider = EmailImportEmbeddingProvider(
+        api_key="secret-provider-token",
+        base_url="http://ollama:11434/v1",
+        embedding_model="embeddinggemma",
+    )
+
+    with patch(
+        "services.email_import_service.generate_embeddings",
+        new_callable=AsyncMock,
+    ) as mock_generate_embeddings:
+        mock_generate_embeddings.side_effect = CircuitOpenError(
+            "provider", 30
+        )
+
+        embeddings = await _generate_import_embeddings(
+            ["Provider body"],
+            embedding_provider=provider,
+        )
+
+    assert embeddings == [[0.0] * EMBEDDING_DIMENSION]
+
+
+@pytest.mark.asyncio
+async def test_owner_quota_lock_releases_on_the_same_dedicated_connection():
+    class _PostgresSessionProbe(AsyncSession):
+        def get_bind(self):
+            dialect = type("Dialect", (), {"name": "postgresql"})()
+            return type("Bind", (), {"dialect": dialect})()
+
+    lock_connection = AsyncMock()
+    session = object.__new__(_PostgresSessionProbe)
+    fake_engine = type("Engine", (), {})()
+    fake_engine.connect = AsyncMock(return_value=lock_connection)
+    with patch.object(
+        email_import_module,
+        "engine",
+        fake_engine,
+    ):
+        lock = await email_import_module._acquire_owner_import_quota_lock(
+            session,
+            user_id="user-1",
+            organization_id="org-1",
+        )
+        await email_import_module._release_owner_import_quota_lock(
+            session,
+            user_id="user-1",
+            organization_id="org-1",
+            lock=lock,
+        )
+
+    fake_engine.connect.assert_awaited_once()
+    assert lock is lock_connection
+    assert lock_connection.execute.await_count == 2
+    lock_connection.commit.assert_awaited_once()
+    lock_connection.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
