@@ -132,9 +132,15 @@ function findNodeLabel(nodes: Node[], id: number | string) {
   return String(node?.label ?? id);
 }
 
-function describeEdge(edge: Edge, nodes: Node[]) {
-  const fromLabel = findNodeLabel(nodes, edge.from);
-  const toLabel = findNodeLabel(nodes, edge.to);
+function describeEdge(edge: Edge, nodes: Node[], nodeMap?: Map<string | number, string>) {
+  let fromLabel, toLabel;
+  if (nodeMap) {
+    fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
+    toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
+  } else {
+    fromLabel = findNodeLabel(nodes, edge.from);
+    toLabel = findNodeLabel(nodes, edge.to);
+  }
   const title = titleText(edge.title);
   return title ? `${fromLabel} -> ${toLabel} (${title})` : `${fromLabel} -> ${toLabel}`;
 }
@@ -257,10 +263,16 @@ export default function NetworkGraph() {
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
+    const nodeMap = new Map<string, string>();
+    for (const node of nodes) {
+      if (node.id != null) {
+        nodeMap.set(String(node.id), String(node.label ?? node.id));
+      }
+    }
     return edges.slice(0, 5).map((edge, index) => ({
       edge,
       id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodes)}`,
+      label: `관계 ${index + 1}: ${describeEdge(edge, nodes, nodeMap)}`,
     }));
   }, [edges, nodes]);
 
