@@ -4,16 +4,6 @@ import openai
 from unittest.mock import patch, AsyncMock
 
 
-class _ProviderResponse:
-    def __init__(self, payload):
-        self.status_code = 200
-        self._payload = payload
-
-    def json(self):
-        return self._payload
-
-    def raise_for_status(self):
-        return None
 from services.embedding import (
     EMBEDDING_INPUT_TOKEN_LIMIT,
     STORAGE_EMBEDDING_DIMENSION,
@@ -24,6 +14,17 @@ from services.embedding import (
     split_embedding_inputs,
 )
 from services.exceptions import EmbeddingGenerationError
+
+class _ProviderResponse:
+    def __init__(self, payload):
+        self.status_code = 200
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        return None
 
 
 def test_split_embedding_inputs_preserves_unicode_at_token_boundaries():
