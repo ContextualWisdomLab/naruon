@@ -35,6 +35,12 @@ jobs:
         run: |
           cd backend
           python -m pytest -q tests/test_email_writing_contracts.py
+      - name: Verify backend contract coverage
+        run: |
+          cd backend
+          python -m coverage erase
+          python -m coverage run --branch --include='services/email_writing_contracts.py' -m pytest -q tests/test_email_writing_contracts.py
+          python -m coverage report --show-missing --fail-under=100 services/email_writing_contracts.py
       - name: Lint backend contract implementation
         run: |
           cd backend
@@ -57,5 +63,15 @@ jobs:
       - run: cd frontend && pnpm install --frozen-lockfile
       - name: Run strict frontend contract tests
         run: cd frontend && pnpm exec vitest run src/lib/email-writing.test.ts
+      - name: Verify frontend contract coverage
+        run: >-
+          cd frontend && pnpm exec vitest run src/lib/email-writing.test.ts
+          --coverage
+          --coverage.include=src/lib/email-writing.ts
+          --coverage.reporter=text
+          --coverage.thresholds.statements=100
+          --coverage.thresholds.branches=100
+          --coverage.thresholds.functions=100
+          --coverage.thresholds.lines=100
       - name: Typecheck frontend contract implementation
         run: cd frontend && pnpm typecheck
