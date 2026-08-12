@@ -170,7 +170,6 @@ export default function NetworkGraph() {
     return map;
   }, [nodes]);
 
-  // ⚡ Bolt: Precompute O(N) Maps for O(1) edge and node lookups to prevent main thread blocking during rapid graph interactions
   const edgeObjectMap = useMemo(() => {
     const map = new Map<string, Edge>();
     for (const edge of edges) {
@@ -281,7 +280,7 @@ export default function NetworkGraph() {
         network.destroy();
       };
     }
-  }, [nodes, edges, nodeMap, edgeObjectMap]);
+  }, [nodes, edges, nodeMap]);
 
   const nodeLabels = useMemo(() => {
     return nodes

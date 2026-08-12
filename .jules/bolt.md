@@ -23,3 +23,6 @@
 
 **Learning:** When generating derived UI state in `useMemo` that joins separate data arrays (like graph edges referencing node IDs), calling helper functions that use `Array.prototype.find()` for every item creates an `O(M * N)` bottleneck.
 **Action:** When a loop needs to repeatedly look up related items from another array by ID, pre-compute an `O(N)` `Map` before the loop and use `map.get()` for `O(1)` lookups instead of inline array `.find()` calls.
+## 2026-07-25 - Prevent O(M*N) Bottlenecks with O(1) Maps in React Components
+**Learning:** When a React component (like `NetworkGraph.tsx`) iterates or handles events that require repeatedly looking up related items from another array by ID (e.g., finding an edge by ID using `edges.find()`), it introduces `O(N)` complexity per lookup. In interactive components or large loops, this results in an `O(M * N)` bottleneck, causing frame drops and main thread blocking.
+**Action:** Pre-compute an `O(N)` `Map` inside a `useMemo` hook using the source arrays (e.g., `edges`, `nodes`). Then, replace the inline `Array.prototype.find()` calls with `map.get()` to achieve `O(1)` lookups. Ensure the `useMemo` hooks and any downstream `useEffect` hooks declare the correct dependency arrays.
