@@ -1,0 +1,66 @@
+name: Email Writing Contracts Test Isolation Once
+
+on:
+  push:
+    branches:
+      - feat/llm-email-writing-contracts
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: email-writing-contracts-test-isolation-once-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolate-frontend-fixture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+      - run: corepack enable pnpm
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: cd frontend && pnpm install --frozen-lockfile
+      - name: Isolate the invalid revision fixture
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('frontend/src/lib/email-writing.test.ts')
+          source = path.read_text(encoding='utf-8')
+          old = """    badRevision.document_revision.digest_hex = 'AB'.repeat(32);
+          """
+          new = """    badRevision.document_revision = {
+                ...badRevision.document_revision,
+                digest_hex: 'AB'.repeat(32),
+              };
+          """
+          if source.count(old) != 1:
+              raise SystemExit('bad revision fixture anchor changed')
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Verify isolated frontend contracts
+        run: |
+          cd frontend
+          pnpm exec vitest run src/lib/email-writing.test.ts
+          pnpm typecheck
+      - name: Publish validated test isolation and remove this workflow
+        env:
+          TARGET_BRANCH: feat/llm-email-writing-contracts
+        run: |
+          set -euo pipefail
+          rm .github/workflows/email-writing-contracts-test-isolation-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/lib/email-writing.test.ts .github/workflows/email-writing-contracts-test-isolation-once.yml
+          git diff --cached --check
+          git commit -m 'test(email-writing): isolate invalid revision fixture'
+          git push origin "HEAD:${TARGET_BRANCH}"
