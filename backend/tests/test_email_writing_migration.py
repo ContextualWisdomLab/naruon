@@ -94,54 +94,56 @@ def test_sqlite_upgrade_downgrade_is_idempotent_and_preserves_unrelated_objects(
     """SQLite receives all objects, and downgrade removes only this revision's DDL."""
     module = _load_migration()
     engine = create_engine("sqlite:///:memory:")
-    with engine.begin() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        connection.exec_driver_sql(
-            "CREATE TABLE email_records (id INTEGER PRIMARY KEY)"
-        )
-        connection.exec_driver_sql(
-            "CREATE TABLE unrelated_audit_record "
-            "(audit_record_id INTEGER PRIMARY KEY)"
-        )
-        monkeypatch.setattr(
-            module,
-            "op",
-            SimpleNamespace(get_bind=lambda: connection),
-        )
-
-        module.upgrade()
-        module.upgrade()
-        database_inspector = inspect(connection)
-        assert set(NEW_TABLE_NAMES).issubset(database_inspector.get_table_names())
-        assert "unrelated_audit_record" in database_inspector.get_table_names()
-        assert "email_records" in database_inspector.get_table_names()
-
-        assert {
-            index["name"]
-            for index in database_inspector.get_indexes("email_review_session")
-        } >= {
-            "ix_email_review_session_owner_scope",
-            "ix_email_review_session_expiry_status",
-            "ix_email_review_session_source_email",
-        }
-        assert {
-            constraint["name"]
-            for constraint in database_inspector.get_check_constraints(
-                "writing_diagnostic_record"
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys = ON")
+            connection.exec_driver_sql(
+                "CREATE TABLE email_records (id INTEGER PRIMARY KEY)"
             )
-        } >= {
-            "ck_writing_diagnostic_record_selector_order",
-            "ck_writing_diagnostic_record_judge_score",
-            "ck_writing_diagnostic_record_admission_status",
-        }
+            connection.exec_driver_sql(
+                "CREATE TABLE unrelated_audit_record "
+                "(audit_record_id INTEGER PRIMARY KEY)"
+            )
+            monkeypatch.setattr(
+                module,
+                "op",
+                SimpleNamespace(get_bind=lambda: connection),
+            )
 
-        module.downgrade()
-        module.downgrade()
-        remaining_tables = set(inspect(connection).get_table_names())
-        assert remaining_tables.isdisjoint(NEW_TABLE_NAMES)
-        assert "unrelated_audit_record" in remaining_tables
-        assert "email_records" in remaining_tables
-    engine.dispose()
+            module.upgrade()
+            module.upgrade()
+            database_inspector = inspect(connection)
+            assert set(NEW_TABLE_NAMES).issubset(database_inspector.get_table_names())
+            assert "unrelated_audit_record" in database_inspector.get_table_names()
+            assert "email_records" in database_inspector.get_table_names()
+
+            assert {
+                index["name"]
+                for index in database_inspector.get_indexes("email_review_session")
+            } >= {
+                "ix_email_review_session_owner_scope",
+                "ix_email_review_session_expiry_status",
+                "ix_email_review_session_source_email",
+            }
+            assert {
+                constraint["name"]
+                for constraint in database_inspector.get_check_constraints(
+                    "writing_diagnostic_record"
+                )
+            } >= {
+                "ck_writing_diagnostic_record_selector_order",
+                "ck_writing_diagnostic_record_judge_score",
+                "ck_writing_diagnostic_record_admission_status",
+            }
+
+            module.downgrade()
+            module.downgrade()
+            remaining_tables = set(inspect(connection).get_table_names())
+            assert remaining_tables.isdisjoint(NEW_TABLE_NAMES)
+            assert "unrelated_audit_record" in remaining_tables
+            assert "email_records" in remaining_tables
+    finally:
+        engine.dispose()
 
 
 def test_postgresql_ddl_compiles_with_named_constraints_and_indexes() -> None:

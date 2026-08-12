@@ -169,9 +169,6 @@ class EmailReviewSession(Base):
         """Serialize only privacy-minimized operational evidence."""
         return {
             "review_session_id": self.review_session_id,
-            "owner_user_id": self.owner_user_id,
-            "owner_organization_id": self.owner_organization_id,
-            "source_email_id": self.source_email_id,
             "revision_algorithm": self.revision_algorithm,
             "revision_digest": self.revision_digest,
             "revision_entity_tag": self.revision_entity_tag,
@@ -419,8 +416,6 @@ class DiagnosticFeedbackEvent(Base):
         return {
             "feedback_event_id": self.feedback_event_id,
             "diagnostic_record_id": self.diagnostic_record_id,
-            "owner_user_id": self.owner_user_id,
-            "owner_organization_id": self.owner_organization_id,
             "feedback_action": self.feedback_action,
             "reviewed_revision_digest": self.reviewed_revision_digest,
             "resulting_revision_digest": self.resulting_revision_digest,
