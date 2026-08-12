@@ -1,4 +1,4 @@
-"""Add is_read to email_records (IMAP \\Seen read state).
+"""Add is_read to emails (IMAP \\Seen read state).
 
 Existing rows default to read so historical/file imports do not surface as unread.
 """
@@ -15,7 +15,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column(
-        "email_records",
+        "emails",
         sa.Column(
             "is_read",
             sa.Boolean(),
@@ -26,4 +26,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("email_records", "is_read")
+    op.drop_column("emails", "is_read")

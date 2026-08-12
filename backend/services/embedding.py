@@ -73,6 +73,10 @@ def _provider_endpoint(base_url: str, resource: str) -> str:
     )
 
 
+class _ProviderTokenizerUnavailable(ValueError):
+    """Signal that a provider does not expose the optional native tokenizer."""
+
+
 async def _provider_json(
     http_client,
     url: str,
@@ -82,8 +86,8 @@ async def _provider_json(
     """POST one native tokenizer request and validate its JSON object response."""
     response = await http_client.post(url, json=payload, headers=headers)
     if response.status_code == 404:
-        raise ValueError(
-            "embedding provider must expose native /tokenize and /detokenize endpoints"
+        raise _ProviderTokenizerUnavailable(
+            "embedding provider does not expose native tokenizer endpoints"
         )
     response.raise_for_status()
     body = response.json()
@@ -258,15 +262,20 @@ async def generate_embeddings(
     )
     try:
         if _requires_provider_tokenizer(selected_model, validated_base_url):
-            request_texts, input_ranges, token_weights = (
-                await _split_embedding_inputs_with_provider_tokenizer(
-                    texts,
-                    selected_model,
-                    validated_base_url,
-                    http_client,
-                    openai_api_key,
+            try:
+                request_texts, input_ranges, token_weights = (
+                    await _split_embedding_inputs_with_provider_tokenizer(
+                        texts,
+                        selected_model,
+                        validated_base_url,
+                        http_client,
+                        openai_api_key,
+                    )
                 )
-            )
+            except _ProviderTokenizerUnavailable:
+                request_texts, input_ranges, token_weights = split_embedding_inputs(
+                    texts, selected_model
+                )
         else:
             request_texts, input_ranges, token_weights = split_embedding_inputs(
                 texts, selected_model
