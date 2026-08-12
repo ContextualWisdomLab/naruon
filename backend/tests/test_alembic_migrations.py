@@ -496,7 +496,7 @@ def test_email_read_state_revision_adds_and_records_column_ownership(monkeypatch
         "create_table",
         "bulk_insert",
     ]
-    assert calls[0][1][0] == "email_records"
+    assert calls[0][1][0] == "emails"
     assert calls[0][1][1].name == "is_read"
     assert calls[0][1][1].nullable is False
 
@@ -570,7 +570,7 @@ def test_email_read_state_revision_uses_canonical_email_records_table():
     assert "_EMAIL_TABLE," in revision_text
 
 
-def test_read_state_revision_targets_canonical_email_records_table(monkeypatch):
+def test_published_read_state_revision_targets_published_emails_table(monkeypatch):
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
     )
@@ -591,7 +591,7 @@ def test_read_state_revision_targets_canonical_email_records_table(monkeypatch):
     assert calls[0][0] == "add_column"
     assert calls[0][1][0] == "email_records"
     assert calls[0][1][1].name == "is_read"
-    assert calls[-1] == ("drop_column", ("email_records", "is_read"))
+    assert calls[-1] == ("drop_column", ("emails", "is_read"))
 
 
 def test_read_state_follow_up_revision_is_after_published_revision():

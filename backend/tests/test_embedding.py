@@ -16,8 +16,8 @@ from services.embedding import (
 from services.exceptions import EmbeddingGenerationError
 
 class _ProviderResponse:
-    def __init__(self, payload):
-        self.status_code = 200
+    def __init__(self, payload, *, status_code=200):
+        self.status_code = status_code
         self._payload = payload
 
     def json(self):
@@ -192,6 +192,40 @@ async def test_generate_embeddings_uses_provider_native_tokenizer_for_local_mode
     assert mock_http_client.post.await_count == 2
     assert mock_http_client.post.await_args_list[0].args[0].endswith("/tokenize")
     assert mock_http_client.post.await_args_list[1].args[0].endswith("/detokenize")
+
+@pytest.mark.asyncio
+async def test_generate_embeddings_falls_back_for_remote_unknown_model_without_native_tokenizer():
+    with patch("services.embedding.AsyncOpenAI") as mock_async_openai, patch(
+        "services.embedding.build_llm_provider_http_client",
+        new_callable=AsyncMock,
+    ) as mock_build_client:
+        mock_http_client = AsyncMock()
+        mock_http_client.post = AsyncMock(
+            return_value=_ProviderResponse({}, status_code=404)
+        )
+        mock_build_client.return_value = (
+            "https://remote.example/v1", mock_http_client
+        )
+        mock_client = mock_async_openai.return_value
+        mock_client.close = AsyncMock()
+        mock_client.embeddings.create = AsyncMock(
+            return_value=AsyncMock(data=[AsyncMock(embedding=[0.1, 0.2, 0.3])])
+        )
+
+        embeddings = await generate_embeddings(
+            ["test"],
+            "remote-key",
+            base_url="https://remote.example/v1",
+            model="remote-custom-model",
+        )
+
+    assert embeddings == [[0.1, 0.2, 0.3]]
+    mock_http_client.post.assert_awaited_once()
+    mock_client.embeddings.create.assert_awaited_once_with(
+        model="remote-custom-model", input=["test"]
+    )
+    mock_client.close.assert_awaited_once()
+
 
 @pytest.mark.asyncio
 async def test_generate_embeddings_prefers_embedding_base_url_when_no_explicit_url():
