@@ -5,6 +5,7 @@ on:
     branches:
       - feat/llm-email-writing-review-evidence-task3
     paths:
+      - .github/scripts/address_email_evidence_review.py
       - .github/workflows/address-email-evidence-review.yml
 
 permissions:
@@ -136,7 +137,7 @@ jobs:
             backend/db/email_writing_evidence.py \
             backend/tests/test_email_writing_migration.py \
             backend/tests/test_email_writing_models.py
-          git rm \
+          git rm -f \
             .github/scripts/address_email_evidence_review.py \
             .github/workflows/address-email-evidence-review.yml
           git commit -m "fix(email-writing): address review evidence findings"
