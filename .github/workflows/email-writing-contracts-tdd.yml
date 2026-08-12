@@ -55,14 +55,16 @@ jobs:
           cd backend
           python -m pytest -q \
             tests/test_email_writing_contracts.py \
-            tests/test_email_writing_contracts_coverage.py
+            tests/test_email_writing_contracts_coverage.py \
+            tests/test_email_writing_contracts_terminal_coverage.py
       - name: Verify backend contract coverage
         run: |
           cd backend
           python -m coverage erase
           python -m coverage run --branch --include='services/email_writing_contracts.py' -m pytest -q \
             tests/test_email_writing_contracts.py \
-            tests/test_email_writing_contracts_coverage.py
+            tests/test_email_writing_contracts_coverage.py \
+            tests/test_email_writing_contracts_terminal_coverage.py
           python -m coverage report --show-missing --fail-under=100 services/email_writing_contracts.py
       - name: Lint backend contract implementation
         run: |
@@ -70,7 +72,8 @@ jobs:
           python -m ruff check \
             services/email_writing_contracts.py \
             tests/test_email_writing_contracts.py \
-            tests/test_email_writing_contracts_coverage.py
+            tests/test_email_writing_contracts_coverage.py \
+            tests/test_email_writing_contracts_terminal_coverage.py
 
   frontend-contracts:
     runs-on: ubuntu-24.04
