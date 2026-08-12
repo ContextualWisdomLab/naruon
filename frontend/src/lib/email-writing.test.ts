@@ -124,7 +124,10 @@ describe('email writing transport parser', () => {
     const badRevision = validResponse() as {
       document_revision: { digest_hex: string };
     };
-    badRevision.document_revision.digest_hex = 'AB'.repeat(32);
+    badRevision.document_revision = {
+      ...badRevision.document_revision,
+      digest_hex: 'AB'.repeat(32),
+    };
     expect(() => parseEmailWritingReviewResponse(badRevision)).toThrow(
       EmailWritingContractError,
     );
