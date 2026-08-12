@@ -1,7 +1,6 @@
 import sys
 sys.path.append('backend')
-from services.text_safety import _is_tag_like_segment, _strip_tag_like_segments, _PlainTextHTMLParser
-import html
+from services.text_safety import _strip_tag_like_segments, _PlainTextHTMLParser
 
 parser = _PlainTextHTMLParser()
 parser.feed("<!--><script>alert(1)</script>-->")

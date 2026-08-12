@@ -1,6 +1,6 @@
 import sys
 sys.path.append('backend')
-from services.text_safety import strip_html_markup, _mask_angle_emails, _PlainTextHTMLParser, _strip_tag_like_segments, _normalize_plain_text
+from services.text_safety import _mask_angle_emails, _PlainTextHTMLParser, _strip_tag_like_segments
 
 payload = "<!--><script>alert(1)</script>-->"
 
