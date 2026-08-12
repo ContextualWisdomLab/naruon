@@ -54,7 +54,7 @@ def split_embedding_inputs(
     texts: list[str],
     model: str | None = None,
 ) -> tuple[list[str], list[tuple[int, int]], list[int]]:
-    """Split inputs by tokenizer tokens and return token weights per chunk."""
+    """Split inputs by tokenizer tokens without corrupting UTF-8 boundaries."""
     encoding = _embedding_encoding(model)
     flattened: list[str] = []
     ranges: list[tuple[int, int]] = []
@@ -67,10 +67,22 @@ def split_embedding_inputs(
         else:
             chunks = []
             weights = []
-            for start in range(0, len(tokens), EMBEDDING_INPUT_TOKEN_LIMIT):
-                token_slice = tokens[start : start + EMBEDDING_INPUT_TOKEN_LIMIT]
-                chunks.append(encoding.decode(token_slice))
-                weights.append(len(token_slice))
+            _, offsets = encoding.decode_with_offsets(tokens)
+            start = 0
+            while start < len(tokens):
+                end = min(start + EMBEDDING_INPUT_TOKEN_LIMIT, len(tokens))
+                if end < len(tokens):
+                    while end > start and offsets[end] == offsets[end - 1]:
+                        end -= 1
+                    if end == start:
+                        end = min(start + EMBEDDING_INPUT_TOKEN_LIMIT, len(tokens))
+                        while end < len(tokens) and offsets[end] == offsets[start]:
+                            end += 1
+                start_character = offsets[start]
+                end_character = len(text) if end == len(tokens) else offsets[end]
+                chunks.append(text[start_character:end_character])
+                weights.append(end - start)
+                start = end
         start = len(flattened)
         flattened.extend(chunks)
         token_weights.extend(weights)

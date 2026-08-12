@@ -570,16 +570,28 @@ def test_email_read_state_revision_uses_canonical_email_records_table():
     assert "_EMAIL_TABLE," in revision_text
 
 
-def test_published_read_state_revision_is_immutable():
-    revision_text = (
+def test_read_state_revision_targets_canonical_email_records_table(monkeypatch):
+    revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
-    ).read_text()
+    )
+    spec = importlib.util.spec_from_file_location("published_read_state", revision_path)
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+    calls = []
+    operations = SimpleNamespace(
+        add_column=lambda *args: calls.append(("add_column", args)),
+        drop_column=lambda *args: calls.append(("drop_column", args)),
+    )
+    monkeypatch.setattr(revision, "op", operations)
 
-    assert 'revision = "0011_email_read_state"' in revision_text
-    assert 'down_revision = "0009_project_graph_projection"' in revision_text
-    assert 'op.add_column(\n        "email_records"' in revision_text
-    assert '"emails"' not in revision_text
-    assert "email_read_state_ownership" not in revision_text
+    revision.upgrade()
+    revision.downgrade()
+
+    assert calls[0][0] == "add_column"
+    assert calls[0][1][0] == "email_records"
+    assert calls[0][1][1].name == "is_read"
+    assert calls[-1] == ("drop_column", ("email_records", "is_read"))
 
 
 def test_read_state_follow_up_revision_is_after_published_revision():
