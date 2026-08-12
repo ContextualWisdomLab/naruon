@@ -57,7 +57,10 @@ def test_alembic_environment_registers_review_evidence_metadata() -> None:
         encoding="utf-8"
     )
     assert "email_writing_evidence" in environment_source
-    assert "target_metadata = Base.metadata" in environment_source
+    assert (
+        "target_metadata = EmailReviewSession.__table__.metadata"
+        in environment_source
+    )
 
 
 def test_migration_revision_and_metadata_match_orm_contract() -> None:
