@@ -1,4 +1,4 @@
-"""Apply bounded CodeRabbit fixes for email-writing review evidence PR #1328."""
+"""Apply bounded backend review fixes for email-writing evidence PR #1328."""
 
 from __future__ import annotations
 
@@ -215,80 +215,11 @@ def update_migration_test_cleanup() -> None:
     replace_once(path, old, new, "migration-test engine cleanup")
 
 
-def update_evidence_workflow() -> None:
-    """Run both test invocations under safety settings and reject bad output."""
-    path = Path(".github/workflows/email-writing-evidence-tdd.yml")
-    old = '''      - name: Run privacy-minimized model and migration tests
-        run: |
-          cd backend
-          python -m pytest -q \\
-            tests/test_email_writing_models.py \\
-            tests/test_email_writing_migration.py
-      - name: Verify migration statement and branch coverage
-        run: |
-          cd backend
-          python -m coverage erase
-          python -m coverage run --branch \\
-            --include='alembic/versions/20260812_0001_add_email_writing_review_evidence.py' \\
-            -m pytest -q tests/test_email_writing_migration.py
-          python -m coverage report --show-missing --fail-under=100 \\
-            alembic/versions/20260812_0001_add_email_writing_review_evidence.py
-'''
-    new = '''      - name: Run privacy-minimized model and migration tests
-        env:
-          PYTHONWARNINGS: error
-          DISABLE_BACKGROUND_WORKERS: "1"
-        run: |
-          set -euo pipefail
-          cd backend
-          output_file="$(mktemp)"
-          trap 'rm -f "$output_file"' EXIT
-          set +e
-          python -m pytest -q \\
-            tests/test_email_writing_models.py \\
-            tests/test_email_writing_migration.py 2>&1 | tee "$output_file"
-          test_status=${PIPESTATUS[0]}
-          set -e
-          if grep -Eiq '(^|[^[:alnum:]_])(Timeout|Fatal|Warn|Denied)([^[:alnum:]_]|$)' "$output_file"; then
-            echo "::error::Backend tests emitted prohibited stability output."
-            exit 1
-          fi
-          exit "$test_status"
-      - name: Verify migration statement and branch coverage
-        env:
-          PYTHONWARNINGS: error
-          DISABLE_BACKGROUND_WORKERS: "1"
-        run: |
-          set -euo pipefail
-          cd backend
-          output_file="$(mktemp)"
-          trap 'rm -f "$output_file"' EXIT
-          python -m coverage erase
-          set +e
-          python -m coverage run --branch \\
-            --include='alembic/versions/20260812_0001_add_email_writing_review_evidence.py' \\
-            -m pytest -q tests/test_email_writing_migration.py 2>&1 | tee "$output_file"
-          test_status=${PIPESTATUS[0]}
-          set -e
-          if grep -Eiq '(^|[^[:alnum:]_])(Timeout|Fatal|Warn|Denied)([^[:alnum:]_]|$)' "$output_file"; then
-            echo "::error::Coverage tests emitted prohibited stability output."
-            exit 1
-          fi
-          if [[ "$test_status" -ne 0 ]]; then
-            exit "$test_status"
-          fi
-          python -m coverage report --show-missing --fail-under=100 \\
-            alembic/versions/20260812_0001_add_email_writing_review_evidence.py
-'''
-    replace_once(path, old, new, "evidence workflow safety settings")
-
-
 def main() -> None:
-    """Apply all currently valid review fixes in one bounded mutation."""
+    """Apply all currently valid backend review fixes in one bounded mutation."""
     update_evidence_serializer()
     update_model_tests()
     update_migration_test_cleanup()
-    update_evidence_workflow()
 
 
 if __name__ == "__main__":
