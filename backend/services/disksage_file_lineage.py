@@ -163,7 +163,9 @@ class CloudCopyLineage(_StrictModel):
 
 
 class FileLineageEnvelope(_StrictModel):
-    schema_version: Literal[1]
+    # DiskSage v2 adds attributed copy-approval evidence while retaining the
+    # v1 ontology envelope shape.
+    schema_version: Literal[1, 2]
     schema_kind: Literal["disksage.file-lineage"]
     source_kind: Literal["file"]
     archive_kind: ARCHIVE_KIND_VALUES

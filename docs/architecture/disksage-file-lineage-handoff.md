@@ -13,7 +13,7 @@ summary and cannot represent a general file's provenance or ontology edges.
 
 ## Decision
 
-Naruon accepts `disksage.file-lineage` version 1 through
+Naruon accepts `disksage.file-lineage` versions 1 and 2 through
 `POST /api/disksage/file-lineage`. The request boundary is strict and rejects
 unknown fields, unsafe relative paths, unverified copies, and
 `provider_write_executed=true` claims. The complete envelope is encrypted at

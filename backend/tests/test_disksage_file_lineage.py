@@ -103,6 +103,15 @@ def test_valid_envelope_keeps_graph_projection_deterministic():
     assert len(canonical_envelope_sha256(envelope)) == 64
 
 
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_accepts_disk_sage_v1_and_v2_envelopes(schema_version: int):
+    envelope = FileLineageEnvelope.model_validate(
+        _envelope(schema_version=schema_version)
+    )
+
+    assert envelope.schema_version == schema_version
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
