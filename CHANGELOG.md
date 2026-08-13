@@ -1,4 +1,5 @@
 ## [Unreleased]
+- 메일 상세 `일정 반영`이 CalDAV If-Match 412/`etag_conflict`를 성공으로 숨기지 않고, 확정 일정 충돌을 사용자에게 알리고 `calendar_reflected.conflict_state`에 기록합니다.
 - UUID V4 제너레이터(`uuid_v4_generator`) 도구를 추가하여 런타임에서 범용 고유 식별자 버전 4를 랜덤으로 생성할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
 ### 보안 패치 (CodeQL extended current-head)
 

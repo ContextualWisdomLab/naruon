@@ -900,6 +900,76 @@ describe("EmailDetail", () => {
     expect(getRecordedProductEvents().some((event) =>
       event.name === "calendar_reflected" &&
       event.payload.calendar_candidate_id === "mail-calendar:9" &&
+      event.payload.provider_write_executed === false &&
+      event.payload.conflict_state === "none",
+    )).toBe(true);
+  });
+
+  it("preserves a confirmed Friday booking when writeback returns If-Match 412", async () => {
+    const email: TestEmail = {
+      id: 19,
+      message_id: "<conflict-calendar@example.com>",
+      thread_id: null,
+      sender: "calendar@example.com",
+      recipients: "user@example.com",
+      subject: "Moved standup",
+      date: "2026-05-22T06:00:00Z",
+      body: "Standup is now Friday 15:00 in Room A.",
+    };
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/19")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({
+          summary: "스탠드업이 금요일 15시로 이동했습니다.",
+          action_items: ["금요일 15:00 스탠드업 반영"],
+        }));
+      }
+      if (url.endsWith("/api/calendar/writeback-intent")) {
+        expect(init?.method).toBe("POST");
+        return Promise.resolve(jsonResponse({
+          workspace_id: "default",
+          target_source_id: "caldav-primary",
+          protocol: "caldav",
+          writeback_mode: "customer_owned",
+          requires_if_match: true,
+          if_match: "etag-friday-1500-standup",
+          provider_status: 412,
+          error_code: "etag_conflict",
+          status: "if_match_conflict",
+          provenance: { source_provider: "Customer CalDAV" },
+          audit_event: "calendar.writeback_intent.conflict",
+        }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={19} />);
+    });
+    await waitForCondition(() =>
+      container?.textContent?.includes("스탠드업이 금요일 15시로 이동했습니다.") ?? false,
+    );
+
+    const syncButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      (button.textContent || button.getAttribute("aria-label") || "").includes("일정 반영"),
+    );
+    expect(syncButton).toBeTruthy();
+    await act(async () => {
+      syncButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("기존 확정 일정과 충돌이 있어 원본을 덮어쓰지 않았습니다.");
+    expect(getRecordedProductEvents().some((event) =>
+      event.name === "calendar_reflected" &&
+      event.payload.conflict_state === "conflict" &&
       event.payload.provider_write_executed === false,
     )).toBe(true);
   });
