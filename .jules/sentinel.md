@@ -133,3 +133,8 @@
 **Vulnerability:** OAuth2 string generation for IMAP/SMTP was vulnerable to delimiter injection by passing the `\x01` character in the user or token parameters.
 **Learning:** Attacker-controlled input inserted into protocols with specific delimiter characters can lead to parameter pollution or auth bypass.
 **Prevention:** Always validate or sanitize untrusted inputs specifically looking for protocol control characters like `\x01` in XOAUTH2 before encoding.
+
+## 2025-02-23 - CRLF Injection in Email Headers
+**Vulnerability:** The `in_reply_to` and `references` fields on the `SendEmailRequest` model lacked explicit validation, opening up an opportunity for header injection by appending `\r\n`.
+**Learning:** While the email service internally checks some headers, relying on the API boundary's Pydantic model ensures bad input is stopped early and consistently. Pydantic regex patterns aren't sufficient on their own for all string contexts due to encoding/decoding inconsistencies.
+**Prevention:** Always use `@field_validator` with explicit `mode="before"` string matching to reject `chr(10)` and `chr(13)` across all user-controlled email header fields. Use `isinstance(value, str)` before string operations to prevent runtime errors if input is missing or malformed.
