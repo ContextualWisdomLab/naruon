@@ -1,0 +1,41 @@
+name: Email Writing Orchestrator TDD
+
+on:
+  push:
+    branches:
+      - feat/llm-email-writing-orchestrator-task5
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: email-writing-orchestrator-tdd-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONWARNINGS: error
+  DISABLE_BACKGROUND_WORKERS: "1"
+
+jobs:
+  red-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+      - run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+      - name: Run Task 5 red contracts
+        run: |
+          cd backend
+          python -m pytest -q \
+            tests/test_contextual_orchestrator_client.py \
+            tests/test_email_writing_orchestrator_scope.py
