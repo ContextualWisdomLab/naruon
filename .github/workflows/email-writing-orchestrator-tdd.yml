@@ -19,7 +19,7 @@ env:
   DISABLE_BACKGROUND_WORKERS: "1"
 
 jobs:
-  red-contracts:
+  task5-contracts:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
