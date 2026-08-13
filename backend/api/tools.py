@@ -2,6 +2,7 @@ import base64
 import hashlib
 import inspect
 import json
+import datetime
 import logging
 import re
 import unicodedata
@@ -854,6 +855,197 @@ registry.register(
         parameters={},
     ),
     uuid_v4_generator_handler,
+)
+
+
+async def current_time_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return {"current_time": now.isoformat()}
+
+
+registry.register(
+    ToolInfo(
+        code="current_time_generator",
+        name="현재 시간 생성기 (Current Time Generator)",
+        description="현재 날짜와 시간을 ISO 8601 형식으로 반환합니다.",
+        category="유틸리티",
+        parameters={},
+    ),
+    current_time_generator_handler,
+)
+
+
+async def date_difference_calculator_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        start_date = datetime.datetime.fromisoformat(
+            params.get("start_date", "").replace("Z", "+00:00")
+        )
+        end_date = datetime.datetime.fromisoformat(
+            params.get("end_date", "").replace("Z", "+00:00")
+        )
+    except ValueError:
+        raise ValueError("Invalid date format. Use ISO 8601 format.")
+
+    diff = end_date - start_date
+    return {"difference_days": diff.days, "difference_seconds": diff.total_seconds()}
+
+
+registry.register(
+    ToolInfo(
+        code="date_difference_calculator",
+        name="날짜 차이 계산기 (Date Difference Calculator)",
+        description="두 날짜 사이의 차이를 일수와 초 단위로 계산합니다.",
+        category="유틸리티",
+        parameters={"start_date": "string", "end_date": "string"},
+    ),
+    date_difference_calculator_handler,
+)
+
+
+async def text_length_calculator_handler(params: Dict[str, Any]) -> Dict[str, int]:
+    return {"length": len(params.get("text", ""))}
+
+
+registry.register(
+    ToolInfo(
+        code="text_length_calculator",
+        name="텍스트 길이 계산기 (Text Length Calculator)",
+        description="주어진 텍스트의 길이를 계산합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    text_length_calculator_handler,
+)
+
+
+async def string_case_converter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    target_case = params.get("target_case", "lower")
+    if target_case == "upper":
+        result = text.upper()
+    elif target_case == "title":
+        result = text.title()
+    else:
+        result = text.lower()
+    return {"converted_text": result}
+
+
+registry.register(
+    ToolInfo(
+        code="string_case_converter",
+        name="문자열 대소문자 변환기 (String Case Converter)",
+        description="문자열을 지정된 대소문자(upper, lower, title) 형식으로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "target_case": "string"},
+    ),
+    string_case_converter_handler,
+)
+
+
+async def word_count_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
+    text = params.get("text", "")
+    words = [w for w in text.split() if w]
+    return {"word_count": len(words)}
+
+
+registry.register(
+    ToolInfo(
+        code="word_count_analyzer",
+        name="단어 수 분석기 (Word Count Analyzer)",
+        description="제공된 텍스트의 단어 수를 계산합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    word_count_analyzer_handler,
+)
+
+
+async def md5_hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {
+        "hash": hashlib.md5(text.encode("utf-8"), usedforsecurity=False).hexdigest()
+    }  # nosemgrep
+
+
+registry.register(
+    ToolInfo(
+        code="md5_hash_generator",
+        name="MD5 해시 생성기 (MD5 Hash Generator)",
+        description="제공된 텍스트의 MD5 해시를 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    md5_hash_generator_handler,
+)
+
+
+async def sha1_hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {
+        "hash": hashlib.sha1(text.encode("utf-8"), usedforsecurity=False).hexdigest()
+    }  # nosemgrep
+
+
+registry.register(
+    ToolInfo(
+        code="sha1_hash_generator",
+        name="SHA1 해시 생성기 (SHA1 Hash Generator)",
+        description="제공된 텍스트의 SHA1 해시를 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    sha1_hash_generator_handler,
+)
+
+
+async def sha256_hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"hash": hashlib.sha256(text.encode("utf-8")).hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="sha256_hash_generator",
+        name="SHA256 해시 생성기 (SHA256 Hash Generator)",
+        description="제공된 텍스트의 SHA256 해시를 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    sha256_hash_generator_handler,
+)
+
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"encoded_text": urllib.parse.quote(text, safe='')}
+
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="주어진 텍스트를 URL 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("encoded_text", "")
+    return {"decoded_text": urllib.parse.unquote(text)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="주어진 텍스트를 URL 디코딩합니다.",
+        category="유틸리티",
+        parameters={"encoded_text": "string"},
+    ),
+    url_decoder_handler,
 )
 
 

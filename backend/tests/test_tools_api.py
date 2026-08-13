@@ -573,6 +573,187 @@ async def test_base64_decoder_tool_invalid_input():
     assert "Invalid Base64 string" in data["message"]
 
 
+@pytest.mark.asyncio
+async def test_current_time_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/current_time_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "current_time" in data["result"]
+    assert (
+        "Z" in data["result"]["current_time"]
+        or "+00:00" in data["result"]["current_time"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_date_difference_calculator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/date_difference_calculator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "start_date": "2023-10-01T12:00:00Z",
+                    "end_date": "2023-10-02T12:00:00Z",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["difference_days"] == 1
+    assert data["result"]["difference_seconds"] == 86400
+
+
+@pytest.mark.asyncio
+async def test_date_difference_calculator_invalid_format():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/date_difference_calculator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "start_date": "invalid",
+                    "end_date": "2023-10-02T12:00:00Z",
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Invalid date format" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_text_length_calculator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/text_length_calculator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["length"] == 5
+
+
+@pytest.mark.asyncio
+async def test_string_case_converter_tool_success():
+    with TestClient(app) as client:
+        response_lower = client.post(
+            "/api/tools/string_case_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "HeLlo", "target_case": "lower"}},
+        )
+        response_upper = client.post(
+            "/api/tools/string_case_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "HeLlo", "target_case": "upper"}},
+        )
+        response_title = client.post(
+            "/api/tools/string_case_converter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world", "target_case": "title"}},
+        )
+    assert response_lower.json()["result"]["converted_text"] == "hello"
+    assert response_upper.json()["result"]["converted_text"] == "HELLO"
+    assert response_title.json()["result"]["converted_text"] == "Hello World"
+
+
+@pytest.mark.asyncio
+async def test_word_count_analyzer_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/word_count_analyzer/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world  from python "}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["word_count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_md5_hash_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/md5_hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "test"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["hash"] == "098f6bcd4621d373cade4e832627b4f6"
+
+
+@pytest.mark.asyncio
+async def test_sha1_hash_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sha1_hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "test"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["hash"] == "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"
+
+
+@pytest.mark.asyncio
+async def test_sha256_hash_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/sha256_hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "test"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert (
+        data["result"]["hash"]
+        == "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    )
+
+
+@pytest.mark.asyncio
+async def test_url_encoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world/test"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["encoded_text"] == "hello%20world%2Ftest"
+
+
+@pytest.mark.asyncio
+async def test_url_decoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"encoded_text": "hello%20world%2Ftest"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["decoded_text"] == "hello world/test"
+
+
 def test_create_tool_success():
     try:
         with TestClient(app) as client:

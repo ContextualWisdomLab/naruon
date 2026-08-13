@@ -1,4 +1,13 @@
 ## [Unreleased]
+
+### 추가 (Added)
+
+* **백엔드 기능 추가**: `backend/api/tools.py`에 여러 유용한 유틸리티 도구를 기획하고 추가했습니다.
+  * 날짜/시간 도구: `현재 시간 생성기 (Current Time Generator)`, `날짜 차이 계산기 (Date Difference Calculator)`
+  * 텍스트 도구: `텍스트 길이 계산기 (Text Length Calculator)`, `문자열 대소문자 변환기 (String Case Converter)`, `단어 수 분석기 (Word Count Analyzer)`
+  * 해시/인코딩 도구: `MD5 해시 생성기`, `SHA1 해시 생성기`, `SHA256 해시 생성기`, `URL 인코더`, `URL 디코더`
+* **백엔드 테스트 추가**: 추가된 10개의 도구에 대해 `backend/tests/test_tools_api.py`에 성공 및 실패 사례를 포함하는 100% 커버리지 테스트를 작성했습니다.
+
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 - UUID V4 제너레이터(`uuid_v4_generator`) 도구를 추가하여 런타임에서 범용 고유 식별자 버전 4를 랜덤으로 생성할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
 ### 보안 패치 (CodeQL extended current-head)
