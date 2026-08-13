@@ -440,3 +440,33 @@ async def test_port_exposes_async_candidate_sync_judge_shape_and_bounded_lane() 
     await port.aclose()
     with pytest.raises(RuntimeError, match="judge_lane_closed"):
         await port.run_judge(judge, "closed")
+
+
+
+@pytest.mark.asyncio
+async def test_cancelled_judge_retains_capacity_until_worker_settles() -> None:
+    """Cancellation does not return while its submitted worker still runs."""
+
+    class _PortClient:
+        async def aclose(self) -> None:
+            return None
+
+    port = EmailWritingOrchestratorPort(_PortClient(), judge_capacity=1)
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking_judge() -> str:
+        started.set()
+        release.wait(timeout=2.0)
+        return "settled"
+
+    task = asyncio.create_task(port.run_judge(blocking_judge))
+    assert await asyncio.to_thread(started.wait, 1.0)
+    task.cancel()
+    await asyncio.sleep(0.02)
+    returned_before_worker_settled = task.done()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await port.aclose()
+    assert returned_before_worker_settled is False
