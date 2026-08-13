@@ -1,5 +1,4 @@
 ## [Unreleased]
-- EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 - UUID V4 제너레이터(`uuid_v4_generator`) 도구를 추가하여 런타임에서 범용 고유 식별자 버전 4를 랜덤으로 생성할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
 ### 보안 패치 (CodeQL extended current-head)
 

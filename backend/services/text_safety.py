@@ -442,6 +442,9 @@ class _PlainTextHTMLParser(HTMLParser):
         if self._raw_text_depth == 0:
             self._parts.append(_strip_tag_like_segments(data))
 
+    def handle_comment(self, data: str) -> None:
+        pass
+
     def get_text(self) -> str:
         return _normalize_plain_text("".join(self._parts))
 
