@@ -26,8 +26,11 @@ incomplete provider proof and never authorizes source eviction.
 The payload keeps explicit file → archive destination → provider/account and
 review relations. These relation edges follow the same entity/provenance
 separation as PROV-O; DiskSage's local ontology remains the domain vocabulary.
-Semantic-data-portal and pg-erd-cloud are deferred until a shared catalog/ERD
-boundary is actually needed; this table is the durable Naruon boundary first.
+The path-free semantic catalog candidate batch is the handoff to
+semantic-data-portal. The durable table has an explicit DBML projection at
+`docs/architecture/erd/disksage-file-lineage.dbml`; pg-erd-cloud can convert it
+to the same snapshot shape as a live database without granting it mutation
+authority. The Alembic model remains the runtime source of truth.
 
 ## Consequences
 
