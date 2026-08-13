@@ -119,17 +119,19 @@ def _feedback_event(**overrides: object) -> DiagnosticFeedbackEvent:
 @pytest.fixture
 def evidence_session() -> Session:
     engine = create_engine("sqlite:///:memory:")
-    with engine.begin() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
-        connection.exec_driver_sql(
-            "CREATE TABLE email_records (id INTEGER PRIMARY KEY)"
-        )
-        connection.exec_driver_sql("INSERT INTO email_records (id) VALUES (1)")
-        for model_type in NEW_MODEL_TYPES:
-            model_type.__table__.create(connection)
-    with Session(engine) as session:
-        yield session
-    engine.dispose()
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys = ON")
+            connection.exec_driver_sql(
+                "CREATE TABLE email_records (id INTEGER PRIMARY KEY)"
+            )
+            connection.exec_driver_sql("INSERT INTO email_records (id) VALUES (1)")
+            for model_type in NEW_MODEL_TYPES:
+                model_type.__table__.create(connection)
+        with Session(engine) as session:
+            yield session
+    finally:
+        engine.dispose()
 
 
 def test_new_database_objects_use_named_two_word_snake_case() -> None:
@@ -208,7 +210,9 @@ def test_review_evidence_round_trip_and_safe_serialization(
         assert forbidden_value not in rendered_log
     assert "review_session_id" in serialized
     assert "prompt_hash" in serialized
-    assert "source_email_id" in serialized
+    assert '"source_email_id"' not in serialized
+    assert '"owner_user_id"' not in serialized
+    assert '"owner_organization_id"' not in serialized
     assert "candidate_hash" in serialized
     assert "feedback_action" in serialized
 
