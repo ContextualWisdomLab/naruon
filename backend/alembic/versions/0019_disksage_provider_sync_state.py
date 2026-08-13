@@ -1,6 +1,6 @@
 """persist provider-native sync state for DiskSage lineage envelopes
 
-Revision ID: 0019_disksage_provider_sync_state
+Revision ID: 0019_disksage_sync_state
 Revises: 0018_disksage_file_lineage
 Create Date: 2026-08-13 00:00:00.000000
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0019_disksage_provider_sync_state"
+revision = "0019_disksage_sync_state"
 down_revision = "0018_disksage_file_lineage"
 branch_labels = None
 depends_on = None

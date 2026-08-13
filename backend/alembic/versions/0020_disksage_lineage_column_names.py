@@ -1,7 +1,7 @@
 """rename ambiguous DiskSage lineage column names
 
-Revision ID: 0020_disksage_lineage_column_names
-Revises: 0019_disksage_provider_sync_state
+Revision ID: 0020_disksage_columns
+Revises: 0019_disksage_sync_state
 Create Date: 2026-08-13 00:00:00.000000
 """
 
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0020_disksage_lineage_column_names"
-down_revision = "0019_disksage_provider_sync_state"
+revision = "0020_disksage_columns"
+down_revision = "0019_disksage_sync_state"
 branch_labels = None
 depends_on = None
 

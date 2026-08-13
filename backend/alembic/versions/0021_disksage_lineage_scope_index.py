@@ -4,8 +4,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0021_disksage_lineage_scope_index"
-down_revision = "0020_disksage_lineage_column_names"
+revision = "0021_disksage_scope_idx"
+down_revision = "0020_disksage_columns"
 branch_labels = None
 depends_on = None
 
