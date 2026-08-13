@@ -32,8 +32,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if inspector.has_table(_TABLE):
-        _rename_if_present(inspector, "content_bytes", "bytes")
-        inspector = sa.inspect(op.get_bind())
-        _rename_if_present(inspector, "provider_name", "provider")
+    # This revision repairs legacy installations that still have the old
+    # single-word names.  Revision 0019 and the canonical 0018 schema both
+    # use content_bytes/provider_name, so a downgrade must not reintroduce
+    # the legacy shape or leave the model and migration chain inconsistent.
+    pass

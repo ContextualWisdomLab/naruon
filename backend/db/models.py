@@ -1121,7 +1121,6 @@ class DiskSageFileLineageRecord(Base):
         Index(
             "ix_disksage_lineage_scope_time",
             "user_id",
-            "organization_id",
             "workspace_id",
             "created_at",
         ),

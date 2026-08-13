@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Literal
+from pathlib import PureWindowsPath
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -158,15 +159,33 @@ class CloudCopyLineage(_StrictModel):
             self.sync_confirmed_at_ms,
         )
         if self.provider_sync_confirmed and any(
-            value is None for value in evidence_fields
+            value is None
+            or (isinstance(value, str) and not value.strip())
+            for value in evidence_fields
         ):
             raise ValueError("confirmed sync is missing provider evidence")
         if self.provider_sync_state not in (None, "unknown") and (
             self.provider_sync_confirmed != (self.provider_sync_state == "complete")
         ):
             raise ValueError("provider sync state does not match confirmation")
-        if self.remote_location_bound is True and not self.remote_object_id:
+        if self.remote_location_bound is True and (
+            self.remote_object_id is None or not self.remote_object_id.strip()
+        ):
             raise ValueError("remote location binding is missing its object id")
+        approval_fields = (
+            self.copy_approval_id,
+            self.copy_approval_action,
+            self.copy_approved_at_ms,
+            self.copy_approved_by,
+            self.copy_approval_rationale,
+        )
+        approval_present = [value is not None for value in approval_fields]
+        if any(approval_present) and not all(approval_present):
+            raise ValueError("copy approval evidence must be complete or absent")
+        if any(approval_present) and (
+            not self.copy_approved_by.strip() or not self.copy_approval_rationale.strip()
+        ):
+            raise ValueError("copy approval attribution is missing")
         return self
 
 
@@ -197,7 +216,9 @@ class FileLineageEnvelope(_StrictModel):
 
     @model_validator(mode="after")
     def validate_path_and_relations(self) -> FileLineageEnvelope:
-        relative = self.source_relative_path.replace("\\", "/")
+        relative = self.source_relative_path
+        if "\\" in relative or PureWindowsPath(relative).drive:
+            raise ValueError("source relative path is not normalized")
         parts = relative.split("/")
         if relative.startswith("/") or any(part in {"", ".", ".."} for part in parts):
             raise ValueError("source relative path is not a normalized relative path")
@@ -205,6 +226,15 @@ class FileLineageEnvelope(_StrictModel):
             raise ValueError("source filename does not match source relative path")
         if any(ord(character) < 32 for character in relative):
             raise ValueError("source relative path contains a control character")
+        approval_fields = (
+            self.cloud_copy.copy_approval_id,
+            self.cloud_copy.copy_approval_action,
+            self.cloud_copy.copy_approved_at_ms,
+            self.cloud_copy.copy_approved_by,
+            self.cloud_copy.copy_approval_rationale,
+        )
+        if self.schema_version == 1 and any(value is not None for value in approval_fields):
+            raise ValueError("schema version 1 cannot carry copy approval evidence")
         return self
 
 

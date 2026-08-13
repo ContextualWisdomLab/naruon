@@ -71,31 +71,31 @@ async def ingest_file_lineage(
             )
         return _summary(existing)
 
-    record = DiskSageFileLineageRecord(
-        lineage_record_uid=f"disksage_lineage_{uuid.uuid4().hex}",
-        user_id=auth_context.user_id,
-        organization_id=auth_context.organization_id,
-        workspace_id=auth_context.workspace_id,
-        lineage_fingerprint=lineage_fingerprint,
-        envelope_sha256=envelope_sha256,
-        schema_version=envelope.schema_version,
-        schema_kind=envelope.schema_kind,
-        source_kind=envelope.source_kind,
-        archive_kind=envelope.archive_kind,
-        raw_content_sha256=envelope.raw_content_sha256,
-        raw_content_blake3=envelope.raw_content_blake3,
-        content_bytes=envelope.bytes,
-        ontology_class=envelope.ontology_class,
-        ontology_relation_count=len(envelope.ontology_relations),
-        ontology_predicates=ontology_predicates(envelope),
-        provider_name=envelope.cloud_copy.provider,
-        provider_sync_confirmed=envelope.cloud_copy.provider_sync_confirmed,
-        provider_sync_state=envelope.cloud_copy.provider_sync_state or "unknown",
-        envelope_json_encrypted=_encrypted_envelope_json(envelope),
-        created_at=datetime.datetime.now(datetime.timezone.utc),
-    )
-    db.add(record)
     try:
+        record = DiskSageFileLineageRecord(
+            lineage_record_uid=f"disksage_lineage_{uuid.uuid4().hex}",
+            user_id=auth_context.user_id,
+            organization_id=auth_context.organization_id,
+            workspace_id=auth_context.workspace_id,
+            lineage_fingerprint=lineage_fingerprint,
+            envelope_sha256=envelope_sha256,
+            schema_version=envelope.schema_version,
+            schema_kind=envelope.schema_kind,
+            source_kind=envelope.source_kind,
+            archive_kind=envelope.archive_kind,
+            raw_content_sha256=envelope.raw_content_sha256,
+            raw_content_blake3=envelope.raw_content_blake3,
+            content_bytes=envelope.bytes,
+            ontology_class=envelope.ontology_class,
+            ontology_relation_count=len(envelope.ontology_relations),
+            ontology_predicates=ontology_predicates(envelope),
+            provider_name=envelope.cloud_copy.provider,
+            provider_sync_confirmed=envelope.cloud_copy.provider_sync_confirmed,
+            provider_sync_state=envelope.cloud_copy.provider_sync_state or "unknown",
+            envelope_json_encrypted=_encrypted_envelope_json(envelope),
+            created_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        db.add(record)
         await db.commit()
         await db.refresh(record)
     except IntegrityError:

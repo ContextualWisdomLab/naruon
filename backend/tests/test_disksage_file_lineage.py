@@ -138,6 +138,8 @@ def test_v2_preserves_attributed_copy_approval_fields():
     [
         ("source_relative_path", "/absolute/path.mov"),
         ("source_relative_path", "../escape.mov"),
+        ("source_relative_path", "DaVinci\\Video 1.mov"),
+        ("source_relative_path", "C:/Video 1.mov"),
         ("source_filename", "different.mov"),
     ],
 )
@@ -184,6 +186,54 @@ def test_complete_provider_sync_state_requires_confirmation():
     payload["cloud_copy"] = {
         **payload["cloud_copy"],  # type: ignore[arg-type]
         "provider_sync_state": "complete",
+    }
+    with pytest.raises(ValidationError):
+        FileLineageEnvelope.model_validate(payload)
+
+
+def test_copy_approval_evidence_is_all_or_none_and_versioned():
+    partial = _envelope()
+    partial["cloud_copy"] = {
+        **partial["cloud_copy"],  # type: ignore[arg-type]
+        "copy_approval_id": "1" * 64,
+    }
+    with pytest.raises(ValidationError):
+        FileLineageEnvelope.model_validate(partial)
+
+    v1_complete = _envelope(
+        cloud_copy={
+            **_envelope()["cloud_copy"],  # type: ignore[arg-type]
+            "copy_approval_id": "1" * 64,
+            "copy_approval_action": "copy-only",
+            "copy_approved_at_ms": 6,
+            "copy_approved_by": "human:local:test",
+            "copy_approval_rationale": "approved",
+        }
+    )
+    with pytest.raises(ValidationError):
+        FileLineageEnvelope.model_validate(v1_complete)
+
+
+def test_confirmed_provider_evidence_rejects_blank_identifiers():
+    payload = _envelope()
+    payload["cloud_copy"] = {
+        **payload["cloud_copy"],  # type: ignore[arg-type]
+        "provider_sync_confirmed": True,
+        "sync_evidence_record_id": " " * 2,
+        "sync_evidence_kind": "provider-native-status",
+        "sync_evidence_id": "evidence-id",
+        "sync_confirmed_at_ms": 7,
+    }
+    with pytest.raises(ValidationError):
+        FileLineageEnvelope.model_validate(payload)
+
+
+def test_location_bound_remote_proof_rejects_blank_object_id():
+    payload = _envelope()
+    payload["cloud_copy"] = {
+        **payload["cloud_copy"],  # type: ignore[arg-type]
+        "remote_location_bound": True,
+        "remote_object_id": " ",
     }
     with pytest.raises(ValidationError):
         FileLineageEnvelope.model_validate(payload)
