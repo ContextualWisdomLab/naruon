@@ -6,7 +6,6 @@ import logging
 import re
 import unicodedata
 import urllib.parse
-import uuid
 from collections import Counter
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional
@@ -910,22 +909,6 @@ registry.register(
         parameters={"discussion_context": "string"},
     ),
     meeting_agenda_generator_handler,
-)
-
-
-async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    return {"uuid": str(uuid.uuid4())}
-
-
-registry.register(
-    ToolInfo(
-        code="uuid_v4_generator",
-        name="UUID V4 생성기 (UUID v4 Generator)",
-        description="범용 고유 식별자(UUID) 버전 4를 무작위로 생성합니다.",
-        category="유틸리티",
-        parameters={},
-    ),
-    uuid_v4_generator_handler,
 )
 
 

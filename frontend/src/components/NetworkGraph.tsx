@@ -132,15 +132,9 @@ function findNodeLabel(nodes: Node[], id: number | string) {
   return String(node?.label ?? id);
 }
 
-function describeEdge(edge: Edge, nodes: Node[], nodeMap?: Map<string | number, string>) {
-  let fromLabel, toLabel;
-  if (nodeMap) {
-    fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
-    toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
-  } else {
-    fromLabel = findNodeLabel(nodes, edge.from);
-    toLabel = findNodeLabel(nodes, edge.to);
-  }
+function describeEdge(edge: Edge, nodes: Node[]) {
+  const fromLabel = findNodeLabel(nodes, edge.from);
+  const toLabel = findNodeLabel(nodes, edge.to);
   const title = titleText(edge.title);
   return title ? `${fromLabel} -> ${toLabel} (${title})` : `${fromLabel} -> ${toLabel}`;
 }
@@ -159,16 +153,6 @@ export default function NetworkGraph() {
   const [graphActionStatus, setGraphActionStatus] = useState('그래프 준비 완료');
   const [relationshipOptionId, setRelationshipOptionId] = useState('');
   const [nodeOptionId, setNodeOptionId] = useState('');
-  const nodeMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const node of nodes) {
-      const key = String(node.id);
-      if (!map.has(key)) {
-        map.set(key, String(node.label ?? node.id));
-      }
-    }
-    return map;
-  }, [nodes]);
 
   useEffect(() => {
     apiClient.get<NetworkData>('/api/network/graph')
@@ -206,7 +190,7 @@ export default function NetworkGraph() {
         if (!edge) return;
         setRelationshipOptionId(String(edge.id));
         setNodeOptionId('');
-        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes, nodeMap)}`);
+        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes)}`);
         setGraphActionStatus('그래프에서 관계를 선택했습니다.');
       };
 
@@ -262,7 +246,7 @@ export default function NetworkGraph() {
         network.destroy();
       };
     }
-  }, [nodes, edges, nodeMap]);
+  }, [nodes, edges]);
 
   const nodeLabels = useMemo(() => {
     return nodes
@@ -276,9 +260,9 @@ export default function NetworkGraph() {
     return edges.slice(0, 5).map((edge, index) => ({
       edge,
       id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodes, nodeMap)}`,
+      label: `관계 ${index + 1}: ${describeEdge(edge, nodes)}`,
     }));
-  }, [edges, nodes, nodeMap]);
+  }, [edges, nodes]);
 
   const nodeOptions = useMemo(() => {
     return nodes.slice(0, 8).map((node) => ({
@@ -291,7 +275,7 @@ export default function NetworkGraph() {
   const selectRelationship = (edge: Edge, status: string) => {
     setRelationshipOptionId(String(edge.id));
     setNodeOptionId('');
-    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes, nodeMap)}`);
+    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes)}`);
     setGraphActionStatus(status);
     if (isGraphId(edge.id)) {
       networkRef.current?.selectEdges?.([edge.id]);
