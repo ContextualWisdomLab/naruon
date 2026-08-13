@@ -18,10 +18,12 @@ Naruon accepts `disksage.file-lineage` versions 1 and 2 through
 unknown fields, unsafe relative paths, unverified copies, and
 `provider_write_executed=true` claims. The complete envelope is encrypted at
 rest and scoped by authenticated user/workspace. `GET /api/disksage/file-lineage`
-returns only hashes, byte count, ontology class, predicate projection, provider,
-the provider-native sync state, and sync status; it does not expose local paths
-or raw metadata values. A state such as `pending-upload` is retained as an
-incomplete provider proof and never authorizes source eviction.
+returns only `lineage_record_uid`, `lineage_fingerprint`, `schema_version`,
+`source_kind`, `archive_kind`, content hashes, `content_bytes`, ontology class,
+predicate projection, `provider_name`, provider-native sync state, sync status,
+and `created_at`; it does not expose local paths or raw metadata values. A state
+such as `pending-upload` is retained as an incomplete provider proof and never
+authorizes source eviction.
 
 The payload keeps explicit file → archive destination → provider/account and
 review relations. These relation edges follow the same entity/provenance

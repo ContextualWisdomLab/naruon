@@ -1,10 +1,10 @@
 import datetime
-import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from api.auth import AuthContext, get_auth_context
 from db.models import DiskSageFileLineageRecord
@@ -12,9 +12,11 @@ from db.session import get_db
 from services.disksage_file_lineage import (
     FileLineageEnvelope,
     FileLineageSummary,
+    canonical_envelope_json,
     canonical_envelope_sha256,
     ontology_predicates,
 )
+from core.runtime_secrets import EncryptionKeyMissingError
 
 router = APIRouter(prefix="/api/disksage", tags=["disksage"])
 
@@ -28,11 +30,11 @@ def _summary(record: DiskSageFileLineageRecord) -> FileLineageSummary:
         archive_kind=record.archive_kind,
         raw_content_sha256=record.raw_content_sha256,
         raw_content_blake3=record.raw_content_blake3,
-        bytes=record.bytes,
+        content_bytes=record.content_bytes,
         ontology_class=record.ontology_class,
         ontology_relation_count=record.ontology_relation_count,
         ontology_predicates=list(record.ontology_predicates or []),
-        provider=record.provider,
+        provider_name=record.provider_name,
         provider_sync_confirmed=record.provider_sync_confirmed,
         provider_sync_state=record.provider_sync_state,
         created_at=record.created_at.isoformat(),
@@ -40,12 +42,7 @@ def _summary(record: DiskSageFileLineageRecord) -> FileLineageSummary:
 
 
 def _encrypted_envelope_json(envelope: FileLineageEnvelope) -> str:
-    return json.dumps(
-        envelope.model_dump(mode="json"),
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+    return canonical_envelope_json(envelope)
 
 
 @router.post("/file-lineage", response_model=FileLineageSummary, status_code=201)
@@ -87,11 +84,11 @@ async def ingest_file_lineage(
         archive_kind=envelope.archive_kind,
         raw_content_sha256=envelope.raw_content_sha256,
         raw_content_blake3=envelope.raw_content_blake3,
-        bytes=envelope.bytes,
+        content_bytes=envelope.bytes,
         ontology_class=envelope.ontology_class,
         ontology_relation_count=len(envelope.ontology_relations),
         ontology_predicates=ontology_predicates(envelope),
-        provider=envelope.cloud_copy.provider,
+        provider_name=envelope.cloud_copy.provider,
         provider_sync_confirmed=envelope.cloud_copy.provider_sync_confirmed,
         provider_sync_state=envelope.cloud_copy.provider_sync_state or "unknown",
         envelope_json_encrypted=_encrypted_envelope_json(envelope),
@@ -101,9 +98,26 @@ async def ingest_file_lineage(
     try:
         await db.commit()
         await db.refresh(record)
-    except RuntimeError as error:
-        if "ENCRYPTION_KEY is required" not in str(error):
+    except IntegrityError:
+        await db.rollback()
+        replayed_result = await db.execute(
+            select(DiskSageFileLineageRecord).where(
+                DiskSageFileLineageRecord.user_id == auth_context.user_id,
+                DiskSageFileLineageRecord.workspace_id == auth_context.workspace_id,
+                DiskSageFileLineageRecord.lineage_fingerprint == lineage_fingerprint,
+            )
+        )
+        replayed = replayed_result.scalar_one_or_none()
+        if replayed is None:
             raise
+        if replayed.envelope_sha256 != envelope_sha256:
+            raise HTTPException(
+                status_code=409,
+                detail="lineage fingerprint is already bound to different evidence",
+            ) from None
+        return _summary(replayed)
+    except EncryptionKeyMissingError as error:
+        await db.rollback()
         raise HTTPException(
             status_code=503,
             detail="Server encryption key is not configured. Contact your workspace administrator.",

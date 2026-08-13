@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from services.disksage_file_lineage import (
     FileLineageEnvelope,
+    canonical_envelope_json,
     canonical_envelope_sha256,
     ontology_predicates,
 )
@@ -101,6 +102,7 @@ def test_valid_envelope_keeps_graph_projection_deterministic():
     assert len(envelope.ontology_relations) == 2
     assert ontology_predicates(envelope) == ["https://disksage.app/ontology#archivedTo"]
     assert len(canonical_envelope_sha256(envelope)) == 64
+    assert canonical_envelope_json(envelope).encode("utf-8")
 
 
 @pytest.mark.parametrize("schema_version", [1, 2])
@@ -165,6 +167,26 @@ def test_provider_sync_state_preserves_pending_upload_without_eviction_claim():
 
     assert envelope.cloud_copy.provider_sync_state == "pending-upload"
     assert envelope.cloud_copy.provider_sync_confirmed is False
+
+
+def test_provider_sync_confirmation_requires_evidence():
+    payload = _envelope()
+    payload["cloud_copy"] = {
+        **payload["cloud_copy"],  # type: ignore[arg-type]
+        "provider_sync_confirmed": True,
+    }
+    with pytest.raises(ValidationError):
+        FileLineageEnvelope.model_validate(payload)
+
+
+def test_complete_provider_sync_state_requires_confirmation():
+    payload = _envelope()
+    payload["cloud_copy"] = {
+        **payload["cloud_copy"],  # type: ignore[arg-type]
+        "provider_sync_state": "complete",
+    }
+    with pytest.raises(ValidationError):
+        FileLineageEnvelope.model_validate(payload)
 
 
 def test_unknown_fields_are_rejected_at_the_handoff_boundary():

@@ -39,11 +39,11 @@ def upgrade() -> None:
             sa.Column("archive_kind", sa.String(length=64), nullable=False),
             sa.Column("raw_content_sha256", sa.String(length=64), nullable=False),
             sa.Column("raw_content_blake3", sa.String(length=64), nullable=False),
-            sa.Column("bytes", sa.BigInteger(), nullable=False),
+            sa.Column("content_bytes", sa.BigInteger(), nullable=False),
             sa.Column("ontology_class", sa.String(length=256), nullable=False),
             sa.Column("ontology_relation_count", sa.Integer(), nullable=False),
             sa.Column("ontology_predicates", sa.JSON(), nullable=False),
-            sa.Column("provider", sa.String(length=32), nullable=False),
+            sa.Column("provider_name", sa.String(length=32), nullable=False),
             sa.Column("provider_sync_confirmed", sa.Boolean(), nullable=False),
             sa.Column(
                 "provider_sync_state",

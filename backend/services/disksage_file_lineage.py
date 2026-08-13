@@ -216,26 +216,31 @@ class FileLineageSummary(_StrictModel):
     archive_kind: str
     raw_content_sha256: str
     raw_content_blake3: str
-    bytes: int
+    content_bytes: int
     ontology_class: str
     ontology_relation_count: int
     ontology_predicates: list[str]
-    provider: PROVIDER_VALUES
+    provider_name: PROVIDER_VALUES
     provider_sync_confirmed: bool
     provider_sync_state: PROVIDER_SYNC_STATE_VALUES
     created_at: str
 
 
-def canonical_envelope_sha256(envelope: FileLineageEnvelope) -> str:
-    """Hash the exact validated JSON payload for idempotent, tamper-evident ingest."""
+def canonical_envelope_json(envelope: FileLineageEnvelope) -> str:
+    """Serialize the validated envelope deterministically for hashing and storage."""
 
-    encoded = json.dumps(
+    return json.dumps(
         envelope.model_dump(mode="json"),
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    )
+
+
+def canonical_envelope_sha256(envelope: FileLineageEnvelope) -> str:
+    """Hash the exact validated JSON payload for idempotent, tamper-evident ingest."""
+
+    return hashlib.sha256(canonical_envelope_json(envelope).encode("utf-8")).hexdigest()
 
 
 def ontology_predicates(envelope: FileLineageEnvelope) -> list[str]:

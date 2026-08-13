@@ -24,7 +24,11 @@ from sqlalchemy.orm import declarative_base, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
 from core.config import settings
-from core.runtime_secrets import EncryptionKeyRing, build_encryption_keyring
+from core.runtime_secrets import (
+    EncryptionKeyMissingError,
+    EncryptionKeyRing,
+    build_encryption_keyring,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +38,7 @@ FERNET_VALUE_PREFIX = "fernet:v1:"
 
 def _validated_fernet_key() -> bytes:
     if settings.ENCRYPTION_KEY is None:
-        raise RuntimeError(
+        raise EncryptionKeyMissingError(
             "ENCRYPTION_KEY is required. Refusing to encrypt without a configured key."
         )
 
@@ -1138,13 +1142,13 @@ class DiskSageFileLineageRecord(Base):
     archive_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     raw_content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     raw_content_blake3: Mapped[str] = mapped_column(String(64), nullable=False)
-    bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     ontology_class: Mapped[str] = mapped_column(String(256), nullable=False)
     ontology_relation_count: Mapped[int] = mapped_column(Integer, nullable=False)
     ontology_predicates: Mapped[list[str]] = mapped_column(
         JSON, default=list, nullable=False
     )
-    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_name: Mapped[str] = mapped_column(String(32), nullable=False)
     provider_sync_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False)
     provider_sync_state: Mapped[str] = mapped_column(
         String(32), nullable=False, default="unknown", server_default="unknown"

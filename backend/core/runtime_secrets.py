@@ -18,6 +18,12 @@ DEFAULT_ENCRYPTION_KEY_ID = "primary"
 ENCRYPTION_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
 
+class EncryptionKeyMissingError(RuntimeError):
+    """Raised when encryption is requested without the configured active key."""
+
+    error_code = "encryption-key-missing"
+
+
 @dataclass(frozen=True)
 class RuntimeEncryptionKey:
     key_id: str
@@ -147,7 +153,7 @@ def build_encryption_keyring(
     previous_keys_value: str | None = None,
 ) -> EncryptionKeyRing:
     if active_key_value is None or not active_key_value.strip():
-        raise RuntimeError(
+        raise EncryptionKeyMissingError(
             "ENCRYPTION_KEY is required. Refusing to encrypt without a configured key."
         )
 
