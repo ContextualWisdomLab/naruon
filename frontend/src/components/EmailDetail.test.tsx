@@ -352,11 +352,18 @@ describe("EmailDetail", () => {
 
     const unsupportedThreadActions = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button"),
-    ).filter((button) =>
-      ["다른 스레드 병합", "스레드 분리"].some((label) =>
-        button.textContent?.includes(label),
-      ),
-    );
+    ).filter((button) => {
+      const accessibleName = [
+        button.textContent,
+        button.getAttribute("aria-label"),
+        button.getAttribute("title"),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join(" ");
+      return ["다른 스레드 병합", "스레드 분리"].some((label) =>
+        accessibleName.includes(label),
+      );
+    });
     expect(unsupportedThreadActions).toHaveLength(0);
   });
 
