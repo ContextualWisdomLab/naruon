@@ -79,7 +79,7 @@ def test_dav_extension_methods_are_hidden_from_openapi_but_registered(
     assert not {"report", "mkcol", "propfind"}.intersection(dav_path)
 
 
-@pytest.mark.parametrize("method", ["REPORT", "MKCOL"])
+@pytest.mark.parametrize("method", ["GET", "REPORT", "MKCOL"])
 def test_dav_extension_methods_dispatch_fail_closed(
     method,
     dev_auth_dependency_overrides,
