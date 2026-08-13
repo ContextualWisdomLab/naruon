@@ -29,6 +29,9 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  participants?: Array<{ name: string; role?: string; initials?: string }>;
+  attachments?: Array<{ name: string; size: string; ext?: string }>;
+  meeting_proposals?: Array<{ date: string; time: string }>;
 };
 interface LlmData {
   summary: string;
@@ -646,6 +649,76 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
         </div>
       </div>
       <Separator />
+
+      {/* 새 UI 영역: 참여자, 첨부파일, 제안 패널 */}
+      {(email.participants || email.attachments || email.meeting_proposals) && (
+        <div className="bg-muted/10 px-6 py-4 flex flex-col gap-4">
+          {/* 참여자 (Participants) */}
+          {email.participants && email.participants.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h4 className="text-xs font-semibold text-muted-foreground">참여자 ({email.participants.length})</h4>
+              <div className="flex items-center gap-2">
+                {email.participants.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 rounded-full border border-border/50 bg-card px-2 py-1 pr-3 shadow-sm">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="bg-primary/10 text-[10px] font-medium text-primary">
+                        {p.initials || p.name.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium text-foreground">{p.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 첨부파일 (Attachments) */}
+          {email.attachments && email.attachments.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h4 className="text-xs font-semibold text-muted-foreground">첨부파일 ({email.attachments.length})</h4>
+              <div className="flex items-center gap-3 overflow-x-auto pb-1">
+                {email.attachments.map((file, i) => (
+                  <div key={i} className="flex min-w-48 items-center gap-3 rounded-lg border border-border/50 bg-card p-2 shadow-sm transition-colors hover:bg-muted/50 cursor-pointer">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded bg-primary/10 text-[10px] font-bold text-primary">
+                      {file.ext || (file.name.includes('.') ? file.name.split('.').pop().toUpperCase() : 'FILE')}
+                    </div>
+                    <div className="flex flex-col overflow-hidden">
+                      <span className="truncate text-xs font-medium text-foreground">{file.name}</span>
+                      <span className="text-[10px] text-muted-foreground">{file.size}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 미팅 제안 패널 (Meeting Proposal) */}
+          {email.meeting_proposals && email.meeting_proposals.length > 0 && (
+            <div className="mt-2 rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="grid size-6 place-items-center rounded-md bg-primary/15 text-[10px] font-bold text-primary">
+                  M
+                </span>
+                <h4 className="text-sm font-bold text-foreground">미팅 일정 제안</h4>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {email.meeting_proposals.map((proposal, i) => (
+                  <Button key={i} variant="outline" size="sm" className="h-8 gap-2 border-primary/20 bg-background text-xs">
+                    <span className="font-semibold">{proposal.date}</span>
+                    <span className="text-muted-foreground">{proposal.time}</span>
+                  </Button>
+                ))}
+                <Button size="sm" className="h-8 gap-1 px-3 text-xs">
+                  일정 확인 및 확정
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
