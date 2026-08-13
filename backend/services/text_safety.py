@@ -456,12 +456,15 @@ def strip_html_markup(value: str) -> str:
     parser.feed(masked)
     parser.close()
     text = parser.get_text()
-    
+
     cleaned_lines = []
     for line in text.splitlines():
         cleaned_lines.append(_strip_tag_like_segments(line))
     text = "\n".join(cleaned_lines).strip()
-    
+    # HTMLParser treats `<!-->` as an empty comment, so a trailing `-->`
+    # from `<!--><script>…</script>-->` would otherwise survive as data.
+    text = text.replace("<!--", "").replace("-->", "")
+
     for token, original in placeholders.items():
         text = text.replace(token, original)
     return text
