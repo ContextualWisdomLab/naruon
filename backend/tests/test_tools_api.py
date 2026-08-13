@@ -505,6 +505,30 @@ async def test_text_analyzer_tool_success():
 
 
 @pytest.mark.asyncio
+async def test_uuid_v4_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/uuid_v4_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+
+    # Check if the result has 'uuid' key
+    assert "uuid" in result
+
+    # Validate UUID v4 format
+    import uuid
+
+    generated_uuid = result["uuid"]
+    parsed_uuid = uuid.UUID(generated_uuid)
+    assert parsed_uuid.version == 4
+
+
+@pytest.mark.asyncio
 async def test_base64_encoder_tool_success():
     with TestClient(app) as client:
         response = client.post(
