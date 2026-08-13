@@ -22,44 +22,18 @@ jobs:
         with:
           ref: ${{ github.sha }}
       - name: Append the cancellation regression
+        env:
+          REGRESSION_B64: CgoKQHB5dGVzdC5tYXJrLmFzeW5jaW8KYXN5bmMgZGVmIHRlc3RfY2FuY2VsbGVkX2p1ZGdlX3JldGFpbnNfY2FwYWNpdHlfdW50aWxfd29ya2VyX3NldHRsZXMoKSAtPiBOb25lOgogICAgIiIiQ2FuY2VsbGF0aW9uIGRvZXMgbm90IHJldHVybiB3aGlsZSBpdHMgc3VibWl0dGVkIHdvcmtlciBzdGlsbCBydW5zLiIiIgoKICAgIGNsYXNzIF9Qb3J0Q2xpZW50OgogICAgICAgIGFzeW5jIGRlZiBhY2xvc2Uoc2VsZikgLT4gTm9uZToKICAgICAgICAgICAgcmV0dXJuIE5vbmUKCiAgICBwb3J0ID0gRW1haWxXcml0aW5nT3JjaGVzdHJhdG9yUG9ydChfUG9ydENsaWVudCgpLCBqdWRnZV9jYXBhY2l0eT0xKQogICAgc3RhcnRlZCA9IHRocmVhZGluZy5FdmVudCgpCiAgICByZWxlYXNlID0gdGhyZWFkaW5nLkV2ZW50KCkKCiAgICBkZWYgYmxvY2tpbmdfanVkZ2UoKSAtPiBzdHI6CiAgICAgICAgc3RhcnRlZC5zZXQoKQogICAgICAgIHJlbGVhc2Uud2FpdCh0aW1lb3V0PTIuMCkKICAgICAgICByZXR1cm4gInNldHRsZWQiCgogICAgdGFzayA9IGFzeW5jaW8uY3JlYXRlX3Rhc2socG9ydC5ydW5fanVkZ2UoYmxvY2tpbmdfanVkZ2UpKQogICAgYXNzZXJ0IGF3YWl0IGFzeW5jaW8udG9fdGhyZWFkKHN0YXJ0ZWQud2FpdCwgMS4wKQogICAgdGFzay5jYW5jZWwoKQogICAgYXdhaXQgYXN5bmNpby5zbGVlcCgwLjAyKQogICAgcmV0dXJuZWRfYmVmb3JlX3dvcmtlcl9zZXR0bGVkID0gdGFzay5kb25lKCkKICAgIHJlbGVhc2Uuc2V0KCkKICAgIHdpdGggcHl0ZXN0LnJhaXNlcyhhc3luY2lvLkNhbmNlbGxlZEVycm9yKToKICAgICAgICBhd2FpdCB0YXNrCiAgICBhd2FpdCBwb3J0LmFjbG9zZSgpCiAgICBhc3NlcnQgcmV0dXJuZWRfYmVmb3JlX3dvcmtlcl9zZXR0bGVkIGlzIEZhbHNlCg==
         run: |
           python - <<'PY'
+          import base64
+          import os
           from pathlib import Path
 
           test_path = Path("backend/tests/test_contextual_orchestrator_client.py")
           source = test_path.read_text(encoding="utf-8")
           test_name = "test_cancelled_judge_retains_capacity_until_worker_settles"
-          addition = '''
-
-
-@pytest.mark.asyncio
-async def test_cancelled_judge_retains_capacity_until_worker_settles() -> None:
-    """Cancellation does not return while its submitted worker still runs."""
-
-    class _PortClient:
-        async def aclose(self) -> None:
-            return None
-
-    port = EmailWritingOrchestratorPort(_PortClient(), judge_capacity=1)
-    started = threading.Event()
-    release = threading.Event()
-
-    def blocking_judge() -> str:
-        started.set()
-        release.wait(timeout=2.0)
-        return "settled"
-
-    task = asyncio.create_task(port.run_judge(blocking_judge))
-    assert await asyncio.to_thread(started.wait, 1.0)
-    task.cancel()
-    await asyncio.sleep(0.02)
-    returned_before_worker_settled = task.done()
-    release.set()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    await port.aclose()
-    assert returned_before_worker_settled is False
-'''
+          addition = base64.b64decode(os.environ["REGRESSION_B64"]).decode("utf-8")
           if test_name not in source:
               test_path.write_text(source + addition, encoding="utf-8")
           Path(
