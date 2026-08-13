@@ -19,7 +19,3 @@
 
 **Learning:** When using a dictionary purely to track the presence of keys (e.g. `has_sent_message[key] = True`), checking for presence with `.get(key, False)` carries unnecessary semantic and memory overhead. Sets in Python provide a cleaner `key in set_name` syntax for boolean presence checks and slightly reduced memory footprint, while maintaining O(1) time complexity.
 **Action:** When tracking unique occurrences or boolean presence of items where the value itself doesn't carry additional information, use a `set` and its `.add()` and `in` operators instead of a `dict` mapping to `True` or `False`.
-## 2025-02-12 - Replaced O(N) Array Lookups with O(1) Maps in Loops
-
-**Learning:** When generating derived UI state in `useMemo` that joins separate data arrays (like graph edges referencing node IDs), calling helper functions that use `Array.prototype.find()` for every item creates an `O(M * N)` bottleneck.
-**Action:** When a loop needs to repeatedly look up related items from another array by ID, pre-compute an `O(N)` `Map` before the loop and use `map.get()` for `O(1)` lookups instead of inline array `.find()` calls.
