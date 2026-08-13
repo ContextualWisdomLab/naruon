@@ -962,9 +962,9 @@ registry.register(
 
 async def md5_hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
-    return {
-        "hash": hashlib.md5(text.encode("utf-8"), usedforsecurity=False).hexdigest()
-    }  # nosemgrep
+    encoded = text.encode("utf-8")
+    hash_val = hashlib.md5(encoded, usedforsecurity=False).hexdigest()  # nosemgrep
+    return {"hash": hash_val}
 
 
 registry.register(
@@ -981,9 +981,9 @@ registry.register(
 
 async def sha1_hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
-    return {
-        "hash": hashlib.sha1(text.encode("utf-8"), usedforsecurity=False).hexdigest()
-    }  # nosemgrep
+    encoded = text.encode("utf-8")
+    hash_val = hashlib.sha1(encoded, usedforsecurity=False).hexdigest()  # nosemgrep
+    return {"hash": hash_val}
 
 
 registry.register(
@@ -1017,7 +1017,7 @@ registry.register(
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
-    return {"encoded_text": urllib.parse.quote(text, safe='')}
+    return {"encoded_text": urllib.parse.quote(text, safe="")}
 
 
 registry.register(
