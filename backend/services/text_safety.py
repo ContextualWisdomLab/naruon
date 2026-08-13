@@ -460,7 +460,9 @@ def strip_html_markup(value: str) -> str:
     cleaned_lines = []
     for line in text.splitlines():
         cleaned_lines.append(_strip_tag_like_segments(line))
-    text = "\n".join(cleaned_lines).strip()
+    # A malformed comment opener such as ``<!-->`` can leave the closing marker
+    # as parser data. Never return that marker from an HTML-sanitized value.
+    text = "\n".join(cleaned_lines).replace("-->", "").strip()
     
     for token, original in placeholders.items():
         text = text.replace(token, original)

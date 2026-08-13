@@ -158,7 +158,38 @@ async def _handle_project_propfind(
 
 @router.api_route(
     "/{path:path}",
-    methods=["PROPFIND", "REPORT", "MKCOL", "GET", "PUT", "DELETE", "OPTIONS"],
+    methods=["OPTIONS"],
+    operation_id="dav_options",
+)
+@router.api_route(
+    "/{path:path}",
+    methods=["DELETE"],
+    operation_id="dav_delete",
+)
+@router.api_route(
+    "/{path:path}",
+    methods=["PUT"],
+    operation_id="dav_put",
+)
+@router.api_route(
+    "/{path:path}",
+    methods=["GET"],
+    operation_id="dav_get",
+)
+@router.api_route(
+    "/{path:path}",
+    methods=["REPORT"],
+    operation_id="dav_report",
+)
+@router.api_route(
+    "/{path:path}",
+    methods=["MKCOL"],
+    operation_id="dav_mkcol",
+)
+@router.api_route(
+    "/{path:path}",
+    methods=["PROPFIND"],
+    operation_id="dav_propfind",
 )
 async def dav_handler(
     request: Request,
