@@ -44,6 +44,7 @@ PROVIDER_SYNC_STATE_VALUES = Literal[
     "content-mismatch",
     "unknown",
 ]
+UNKNOWN_ONTOLOGY_CLASS = "https://disksage.app/ontology#Unknown"
 
 
 class _StrictModel(BaseModel):
@@ -190,17 +191,19 @@ class CloudCopyLineage(_StrictModel):
 
 
 class FileLineageEnvelope(_StrictModel):
-    # DiskSage v2 adds attributed copy-approval evidence while retaining the
-    # v1 ontology envelope shape.
-    schema_version: Literal[1, 2]
+    # DiskSage v3 makes ontology projection and provider-native state explicit;
+    # v1/v2 remain readable with deterministic legacy defaults.
+    schema_version: Literal[1, 2, 3]
     schema_kind: Literal["disksage.file-lineage"]
     source_kind: Literal["file"]
     archive_kind: ARCHIVE_KIND_VALUES
     source_filename: str = Field(min_length=1, max_length=512)
     source_relative_path: str = Field(min_length=1, max_length=4096)
     source_context: str = Field(min_length=1, max_length=1024)
-    ontology_class: str = Field(pattern=ONTOLOGY_CLASS_PATTERN)
-    ontology_relations: list[FileLineageRelation] = Field(max_length=256)
+    ontology_class: str = Field(
+        default=UNKNOWN_ONTOLOGY_CLASS, pattern=ONTOLOGY_CLASS_PATTERN
+    )
+    ontology_relations: list[FileLineageRelation] = Field(default_factory=list, max_length=256)
     raw_content_sha256: str = Field(pattern=HEX64_PATTERN)
     raw_content_blake3: str = Field(pattern=HEX64_PATTERN)
     bytes: int = Field(ge=0)
@@ -213,6 +216,14 @@ class FileLineageEnvelope(_StrictModel):
     duration_ms: int | None = Field(default=None, ge=0)
     review: ReviewLineage
     cloud_copy: CloudCopyLineage
+
+    @model_validator(mode="before")
+    @classmethod
+    def require_v3_ontology_projection(cls, values: object) -> object:
+        if isinstance(values, dict) and values.get("schema_version") == 3:
+            if not values.get("ontology_class") or "ontology_relations" not in values:
+                raise ValueError("schema version 3 requires ontology projection")
+        return values
 
     @model_validator(mode="after")
     def validate_path_and_relations(self) -> FileLineageEnvelope:

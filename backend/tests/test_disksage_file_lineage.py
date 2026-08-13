@@ -105,13 +105,31 @@ def test_valid_envelope_keeps_graph_projection_deterministic():
     assert canonical_envelope_json(envelope).encode("utf-8")
 
 
-@pytest.mark.parametrize("schema_version", [1, 2])
-def test_accepts_disk_sage_v1_and_v2_envelopes(schema_version: int):
+@pytest.mark.parametrize("schema_version", [1, 2, 3])
+def test_accepts_disk_sage_file_lineage_schema_versions(schema_version: int):
     envelope = FileLineageEnvelope.model_validate(
         _envelope(schema_version=schema_version)
     )
 
     assert envelope.schema_version == schema_version
+
+
+def test_legacy_v2_without_new_ontology_projection_is_migrated():
+    payload = _envelope(schema_version=2)
+    payload.pop("ontology_class")
+    payload.pop("ontology_relations")
+
+    envelope = FileLineageEnvelope.model_validate(payload)
+
+    assert envelope.ontology_class.endswith("#Unknown")
+    assert envelope.ontology_relations == []
+
+
+def test_v3_requires_ontology_projection():
+    payload = _envelope(schema_version=3)
+    payload.pop("ontology_class")
+    with pytest.raises(ValidationError):
+        FileLineageEnvelope.model_validate(payload)
 
 
 def test_v2_preserves_attributed_copy_approval_fields():
