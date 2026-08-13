@@ -22,3 +22,7 @@
 ## 2024-05-30 - Python urllib.parse.urlsplit port edge case
 **Learning:** `urllib.parse.urlsplit` parses a port like `:0` but accessing the `.port` property raises a `ValueError: Port out of range 0-65535` under the hood. Testing these scenarios gracefully requires mocking `urllib.parse.SplitResult.port` or the `urlsplit` return value entirely because you can't construct an exception-raising property directly on a mock without using `PropertyMock` or overriding the `@property` in a subclass.
 **Action:** When testing edge cases that involve standard library internals behaving dynamically or raising exceptions via property accesses (like `SplitResult.port`), explicitly subclass the return object or use `patch` with `PropertyMock` to simulate the behavior predictably rather than just passing malformed strings.
+## 2025-02-12 - Replaced O(N) Array Lookups with O(1) Maps in Loops
+
+**Learning:** When generating derived UI state in `useMemo` that joins separate data arrays (like graph edges referencing node IDs), calling helper functions that use `Array.prototype.find()` for every item creates an `O(M * N)` bottleneck.
+**Action:** When a loop needs to repeatedly look up related items from another array by ID, pre-compute an `O(N)` `Map` before the loop and use `map.get()` for `O(1)` lookups instead of inline array `.find()` calls.
