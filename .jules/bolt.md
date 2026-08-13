@@ -22,3 +22,7 @@
 ## 2025-02-12 - Inline Mapping of Arrays in Components
 **Learning:** Wrapping inline mapping of arrays within JSX components (e.g. `array.map()`) in a `useMemo` hook is crucial to avoid O(N) re-renders, especially when dealing with lists or UI segments that don't need to change strictly with every state update of the parent.
 **Action:** Always wrap `.map()` calls over arrays in components with potentially frequent state updates inside a `useMemo` hook to ensure efficiency and non-blocking performance.
+## 2025-02-12 - Replaced O(N) Array Lookups with O(1) Maps in Loops
+
+**Learning:** When generating derived UI state in `useMemo` that joins separate data arrays (like graph edges referencing node IDs), calling helper functions that use `Array.prototype.find()` for every item creates an `O(M * N)` bottleneck.
+**Action:** When a loop needs to repeatedly look up related items from another array by ID, pre-compute an `O(N)` `Map` before the loop and use `map.get()` for `O(1)` lookups instead of inline array `.find()` calls.
