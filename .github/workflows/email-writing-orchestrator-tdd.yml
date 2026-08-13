@@ -33,7 +33,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-hashes.txt
       - run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
-      - name: Run Task 5 contracts
+      - name: Run Task 5 contracts including Judge cancellation
         run: |
           cd backend
           python -m pytest -q \
