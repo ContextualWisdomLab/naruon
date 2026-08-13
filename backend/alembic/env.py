@@ -8,13 +8,14 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from core.config import settings
 from db.email_writing_evidence import EmailReviewSession
+from db.email_writing_orchestrator_config import EmailWritingOrchestratorConfig
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = EmailReviewSession.__table__.metadata
+target_metadata = EmailWritingOrchestratorConfig.__table__.metadata
 
 
 def _database_url() -> str:
