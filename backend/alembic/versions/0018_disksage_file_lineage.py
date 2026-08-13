@@ -45,6 +45,12 @@ def upgrade() -> None:
             sa.Column("ontology_predicates", sa.JSON(), nullable=False),
             sa.Column("provider", sa.String(length=32), nullable=False),
             sa.Column("provider_sync_confirmed", sa.Boolean(), nullable=False),
+            sa.Column(
+                "provider_sync_state",
+                sa.String(length=32),
+                nullable=False,
+                server_default="unknown",
+            ),
             sa.Column("envelope_json_encrypted", sa.String(), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.PrimaryKeyConstraint("lineage_record_uid"),

@@ -34,6 +34,7 @@ def _summary(record: DiskSageFileLineageRecord) -> FileLineageSummary:
         ontology_predicates=list(record.ontology_predicates or []),
         provider=record.provider,
         provider_sync_confirmed=record.provider_sync_confirmed,
+        provider_sync_state=record.provider_sync_state,
         created_at=record.created_at.isoformat(),
     )
 
@@ -92,6 +93,7 @@ async def ingest_file_lineage(
         ontology_predicates=ontology_predicates(envelope),
         provider=envelope.cloud_copy.provider,
         provider_sync_confirmed=envelope.cloud_copy.provider_sync_confirmed,
+        provider_sync_state=envelope.cloud_copy.provider_sync_state or "unknown",
         envelope_json_encrypted=_encrypted_envelope_json(envelope),
         created_at=datetime.datetime.now(datetime.timezone.utc),
     )

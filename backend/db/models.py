@@ -1146,6 +1146,9 @@ class DiskSageFileLineageRecord(Base):
     )
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     provider_sync_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    provider_sync_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unknown", server_default="unknown"
+    )
     # Source paths and metadata evidence are intentionally not queryable plaintext.
     envelope_json_encrypted: Mapped[str] = mapped_column(
         EncryptedString, nullable=False

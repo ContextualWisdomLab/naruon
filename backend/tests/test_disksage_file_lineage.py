@@ -126,6 +126,19 @@ def test_provider_write_claim_is_rejected_even_when_copy_is_verified():
         FileLineageEnvelope.model_validate(payload)
 
 
+def test_provider_sync_state_preserves_pending_upload_without_eviction_claim():
+    payload = _envelope()
+    payload["cloud_copy"] = {
+        **payload["cloud_copy"],  # type: ignore[arg-type]
+        "provider_sync_state": "pending-upload",
+    }
+
+    envelope = FileLineageEnvelope.model_validate(payload)
+
+    assert envelope.cloud_copy.provider_sync_state == "pending-upload"
+    assert envelope.cloud_copy.provider_sync_confirmed is False
+
+
 def test_unknown_fields_are_rejected_at_the_handoff_boundary():
     payload = _envelope(untrusted_private_value="must-not-persist")
     with pytest.raises(ValidationError):

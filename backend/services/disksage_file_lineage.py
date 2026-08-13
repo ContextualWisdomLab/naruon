@@ -30,6 +30,18 @@ ARCHIVE_KIND_VALUES = Literal[
 ]
 REVIEW_DISPOSITION_VALUES = Literal["approved", "held"]
 SYNC_KIND_VALUES = Literal["provider-api", "provider-native-status"]
+PROVIDER_SYNC_STATE_VALUES = Literal[
+    "complete",
+    "pending-upload",
+    "not-ubiquitous",
+    "not-local-current",
+    "uploading",
+    "excluded-from-sync",
+    "sync-paused",
+    "remote-unavailable",
+    "content-mismatch",
+    "unknown",
+]
 
 
 class _StrictModel(BaseModel):
@@ -114,6 +126,9 @@ class CloudCopyLineage(_StrictModel):
     local_copy_verified: bool
     provider_write_executed: bool
     provider_sync_confirmed: bool
+    # Optional keeps version-1 envelopes backwards compatible; new DiskSage
+    # exports preserve provider-native states such as pending-upload.
+    provider_sync_state: PROVIDER_SYNC_STATE_VALUES | None = None
     sync_evidence_record_id: str | None = Field(default=None, max_length=256)
     sync_evidence_kind: SYNC_KIND_VALUES | None = None
     sync_evidence_id: str | None = Field(default=None, max_length=512)
@@ -138,6 +153,10 @@ class CloudCopyLineage(_StrictModel):
             value is None for value in evidence_fields
         ):
             raise ValueError("confirmed sync is missing provider evidence")
+        if self.provider_sync_state not in (None, "unknown") and (
+            self.provider_sync_confirmed != (self.provider_sync_state == "complete")
+        ):
+            raise ValueError("provider sync state does not match confirmation")
         if self.remote_location_bound is True and not self.remote_object_id:
             raise ValueError("remote location binding is missing its object id")
         return self
@@ -193,6 +212,7 @@ class FileLineageSummary(_StrictModel):
     ontology_predicates: list[str]
     provider: PROVIDER_VALUES
     provider_sync_confirmed: bool
+    provider_sync_state: PROVIDER_SYNC_STATE_VALUES
     created_at: str
 
 
