@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -102,7 +102,10 @@ function normalizeLlmData(payload: unknown): LlmData {
   };
 }
 
-export function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
+// ⚡ Bolt: Memoized EmailDetail to prevent unnecessary re-renders
+// 🎯 Why: Re-renders of EmailDetail when the parent components (like WorkspaceHome) re-render can cause performance issues, especially when switching active layout tabs or receiving polling updates that don't affect the selected email.
+// 📊 Impact: Significantly reduces React reconciliation work when the workspace state changes but the selected email remains the same.
+export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
   const [email, setEmail] = useState<EmailData | null>(null);
   const [threadEmails, setThreadEmails] = useState<EmailData[]>([]);
   const [llmData, setLlmData] = useState<LlmData | null>(null);
@@ -875,4 +878,4 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       />
     </div>
   );
-}
+});
