@@ -30,6 +30,7 @@ ARCHIVE_KIND_VALUES = Literal[
 ]
 REVIEW_DISPOSITION_VALUES = Literal["approved", "held"]
 SYNC_KIND_VALUES = Literal["provider-api", "provider-native-status"]
+COPY_APPROVAL_ACTION_VALUES = Literal["copy-only", "adopt-existing-copy"]
 PROVIDER_SYNC_STATE_VALUES = Literal[
     "complete",
     "pending-upload",
@@ -123,6 +124,13 @@ class CloudCopyLineage(_StrictModel):
     destination: str = Field(min_length=1, max_length=4096)
     copied_at_ms: int = Field(ge=0)
     copy_verification_method: Literal["copied-by-disk-sage", "adopted-existing"]
+    # DiskSage v2 binds the copy to one attributed human action. These remain
+    # optional so v1 and pre-approval receipts can still be ingested.
+    copy_approval_id: str | None = Field(default=None, pattern=HEX64_PATTERN)
+    copy_approval_action: COPY_APPROVAL_ACTION_VALUES | None = None
+    copy_approved_at_ms: int | None = Field(default=None, ge=0)
+    copy_approved_by: str | None = Field(default=None, max_length=256)
+    copy_approval_rationale: str | None = Field(default=None, max_length=2000)
     local_copy_verified: bool
     provider_write_executed: bool
     provider_sync_confirmed: bool

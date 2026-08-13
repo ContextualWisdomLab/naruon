@@ -112,6 +112,25 @@ def test_accepts_disk_sage_v1_and_v2_envelopes(schema_version: int):
     assert envelope.schema_version == schema_version
 
 
+def test_v2_preserves_attributed_copy_approval_fields():
+    payload = _envelope(
+        schema_version=2,
+        cloud_copy={
+            **_envelope()["cloud_copy"],  # type: ignore[arg-type]
+            "copy_approval_id": "1" * 64,
+            "copy_approval_action": "copy-only",
+            "copy_approved_at_ms": 6,
+            "copy_approved_by": "human:local:test",
+            "copy_approval_rationale": "approved after metadata review",
+        },
+    )
+
+    envelope = FileLineageEnvelope.model_validate(payload)
+
+    assert envelope.cloud_copy.copy_approval_action == "copy-only"
+    assert envelope.cloud_copy.copy_approval_id == "1" * 64
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
