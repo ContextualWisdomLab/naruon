@@ -180,16 +180,19 @@ async def _handle_project_propfind(
     "/{path:path}",
     methods=["REPORT"],
     operation_id="dav_report",
+    include_in_schema=False,
 )
 @router.api_route(
     "/{path:path}",
     methods=["MKCOL"],
     operation_id="dav_mkcol",
+    include_in_schema=False,
 )
 @router.api_route(
     "/{path:path}",
     methods=["PROPFIND"],
     operation_id="dav_propfind",
+    include_in_schema=False,
 )
 async def dav_handler(
     request: Request,

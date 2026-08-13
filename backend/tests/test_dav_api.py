@@ -68,6 +68,33 @@ def test_dav_options(dev_auth_dependency_overrides):
         assert "calendar-access" in response.headers.get("DAV", "")
 
 
+def test_dav_extension_methods_are_hidden_from_openapi_but_registered(
+    dev_auth_dependency_overrides,
+):
+    with TestClient(app) as client:
+        schema = client.get("/openapi.json").json()
+
+    dav_path = schema["paths"]["/dav/{path}"]
+    assert {"get", "put", "delete", "options"}.issubset(dav_path)
+    assert not {"report", "mkcol", "propfind"}.intersection(dav_path)
+
+
+@pytest.mark.parametrize("method", ["REPORT", "MKCOL"])
+def test_dav_extension_methods_dispatch_fail_closed(
+    method,
+    dev_auth_dependency_overrides,
+):
+    with TestClient(app) as client:
+        response = client.request(
+            method,
+            "/dav/user123/projects/file.ics",
+            headers=AUTH_HEADERS,
+        )
+
+    assert response.status_code == 501
+    assert "Provider-backed DAV method is not implemented" in response.text
+
+
 def test_dav_rejects_different_user_path(dev_auth_dependency_overrides):
     with TestClient(app) as client:
         response = client.request(
