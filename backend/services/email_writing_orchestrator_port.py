@@ -90,7 +90,7 @@ class EmailWritingOrchestratorPort:
             lambda: operation(*args, **kwargs),
         )
         try:
-            return await future
+            return await asyncio.shield(future)
         except asyncio.CancelledError:
             await asyncio.shield(future)
             raise
