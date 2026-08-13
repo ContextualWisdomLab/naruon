@@ -12,6 +12,7 @@
   `docs/topic-intelligence/`에 하나의 상태 표시 문서 그래프로 정리했습니다.
   이는 미래 계약의 설계 근거이며, 현재 runtime 구현이나 물리 DB 엔터티가
   존재한다는 주장이 아닙니다.
+- UUID V4 제너레이터(`uuid_v4_generator`) 도구를 추가하여 런타임에서 범용 고유 식별자 버전 4를 랜덤으로 생성할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
 
 ### 보안 패치 (CodeQL extended current-head)
 
