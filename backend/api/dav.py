@@ -1,6 +1,5 @@
 import logging
 from html import escape as escape_xml_text
-from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,15 +12,67 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dav", tags=["dav"])
 
+_DAV_AUTHORIZATION_PATH_MAX_CHARACTERS = 8192
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+_DAV_STRUCTURAL_OCTETS = frozenset(
+    {*range(0x20), 0x2E, 0x2F, 0x5C, 0x7F}
+)
+
+
+def _residual_percent_octet(path: str, percent_index: int) -> int | None:
+    """Return the octet exposed by another decode, following nested ``%25``."""
+
+    cursor = percent_index + 1
+    while cursor + 1 < len(path):
+        pair = path[cursor : cursor + 2]
+        if pair[0] not in _HEX_DIGITS or pair[1] not in _HEX_DIGITS:
+            return None
+        octet = int(pair, 16)
+        if octet != 0x25:
+            return octet
+        cursor += 2
+    return None
+
+
+def _has_ambiguous_percent_encoding(path: str) -> bool:
+    """Detect residual encodings that another decode would make structural."""
+
+    for index, character in enumerate(path):
+        if character != "%":
+            continue
+        octet = _residual_percent_octet(path, index)
+        if octet in _DAV_STRUCTURAL_OCTETS:
+            return True
+    return False
+
 
 def _normalize_dav_authorization_path(path: str) -> str:
+    """Validate the framework-decoded DAV path without decoding it again.
+
+    ASGI routing has already decoded the request-target path once. Authorization
+    therefore treats residual percent text as data unless another decode would
+    introduce a traversal dot, separator, backslash, or control octet. Literal
+    backslashes are normalized to separators for owner/traversal checks.
+    """
+
+    if len(path) > _DAV_AUTHORIZATION_PATH_MAX_CHARACTERS:
+        raise HTTPException(
+            status_code=414,
+            detail="DAV path exceeds authorization length limit",
+        )
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in path):
+        raise HTTPException(
+            status_code=400,
+            detail="DAV path contains control characters",
+        )
+
     normalized_path = path.replace("\\", "/")
-    for _ in range(100):
-        decoded_path = unquote(normalized_path).replace("\\", "/")
-        if decoded_path == normalized_path:
-            return normalized_path
-        normalized_path = decoded_path
-    raise HTTPException(status_code=400, detail="DAV path decoding limit exceeded")
+    if _has_ambiguous_percent_encoding(normalized_path):
+        raise HTTPException(
+            status_code=400,
+            detail="DAV path contains ambiguous percent encoding",
+        )
+    return normalized_path
 
 
 def _dav_path_owner_user_id(path: str) -> str | None:
