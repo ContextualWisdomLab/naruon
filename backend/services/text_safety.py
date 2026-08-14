@@ -238,7 +238,7 @@ def _skip_spaces(text: str, start: int) -> int:
 def _check_html_tag_at(decoded: str, cursor: int) -> tuple[bool, int]:
     tag_start = cursor + 1
 
-    if decoded.startswith("!--", tag_start):
+    if decoded.startswith("!--", tag_start) or decoded.startswith("--", tag_start):
         return True, 0
 
     if decoded[tag_start].isspace():
