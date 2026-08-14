@@ -33,6 +33,18 @@ describe("calendarWritebackConflictState", () => {
     ).toBe("warning");
   });
 
+  it("does not treat a non-conflict status substring as a hard conflict", () => {
+    expect(
+      calendarWritebackConflictState([
+        {
+          requires_if_match: true,
+          if_match: "etag-room-a-1500",
+          status: "no_conflict",
+        },
+      ]),
+    ).toBe("warning");
+  });
+
   it("returns none when every intent is a new slot with no precondition", () => {
     expect(
       calendarWritebackConflictState([
