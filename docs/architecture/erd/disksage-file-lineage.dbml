@@ -25,7 +25,7 @@ Table public.disksage_file_lineage_records {
 
   indexes {
     (user_id, workspace_id, lineage_fingerprint) [unique]
-    (user_id, organization_id, workspace_id, created_at)
+    (user_id, workspace_id, created_at)
     (workspace_id, ontology_class)
   }
 }

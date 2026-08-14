@@ -50,9 +50,9 @@ def _envelope(**overrides: object) -> dict[str, object]:
         "filesystem_time": {"created_at_ms": 2, "modified_at_ms": 3},
         "metadata_evidence": [
             {
-                "field": "production_time",
-                "value": "2026-04-28T00:00:00Z",
-                "source": "exiftool:MediaCreateDate",
+                "field": "production-date",
+                "value": "1970-01-01",
+                "source": "embedded:exiftool:MediaCreateDate",
                 "confidence": "high",
             }
         ],
@@ -187,6 +187,105 @@ def test_provider_sync_state_preserves_pending_upload_without_eviction_claim():
 
     assert envelope.cloud_copy.provider_sync_state == "pending-upload"
     assert envelope.cloud_copy.provider_sync_confirmed is False
+
+
+@pytest.mark.parametrize("provider_sync_state", ["pending-upload", "not-local-current"])
+def test_provider_sync_incomplete_states_remain_unconfirmed(provider_sync_state: str):
+    payload = _envelope(
+        cloud_copy={
+            **_envelope()["cloud_copy"],  # type: ignore[arg-type]
+            "provider_sync_state": provider_sync_state,
+        }
+    )
+
+    envelope = FileLineageEnvelope.model_validate(payload)
+
+    assert envelope.cloud_copy.provider_sync_state == provider_sync_state
+    assert envelope.cloud_copy.provider_sync_confirmed is False
+
+
+def test_filename_date_is_only_auxiliary_when_embedded_metadata_exists():
+    payload = _envelope(
+        production_time={
+            "selected_value_ms": 1,
+            "selected_source": "filename:path-token",
+            "confidence": "low",
+            "evidence_precedence": [
+                "embedded_metadata",
+                "explicit_filename_date",
+                "filesystem_created_at",
+                "filesystem_modified_at",
+            ],
+        },
+        metadata_evidence=[
+            {
+                "field": "filename-date-hint",
+                "value": "1970-01-01",
+                "source": "filename:path-token",
+                "confidence": "low",
+            },
+            {
+                "field": "production-date",
+                "value": "1970-01-01",
+                "source": "embedded:exiftool:MediaCreateDate",
+                "confidence": "high",
+            },
+        ],
+    )
+    with pytest.raises(ValidationError):
+        FileLineageEnvelope.model_validate(payload)
+
+
+def test_filename_date_can_be_selected_only_without_higher_precedence_evidence():
+    payload = _envelope(
+        production_time={
+            "selected_value_ms": 1,
+            "selected_source": "filename:path-token",
+            "confidence": "low",
+            "evidence_precedence": [
+                "embedded_metadata",
+                "explicit_filename_date",
+                "filesystem_created_at",
+                "filesystem_modified_at",
+            ],
+        },
+        metadata_evidence=[
+            {
+                "field": "filename-date-hint",
+                "value": "1970-01-01",
+                "source": "filename:path-token",
+                "confidence": "low",
+            }
+        ],
+    )
+    envelope = FileLineageEnvelope.model_validate(payload)
+    assert envelope.production_time.selected_source == "filename:path-token"
+
+
+def test_filesystem_modified_fallback_uses_modified_evidence_source():
+    payload = _envelope(
+        production_time={
+            "selected_value_ms": 1,
+            "selected_source": "filesystem:modified-fallback",
+            "confidence": "low",
+            "evidence_precedence": [
+                "embedded_metadata",
+                "explicit_filename_date",
+                "filesystem_created_at",
+                "filesystem_modified_at",
+            ],
+        },
+        metadata_evidence=[
+            {
+                "field": "filesystem-modified-date",
+                "value": "1970-01-01",
+                "source": "filesystem:modified",
+                "confidence": "low",
+            }
+        ],
+    )
+    envelope = FileLineageEnvelope.model_validate(payload)
+    assert envelope.production_time.selected_source == "filesystem:modified-fallback"
 
 
 def test_provider_sync_confirmation_requires_evidence():

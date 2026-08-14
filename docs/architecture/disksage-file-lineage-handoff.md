@@ -25,6 +25,12 @@ and `created_at`; it does not expose local paths or raw metadata values. A state
 such as `pending-upload` is retained as an incomplete provider proof and never
 authorizes source eviction.
 
+Production-time validation is repeated at the Naruon trust boundary with the
+canonical order `embedded_metadata` > `explicit_filename_date` >
+`filesystem_created_at` > `filesystem_modified_at`. Filename date tokens such
+as `2026-04-28` or `251210` are auxiliary evidence; they cannot override an
+embedded production date, and a non-embedded selection must be low confidence.
+
 The payload keeps explicit file → archive destination → provider/account and
 review relations. These relation edges follow the same entity/provenance
 separation as PROV-O; DiskSage's local ontology remains the domain vocabulary.

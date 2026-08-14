@@ -45,6 +45,19 @@ def _encrypted_envelope_json(envelope: FileLineageEnvelope) -> str:
     return canonical_envelope_json(envelope)
 
 
+def _lineage_scope(auth_context: AuthContext) -> tuple[object, ...]:
+    organization_filter = (
+        DiskSageFileLineageRecord.organization_id == auth_context.organization_id
+        if auth_context.organization_id is not None
+        else DiskSageFileLineageRecord.organization_id.is_(None)
+    )
+    return (
+        DiskSageFileLineageRecord.user_id == auth_context.user_id,
+        organization_filter,
+        DiskSageFileLineageRecord.workspace_id == auth_context.workspace_id,
+    )
+
+
 @router.post("/file-lineage", response_model=FileLineageSummary, status_code=201)
 async def ingest_file_lineage(
     envelope: FileLineageEnvelope,
@@ -57,8 +70,7 @@ async def ingest_file_lineage(
     lineage_fingerprint = envelope.cloud_copy.lineage_fingerprint
     existing_result = await db.execute(
         select(DiskSageFileLineageRecord).where(
-            DiskSageFileLineageRecord.user_id == auth_context.user_id,
-            DiskSageFileLineageRecord.workspace_id == auth_context.workspace_id,
+            *_lineage_scope(auth_context),
             DiskSageFileLineageRecord.lineage_fingerprint == lineage_fingerprint,
         )
     )
@@ -102,8 +114,7 @@ async def ingest_file_lineage(
         await db.rollback()
         replayed_result = await db.execute(
             select(DiskSageFileLineageRecord).where(
-                DiskSageFileLineageRecord.user_id == auth_context.user_id,
-                DiskSageFileLineageRecord.workspace_id == auth_context.workspace_id,
+                *_lineage_scope(auth_context),
                 DiskSageFileLineageRecord.lineage_fingerprint == lineage_fingerprint,
             )
         )
@@ -136,8 +147,7 @@ async def list_file_lineage(
     result = await db.execute(
         select(DiskSageFileLineageRecord)
         .where(
-            DiskSageFileLineageRecord.user_id == auth_context.user_id,
-            DiskSageFileLineageRecord.workspace_id == auth_context.workspace_id,
+            *_lineage_scope(auth_context),
         )
         .order_by(DiskSageFileLineageRecord.created_at.desc())
         .limit(limit)

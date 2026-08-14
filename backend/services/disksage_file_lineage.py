@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Literal
+from datetime import UTC, datetime
 from pathlib import PureWindowsPath
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -45,6 +46,12 @@ PROVIDER_SYNC_STATE_VALUES = Literal[
     "unknown",
 ]
 UNKNOWN_ONTOLOGY_CLASS = "https://disksage.app/ontology#Unknown"
+EVIDENCE_PRECEDENCE = (
+    "embedded_metadata",
+    "explicit_filename_date",
+    "filesystem_created_at",
+    "filesystem_modified_at",
+)
 
 
 class _StrictModel(BaseModel):
@@ -237,6 +244,7 @@ class FileLineageEnvelope(_StrictModel):
             raise ValueError("source filename does not match source relative path")
         if any(ord(character) < 32 for character in relative):
             raise ValueError("source relative path contains a control character")
+        _validate_production_evidence(self.production_time, self.metadata_evidence)
         approval_fields = (
             self.cloud_copy.copy_approval_id,
             self.cloud_copy.copy_approval_action,
@@ -265,6 +273,75 @@ class FileLineageSummary(_StrictModel):
     provider_sync_confirmed: bool
     provider_sync_state: PROVIDER_SYNC_STATE_VALUES
     created_at: str
+
+
+def _date_value(epoch_ms: int) -> str:
+    try:
+        return datetime.fromtimestamp(epoch_ms / 1000, tz=UTC).date().isoformat()
+    except (OverflowError, OSError, ValueError) as error:
+        raise ValueError("production time is out of bounds") from error
+
+
+def _production_source_class(source: str) -> str:
+    if source.startswith("embedded:"):
+        return "embedded_metadata"
+    return {
+        "filename:path-token": "explicit_filename_date",
+        "filesystem:created": "filesystem_created_at",
+        "filesystem:modified-fallback": "filesystem_modified_at",
+    }.get(source, "")
+
+
+def _evidence_source_class(evidence: FileMetadataEvidence) -> str | None:
+    if evidence.field == "production-date" and evidence.source.startswith("embedded:"):
+        return "embedded_metadata"
+    return {
+        ("filename-date-hint", "filename:path-token"): "explicit_filename_date",
+        ("filesystem-created-date", "filesystem:created"): "filesystem_created_at",
+        (
+            "filesystem-modified-date",
+            "filesystem:modified",
+        ): "filesystem_modified_at",
+    }.get((evidence.field, evidence.source))
+
+
+def _validate_production_evidence(
+    production: ProductionTimeLineage,
+    metadata: list[FileMetadataEvidence],
+) -> None:
+    if production.evidence_precedence != list(EVIDENCE_PRECEDENCE):
+        raise ValueError("production evidence precedence is not canonical")
+    source_class = _production_source_class(production.selected_source)
+    if not source_class:
+        raise ValueError("production time source is unsupported")
+    if source_class != "embedded_metadata" and production.confidence != "low":
+        raise ValueError("non-embedded production evidence must be low confidence")
+    expected = {
+        "embedded_metadata": ("production-date", production.selected_source),
+        "explicit_filename_date": ("filename-date-hint", "filename:path-token"),
+        "filesystem_created_at": ("filesystem-created-date", "filesystem:created"),
+        "filesystem_modified_at": (
+            "filesystem-modified-date",
+            "filesystem:modified",
+        ),
+    }[source_class]
+    selected_date = _date_value(production.selected_value_ms)
+    if not any(
+        evidence.field == expected[0]
+        and evidence.source == expected[1]
+        and evidence.value == selected_date
+        for evidence in metadata
+    ):
+        raise ValueError("selected production evidence is missing or mismatched")
+    selected_rank = EVIDENCE_PRECEDENCE.index(source_class)
+    if any(
+        EVIDENCE_PRECEDENCE.index(evidence_class) < selected_rank
+        for evidence_class in (
+            _evidence_source_class(evidence) for evidence in metadata
+        )
+        if evidence_class is not None
+    ):
+        raise ValueError("production evidence violates precedence")
 
 
 def canonical_envelope_json(envelope: FileLineageEnvelope) -> str:
