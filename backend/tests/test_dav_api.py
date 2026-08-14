@@ -156,6 +156,7 @@ def test_dav_unsupported_method_logs_reason(dev_auth_dependency_overrides, caplo
         for record in caplog.records
     )
 
+
 def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
     """
     Test that DAV handlers safely encode control characters in the requested path,
@@ -180,9 +181,17 @@ def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
     async def run_handler():
         req = Request(scope)
         from api.auth import AuthContext
-        auth_ctx = AuthContext(user_id="user123", organization_id="org1", role="user", group_ids=[], workspace_id="ws1")
+
+        auth_ctx = AuthContext(
+            user_id="user123",
+            organization_id="org1",
+            role="user",
+            group_ids=[],
+            workspace_id="ws1",
+        )
 
         from api.dav import dav_handler
+
         await dav_handler(request=req, path=malicious_path, auth_context=auth_ctx)
 
     asyncio.run(run_handler())
@@ -195,9 +204,33 @@ def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
     found_in_logs = False
     for record in caplog.records:
         if "DAV Request" in record.message:
-            assert raw_ansi not in record.message, "Raw ANSI escape sequence found in logs!"
-            assert "\n" not in record.message[12:], "Raw newline found in log message body!"
-            assert "\\x1b[31minjected\\n\\r" in record.message or "\\x1b[31minjected\\r\\n" in record.message, "Escaped characters missing from log message!"
+            assert (
+                raw_ansi not in record.message
+            ), "Raw ANSI escape sequence found in logs!"
+            assert (
+                "\n" not in record.message[12:]
+            ), "Raw newline found in log message body!"
+            assert (
+                "\\x1b[31minjected\\n\\r" in record.message
+                or "\\x1b[31minjected\\r\\n" in record.message
+            ), "Escaped characters missing from log message!"
             found_in_logs = True
 
     assert found_in_logs, "DAV Request log was not found"
+
+
+def test_dav_decoding_limit_exceeded(monkeypatch):
+    from api.dav import _normalize_dav_authorization_path
+    from fastapi import HTTPException
+
+    # Simulate an infinite decode loop by ensuring unquote always returns a different string
+    def fake_unquote(s, *args, **kwargs):
+        return s + "a"
+
+    monkeypatch.setattr("api.dav.unquote", fake_unquote)
+
+    with pytest.raises(HTTPException) as exc_info:
+        _normalize_dav_authorization_path("/some/path")
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "DAV path decoding limit exceeded"
