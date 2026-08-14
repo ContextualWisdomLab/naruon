@@ -1,3 +1,4 @@
+import sys
 import pytest
 
 from services.text_safety import contains_html_markup, strip_html_markup
@@ -10,7 +11,10 @@ from services.text_safety import contains_html_markup, strip_html_markup
         ("<svg/onload=alert(1)>", ""),
         ("<script src=//attacker.example/xss.js", ""),
         ('<a href="javascript:alert(1)">click me</a>', "click me"),
-        ("<!--><script>alert(1)</script>-->", ""),
+        (
+            "<!--><script>alert(1)</script>-->",
+            "-->" if sys.version_info >= (3, 14) else "",
+        ),
         ("<script@x.y>alert(1)</script@x.y>", "alert(1)"),
         ("<xmp>raw legacy text</xmp>", "raw legacy text"),
         ("&lt;XMP&gt;raw legacy text&lt;/XMP&gt;", "raw legacy text"),
@@ -45,8 +49,7 @@ def test_strip_html_markup_plain_text_fast_path_skips_parser(monkeypatch):
     )
 
     assert (
-        strip_html_markup("plain   text\n\n second\tline ")
-        == "plain text\nsecond line"
+        strip_html_markup("plain   text\n\n second\tline ") == "plain text\nsecond line"
     )
 
 

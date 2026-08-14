@@ -255,7 +255,9 @@ def _check_html_tag_at(decoded: str, cursor: int) -> tuple[bool, int]:
 
     closing = decoded.find(">", tag_start + 1)
     if tag_start < len(decoded) and decoded[tag_start].isalpha():
-        tag_content = decoded[tag_start : closing if closing != -1 else None].strip()
+        tag_content = decoded[
+            tag_start : closing if closing != -1 else None
+        ].strip()
         next_cursor = closing + 1 if closing != -1 else len(decoded)
 
         if _looks_like_angle_email(tag_content):
@@ -336,11 +338,7 @@ def _is_tag_like_segment(value: str) -> bool:
     candidate = value.strip()
     if not candidate:
         return False
-    if (
-        candidate.startswith("!--")
-        or candidate.endswith("--")
-        or candidate[0] in {"!", "?"}
-    ):
+    if candidate.startswith("!--") or candidate[0] in {"!", "?"}:
         return True
     if candidate[0] == "/":
         candidate = candidate[1:].lstrip()

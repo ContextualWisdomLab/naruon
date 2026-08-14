@@ -859,9 +859,7 @@ registry.register(
 
 async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, List[str]]:
     text = params.get("text", "")
-    # Simple regex to extract http/https URLs
     urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
-    # Ensure all extracted URLs start with http
     normalized_urls = [
         url if url.startswith("http") else f"http://{url}" for url in urls
     ]
