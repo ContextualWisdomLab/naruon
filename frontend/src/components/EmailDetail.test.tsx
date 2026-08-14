@@ -1310,4 +1310,90 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("답장 전송에 실패했습니다.");
   });
+
+  async function renderEmailDetail(email: Record<string, unknown>) {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(`/api/emails/${email.id}`)) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<EmailDetail emailId={Number(email.id)} />);
+    });
+    await act(async () => { await flushAsyncWork(); });
+    return container;
+  }
+
+  it("omits the metadata rail when participants, attachments, and proposals are absent", async () => {
+    await renderEmailDetail({
+      id: 31,
+      message_id: "<no-meta@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "No metadata",
+      date: "2026-08-13T10:00:00Z",
+      body: "plain",
+    });
+    expect(container?.querySelector('[data-testid="email-metadata-rail"]')).toBeNull();
+    expect(container?.textContent).not.toContain("참여자");
+    expect(container?.textContent).not.toContain("첨부파일");
+    expect(container?.textContent).not.toContain("미팅 일정 제안");
+  });
+
+  it("omits the metadata rail when optional arrays are present but empty", async () => {
+    await renderEmailDetail({
+      id: 32,
+      message_id: "<empty-meta@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Empty metadata",
+      date: "2026-08-13T10:00:00Z",
+      body: "plain",
+      participants: [],
+      attachments: [],
+      meeting_proposals: [],
+    });
+    expect(container?.querySelector('[data-testid="email-metadata-rail"]')).toBeNull();
+  });
+
+  it("renders populated metadata as non-interactive evidence, not fake controls", async () => {
+    await renderEmailDetail({
+      id: 33,
+      message_id: "<meta@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Metadata",
+      date: "2026-08-13T10:00:00Z",
+      body: "plain",
+      participants: [{ name: "김철수", initials: "철수" }],
+      attachments: [
+        { name: "brief.pdf", size: "12 KB", ext: "PDF" },
+        { name: "notes", size: "1 KB" },
+        { name: "draft.", size: "2 KB" },
+      ],
+      meeting_proposals: [{ date: "8/15 (금)", time: "15:00" }],
+    });
+
+    const rail = container?.querySelector('[data-testid="email-metadata-rail"]');
+    expect(rail).not.toBeNull();
+    expect(rail?.textContent).toContain("김철수");
+    expect(rail?.textContent).toContain("brief.pdf");
+    expect(rail?.textContent).toContain("PDF");
+    expect(rail?.textContent).toContain("FILE");
+    expect(rail?.textContent).toContain("8/15 (금)");
+    expect(rail?.textContent).toContain("15:00");
+    expect(rail?.querySelector("button")).toBeNull();
+    expect(rail?.textContent).not.toContain("일정 확인 및 확정");
+    expect(rail?.innerHTML).not.toContain("cursor-pointer");
+  });
 });

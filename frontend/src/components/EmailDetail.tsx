@@ -33,6 +33,29 @@ type EmailData = ThreadEmailData & {
   attachments?: Array<{ name: string; size: string; ext?: string }>;
   meeting_proposals?: Array<{ date: string; time: string }>;
 };
+
+/** True when the mail-detail metadata rail has at least one item to show. */
+function emailMetadataHasItems(
+  email: Pick<EmailData, "participants" | "attachments" | "meeting_proposals">,
+): boolean {
+  return (
+    (email.participants?.length ?? 0) > 0 ||
+    (email.attachments?.length ?? 0) > 0 ||
+    (email.meeting_proposals?.length ?? 0) > 0
+  );
+}
+
+/** File-type badge for an attachment card; never uppercases a missing suffix. */
+function attachmentExtensionLabel(file: { name: string; ext?: string }): string {
+  if (file.ext) {
+    return file.ext;
+  }
+  if (!file.name.includes(".")) {
+    return "FILE";
+  }
+  const suffix = file.name.split(".").pop();
+  return suffix ? suffix.toUpperCase() : "FILE";
+}
 interface LlmData {
   summary: string;
   action_items: string[];
@@ -650,10 +673,8 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
       </div>
       <Separator />
 
-      {/* 새 UI 영역: 참여자, 첨부파일, 제안 패널 */}
-      {(email.participants || email.attachments || email.meeting_proposals) && (
-        <div className="bg-muted/10 px-6 py-4 flex flex-col gap-4">
-          {/* 참여자 (Participants) */}
+      {emailMetadataHasItems(email) && (
+        <div data-testid="email-metadata-rail" className="bg-muted/10 px-6 py-4 flex flex-col gap-4">
           {email.participants && email.participants.length > 0 && (
             <div className="flex flex-col gap-2">
               <h4 className="text-xs font-semibold text-muted-foreground">참여자 ({email.participants.length})</h4>
@@ -674,15 +695,14 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             </div>
           )}
 
-          {/* 첨부파일 (Attachments) */}
           {email.attachments && email.attachments.length > 0 && (
             <div className="flex flex-col gap-2">
               <h4 className="text-xs font-semibold text-muted-foreground">첨부파일 ({email.attachments.length})</h4>
               <div className="flex items-center gap-3 overflow-x-auto pb-1">
                 {email.attachments.map((file, i) => (
-                  <div key={i} className="flex min-w-48 items-center gap-3 rounded-lg border border-border/50 bg-card p-2 shadow-sm transition-colors hover:bg-muted/50 cursor-pointer">
+                  <div key={i} className="flex min-w-48 items-center gap-3 rounded-lg border border-border/50 bg-card p-2 shadow-sm">
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded bg-primary/10 text-[10px] font-bold text-primary">
-                      {file.ext || (file.name.includes('.') ? file.name.split('.').pop()?.toUpperCase() : 'FILE')}
+                      {attachmentExtensionLabel(file)}
                     </div>
                     <div className="flex flex-col overflow-hidden">
                       <span className="truncate text-xs font-medium text-foreground">{file.name}</span>
@@ -694,7 +714,6 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
             </div>
           )}
 
-          {/* 미팅 제안 패널 (Meeting Proposal) */}
           {email.meeting_proposals && email.meeting_proposals.length > 0 && (
             <div className="mt-2 rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
@@ -703,17 +722,17 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                 </span>
                 <h4 className="text-sm font-bold text-foreground">미팅 일정 제안</h4>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <ul className="flex flex-wrap items-center gap-2">
                 {email.meeting_proposals.map((proposal, i) => (
-                  <Button key={i} variant="outline" size="sm" className="h-8 gap-2 border-primary/20 bg-background text-xs">
+                  <li
+                    key={i}
+                    className="inline-flex h-8 items-center gap-2 rounded-md border border-primary/20 bg-background px-3 text-xs"
+                  >
                     <span className="font-semibold">{proposal.date}</span>
                     <span className="text-muted-foreground">{proposal.time}</span>
-                  </Button>
+                  </li>
                 ))}
-                <Button size="sm" className="h-8 gap-1 px-3 text-xs">
-                  일정 확인 및 확정
-                </Button>
-              </div>
+              </ul>
             </div>
           )}
         </div>
