@@ -1,0 +1,94 @@
+name: One-shot sync PR 1297 with develop
+
+on:
+  push:
+    branches:
+      - fix/remove-lexical-topic-heuristics
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-sync-pr-1297
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: >-
+      github.repository == 'ContextualWisdomLab/naruon' &&
+      github.ref == 'refs/heads/fix/remove-lexical-topic-heuristics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact PR branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: fix/remove-lexical-topic-heuristics
+
+      - name: Merge current develop and remove this one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch='fix/remove-lexical-topic-heuristics'
+          workflow='.github/workflows/one-shot-sync-pr-1297.yml'
+          expected_pr_parent='4fe5c9accd0864af8c11c54f1103d120280ae9b1'
+          email_detail_entry='- EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.'
+
+          test "$(git rev-parse HEAD^)" = "$expected_pr_parent"
+          git fetch --no-tags origin develop
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          if ! git merge-base --is-ancestor origin/develop HEAD; then
+            set +e
+            git merge --no-commit --no-ff origin/develop
+            merge_status=$?
+            set -e
+
+            mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+            if (( merge_status != 0 )); then
+              if (( ${#conflicts[@]} != 1 )) || [[ "${conflicts[0]}" != 'CHANGELOG.md' ]]; then
+                printf 'Unexpected merge conflicts:\n' >&2
+                printf '  %s\n' "${conflicts[@]}" >&2
+                exit 1
+              fi
+
+              git checkout --ours -- CHANGELOG.md
+              EMAIL_DETAIL_ENTRY="$email_detail_entry" python - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path('CHANGELOG.md')
+          text = path.read_text(encoding='utf-8')
+          heading = '## [Unreleased]\n'
+          entry = os.environ['EMAIL_DETAIL_ENTRY'] + '\n'
+          if not text.startswith(heading):
+              raise SystemExit('CHANGELOG.md does not start with the Unreleased heading')
+          if entry not in text:
+              text = heading + entry + text[len(heading):]
+              path.write_text(text, encoding='utf-8')
+          PY
+              git add CHANGELOG.md
+            fi
+          fi
+
+          rm -- "$workflow"
+          git add -A
+          git diff --cached --check
+
+          if git diff --cached --quiet; then
+            echo 'No synchronization commit was required.'
+            exit 0
+          fi
+
+          git commit -m 'Merge develop into fix/remove-lexical-topic-heuristics'
+          git push origin "HEAD:${branch}"
