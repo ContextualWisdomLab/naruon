@@ -133,3 +133,7 @@
 **Vulnerability:** The `in_reply_to` and `references` fields on the `SendEmailRequest` model lacked explicit validation, opening up an opportunity for header injection by appending `\r\n`.
 **Learning:** While the email service internally checks some headers, relying on the API boundary's Pydantic model ensures bad input is stopped early and consistently. Pydantic regex patterns aren't sufficient on their own for all string contexts due to encoding/decoding inconsistencies.
 **Prevention:** Always use `@field_validator` with explicit `mode="before"` string matching to reject `chr(10)` and `chr(13)` across all user-controlled email header fields. Use `isinstance(value, str)` before string operations to prevent runtime errors if input is missing or malformed.
+## 2025-02-14 - Limit Percent-Decoding Rounds to Prevent DoS
+**Vulnerability:** A Denial of Service (DoS) vulnerability existed in `backend/api/dav.py` due to an excessive loop bound (`range(100)`) for `urllib.parse.unquote`.
+**Learning:** Malicious inputs with deeply nested percent-encoding (e.g., `%252525...`) could force the application to perform expensive string operations in a loop, consuming CPU resources and blocking the event loop.
+**Prevention:** Bound loop-based decoding and normalization logic to a small, fixed number of rounds (e.g., 4) to ensure constant-time worst-case bounds.

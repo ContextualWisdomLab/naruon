@@ -16,7 +16,7 @@ router = APIRouter(prefix="/dav", tags=["dav"])
 
 def _normalize_dav_authorization_path(path: str) -> str:
     normalized_path = path.replace("\\", "/")
-    for _ in range(100):
+    for _ in range(4):
         decoded_path = unquote(normalized_path).replace("\\", "/")
         if decoded_path == normalized_path:
             return normalized_path
