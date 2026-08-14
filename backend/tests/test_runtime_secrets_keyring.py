@@ -1,6 +1,7 @@
 import pytest
 from cryptography.fernet import Fernet
-from core.runtime_secrets import build_encryption_keyring, DEFAULT_ENCRYPTION_KEY_ID
+
+from core.runtime_secrets import DEFAULT_ENCRYPTION_KEY_ID, build_encryption_keyring
 
 
 def test_build_encryption_keyring_success():
@@ -44,8 +45,6 @@ def test_build_encryption_keyring_with_previous_keys():
 def test_build_encryption_keyring_duplicate_key_id():
     active_key = Fernet.generate_key().decode("utf-8")
     prev_key = Fernet.generate_key().decode("utf-8")
-
-    # Trying to use DEFAULT_ENCRYPTION_KEY_ID ('primary') in previous_keys
     previous_keys_str = f"{DEFAULT_ENCRYPTION_KEY_ID}={prev_key}"
 
     with pytest.raises(
@@ -59,7 +58,6 @@ def test_build_encryption_keyring_duplicate_key_id():
 def test_build_encryption_keyring_invalid_previous_key_format():
     active_key = Fernet.generate_key().decode("utf-8")
 
-    # Missing key_id
     with pytest.raises(
         RuntimeError,
         match="ENCRYPTION_PREVIOUS_KEYS entries must use key_id=fernet_key",
@@ -68,7 +66,6 @@ def test_build_encryption_keyring_invalid_previous_key_format():
             active_key_value=active_key, previous_keys_value="=some_value"
         )
 
-    # Missing separator
     with pytest.raises(
         RuntimeError,
         match="ENCRYPTION_PREVIOUS_KEYS entries must use key_id=fernet_key",
