@@ -13,15 +13,17 @@ const PRIVATE_OR_LOCAL_HOST_PATTERNS: readonly RegExp[] = [
   /^fe[89ab][0-9a-f]:/,
 ];
 
+/** Normalize a URL hostname for exact host-policy comparisons. */
 export function normalizeHostname(value: URL | string): string {
   const hostname = typeof value === "string" ? value : value.hostname;
   return hostname
+    .replace(/\.+$/, "")
     .replace(/^\[/, "")
     .replace(/\]$/, "")
-    .replace(/\.+$/, "")
     .toLowerCase();
 }
 
+/** Return whether a hostname is one of Naruon's exact loopback endpoints. */
 export function isLoopbackHostname(value: URL | string): boolean {
   const hostname = normalizeHostname(value);
   return (
@@ -31,6 +33,7 @@ export function isLoopbackHostname(value: URL | string): boolean {
   );
 }
 
+/** Return whether a hostname uses the IPv4-mapped IPv6 prefix. */
 export function isIpv4MappedHostname(value: URL | string): boolean {
   return normalizeHostname(value).startsWith("::ffff:");
 }
@@ -54,6 +57,7 @@ function ipv4MappedHostToDotted(hostname: string): string | null {
   return [high >> 8, high & 255, low >> 8, low & 255].join(".");
 }
 
+/** Return whether a hostname is private, link-local, unspecified, or loopback. */
 export function isPrivateOrLoopbackHostname(value: URL | string): boolean {
   const hostname = normalizeHostname(value);
   const mapped = ipv4MappedHostToDotted(hostname);
