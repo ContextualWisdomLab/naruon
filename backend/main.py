@@ -129,7 +129,7 @@ def _origin_from_referer(header_value: str | None) -> str | None:
 
 def _is_trusted_browser_origin(origin: str | None) -> bool:
     if origin is None:
-        return True
+        return False
     return origin in set(settings.ALLOWED_CORS_ORIGINS_LIST)
 
 
@@ -151,20 +151,22 @@ async def reject_cross_site_state_changing_api_requests(request: Request, call_n
             )
 
         raw_origin = request.headers.get("origin")
+        raw_referer = request.headers.get("referer")
+        if not fetch_site and raw_origin is None and raw_referer is None:
+            return await call_next(request)
         origin = _normalized_origin(raw_origin)
         if raw_origin is not None and origin is None:
             return JSONResponse(
                 status_code=403,
                 content={"error_code": "csrf_origin_rejected"},
             )
-        if not _is_trusted_browser_origin(origin):
+        if origin is not None and not _is_trusted_browser_origin(origin):
             return JSONResponse(
                 status_code=403,
                 content={"error_code": "csrf_origin_rejected"},
             )
 
         if origin is None:
-            raw_referer = request.headers.get("referer")
             referer_origin = _origin_from_referer(raw_referer)
             if raw_referer is not None and referer_origin is None:
                 return JSONResponse(
