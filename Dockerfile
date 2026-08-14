@@ -1,5 +1,5 @@
 # Stage 1: Backend runtime for local Compose and backend-only deployments
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS backend-runtime
+FROM python:3.14-slim@sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc AS backend-runtime
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -25,7 +25,7 @@ EXPOSE 8000
 CMD ["python", "scripts/start_backend.py", "--host", "0.0.0.0", "--port", "8000"]
 
 # Stage 2: Build Frontend
-FROM node:26-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583 AS frontend-builder
+FROM node:26-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503 AS frontend-builder
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 ENV PNPM_VERSION=11.5.3
@@ -63,8 +63,8 @@ ARG OCI_IMAGE_LICENSES="LicenseRef-Naruon-Proprietary"
 ARG OCI_IMAGE_REF_NAME=""
 ARG OCI_IMAGE_TITLE="naruon"
 ARG OCI_IMAGE_DESCRIPTION="Naruon combined FastAPI and Next.js runtime image"
-ARG OCI_IMAGE_BASE_DIGEST="sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6"
-ARG OCI_IMAGE_BASE_NAME="docker.io/library/python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6"
+ARG OCI_IMAGE_BASE_DIGEST="sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc"
+ARG OCI_IMAGE_BASE_NAME="docker.io/library/python:3.14-slim@sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc"
 
 # Defaults keep local builds provenance-complete. The publishing workflow derives
 # and overrides both values from the exact first FROM instruction, while
