@@ -170,6 +170,28 @@ export default function NetworkGraph() {
     return map;
   }, [nodes]);
 
+  // ⚡ Bolt: Pre-compute Map for O(1) edge lookups
+  const edgesById = useMemo(() => {
+    const map = new Map<string, Edge>();
+    for (const edge of edges) {
+      if (edge.id != null) {
+        map.set(String(edge.id), edge);
+      }
+    }
+    return map;
+  }, [edges]);
+
+  // ⚡ Bolt: Pre-compute Map for O(1) node lookups
+  const nodesById = useMemo(() => {
+    const map = new Map<string, Node>();
+    for (const node of nodes) {
+      if (node.id != null) {
+        map.set(String(node.id), node);
+      }
+    }
+    return map;
+  }, [nodes]);
+
   useEffect(() => {
     apiClient.get<NetworkData>('/api/network/graph')
       .then((data) => {
@@ -202,7 +224,7 @@ export default function NetworkGraph() {
       };
 
       const selectEdge = (edgeId: number | string) => {
-        const edge = edges.find((candidate) => graphIdEquals(candidate.id, edgeId));
+        const edge = edgesById.get(String(edgeId));
         if (!edge) return;
         setRelationshipOptionId(String(edge.id));
         setNodeOptionId('');
@@ -262,7 +284,7 @@ export default function NetworkGraph() {
         network.destroy();
       };
     }
-  }, [nodes, edges, nodeMap]);
+  }, [nodes, edges, nodeMap, edgesById]);
 
   const nodeLabels = useMemo(() => {
     return nodes
@@ -315,13 +337,13 @@ export default function NetworkGraph() {
   };
 
   const handleRelationshipOptionChange = (value: string) => {
-    const edge = edges.find((candidate) => String(candidate.id) === value);
+    const edge = edgesById.get(value);
     if (!edge) return;
     selectRelationship(edge, '선택한 관계를 열었습니다.');
   };
 
   const handleNodeOptionChange = (value: string) => {
-    const node = nodes.find((candidate) => String(candidate.id) === value);
+    const node = nodesById.get(value);
     if (!node) return;
     selectGraphNode(node, '선택한 노드를 열었습니다.');
   };

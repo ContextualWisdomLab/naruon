@@ -26,3 +26,6 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2024-08-01 - Avoided O(N) lookup repeatedly in handlers by mapping IDs
+**Learning:** Using `Array.prototype.find()` on large datasets like graph nodes or edges inside interaction event handlers causes unexpected blocking and O(N) delay every time the user performs an action (e.g., selecting a relationship option from a select component).
+**Action:** Use `useMemo` to construct a Map structure from the array with the `id` as the key (`edgesById`, `nodesById`), replacing `.find()` calls in selection event handlers with `.get()` to ensure O(1) performance and a smoother UI experience.
