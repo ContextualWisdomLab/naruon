@@ -36,24 +36,26 @@ jobs:
 
           test "$GITHUB_REPOSITORY" = 'ContextualWisdomLab/naruon'
           test "$GITHUB_REF" = 'refs/heads/fix/remove-lexical-topic-heuristics'
-          test "$(git rev-parse HEAD^)" = 'b99558dc7bd716261372b58692546c7739fa5859'
+          test "$(git rev-parse HEAD^)" = '61e9de0d30021de6997cd6afd0a6f4ad3f016f5c'
 
           python - <<'PY'
           from pathlib import Path
 
           path = Path('AGENTS.md')
-          old = '''  reference that binds the full scope or an explicit composite identity with the
-  required snapshot revision, model version, request/result scope, and label
-  version. Never join snapshots, model artifacts, topic components, or label
-  evidence by a bare document, model, topic, rank, label, or display value.
-'''
-          new = '''  reference that binds the full scope or an explicit composite identity with the
-  applicable snapshot revision, model version, request/result scope, or label
-  version. Define the required identity tuple for each entity; require only the
-  dimensions relevant to that entity. Never join snapshots, model artifacts,
-  topic components, or label evidence by a bare document, model, topic, rank,
-  label, or display value.
-'''
+          old = (
+              "  reference that binds the full scope or an explicit composite identity with the\n"
+              "  required snapshot revision, model version, request/result scope, and label\n"
+              "  version. Never join snapshots, model artifacts, topic components, or label\n"
+              "  evidence by a bare document, model, topic, rank, label, or display value.\n"
+          )
+          new = (
+              "  reference that binds the full scope or an explicit composite identity with the\n"
+              "  applicable snapshot revision, model version, request/result scope, or label\n"
+              "  version. Define the required identity tuple for each entity; require only the\n"
+              "  dimensions relevant to that entity. Never join snapshots, model artifacts,\n"
+              "  topic components, or label evidence by a bare document, model, topic, rank,\n"
+              "  label, or display value.\n"
+          )
           text = path.read_text(encoding='utf-8')
           if text.count(old) != 1:
               raise SystemExit('expected AGENTS.md identity guidance was not found exactly once')
