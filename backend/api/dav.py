@@ -224,8 +224,9 @@ async def dav_handler(
     Provider-backed writeback stays fail-closed until source capability and
     ETag/If-Match enforcement are available through signed writeback intents.
     """
-    _ensure_dav_owner_scope(path, auth_context)
-    safe_path = repr(path)[1:-1]
+    normalized_path = _normalize_dav_authorization_path(path)
+    _ensure_dav_owner_scope(normalized_path, auth_context)
+    safe_path = repr(normalized_path)[1:-1]
     logger.info("DAV Request: %s /%s", request.method, safe_path)
 
     if request.method == "OPTIONS":
@@ -241,14 +242,13 @@ async def dav_handler(
     if request.method == "PROPFIND":
         return await _handle_project_propfind(
             request=request,
-            path=path,
+            path=normalized_path,
             auth_context=auth_context,
             db=db,
         )
 
     if request.method == "PUT":
         body = await request.body()
-        safe_path = repr(path)[1:-1]
         logger.info("DAV PUT received %s bytes at /%s", len(body), safe_path)
         logger.warning(
             "DAV PUT rejected at /%s: provider-backed DAV writeback is not "
