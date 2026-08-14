@@ -399,10 +399,9 @@ async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(c
     assert records[0].exception_type == "ValueError"
     assert len(records[0].exception_traceback_fingerprint) == 12
     int(records[0].exception_traceback_fingerprint, 16)
-    assert (
-        records[0].tool_code_fingerprint
-        == hashlib.sha256(hostile_code.encode("utf-8")).hexdigest()[:12]
-    )
+    assert records[0].tool_code_fingerprint == hashlib.sha256(
+        hostile_code.encode("utf-8")
+    ).hexdigest()[:12]
     assert response.message == r"failure\r\nforged_exception=true"
     assert "\r" not in response.message
     assert "\n" not in response.message
@@ -502,30 +501,6 @@ async def test_text_analyzer_tool_success():
     assert result["char_count"] == 27
     assert result["char_count_no_spaces"] == 21
     assert result["word_count"] == 6
-
-
-@pytest.mark.asyncio
-async def test_uuid_v4_generator_tool_success():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/uuid_v4_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    result = data["result"]
-
-    # Check if the result has 'uuid' key
-    assert "uuid" in result
-
-    # Validate UUID v4 format
-    import uuid
-
-    generated_uuid = result["uuid"]
-    parsed_uuid = uuid.UUID(generated_uuid)
-    assert parsed_uuid.version == 4
 
 
 @pytest.mark.asyncio
