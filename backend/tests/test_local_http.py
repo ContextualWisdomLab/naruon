@@ -8,43 +8,25 @@ from core.local_http import (
 )
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        (
-            "http://[::1]:18080/",
-            LocalHTTPOrigin(
-                origin="http://[::1]:18080",
-                scheme="http",
-                hostname="::1",
-                port=18080,
-            ),
-        ),
-        (
-            "http://localhost",
-            LocalHTTPOrigin(
-                origin="http://localhost",
-                scheme="http",
-                hostname="localhost",
-                port=80,
-            ),
-        ),
-        (
-            "https://127.0.0.1:443/",
-            LocalHTTPOrigin(
-                origin="https://127.0.0.1",
-                scheme="https",
-                hostname="127.0.0.1",
-                port=443,
-            ),
-        ),
-    ],
-)
-def test_loopback_origin_is_canonicalized(
-    value: str,
-    expected: LocalHTTPOrigin,
-) -> None:
-    assert validate_loopback_http_origin(value) == expected
+def test_loopback_origin_is_canonicalized() -> None:
+    assert validate_loopback_http_origin("http://[::1]:18080/") == LocalHTTPOrigin(
+        origin="http://[::1]:18080",
+        scheme="http",
+        hostname="::1",
+        port=18080,
+    )
+    assert validate_loopback_http_origin("http://localhost") == LocalHTTPOrigin(
+        origin="http://localhost",
+        scheme="http",
+        hostname="localhost",
+        port=80,
+    )
+    assert validate_loopback_http_origin("https://127.0.0.1:443/") == LocalHTTPOrigin(
+        origin="https://127.0.0.1",
+        scheme="https",
+        hostname="127.0.0.1",
+        port=443,
+    )
 
 
 @pytest.mark.parametrize(
@@ -67,7 +49,7 @@ def test_loopback_origin_normalizes_malformed_parser_errors(value: str) -> None:
     [
         "http://localhost:80\x00/",
         "http://\nlocalhost/",
-    ],
+    ]
 )
 def test_loopback_origin_rejects_control_characters(value: str) -> None:
     with pytest.raises(LocalHTTPValidationError, match="control characters"):
@@ -81,15 +63,12 @@ def test_loopback_origin_rejects_control_characters(value: str) -> None:
         "http://user:pass@localhost/",
         "http://localhost/path",
         "http://localhost/?query=1",
-        "http://localhost/#fragment",
-        "http:///",
-    ],
+        "http://localhost/#frag",
+        "http:///",  # No hostname
+    ]
 )
 def test_loopback_origin_rejects_invalid_components(value: str) -> None:
-    with pytest.raises(
-        LocalHTTPValidationError,
-        match=r"must be a loopback HTTP\(S\) origin",
-    ):
+    with pytest.raises(LocalHTTPValidationError, match=r"must be a loopback HTTP\(S\) origin"):
         validate_loopback_http_origin(value)
 
 
@@ -100,7 +79,7 @@ def test_loopback_origin_rejects_invalid_components(value: str) -> None:
         "http://192.168.1.1/",
         "http://[2001:db8::1]/",
         "http://invalid.localhost/",
-    ],
+    ]
 )
 def test_loopback_origin_rejects_non_allowlisted_hosts(value: str) -> None:
     with pytest.raises(LocalHTTPValidationError, match="host is not allowlisted"):
@@ -111,10 +90,10 @@ def test_loopback_origin_rejects_non_allowlisted_hosts(value: str) -> None:
     "value",
     [
         "http://localhost:-1/",
-        "http://localhost:0/",
         "http://localhost:65536/",
         "http://localhost:abc/",
-    ],
+        "http://localhost:0/",
+    ]
 )
 def test_loopback_origin_rejects_invalid_ports(value: str) -> None:
     with pytest.raises(LocalHTTPValidationError, match="port is invalid"):
