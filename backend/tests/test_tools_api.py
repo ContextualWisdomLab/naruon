@@ -1277,3 +1277,102 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_url_extractor():
+    result = await execute_tool(
+        "url_extractor",
+        ExecuteRequest(
+            parameters={
+                "text": "Check out https://example.com and www.test.com for more info."
+            }
+        ),
+    )
+    assert result.status == "success"
+    assert "urls" in result.result
+    urls = result.result["urls"]
+    assert len(urls) == 2
+    assert urls[0] == "https://example.com"
+    assert urls[1] == "http://www.test.com"
+
+
+@pytest.mark.asyncio
+async def test_url_extractor_no_urls():
+    result = await execute_tool(
+        "url_extractor",
+        ExecuteRequest(parameters={"text": "This text has no links in it."}),
+    )
+    assert result.status == "success"
+    assert "urls" in result.result
+    assert len(result.result["urls"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_hash_generator():
+    result = await execute_tool(
+        "hash_generator",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "md5"}),
+    )
+    assert result.status == "success"
+    assert result.result["algorithm"] == "md5"
+    assert result.result["hash"] == "5d41402abc4b2a76b9719d911017c592"
+
+    result_sha256 = await execute_tool(
+        "hash_generator",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "sha256"}),
+    )
+    assert result_sha256.status == "success"
+    assert result_sha256.result["algorithm"] == "sha256"
+    assert (
+        result_sha256.result["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+    result_sha1 = await execute_tool(
+        "hash_generator",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "sha1"}),
+    )
+    assert result_sha1.status == "success"
+
+    result_sha512 = await execute_tool(
+        "hash_generator",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "sha512"}),
+    )
+    assert result_sha512.status == "success"
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_invalid_algorithm():
+    result = await execute_tool(
+        "hash_generator",
+        ExecuteRequest(parameters={"text": "hello", "algorithm": "invalid"}),
+    )
+    assert result.status == "failed"
+    assert "Unsupported algorithm: invalid" in result.message
+    assert result.result is None
+
+
+@pytest.mark.asyncio
+async def test_json_formatter():
+    valid_json = '{"name":"test", "value":1}'
+    result = await execute_tool(
+        "json_formatter", ExecuteRequest(parameters={"json_string": valid_json})
+    )
+    assert result.status == "success"
+    assert "formatted_json" in result.result
+    # Checking for specific indentation style
+    assert (
+        '{\n    "name": "test",\n    "value": 1\n}' == result.result["formatted_json"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_invalid():
+    invalid_json = '{name: "test"'
+    result = await execute_tool(
+        "json_formatter", ExecuteRequest(parameters={"json_string": invalid_json})
+    )
+    assert result.status == "failed"
+    assert "Invalid JSON string" in result.message
+    assert result.result is None

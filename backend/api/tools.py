@@ -857,6 +857,83 @@ registry.register(
 )
 
 
+async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, List[str]]:
+    text = params.get("text", "")
+    # Simple regex to extract http/https URLs
+    urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
+    # Ensure all extracted URLs start with http
+    normalized_urls = [
+        url if url.startswith("http") else f"http://{url}" for url in urls
+    ]
+    return {"urls": normalized_urls}
+
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에서 모든 URL을 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    encoded_text = text.encode("utf-8")
+
+    if algorithm == "md5":
+        h = hashlib.md5(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha1":
+        h = hashlib.sha1(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha256":
+        h = hashlib.sha256(encoded_text)
+    elif algorithm == "sha512":
+        h = hashlib.sha512(encoded_text)
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+    return {"hash": h.hexdigest(), "algorithm": algorithm}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트의 해시(MD5, SHA1, SHA256, SHA512)를 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    json_string = params.get("json_string", "")
+    try:
+        parsed_json = json.loads(json_string)
+        formatted_json = json.dumps(parsed_json, indent=4, ensure_ascii=False)
+        return {"formatted_json": formatted_json}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 보기 좋게 포매팅합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
+
+
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:
     """
