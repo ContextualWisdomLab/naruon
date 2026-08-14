@@ -1,4 +1,5 @@
 ## [Unreleased]
+- EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
 
 - STM 결과로 오인될 수 있었던 하드코딩 용어표 기반
