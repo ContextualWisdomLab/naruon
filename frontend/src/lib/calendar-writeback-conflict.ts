@@ -17,6 +17,14 @@ const CONFLICT_ERROR_CODES = new Set([
   "schedule_conflict",
 ]);
 
+const CONFLICT_STATUS_CODES = new Set([
+  "conflict",
+  "etag_conflict",
+  "if_match_conflict",
+  "precondition_failed",
+  "schedule_conflict",
+]);
+
 /**
  * Return the strongest conflict state across one writeback-intent batch.
  *
@@ -34,7 +42,7 @@ export function calendarWritebackConflictState(
     if (
       intent.provider_status === 412 ||
       CONFLICT_ERROR_CODES.has(errorCode) ||
-      status.includes("conflict")
+      CONFLICT_STATUS_CODES.has(status)
     ) {
       return "conflict";
     }
