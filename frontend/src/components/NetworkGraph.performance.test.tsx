@@ -42,6 +42,7 @@ describe("NetworkGraph lookup complexity", () => {
   let container: HTMLDivElement | null = null;
 
   async function renderGraph(body: unknown) {
+    onMock.mockClear();
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(body))));
     container = document.createElement("div");
     document.body.appendChild(container);
