@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
 
 import type { CalendarWritebackActionKey, CalendarWritebackIntentResponse, CalendarWritebackSource, WritebackStatus } from './calendar/types';
-import { calendarDefinitions, calendarMonthEvents, calendarWeekEvents, calendarCandidateEvents } from './calendar/constants';
-import { buildInitialCalendarVisibility, isCustomerOwnedWritableSource, getApiErrorStatus } from './calendar/helpers';
+import { calendarDefinitions, calendarDisplayMonth, calendarMonthEvents, calendarWeekEvents, calendarCandidateEvents } from './calendar/constants';
+import { buildInitialCalendarVisibility, formatCalendarDisplayMonth, isCustomerOwnedWritableSource, getApiErrorStatus } from './calendar/helpers';
 import { CalendarMonthView } from './calendar/CalendarMonthView';
 import { CalendarWeekView } from './calendar/CalendarWeekView';
 import { CalendarDetailView } from './calendar/CalendarDetailView';
@@ -179,7 +179,7 @@ export function CalendarLayout() {
               <Button type="button" variant="ghost" size="icon-sm" aria-label="다음 달" className="rounded-md"><ChevronRight className="size-5" aria-hidden="true" /></Button>
             </div>
             <h1 className="text-xl font-bold">일정 관리</h1>
-            <h2 className="text-sm font-bold text-muted-foreground lg:ml-2">2026년 5월</h2>
+            <h2 className="text-sm font-bold text-muted-foreground lg:ml-2">{formatCalendarDisplayMonth(calendarDisplayMonth)}</h2>
           </div>
           <div className="flex w-full min-w-0 items-center gap-3">
             <div role="tablist" aria-label="일정 보기 방식" className="flex min-w-0 overflow-x-auto rounded-md border border-border">

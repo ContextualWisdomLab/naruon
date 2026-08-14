@@ -1,4 +1,5 @@
 ## [Unreleased]
+- 회의 조율 제안 버튼의 날짜·요일·`aria-label`을 캘린더 헤더와 같은 2026년 5월 Seoul ISO 시각에서 만들어, 잘못된 `(목)`/`(금)` 하드코드를 제거합니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 - UUID V4 제너레이터(`uuid_v4_generator`) 도구를 추가하여 런타임에서 범용 고유 식별자 버전 4를 랜덤으로 생성할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
 ### 보안 패치 (CodeQL extended current-head)

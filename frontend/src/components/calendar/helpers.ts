@@ -66,6 +66,53 @@ export function getProviderRetryLabel(result: CalendarWritebackIntentResponse) {
   return '실행 요청 없음';
 }
 
+const SEOUL_WEEKDAY: Record<string, string> = {
+  Sun: "일",
+  Mon: "월",
+  Tue: "화",
+  Wed: "수",
+  Thu: "목",
+  Fri: "금",
+  Sat: "토",
+};
+
+function seoulDateParts(iso: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const values: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.type !== "literal") {
+      values[part.type] = part.value;
+    }
+  }
+  return values;
+}
+
+/** Format a 회의 조율 slot from the same Seoul ISO instants used as proposal data. */
+export function formatCoordinationProposalLabel(startsAt: string, endsAt: string) {
+  const start = seoulDateParts(startsAt);
+  const end = seoulDateParts(endsAt);
+  const weekday = SEOUL_WEEKDAY[start.weekday] ?? start.weekday;
+  const startHour = start.hour.padStart(2, "0");
+  const startMinute = start.minute.padStart(2, "0");
+  const endHour = end.hour.padStart(2, "0");
+  const endMinute = end.minute.padStart(2, "0");
+  return `${start.month}월 ${start.day}일 (${weekday}) ${startHour}:${startMinute} - ${endHour}:${endMinute}`;
+}
+
+/** Format the calendar chrome month from the shared YYYY-MM display month. */
+export function formatCalendarDisplayMonth(month: string) {
+  const [year, monthNumber] = month.split("-");
+  return `${year}년 ${Number(monthNumber)}월`;
+}
+
 export function getApiErrorStatus(error: unknown) {
   const shapedError = error as { status?: unknown; response?: { status?: unknown } } | null;
   if (typeof shapedError?.status === 'number') return shapedError.status;

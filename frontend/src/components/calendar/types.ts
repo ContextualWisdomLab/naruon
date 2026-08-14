@@ -68,4 +68,13 @@ export type CalendarCandidateEvent = {
   mode: string;
 };
 
+export type CalendarCoordinationProposal = {
+  id: string;
+  rankLabel: string;
+  startsAt: string;
+  endsAt: string;
+  availability: string;
+  emphasized: boolean;
+};
+
 export type CalendarDetailEvent = CalendarMonthEvent;
