@@ -189,7 +189,6 @@ registry = ToolRegistry()
 
 # Initialize default tools
 
-
 async def mock_handler(params: Dict[str, Any]) -> str:
     encoded = json.dumps(params, ensure_ascii=False, sort_keys=True)
     return f"Mock execution successful with params: {encoded}"
@@ -246,7 +245,6 @@ async def tone_analyzer_handler(params: Dict[str, Any]) -> Any:
         "tone_score": 85,
     }
 
-
 def _detect_text_language(text: str) -> str:
     if any("\uac00" <= char <= "\ud7a3" for char in text):
         return "ko"
@@ -274,10 +272,7 @@ async def email_translator_handler(params: Dict[str, Any]) -> Any:
         ]
         translated_terms: list[str] = []
         for source_phrase, translated_phrase in phrase_map:
-            if (
-                source_phrase in lowered_text
-                and translated_phrase not in translated_terms
-            ):
+            if source_phrase in lowered_text and translated_phrase not in translated_terms:
                 translated_terms.append(translated_phrase)
         translated_text = " ".join(translated_terms) if translated_terms else text
         confidence = 0.9 if translated_terms else 0.45
@@ -296,9 +291,7 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
     normalized_domain = sender_domain.lower()
     phishing_terms = {"password", "bank", "login", "verify", "account", "credential"}
     spam_terms = {"urgent", "now", "free", "winner", "click", "limited"}
-    phishing_hits = sorted(
-        term for term in phishing_terms if term in normalized_content
-    )
+    phishing_hits = sorted(term for term in phishing_terms if term in normalized_content)
     spam_hits = sorted(term for term in spam_terms if term in normalized_content)
     suspicious_domain = (
         normalized_domain.endswith((".ru", ".zip", ".tk"))
@@ -321,9 +314,7 @@ async def spam_phishing_detector_handler(params: Dict[str, Any]) -> Any:
         warnings.append(f"sender domain looks suspicious: {sender_domain}")
     return {
         "is_spam": bool(spam_hits or suspicious_domain),
-        "is_phishing": bool(
-            len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)
-        ),
+        "is_phishing": bool(len(phishing_hits) >= 2 or (phishing_hits and suspicious_domain)),
         "risk_score": risk_score,
         "warnings": warnings,
     }
@@ -348,15 +339,7 @@ async def sentiment_analyzer_handler(params: Dict[str, Any]) -> Any:
     text = params.get("text", "")
     normalized_text = text.lower()
     positive_terms = {"thank", "thanks", "great", "good", "excellent", "감사", "좋"}
-    negative_terms = {
-        "disappointed",
-        "urgent",
-        "issue",
-        "problem",
-        "bad",
-        "불만",
-        "문제",
-    }
+    negative_terms = {"disappointed", "urgent", "issue", "problem", "bad", "불만", "문제"}
     positive_hits = [term for term in positive_terms if term in normalized_text]
     negative_hits = [term for term in negative_terms if term in normalized_text]
     if negative_hits and len(negative_hits) >= len(positive_hits):
@@ -550,7 +533,6 @@ registry.register(
     tone_analyzer_handler,
 )
 
-
 async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
     text = params.get("text", "")
     char_count = len(text)
@@ -562,7 +544,6 @@ async def text_analyzer_handler(params: Dict[str, Any]) -> Dict[str, int]:
         "char_count_no_spaces": char_count_no_spaces,
         "word_count": len(text.split()),
     }
-
 
 registry.register(
     ToolInfo(
@@ -960,60 +941,3 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
             result=None,
             message=_safe_tool_failure_message(e),
         )
-
-
-async def uppercase_converter_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
-    return {"converted_text": text.upper()}
-
-
-registry.register(
-    ToolInfo(
-        code="uppercase_converter",
-        name="대문자 변환기 (Uppercase Converter)",
-        description="입력된 문자열을 대문자로 변환합니다.",
-        category="텍스트",
-        parameters={
-            "text": {"type": "string", "description": "대문자로 변환할 대상 텍스트"}
-        },
-    ),
-    uppercase_converter_handler,
-)
-
-
-async def lowercase_converter_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
-    return {"converted_text": text.lower()}
-
-
-registry.register(
-    ToolInfo(
-        code="lowercase_converter",
-        name="소문자 변환기 (Lowercase Converter)",
-        description="입력된 문자열을 소문자로 변환합니다.",
-        category="텍스트",
-        parameters={
-            "text": {"type": "string", "description": "소문자로 변환할 대상 텍스트"}
-        },
-    ),
-    lowercase_converter_handler,
-)
-
-
-async def string_length_calculator_handler(params: Dict[str, Any]) -> Dict[str, int]:
-    text = params.get("text", "")
-    return {"length": len(text)}
-
-
-registry.register(
-    ToolInfo(
-        code="string_length_calculator",
-        name="문자열 길이 계산기 (String Length Calculator)",
-        description="입력된 문자열의 길이를 반환합니다.",
-        category="텍스트",
-        parameters={
-            "text": {"type": "string", "description": "길이를 계산할 대상 텍스트"}
-        },
-    ),
-    string_length_calculator_handler,
-)
