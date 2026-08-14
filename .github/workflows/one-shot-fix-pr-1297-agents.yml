@@ -17,7 +17,7 @@ jobs:
     if: >-
       github.repository == 'ContextualWisdomLab/naruon' &&
       github.ref == 'refs/heads/fix/remove-lexical-topic-heuristics' &&
-      github.sha == '0b0f6ac9a8759de9fe92edae90f5c9ed13f34a85'
+      github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -29,7 +29,7 @@ jobs:
       - name: Checkout exact PR branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          fetch-depth: 2
           persist-credentials: true
           ref: fix/remove-lexical-topic-heuristics
 
@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          test "$(git rev-parse HEAD)" = '0b0f6ac9a8759de9fe92edae90f5c9ed13f34a85'
+          test "$(git rev-parse HEAD^)" = '01fbdacb592c8271079641e12911c949c137ae28'
 
           python - <<'PY'
           from pathlib import Path
@@ -65,7 +65,7 @@ jobs:
           rm -- '.github/workflows/one-shot-fix-pr-1297-agents.yml'
           git add AGENTS.md .github/workflows/one-shot-fix-pr-1297-agents.yml
           git diff --cached --check
-          git diff --cached --exit-code -- AGENTS.md && exit 1 || true
+          git diff --cached --quiet -- AGENTS.md && exit 1
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
