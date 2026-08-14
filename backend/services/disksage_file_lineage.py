@@ -45,6 +45,7 @@ PROVIDER_SYNC_STATE_VALUES = Literal[
     "content-mismatch",
     "unknown",
 ]
+PROVIDER_SYNC_TIMELINESS_VALUES = Literal["complete", "pending", "overdue"]
 UNKNOWN_ONTOLOGY_CLASS = "https://disksage.app/ontology#Unknown"
 EVIDENCE_PRECEDENCE = (
     "embedded_metadata",
@@ -155,6 +156,12 @@ class CloudCopyLineage(_StrictModel):
     remote_object_id: str | None = Field(default=None, max_length=512)
     remote_revision: str | None = Field(default=None, max_length=512)
     remote_location_bound: bool | None = None
+    # DiskSage's diagnostic timeliness projection is retained inside the encrypted envelope;
+    # it never grants source-eviction authority.
+    sync_timeliness: PROVIDER_SYNC_TIMELINESS_VALUES | None = None
+    sync_pending_age_ms: int | None = Field(default=None, ge=0)
+    sync_overdue_after_ms: int | None = Field(default=None, ge=0)
+    sync_reason_codes: list[str] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
     def bind_provider_evidence(self) -> CloudCopyLineage:
@@ -182,6 +189,12 @@ class CloudCopyLineage(_StrictModel):
             self.remote_object_id is None or not self.remote_object_id.strip()
         ):
             raise ValueError("remote location binding is missing its object id")
+        if self.sync_timeliness == "complete" and (
+            not self.provider_sync_confirmed or self.provider_sync_state != "complete"
+        ):
+            raise ValueError("complete sync timeliness is not provider-confirmed")
+        if self.sync_timeliness in {"pending", "overdue"} and self.provider_sync_confirmed:
+            raise ValueError("incomplete sync timeliness is provider-confirmed")
         approval_fields = (
             self.copy_approval_id,
             self.copy_approval_action,

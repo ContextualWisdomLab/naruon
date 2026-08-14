@@ -218,6 +218,51 @@ def test_provider_sync_incomplete_states_remain_unconfirmed(provider_sync_state:
     assert envelope.cloud_copy.provider_sync_confirmed is False
 
 
+def test_provider_sync_timeliness_projection_is_preserved_without_eviction_authority():
+    payload = _envelope(
+        cloud_copy={
+            **_envelope()["cloud_copy"],  # type: ignore[arg-type]
+            "provider_sync_state": "unknown",
+            "sync_timeliness": "pending",
+            "sync_pending_age_ms": 123,
+            "sync_overdue_after_ms": 456,
+            "sync_reason_codes": ["provider-sync-confirmation-pending"],
+        }
+    )
+
+    envelope = FileLineageEnvelope.model_validate(payload)
+
+    assert envelope.cloud_copy.sync_timeliness == "pending"
+    assert envelope.cloud_copy.sync_pending_age_ms == 123
+    assert envelope.cloud_copy.sync_overdue_after_ms == 456
+    assert envelope.cloud_copy.sync_reason_codes == [
+        "provider-sync-confirmation-pending"
+    ]
+    assert envelope.cloud_copy.provider_sync_confirmed is False
+
+
+def test_complete_timeliness_requires_confirmed_complete_provider_state():
+    payload = _envelope(
+        cloud_copy={
+            **_envelope()["cloud_copy"],  # type: ignore[arg-type]
+            "provider_sync_confirmed": True,
+            "provider_sync_state": "complete",
+            "sync_evidence_record_id": "1" * 64,
+            "sync_evidence_kind": "provider-native-status",
+            "sync_evidence_id": "icloud-uploaded-flag",
+            "sync_confirmed_at_ms": 7,
+            "sync_timeliness": "complete",
+            "sync_pending_age_ms": 0,
+            "sync_overdue_after_ms": 456,
+            "sync_reason_codes": [],
+        }
+    )
+
+    envelope = FileLineageEnvelope.model_validate(payload)
+
+    assert envelope.cloud_copy.sync_timeliness == "complete"
+
+
 def test_filename_date_is_only_auxiliary_when_embedded_metadata_exists():
     payload = _envelope(
         production_time={
