@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, Users, Paperclip, Calendar } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -29,6 +29,9 @@ import {
 type EmailData = ThreadEmailData & {
   requires_reply?: boolean;
   schedule_conflict?: boolean;
+  attachments?: Array<{ id: string; name: string; size: string }>;
+  participants?: Array<{ name: string; email: string; role: string }>;
+  meeting_proposals?: Array<{ id: string; title: string; time: string }>;
 };
 interface LlmData {
   summary: string;
@@ -649,8 +652,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         </div>
       </div>
       <Separator />
-      <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="flex-1">
+          <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
           <DecisionPointCard
             title="맥락 종합"
@@ -864,6 +868,65 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
           </DecisionPointCard>
         </div>
       </ScrollArea>
+        <aside className="w-80 flex-shrink-0 bg-background/50 p-6 overflow-y-auto hidden xl:block border-l border-border space-y-6">
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" />
+              참여자
+            </h3>
+            {email.participants && email.participants.length > 0 ? (
+              <ul className="space-y-2">
+                {email.participants.map((p, i) => (
+                  <li key={i} className="text-sm flex flex-col">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="text-xs text-muted-foreground">{p.email} ({p.role})</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">참여자 정보가 없습니다.</p>
+            )}
+          </div>
+          <Separator />
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <Paperclip className="w-4 h-4 text-primary" />
+              첨부 파일
+            </h3>
+            {email.attachments && email.attachments.length > 0 ? (
+              <ul className="space-y-2">
+                {email.attachments.map((a, i) => (
+                  <li key={i} className="text-sm flex flex-col">
+                    <span className="font-medium">{a.name}</span>
+                    <span className="text-xs text-muted-foreground">{a.size}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">첨부 파일이 없습니다.</p>
+            )}
+          </div>
+          <Separator />
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary" />
+              일정 제안
+            </h3>
+            {email.meeting_proposals && email.meeting_proposals.length > 0 ? (
+              <ul className="space-y-2">
+                {email.meeting_proposals.map((m, i) => (
+                  <li key={i} className="text-sm flex flex-col">
+                    <span className="font-medium">{m.title}</span>
+                    <span className="text-xs text-muted-foreground">{m.time}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">제안된 일정이 없습니다.</p>
+            )}
+          </div>
+        </aside>
+      </div>
       <SourceDrawer
         open={sourceDrawerOpen}
         title="맥락 종합 근거"

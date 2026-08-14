@@ -50,6 +50,10 @@ vi.mock("lucide-react", () => ({
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
+  Users: () => <svg aria-hidden="true" />,
+  Paperclip: () => <svg aria-hidden="true" />,
+  Calendar: () => <svg aria-hidden="true" />,
+  MessagesSquare: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
 
