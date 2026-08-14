@@ -35,6 +35,10 @@ def test_strip_html_markup_preserves_safe_angle_bracket_display_text(safe_text):
     assert strip_html_markup(safe_text) == safe_text
 
 
+def test_strip_html_markup_preserves_decoded_comment_terminator_text():
+    assert strip_html_markup("--&gt;") == "-->"
+
+
 def test_strip_html_markup_plain_text_fast_path_skips_parser(monkeypatch):
     class ParserThatShouldNotRun:
         def __init__(self):
