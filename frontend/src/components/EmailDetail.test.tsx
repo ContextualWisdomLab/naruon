@@ -982,7 +982,10 @@ describe("EmailDetail", () => {
     });
     await flushAsyncWork();
 
-    expect(container.textContent).toContain("기존 확정 일정과 충돌이 있어 원본을 덮어쓰지 않았습니다.");
+    expect(container.textContent).toContain(
+      "기존 확정 일정과 충돌이 있어 ‘금요일 15:00 스탠드업 반영’을 덮어쓰지 않았습니다.",
+    );
+    expect(container.textContent).toContain("일정 충돌 조율");
     expect(getRecordedProductEvents().some((event) =>
       event.name === "calendar_reflected" &&
       event.payload.conflict_state === "conflict" &&

@@ -22,6 +22,10 @@ Writeback-intent 배치에서 가장 강한 충돌 상태를 고릅니다.
 3. 그 외 `none`.
 
 `conflict`는 오류 상태로 표면화하고 원본을 덮어쓰지 않았다고 말합니다.
+충돌한 실행 항목 문구가 있으면 그 라벨을 그대로 인용합니다. 서버가
+보낸 시각 창이 없으므로 시계 시각을 파싱·합성하지 않습니다.
+동시에 메일 상세의 `일정 충돌 조율` 배지를 켜서 구매자가 목록과
+같은 화면에서 확정 일정이 유지됐음을 보게 합니다.
 `warning`은 If-Match 검사가 필요하다고 말합니다. 제품 이벤트
 `calendar_reflected.conflict_state`는 이 분류를 그대로 실습니다.
 
@@ -35,9 +39,11 @@ CalDAV If-Match/ETag 증거에 의존합니다. 서버가 시간 창을 아직 �
 ## Verification contract
 
 `frontend/src/lib/calendar-writeback-conflict.test.ts`는 금요일 15:00
-확정 일정의 412 배치, If-Match-only 경고, 신규 슬롯 `none`을 고정합니다.
-`EmailDetail.test.tsx`는 같은 412 응답이 메일 상세에 “덮어쓰지 않았습니다”
-를 표시하고 `conflict_state: "conflict"`를 기록하는지 실행합니다.
+확정 일정의 412 배치, 충돌 실행 항목 라벨 인용, If-Match-only 경고,
+신규 슬롯 `none`을 고정합니다.
+`EmailDetail.test.tsx`는 같은 412 응답이 메일 상세에 차단된 실행 항목
+문구와 `일정 충돌 조율` 배지를 표시하고 `conflict_state: "conflict"`를
+기록하는지 실행합니다.
 
 ## Rollback
 

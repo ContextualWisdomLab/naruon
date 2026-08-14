@@ -21,6 +21,7 @@ import {
 import { toMailBodyText, toMailDisplayText } from "@/lib/mail-text";
 import { toConfidencePercent } from "@/lib/confidence";
 import {
+  calendarWritebackBlockedSummaries,
   calendarWritebackConflictMessage,
   calendarWritebackConflictState,
 } from "@/lib/calendar-writeback-conflict";
@@ -445,10 +446,20 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       );
       if (!isCurrentEmail()) return;
       const conflictState = calendarWritebackConflictState(intents);
+      const blockedSummaries = calendarWritebackBlockedSummaries(intents, actionItems);
       setSyncStatus({
         type: conflictState === "conflict" ? "error" : "success",
-        message: calendarWritebackConflictMessage(conflictState, intents.length),
+        message: calendarWritebackConflictMessage(
+          conflictState,
+          intents.length,
+          blockedSummaries,
+        ),
       });
+      if (conflictState === "conflict") {
+        setEmail((current) => (
+          current ? { ...current, schedule_conflict: true } : current
+        ));
+      }
       recordProductEvent("calendar_reflected", {
         surface: "mail_detail",
         calendar_candidate_id: `mail-calendar:${actionEmailId ?? "unknown"}`,
