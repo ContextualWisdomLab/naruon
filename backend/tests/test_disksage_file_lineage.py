@@ -176,6 +176,20 @@ def test_provider_write_claim_is_rejected_even_when_copy_is_verified():
         FileLineageEnvelope.model_validate(payload)
 
 
+def test_provider_api_copy_method_is_preserved_without_naruon_write_authority():
+    payload = _envelope(
+        cloud_copy={
+            **_envelope()["cloud_copy"],  # type: ignore[arg-type]
+            "copy_verification_method": "copied-by-provider-api",
+        }
+    )
+
+    envelope = FileLineageEnvelope.model_validate(payload)
+
+    assert envelope.cloud_copy.copy_verification_method == "copied-by-provider-api"
+    assert envelope.cloud_copy.provider_write_executed is False
+
+
 def test_provider_sync_state_preserves_pending_upload_without_eviction_claim():
     payload = _envelope()
     payload["cloud_copy"] = {

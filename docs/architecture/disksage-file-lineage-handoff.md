@@ -16,7 +16,11 @@ summary and cannot represent a general file's provenance or ontology edges.
 Naruon accepts `disksage.file-lineage` versions 1, 2, and 3 through
 `POST /api/disksage/file-lineage`. The request boundary is strict and rejects
 unknown fields, unsafe relative paths, unverified copies, and
-`provider_write_executed=true` claims. The complete envelope is encrypted at
+`provider_write_executed=true` claims. `copy_verification_method` may be
+`copied-by-disk-sage`, `copied-by-provider-api`, or `adopted-existing`; the
+provider-API variant records DiskSage's authenticated write evidence while
+Naruon remains a catalog projection and never becomes the write authority. The
+complete envelope is encrypted at
 rest and scoped by authenticated user/workspace. `GET /api/disksage/file-lineage`
 returns only `lineage_record_uid`, `lineage_fingerprint`, `schema_version`,
 `source_kind`, `archive_kind`, content hashes, `content_bytes`, ontology class,

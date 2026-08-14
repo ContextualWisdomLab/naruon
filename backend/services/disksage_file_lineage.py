@@ -132,7 +132,9 @@ class CloudCopyLineage(_StrictModel):
     destination_account_scope: Literal["personal", "organization", "shared", "unknown"]
     destination: str = Field(min_length=1, max_length=4096)
     copied_at_ms: int = Field(ge=0)
-    copy_verification_method: Literal["copied-by-disk-sage", "adopted-existing"]
+    copy_verification_method: Literal[
+        "copied-by-disk-sage", "copied-by-provider-api", "adopted-existing"
+    ]
     # DiskSage v2 binds the copy to one attributed human action. These remain
     # optional so v1 and pre-approval receipts can still be ingested.
     copy_approval_id: str | None = Field(default=None, pattern=HEX64_PATTERN)
