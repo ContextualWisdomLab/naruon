@@ -28,11 +28,17 @@ from core.config import settings
 from db.session import get_db
 from main import app
 
-TEST_DEV_AUTH_TOKEN = "test-dev-auth-token-with-32-byte-minimum"  # noqa: S105 - test-only token
+TEST_DEV_AUTH_TOKEN = (
+    "test-dev-auth-token-with-32-byte-minimum"  # noqa: S105 - test-only token
+)
 WEAK_DEV_AUTH_TOKEN = "weak-token"  # noqa: S105 - test-only token
-WRONG_DEV_AUTH_TOKEN = "wrong-dev-auth-token-with-32-byte-min"  # noqa: S105 - test-only token
+WRONG_DEV_AUTH_TOKEN = (
+    "wrong-dev-auth-token-with-32-byte-min"  # noqa: S105 - test-only token
+)
 TEST_SESSION_HMAC_SECRET = os.environ["AUTH_SESSION_HMAC_SECRET"]
-WRONG_SESSION_HMAC_SECRET = "wrong-session-hmac-secret-with-32-byte-min"  # noqa: S105 - test-only secret
+WRONG_SESSION_HMAC_SECRET = (
+    "wrong-session-hmac-secret-with-32-byte-min"  # noqa: S105 - test-only secret
+)
 PUBLIC_FIXTURE_SESSION_HMAC_SECRET = "-".join(
     ("naruon", "session", "hmac", "token", "32", "byte", "minimum")
 )
@@ -1420,3 +1426,49 @@ def test_is_tenant_admin_role(role: str, expected: bool):
 )
 def test_is_admin_role(role: str, expected: bool):
     assert is_admin_role(role) is expected
+
+
+def test_preload_oidc_jwks_with_no_client(monkeypatch):
+    from api import auth as auth_module
+
+    monkeypatch.setattr(auth_module, "jwks_client", None)
+    monkeypatch.setattr(auth_module, "_cached_oidc_signing_keys", ("previous_key",))
+
+    auth_module.preload_oidc_jwks()
+
+    assert auth_module._cached_oidc_signing_keys == ()
+
+
+def test_preload_oidc_jwks_success(monkeypatch):
+    from unittest.mock import MagicMock
+    from api import auth as auth_module
+
+    mock_jwk_set = MagicMock()
+    mock_jwk_set.keys = ["key1", "key2"]
+
+    mock_client = MagicMock()
+    mock_client.get_jwk_set.return_value = mock_jwk_set
+
+    monkeypatch.setattr(auth_module, "jwks_client", mock_client)
+    monkeypatch.setattr(auth_module, "_cached_oidc_signing_keys", ("previous_key",))
+
+    auth_module.preload_oidc_jwks()
+
+    mock_client.get_jwk_set.assert_called_once_with(refresh=True)
+    assert auth_module._cached_oidc_signing_keys == ("key1", "key2")
+
+
+def test_preload_oidc_jwks_exception_handling(monkeypatch):
+    from unittest.mock import MagicMock
+    from api import auth as auth_module
+
+    mock_client = MagicMock()
+    mock_client.get_jwk_set.side_effect = Exception("Test Exception")
+
+    monkeypatch.setattr(auth_module, "jwks_client", mock_client)
+    monkeypatch.setattr(auth_module, "_cached_oidc_signing_keys", ("previous_key",))
+
+    auth_module.preload_oidc_jwks()
+
+    mock_client.get_jwk_set.assert_called_once_with(refresh=True)
+    assert auth_module._cached_oidc_signing_keys == ()
