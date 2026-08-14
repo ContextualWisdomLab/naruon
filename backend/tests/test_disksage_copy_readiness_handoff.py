@@ -36,6 +36,9 @@ def _success_payload() -> dict[str, object]:
         "raw_metadata_values_included": False,
         "cloud_write_executed": False,
         "source_eviction_authorized": False,
+        "icloud_native_status_observed": None,
+        "icloud_native_sync_state": None,
+        "icloud_native_status_timed_out": None,
     }
 
 
@@ -115,6 +118,17 @@ def test_main_delegates_to_absolute_verifier_without_shell_env_or_input_read(
 def test_main_accepts_current_disksage_schema_versions(tmp_path, capsys, schema_version):
     payload = _success_payload()
     payload["schema_version"] = schema_version
+    verifier = _json_verifier(tmp_path / "verifier", payload, 0)
+
+    assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+
+
+def test_main_accepts_legacy_success_protocol_for_prior_schema(tmp_path, capsys):
+    payload = _success_payload()
+    payload["schema_version"] = 5
+    for field in handoff.NATIVE_STATUS_FIELDS:
+        payload.pop(field)
     verifier = _json_verifier(tmp_path / "verifier", payload, 0)
 
     assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 0
@@ -761,6 +775,25 @@ def test_main_rejects_mismatched_or_extended_protocol_without_leakage(
 def test_protocol_decoder_rejects_invalid_or_ambiguous_transport(result):
     with pytest.raises(handoff.HandoffError) as error:
         handoff._decode_protocol(result)
+
+    assert error.value.error_code == "disksage-verifier-protocol-invalid"
+
+
+@pytest.mark.parametrize(
+    "field_value",
+    [
+        {"icloud_native_status_observed": "yes"},
+        {"icloud_native_status_timed_out": 1},
+        {"icloud_native_sync_state": "/private/source"},
+    ],
+)
+def test_protocol_decoder_rejects_invalid_native_status_summary(field_value):
+    payload = _success_payload()
+    payload.update(field_value)
+    with pytest.raises(handoff.HandoffError) as error:
+        handoff._decode_protocol(
+            handoff.VerifierResult(0, json.dumps(payload).encode(), b"")
+        )
 
     assert error.value.error_code == "disksage-verifier-protocol-invalid"
 
