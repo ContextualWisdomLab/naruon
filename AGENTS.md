@@ -440,9 +440,11 @@ in this repo.
   reusable business identifier such as `document_ref`, `model_id`, `topic_id`,
   or `label_id` as an unscoped primary or foreign key. Use an opaque immutable
   reference that binds the full scope or an explicit composite identity with the
-  required snapshot revision, model version, request/result scope, and label
-  version. Never join snapshots, model artifacts, topic components, or label
-  evidence by a bare document, model, topic, rank, label, or display value.
+  applicable snapshot revision, model version, request/result scope, or label
+  version. Define the required identity tuple for each entity; require only the
+  dimensions relevant to that entity. Never join snapshots, model artifacts,
+  topic components, or label evidence by a bare document, model, topic, rank,
+  label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
 - When reviews find missing browser security headers or tabnabbing hardening,
   update both backend header tests and frontend link tests. Global backend
