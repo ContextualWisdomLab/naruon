@@ -1,8 +1,10 @@
 import defusedxml.ElementTree as ET
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from api.dav import _normalize_dav_authorization_path
 from main import app
 from services.webdav_service import webdav_service
 
@@ -94,6 +96,87 @@ def test_dav_rejects_ownerless_options_before_capability_discovery(
         assert response.json()["detail"] == "DAV path must include an owner user"
 
 
+def test_dav_authorization_path_preserves_literal_percent_data():
+    assert (
+        _normalize_dav_authorization_path("user123/projects/literal%25")
+        == "user123/projects/literal%25"
+    )
+    assert (
+        _normalize_dav_authorization_path("user123/projects/분석%zz")
+        == "user123/projects/분석%zz"
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "user123/projects/%2e%2e/secret",
+        "user123/projects/%252e%252e/secret",
+        "user123/projects/%2fsecret",
+        "user123/projects/%5csecret",
+        "user123/projects/%00secret",
+        "user123/projects/%250asecret",
+    ],
+)
+def test_dav_authorization_path_rejects_nested_structural_decoding(path):
+    with pytest.raises(HTTPException) as exc_info:
+        _normalize_dav_authorization_path(path)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "DAV path contains ambiguous percent encoding"
+
+
+@pytest.mark.parametrize("control_character", ["\x00", "\x1f", "\x7f"])
+def test_dav_authorization_path_rejects_decoded_controls(control_character):
+    with pytest.raises(HTTPException) as exc_info:
+        _normalize_dav_authorization_path(
+            f"user123/projects/report{control_character}name"
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "DAV path contains control characters"
+
+
+def test_dav_authorization_path_normalizes_literal_backslashes_once():
+    assert (
+        _normalize_dav_authorization_path(r"user123\projects\demo")
+        == "user123/projects/demo"
+    )
+
+
+def test_dav_authorization_path_has_explicit_resource_boundary():
+    prefix = "user123/projects/"
+    boundary_path = prefix + ("x" * (8192 - len(prefix)))
+    assert _normalize_dav_authorization_path(boundary_path) == boundary_path
+
+    with pytest.raises(HTTPException) as exc_info:
+        _normalize_dav_authorization_path(boundary_path + "x")
+
+    assert exc_info.value.status_code == 414
+    assert exc_info.value.detail == "DAV path exceeds authorization length limit"
+
+
+def test_dav_route_rejects_nested_encoded_traversal(dev_auth_dependency_overrides):
+    with TestClient(app) as client:
+        response = client.options(
+            "/dav/user123/projects/%252e%252e/secret",
+            headers=AUTH_HEADERS,
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "DAV path contains ambiguous percent encoding"
+
+
+def test_dav_route_preserves_encoded_percent_as_data(dev_auth_dependency_overrides):
+    with TestClient(app) as client:
+        response = client.options(
+            "/dav/user123/projects/literal%2525",
+            headers=AUTH_HEADERS,
+        )
+
+    assert response.status_code == 200
+
+
 def test_dav_propfind(dev_auth_dependency_overrides, stub_dav_project_folders):
     with TestClient(app) as client:
         response = client.request(
@@ -114,6 +197,7 @@ def test_dav_propfind_escapes_path_values(
             "PROPFIND", "/dav/user123/projects/x%26y%3Cz%3E", headers=AUTH_HEADERS
         )
         assert response.status_code == 207
+        assert "<D:multistatus" in response.text
         assert "x&amp;y&lt;z&gt;" in response.text
         assert "x&y<z>" not in response.text
         ET.fromstring(response.text)
@@ -155,6 +239,7 @@ def test_dav_unsupported_method_logs_reason(dev_auth_dependency_overrides, caplo
         in record.getMessage()
         for record in caplog.records
     )
+
 
 def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
     """
