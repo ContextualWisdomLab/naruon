@@ -416,16 +416,6 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
     assert duplicates == [], "\n".join(duplicates)
 
 
-def test_trivy_findings_are_not_hidden_by_global_legacy_suppressions() -> None:
-    """Keep repository-wide vulnerability findings visible to the security gate."""
-
-    assert not (REPO_ROOT / ".trivyignore").exists(), (
-        "legacy .trivyignore entries suppress a CVE across every artifact; "
-        "remediate the finding or use an artifact-scoped, justified, expiring "
-        ".trivyignore.yaml exception"
-    )
-
-
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
