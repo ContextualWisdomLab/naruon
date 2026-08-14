@@ -695,13 +695,11 @@ class SendEmailRequest(BaseModel):
 
     @field_validator("to", "subject", "in_reply_to", "references", mode="before")
     @classmethod
-    def reject_crlf(cls, value: object) -> object:
-        """Reject SMTP header injection via CR/LF before pattern validation."""
-        if value is None:
-            return value
-        if isinstance(value, str) and ("\r" in value or "\n" in value):
-            raise ValueError("Email header fields must not contain newlines")
-        return value
+    def reject_crlf(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            if chr(10) in v or chr(13) in v:
+                raise ValueError("CR/LF injection detected")
+        return v
 
 
 @router.post("/send")
