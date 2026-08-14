@@ -254,19 +254,48 @@ function optionalPort(value: string) {
   return Number.isFinite(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : null;
 }
 
+
+function isValidHost(host: string | null | undefined): string | null {
+  if (!host) return null;
+  // Use URL parsing if possible, or basic regex to catch common SSRF bypasses
+  try {
+    const url = new URL(host.includes('://') ? host : `https://${host}`);
+    const hostname = url.hostname;
+
+    // Block private IP ranges (RFC 1918, loopback, link-local, multicast)
+    const privateIpRegex = /^(?:10\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|127\.|169\.254\.|0\.|224\.|255\.|::1)/;
+    if (privateIpRegex.test(hostname)) return null;
+    if (hostname === 'localhost') return null;
+
+    // Block forbidden schemes
+    if (url.protocol === 'file:' || url.protocol === 'gopher:' || url.protocol === 'dict:') return null;
+
+    return host;
+  } catch (_e) {
+    // If it's not a valid URL or hostname, return null
+    return null;
+  }
+}
+
+function sanitizeHostInput(value: string | null | undefined): string | null {
+  const host = optionalText(value ?? '');
+  if (!host) return null;
+  return isValidHost(host);
+}
+
 function buildAccountUpdate(form: AccountFormState, secrets: AccountSecretFormValues): AccountConfigUpdate {
   const update: AccountConfigUpdate = {
-    smtp_server: optionalText(form.smtpServer),
+    smtp_server: sanitizeHostInput(form.smtpServer),
     smtp_port: optionalPort(form.smtpPort),
     smtp_username: optionalText(form.smtpUsername),
-    imap_server: optionalText(form.imapServer),
+    imap_server: sanitizeHostInput(form.imapServer),
     imap_port: optionalPort(form.imapPort),
     imap_username: optionalText(form.imapUsername),
-    pop3_server: optionalText(form.pop3Server),
+    pop3_server: sanitizeHostInput(form.pop3Server),
     pop3_port: optionalPort(form.pop3Port),
     pop3_username: optionalText(form.pop3Username),
     oauth_client_id: optionalText(form.oauthClientId),
-    oauth_redirect_uri: optionalText(form.oauthRedirectUri),
+    oauth_redirect_uri: sanitizeHostInput(form.oauthRedirectUri),
   };
 
   const smtpPassword = optionalText(secrets.smtpPassword);
@@ -293,7 +322,7 @@ function buildProviderCreate(form: ModelProviderFormState, apiKeyValue: string) 
   } = {
     name: optionalText(form.name) ?? form.modelIdentifier,
     provider_type: optionalText(form.providerType) ?? 'openai',
-    base_url: optionalText(form.baseUrl),
+    base_url: sanitizeHostInput(form.baseUrl),
     model_identifier: optionalText(form.modelIdentifier),
     embedding_model: optionalText(form.embeddingModel),
     is_active: form.isActive,
