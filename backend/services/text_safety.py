@@ -338,7 +338,7 @@ def _is_tag_like_segment(value: str) -> bool:
     candidate = value.strip()
     if not candidate:
         return False
-    if candidate.startswith("!--") or candidate[0] in {"!", "?"}:
+    if candidate.startswith("!--") or candidate.startswith("--") or candidate[0] in {"!", "?"}:
         return True
     if candidate[0] == "/":
         candidate = candidate[1:].lstrip()
