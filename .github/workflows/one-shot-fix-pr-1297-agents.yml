@@ -14,10 +14,6 @@ concurrency:
 
 jobs:
   fix:
-    if: >-
-      github.repository == 'ContextualWisdomLab/naruon' &&
-      github.ref == 'refs/heads/fix/remove-lexical-topic-heuristics' &&
-      github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -38,7 +34,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          test "$(git rev-parse HEAD^)" = '01fbdacb592c8271079641e12911c949c137ae28'
+          test "$GITHUB_REPOSITORY" = 'ContextualWisdomLab/naruon'
+          test "$GITHUB_REF" = 'refs/heads/fix/remove-lexical-topic-heuristics'
+          test "$(git rev-parse HEAD^)" = 'b99558dc7bd716261372b58692546c7739fa5859'
 
           python - <<'PY'
           from pathlib import Path
