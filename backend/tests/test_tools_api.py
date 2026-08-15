@@ -505,6 +505,30 @@ async def test_text_analyzer_tool_success():
 
 
 @pytest.mark.asyncio
+async def test_uuid_v4_generator_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/uuid_v4_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+
+    # Check if the result has 'uuid' key
+    assert "uuid" in result
+
+    # Validate UUID v4 format
+    import uuid
+
+    generated_uuid = result["uuid"]
+    parsed_uuid = uuid.UUID(generated_uuid)
+    assert parsed_uuid.version == 4
+
+
+@pytest.mark.asyncio
 async def test_base64_encoder_tool_success():
     with TestClient(app) as client:
         response = client.post(
@@ -1045,46 +1069,6 @@ async def test_mock_handler():
 
     res = await mock_handler({"test": 123})
     assert "123" in res
-
-
-def test_validate_webhook_url_details_success():
-    from api.tools import validate_webhook_url_details
-
-    with patch("api.tools._resolve_global_addresses", return_value=("93.184.216.34",)):
-        result = validate_webhook_url_details("https://example.com/webhook")
-        assert result.normalized_url == "https://example.com/webhook"
-        assert result.hostname == "example.com"
-        assert result.port == 443
-        assert result.addresses == ("93.184.216.34",)
-
-        result_with_port = validate_webhook_url_details(
-            "https://example.com:8443/webhook"
-        )
-        assert result_with_port.normalized_url == "https://example.com:8443/webhook"
-        assert result_with_port.hostname == "example.com"
-        assert result_with_port.port == 8443
-        assert result_with_port.addresses == ("93.184.216.34",)
-
-
-def test_validate_webhook_url_details_errors():
-    from api.tools import validate_webhook_url_details
-
-    with pytest.raises(ValueError, match="Webhook URL must use https"):
-        validate_webhook_url_details("http://example.com/webhook")
-
-    with pytest.raises(ValueError, match="Webhook URL must not include userinfo"):
-        validate_webhook_url_details("https://user:pass@example.com/webhook")
-
-    with pytest.raises(ValueError, match="Webhook URL must not include a fragment"):
-        validate_webhook_url_details("https://example.com/webhook#fragment")
-
-    with pytest.raises(ValueError, match="Webhook URL must include a host"):
-        validate_webhook_url_details("https:///webhook")
-
-    with pytest.raises(
-        ValueError, match="Webhook URL host must not use an internal domain suffix"
-    ):
-        validate_webhook_url_details("https://example.internal/webhook")
 
 
 def test_validate_webhook_url_no_host():

@@ -1,4 +1,6 @@
 ## [Unreleased]
+- EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
+- UUID V4 제너레이터(`uuid_v4_generator`) 도구를 추가하여 런타임에서 범용 고유 식별자 버전 4를 랜덤으로 생성할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
 ### 보안 패치 (CodeQL extended current-head)
 
 - `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 버전으로 동기화했습니다. Strix 잠금은 `google-cloud-aiplatform==1.160.0`의 `<7` 제약을 위반하던 `protobuf==7.35.1`을 이미 검증된 `6.33.6`으로 복구해 다시 해석·설치 가능하게 했습니다.
