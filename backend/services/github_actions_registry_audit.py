@@ -125,6 +125,7 @@ def audit_workflow_registry(
     client: GitHubActionsAuditClient,
     *,
     observed_at: datetime,
+    previous_receipt: WorkflowRegistryAuditReceipt | None = None,
 ) -> WorkflowRegistryAuditReceipt:
     """Collect and classify a complete workflow registry against one exact tree.
 
@@ -136,6 +137,8 @@ def audit_workflow_registry(
         repository: Repository in ``owner/name`` form.
         client: Read-only GitHub control-plane adapter.
         observed_at: Caller-owned observation timestamp with timezone.
+        previous_receipt: Optional prior audit receipt used to detect a workflow
+            identity that now points at a different repository path.
 
     Returns:
         A branch-stable audit receipt suitable for immutable evidence storage.
@@ -162,7 +165,7 @@ def audit_workflow_registry(
     if client.get_branch_sha(repository, default_branch) != default_branch_sha:
         raise AuditError("default_branch_moved")
 
-    return WorkflowRegistryAuditReceipt(
+    receipt = WorkflowRegistryAuditReceipt(
         repository=repository,
         default_branch=default_branch,
         default_branch_sha=default_branch_sha,
@@ -172,6 +175,29 @@ def audit_workflow_registry(
         pages=page_receipts,
         records=audited_records,
     )
+    _validate_identity_continuity(repository, previous_receipt, receipt)
+    return receipt
+
+
+def _validate_identity_continuity(
+    repository: str,
+    previous_receipt: WorkflowRegistryAuditReceipt | None,
+    current_receipt: WorkflowRegistryAuditReceipt,
+) -> None:
+    """Reject cross-observation workflow-ID reuse for a different exact path."""
+    if previous_receipt is None:
+        return
+    if previous_receipt.repository != repository:
+        raise AuditError("previous_receipt_repository_mismatch")
+
+    previous_paths = {
+        record.workflow_id: record.path for record in previous_receipt.records
+    }
+    for record in current_receipt.records:
+        if record.workflow_id not in previous_paths:
+            continue
+        if previous_paths[record.workflow_id] != record.path:
+            raise AuditError("workflow_id_path_changed")
 
 
 def _collect_workflows(
