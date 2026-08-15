@@ -1,0 +1,143 @@
+name: One-shot S3 object-storage implementation
+
+on:
+  push:
+    branches:
+      - feat/s3-object-storage-backend
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s3-object-storage-implementation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  implement-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONWARNINGS: error
+      DISABLE_BACKGROUND_WORKERS: "1"
+    steps:
+      - name: Harden the runner (audit outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout feature branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/s3-object-storage-backend
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Install hash-locked backend dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check --require-hashes
+          -r backend/requirements-hashes.txt
+
+      - name: Confirm the new contracts fail before integration
+        shell: bash
+        run: |
+          set +e
+          cd backend
+          python -m pytest -q \
+            tests/test_s3_object_storage.py \
+            tests/test_document_object_storage.py \
+            tests/test_s3_document_api.py \
+            tests/test_s3_storage_settings.py \
+            tests/test_s3_storage_docstrings.py \
+            > /tmp/s3-red-phase.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/s3-red-phase.log
+          if [ "$status" -eq 0 ]; then
+            echo "::error::S3 contracts unexpectedly passed before source integration"
+            exit 1
+          fi
+
+      - name: Apply source integration
+        run: python scripts/apply_s3_object_storage_backend.py
+
+      - name: Lint changed Python sources
+        run: |
+          cd backend
+          python -m ruff check \
+            core/config.py \
+            db/models.py \
+            api/data.py \
+            services/newsdom_worker.py \
+            services/s3_object_storage.py \
+            services/document_object_storage.py \
+            alembic/versions/0018_document_object_records.py \
+            tests/test_s3_object_storage.py \
+            tests/test_document_object_storage.py \
+            tests/test_s3_document_api.py \
+            tests/test_s3_storage_settings.py \
+            tests/test_s3_storage_docstrings.py
+
+      - name: Run S3 contracts and related regressions
+        run: |
+          cd backend
+          python -m pytest -q \
+            tests/test_s3_object_storage.py \
+            tests/test_document_object_storage.py \
+            tests/test_s3_document_api.py \
+            tests/test_s3_storage_settings.py \
+            tests/test_s3_storage_docstrings.py \
+            tests/test_newsdom_worker.py \
+            tests/test_data_api.py \
+            tests/test_alembic_migrations.py
+
+      - name: Enforce 100 percent statement and branch coverage
+        run: |
+          cd backend
+          python -m coverage erase
+          python -m coverage run --branch \
+            --source=services.s3_object_storage,services.document_object_storage \
+            -m pytest -q \
+              tests/test_s3_object_storage.py \
+              tests/test_document_object_storage.py \
+              tests/test_s3_document_api.py \
+              tests/test_s3_storage_settings.py
+          python -m coverage report --show-missing --fail-under=100
+
+      - name: Compile production modules and validate migration graph
+        run: |
+          python -m compileall -q \
+            backend/core/config.py \
+            backend/db/models.py \
+            backend/api/data.py \
+            backend/services/newsdom_worker.py \
+            backend/services/s3_object_storage.py \
+            backend/services/document_object_storage.py \
+            backend/alembic/versions/0018_document_object_records.py
+          cd backend
+          python -m pytest -q tests/test_alembic_migrations.py
+
+      - name: Remove one-shot implementation machinery
+        run: |
+          rm -f scripts/apply_s3_object_storage_backend.py
+          rm -f .github/workflows/s3-object-storage-implementation.yml
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "::error::No verified implementation changes were produced"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(storage): support S3 document persistence"
+          git push origin HEAD:feat/s3-object-storage-backend
