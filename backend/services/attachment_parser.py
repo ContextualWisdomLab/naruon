@@ -2,6 +2,8 @@
 
 import base64
 import binascii
+import io
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +16,17 @@ _GENERIC_CONTENT_TYPES = {
     "binary/octet-stream",
     "application/x-binary",
 }
+_HWPX_CONTENT_TYPES = (
+    "application/hwp+zip",
+    "application/x-hwp+zip",
+    "application/vnd.hancom.hwpx",
+)
+_HWP_CONTENT_TYPES = (
+    "application/x-hwp",
+    "application/vnd.hancom.hwp",
+    "application/haansofthwp",
+)
+_HWP_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
 MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
 
@@ -87,6 +100,20 @@ _PARSER_MANIFEST = (
         parse_status="pdf_dom_recognition_pending",
     ),
     AttachmentParserDescriptor(
+        parser_key="hwpx",
+        display_name="HWPX documents (OWPML XML package recognition)",
+        content_types=_HWPX_CONTENT_TYPES,
+        extensions=(".hwpx", ".owpml"),
+        parse_status="hwpx_xml_package_pending",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="hwp",
+        display_name="HWP binary documents (sandboxed conversion)",
+        content_types=_HWP_CONTENT_TYPES,
+        extensions=(".hwp",),
+        parse_status="hwp_conversion_pending",
+    ),
+    AttachmentParserDescriptor(
         parser_key="unsupported_binary",
         display_name="Unsupported binary attachments",
         content_types=("application/octet-stream",),
@@ -96,8 +123,14 @@ _PARSER_MANIFEST = (
 )
 # Statuses whose recognition is too heavy to run inline during import. The
 # attachment is stored with the pending status and a background worker later
-# calls the NewsDOM sidecar to fill in parse_content + the content graph.
-_DEFERRED_PARSE_STATUSES = frozenset({"pdf_dom_recognition_pending"})
+# calls a sandboxed recognizer/converter to fill parse_content and content graph.
+_DEFERRED_PARSE_STATUSES = frozenset(
+    {
+        "pdf_dom_recognition_pending",
+        "hwpx_xml_package_pending",
+        "hwp_conversion_pending",
+    }
+)
 _SUPPORTED_CONTENT_TYPES = {
     content_type
     for descriptor in _PARSER_MANIFEST
@@ -116,6 +149,11 @@ _EXTENSION_CONTENT_TYPES = {
     if descriptor.parse_status == "parsed"
     or descriptor.parse_status in _DEFERRED_PARSE_STATUSES
     for extension in descriptor.extensions
+}
+_DEFERRED_PAYLOAD_ERROR_MESSAGES = {
+    "invalid_pdf_payload": "Pending attachment payload is not a PDF",
+    "invalid_hwpx_payload": "Pending attachment payload is not a HWPX package",
+    "invalid_hwp_payload": "Pending attachment payload is not a HWP binary document",
 }
 
 
@@ -154,13 +192,13 @@ def parse_email_attachment(
 
     deferred_descriptor = _DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE.get(parse_content_type)
     if deferred_descriptor is not None:
-        # Heavy recognition (OCR/MinerU via the NewsDOM sidecar) must not run
-        # inline during import. Retain the raw bytes as a base64 payload in
-        # ``content`` (mirroring the document-upload path's document_content) so
-        # the worker can decode and recognize them later; mark the attachment
-        # pending. The pending status gates display, and the worker overwrites
-        # ``content`` with the recognized text on success. Without this the
-        # source bytes were discarded and recognition was impossible.
+        # Heavy recognition (OCR/MinerU, HWPX XML section extraction, or HWP
+        # binary conversion) must not run inline during import. Retain the raw
+        # bytes as a base64 payload in ``content`` so the worker can recognize
+        # them later; mark the attachment pending. The pending status gates
+        # display, and the worker overwrites ``content`` with recognized text on
+        # success. Without this the source bytes are discarded and recognition
+        # is impossible.
         deferred_payload = _coerce_deferred_payload_bytes(raw_content)
         if len(deferred_payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
             return AttachmentParseResult(
@@ -173,9 +211,11 @@ def parse_email_attachment(
                 parse_status="parse_size_limit_exceeded",
                 parse_error_code="parse_size_limit_exceeded",
             )
-        if parse_content_type == "application/pdf" and not deferred_payload.startswith(
-            b"%PDF-"
-        ):
+        payload_error_code = _deferred_payload_error_code(
+            parse_content_type,
+            deferred_payload,
+        )
+        if payload_error_code is not None:
             return AttachmentParseResult(
                 filename=safe_filename,
                 content="",
@@ -183,8 +223,8 @@ def parse_email_attachment(
                 parse_content="",
                 parse_content_type=parse_content_type,
                 parser_key=deferred_descriptor.parser_key,
-                parse_status="invalid_pdf_payload",
-                parse_error_code="invalid_pdf_payload",
+                parse_status=payload_error_code,
+                parse_error_code=payload_error_code,
             )
         return AttachmentParseResult(
             filename=safe_filename,
@@ -289,21 +329,67 @@ def _encode_deferred_payload(payload: bytes) -> str:
     return base64.b64encode(payload).decode("ascii")
 
 
-def decode_deferred_attachment_payload(content: str | None) -> bytes:
+def decode_deferred_attachment_payload(
+    content: str | None,
+    expected_content_type: str = "application/pdf",
+) -> bytes:
     """Decode the base64 payload retained on a pending attachment's content.
 
-    Raises ``ValueError`` when the stored payload is not valid base64, so the
-    recognition worker can record an error status instead of crashing.
+    Raises ``ValueError`` when the stored payload is not valid base64 or no
+    longer matches the expected deferred parser family, so the recognition
+    worker can record an error status instead of crashing.
     """
+    parse_content_type = _normalize_content_type(expected_content_type)
     try:
         payload = base64.b64decode((content or "").encode("ascii"), validate=True)
     except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
         raise ValueError("Pending attachment payload is not valid base64") from exc
     if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-        raise ValueError("Pending attachment PDF exceeds the parse size limit")
-    if not payload.startswith(b"%PDF-"):
-        raise ValueError("Pending attachment payload is not a PDF")
+        raise ValueError("Pending attachment payload exceeds the parse size limit")
+    payload_error_code = _deferred_payload_error_code(parse_content_type, payload)
+    if payload_error_code is not None:
+        raise ValueError(_DEFERRED_PAYLOAD_ERROR_MESSAGES[payload_error_code])
     return payload
+
+
+def _deferred_payload_error_code(
+    parse_content_type: str,
+    payload: bytes,
+) -> str | None:
+    """Return an error code when deferred parser bytes fail a cheap signature."""
+    if parse_content_type == "application/pdf" and not payload.startswith(b"%PDF-"):
+        return "invalid_pdf_payload"
+    if parse_content_type in _HWPX_CONTENT_TYPES and not _is_hwpx_payload(payload):
+        return "invalid_hwpx_payload"
+    if parse_content_type in _HWP_CONTENT_TYPES and not payload.startswith(
+        _HWP_OLE_MAGIC
+    ):
+        return "invalid_hwp_payload"
+    return None
+
+
+def _is_hwpx_payload(payload: bytes) -> bool:
+    """Return whether bytes look like a HWPX/OWPML ZIP package.
+
+    The check intentionally inspects only bounded ZIP metadata and file names.
+    It does not decompress section XML, execute active content, or fetch external
+    resources during import.
+    """
+    if not payload.startswith(b"PK"):
+        return False
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            names = set(archive.namelist())
+    except (zipfile.BadZipFile, ValueError):
+        return False
+    has_manifest = "Contents/content.hpf" in names or "META-INF/manifest.xml" in names
+    has_section = any(
+        name.startswith("Contents/section") and name.endswith(".xml")
+        for name in names
+    )
+    has_version = "version.xml" in names
+    has_mimetype = "mimetype" in names
+    return has_mimetype and has_version and (has_manifest or has_section)
 
 
 def _coerce_text(raw_content: Any) -> str:
