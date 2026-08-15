@@ -18,13 +18,17 @@ def test_connector_scope_statement_with_org():
     assert stmt is not None
     assert isinstance(stmt, Select)
 
-    # Compile the statement to check the bound parameters
     compiled = stmt.compile()
     params = compiled.params
+    organization_parameter = next(
+        value for key, value in params.items() if key.startswith("organization_id")
+    )
+    workspace_parameter = next(
+        value for key, value in params.items() if key.startswith("workspace_id")
+    )
 
-    # Parameters are typically like organization_id_1, workspace_id_1, param_1
-    assert "test_org_id" in params.values()
-    assert "test_workspace_id" in params.values()
+    assert organization_parameter == auth_context.organization_id
+    assert workspace_parameter == auth_context.workspace_id
 
 
 def test_connector_scope_statement_without_org():
