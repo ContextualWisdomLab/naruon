@@ -65,6 +65,26 @@ def test_validate_global_address_private_allowed_when_host_allowed(monkeypatch):
     assert _validate_global_address("192.168.1.5", hostname="ollama") == "192.168.1.5"
 
 
+@pytest.mark.parametrize(
+    "address",
+    [
+        "169.254.169.254",
+        "224.0.0.1",
+        "0.0.0.0",
+        "255.255.255.255",
+    ],
+)
+def test_validate_global_address_allowlisted_host_rejects_unsafe_address_classes(
+    monkeypatch, address
+):
+    """Local-container opt-in must not authorize metadata or non-unicast addresses."""
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
+    monkeypatch.setattr(settings, "ALLOWED_LLM_BASE_URL_HOSTS", "ollama")
+
+    with pytest.raises(ValueError, match=LLM_BASE_URL_NOT_ALLOWED):
+        _validate_global_address(address, hostname="ollama")
+
+
 def test_validate_global_address_private_rejected_when_host_not_allowed(monkeypatch):
     """Test that a private IP is rejected even with ALLOW_LOCAL_LLM_PROVIDERS if the hostname is not allowed."""
     monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
