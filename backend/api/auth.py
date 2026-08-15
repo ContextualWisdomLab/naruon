@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 import jwt
 from jwt import PyJWKClient
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 
 from core.config import settings, validate_auth_session_hmac_secret_value
 from core.url_validation import (
@@ -154,6 +154,7 @@ MAX_SIGNED_SESSION_EXPIRATION_SECONDS = 12 * 60 * 60
 MAX_SIGNED_SESSION_CLOCK_SKEW_SECONDS = 60
 SESSION_AUTH_RATE_LIMIT_WINDOW_SECONDS = 60
 SESSION_AUTH_RATE_LIMIT_MAX_FAILURES = 10
+SESSION_AUTH_SCOPE_RATE_LIMIT_MAX_FAILURES = 100
 SESSION_AUTH_RATE_LIMIT_MAX_BUCKETS = 4096
 _session_auth_failure_buckets: dict[str, tuple[int, float]] = {}
 
@@ -189,8 +190,22 @@ def is_admin_role(role: str) -> bool:
 
 async def get_auth_context(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    request: Request = None,
 ) -> AuthContext:
-    return build_auth_context(authorization=authorization)
+    """Build HTTP identity while applying aggregate invalid-session throttling.
+
+    The aggregate scope comes only from the ASGI peer address exposed by
+    ``request.client``. Application code deliberately ignores Forwarded and
+    X-Forwarded-For so arbitrary request headers cannot mint fresh throttle
+    identities. Operators behind a trusted reverse proxy must configure that
+    proxy/server boundary so the ASGI client address has the intended meaning.
+    """
+    failure_scope = _http_session_auth_failure_scope(request)
+    payload, session_verifier = _verify_signed_session_payload(
+        authorization,
+        failure_scope=failure_scope,
+    )
+    return _auth_context_from_session_payload(payload, session_verifier)
 
 
 def build_auth_context(authorization: str | None = None) -> AuthContext:
@@ -203,6 +218,11 @@ def build_auth_context(authorization: str | None = None) -> AuthContext:
     group, and workspace claims in the runtime dependency path. Endpoint tests
     that need fixture identities must continue to use explicit FastAPI
     dependency overrides.
+
+    This direct non-HTTP entry point intentionally has no peer-derived aggregate
+    rate-limit scope; it retains the exact-token failure budget only. HTTP
+    callers should use ``get_auth_context`` so varying invalid tokens from one
+    observed peer share an additional coarse abuse budget.
     """
     payload, session_verifier = _verify_signed_session_payload(authorization)
     return _auth_context_from_session_payload(payload, session_verifier)
@@ -304,6 +324,21 @@ def _session_auth_failure_key(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def _session_auth_scope_failure_key(scope: str) -> str:
+    digest = hashlib.sha256(scope.encode("utf-8")).hexdigest()
+    return f"scope:{digest}"
+
+
+def _http_session_auth_failure_scope(request: Request | None) -> str | None:
+    """Return the server-observed HTTP peer scope without trusting headers."""
+    if request is None:
+        return None
+    client = request.client
+    if client is None or not client.host:
+        return "peer:unavailable"
+    return f"peer:{client.host}"
+
+
 def _prune_session_auth_failure_buckets(now: float) -> None:
     expired_keys = [
         key
@@ -323,22 +358,34 @@ def _ensure_session_auth_failure_bucket_capacity(key: str) -> None:
     _session_auth_failure_buckets.pop(next(iter(_session_auth_failure_buckets)), None)
 
 
-def _reject_if_session_auth_rate_limited(token: str) -> None:
-    now = time.monotonic()
-    _prune_session_auth_failure_buckets(now)
-    key = _session_auth_failure_key(token)
+def _session_auth_failure_count(key: str, now: float) -> int:
     failure_count, _reset_at = _session_auth_failure_buckets.get(
         key,
         (0, now + SESSION_AUTH_RATE_LIMIT_WINDOW_SECONDS),
     )
-    if failure_count >= SESSION_AUTH_RATE_LIMIT_MAX_FAILURES:
+    return failure_count
+
+
+def _reject_if_session_auth_rate_limited(
+    token: str,
+    failure_scope: str | None = None,
+) -> None:
+    now = time.monotonic()
+    _prune_session_auth_failure_buckets(now)
+    token_key = _session_auth_failure_key(token)
+    if _session_auth_failure_count(token_key, now) >= SESSION_AUTH_RATE_LIMIT_MAX_FAILURES:
+        raise _authentication_error()
+    if failure_scope is None:
+        return
+    scope_key = _session_auth_scope_failure_key(failure_scope)
+    if (
+        _session_auth_failure_count(scope_key, now)
+        >= SESSION_AUTH_SCOPE_RATE_LIMIT_MAX_FAILURES
+    ):
         raise _authentication_error()
 
 
-def _record_session_auth_failure(token: str) -> None:
-    now = time.monotonic()
-    _prune_session_auth_failure_buckets(now)
-    key = _session_auth_failure_key(token)
+def _increment_session_auth_failure(key: str, now: float) -> None:
     _ensure_session_auth_failure_bucket_capacity(key)
     failure_count, reset_at = _session_auth_failure_buckets.get(
         key,
@@ -350,20 +397,38 @@ def _record_session_auth_failure(token: str) -> None:
     _session_auth_failure_buckets[key] = (failure_count + 1, reset_at)
 
 
+def _record_session_auth_failure(
+    token: str,
+    failure_scope: str | None = None,
+) -> None:
+    now = time.monotonic()
+    _prune_session_auth_failure_buckets(now)
+    _increment_session_auth_failure(_session_auth_failure_key(token), now)
+    if failure_scope is not None:
+        _increment_session_auth_failure(
+            _session_auth_scope_failure_key(failure_scope),
+            now,
+        )
+
+
 def _clear_session_auth_failures(token: str) -> None:
+    # Successful verification clears only the exact-token failure bucket. The
+    # coarse HTTP peer bucket is an abuse signal, not subscriber identity, and
+    # expires naturally so possession of one valid token cannot reset it.
     _session_auth_failure_buckets.pop(_session_auth_failure_key(token), None)
 
 
 def _verify_signed_session_payload(
     authorization: str | None,
+    failure_scope: str | None = None,
 ) -> tuple[dict[str, Any], SessionVerifier]:
     token = _extract_bearer_token(authorization)
-    _reject_if_session_auth_rate_limited(token)
+    _reject_if_session_auth_rate_limited(token, failure_scope)
 
     try:
         payload, session_verifier = _verify_signed_session_token(token)
     except HTTPException:
-        _record_session_auth_failure(token)
+        _record_session_auth_failure(token, failure_scope)
         raise
     _clear_session_auth_failures(token)
     return payload, session_verifier
