@@ -131,9 +131,13 @@ def _origin_from_referer(header_value: str | None) -> str | None:
 
 
 def _is_trusted_browser_origin(origin: str | None) -> bool:
-    if origin is None:
-        return True
-    return origin in set(settings.ALLOWED_CORS_ORIGINS_LIST)
+    """Return whether explicit browser origin evidence matches the allowlist.
+
+    ``None`` is intentionally untrusted. Headerless non-browser API clients are
+    handled separately by the middleware because bearer authentication is sent
+    explicitly rather than ambiently by the browser.
+    """
+    return origin is not None and origin in set(settings.ALLOWED_CORS_ORIGINS_LIST)
 
 
 def _requires_browser_origin_check(request: Request) -> bool:
@@ -155,29 +159,30 @@ async def reject_cross_site_state_changing_api_requests(request: Request, call_n
 
         raw_origin = request.headers.get("origin")
         origin = _normalized_origin(raw_origin)
-        if raw_origin is not None and origin is None:
-            return JSONResponse(
-                status_code=403,
-                content={"error_code": "csrf_origin_rejected"},
-            )
-        if not _is_trusted_browser_origin(origin):
-            return JSONResponse(
-                status_code=403,
-                content={"error_code": "csrf_origin_rejected"},
-            )
-
-        if origin is None:
+        if raw_origin is not None:
+            if origin is None or not _is_trusted_browser_origin(origin):
+                return JSONResponse(
+                    status_code=403,
+                    content={"error_code": "csrf_origin_rejected"},
+                )
+        else:
             raw_referer = request.headers.get("referer")
             referer_origin = _origin_from_referer(raw_referer)
-            if raw_referer is not None and referer_origin is None:
+            if raw_referer is not None:
+                if referer_origin is None or not _is_trusted_browser_origin(
+                    referer_origin
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"error_code": "csrf_referer_rejected"},
+                    )
+            elif fetch_site:
+                # Fetch Metadata is browser-supplied evidence. A browser request
+                # that advertises a fetch site but supplies neither Origin nor
+                # Referer must fail closed rather than treating absence as trust.
                 return JSONResponse(
                     status_code=403,
-                    content={"error_code": "csrf_referer_rejected"},
-                )
-            if not _is_trusted_browser_origin(referer_origin):
-                return JSONResponse(
-                    status_code=403,
-                    content={"error_code": "csrf_referer_rejected"},
+                    content={"error_code": "csrf_origin_rejected"},
                 )
 
     return await call_next(request)
