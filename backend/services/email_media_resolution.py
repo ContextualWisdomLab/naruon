@@ -209,8 +209,8 @@ def _collect_message_parts(
 
     raw_payload = part.get_payload(decode=True)
     payload = raw_payload if isinstance(raw_payload, bytes) else b""
-    artifact = _build_artifact(content_type, payload)
-    artifact = _store_artifact(artifacts, artifact)
+    occurrence_artifact = _build_artifact(content_type, payload)
+    artifact = _store_artifact(artifacts, occurrence_artifact)
     content_id = _normalize_content_id(part.get("Content-ID"))
     mime_images.append(
         _MimeImagePart(
@@ -218,7 +218,7 @@ def _collect_message_parts(
             related_scope=current_scope,
             content_id=content_id,
             artifact_id=artifact.artifact_id,
-            llm_safe=artifact.llm_safe,
+            llm_safe=occurrence_artifact.llm_safe,
         )
     )
     _append_occurrence(
@@ -232,8 +232,10 @@ def _collect_message_parts(
             normalized_reference=None,
             content_id=content_id,
             artifact_id=artifact.artifact_id,
-            resolution_status="resolved" if artifact.llm_safe else "unsafe_media",
-            reason_code=artifact.reason_code,
+            resolution_status=(
+                "resolved" if occurrence_artifact.llm_safe else "unsafe_media"
+            ),
+            reason_code=occurrence_artifact.reason_code,
         ),
     )
 
@@ -415,7 +417,8 @@ def _resolve_data_reference(
             "unresolved",
             str(exc),
         )
-    artifact = _store_artifact(artifacts, _build_artifact(content_type, payload))
+    occurrence_artifact = _build_artifact(content_type, payload)
+    artifact = _store_artifact(artifacts, occurrence_artifact)
     return _reference_occurrence(
         "html_data",
         html_path,
@@ -425,8 +428,12 @@ def _resolve_data_reference(
         normalized_reference,
         None,
         artifact.artifact_id,
-        "resolved" if artifact.llm_safe else "unsafe_media",
-        "data_image_resolved" if artifact.llm_safe else artifact.reason_code,
+        "resolved" if occurrence_artifact.llm_safe else "unsafe_media",
+        (
+            "data_image_resolved"
+            if occurrence_artifact.llm_safe
+            else occurrence_artifact.reason_code
+        ),
     )
 
 
@@ -522,8 +529,12 @@ def _build_artifact(content_type: str, payload: bytes) -> EmailMediaArtifact:
 def _store_artifact(
     artifacts: dict[str, EmailMediaArtifact], artifact: EmailMediaArtifact
 ) -> EmailMediaArtifact:
+    """Deduplicate payloads without letting one occurrence alter another's safety."""
     existing = artifacts.get(artifact.artifact_id)
     if existing is not None:
+        if artifact.llm_safe and not existing.llm_safe:
+            artifacts[artifact.artifact_id] = artifact
+            return artifact
         return existing
     if len(artifacts) >= MAX_EMAIL_MEDIA_ARTIFACTS:
         raise ValueError("email_media_artifact_limit_exceeded")
