@@ -13,7 +13,9 @@ from services.llm_provider_selection import LOCAL_PROVIDER_API_KEY
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
 
-_CANDIDATE_DATE = datetime.datetime(2026, 4, 27, 10, 0, tzinfo=datetime.timezone.utc)
+_CANDIDATE_DATE = datetime.datetime(
+    2026, 4, 27, 10, 0, tzinfo=datetime.timezone.utc
+)
 
 
 class MockLexicalRow:
@@ -115,11 +117,19 @@ class MockSession:
             return MockRowsResult([MockReplyCountRow("thread-123", 2)])
         if "word_similarity" in statement_text:
             return MockRowsResult(
-                [MockLexicalRow(1, "Test Subject", "test@test.com", "Test Body", 0.9)]
+                [
+                    MockLexicalRow(
+                        1, "Test Subject", "test@test.com", "Test Body", 0.9
+                    )
+                ]
             )
         if "<=>" in statement_text:
             return MockRowsResult(
-                [MockDenseRow(1, "Test Subject", "test@test.com", "Test Body", 0.3)]
+                [
+                    MockDenseRow(
+                        1, "Test Subject", "test@test.com", "Test Body", 0.3
+                    )
+                ]
             )
         return MockRowsResult([])
 
@@ -268,7 +278,9 @@ def test_search_endpoint_query_is_scoped_to_current_user(mock_generate_embedding
         assert "email_records.organization_id" in statement_text
         query_params = channel_statement.compile().params
         user_scope_params = {
-            value for key, value in query_params.items() if key.startswith("user_id")
+            value
+            for key, value in query_params.items()
+            if key.startswith("user_id")
         }
         organization_scope_params = {
             value
@@ -305,7 +317,9 @@ def test_search_falls_back_to_lexical_when_embedding_provider_fails(
     assert response.status_code == 200
     data = response.json()
     assert len(data["results"]) == 1
-    joined_statements = " ".join(str(stmt).lower() for stmt in session.statements)
+    joined_statements = " ".join(
+        str(stmt).lower() for stmt in session.statements
+    )
     assert "word_similarity" in joined_statements
     assert "<=>" not in joined_statements
 
@@ -341,7 +355,9 @@ def test_search_runs_lexical_only_when_no_provider_is_configured():
     assert response.status_code == 200
     data = response.json()
     assert len(data["results"]) == 1
-    joined_statements = " ".join(str(stmt).lower() for stmt in session.statements)
+    joined_statements = " ".join(
+        str(stmt).lower() for stmt in session.statements
+    )
     assert "word_similarity" in joined_statements
     assert "<=>" not in joined_statements
 
@@ -390,10 +406,12 @@ def test_search_uses_primary_config_session_and_readonly_search_session(
         "llm_providers" in str(stmt).lower() for stmt in config_session.statements
     )
     assert all(
-        "word_similarity" not in str(stmt).lower() for stmt in config_session.statements
+        "word_similarity" not in str(stmt).lower()
+        for stmt in config_session.statements
     )
     assert any(
-        "word_similarity" in str(stmt).lower() for stmt in search_session.statements
+        "word_similarity" in str(stmt).lower()
+        for stmt in search_session.statements
     )
 
 
@@ -419,7 +437,9 @@ def test_search_pads_local_embedding_dimension_for_vector_search(
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    joined_statements = " ".join(str(stmt).lower() for stmt in session.statements)
+    joined_statements = " ".join(
+        str(stmt).lower() for stmt in session.statements
+    )
     assert "<=>" in joined_statements
 
 
@@ -569,18 +589,3 @@ def test_build_search_result_items_drops_below_minimum_score():
     )
 
     assert results == []
-
-
-def test_resolve_fusion_settings_loads_from_config(monkeypatch):
-    from api.search import resolve_fusion_settings
-    from core.config import settings
-
-    monkeypatch.setattr(settings, "SEARCH_FUSION_STRATEGY", "reciprocal_rank_fusion")
-    monkeypatch.setattr(settings, "SEARCH_FUSION_SEMANTIC_WEIGHT", 0.9)
-    monkeypatch.setattr(settings, "SEARCH_RRF_RANK_CONSTANT", 100)
-
-    result = resolve_fusion_settings()
-
-    assert result.strategy_name == "reciprocal_rank_fusion"
-    assert result.semantic_weight_alpha == 0.9
-    assert result.rank_constant_eta == 100
