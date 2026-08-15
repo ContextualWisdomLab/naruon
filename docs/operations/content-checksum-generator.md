@@ -14,16 +14,23 @@ Do not substitute MD5, SHA-1, aliases, or differently sized BLAKE2 outputs; the 
 
 ## Execute
 
-Call the existing authenticated tool endpoint with the tool code and the two required parameters:
+Use the canonical generic tool-execution contract implemented by [`backend/api/tools.py`](../../backend/api/tools.py):
+
+- **Method and route:** `POST /api/tools/content_checksum_generator/execute`.
+- **Authentication prerequisite:** send `Authorization: Bearer <token>` with a bearer token accepted by Naruon's [`get_auth_context`](../../backend/api/auth.py). The tools router is mounted with that private-API dependency in [`backend/main.py`](../../backend/main.py); unauthenticated requests are not part of the supported contract.
+- **Content type:** `application/json`.
+- **Request envelope:** place tool inputs under the required `parameters` object; do not send `text` or `algorithm` at the top level.
 
 ```json
 {
-  "text": "content to compare",
-  "algorithm": "sha256"
+  "parameters": {
+    "text": "content to compare",
+    "algorithm": "sha256"
+  }
 }
 ```
 
-The tool reports `algorithm_code`, `digest_hex`, `byte_length`, `encoding_code`, and `security_note`. Input is limited to 1,048,576 bytes **after** UTF-8 encoding. Canonically equivalent Unicode text can produce different digests when its byte sequences differ because Naruon does not normalize the source before hashing.
+On successful execution, the endpoint returns the generic `ExecuteResponse` envelope with `status: "success"`; its `result` contains `algorithm_code`, `digest_hex`, `byte_length`, `encoding_code`, and `security_note`. Input is limited to 1,048,576 bytes **after** UTF-8 encoding. Canonically equivalent Unicode text can produce different digests when its byte sequences differ because Naruon does not normalize the source before hashing.
 
 ## Take the next action
 
@@ -35,6 +42,6 @@ The tool reports `algorithm_code`, `digest_hex`, `byte_length`, `encoding_code`,
 
 ## Failure handling
 
-An unsupported algorithm or oversized payload fails closed with a deterministic validation error. Operators should change the requested algorithm to an allowlisted value or split/restructure the calling workflow; they should not bypass the limit or add a legacy digest solely to make a failed request pass.
+An unsupported algorithm or oversized payload fails closed with a deterministic `ExecuteResponse` whose `status` is `"failed"` and whose message is a bounded validation error. Operators should change the requested algorithm to an allowlisted value or split/restructure the calling workflow; they should not bypass the limit or add a legacy digest solely to make a failed request pass.
 
 Architecture decision: [`ADR-0007`](../adr/0007-bounded-content-checksum-surface.md). Standards and APA 7 references: [`docs/doctoring/content-checksum-generator.md`](../doctoring/content-checksum-generator.md).
