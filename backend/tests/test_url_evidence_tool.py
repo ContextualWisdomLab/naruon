@@ -1,5 +1,7 @@
 """Regression tests for Naruon's bounded URL-evidence extractor."""
 
+import socket
+
 import pytest
 
 import main
@@ -55,6 +57,19 @@ async def test_url_evidence_preserves_unicode_offsets_and_balanced_parentheses()
 
 
 @pytest.mark.asyncio
+async def test_url_evidence_trims_only_unbalanced_terminal_delimiters() -> None:
+    """Balanced square/curly path delimiters survive while prose closers are removed."""
+    text = "https://example.com/a[1]] https://example.com/b{c}}"
+
+    result = await registry.invoke_tool("url_evidence_extractor", {"text": text})
+
+    assert [item["raw_value"] for item in result["matches"]] == [
+        "https://example.com/a[1]",
+        "https://example.com/b{c}",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_url_evidence_preserves_repeated_source_locations() -> None:
     """Repeated URL spellings remain separate auditable occurrences."""
     text = "https://example.com/a 그리고 https://example.com/a"
@@ -70,17 +85,18 @@ async def test_url_evidence_preserves_repeated_source_locations() -> None:
 
 
 @pytest.mark.asyncio
-async def test_url_evidence_normalizes_idna_ipv6_and_flags_userinfo() -> None:
+async def test_url_evidence_normalizes_idna_ipv6_ipv4_and_flags_userinfo() -> None:
     """Host normalization is deterministic and credential-bearing URLs are surfaced."""
     text = (
         "https://user:pw@BÜCHER.example/경로 "
-        "https://[2001:0db8:0:0:0:0:0:1]:8443/a"
+        "https://[2001:0db8:0:0:0:0:0:1]:8443/a "
+        "HTTP://127.0.0.1:443/a"
     )
 
     result = await registry.invoke_tool("url_evidence_extractor", {"text": text})
 
-    assert result["match_count"] == 2
-    first, second = result["matches"]
+    assert result["match_count"] == 3
+    first, second, third = result["matches"]
     assert first["host_value"] == "xn--bcher-kva.example"
     assert first["normalized_value"] == "https://user:pw@xn--bcher-kva.example/경로"
     assert first["contains_userinfo"] is True
@@ -92,6 +108,10 @@ async def test_url_evidence_normalizes_idna_ipv6_and_flags_userinfo() -> None:
     assert second["contains_userinfo"] is False
     assert second["validation_status"] == "valid"
     assert second["warning_codes"] == []
+
+    assert third["host_value"] == "127.0.0.1"
+    assert third["normalized_value"] == "http://127.0.0.1:443/a"
+    assert third["validation_status"] == "valid"
 
 
 @pytest.mark.asyncio
@@ -109,6 +129,48 @@ async def test_url_evidence_ignores_other_schemes_and_retains_invalid_http_evide
     assert malformed_percent["raw_value"] == "https://example.com/%zz"
     assert malformed_percent["validation_status"] == "invalid"
     assert malformed_percent["warning_codes"] == ["malformed_percent_encoding"]
+
+
+@pytest.mark.asyncio
+async def test_url_evidence_retains_parser_host_and_port_failures() -> None:
+    """Malformed absolute HTTP(S) candidates remain inspectable with stable reasons."""
+    oversized_label = "a" * 64
+    text = (
+        "https://[::1/a "
+        f"https://{oversized_label}.example/a "
+        "https://example.com:99999/a"
+    )
+
+    result = await registry.invoke_tool("url_evidence_extractor", {"text": text})
+
+    assert result["match_count"] == 3
+    parser_error, host_error, port_error = result["matches"]
+    assert parser_error["validation_status"] == "invalid"
+    assert parser_error["warning_codes"] == ["invalid_url"]
+    assert host_error["validation_status"] == "invalid"
+    assert host_error["warning_codes"] == ["invalid_host"]
+    assert port_error["validation_status"] == "invalid"
+    assert port_error["warning_codes"] == ["invalid_port"]
+
+
+@pytest.mark.asyncio
+async def test_url_evidence_never_resolves_or_connects_to_extracted_hosts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Extraction must remain pure even when a URL names an external host."""
+
+    def _network_forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("URL evidence extraction must not perform network I/O")
+
+    monkeypatch.setattr(socket, "getaddrinfo", _network_forbidden)
+    monkeypatch.setattr(socket, "create_connection", _network_forbidden)
+
+    result = await registry.invoke_tool(
+        "url_evidence_extractor", {"text": "See https://example.com/a?q=1#proof."}
+    )
+
+    assert result["match_count"] == 1
+    assert result["matches"][0]["normalized_value"] == "https://example.com/a?q=1#proof"
 
 
 @pytest.mark.asyncio
