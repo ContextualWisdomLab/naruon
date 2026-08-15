@@ -10,7 +10,7 @@ from fastapi import HTTPException
 import httpx
 import pytest
 
-from api import tenant_config
+from api import email_writing_orchestrator_config as tenant_config
 from services.contextual_orchestrator_client import (
     ContextualOrchestratorClient,
     ContextualOrchestratorError,

@@ -75,12 +75,12 @@ def scoped_configuration_stubs(
         )
 
     monkeypatch.setattr(
-        "api.tenant_config.get_scoped_email_writing_orchestrator_config",
+        "api.email_writing_orchestrator_config.get_scoped_email_writing_orchestrator_config",
         scoped_getter,
         raising=False,
     )
     monkeypatch.setattr(
-        "api.tenant_config.validate_llm_provider_base_url_details_async",
+        "api.email_writing_orchestrator_config.validate_llm_provider_base_url_details_async",
         endpoint_validator,
         raising=False,
     )
