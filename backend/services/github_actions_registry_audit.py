@@ -14,6 +14,15 @@ from typing import Literal, Protocol, cast
 
 WORKFLOW_DIRECTORY = ".github/workflows/"
 WORKFLOW_PAGE_SIZE = 100
+WORKFLOW_STATES = frozenset(
+    {
+        "active",
+        "deleted",
+        "disabled_fork",
+        "disabled_inactivity",
+        "disabled_manually",
+    }
+)
 
 WorkflowClassification = Literal[
     "present_repository_workflow",
@@ -268,10 +277,14 @@ def _classify_record(
 ) -> WorkflowClassification:
     """Return one fail-closed classification for a workflow registry record."""
     path = record.path
+    if record.state not in WORKFLOW_STATES:
+        return "unresolved_workflow_record"
     if _looks_like_repository_workflow(path) and not _is_canonical_workflow_path(path):
         return "unresolved_workflow_record"
     if not path.startswith(WORKFLOW_DIRECTORY):
         return "dynamic_or_external_workflow"
+    if record.state == "deleted" and path in tree_paths:
+        return "unresolved_workflow_record"
     if path in tree_paths:
         return "present_repository_workflow"
     if record.state == "active":
