@@ -1,21 +1,51 @@
 # Naruon Architecture Decision Records
 
-Status values: Proposed, Accepted, Superseded.
+This index records cross-cutting Naruon decisions that must survive beyond an
+individual pull request, implementation plan, or chat. `Accepted` means only that
+the Naruon decision governs its stated local scope; it does not transfer authority
+to an external service or mean that a future integration is implemented.
+`Proposed` records a discoverable target for later review and does not govern
+implementation.
 
-This index records durable Naruon architectural decisions. A decision is not shipped behavior merely because its ADR exists. `Accepted` requires protected-branch implementation or process authority plus current verification evidence.
+| ADR | Decision | Status | Capability effect |
+|---|---|---|---|
+| [ADR-0001](0001-topic-measurement-authority.md) | Consume structural topic measurement only from scientific authority, never a keyword or label heuristic | Accepted | `ACCEPTED-NARUON-POLICY`; no runtime promotion |
+| [ADR-0002](0002-fitted-topic-artifact-consumption.md) | Conditionally consume only a versioned fitted topic artifact through a fail-closed adapter | Proposed | Target `PLANNED`; runtime `BLOCKED-UPSTREAM` |
+| [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md) | Keep statistical topic measurement separate from agenda generation | Proposed | Future capability `PLANNED`; no implementation authorization |
+| [ADR-0004](0004-inkspan-backed-llm-email-writing-guidance.md) | Compose Inkspan, contextual-orchestrator, and fast-mlsirm for LLM-native email guidance without lexical semantic fallback | Proposed | Design and TDD plan only; runtime remains unshipped |
 
-| ADR | Status | Decision |
-|---|---|---|
-| [0001](0001-inkspan-backed-llm-email-writing-guidance.md) | Proposed | Inkspan-backed, LLM-native email writing guidance with fast-mlsirm judge calibration and no keyword semantic fallback |
+The complete topic-intelligence requirements, architecture, contract, UML,
+conceptual ERD, security, test, and operability graph is indexed at
+[`docs/topic-intelligence/README.md`](../topic-intelligence/README.md).
+Its [canonical digest inventory](../topic-intelligence/README.md#canonical-digest-inventory)
+is the single cross-document list for the planned adapter profile.
 
 ## Decision discipline
 
-- **Proposed:** design and ownership boundaries are documented, but implementation or operational acceptance evidence is incomplete.
-- **Accepted:** protected `develop` contains the governing implementation or process and its tests, security evidence, documentation, and rollback contract are current.
+- **Proposed:** design and ownership boundaries are documented, but implementation
+  or operational acceptance evidence is incomplete.
+- **Accepted:** protected `develop` contains the governing implementation or
+  process and its tests, security evidence, documentation, and rollback contract
+  are current.
 - **Superseded:** retained for traceability but replaced by a later ADR.
-
-Material changes to model authority, editor ownership, keyword/heuristic fallback, PII handling, send gating, calibration, persistence, or cross-repository integration require a new or superseding ADR rather than silent edits.
 
 ## Required ADR sections
 
-Every material ADR records context, alternatives, decision, consequences, failure and recovery, security and privacy, accessibility where applicable, compatibility and migration, verification, research/standards traceability, and rollback or supersession conditions.
+Every material ADR records context, alternatives, decision, consequences, failure
+and recovery, security and privacy, accessibility where applicable, compatibility
+and migration, verification, research or standards traceability, and rollback or
+supersession conditions.
+
+## Change rule
+
+Create or update an ADR when a Naruon change adopts or declines an external service
+contract, introduces a scientific or statistical inference contract, changes
+persistence or tenant authority, changes model or credential trust boundaries, or
+replaces a fail-closed product capability with a different production dependency.
+A Naruon ADR records Naruon's decision only; it cannot assign authority to, or
+accept a decision for, another service.
+
+Every implementing PR must keep the corresponding source, tests, doctoring,
+architecture and operability contract, and CHANGELOG maturity truthful. An active
+PR, accepted local policy, or proposed target must not be described as protected-
+branch implementation before it is integrated and independently verified.
