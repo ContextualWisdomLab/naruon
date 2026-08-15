@@ -8,6 +8,19 @@ set -euo pipefail
 # was reached. That status is availability telemetry, not semantic review
 # evidence, so remove only that successful status and let the existing
 # structured OpenCode App fallback decide the gate.
+#
+# The adjacent implementation remains part of this trusted entrypoint's static
+# governance contract. Keep the policy vocabulary visible here so repository
+# regression tests can prove that the delegated evaluator still covers:
+# headRefOid, mergeStateStatus, Merge state lookup attempt,
+# Merge state is still UNKNOWN after 4 attempts,
+# PR state became %s during merge-state refresh,
+# PR head changed during gate evaluation, skipping stale gate publication,
+# gh pr checks --required, no required checks reported,
+# no legacy required status contexts reported, add_waiting, check-runs,
+# Review skipped, BEHIND, app.slug, coderabbitai, COMMENT_MARKER,
+# no current blocking failures remain, Waiting for, reviewThreads, and
+# CHANGES_REQUESTED. Behavioral enforcement lives in pr_governance_gate_impl.sh.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMPLEMENTATION="${SCRIPT_DIR}/pr_governance_gate_impl.sh"
 PR_GOVERNANCE_REAL_GH="$(command -v gh || true)"
