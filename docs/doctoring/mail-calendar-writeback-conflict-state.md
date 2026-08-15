@@ -1,6 +1,6 @@
 # Mail-detail calendar writeback conflict state
 
-검토 기준일: **2026-08-13**
+검토 기준일: **2026-08-15**
 
 ## Incident
 
@@ -29,6 +29,10 @@ Writeback-intent 배치에서 가장 강한 충돌 상태를 고릅니다.
 `warning`은 If-Match 검사가 필요하다고 말합니다. 제품 이벤트
 `calendar_reflected.conflict_state`는 이 분류를 그대로 실습니다.
 
+HTTP 조건부 요청의 현재 표준 근거는 RFC 9110 §13, 특히 §13.1.1의
+`If-Match`와 전제조건 실패 시의 412 의미입니다. RFC 7232는 RFC 9110에
+의해 폐기되었으므로 현재 규범 근거로 사용하지 않습니다.
+
 ## Trust boundary
 
 Naruon은 캘린더 호스트가 아닙니다. 충돌 판정은 고객 원본 계정의
@@ -56,6 +60,5 @@ Daboo, C., Desruisseaux, B., & Dusseault, L. (2007). *Calendaring
 extensions to WebDAV (CalDAV)* (RFC 4791). RFC Editor.
 https://doi.org/10.17487/RFC4791
 
-Fielding, R., & Reschke, J. (Eds.). (2014). *Hypertext Transfer Protocol
-(HTTP/1.1): Conditional requests* (RFC 7232). RFC Editor.
-https://doi.org/10.17487/RFC7232
+Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP semantics*
+(RFC 9110; STD 97). RFC Editor. https://doi.org/10.17487/RFC9110
