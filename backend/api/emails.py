@@ -15,6 +15,10 @@ from services.email_client import (
     send_email,
     validate_smtp_destination,
 )
+from services.email_signature_service import (
+    get_email_signature_text,
+    render_email_with_signature,
+)
 from services.reply_tracking_service import (
     check_missing_replies,
     configured_email_addresses,
@@ -749,10 +753,15 @@ async def send_email_endpoint(
                 ) from exc
             raise
 
+        email_signature_text = await get_email_signature_text(
+            db,
+            user_id=auth_context.user_id,
+            organization_id=auth_context.organization_id,
+        )
         message_params = EmailMessageParams(
             to_address=request.to,
             subject=request.subject,
-            body=request.body,
+            body=render_email_with_signature(request.body, email_signature_text),
             in_reply_to=request.in_reply_to,
             references=request.references,
         )
