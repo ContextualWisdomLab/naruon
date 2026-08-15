@@ -28,6 +28,7 @@ REPO="${GITHUB_REPOSITORY#*/}"
 BLOCKERS=()
 WAITING=()
 PR_CHECKS_ERROR_FILE="$(mktemp)"
+CHECK_RUNS_ERROR_FILE="$(mktemp)"
 ISSUE_COMMENTS_ERROR_FILE="$(mktemp)"
 REVIEW_COMMENTS_ERROR_FILE="$(mktemp)"
 OPENCODE_REVIEWS_ERROR_FILE="$(mktemp)"
@@ -37,6 +38,7 @@ RUN_DETAILS_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}/a
 cleanup_temp_files() {
   rm -f \
     "$PR_CHECKS_ERROR_FILE" \
+    "$CHECK_RUNS_ERROR_FILE" \
     "$ISSUE_COMMENTS_ERROR_FILE" \
     "$REVIEW_COMMENTS_ERROR_FILE" \
     "$OPENCODE_REVIEWS_ERROR_FILE" \
@@ -341,12 +343,21 @@ CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potent
 CODERABBIT_ISSUE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|actionable comments?|changes requested|request changes'
 CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|changes requested|request changes'
 CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
-CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
+CHECK_RUNS='{"check_runs":[]}'
+if ! CHECK_RUNS_RAW="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100" 2>"$CHECK_RUNS_ERROR_FILE")"; then
+  printf 'check-runs lookup failed:\n'
+  printf '%s\n' "$(<"$CHECK_RUNS_ERROR_FILE")" | sed 's/^/    /'
+  add_blocker 'Current-head check runs could not be read; see the workflow run log.'
+else
+  CHECK_RUNS="$CHECK_RUNS_RAW"
+fi
 COMMIT_STATUS_JSON='{"statuses":[]}'
-if ! COMMIT_STATUS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
+if ! COMMIT_STATUS_RAW="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
   printf 'commit status lookup failed:\n'
   printf '%s\n' "$(<"$COMMIT_STATUS_ERROR_FILE")" | sed 's/^/    /'
   add_blocker 'Current-head commit statuses could not be read; see the workflow run log.'
+else
+  COMMIT_STATUS_JSON="$COMMIT_STATUS_RAW"
 fi
 CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
   [.check_runs[]
