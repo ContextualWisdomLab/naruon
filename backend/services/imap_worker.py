@@ -251,6 +251,8 @@ class ImapSyncWorker:
     ) -> list[bytes]:
         if imap_server is None or imap_port is None:
             imap_server, imap_port = self._validated_destination(config)
+        else:
+            imap_server, imap_port = validate_imap_destination(imap_server, imap_port)
         import ssl
         ssl_context = ssl.create_default_context()
         imap_client = aioimaplib.IMAP4_SSL(
