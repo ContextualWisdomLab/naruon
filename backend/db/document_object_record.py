@@ -28,7 +28,8 @@ class DocumentObjectRecord(Base):
 
     The owning ``workspace_documents`` row remains authoritative for tenant
     scope and workflow state. This table contains only the opaque object
-    locator plus integrity metadata; raw payload bytes never enter this row.
+    locator, integrity metadata, and lifecycle timestamps; raw payload bytes
+    never enter this row.
     """
 
     __tablename__ = "document_object_records"
@@ -38,7 +39,7 @@ class DocumentObjectRecord(Base):
             name="ck_document_object_records_backend",
         ),
         CheckConstraint(
-            "storage_state IN ('active', 'deleted')",
+            "storage_state IN ('active', 'consumed', 'deleted')",
             name="ck_document_object_records_state",
         ),
         CheckConstraint(
@@ -49,6 +50,15 @@ class DocumentObjectRecord(Base):
             "bucket_name IS NOT NULL AND object_key IS NOT NULL "
             "AND inline_payload IS NULL",
             name="ck_document_object_records_s3_locator",
+        ),
+        CheckConstraint(
+            "(storage_state = 'active' AND consumed_at IS NULL "
+            "AND deleted_at IS NULL) OR "
+            "(storage_state = 'consumed' AND consumed_at IS NOT NULL "
+            "AND deleted_at IS NULL) OR "
+            "(storage_state = 'deleted' AND consumed_at IS NOT NULL "
+            "AND deleted_at IS NOT NULL)",
+            name="ck_document_object_records_lifecycle",
         ),
         UniqueConstraint(
             "document_id",
@@ -85,6 +95,14 @@ class DocumentObjectRecord(Base):
     checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_state: Mapped[str] = mapped_column(
         String(32), default="active", nullable=False
+    )
+    consumed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    deleted_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
