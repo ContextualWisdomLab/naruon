@@ -43,8 +43,8 @@ jobs:
         shell: bash
         run: |
           cat > frontend/src/components/data-layout/DocumentRepositoryTab.busy-state.test.tsx <<'EOF'
-          import { render, screen } from '@testing-library/react';
-          import { describe, expect, it, vi } from 'vitest';
+          import { renderToStaticMarkup } from 'react-dom/server';
+          import { describe, expect, it } from 'vitest';
 
           import { DocumentRepositoryTab } from './DocumentRepositoryTab';
 
@@ -63,12 +63,12 @@ jobs:
           };
 
           function renderRepository(activeDocumentAction: string | null) {
-            render(
+            return renderToStaticMarkup(
               <DocumentRepositoryTab
                 {...({
                   writebackStatus: 'idle',
                   writebackResult: null,
-                  requestWebdavWritebackIntent: vi.fn(),
+                  requestWebdavWritebackIntent: () => undefined,
                   isWritebackLoading: false,
                   canRequestWebdavWriteback: true,
                   selectedWebdavAccount: {
@@ -77,10 +77,10 @@ jobs:
                     writeback_enabled: true,
                   },
                   isWebdavSourceLoading: false,
-                  setSelectedWebdavSourceId: vi.fn(),
+                  setSelectedWebdavSourceId: () => undefined,
                   uniqueThreadStatus: 'idle',
                   uniqueThreadResult: null,
-                  requestUniqueThreadIntent: vi.fn(),
+                  requestUniqueThreadIntent: () => undefined,
                   isUniqueThreadLoading: false,
                   connectorEvents: [],
                   dataSurfaceStatus: 'ready',
@@ -88,14 +88,14 @@ jobs:
                   embeddingStage: null,
                   emailRepository: null,
                   attachmentRepository: null,
-                  handleEmailImportFileChange: vi.fn(),
-                  requestEmailFileImport: vi.fn(),
+                  handleEmailImportFileChange: () => undefined,
+                  requestEmailFileImport: () => undefined,
                   isEmailImportLoading: false,
                   emailImportFiles: [],
                   emailImportStatus: 'idle',
                   emailImportResult: null,
-                  handleDocumentFileChange: vi.fn(),
-                  requestDocumentUpload: vi.fn(),
+                  handleDocumentFileChange: () => undefined,
+                  requestDocumentUpload: () => undefined,
                   isDocumentActionLoading: true,
                   activeDocumentAction,
                   documentUploadFiles: [],
@@ -110,37 +110,52 @@ jobs:
                   webdavAccountMap: new Map(),
                   projectFolders: [],
                   selectedRepositoryAssetKey: workspaceDocument.asset_key,
-                  setSelectedRepositoryAssetKey: vi.fn(),
+                  setSelectedRepositoryAssetKey: () => undefined,
                   repositoryAssets: [workspaceDocument],
                   selectedWorkspaceDocument: workspaceDocument,
-                  requestDocumentAction: vi.fn(),
+                  requestDocumentAction: () => undefined,
                 } as never)}
               />,
             );
           }
 
+          function getActionButtonTag(markup: string, action: string) {
+            const match = markup.match(
+              new RegExp(`<button[^>]*data-document-action="${action}"[^>]*>`),
+            );
+            if (!match) {
+              throw new Error(`missing rendered button for ${action}`);
+            }
+            return match[0];
+          }
+
           describe('DocumentRepositoryTab action busy identity', () => {
             it('marks only the initiating document action as busy', () => {
-              renderRepository('reparse');
+              const markup = renderRepository('reparse');
 
-              expect(screen.getByRole('button', { name: '재파싱 실행' })).toHaveAttribute('aria-busy', 'true');
-              expect(screen.getByRole('button', { name: '임베딩 재생성 의도' })).toHaveAttribute('aria-busy', 'false');
-              expect(screen.getByRole('button', { name: 'HWP 변환 의도' })).toHaveAttribute('aria-busy', 'false');
-              expect(screen.getByRole('button', { name: 'WebDAV 문서 실행 요청' })).toHaveAttribute('aria-busy', 'false');
-              expect(screen.getByRole('button', { name: '선택 문서 저장' })).toHaveAttribute('aria-busy', 'false');
+              expect(getActionButtonTag(markup, 'reparse')).toContain('aria-busy="true"');
+              expect(getActionButtonTag(markup, 'embedding-regeneration-intent')).toContain('aria-busy="false"');
+              expect(getActionButtonTag(markup, 'hwp-conversion-intent')).toContain('aria-busy="false"');
+              expect(getActionButtonTag(markup, 'webdav-materialization-intent')).toContain('aria-busy="false"');
+              expect(getActionButtonTag(markup, 'upload')).toContain('aria-busy="false"');
             });
           });
           EOF
 
-      - name: Prove the regression is red before implementation
+      - name: Prove the regression is red for the intended reason
         shell: bash
         run: |
           set -euo pipefail
           cd frontend
-          if pnpm exec vitest run src/components/data-layout/DocumentRepositoryTab.busy-state.test.tsx; then
+          set +e
+          pnpm exec vitest run src/components/data-layout/DocumentRepositoryTab.busy-state.test.tsx 2>&1 | tee /tmp/document-action-red.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [[ "$status" -eq 0 ]]; then
             echo 'Expected the action-identity regression to fail before implementation.' >&2
             exit 1
           fi
+          grep -F 'missing rendered button for reparse' /tmp/document-action-red.log
 
       - name: Implement per-action busy identity
         shell: bash
@@ -242,15 +257,15 @@ jobs:
           tab_source = Path(tab_path).read_text(encoding='utf-8')
           replacements = {
               "onClick={() => void requestDocumentUpload()}\n                        disabled={isDocumentActionLoading || documentUploadFiles.length === 0}\n                        aria-busy={isDocumentActionLoading}":
-                  "onClick={() => void requestDocumentUpload()}\n                        disabled={isDocumentActionLoading || documentUploadFiles.length === 0}\n                        aria-busy={activeDocumentAction === 'upload'}",
+                  "onClick={() => void requestDocumentUpload()}\n                        data-document-action=\"upload\"\n                        disabled={isDocumentActionLoading || documentUploadFiles.length === 0}\n                        aria-busy={activeDocumentAction === 'upload'}",
               "onClick={() => void requestDocumentAction('reparse')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={isDocumentActionLoading}":
-                  "onClick={() => void requestDocumentAction('reparse')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'reparse'}",
+                  "onClick={() => void requestDocumentAction('reparse')}\n                        data-document-action=\"reparse\"\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'reparse'}",
               "onClick={() => void requestDocumentAction('embedding-regeneration-intent')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={isDocumentActionLoading}":
-                  "onClick={() => void requestDocumentAction('embedding-regeneration-intent')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'embedding-regeneration-intent'}",
+                  "onClick={() => void requestDocumentAction('embedding-regeneration-intent')}\n                        data-document-action=\"embedding-regeneration-intent\"\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'embedding-regeneration-intent'}",
               "onClick={() => void requestDocumentAction('hwp-conversion-intent')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={isDocumentActionLoading}":
-                  "onClick={() => void requestDocumentAction('hwp-conversion-intent')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'hwp-conversion-intent'}",
+                  "onClick={() => void requestDocumentAction('hwp-conversion-intent')}\n                        data-document-action=\"hwp-conversion-intent\"\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'hwp-conversion-intent'}",
               "onClick={() => void requestDocumentAction('webdav-materialization-intent')}\n                        disabled={isDocumentActionLoading || !selectedWebdavAccount || selectedWorkspaceDocument.state_code !== 'ready'}\n                        aria-busy={isDocumentActionLoading}":
-                  "onClick={() => void requestDocumentAction('webdav-materialization-intent')}\n                        disabled={isDocumentActionLoading || !selectedWebdavAccount || selectedWorkspaceDocument.state_code !== 'ready'}\n                        aria-busy={activeDocumentAction === 'webdav-materialization-intent'}",
+                  "onClick={() => void requestDocumentAction('webdav-materialization-intent')}\n                        data-document-action=\"webdav-materialization-intent\"\n                        disabled={isDocumentActionLoading || !selectedWebdavAccount || selectedWorkspaceDocument.state_code !== 'ready'}\n                        aria-busy={activeDocumentAction === 'webdav-materialization-intent'}",
           }
           for old, new in replacements.items():
               if tab_source.count(old) != 1:
@@ -265,7 +280,7 @@ jobs:
 
           A shared loading lock may disable sibling document actions to prevent conflicting writes, but it must not announce every sibling as the operation that is currently processing. Naruon therefore records the initiating document action separately from the shared lock. Only the initiating upload, reparse, embedding-regeneration, HWP-conversion, or WebDAV-materialization button exposes `aria-busy=true`; disabled siblings remain `aria-busy=false`.
 
-          The focused rendered regression exercises the real button group and fails if a shared boolean again marks every document action busy.
+          The focused server-rendered regression exercises the real button group and fails if a shared boolean again marks every document action busy. Stable `data-document-action` identifiers exist only to bind rendered accessibility evidence to the initiating operation; they do not authorize or execute an action.
           """.strip()
           if '## Action identity' in doctoring:
               raise SystemExit('doctoring already contains the action identity section')
