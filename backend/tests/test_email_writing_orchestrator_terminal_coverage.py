@@ -17,7 +17,6 @@ from sqlalchemy import create_engine, inspect
 
 from api.auth import AuthContext
 from api import email_writing_orchestrator_config as config_api
-from db.email_writing_orchestrator_config import EmailWritingOrchestratorConfig
 from services import contextual_orchestrator_client as client_module
 from services.contextual_orchestrator_client import (
     ContextualOrchestratorClient,
@@ -809,3 +808,4 @@ def test_migration_executes_upgrade_and_downgrade(
             "email_writing_orchestrator_config"
         )
         assert inspector.has_table("unrelated_record")
+    engine.dispose()
