@@ -6,11 +6,12 @@ import base64
 from io import BytesIO
 from types import SimpleNamespace
 
-from fastapi import HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, UploadFile
 import pytest
 
-import api.data as data_module
-from db.models import Document, DocumentObjectRecord
+import api.document_storage as data_module
+from db.document_object_record import DocumentObjectRecord
+from db.models import Document
 from services.document_object_storage import (
     DocumentObjectStorageError,
     StoredDocumentPayload,
@@ -70,6 +71,22 @@ def _s3_payload() -> StoredDocumentPayload:
             ),
         )
     )
+
+
+def test_runtime_route_replacement_removes_only_legacy_pdf_upload() -> None:
+    candidate_router = APIRouter(prefix="/api/data")
+
+    @candidate_router.post("/documents/pdf-dom-recognition")
+    async def legacy_pdf_upload() -> dict[str, bool]:
+        return {"legacy": True}
+
+    @candidate_router.get("/health")
+    async def health() -> dict[str, bool]:
+        return {"ok": True}
+
+    assert data_module.remove_legacy_pdf_upload_route(candidate_router) is True
+    assert data_module.remove_legacy_pdf_upload_route(candidate_router) is False
+    assert [route.path for route in candidate_router.routes] == ["/api/data/health"]
 
 
 @pytest.mark.asyncio

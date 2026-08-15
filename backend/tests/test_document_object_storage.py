@@ -4,21 +4,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from types import SimpleNamespace
 
 import pytest
 
-from db.models import Document, DocumentObjectRecord
+from db.document_object_record import DocumentObjectRecord
+from db.models import Document
 import services.document_object_storage as storage_module
-from services.document_object_storage import (
-    MAX_PDF_DOCUMENT_BYTES,
-    DocumentObjectStorageError,
-    StoredDocumentPayload,
-    decode_legacy_pdf_payload,
-    delete_configured_document_payload,
-    load_pending_pdf_document_bytes,
-    store_configured_pdf_document,
-)
 from services.s3_object_storage import S3StoredObject
 
 
@@ -111,7 +102,7 @@ def _document(*, content: str | None = None) -> Document:
 
 
 def test_database_payload_preserves_legacy_inline_contract_without_object_record() -> None:
-    stored = StoredDocumentPayload.for_database(PDF_BYTES)
+    stored = storage_module.StoredDocumentPayload.for_database(PDF_BYTES)
 
     assert stored.storage_backend == "database"
     assert base64.b64decode(stored.document_content or "") == PDF_BYTES
@@ -120,7 +111,7 @@ def test_database_payload_preserves_legacy_inline_contract_without_object_record
 
 
 def test_s3_payload_creates_normalized_object_record_without_inline_bytes() -> None:
-    stored = StoredDocumentPayload.for_s3(_s3_object())
+    stored = storage_module.StoredDocumentPayload.for_s3(_s3_object())
     record = stored.to_object_record("doc-1")
 
     assert stored.document_content is None
@@ -138,18 +129,25 @@ def test_s3_payload_creates_normalized_object_record_without_inline_bytes() -> N
         ("not@@base64", "base64"),
         (base64.b64encode(b"not-a-pdf").decode("ascii"), "PDF"),
         (
-            base64.b64encode(b"%PDF-" + b"x" * MAX_PDF_DOCUMENT_BYTES).decode("ascii"),
+            base64.b64encode(
+                b"%PDF-" + b"x" * storage_module.MAX_PDF_DOCUMENT_BYTES
+            ).decode("ascii"),
             "size limit",
         ),
     ],
 )
 def test_legacy_decoder_fails_closed(encoded: str, expected_message: str) -> None:
     with pytest.raises(ValueError, match=expected_message):
-        decode_legacy_pdf_payload(encoded)
+        storage_module.decode_legacy_pdf_payload(encoded)
 
 
 def test_legacy_decoder_accepts_valid_pdf() -> None:
-    assert decode_legacy_pdf_payload(base64.b64encode(PDF_BYTES).decode("ascii")) == PDF_BYTES
+    assert (
+        storage_module.decode_legacy_pdf_payload(
+            base64.b64encode(PDF_BYTES).decode("ascii")
+        )
+        == PDF_BYTES
+    )
 
 
 @pytest.mark.asyncio
@@ -160,7 +158,7 @@ async def test_store_configured_database_payload_uses_no_s3_client(monkeypatch) 
         raise AssertionError("database backend must not construct an S3 client")
 
     monkeypatch.setattr(storage_module, "_build_s3_backend_from_settings", fail_builder)
-    stored = await store_configured_pdf_document(
+    stored = await storage_module.store_configured_pdf_document(
         payload=PDF_BYTES,
         document_id="doc-1",
         organization_id="organization-1",
@@ -168,7 +166,7 @@ async def test_store_configured_database_payload_uses_no_s3_client(monkeypatch) 
     )
 
     assert stored.storage_backend == "database"
-    assert decode_legacy_pdf_payload(stored.document_content) == PDF_BYTES
+    assert storage_module.decode_legacy_pdf_payload(stored.document_content) == PDF_BYTES
 
 
 @pytest.mark.asyncio
@@ -180,7 +178,7 @@ async def test_store_and_delete_configured_s3_payload(monkeypatch) -> None:
         return backend
 
     monkeypatch.setattr(storage_module, "_build_s3_backend_from_settings", build_backend)
-    stored = await store_configured_pdf_document(
+    stored = await storage_module.store_configured_pdf_document(
         payload=PDF_BYTES,
         document_id="doc-1",
         organization_id="organization-1",
@@ -203,7 +201,7 @@ async def test_store_and_delete_configured_s3_payload(monkeypatch) -> None:
         "_build_s3_backend_from_settings",
         build_delete_backend,
     )
-    await delete_configured_document_payload(stored)
+    await storage_module.delete_configured_document_payload(stored)
     assert delete_backend.delete_calls == [stored.s3_object]
     assert delete_backend.closed is True
 
@@ -214,7 +212,9 @@ async def test_delete_database_payload_is_a_noop(monkeypatch) -> None:
         raise AssertionError("database cleanup must not construct an S3 client")
 
     monkeypatch.setattr(storage_module, "_build_s3_backend_from_settings", fail_builder)
-    await delete_configured_document_payload(StoredDocumentPayload.for_database(PDF_BYTES))
+    await storage_module.delete_configured_document_payload(
+        storage_module.StoredDocumentPayload.for_database(PDF_BYTES)
+    )
 
 
 @pytest.mark.asyncio
@@ -222,7 +222,7 @@ async def test_loader_prefers_legacy_inline_payload_without_querying_object_reco
     session = ScalarSession(_s3_record())
     document = _document(content=base64.b64encode(PDF_BYTES).decode("ascii"))
 
-    loaded = await load_pending_pdf_document_bytes(session, document)
+    loaded = await storage_module.load_pending_pdf_document_bytes(session, document)
 
     assert loaded == PDF_BYTES
     assert session.scalar_calls == 0
@@ -237,7 +237,10 @@ async def test_loader_reads_s3_record_and_closes_backend(monkeypatch) -> None:
         return backend
 
     monkeypatch.setattr(storage_module, "_build_s3_backend_from_settings", build_backend)
-    loaded = await load_pending_pdf_document_bytes(session, _document(content=None))
+    loaded = await storage_module.load_pending_pdf_document_bytes(
+        session,
+        _document(content=None),
+    )
 
     assert loaded == PDF_BYTES
     assert backend.get_calls[0].object_key.endswith("source.pdf")
@@ -247,21 +250,30 @@ async def test_loader_reads_s3_record_and_closes_backend(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_loader_rejects_missing_or_inactive_object_record() -> None:
-    with pytest.raises(DocumentObjectStorageError, match="not available"):
-        await load_pending_pdf_document_bytes(ScalarSession(None), _document(content=None))
+    with pytest.raises(storage_module.DocumentObjectStorageError, match="not available"):
+        await storage_module.load_pending_pdf_document_bytes(
+            ScalarSession(None),
+            _document(content=None),
+        )
 
     inactive = _s3_record()
     inactive.storage_state = "deleted"
-    with pytest.raises(DocumentObjectStorageError, match="not active"):
-        await load_pending_pdf_document_bytes(ScalarSession(inactive), _document(content=None))
+    with pytest.raises(storage_module.DocumentObjectStorageError, match="not active"):
+        await storage_module.load_pending_pdf_document_bytes(
+            ScalarSession(inactive),
+            _document(content=None),
+        )
 
 
 @pytest.mark.asyncio
 async def test_loader_rejects_wrong_document_and_corrupt_download(monkeypatch) -> None:
     record = _s3_record()
     record.document_id = "other-document"
-    with pytest.raises(DocumentObjectStorageError, match="does not match"):
-        await load_pending_pdf_document_bytes(ScalarSession(record), _document(content=None))
+    with pytest.raises(storage_module.DocumentObjectStorageError, match="does not match"):
+        await storage_module.load_pending_pdf_document_bytes(
+            ScalarSession(record),
+            _document(content=None),
+        )
 
     backend = FakeS3Backend(returned_payload=b"not-a-pdf")
 
@@ -269,6 +281,9 @@ async def test_loader_rejects_wrong_document_and_corrupt_download(monkeypatch) -
         return backend
 
     monkeypatch.setattr(storage_module, "_build_s3_backend_from_settings", build_backend)
-    with pytest.raises(DocumentObjectStorageError, match="PDF"):
-        await load_pending_pdf_document_bytes(ScalarSession(_s3_record()), _document(content=None))
+    with pytest.raises(storage_module.DocumentObjectStorageError, match="PDF"):
+        await storage_module.load_pending_pdf_document_bytes(
+            ScalarSession(_s3_record()),
+            _document(content=None),
+        )
     assert backend.closed is True

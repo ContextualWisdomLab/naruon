@@ -1,7 +1,7 @@
 """Document-payload persistence across legacy database and S3 backends.
 
 PostgreSQL remains the authoritative metadata, authorization, workflow, and
-parsed-text store.  This module only moves immutable raw PDF bytes behind a
+parsed-text store. This module only moves immutable raw PDF bytes behind a
 small persistence seam so deployments can retain the current inline database
 mode or select an S3-compatible object store without changing API semantics.
 """
@@ -16,12 +16,13 @@ from urllib.parse import urlsplit
 
 from sqlalchemy import select
 
-from core.config import settings
+from core.object_storage_config import object_storage_settings as settings
 from core.url_validation import (
     parse_allowed_hosts,
     validate_https_url_host_details,
 )
-from db.models import Document, DocumentObjectRecord
+from db.document_object_record import DocumentObjectRecord
+from db.models import Document
 from services.llm_provider_urls import build_pinned_https_async_client
 from services.s3_object_storage import (
     AwsCredentials,
@@ -68,7 +69,7 @@ class StoredDocumentPayload:
         )
 
     def to_object_record(self, document_id: str) -> DocumentObjectRecord | None:
-        """Build normalized SQL metadata for an S3 payload, or no row for inline data."""
+        """Build normalized SQL metadata for S3, or no row for inline storage."""
         if self.s3_object is None:
             return None
         return DocumentObjectRecord(
@@ -131,7 +132,7 @@ async def store_configured_pdf_document(
 
 
 async def delete_configured_document_payload(stored: StoredDocumentPayload) -> None:
-    """Compensate a previously persisted S3 object after metadata commit failure."""
+    """Compensate a persisted S3 object after a metadata commit failure."""
     if stored.s3_object is None:
         return
     backend = await _build_s3_backend_from_settings()
@@ -251,9 +252,7 @@ def _resolve_endpoint_and_allowlist() -> tuple[str, frozenset[str]]:
     if configured_endpoint:
         parsed = urlsplit(configured_endpoint)
         host = (parsed.hostname or "").lower().rstrip(".")
-        allowed_hosts = parse_allowed_hosts(
-            settings.OBJECT_STORAGE_S3_ALLOWED_HOSTS
-        )
+        allowed_hosts = parse_allowed_hosts(settings.OBJECT_STORAGE_S3_ALLOWED_HOSTS)
         if host not in allowed_hosts:
             raise ValueError("Configured S3 endpoint host is not allowlisted")
         return configured_endpoint, allowed_hosts
@@ -276,6 +275,7 @@ def _resolve_endpoint_and_allowlist() -> tuple[str, frozenset[str]]:
 
 
 def _validate_pdf_bytes(payload: bytes) -> None:
+    """Reject oversized or non-PDF bytes before persistence or recognition."""
     if len(payload) > MAX_PDF_DOCUMENT_BYTES:
         raise ValueError("Pending PDF document exceeds the size limit")
     if not payload.startswith(b"%PDF-"):

@@ -1,7 +1,7 @@
 """Minimal, auditable S3-compatible object storage with AWS SigV4 signing.
 
 The implementation deliberately uses Naruon's existing hardened ``httpx``
-transport rather than a provider SDK.  That keeps the runtime dependency set
+transport rather than a provider SDK. That keeps the runtime dependency set
 stable while preserving exact-host validation, DNS pinning, bounded timeouts,
 checksums, server-side encryption, and redacted failure messages.
 """
@@ -22,7 +22,6 @@ import httpx
 
 _ALGORITHM = "AWS4-HMAC-SHA256"
 _SERVICE_NAME = "s3"
-_EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 _BUCKET_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 _REGION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 _EXPECTED_OWNER_PATTERN = re.compile(r"^[0-9]{12}$")

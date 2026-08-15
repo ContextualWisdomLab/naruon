@@ -28,6 +28,10 @@ from api.accounts import router as accounts_router
 from api.webdav import router as webdav_router
 from api.security import router as security_router
 from api.data import router as data_router
+from api.document_storage import (
+    remove_legacy_pdf_upload_route,
+    router as document_storage_router,
+)
 from api.ai_hub import router as ai_hub_router
 from api.projects import router as projects_router
 from api.session import router as auth_session_router
@@ -214,6 +218,11 @@ app.add_middleware(
     allow_headers=["Accept", "Content-Type", "Authorization"],
 )
 
+# The broad data router still contains the legacy inline-PDF function for
+# compatibility with direct callers. Runtime composition removes only that one
+# route and registers the S3-aware document-storage boundary instead.
+remove_legacy_pdf_upload_route(data_router)
+
 app.include_router(search_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(llm_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(calendar_router, dependencies=PRIVATE_API_DEPENDENCIES)
@@ -233,6 +242,7 @@ app.include_router(dav_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(accounts_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(webdav_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(security_router, dependencies=PRIVATE_API_DEPENDENCIES)
+app.include_router(document_storage_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(data_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(ai_hub_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(projects_router, dependencies=PRIVATE_API_DEPENDENCIES)

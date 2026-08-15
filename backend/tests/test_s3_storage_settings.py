@@ -2,23 +2,16 @@
 
 from __future__ import annotations
 
-import secrets
-
 import pytest
 from pydantic import ValidationError
 
-from core.config import Settings
+from core.object_storage_config import ObjectStorageSettings
 
 
-def _settings(**overrides) -> Settings:
-    values = {
-        "DATABASE_URL": "postgresql+asyncpg://test:test@localhost/test",
-        "AUTH_SESSION_HMAC_SECRET": secrets.token_urlsafe(48),
-        "ALLOWED_CORS_ORIGINS": "http://localhost:3000",
-        "_env_file": (),
-    }
+def _settings(**overrides) -> ObjectStorageSettings:
+    values = {"_env_file": ()}
     values.update(overrides)
-    return Settings(**values)
+    return ObjectStorageSettings(**values)
 
 
 def test_database_backend_needs_no_s3_credentials() -> None:
@@ -94,6 +87,9 @@ def test_valid_s3_configuration_preserves_secrets_as_secret_values() -> None:
 
     assert configured.OBJECT_STORAGE_BACKEND == "s3"
     assert configured.OBJECT_STORAGE_S3_REGION_NAME == "ap-northeast-2"
+    assert configured.OBJECT_STORAGE_S3_ACCESS_KEY_ID is not None
+    assert configured.OBJECT_STORAGE_S3_SECRET_ACCESS_KEY is not None
+    assert configured.OBJECT_STORAGE_S3_SESSION_TOKEN is not None
     assert configured.OBJECT_STORAGE_S3_ACCESS_KEY_ID.get_secret_value() == "access-key"
     assert configured.OBJECT_STORAGE_S3_SECRET_ACCESS_KEY.get_secret_value() == "secret-key"
     assert configured.OBJECT_STORAGE_S3_SESSION_TOKEN.get_secret_value() == "temporary-token"
