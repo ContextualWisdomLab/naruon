@@ -12,6 +12,7 @@ import asyncio
 import base64
 import binascii
 from dataclasses import dataclass
+import datetime
 from urllib.parse import urlsplit
 
 from sqlalchemy import select
@@ -85,6 +86,31 @@ class StoredDocumentPayload:
         )
 
 
+def _utc_now() -> datetime.datetime:
+    """Return an aware UTC timestamp for object lifecycle transitions."""
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _stored_object_from_record(record: DocumentObjectRecord) -> S3StoredObject:
+    """Validate persisted locator metadata and materialize an S3 object handle."""
+    if record.storage_backend != "s3":
+        raise DocumentObjectStorageError("Document object backend is unsupported")
+    if not record.bucket_name or not record.object_key:
+        raise DocumentObjectStorageError("Document object locator is incomplete")
+    try:
+        return S3StoredObject(
+            bucket_name=record.bucket_name,
+            object_key=record.object_key,
+            content_type=record.content_type,
+            content_length=record.content_length,
+            checksum_sha256=record.checksum_sha256,
+        )
+    except ValueError as exc:
+        raise DocumentObjectStorageError(
+            "Document object metadata failed validation"
+        ) from exc
+
+
 def decode_legacy_pdf_payload(encoded_payload: str | None) -> bytes:
     """Decode and validate a legacy base64 PDF stored in ``workspace_documents``."""
     try:
@@ -146,6 +172,78 @@ async def delete_configured_document_payload(stored: StoredDocumentPayload) -> N
         await backend.aclose()
 
 
+async def mark_document_payload_consumed(
+    session,
+    document_id: str,
+) -> DocumentObjectRecord | None:
+    """Move an S3 document record from active to consumed idempotently.
+
+    ``None`` denotes the legacy inline-database backend, which has no external
+    object record. A consumed marker is committed with the parsed document
+    before remote deletion is attempted, so cleanup can be retried without
+    losing durable proof that recognition no longer needs the raw object.
+    """
+    record = await session.scalar(
+        select(DocumentObjectRecord).where(
+            DocumentObjectRecord.document_id == document_id
+        )
+    )
+    if record is None:
+        return None
+    if record.storage_state == "active":
+        record.storage_state = "consumed"
+        record.consumed_at = _utc_now()
+        return record
+    if record.storage_state == "consumed":
+        if record.consumed_at is None or record.deleted_at is not None:
+            raise DocumentObjectStorageError(
+                "Consumed document object lifecycle metadata is inconsistent"
+            )
+        return record
+    if record.storage_state == "deleted":
+        if record.consumed_at is None or record.deleted_at is None:
+            raise DocumentObjectStorageError(
+                "Deleted document object lifecycle metadata is inconsistent"
+            )
+        return record
+    raise DocumentObjectStorageError("Document object lifecycle state is unsupported")
+
+
+async def delete_consumed_document_payload(record: DocumentObjectRecord) -> None:
+    """Delete a consumed S3 object and mark deletion only after remote success.
+
+    Already-deleted records are idempotent no-ops. Any transport or integrity
+    failure leaves a consumed record intact so a later cleanup sweep can retry.
+    """
+    if record.storage_state == "deleted":
+        if record.consumed_at is None or record.deleted_at is None:
+            raise DocumentObjectStorageError(
+                "Deleted document object lifecycle metadata is inconsistent"
+            )
+        return
+    if record.storage_state != "consumed" or record.consumed_at is None:
+        raise DocumentObjectStorageError(
+            "Document object must be consumed before deletion"
+        )
+    if record.deleted_at is not None:
+        raise DocumentObjectStorageError(
+            "Consumed document object must not already have a deletion timestamp"
+        )
+
+    stored_object = _stored_object_from_record(record)
+    backend = await _build_s3_backend_from_settings()
+    try:
+        await backend.delete_object(stored_object)
+    except (S3ObjectStorageError, ValueError) as exc:
+        raise DocumentObjectStorageError(
+            "Configured S3 document storage could not delete the consumed payload"
+        ) from exc
+    finally:
+        await backend.aclose()
+    record.storage_state = "deleted"
+    record.deleted_at = _utc_now()
+
+
 async def load_pending_pdf_document_bytes(session, document: Document) -> bytes:
     """Load a pending PDF from inline SQL or its normalized S3 object record."""
     if document.document_content:
@@ -162,24 +260,8 @@ async def load_pending_pdf_document_bytes(session, document: Document) -> bytes:
         raise DocumentObjectStorageError("Document object record does not match document")
     if record.storage_state != "active":
         raise DocumentObjectStorageError("Document object record is not active")
-    if record.storage_backend != "s3":
-        raise DocumentObjectStorageError("Document object backend is unsupported")
-    if not record.bucket_name or not record.object_key:
-        raise DocumentObjectStorageError("Document object locator is incomplete")
 
-    try:
-        stored_object = S3StoredObject(
-            bucket_name=record.bucket_name,
-            object_key=record.object_key,
-            content_type=record.content_type,
-            content_length=record.content_length,
-            checksum_sha256=record.checksum_sha256,
-        )
-    except ValueError as exc:
-        raise DocumentObjectStorageError(
-            "Document object metadata failed validation"
-        ) from exc
-
+    stored_object = _stored_object_from_record(record)
     backend = await _build_s3_backend_from_settings()
     try:
         payload = await backend.get_object(stored_object)
