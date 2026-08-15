@@ -376,6 +376,16 @@ def _strip_tag_like_segments(value: str) -> str:
             parts.append(value[cursor:])
             break
 
+        # Check for HTML comments
+        if value.startswith("<!--", start):
+            end = value.find("-->", start + 4)
+            if end == -1:
+                parts.append(value[cursor:start])
+                break
+            parts.append(value[cursor:start])
+            cursor = end + 3
+            continue
+
         end = value.find(">", start + 1)
         if end == -1:
             candidate = value[start + 1 :]
