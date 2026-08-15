@@ -54,10 +54,23 @@ def test_validate_global_address_multicast_ip_rejected():
         _validate_global_address("224.0.0.1")
 
 
-def test_validate_global_address_loopback_allowed_when_settings_enabled(monkeypatch):
-    """Test that a loopback IP is allowed when ALLOW_LOCAL_LLM_PROVIDERS is True."""
+def test_validate_global_address_loopback_allowed_for_explicit_localhost(monkeypatch):
+    """Explicit local hostname identity may resolve to loopback under local opt-in."""
     monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
-    assert _validate_global_address("127.0.0.1") == "127.0.0.1"
+    assert (
+        _validate_global_address("127.0.0.1", hostname="localhost")
+        == "127.0.0.1"
+    )
+
+
+def test_validate_global_address_loopback_rejected_without_local_host_identity(
+    monkeypatch,
+):
+    """Local opt-in alone must not authorize a DNS-derived loopback address."""
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
+
+    with pytest.raises(ValueError, match=LLM_BASE_URL_NOT_ALLOWED):
+        _validate_global_address("127.0.0.1")
 
 
 @pytest.mark.parametrize(
