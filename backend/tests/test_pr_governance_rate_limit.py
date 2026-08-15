@@ -244,3 +244,26 @@ def test_check_run_lookup_failure_is_an_explicit_blocker(tmp_path: Path) -> None
     assert result.returncode == 0, output
     assert "Current-head check runs could not be read" in output
     assert "PR governance metadata gate errored" not in output
+
+
+def test_gate_harness_ignores_ambient_fake_cli_controls(tmp_path: Path, monkeypatch) -> None:
+    """Ambient process variables must not alter deterministic fake-CLI behavior."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+    monkeypatch.setenv(
+        "FAKE_GH_COMMENT_BODY",
+        "Ambient unrelated text: review available. Head SHA: " + HEAD_SHA,
+    )
+
+    result = _run_gate(repo_root, bin_dir)
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert (
+        "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval"
+        in output
+    )
+    assert "PR governance metadata gate is ready" not in output
