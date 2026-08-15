@@ -93,7 +93,6 @@ def test_telemetry_logs_error_on_missing_hostname(monkeypatch, caplog):
 
 
 def test_telemetry_setup_success(monkeypatch, caplog):
-    import logging
     from unittest.mock import patch
     from fastapi import FastAPI
     from core import telemetry
@@ -133,7 +132,6 @@ def test_telemetry_setup_success(monkeypatch, caplog):
 
 
 def test_telemetry_early_return_if_already_configured(caplog):
-    import logging
     from fastapi import FastAPI
     from core import telemetry
 
@@ -149,7 +147,6 @@ def test_telemetry_early_return_if_already_configured(caplog):
 
 
 def test_telemetry_setup_exception_handling(monkeypatch, caplog):
-    import logging
     from unittest.mock import patch
     from fastapi import FastAPI
     from core import telemetry
