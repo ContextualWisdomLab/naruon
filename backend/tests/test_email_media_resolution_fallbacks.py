@@ -76,6 +76,39 @@ def _related_with_two_identical_images() -> bytes:
     )
 
 
+def _related_with_conflicting_content_types(*, safe_first: bool) -> bytes:
+    """Build one payload with a valid and a mismatched MIME declaration."""
+    encoded = base64.b64encode(_png())
+    image_parts = [
+        (b"image/png", b"safe@example.test"),
+        (b"image/jpeg", b"mismatch@example.test"),
+    ]
+    if not safe_first:
+        image_parts.reverse()
+
+    message_parts = [
+        b"MIME-Version: 1.0\r\n",
+        b"Content-Type: multipart/related; boundary=rel\r\n\r\n",
+        b"--rel\r\nContent-Type: text/html; charset=utf-8\r\n\r\n",
+        (
+            b'<img src="cid:safe@example.test">'
+            b'<img src="cid:mismatch@example.test">\r\n'
+        ),
+    ]
+    for content_type, content_id in image_parts:
+        message_parts.extend(
+            [
+                b"--rel\r\nContent-Type: " + content_type + b"\r\n",
+                b"Content-ID: <" + content_id + b">\r\n",
+                b"Content-Transfer-Encoding: base64\r\n\r\n",
+                encoded,
+                b"\r\n",
+            ]
+        )
+    message_parts.append(b"--rel--\r\n")
+    return b"".join(message_parts)
+
+
 def test_decode_text_part_fallbacks_are_deterministic() -> None:
     """Decode bytes safely after content-manager and charset failures."""
     ascii_part = _BrokenTextPart(
@@ -130,3 +163,49 @@ def test_occurrence_limit_bounds_repeated_deduplicated_mime_images(
     monkeypatch.setattr(media, "MAX_EMAIL_MEDIA_OCCURRENCES", 1)
     with pytest.raises(ValueError, match="email_media_occurrence_limit_exceeded"):
         media.resolve_email_media(_related_with_two_identical_images())
+
+
+@pytest.mark.parametrize("safe_first", [True, False])
+def test_content_dedupe_never_upgrades_a_mismatched_occurrence(
+    safe_first: bool,
+) -> None:
+    """Keep per-occurrence MIME safety independent of payload deduplication order."""
+    resolution = media.resolve_email_media(
+        _related_with_conflicting_content_types(safe_first=safe_first)
+    )
+
+    assert len(resolution.artifacts) == 1
+    artifact = resolution.artifacts[0]
+    assert artifact.content_type == "image/png"
+    assert artifact.llm_safe is True
+
+    mime_occurrences = {
+        occurrence.content_id: occurrence
+        for occurrence in resolution.occurrences
+        if occurrence.occurrence_kind == "mime_part"
+    }
+    assert mime_occurrences["safe@example.test"].resolution_status == "resolved"
+    assert mime_occurrences["safe@example.test"].reason_code == "llm_safe_image"
+    assert (
+        mime_occurrences["mismatch@example.test"].resolution_status
+        == "unsafe_media"
+    )
+    assert (
+        mime_occurrences["mismatch@example.test"].reason_code
+        == "image_content_type_mismatch"
+    )
+
+    cid_occurrences = {
+        occurrence.content_id: occurrence
+        for occurrence in resolution.occurrences
+        if occurrence.occurrence_kind == "html_cid"
+    }
+    assert cid_occurrences["safe@example.test"].resolution_status == "resolved"
+    assert (
+        cid_occurrences["mismatch@example.test"].resolution_status
+        == "unsafe_media"
+    )
+    assert (
+        cid_occurrences["mismatch@example.test"].reason_code
+        == "cid_target_not_llm_safe"
+    )
