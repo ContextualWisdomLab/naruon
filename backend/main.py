@@ -134,9 +134,8 @@ def _is_trusted_browser_origin(origin: str | None) -> bool:
 
 
 def _requires_browser_origin_check(request: Request) -> bool:
-    return (
-        request.method.upper() in STATE_CHANGING_API_METHODS
-        and request.url.path.startswith("/api/")
+    return request.method.upper() in STATE_CHANGING_API_METHODS and request.url.path.startswith(
+        ("/api/", "/dav/")
     )
 
 
