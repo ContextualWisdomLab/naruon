@@ -72,6 +72,9 @@ def test_validate_global_address_private_allowed_when_host_allowed(monkeypatch):
         "224.0.0.1",
         "0.0.0.0",
         "255.255.255.255",
+        "::",
+        "fe80::1",
+        "ff02::1",
     ],
 )
 def test_validate_global_address_allowlisted_host_rejects_unsafe_address_classes(
@@ -83,6 +86,14 @@ def test_validate_global_address_allowlisted_host_rejects_unsafe_address_classes
 
     with pytest.raises(ValueError, match=LLM_BASE_URL_NOT_ALLOWED):
         _validate_global_address(address, hostname="ollama")
+
+
+def test_validate_global_address_allowlisted_host_accepts_unique_local_ipv6(monkeypatch):
+    """An allowlisted local provider may resolve to IPv6 unique-local space."""
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
+    monkeypatch.setattr(settings, "ALLOWED_LLM_BASE_URL_HOSTS", "ollama")
+
+    assert _validate_global_address("fd00::1", hostname="ollama") == "fd00::1"
 
 
 def test_validate_global_address_private_rejected_when_host_not_allowed(monkeypatch):
