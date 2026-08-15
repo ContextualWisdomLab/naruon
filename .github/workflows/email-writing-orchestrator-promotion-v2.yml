@@ -1,0 +1,188 @@
+name: Email Writing Orchestrator Promotion V2
+
+on:
+  push:
+    branches:
+      - feat/llm-email-writing-orchestrator-task5
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: email-writing-orchestrator-promotion-v2
+  cancel-in-progress: true
+
+jobs:
+  promote-task5:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      GH_TOKEN: ${{ github.token }}
+      TARGET_BRANCH: feat/llm-email-writing-context-task4
+    steps:
+      - name: Locate or create the staged pull request
+        id: pull-request
+        shell: bash
+        run: |
+          set -euo pipefail
+          pull_number="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --head "$GITHUB_REF_NAME" \
+              --base "$TARGET_BRANCH" \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [[ -z "$pull_number" ]]; then
+            pull_url="$(
+              gh pr create \
+                --repo "$GITHUB_REPOSITORY" \
+                --base "$TARGET_BRANCH" \
+                --head "$GITHUB_REF_NAME" \
+                --title 'feat(email-writing): add contextual orchestration boundary' \
+                --body-file - <<'EOF'
+          ## Product outcome
+
+          Adds a tenant-scoped, provider-neutral contextual-orchestrator boundary for email-writing review, including a dedicated configuration API, privacy-minimized evidence, bounded Judge concurrency, strict response validation, and fail-closed transport behavior.
+
+          ## Quality evidence
+
+          - Task-specific contracts and adversarial hardening regressions
+          - exact statement and branch coverage gate for shipped Task 5 modules
+          - complete shipped docstring gate
+          - Ruff, compile, migration upgrade/downgrade, and unrelated-data preservation checks
+          - APA 7 doctoring for measurement, multilingual validity, privacy, risk, and governance boundaries
+          EOF
+            )"
+            pull_number="${pull_url##*/}"
+          fi
+          printf 'pull_number=%s\n' "$pull_number" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for all non-promotion checks to settle
+        id: checks
+        shell: bash
+        env:
+          PULL_NUMBER: ${{ steps.pull-request.outputs.pull_number }}
+        run: |
+          set -euo pipefail
+          stable_success_polls=0
+          previous_signature=''
+          for _attempt in $(seq 1 180); do
+            head_sha="$(
+              gh pr view "$PULL_NUMBER" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json headRefOid \
+                --jq '.headRefOid'
+            )"
+            check_runs="$(
+              gh api \
+                -H 'Accept: application/vnd.github+json' \
+                "/repos/$GITHUB_REPOSITORY/commits/$head_sha/check-runs?per_page=100" \
+                --jq '[.check_runs[] | select(.name != "promote-task5" and .name != "promote") | {name, status, conclusion}]'
+            )"
+            failure_count="$(
+              jq '[.[] | select(.status == "completed" and (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped"))] | length' \
+                <<<"$check_runs"
+            )"
+            pending_count="$(
+              jq '[.[] | select(.status != "completed")] | length' \
+                <<<"$check_runs"
+            )"
+            check_count="$(jq 'length' <<<"$check_runs")"
+            signature="$(
+              jq -S -c 'sort_by(.name) | map({name, status, conclusion})' \
+                <<<"$check_runs"
+            )"
+
+            required_json="$(
+              gh pr checks "$PULL_NUMBER" \
+                --repo "$GITHUB_REPOSITORY" \
+                --required \
+                --json name,state,bucket 2>/dev/null || printf '[]'
+            )"
+            required_failures="$(
+              jq '[.[] | select(.bucket == "fail" or .bucket == "cancel")] | length' \
+                <<<"$required_json"
+            )"
+            required_pending="$(
+              jq '[.[] | select(.bucket == "pending")] | length' \
+                <<<"$required_json"
+            )"
+
+            if [[ "$failure_count" -gt 0 || "$required_failures" -gt 0 ]]; then
+              jq -r '.[] | select(.status == "completed" and (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")) | "\(.name): \(.conclusion)"' \
+                <<<"$check_runs"
+              jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | "required \(.name): \(.state)"' \
+                <<<"$required_json"
+              exit 1
+            fi
+
+            if [[ "$check_count" -gt 0 && "$pending_count" -eq 0 && "$required_pending" -eq 0 && "$signature" == "$previous_signature" ]]; then
+              stable_success_polls=$((stable_success_polls + 1))
+              if [[ "$stable_success_polls" -ge 2 ]]; then
+                printf 'head_sha=%s\n' "$head_sha" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            else
+              stable_success_polls=0
+            fi
+            previous_signature="$signature"
+            sleep 15
+          done
+          echo 'Checks did not settle within the bounded promotion window.' >&2
+          exit 1
+
+      - name: Reject unresolved review findings
+        shell: bash
+        env:
+          PULL_NUMBER: ${{ steps.pull-request.outputs.pull_number }}
+        run: |
+          set -euo pipefail
+          repository_owner="${GITHUB_REPOSITORY%%/*}"
+          repository_name="${GITHUB_REPOSITORY##*/}"
+          unresolved_count="$(
+            gh api graphql \
+              -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved}}}}}' \
+              -F owner="$repository_owner" \
+              -F name="$repository_name" \
+              -F number="$PULL_NUMBER" \
+              --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length'
+          )"
+          if [[ "$unresolved_count" -ne 0 ]]; then
+            echo "$unresolved_count unresolved review thread(s) remain." >&2
+            exit 1
+          fi
+          review_decision="$(
+            gh pr view "$PULL_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json reviewDecision \
+              --jq '.reviewDecision // ""'
+          )"
+          if [[ "$review_decision" == 'CHANGES_REQUESTED' ]]; then
+            echo 'A current review requests changes.' >&2
+            exit 1
+          fi
+
+      - name: Merge or arm policy-compliant auto-merge
+        shell: bash
+        env:
+          PULL_NUMBER: ${{ steps.pull-request.outputs.pull_number }}
+        run: |
+          set -euo pipefail
+          if gh pr merge "$PULL_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --squash \
+            --delete-branch; then
+            exit 0
+          fi
+          gh pr merge "$PULL_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --auto \
+            --squash \
+            --delete-branch
