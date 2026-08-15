@@ -1,0 +1,155 @@
+name: Repair PR 1355 Reply Ordering
+
+on:
+  push:
+    branches:
+      - fix/reply-ordering-fast-path
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-pr-1355-reply-ordering
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONWARNINGS: error
+      DISABLE_BACKGROUND_WORKERS: "1"
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/reply-ordering-fast-path
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Install hash-locked backend dependencies
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes \
+            -r backend/requirements-hashes.txt \
+            -r backend/requirements-agent.txt
+
+      - name: Apply bounded production repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one source match, found {count}")
+              return text.replace(old, new, 1)
+
+          emails_path = Path("backend/api/emails.py")
+          emails = emails_path.read_text(encoding="utf-8")
+          emails = replace_once(
+              emails,
+              """        .where(ranked_heads.c.thread_rank == 1)\n        .order_by(Email.date.desc())\n        .limit(head_candidate_limit)\n""",
+              """        .where(ranked_heads.c.thread_rank == 1)\n        .order_by(Email.date.desc(), Email.id.desc())\n        .limit(head_candidate_limit)\n""",
+              "ranked-head order",
+          )
+          emails = replace_once(
+              emails,
+              """                or_(\n                    Email.thread_id.in_(thread_lookup),\n                    Email.message_id.in_(thread_lookup),\n                ),\n            )\n            .order_by(Email.date.desc())\n        )\n""",
+              """                or_(\n                    Email.thread_id.in_(thread_lookup),\n                    Email.message_id.in_(thread_lookup),\n                ),\n            )\n            .order_by(Email.date.desc(), Email.id.desc())\n        )\n""",
+              "thread-message order",
+          )
+          emails = replace_once(
+              emails,
+              """                requires_reply=thread_requires_reply(\n                    list(reversed(thread_messages[group_key])), user_addresses\n                ),\n""",
+              """                requires_reply=thread_requires_reply(\n                    thread_messages[group_key],\n                    user_addresses,\n                    is_descending=True,\n                ),\n""",
+              "descending fast path",
+          )
+          emails_path.write_text(emails, encoding="utf-8")
+
+          service_path = Path("backend/services/reply_tracking_service.py")
+          service = service_path.read_text(encoding="utf-8")
+          old_functions = '''def thread_reply_candidate(\n    thread_messages: list[Email],\n    user_addresses: set[str],\n    is_chronological: bool = False,\n) -> Email | None:\n    if not user_addresses:\n        return None\n\n    ordered_messages = (\n        reversed(thread_messages)\n        if is_chronological\n        else sorted(\n            thread_messages, key=lambda item: (item.date, item.id or 0), reverse=True\n        )\n    )\n\n    latest_external_date = None\n    for message in ordered_messages:\n        is_from_user = message_is_from_user(message, user_addresses)\n\n        if not is_from_user:\n            if latest_external_date is None or message.date > latest_external_date:\n                latest_external_date = message.date\n            continue\n\n        if is_from_user and not message_is_self_sent(message, user_addresses):\n            has_later_external_reply = (\n                latest_external_date is not None and latest_external_date > message.date\n            )\n            if not has_later_external_reply:\n                if detect_reply_tracking(message.body):\n                    return message\n\n    return None\n\n\ndef thread_requires_reply(\n    thread_messages: list[Email], user_addresses: set[str]\n) -> bool:\n    return thread_reply_candidate(thread_messages, user_addresses) is not None\n'''
+          new_functions = '''def thread_reply_candidate(\n    thread_messages: list[Email],\n    user_addresses: set[str],\n    is_chronological: bool = False,\n    is_descending: bool = False,\n) -> Email | None:\n    """Return the newest sent message without a later external reply.\n\n    ``is_chronological`` trusts ascending ``(date, id)`` input and scans it in\n    reverse. ``is_descending`` trusts an existing descending ``(date, id)``\n    database order and avoids another allocation and sort.\n    """\n    if not user_addresses:\n        return None\n\n    if is_descending:\n        ordered_messages = thread_messages\n    elif is_chronological:\n        ordered_messages = reversed(thread_messages)\n    else:\n        ordered_messages = sorted(\n            thread_messages, key=lambda item: (item.date, item.id or 0), reverse=True\n        )\n\n    latest_external_key: tuple[datetime.datetime, int] | None = None\n    for message in ordered_messages:\n        message_key = (message.date, message.id or 0)\n        is_from_user = message_is_from_user(message, user_addresses)\n\n        if not is_from_user:\n            if latest_external_key is None or message_key > latest_external_key:\n                latest_external_key = message_key\n            continue\n\n        if not message_is_self_sent(message, user_addresses):\n            has_later_external_reply = (\n                latest_external_key is not None\n                and latest_external_key > message_key\n            )\n            if not has_later_external_reply and detect_reply_tracking(message.body):\n                return message\n\n    return None\n\n\ndef thread_requires_reply(\n    thread_messages: list[Email],\n    user_addresses: set[str],\n    is_descending: bool = False,\n) -> bool:\n    """Return whether a thread has a sent message awaiting a reply."""\n    return (\n        thread_reply_candidate(\n            thread_messages,\n            user_addresses,\n            is_descending=is_descending,\n        )\n        is not None\n    )\n'''
+          service = replace_once(
+              service,
+              old_functions,
+              new_functions,
+              "reply-tracking functions",
+          )
+          service_path.write_text(service, encoding="utf-8")
+
+          tests_path = Path("backend/tests/test_reply_tracking_service.py")
+          tests = tests_path.read_text(encoding="utf-8")
+          marker = "def test_descending_reply_tracking_uses_id_for_equal_dates():"
+          if marker not in tests:
+              tests += '''\n\ndef test_descending_reply_tracking_uses_id_for_equal_dates():\n    """An equal-date external message with a higher id is a later reply."""\n    from services.reply_tracking_service import thread_requires_reply\n\n    sent_message = make_email(\n        "sent_equal_date",\n        sender="me@example.com",\n        recipients="client@example.com",\n        minutes=0,\n    )\n    sent_message.id = 1\n    external_reply = make_email(\n        "external_equal_date",\n        sender="client@example.com",\n        recipients="me@example.com",\n        minutes=0,\n        body="Crossed in transit.",\n    )\n    external_reply.id = 2\n\n    assert (\n        thread_requires_reply(\n            [external_reply, sent_message],\n            USER_ADDRESSES,\n            is_descending=True,\n        )\n        is False\n    )\n    assert thread_requires_reply([sent_message, external_reply], USER_ADDRESSES) is False\n\n\ndef test_descending_reply_tracking_keeps_higher_id_sent_message():\n    """An equal-date sent message with a higher id remains the newest action."""\n    from services.reply_tracking_service import thread_requires_reply\n\n    external_message = make_email(\n        "external_equal_date",\n        sender="client@example.com",\n        recipients="me@example.com",\n        minutes=0,\n        body="Earlier message.",\n    )\n    external_message.id = 1\n    sent_message = make_email(\n        "sent_equal_date",\n        sender="me@example.com",\n        recipients="client@example.com",\n        minutes=0,\n    )\n    sent_message.id = 2\n\n    assert (\n        thread_requires_reply(\n            [sent_message, external_message],\n            USER_ADDRESSES,\n            is_descending=True,\n        )\n        is True\n    )\n    assert thread_requires_reply([external_message, sent_message], USER_ADDRESSES) is True\n'''
+          tests_path.write_text(tests, encoding="utf-8")
+
+          changelog_path = Path("CHANGELOG.md")
+          changelog = changelog_path.read_text(encoding="utf-8")
+          entry = (
+              "- 이메일 스레드 헤드와 메시지를 `(date, id)` 내림차순으로 "
+              "결정론적으로 조회하고, 이미 정렬된 결과를 답장 추적기에 직접 "
+              "전달해 대형 메일함의 불필요한 역순 복사·재정렬을 제거했습니다.\n"
+          )
+          if entry not in changelog:
+              changelog = replace_once(
+                  changelog,
+                  "## [Unreleased]\n",
+                  "## [Unreleased]\n" + entry,
+                  "Unreleased changelog heading",
+              )
+          changelog_path.write_text(changelog, encoding="utf-8")
+          PY
+
+      - name: Verify focused regression contracts
+        run: |
+          cd backend
+          python -m pytest -q \
+            tests/test_reply_ordering_contract.py \
+            tests/test_reply_tracking_service.py
+          python -m ruff check \
+            api/emails.py \
+            services/reply_tracking_service.py \
+            tests/test_reply_ordering_contract.py \
+            tests/test_reply_tracking_service.py
+
+      - name: Verify complete backend suite
+        run: |
+          set -o pipefail
+          cd backend
+          python -m pytest -q 2>&1 | tee pytest_output.log
+          if grep -qiE 'timeout|fatal|warn|denied' pytest_output.log; then
+            echo "::error::Tests produced Timeout, Fatal, Warn, or Denied outputs"
+            exit 1
+          fi
+
+      - name: Remove one-shot workflow and commit verified repair
+        run: |
+          rm .github/workflows/repair-pr-1355-reply-ordering.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            CHANGELOG.md \
+            backend/api/emails.py \
+            backend/services/reply_tracking_service.py \
+            backend/tests/test_reply_ordering_contract.py \
+            backend/tests/test_reply_tracking_service.py \
+            .github/workflows/repair-pr-1355-reply-ordering.yml
+          if git diff --cached --quiet; then
+            echo "No verified repair changes to commit."
+            exit 0
+          fi
+          git commit -m "fix(email): preserve deterministic descending thread order"
+          git push origin HEAD:fix/reply-ordering-fast-path
