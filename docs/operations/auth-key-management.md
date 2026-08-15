@@ -5,15 +5,19 @@
 - `backend/api/auth.py` no longer accepts public `X-User-*`,
   `X-Organization-*`, `X-Group-*`, or `X-Dev-Auth-Token` headers as runtime
   authentication material.
-- Runtime authentication accepts only `Authorization: Bearer` compact session
-  envelopes whose protected header pins `alg=HS256` and whose `header.payload`
-  signing input is signed with HMAC-SHA256 by the configured
-  `AUTH_SESSION_HMAC_SECRET`. The secret must be explicitly configured,
-  high-entropy generated material, and at least 32 bytes. Settings fail at
-  startup in every runtime mode when this secret is missing, too short, or an
-  obvious repeated placeholder or known public fixture value; runtime
-  verification still fails closed with `401 Authentication required` when an
-  already-loaded configured value becomes absent, weak, or public.
+- Runtime authentication accepts `Authorization: Bearer` compact sessions through
+  two fail-closed verification modes. The internal HMAC session envelope pins its
+  protected header to `alg=HS256` and signs the `header.payload` input with
+  HMAC-SHA256 by the configured `AUTH_SESSION_HMAC_SECRET`. When OIDC is
+  configured, the same bearer boundary also accepts OIDC sessions only after the
+  configured issuer, client audience membership, JOSE header constraints, JWKS
+  signature, `iat`, `exp`, and required tenant/role claims are verified as
+  described below. The HMAC secret must be explicitly configured, high-entropy
+  generated material, and at least 32 bytes. Settings fail at startup in every
+  runtime mode when this secret is missing, too short, or an obvious repeated
+  placeholder or known public fixture value; runtime HMAC verification still
+  fails closed with `401 Authentication required` when an already-loaded
+  configured value becomes absent, weak, or public.
 - The signed session payload is versioned and must include
   `iss=naruon-control-plane`, `aud=naruon-api`, `sub`, explicit `role`,
   `workspace`, `exp`, and organization/group scope claims. Tampered, expired,
