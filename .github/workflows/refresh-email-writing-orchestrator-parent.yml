@@ -1,0 +1,84 @@
+name: Refresh Email Writing Orchestrator Parent
+
+on:
+  push:
+    branches:
+      - feat/llm-email-writing-orchestrator-task5
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-email-writing-orchestrator-parent
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONWARNINGS: error
+  DISABLE_BACKGROUND_WORKERS: "1"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/llm-email-writing-orchestrator-task5
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Merge the current Task 4 parent
+        run: |
+          set -euo pipefail
+          git fetch origin feat/llm-email-writing-context-task4
+          git config user.name "CWL Email Writing Task 5 Refresh"
+          git config user.email "actions@users.noreply.github.com"
+          git merge --no-edit --no-ff origin/feat/llm-email-writing-context-task4
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+      - name: Install hash-locked backend dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+      - name: Verify orchestrator boundary contracts
+        run: |
+          cd backend
+          python -m pytest -q \
+            tests/test_contextual_orchestrator_client.py \
+            tests/test_contextual_orchestrator_hardening.py \
+            tests/test_email_writing_orchestrator_module_boundary.py \
+            tests/test_email_writing_orchestrator_scope.py \
+            tests/test_email_writing_orchestrator_migration.py \
+            tests/test_email_writing_orchestrator_config_api.py \
+            tests/test_email_writing_orchestrator_terminal_coverage.py
+          python -m ruff check \
+            api/email_writing_orchestrator_config.py \
+            db/email_writing_orchestrator_config.py \
+            services/contextual_orchestrator_client.py \
+            services/email_writing_orchestrator_port.py \
+            services/tenant_config_scope.py \
+            alembic/versions/20260813_0001_add_email_writing_orchestrator_config.py \
+            tests/test_contextual_orchestrator_client.py \
+            tests/test_contextual_orchestrator_hardening.py \
+            tests/test_email_writing_orchestrator_module_boundary.py \
+            tests/test_email_writing_orchestrator_scope.py \
+            tests/test_email_writing_orchestrator_migration.py \
+            tests/test_email_writing_orchestrator_config_api.py \
+            tests/test_email_writing_orchestrator_terminal_coverage.py
+          python -m compileall -q \
+            api/email_writing_orchestrator_config.py \
+            db/email_writing_orchestrator_config.py \
+            services/contextual_orchestrator_client.py \
+            services/email_writing_orchestrator_port.py \
+            services/tenant_config_scope.py \
+            alembic/versions/20260813_0001_add_email_writing_orchestrator_config.py
+      - name: Remove one-shot workflow and publish refresh
+        run: |
+          set -euo pipefail
+          rm .github/workflows/refresh-email-writing-orchestrator-parent.yml
+          git diff --check
+          git add .github/workflows/refresh-email-writing-orchestrator-parent.yml
+          git commit -m "ci(email-writing): remove Task 5 parent refresh workflow"
+          git push origin HEAD:feat/llm-email-writing-orchestrator-task5
