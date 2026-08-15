@@ -26,6 +26,7 @@ MAX_EMAIL_MEDIA_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_EMAIL_MEDIA_HTML_CHARS = 2_000_000
 MAX_EMAIL_MEDIA_REFERENCES = 500
 MAX_EMAIL_MEDIA_ARTIFACTS = 100
+MAX_EMAIL_MEDIA_OCCURRENCES = 1_000
 
 _SUPPORTED_IMAGE_TYPES = frozenset(
     {"image/png", "image/jpeg", "image/gif", "image/webp"}
@@ -126,8 +127,8 @@ def resolve_email_media(raw_message: bytes) -> EmailMediaResolution:
 
     Raises:
         TypeError: If ``raw_message`` is not bytes.
-        ValueError: If the raw message exceeds the deterministic size bound or
-            contains more media artifacts/references than the resolver permits.
+        ValueError: If the raw message exceeds a deterministic resource bound or
+            contains too many media artifacts, references, or occurrences.
     """
     if not isinstance(raw_message, bytes):
         raise TypeError("raw_message must be bytes")
@@ -150,14 +151,16 @@ def resolve_email_media(raw_message: bytes) -> EmailMediaResolution:
         html_parts=html_parts,
     )
 
+    reference_count = 0
     for html_path, related_scope, html_source in html_parts:
-        _resolve_html_references(
+        reference_count += _resolve_html_references(
             html_path=html_path,
             related_scope=related_scope,
             html_source=html_source,
             artifacts=artifacts,
             occurrences=occurrences,
             mime_images=mime_images,
+            reference_budget=MAX_EMAIL_MEDIA_REFERENCES - reference_count,
         )
 
     return EmailMediaResolution(
@@ -218,7 +221,8 @@ def _collect_message_parts(
             llm_safe=artifact.llm_safe,
         )
     )
-    occurrences.append(
+    _append_occurrence(
+        occurrences,
         EmailMediaOccurrence(
             occurrence_kind="mime_part",
             source_path=path,
@@ -230,7 +234,7 @@ def _collect_message_parts(
             artifact_id=artifact.artifact_id,
             resolution_status="resolved" if artifact.llm_safe else "unsafe_media",
             reason_code=artifact.reason_code,
-        )
+        ),
     )
 
 
@@ -242,11 +246,12 @@ def _resolve_html_references(
     artifacts: dict[str, EmailMediaArtifact],
     occurrences: list[EmailMediaOccurrence],
     mime_images: list[_MimeImagePart],
-) -> None:
+    reference_budget: int,
+) -> int:
     parser = _ImageSourceParser(html_source)
     parser.feed(html_source)
     parser.close()
-    if len(parser.references) > MAX_EMAIL_MEDIA_REFERENCES:
+    if len(parser.references) > reference_budget:
         raise ValueError("email_media_reference_limit_exceeded")
 
     for raw_reference, source_start, source_end in parser.references:
@@ -297,7 +302,8 @@ def _resolve_html_references(
                 resolution_status="unresolved",
                 reason_code="unsupported_image_reference",
             )
-        occurrences.append(occurrence)
+        _append_occurrence(occurrences, occurrence)
+    return len(parser.references)
 
 
 def _resolve_cid_reference(
@@ -450,6 +456,15 @@ def _reference_occurrence(
     )
 
 
+def _append_occurrence(
+    occurrences: list[EmailMediaOccurrence], occurrence: EmailMediaOccurrence
+) -> None:
+    """Append one occurrence while enforcing the per-message provenance bound."""
+    if len(occurrences) >= MAX_EMAIL_MEDIA_OCCURRENCES:
+        raise ValueError("email_media_occurrence_limit_exceeded")
+    occurrences.append(occurrence)
+
+
 def _build_artifact(content_type: str, payload: bytes) -> EmailMediaArtifact:
     normalized_type = _normalize_content_type(content_type)
     content_sha256 = hashlib.sha256(payload).hexdigest()
@@ -584,7 +599,11 @@ def _normalize_content_id(value: object) -> str | None:
     normalized = str(value).strip()
     if normalized.startswith("<") and normalized.endswith(">"):
         normalized = normalized[1:-1]
-    if not normalized or _CONTROL_CHARACTER_RE.search(normalized):
+    if (
+        not normalized
+        or _CONTROL_CHARACTER_RE.search(normalized)
+        or any(character.isspace() for character in normalized)
+    ):
         return None
     return normalized
 
