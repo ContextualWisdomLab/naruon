@@ -10,7 +10,7 @@ from services.text_safety import contains_html_markup, strip_html_markup
         ("<svg/onload=alert(1)>", ""),
         ("<script src=//attacker.example/xss.js", ""),
         ('<a href="javascript:alert(1)">click me</a>', "click me"),
-        ("<!--><script>alert(1)</script>-->", "-->" if __import__("sys").version_info >= (3, 13) else ""),
+        ("<!--><script>alert(1)</script>-->", ""),
         ("<script@x.y>alert(1)</script@x.y>", "alert(1)"),
         ("<xmp>raw legacy text</xmp>", "raw legacy text"),
         ("&lt;XMP&gt;raw legacy text&lt;/XMP&gt;", "raw legacy text"),
@@ -20,6 +20,10 @@ from services.text_safety import contains_html_markup, strip_html_markup
 )
 def test_strip_html_markup_never_returns_raw_tag_like_payloads(payload, expected):
     assert strip_html_markup(payload) == expected
+
+
+def test_strip_html_markup_preserves_legitimate_comment_terminator_text():
+    assert strip_html_markup("Keep --&gt; as text") == "Keep --> as text"
 
 
 @pytest.mark.parametrize(
