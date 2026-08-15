@@ -132,6 +132,32 @@ def test_audit_classifies_exact_present_active_and_orphan_records() -> None:
     ]
 
 
+def test_empty_registry_is_complete_evidence() -> None:
+    """A genuine zero-count page is complete rather than a pagination failure."""
+    client = FakeAuditClient(pages={1: page(0)}, tree_paths=set())
+
+    receipt = audit_workflow_registry(
+        "ContextualWisdomLab/naruon", client, observed_at=OBSERVED_AT
+    )
+
+    assert receipt.registry_total_count == 0
+    assert receipt.observed_workflow_count == 0
+    assert receipt.records == ()
+    assert client.requested_pages == [1]
+
+
+def test_timezone_naive_observation_time_is_rejected() -> None:
+    """Audit receipts need an offset-bearing observation time for durable evidence."""
+    client = FakeAuditClient(pages={1: page(0)}, tree_paths=set())
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        audit_workflow_registry(
+            "ContextualWisdomLab/naruon",
+            client,
+            observed_at=datetime(2026, 8, 16, 1, 45),
+        )
+
+
 def test_legitimate_present_finalizer_like_name_is_not_name_matched_as_orphan() -> None:
     """A finalizer-like name remains present when its exact path exists in the tree."""
     path = ".github/workflows/finalizer-supported-maintenance.yml"
@@ -156,6 +182,7 @@ def test_legitimate_present_finalizer_like_name_is_not_name_matched_as_orphan() 
         ".github/workflows\\app-ci.yml",
         ".github/workflows//app-ci.yml",
         ".github/workflows/app-ci.yml\x00",
+        ".github/workflows/",
     ],
 )
 def test_noncanonical_repository_like_paths_fail_to_unresolved(hostile_path: str) -> None:
@@ -194,7 +221,16 @@ def test_registry_pagination_collects_every_page_before_classification() -> None
 def test_partial_pagination_fails_closed() -> None:
     """An empty page before total_count is reached cannot produce clean evidence."""
     client = FakeAuditClient(
-        pages={1: page(101, *[workflow(index, f".github/workflows/{index}.yml") for index in range(100)]), 2: page(101)},
+        pages={
+            1: page(
+                101,
+                *[
+                    workflow(index, f".github/workflows/{index}.yml")
+                    for index in range(100)
+                ],
+            ),
+            2: page(101),
+        },
         tree_paths=set(),
     )
 
@@ -204,6 +240,45 @@ def test_partial_pagination_fails_closed() -> None:
         )
 
     assert exc_info.value.reason_code == "workflow_registry_pagination_incomplete"
+
+
+def test_registry_total_change_between_pages_fails_closed() -> None:
+    """A moving registry total invalidates pagination evidence."""
+    first_page = tuple(
+        workflow(index, f".github/workflows/live-{index}.yml") for index in range(100)
+    )
+    client = FakeAuditClient(
+        pages={1: page(101, *first_page), 2: page(102, workflow(101, ".github/workflows/new.yml"))},
+        tree_paths={record.path for record in first_page},
+    )
+
+    with pytest.raises(AuditError) as exc_info:
+        audit_workflow_registry(
+            "ContextualWisdomLab/naruon", client, observed_at=OBSERVED_AT
+        )
+
+    assert exc_info.value.reason_code == "workflow_registry_total_changed"
+
+
+def test_page_with_more_records_than_total_fails_closed() -> None:
+    """A registry response cannot claim fewer records than it actually returns."""
+    client = FakeAuditClient(
+        pages={
+            1: page(
+                1,
+                workflow(70, ".github/workflows/a.yml"),
+                workflow(71, ".github/workflows/b.yml"),
+            )
+        },
+        tree_paths={".github/workflows/a.yml", ".github/workflows/b.yml"},
+    )
+
+    with pytest.raises(AuditError) as exc_info:
+        audit_workflow_registry(
+            "ContextualWisdomLab/naruon", client, observed_at=OBSERVED_AT
+        )
+
+    assert exc_info.value.reason_code == "workflow_registry_count_exceeded"
 
 
 def test_duplicate_workflow_id_fails_closed() -> None:
