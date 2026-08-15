@@ -61,7 +61,7 @@ gh() {
       [.[][]
         | select((.user.login // "") | test("coderabbit|github-code-quality"; "i"))
         | select((.body // "") | contains($head_sha))
-        | select((.body // "") | test("review limit reached|couldn.?t start (this )?review|review (did not|didn.?t) start"; "i"))]
+        | select((.body // "") | test("review limit reached|couldn\u0027?t start (this )?review|review (did not|didn\u0027?t) start"; "i"))]
       | length')"
     if [ "$unavailable_count" != "0" ]; then
       printf 'Ignoring successful CodeRabbit commit status: authoritative current-head review comment reports that semantic review did not start.\n' >&2
