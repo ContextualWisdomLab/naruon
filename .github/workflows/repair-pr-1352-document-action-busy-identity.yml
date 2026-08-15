@@ -1,0 +1,307 @@
+name: Repair PR 1352 document action busy identity
+
+on:
+  push:
+    branches:
+      - fix/aria-busy-clean-scope
+    paths:
+      - .github/workflows/repair-pr-1352-document-action-busy-identity.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-pr-1352-document-action-busy-identity
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/aria-busy-clean-scope
+          fetch-depth: 0
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frozen frontend dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      - name: Add the failing action-identity regression
+        shell: bash
+        run: |
+          cat > frontend/src/components/data-layout/DocumentRepositoryTab.busy-state.test.tsx <<'EOF'
+          import { render, screen } from '@testing-library/react';
+          import { describe, expect, it, vi } from 'vitest';
+
+          import { DocumentRepositoryTab } from './DocumentRepositoryTab';
+
+          const workspaceDocument = {
+            asset_key: 'workspace-document-1',
+            asset_type: 'workspace_document',
+            display_name: '운영 계약.md',
+            source_label: '로컬 문서',
+            state_code: 'ready',
+            detail_text: '검토 가능한 문서 근거',
+            content_chars: 128,
+            captured_at: '2026-08-15T09:00:00+09:00',
+            evidence_source: 'workspace_document',
+            thread_key: 'thread-1',
+            provider_write_executed: false,
+          };
+
+          function renderRepository(activeDocumentAction: string | null) {
+            render(
+              <DocumentRepositoryTab
+                {...({
+                  writebackStatus: 'idle',
+                  writebackResult: null,
+                  requestWebdavWritebackIntent: vi.fn(),
+                  isWritebackLoading: false,
+                  canRequestWebdavWriteback: true,
+                  selectedWebdavAccount: {
+                    source_id: 'webdav-1',
+                    display_label: '업무 문서',
+                    writeback_enabled: true,
+                  },
+                  isWebdavSourceLoading: false,
+                  setSelectedWebdavSourceId: vi.fn(),
+                  uniqueThreadStatus: 'idle',
+                  uniqueThreadResult: null,
+                  requestUniqueThreadIntent: vi.fn(),
+                  isUniqueThreadLoading: false,
+                  connectorEvents: [],
+                  dataSurfaceStatus: 'ready',
+                  dataQualitySurface: null,
+                  embeddingStage: null,
+                  emailRepository: null,
+                  attachmentRepository: null,
+                  handleEmailImportFileChange: vi.fn(),
+                  requestEmailFileImport: vi.fn(),
+                  isEmailImportLoading: false,
+                  emailImportFiles: [],
+                  emailImportStatus: 'idle',
+                  emailImportResult: null,
+                  handleDocumentFileChange: vi.fn(),
+                  requestDocumentUpload: vi.fn(),
+                  isDocumentActionLoading: true,
+                  activeDocumentAction,
+                  documentUploadFiles: [],
+                  documentActionStatus: 'loading',
+                  documentActionResult: null,
+                  webdavAccountStatus: 'ready',
+                  webdavAccounts: [{
+                    source_id: 'webdav-1',
+                    display_label: '업무 문서',
+                    writeback_enabled: true,
+                  }],
+                  webdavAccountMap: new Map(),
+                  projectFolders: [],
+                  selectedRepositoryAssetKey: workspaceDocument.asset_key,
+                  setSelectedRepositoryAssetKey: vi.fn(),
+                  repositoryAssets: [workspaceDocument],
+                  selectedWorkspaceDocument: workspaceDocument,
+                  requestDocumentAction: vi.fn(),
+                } as never)}
+              />,
+            );
+          }
+
+          describe('DocumentRepositoryTab action busy identity', () => {
+            it('marks only the initiating document action as busy', () => {
+              renderRepository('reparse');
+
+              expect(screen.getByRole('button', { name: '재파싱 실행' })).toHaveAttribute('aria-busy', 'true');
+              expect(screen.getByRole('button', { name: '임베딩 재생성 의도' })).toHaveAttribute('aria-busy', 'false');
+              expect(screen.getByRole('button', { name: 'HWP 변환 의도' })).toHaveAttribute('aria-busy', 'false');
+              expect(screen.getByRole('button', { name: 'WebDAV 문서 실행 요청' })).toHaveAttribute('aria-busy', 'false');
+              expect(screen.getByRole('button', { name: '선택 문서 저장' })).toHaveAttribute('aria-busy', 'false');
+            });
+          });
+          EOF
+
+      - name: Prove the regression is red before implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          if pnpm exec vitest run src/components/data-layout/DocumentRepositoryTab.busy-state.test.tsx; then
+            echo 'Expected the action-identity regression to fail before implementation.' >&2
+            exit 1
+          fi
+
+      - name: Implement per-action busy identity
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              source = target.read_text(encoding='utf-8')
+              if source.count(old) != 1:
+                  raise SystemExit(f'{path}: expected one replacement, found {source.count(old)}')
+              target.write_text(source.replace(old, new), encoding='utf-8')
+
+          types_path = 'frontend/src/components/data-layout/types.ts'
+          replace_once(
+              types_path,
+              "export type DocumentActionStatus = 'idle' | 'loading' | 'success' | 'auth' | 'error';\n\nexport type DataSurfaceStatus",
+              "export type DocumentActionStatus = 'idle' | 'loading' | 'success' | 'auth' | 'error';\nexport type DocumentOperation = 'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent';\nexport type ActiveDocumentAction = 'upload' | DocumentOperation;\n\nexport type DataSurfaceStatus",
+          )
+
+          data_layout_path = 'frontend/src/components/DataLayout.tsx'
+          replace_once(
+              data_layout_path,
+              "  DocumentActionStatus,\n  DataSurfaceStatus,",
+              "  DocumentActionStatus,\n  ActiveDocumentAction,\n  DocumentOperation,\n  DataSurfaceStatus,",
+          )
+          replace_once(
+              data_layout_path,
+              "  const [documentActionStatus, setDocumentActionStatus] = useState<DocumentActionStatus>('idle');\n  const [documentActionResult, setDocumentActionResult] = useState<DataDocumentActionResponse | null>(null);",
+              "  const [documentActionStatus, setDocumentActionStatus] = useState<DocumentActionStatus>('idle');\n  const [activeDocumentAction, setActiveDocumentAction] = useState<ActiveDocumentAction | null>(null);\n  const [documentActionResult, setDocumentActionResult] = useState<DataDocumentActionResponse | null>(null);",
+          )
+          replace_once(
+              data_layout_path,
+              "    setDocumentActionStatus('loading');\n    setDocumentActionResult(null);\n    try {\n      const documentType = getDocumentTypeForFile(file);\n      if (!isTextDocumentUploadType(documentType)) {\n        setDocumentActionStatus('error');\n        return;\n      }\n      const documentContent = await file.text();",
+              "    const documentType = getDocumentTypeForFile(file);\n    if (!isTextDocumentUploadType(documentType)) {\n      setDocumentActionStatus('error');\n      return;\n    }\n\n    setActiveDocumentAction('upload');\n    setDocumentActionStatus('loading');\n    setDocumentActionResult(null);\n    try {\n      const documentContent = await file.text();",
+          )
+          replace_once(
+              data_layout_path,
+              "    } catch (error: unknown) {\n      const status = getApiErrorStatus(error);\n      setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');\n    }\n  }, [documentUploadFiles, loadDataQualitySurface]);",
+              "    } catch (error: unknown) {\n      const status = getApiErrorStatus(error);\n      setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');\n    } finally {\n      setActiveDocumentAction(null);\n    }\n  }, [documentUploadFiles, loadDataQualitySurface]);",
+          )
+          replace_once(
+              data_layout_path,
+              "  const requestDocumentAction = useCallback(async (\n    action: 'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent',\n  ) => {",
+              "  const requestDocumentAction = useCallback(async (\n    action: DocumentOperation,\n  ) => {",
+          )
+
+          data_source = Path(data_layout_path).read_text(encoding='utf-8')
+          action_start = data_source.index('  const requestDocumentAction = useCallback')
+          action_end = data_source.index('  const isWritebackLoading', action_start)
+          action_block = data_source[action_start:action_end]
+          old = "    setDocumentActionStatus('loading');\n    setDocumentActionResult(null);\n    try {"
+          if action_block.count(old) != 1:
+              raise SystemExit('requestDocumentAction: expected one loading transition')
+          action_block = action_block.replace(
+              old,
+              "    setActiveDocumentAction(action);\n    setDocumentActionStatus('loading');\n    setDocumentActionResult(null);\n    try {",
+          )
+          old = "    } catch (error: unknown) {\n      const status = getApiErrorStatus(error);\n      setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');\n    }\n  }, ["
+          if action_block.count(old) != 1:
+              raise SystemExit('requestDocumentAction: expected one terminal catch')
+          action_block = action_block.replace(
+              old,
+              "    } catch (error: unknown) {\n      const status = getApiErrorStatus(error);\n      setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');\n    } finally {\n      setActiveDocumentAction(null);\n    }\n  }, [",
+          )
+          Path(data_layout_path).write_text(
+              data_source[:action_start] + action_block + data_source[action_end:],
+              encoding='utf-8',
+          )
+          replace_once(
+              data_layout_path,
+              "              isDocumentActionLoading={isDocumentActionLoading}\n              documentUploadFiles={documentUploadFiles}",
+              "              isDocumentActionLoading={isDocumentActionLoading}\n              activeDocumentAction={activeDocumentAction}\n              documentUploadFiles={documentUploadFiles}",
+          )
+
+          tab_path = 'frontend/src/components/data-layout/DocumentRepositoryTab.tsx'
+          replace_once(
+              tab_path,
+              "  DocumentActionStatus,\n  EmailFileImportResponse,",
+              "  DocumentActionStatus,\n  ActiveDocumentAction,\n  DocumentOperation,\n  EmailFileImportResponse,",
+          )
+          replace_once(
+              tab_path,
+              "  isDocumentActionLoading: boolean;\n  documentUploadFiles: File[];",
+              "  isDocumentActionLoading: boolean;\n  activeDocumentAction: ActiveDocumentAction | null;\n  documentUploadFiles: File[];",
+          )
+          replace_once(
+              tab_path,
+              "  requestDocumentAction: (action: 'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent') => void;",
+              "  requestDocumentAction: (action: DocumentOperation) => void;",
+          )
+          replace_once(
+              tab_path,
+              "  isDocumentActionLoading,\n  documentUploadFiles,",
+              "  isDocumentActionLoading,\n  activeDocumentAction,\n  documentUploadFiles,",
+          )
+
+          tab_source = Path(tab_path).read_text(encoding='utf-8')
+          replacements = {
+              "onClick={() => void requestDocumentUpload()}\n                        disabled={isDocumentActionLoading || documentUploadFiles.length === 0}\n                        aria-busy={isDocumentActionLoading}":
+                  "onClick={() => void requestDocumentUpload()}\n                        disabled={isDocumentActionLoading || documentUploadFiles.length === 0}\n                        aria-busy={activeDocumentAction === 'upload'}",
+              "onClick={() => void requestDocumentAction('reparse')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={isDocumentActionLoading}":
+                  "onClick={() => void requestDocumentAction('reparse')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'reparse'}",
+              "onClick={() => void requestDocumentAction('embedding-regeneration-intent')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={isDocumentActionLoading}":
+                  "onClick={() => void requestDocumentAction('embedding-regeneration-intent')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'embedding-regeneration-intent'}",
+              "onClick={() => void requestDocumentAction('hwp-conversion-intent')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={isDocumentActionLoading}":
+                  "onClick={() => void requestDocumentAction('hwp-conversion-intent')}\n                        disabled={isDocumentActionLoading}\n                        aria-busy={activeDocumentAction === 'hwp-conversion-intent'}",
+              "onClick={() => void requestDocumentAction('webdav-materialization-intent')}\n                        disabled={isDocumentActionLoading || !selectedWebdavAccount || selectedWorkspaceDocument.state_code !== 'ready'}\n                        aria-busy={isDocumentActionLoading}":
+                  "onClick={() => void requestDocumentAction('webdav-materialization-intent')}\n                        disabled={isDocumentActionLoading || !selectedWebdavAccount || selectedWorkspaceDocument.state_code !== 'ready'}\n                        aria-busy={activeDocumentAction === 'webdav-materialization-intent'}",
+          }
+          for old, new in replacements.items():
+              if tab_source.count(old) != 1:
+                  raise SystemExit(f'DocumentRepositoryTab: expected one action replacement for {old.splitlines()[0]}')
+              tab_source = tab_source.replace(old, new)
+          Path(tab_path).write_text(tab_source, encoding='utf-8')
+
+          doctoring_path = Path('docs/doctoring/async-button-busy-state.md')
+          doctoring = doctoring_path.read_text(encoding='utf-8')
+          addition = """
+          ## Action identity
+
+          A shared loading lock may disable sibling document actions to prevent conflicting writes, but it must not announce every sibling as the operation that is currently processing. Naruon therefore records the initiating document action separately from the shared lock. Only the initiating upload, reparse, embedding-regeneration, HWP-conversion, or WebDAV-materialization button exposes `aria-busy=true`; disabled siblings remain `aria-busy=false`.
+
+          The focused rendered regression exercises the real button group and fails if a shared boolean again marks every document action busy.
+          """.strip()
+          if '## Action identity' in doctoring:
+              raise SystemExit('doctoring already contains the action identity section')
+          doctoring_path.write_text(doctoring.rstrip() + '\n\n' + addition + '\n', encoding='utf-8')
+          PY
+
+      - name: Verify focused rendered regression
+        run: cd frontend && pnpm exec vitest run src/components/data-layout/DocumentRepositoryTab.busy-state.test.tsx
+
+      - name: Verify complete frontend quality gate
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          NEXT_BUILD_CPUS: '2'
+          POSTCSS_WORKERS: '1'
+          DISABLE_POSTCSS_WORKERS: 'true'
+        run: |
+          cd frontend
+          pnpm test
+          pnpm run lint
+          pnpm run build
+
+      - name: Commit verified repair and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/repair-pr-1352-document-action-busy-identity.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            frontend/src/components/DataLayout.tsx \
+            frontend/src/components/data-layout/types.ts \
+            frontend/src/components/data-layout/DocumentRepositoryTab.tsx \
+            frontend/src/components/data-layout/DocumentRepositoryTab.busy-state.test.tsx \
+            docs/doctoring/async-button-busy-state.md \
+            .github/workflows/repair-pr-1352-document-action-busy-identity.yml
+          git diff --cached --check
+          git commit -m 'fix(a11y): identify the active document action'
+          git push origin HEAD:fix/aria-busy-clean-scope
