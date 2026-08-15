@@ -74,7 +74,7 @@ def test_content_checksum_api_executes_authenticated_request() -> None:
     assert payload["status"] == "success"
     assert payload["result"]["digest_hex"] == EXPECTED_SHA256_ABC
     assert payload["result"]["byte_length"] == 3
-    assert payload["message"] == "Tool executed successfully"
+    assert payload["message"] == "Execution successful"
 
 
 def test_content_checksum_api_rejects_unauthenticated_request() -> None:
