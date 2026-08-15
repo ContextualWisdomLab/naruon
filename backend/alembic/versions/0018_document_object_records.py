@@ -32,6 +32,16 @@ def upgrade() -> None:
         sa.Column("checksum_sha256", sa.String(length=64), nullable=False),
         sa.Column("storage_state", sa.String(length=32), nullable=False),
         sa.Column(
+            "consumed_at",
+            sa.DateTime(timezone=True),
+            nullable=True,
+        ),
+        sa.Column(
+            "deleted_at",
+            sa.DateTime(timezone=True),
+            nullable=True,
+        ),
+        sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
@@ -46,7 +56,7 @@ def upgrade() -> None:
             name="ck_document_object_records_backend",
         ),
         sa.CheckConstraint(
-            "storage_state IN ('active', 'deleted')",
+            "storage_state IN ('active', 'consumed', 'deleted')",
             name="ck_document_object_records_state",
         ),
         sa.CheckConstraint(
@@ -57,6 +67,15 @@ def upgrade() -> None:
             "bucket_name IS NOT NULL AND object_key IS NOT NULL "
             "AND inline_payload IS NULL",
             name="ck_document_object_records_s3_locator",
+        ),
+        sa.CheckConstraint(
+            "(storage_state = 'active' AND consumed_at IS NULL "
+            "AND deleted_at IS NULL) OR "
+            "(storage_state = 'consumed' AND consumed_at IS NOT NULL "
+            "AND deleted_at IS NULL) OR "
+            "(storage_state = 'deleted' AND consumed_at IS NOT NULL "
+            "AND deleted_at IS NOT NULL)",
+            name="ck_document_object_records_lifecycle",
         ),
         sa.ForeignKeyConstraint(
             ["document_id"],
