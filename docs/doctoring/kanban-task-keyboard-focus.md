@@ -14,11 +14,17 @@ The card therefore preserves its existing hover treatment and adds the same expl
 
 The focused source contract locates the Kanban card button from the actual `tasksByStatus[col.id].map((task)` rendering path and requires all three tokens. It does not treat an unrelated focused control elsewhere in `TasksLayout` as evidence for the task card.
 
+## Research evidence
+
+Schrepp (2006) compared keyboard and mouse navigation in real websites and two small navigation studies, finding that common web designs imposed substantial efficiency disadvantages on keyboard navigation. The paper supports treating keyboard operability and orientation as concrete interaction-quality concerns rather than merely static markup properties. This bounded change addresses one necessary orientation cue—visible focus on the interactive Kanban card—without claiming that a focus ring alone removes the broader efficiency gap identified in the study.
+
 ## Claim boundary
 
 This bounded change supports the WCAG 2.2 Focus Visible objective for the Kanban task-card control. It does not by itself claim whole-product WCAG 2.2 conformance, Focus Not Obscured conformance, or the Level AAA Focus Appearance area/contrast requirement. Those require rendered-browser assessment across supported themes, zoom levels, forced-colors/high-contrast modes, and viewport states.
 
 ## References (APA 7th)
+
+Schrepp, M. (2006). On the efficiency of keyboard navigation in Web sites. *Universal Access in the Information Society, 5*(2), 180–188. https://doi.org/10.1007/s10209-006-0036-x
 
 World Wide Web Consortium. (2023). *Web Content Accessibility Guidelines (WCAG) 2.2* (W3C Recommendation). https://www.w3.org/TR/WCAG22/
 
