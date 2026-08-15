@@ -33,7 +33,7 @@ No paper PDF is committed in this slice because redistribution permission for th
 
 ## Acceptance evidence
 
-The regression contract covers published/stable `abc` digest vectors for all three algorithms, exact-byte distinction between canonically equivalent Unicode strings, rejection of SHA-1/MD5 and ambiguous aliases, the one-MiB UTF-8 boundary, and idempotent application registration. Protected-branch integration still requires exact-current-head CI, security, coverage, and independent review gates before the capability may be described as shipped.
+The regression contract covers published/stable `abc` digest vectors for all three algorithms, exact-byte distinction between canonically equivalent Unicode strings, rejection of SHA-1/MD5 and ambiguous aliases, the one-MiB UTF-8 boundary, and idempotent application registration. Protected-branch integration still requires exact-current-head CI, security, **100% owned production statement/branch coverage where exposed as required by [ADR-0007](../adr/0007-bounded-content-checksum-surface.md)**, and independent review gates before the capability may be described as shipped.
 
 ## References (APA 7th)
 
