@@ -63,7 +63,8 @@ jobs:
             tests/test_email_writing_orchestrator_module_boundary.py \
             tests/test_email_writing_orchestrator_scope.py \
             tests/test_email_writing_orchestrator_migration.py \
-            tests/test_email_writing_orchestrator_config_api.py
+            tests/test_email_writing_orchestrator_config_api.py \
+            tests/test_email_writing_orchestrator_terminal_coverage.py
       - name: Verify Task 5 statement and branch coverage
         run: |
           cd backend
@@ -76,7 +77,8 @@ jobs:
             tests/test_email_writing_orchestrator_module_boundary.py \
             tests/test_email_writing_orchestrator_scope.py \
             tests/test_email_writing_orchestrator_migration.py \
-            tests/test_email_writing_orchestrator_config_api.py
+            tests/test_email_writing_orchestrator_config_api.py \
+            tests/test_email_writing_orchestrator_terminal_coverage.py
           python -m coverage report --show-missing --fail-under=100 \
             api/email_writing_orchestrator_config.py \
             db/email_writing_orchestrator_config.py \
@@ -130,7 +132,8 @@ jobs:
             tests/test_email_writing_orchestrator_module_boundary.py \
             tests/test_email_writing_orchestrator_scope.py \
             tests/test_email_writing_orchestrator_migration.py \
-            tests/test_email_writing_orchestrator_config_api.py
+            tests/test_email_writing_orchestrator_config_api.py \
+            tests/test_email_writing_orchestrator_terminal_coverage.py
       - name: Compile Task 5 source
         run: |
           python -m compileall -q \
