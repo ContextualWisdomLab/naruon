@@ -20,7 +20,9 @@ SOURCE_REF_ACTIONS = {
 }
 
 
-def _effective_contents_permission(workflow: dict[str, Any], job: dict[str, Any]) -> str:
+def _effective_contents_permission(
+    workflow: dict[str, Any], job: dict[str, Any]
+) -> str:
     """Return the effective GitHub token contents permission for one job."""
     permissions = job.get("permissions", workflow.get("permissions"))
     if permissions == "write-all":
@@ -39,7 +41,11 @@ def _step_publishes_source_ref(step: dict[str, Any]) -> bool:
     if re.search(r"\bgit\s+push\b", run_lower):
         return True
 
-    refs_api = re.search(r"(?:api\.github\.com|\bgh\s+api\b)[^\n]*?/git/refs", run_lower)
+    refs_api = re.search(
+        r"(?:api\.github\.com|\bgh\s+api\b).*?/git/refs",
+        run_lower,
+        re.DOTALL,
+    )
     mutating_method = re.search(
         r"(?:-x|--request|--method)\s+(?:post|patch)\b", run_lower
     )
@@ -51,7 +57,11 @@ def _step_publishes_source_ref(step: dict[str, Any]) -> bool:
         return True
 
     with_values = step.get("with")
-    script = str(with_values.get("script", "")) if isinstance(with_values, dict) else ""
+    script = (
+        str(with_values.get("script", ""))
+        if isinstance(with_values, dict)
+        else ""
+    )
     normalized_script = re.sub(r"\s+", "", script).lower()
     return any(
         token in normalized_script
@@ -133,7 +143,10 @@ jobs:
     steps:
       - uses: actions/github-script@0123456789012345678901234567890123456789
         with:
-          script: github.rest.git.createRef({owner: 'o', repo: 'r', ref: 'refs/heads/x', sha: 'a'})
+          script: |
+            github.rest.git.createRef({
+              owner: 'o', repo: 'r', ref: 'refs/heads/x', sha: 'a'
+            })
 """,
             [("publish", "write")],
         ),
@@ -144,6 +157,18 @@ jobs:
   publish:
     steps:
       - run: git push origin HEAD:refs/heads/generated
+""",
+            [("publish", "write")],
+        ),
+        (
+            """permissions:
+  contents: write
+jobs:
+  publish:
+    steps:
+      - run: |
+          curl --request PATCH \\
+            https://api.github.com/repos/o/r/git/refs/heads/generated
 """,
             [("publish", "write")],
         ),

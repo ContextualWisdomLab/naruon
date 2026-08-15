@@ -15,6 +15,16 @@ const workspaceConfig = readFileSync(`${frontendRoot}/pnpm-workspace.yaml`, 'utf
 
 type NanoidLockSection = 'packages' | 'snapshots';
 
+const compareVersions = (left: string, right: readonly number[]) => {
+  const parts = left.split('.').map(Number);
+  return parts[0] - right[0] || parts[1] - right[1] || parts[2] - right[2];
+};
+
+const isAffectedNanoidVersion = (version: string) =>
+  compareVersions(version, [3, 3, 16]) < 0 ||
+  (compareVersions(version, [4, 0, 0]) >= 0 &&
+    compareVersions(version, [5, 1, 16]) < 0);
+
 const lockedNanoidVersions = (): Record<NanoidLockSection, string[]> => {
   const versions: Record<NanoidLockSection, string[]> = {
     packages: [],
@@ -49,26 +59,31 @@ const lockedNanoidVersions = (): Record<NanoidLockSection, string[]> => {
 };
 
 describe('frontend dependency security contract', () => {
-  it('keeps every nanoid resolution at or above the OSV fixed version', () => {
-    const fixedVersion = [5, 1, 16] as const;
-    const compareVersions = (left: string, right: readonly number[]) => {
-      const parts = left.split('.').map(Number);
-      return parts[0] - right[0] || parts[1] - right[1] || parts[2] - right[2];
-    };
+  it.each(['3.3.15', '4.0.0', '5.1.15'])(
+    'recognizes affected nanoid version %s',
+    (version) => {
+      expect(isAffectedNanoidVersion(version)).toBe(true);
+    },
+  );
 
+  it.each(['3.3.16', '3.3.99', '5.1.16', '6.0.0'])(
+    'recognizes patched nanoid version %s',
+    (version) => {
+      expect(isAffectedNanoidVersion(version)).toBe(false);
+    },
+  );
+
+  it('keeps each locked nanoid version outside the advisory ranges', () => {
     expect(packageManifest.overrides?.nanoid).toBe('5.1.16');
     expect(packageManifest.resolutions?.nanoid).toBe('5.1.16');
     expect(workspaceConfig).toContain('  nanoid: "5.1.16"\n');
-    expect(
-      compareVersions(packageManifest.overrides?.nanoid ?? '0.0.0', fixedVersion),
-    ).toBeGreaterThanOrEqual(0);
     expect(lockfile).toContain('  nanoid: 5.1.16\n');
 
     const versions = lockedNanoidVersions();
     for (const section of ['packages', 'snapshots'] as const) {
       expect(versions[section]).toEqual(['5.1.16']);
       for (const version of versions[section]) {
-        expect(compareVersions(version, fixedVersion)).toBeGreaterThanOrEqual(0);
+        expect(isAffectedNanoidVersion(version)).toBe(false);
       }
     }
   });
