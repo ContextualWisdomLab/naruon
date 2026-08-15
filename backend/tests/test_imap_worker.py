@@ -28,6 +28,29 @@ async def test_imap_worker_skips_disallowed_destination(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_imap_worker_fetch_rejects_explicit_disallowed_destination(monkeypatch):
+    """Explicit fetch overrides must pass mail egress policy before networking."""
+    worker = ImapSyncWorker()
+    config = TenantConfig(
+        user_id="testuser",
+        imap_server="imap.example.com",
+        imap_port=993,
+    )
+    connection_attempts = []
+
+    def fail_connect(*args, **kwargs):
+        connection_attempts.append((args, kwargs))
+        raise AssertionError("IMAP connection must not open before policy validation")
+
+    monkeypatch.setattr("services.imap_worker.aioimaplib.IMAP4_SSL", fail_connect)
+
+    with pytest.raises(ValueError, match="IMAP server is not allowed"):
+        await worker._fetch_messages(config, "127.0.0.1", 993)
+
+    assert connection_attempts == []
+
+
+@pytest.mark.asyncio
 async def test_imap_worker_sync_tenant_raises_when_connection_fails(monkeypatch):
     worker = ImapSyncWorker()
     config = TenantConfig(
