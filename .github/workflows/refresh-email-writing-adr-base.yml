@@ -71,8 +71,9 @@ jobs:
                   "docs/doctoring/"
                   "llm-email-writing-guidance-and-fast-mlsirm-judge.md"
               ): (
-                  "## References",
-                  "APA",
+                  "## APA 7th references",
+                  "NIST AI 600-1",
+                  "ISO/IEC 42001:2023",
               ),
           }
           for path, markers in required.items():
