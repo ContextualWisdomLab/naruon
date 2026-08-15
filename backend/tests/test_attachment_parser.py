@@ -18,15 +18,21 @@ def _minimal_hwpx_bytes() -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr("mimetype", "application/hwp+zip")
-        archive.writestr("version.xml", "<version app=\"Naruon\" />")
+        archive.writestr("version.xml", '<version app="Naruon" />')
         archive.writestr("Contents/content.hpf", "<package />")
         archive.writestr("Contents/section0.xml", "<section><p>계약 검토</p></section>")
     return buffer.getvalue()
 
 
 def _minimal_hwp_bytes() -> bytes:
-    """Build a minimal OLE-signature HWP binary sentinel fixture."""
-    return b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1HWP Binary Body"
+    """Build a minimal OLE and HWP FileHeader signature fixture."""
+    return (
+        b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+        + b"\x00" * 64
+        + b"HWP Document File"
+        + b"\x00" * 15
+        + b"HWP Binary Body"
+    )
 
 
 def test_html_attachment_preserves_parse_source_and_safe_display_text():
