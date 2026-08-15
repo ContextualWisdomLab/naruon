@@ -12,9 +12,18 @@ function kanbanTaskButtonOpeningTag(): string {
   expect(mapIndex).toBeGreaterThan(-1);
 
   const buttonIndex = tasksLayoutSource.indexOf("<button", mapIndex);
-  const openingTagEnd = tasksLayoutSource.indexOf(">", buttonIndex);
+  const classNamePrefix = 'className="';
+  const classNameIndex = tasksLayoutSource.indexOf(classNamePrefix, buttonIndex);
+  const classNameEnd = tasksLayoutSource.indexOf(
+    '"',
+    classNameIndex + classNamePrefix.length,
+  );
+  const openingTagEnd = tasksLayoutSource.indexOf(">", classNameEnd);
+
   expect(buttonIndex).toBeGreaterThan(mapIndex);
-  expect(openingTagEnd).toBeGreaterThan(buttonIndex);
+  expect(classNameIndex).toBeGreaterThan(buttonIndex);
+  expect(classNameEnd).toBeGreaterThan(classNameIndex);
+  expect(openingTagEnd).toBeGreaterThan(classNameEnd);
   return tasksLayoutSource.slice(buttonIndex, openingTagEnd);
 }
 
