@@ -3,6 +3,7 @@
 import base64
 import binascii
 import io
+import struct
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,8 +28,17 @@ _HWP_CONTENT_TYPES = (
     "application/haansofthwp",
 )
 _HWP_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_HWPX_MIMETYPE = b"application/hwp+zip"
+_ZIP_END_RECORD_SIGNATURE = b"PK\x05\x06"
+_ZIP_END_RECORD_SIZE = 22
+_ZIP_MAX_COMMENT_BYTES = 65_535
+_ZIP_END_RECORD = struct.Struct("<4s4H2LH")
 MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
 MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
+MAX_HWPX_ZIP_ENTRIES = 4_096
+MAX_HWPX_CENTRAL_DIRECTORY_BYTES = 4 * 1024 * 1024
+MAX_HWPX_ZIP_NAME_BYTES = 1 * 1024 * 1024
+MAX_HWPX_MIMETYPE_BYTES = 128
 
 
 @dataclass(frozen=True)
@@ -368,28 +378,97 @@ def _deferred_payload_error_code(
     return None
 
 
-def _is_hwpx_payload(payload: bytes) -> bool:
-    """Return whether bytes look like a HWPX/OWPML ZIP package.
+def _bounded_zip_directory_metadata(payload: bytes) -> tuple[int, int] | None:
+    """Return bounded ZIP directory counts without materializing member metadata."""
+    search_start = max(
+        0,
+        len(payload) - (_ZIP_END_RECORD_SIZE + _ZIP_MAX_COMMENT_BYTES),
+    )
+    record_offset = payload.rfind(_ZIP_END_RECORD_SIGNATURE, search_start)
+    if record_offset < 0 or record_offset + _ZIP_END_RECORD_SIZE > len(payload):
+        return None
 
-    The check intentionally inspects only bounded ZIP metadata and file names.
-    It does not decompress section XML, execute active content, or fetch external
-    resources during import.
+    (
+        signature,
+        disk_number,
+        directory_disk_number,
+        disk_entry_count,
+        total_entry_count,
+        directory_size,
+        directory_offset,
+        comment_size,
+    ) = _ZIP_END_RECORD.unpack_from(payload, record_offset)
+    if (
+        signature != _ZIP_END_RECORD_SIGNATURE
+        or disk_number != 0
+        or directory_disk_number != 0
+        or disk_entry_count != total_entry_count
+        or not 0 < total_entry_count <= MAX_HWPX_ZIP_ENTRIES
+        or directory_size > MAX_HWPX_CENTRAL_DIRECTORY_BYTES
+        or record_offset + _ZIP_END_RECORD_SIZE + comment_size != len(payload)
+        or directory_offset + directory_size > record_offset
+    ):
+        return None
+    return total_entry_count, directory_size
+
+
+def _is_hwpx_payload(payload: bytes) -> bool:
+    """Return whether bytes look like a bounded HWPX/OWPML ZIP package.
+
+    Recognition checks ZIP directory budgets and the exact HWPX ``mimetype``
+    signature before inspecting only member names. It does not parse section XML,
+    execute active content, extract files, or fetch external resources.
     """
-    if not payload.startswith(b"PK"):
+    directory_metadata = _bounded_zip_directory_metadata(payload)
+    if not payload.startswith(b"PK") or directory_metadata is None:
         return False
+    expected_entry_count, _ = directory_metadata
+
     try:
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            names = set(archive.namelist())
-    except (zipfile.BadZipFile, ValueError):
+            entries = archive.infolist()
+            aggregate_name_bytes = sum(
+                len(entry.filename.encode("utf-8", errors="surrogatepass"))
+                for entry in entries
+            )
+            if (
+                len(entries) != expected_entry_count
+                or aggregate_name_bytes > MAX_HWPX_ZIP_NAME_BYTES
+            ):
+                return False
+
+            mimetype_entries = [
+                entry for entry in entries if entry.filename == "mimetype"
+            ]
+            if len(mimetype_entries) != 1:
+                return False
+            mimetype_entry = mimetype_entries[0]
+            if (
+                mimetype_entry.flag_bits & 0x1
+                or mimetype_entry.file_size > MAX_HWPX_MIMETYPE_BYTES
+            ):
+                return False
+            mimetype = archive.read(mimetype_entry)
+            names = {entry.filename for entry in entries}
+    except (
+        NotImplementedError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        zipfile.BadZipFile,
+    ):
         return False
+
     has_manifest = "Contents/content.hpf" in names or "META-INF/manifest.xml" in names
     has_section = any(
         name.startswith("Contents/section") and name.endswith(".xml")
         for name in names
     )
-    has_version = "version.xml" in names
-    has_mimetype = "mimetype" in names
-    return has_mimetype and has_version and (has_manifest or has_section)
+    return (
+        mimetype == _HWPX_MIMETYPE
+        and "version.xml" in names
+        and (has_manifest or has_section)
+    )
 
 
 def _coerce_text(raw_content: Any) -> str:
