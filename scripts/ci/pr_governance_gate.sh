@@ -23,6 +23,15 @@ set -euo pipefail
 # CHANGES_REQUESTED. Behavioral enforcement lives in pr_governance_gate_impl.sh.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMPLEMENTATION="${SCRIPT_DIR}/pr_governance_gate_impl.sh"
+
+# Resolve the real GitHub CLI only after restoring the runner-owned PATH. An
+# earlier workflow step may prepend a directory through GITHUB_PATH; trusting
+# that directory here would let an untrusted `gh` binary become the authority
+# for governance evidence before the delegated implementation can harden PATH.
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  export PATH
+fi
 PR_GOVERNANCE_REAL_GH="$(command -v gh || true)"
 if [ -z "$PR_GOVERNANCE_REAL_GH" ]; then
   printf 'GitHub CLI is unavailable; refusing to evaluate PR governance.\n' >&2
