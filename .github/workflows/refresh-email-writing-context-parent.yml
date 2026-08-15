@@ -1,0 +1,63 @@
+name: Refresh Email Writing Context Parent
+
+on:
+  push:
+    branches:
+      - feat/llm-email-writing-context-task4
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-email-writing-context-parent
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONWARNINGS: error
+  DISABLE_BACKGROUND_WORKERS: "1"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/llm-email-writing-context-task4
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Merge the current Task 3 parent
+        run: |
+          set -euo pipefail
+          git fetch origin feat/llm-email-writing-review-evidence-task3
+          git config user.name "CWL Email Writing Task 4 Refresh"
+          git config user.email "actions@users.noreply.github.com"
+          git merge --no-edit --no-ff origin/feat/llm-email-writing-review-evidence-task3
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+      - name: Install hash-locked backend dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+      - name: Verify server-authoritative context contracts
+        run: |
+          cd backend
+          python -m pytest -q \
+            tests/test_email_writing_context_service.py \
+            tests/test_email_writing_context_service_coverage.py
+          python -m ruff check \
+            services/email_writing_context_service.py \
+            tests/test_email_writing_context_service.py \
+            tests/test_email_writing_context_service_coverage.py
+          python -m compileall -q services/email_writing_context_service.py
+      - name: Remove one-shot workflow and publish refresh
+        run: |
+          set -euo pipefail
+          rm .github/workflows/refresh-email-writing-context-parent.yml
+          git diff --check
+          git add .github/workflows/refresh-email-writing-context-parent.yml
+          git commit -m "ci(email-writing): remove Task 4 parent refresh workflow"
+          git push origin HEAD:feat/llm-email-writing-context-task4
