@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -17,6 +18,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.models import Base
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from db.models import Document
 
 
 class DocumentObjectRecord(Base):
