@@ -154,14 +154,17 @@ def test_validate_https_url_host(mock_details):
 
 
 def test_validate_same_or_subdomain_host_rejects_suffix_confusion():
-    validate_same_or_subdomain_host(
-        "OIDC_JWKS_URL", "issuer.example.com", "OIDC_ISSUER_URL", "issuer.example.com"
-    )
-    validate_same_or_subdomain_host(
-        "OIDC_JWKS_URL", "jwks.issuer.example.com", "OIDC_ISSUER_URL", "issuer.example.com"
-    )
+    for valid_host in (
+        "issuer.example.com",
+        "jwks.issuer.example.com",
+        "a.b.c.issuer.example.com",
+    ):
+        validate_same_or_subdomain_host(
+            "OIDC_JWKS_URL", valid_host, "OIDC_ISSUER_URL", "issuer.example.com"
+        )
 
     for invalid_host in (
+        "other.com",
         "fakeissuer.example.com",
         "issuer.example.com.attacker.com",
         "notexample.com",
