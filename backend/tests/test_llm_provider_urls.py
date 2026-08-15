@@ -1,3 +1,5 @@
+import socket
+
 import pytest
 
 from core.config import settings
@@ -5,6 +7,7 @@ from services.llm_provider_urls import (
     LLM_BASE_URL_NOT_ALLOWED,
     _is_ip_literal,
     _validate_global_address,
+    validate_llm_provider_base_url,
 )
 
 
@@ -55,6 +58,66 @@ def test_validate_global_address_loopback_allowed_when_settings_enabled(monkeypa
     """Test that a loopback IP is allowed when ALLOW_LOCAL_LLM_PROVIDERS is True."""
     monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
     assert _validate_global_address("127.0.0.1") == "127.0.0.1"
+
+
+@pytest.mark.parametrize(
+    "provider_url, hostname",
+    [
+        ("https://provider.example/v1", "provider.example"),
+        ("http://ollama:11434/v1", "ollama"),
+    ],
+)
+def test_validate_provider_base_url_rejects_loopback_dns_rebinding(
+    monkeypatch, provider_url, hostname
+):
+    """An allowlisted non-local hostname must not gain loopback access via DNS."""
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
+    monkeypatch.setattr(settings, "ALLOWED_LLM_BASE_URL_HOSTS", hostname)
+
+    def resolve_to_loopback(resolved_hostname, port, *, type):
+        """Resolve the candidate hostname to loopback to simulate DNS rebinding."""
+        assert resolved_hostname == hostname
+        assert type == socket.SOCK_STREAM
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("127.0.0.1", port),
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve_to_loopback)
+
+    with pytest.raises(ValueError, match=LLM_BASE_URL_NOT_ALLOWED):
+        validate_llm_provider_base_url(provider_url)
+
+
+def test_validate_provider_base_url_allows_explicit_localhost_loopback(monkeypatch):
+    """Explicit localhost remains usable when the local-provider opt-in is enabled."""
+    monkeypatch.setattr(settings, "ALLOW_LOCAL_LLM_PROVIDERS", True)
+
+    def resolve_localhost(resolved_hostname, port, *, type):
+        """Resolve the explicit local-development hostname to loopback."""
+        assert resolved_hostname == "localhost"
+        assert type == socket.SOCK_STREAM
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("127.0.0.1", port),
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve_localhost)
+
+    assert (
+        validate_llm_provider_base_url("http://localhost:11434/v1")
+        == "http://localhost:11434/v1"
+    )
 
 
 def test_validate_global_address_private_allowed_when_host_allowed(monkeypatch):
