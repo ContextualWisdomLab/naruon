@@ -75,13 +75,18 @@ function renderRepository(activeDocumentAction: string | null) {
 }
 
 function getActionButtonTag(markup: string, action: string) {
-  const match = markup.match(
-    new RegExp(`<button[^>]*data-document-action="${action}"[^>]*>`),
-  );
-  if (!match) {
+  const actionAttribute = `data-document-action="${action}"`;
+  const actionIndex = markup.indexOf(actionAttribute);
+  if (actionIndex < 0) {
     throw new Error(`missing rendered button for ${action}`);
   }
-  return match[0];
+
+  const buttonStart = markup.lastIndexOf('<button', actionIndex);
+  const buttonEnd = markup.indexOf('>', actionIndex);
+  if (buttonStart < 0 || buttonEnd < 0) {
+    throw new Error(`malformed rendered button for ${action}`);
+  }
+  return markup.slice(buttonStart, buttonEnd + 1);
 }
 
 describe('DocumentRepositoryTab action busy identity', () => {
