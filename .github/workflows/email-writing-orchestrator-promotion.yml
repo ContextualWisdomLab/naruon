@@ -1,0 +1,165 @@
+name: Email Writing Orchestrator Promotion
+
+on:
+  push:
+    branches:
+      - feat/llm-email-writing-orchestrator-task5
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: email-writing-orchestrator-promotion
+  cancel-in-progress: true
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      GH_TOKEN: ${{ github.token }}
+      TARGET_BRANCH: feat/llm-email-writing-context-task4
+    steps:
+      - name: Locate or create the staged Task 5 pull request
+        id: pull-request
+        shell: bash
+        run: |
+          set -euo pipefail
+          pull_number="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --head "$GITHUB_REF_NAME" \
+              --base "$TARGET_BRANCH" \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [[ -z "$pull_number" ]]; then
+            pull_url="$(
+              gh pr create \
+                --repo "$GITHUB_REPOSITORY" \
+                --base "$TARGET_BRANCH" \
+                --head "$GITHUB_REF_NAME" \
+                --title 'feat(email-writing): add contextual orchestration boundary' \
+                --body-file - <<'EOF'
+          ## Product outcome
+
+          Adds a tenant-scoped, provider-neutral contextual-orchestrator boundary for email-writing review, including a dedicated configuration API, privacy-minimized evidence, bounded Judge concurrency, strict response validation, and fail-closed transport behavior.
+
+          ## Quality evidence
+
+          - Task-specific contracts and adversarial hardening regressions
+          - exact statement and branch coverage gate for shipped Task 5 modules
+          - complete shipped docstring gate
+          - Ruff, compile, migration upgrade/downgrade, and unrelated-data preservation checks
+          - APA 7 doctoring for measurement, multilingual validity, privacy, risk, and governance boundaries
+          EOF
+            )"
+            pull_number="${pull_url##*/}"
+          fi
+          printf 'pull_number=%s\n' "$pull_number" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for required checks to become terminal
+        id: checks
+        shell: bash
+        env:
+          PULL_NUMBER: ${{ steps.pull-request.outputs.pull_number }}
+        run: |
+          set -euo pipefail
+          stable_success_polls=0
+          for _attempt in $(seq 1 120); do
+            required_json="$(
+              gh pr checks "$PULL_NUMBER" \
+                --repo "$GITHUB_REPOSITORY" \
+                --required \
+                --json name,state,bucket 2>/dev/null || printf '[]'
+            )"
+            failure_count="$(
+              jq '[.[] | select(.bucket == "fail" or .bucket == "cancel")] | length' \
+                <<<"$required_json"
+            )"
+            pending_count="$(
+              jq '[.[] | select(.bucket == "pending")] | length' \
+                <<<"$required_json"
+            )"
+            required_count="$(jq 'length' <<<"$required_json")"
+
+            if [[ "$failure_count" -gt 0 ]]; then
+              jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | "\(.name): \(.state)"' \
+                <<<"$required_json"
+              exit 1
+            fi
+            if [[ "$required_count" -gt 0 && "$pending_count" -eq 0 ]]; then
+              stable_success_polls=$((stable_success_polls + 1))
+              if [[ "$stable_success_polls" -ge 2 ]]; then
+                printf 'required_count=%s\n' "$required_count" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            else
+              stable_success_polls=0
+            fi
+            sleep 15
+          done
+          echo 'Required checks did not settle within the bounded promotion window.' >&2
+          exit 1
+
+      - name: Reject unresolved review findings
+        shell: bash
+        env:
+          PULL_NUMBER: ${{ steps.pull-request.outputs.pull_number }}
+        run: |
+          set -euo pipefail
+          repository_owner="${GITHUB_REPOSITORY%%/*}"
+          repository_name="${GITHUB_REPOSITORY##*/}"
+          unresolved_count="$(
+            gh api graphql \
+              -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved}}}}}' \
+              -F owner="$repository_owner" \
+              -F name="$repository_name" \
+              -F number="$PULL_NUMBER" \
+              --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length'
+          )"
+          if [[ "$unresolved_count" -ne 0 ]]; then
+            echo "$unresolved_count unresolved review thread(s) remain." >&2
+            exit 1
+          fi
+          review_decision="$(
+            gh pr view "$PULL_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json reviewDecision \
+              --jq '.reviewDecision // ""'
+          )"
+          if [[ "$review_decision" == 'CHANGES_REQUESTED' ]]; then
+            echo 'A current review requests changes.' >&2
+            exit 1
+          fi
+
+      - name: Merge or arm policy-compliant auto-merge
+        shell: bash
+        env:
+          PULL_NUMBER: ${{ steps.pull-request.outputs.pull_number }}
+        run: |
+          set -euo pipefail
+          merge_state="$(
+            gh pr view "$PULL_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json mergeStateStatus \
+              --jq '.mergeStateStatus'
+          )"
+          if [[ "$merge_state" == 'CLEAN' || "$merge_state" == 'UNSTABLE' ]]; then
+            gh pr merge "$PULL_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --squash \
+              --delete-branch
+            exit 0
+          fi
+          gh pr merge "$PULL_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --auto \
+            --squash \
+            --delete-branch
