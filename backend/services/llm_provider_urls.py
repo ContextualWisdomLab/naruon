@@ -99,12 +99,13 @@ def _format_normalized_netloc(hostname: str, port: int, *, explicit_port: bool) 
 def _validate_global_address(address: str, *, hostname: str | None = None) -> str:
     """Validate a globally routable address or an explicitly scoped local one.
 
-    ``ALLOW_LOCAL_LLM_PROVIDERS`` admits loopback addresses for local developer
-    runtimes. An exact, operator-allowlisted single-label provider hostname may
-    additionally resolve only into RFC 1918 IPv4 or RFC 4193 IPv6 unique-local
-    space. Link-local, reserved, unspecified, multicast, and other non-global
-    address classes never become reachable merely because a hostname is
-    allowlisted.
+    ``ALLOW_LOCAL_LLM_PROVIDERS`` admits loopback only when the original URL
+    hostname is itself an explicit local-development identity such as
+    ``localhost`` or a configured loopback literal. An exact,
+    operator-allowlisted single-label provider hostname may additionally
+    resolve only into RFC 1918 IPv4 or RFC 4193 IPv6 unique-local space.
+    Link-local, reserved, unspecified, multicast, and other non-global address
+    classes never become reachable merely because a hostname is allowlisted.
     """
     try:
         ip_address = ipaddress.ip_address(address)
@@ -113,7 +114,7 @@ def _validate_global_address(address: str, *, hostname: str | None = None) -> st
 
     is_allowed_local = False
     if settings.ALLOW_LOCAL_LLM_PROVIDERS:
-        if ip_address.is_loopback:
+        if ip_address.is_loopback and hostname and _is_local_dev_host(hostname):
             is_allowed_local = True
         elif (
             hostname
