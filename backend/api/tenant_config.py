@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
@@ -315,7 +316,23 @@ async def _validated_orchestrator_url(value: str | None) -> str | None:
             status_code=400,
             detail=_EMAIL_WRITING_ORCHESTRATOR_INVALID,
         ) from exc
-    return None if validated is None else validated.normalized_url
+    if validated is None:
+        return None
+    parsed = urlsplit(validated.normalized_url)
+    if (
+        parsed.scheme.lower() != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=_EMAIL_WRITING_ORCHESTRATOR_INVALID,
+        )
+    return validated.normalized_url
 
 
 @router.put(

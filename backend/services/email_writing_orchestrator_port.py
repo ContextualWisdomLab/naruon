@@ -10,10 +10,10 @@ oversubscription.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 import threading
-from typing import Any, ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar
 
 from services.contextual_orchestrator_client import (
     ChatMessage,
@@ -84,16 +84,23 @@ class EmailWritingOrchestratorPort:
         """Run one synchronous Judge operation in the bounded worker lane."""
         self._assert_judge_lane_open()
         await self._judge_semaphore.acquire()
-        loop = asyncio.get_running_loop()
-        future = loop.run_in_executor(
-            self._judge_executor,
-            lambda: operation(*args, **kwargs),
-        )
         try:
-            return await asyncio.shield(future)
-        except asyncio.CancelledError:
-            await asyncio.shield(future)
-            raise
+            loop = asyncio.get_running_loop()
+            with self._state_lock:
+                if self._closed:
+                    raise RuntimeError("judge_lane_closed")
+                future = loop.run_in_executor(
+                    self._judge_executor,
+                    lambda: operation(*args, **kwargs),
+                )
+            try:
+                return await asyncio.shield(future)
+            except asyncio.CancelledError:
+                try:
+                    await asyncio.shield(future)
+                except Exception:
+                    pass
+                raise
         finally:
             self._judge_semaphore.release()
 

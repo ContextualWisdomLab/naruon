@@ -46,6 +46,9 @@ _PROFILE_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _MAX_MESSAGE_COUNT = 64
 _MAX_MESSAGE_CHARS = 200_000
 _MAX_TOTAL_MESSAGE_CHARS = 1_000_000
+_MAX_JSON_DEPTH = 32
+_MAX_JSON_NODES = 100_000
+_MAX_TRACE_STEPS = 64
 _MAX_SAFE_INTEGER = 2**53 - 1
 
 
@@ -155,6 +158,27 @@ def _bounded_counter(value: Any) -> int:
     return value
 
 
+def _validate_json_structure(value: Any) -> None:
+    """Reject response trees whose parsing work exceeds fixed limits."""
+    pending: list[tuple[Any, int]] = [(value, 1)]
+    observed_nodes = 0
+    while pending:
+        current, depth = pending.pop()
+        observed_nodes += 1
+        if depth > _MAX_JSON_DEPTH or observed_nodes > _MAX_JSON_NODES:
+            raise ContextualOrchestratorError(
+                "orchestrator_malformed_response"
+            )
+        if isinstance(current, dict):
+            pending.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, list):
+            pending.extend((item, depth + 1) for item in current)
+        elif isinstance(current, str) and _contains_surrogate(current):
+            raise ContextualOrchestratorError(
+                "orchestrator_malformed_response"
+            )
+
+
 class ContextualOrchestratorClient:
     """Secure per-tenant client for candidate and Judge completions."""
 
@@ -262,6 +286,10 @@ class ContextualOrchestratorClient:
                         headers,
                         payload,
                     )
+                    if completion.mode != mode:
+                        raise ContextualOrchestratorError(
+                            "orchestrator_malformed_response"
+                        )
                 except ContextualOrchestratorError as exc:
                     if not exc.transient or attempt >= self._max_retries:
                         if exc.transient:
@@ -470,6 +498,7 @@ class ContextualOrchestratorClient:
             ) from exc
         if not isinstance(value, dict):
             raise ContextualOrchestratorError("orchestrator_malformed_response")
+        _validate_json_structure(value)
         return value
 
     def _parse_completion(self, body: bytes) -> ContextualOrchestratorCompletion:
@@ -491,7 +520,10 @@ class ContextualOrchestratorClient:
         if mode not in {"route", "conduct"}:
             raise ContextualOrchestratorError("orchestrator_malformed_response")
         raw_trace = orchestration.get("trace")
-        if not isinstance(raw_trace, list):
+        if (
+            not isinstance(raw_trace, list)
+            or len(raw_trace) > _MAX_TRACE_STEPS
+        ):
             raise ContextualOrchestratorError("orchestrator_malformed_response")
         trace: list[OrchestrationUsageEvidence] = []
         for step in raw_trace:
