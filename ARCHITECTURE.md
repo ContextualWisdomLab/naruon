@@ -20,6 +20,21 @@ Runtime database connectivity is secret-injected: `backend/core/config.py` has
 no fallback `DATABASE_URL`, so missing database configuration fails at startup
 rather than silently using shared development credentials.
 
+## Topic-intelligence boundary
+
+Naruon has no live Structural Topic Modeling endpoint, fitted topic artifact,
+or topic-result persistence. The retained `keyword_extractor` is deterministic
+lexical metadata and must not feed topic, agenda, search, or norm-group
+inference. A future adapter may consume a separately accepted, versioned TEPP
+artifact/API only when frozen preprocessing and vocabulary, covariate design,
+mixed-membership posterior uncertainty, diagnostics, provenance, and explicit
+abstention are all available. Missing or incompatible scientific authority
+fails closed. Naruon owns authentication, authorization, request validation,
+the adapter envelope, and disclosure policy; TEPP would own the scientific
+payload. See the canonical documentation graph in
+[`docs/topic-intelligence/README.md`](docs/topic-intelligence/README.md) and
+[`ADR-0001`](docs/adr/0001-topic-measurement-authority.md).
+
 ## Workspace navigation boundary
 
 The Next.js shell opens the Today execution dashboard for first-run sessions and
@@ -254,11 +269,12 @@ compact session tokens whose protected header pins `alg=HS256` and whose
 `header.payload` signing input is signed by the configured
 `AUTH_SESSION_HMAC_SECRET`; missing, weak, malformed, legacy two-segment,
 wrong-algorithm, tampered, expired, or public fixture-secret tokens fail closed
-with 401. OIDC tokens additionally require a verified `iat` NumericDate and an
-exact configured issuer/client audience before their tenant and role claims are
-used. The signed session envelope must carry explicit identity, role,
-organization/group, and workspace claims, so user ids such as `admin` do not
-imply elevated privileges.
+with 401. OIDC tokens additionally require a verified `iat` NumericDate, exact
+configured issuer equality, and a verified audience claim containing the
+configured OIDC client ID (including multi-valued audiences) before their tenant
+and role claims are used. The signed session envelope must carry explicit
+identity, role, organization/group, and workspace claims, so user ids such as
+`admin` do not imply elevated privileges.
 Endpoint tests use FastAPI dependency overrides for fixture identity only through
 explicit opt-in pytest fixtures, while a full Keycloak/Casdoor/OIDC provider and
 audited mailbox-owner migration remain required before production multi-user
