@@ -34,6 +34,11 @@ def test_malformed_percent_triplets_are_rejected(txt_path: str) -> None:
     assert _txt_context_path([f"path={txt_path}"]) is None
 
 
+def test_invalid_utf8_percent_octet_is_rejected() -> None:
+    """Reject invalid UTF-8 rather than accepting a replacement-character path."""
+    assert _txt_context_path(["path=/safe%FF"]) is None
+
+
 def test_encoded_literal_percent_is_preserved_after_one_decode() -> None:
     """Allow a single encoded percent when it does not form another triplet."""
     assert _txt_context_path(["path=/discount-100%25"]) == "/discount-100%"
