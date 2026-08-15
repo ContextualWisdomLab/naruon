@@ -32,7 +32,7 @@ class _OrganizationAwareSession:
         """Return the document only when every emitted scope predicate matches."""
 
         compiled = statement.compile()
-        rendered = str(statement)
+        rendered_scope = str(statement.whereclause)
         values = tuple(compiled.params.values())
         if self.document.document_id not in values:
             return _ScalarResult(None)
@@ -42,11 +42,11 @@ class _OrganizationAwareSession:
         # A missing organization predicate reproduces the vulnerable behavior:
         # a document from another tenant is still returned solely because both
         # principals supplied the same workspace identifier.
-        if "workspace_documents.organization_id" not in rendered:
+        if "workspace_documents.organization_id" not in rendered_scope:
             return _ScalarResult(self.document)
 
         if self.document.organization_id is None:
-            organization_matches = "IS NULL" in rendered.upper()
+            organization_matches = "IS NULL" in rendered_scope.upper()
         else:
             organization_matches = self.document.organization_id in values
         return _ScalarResult(self.document if organization_matches else None)
