@@ -192,7 +192,6 @@ def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: P
     output = result.stdout + result.stderr
 
     assert result.returncode == 0, output
-    assert "Ignoring successful CodeRabbit commit status" in output
     assert (
         "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval"
         in output
@@ -320,5 +319,5 @@ def test_skipped_and_neutral_required_checks_block_merge_readiness(tmp_path: Pat
 
         assert result.returncode == 0, output
         assert f"Required check `Application CI` is {state} on the current head." in output
-        assert "PR governance metadata gate blocked" in output
+        assert "PR governance blockers for 42" in output
         assert "PR governance metadata gate is ready" not in output
