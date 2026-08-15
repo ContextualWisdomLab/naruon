@@ -68,9 +68,10 @@ describe("storybook design token contract", () => {
     expect(aliasedLiveVariables.length).toBeGreaterThan(0);
 
     for (const liveVariable of aliasedLiveVariables) {
-      expect(liveVariableNames, `${liveVariable} must exist in globals.css`).toContain(
-        liveVariable,
-      );
+      expect(
+        liveVariableNames.has(liveVariable),
+        `${liveVariable} must exist in globals.css`,
+      ).toBe(true);
     }
   });
 
