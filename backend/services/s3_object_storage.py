@@ -394,10 +394,10 @@ def _normalize_headers(headers: Mapping[str, str]) -> dict[str, str]:
         normalized_name = name.strip().lower()
         if not normalized_name or _CONTROL_CHARACTER_PATTERN.search(normalized_name):
             raise ValueError("S3 request header name is invalid")
-        normalized_value = " ".join(str(value).strip().split())
-        if _CONTROL_CHARACTER_PATTERN.search(normalized_value):
+        raw_value = str(value)
+        if _CONTROL_CHARACTER_PATTERN.search(raw_value):
             raise ValueError("S3 request header value is invalid")
-        normalized[normalized_name] = normalized_value
+        normalized[normalized_name] = " ".join(raw_value.strip().split())
     return normalized
 
 

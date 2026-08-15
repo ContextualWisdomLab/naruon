@@ -14,13 +14,13 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api import data as data_api
 from api.auth import AuthContext, get_auth_context
 from api.data import DataDocumentActionResponse, _document_response, _safe_display_text
 from db.document_object_record import DocumentObjectRecord
 from db.models import Document
 from db.session import get_db
 from services.document_object_storage import (
-    MAX_PDF_DOCUMENT_BYTES,
     DocumentObjectStorageError,
     StoredDocumentPayload,
     delete_configured_document_payload,
@@ -81,9 +81,14 @@ async def upload_document_for_pdf_dom_recognition(
     The database backend preserves the existing base64 contract for deployments
     that have not opted into object storage. The S3 backend writes raw bytes once
     and stores only normalized locator/integrity metadata in PostgreSQL.
+
+    The replacement route deliberately reads the legacy data-router limit at
+    request time so existing deployments and tests that tighten that boundary
+    continue to exercise the same fail-closed size policy after runtime routing.
     """
-    raw = await file.read(MAX_PDF_DOCUMENT_BYTES + 1)
-    if len(raw) > MAX_PDF_DOCUMENT_BYTES:
+    upload_limit_bytes = data_api._MAX_PDF_DOM_UPLOAD_BYTES
+    raw = await file.read(upload_limit_bytes + 1)
+    if len(raw) > upload_limit_bytes:
         raise HTTPException(status_code=413, detail="PDF upload is too large.")
     if not raw.startswith(b"%PDF-"):
         raise HTTPException(

@@ -14,7 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.models import Base
 
@@ -23,7 +23,7 @@ class DocumentObjectRecord(Base):
     """Integrity-bearing locator for one raw workspace document stored in S3.
 
     The owning ``workspace_documents`` row remains authoritative for tenant
-    scope and workflow state.  This table contains only the opaque object
+    scope and workflow state. This table contains only the opaque object
     locator plus integrity metadata; raw payload bytes never enter this row.
     """
 
@@ -71,6 +71,7 @@ class DocumentObjectRecord(Base):
         ForeignKey("workspace_documents.document_id", ondelete="CASCADE"),
         nullable=False,
     )
+    document: Mapped["Document"] = relationship("Document")
     storage_backend: Mapped[str] = mapped_column(String(32), nullable=False)
     bucket_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
