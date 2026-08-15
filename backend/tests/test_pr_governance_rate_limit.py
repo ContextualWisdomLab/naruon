@@ -7,6 +7,7 @@ review into semantic review evidence.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -14,6 +15,16 @@ import textwrap
 
 
 HEAD_SHA = "0123456789abcdef0123456789abcdef01234567"
+_FAKE_GH_CONFIG_NAME = "fake-gh-config.json"
+
+
+def _write_fake_gh_config(bin_dir: Path, config: dict[str, object] | None = None) -> None:
+    """Write explicit fake-CLI controls without inheriting ambient process state."""
+
+    (bin_dir / _FAKE_GH_CONFIG_NAME).write_text(
+        json.dumps(config or {}, separators=(",", ":")),
+        encoding="utf-8",
+    )
 
 
 def _write_fake_gh(bin_dir: Path) -> None:
@@ -23,10 +34,12 @@ def _write_fake_gh(bin_dir: Path) -> None:
             f'''\
             #!/usr/bin/env python3
             import json
-            import os
+            from pathlib import Path
             import sys
 
             HEAD = "{HEAD_SHA}"
+            CONFIG_PATH = Path(sys.argv[0]).with_name("{_FAKE_GH_CONFIG_NAME}")
+            CONFIG = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
             args = sys.argv[1:]
             joined = " ".join(args)
 
@@ -71,7 +84,7 @@ def _write_fake_gh(bin_dir: Path) -> None:
                 endpoint = next((arg for arg in args[1:] if arg.startswith("repos/")), "")
 
                 if endpoint.endswith("/status"):
-                    if os.environ.get("FAKE_GH_FAIL_STATUS") == "1":
+                    if CONFIG.get("fail_status"):
                         print("synthetic commit-status outage", file=sys.stderr)
                         raise SystemExit(1)
                     emit({{"statuses": [{{
@@ -84,7 +97,7 @@ def _write_fake_gh(bin_dir: Path) -> None:
                     raise SystemExit(0)
 
                 if "/check-runs" in endpoint:
-                    if os.environ.get("FAKE_GH_FAIL_CHECK_RUNS") == "1":
+                    if CONFIG.get("fail_check_runs"):
                         print("synthetic check-runs outage", file=sys.stderr)
                         raise SystemExit(1)
                     emit({{"check_runs": []}})
@@ -101,8 +114,8 @@ def _write_fake_gh(bin_dir: Path) -> None:
                         "id": 777,
                         "user": {{"login": "coderabbitai[bot]"}},
                         "created_at": "2026-08-15T00:00:00Z",
-                        "body": os.environ.get(
-                            "FAKE_GH_COMMENT_BODY",
+                        "body": CONFIG.get(
+                            "comment_body",
                             "Review limit reached. We couldn't start this review. "
                             "Next review available later. Head SHA: " + HEAD,
                         ),
@@ -124,32 +137,35 @@ def _write_fake_gh(bin_dir: Path) -> None:
         encoding="utf-8",
     )
     gh.chmod(0o755)
+    _write_fake_gh_config(bin_dir)
 
 
 def _gate_environment(bin_dir: Path) -> dict[str, str]:
-    env = os.environ.copy()
-    env.update(
-        {
-            "PATH": f"{bin_dir}:{env['PATH']}",
-            "GITHUB_REPOSITORY": "owner/repo",
-            "GH_TOKEN": "fake",
-            "EVENT_NAME": "pull_request_target",
-            "TARGET_PR_NUMBER": "42",
-            "DIRECT_PR_NUMBER": "",
-            "WORKFLOW_RUN_PR_NUMBER": "",
-            "PR_GOVERNANCE_RETRY_SLEEP_SECONDS": "0",
-        }
-    )
-    # The production implementation hardens PATH when GITHUB_ACTIONS is set,
-    # which would intentionally hide this test's deterministic fake `gh`.
-    env.pop("GITHUB_ACTIONS", None)
-    return env
+    """Build the complete deterministic child environment required by the gate."""
+
+    return {
+        "PATH": f"{bin_dir}:{os.defpath}",
+        "GITHUB_REPOSITORY": "owner/repo",
+        "GH_TOKEN": "fake",
+        "EVENT_NAME": "pull_request_target",
+        "TARGET_PR_NUMBER": "42",
+        "DIRECT_PR_NUMBER": "",
+        "WORKFLOW_RUN_PR_NUMBER": "",
+        "PR_GOVERNANCE_RETRY_SLEEP_SECONDS": "0",
+    }
 
 
-def _run_gate(repo_root: Path, bin_dir: Path, **extra_env: str) -> subprocess.CompletedProcess[str]:
+def _run_gate(
+    repo_root: Path,
+    bin_dir: Path,
+    *,
+    fake_gh_config: dict[str, object] | None = None,
+    gate_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     gate = repo_root / "scripts" / "ci" / "pr_governance_gate.sh"
+    _write_fake_gh_config(bin_dir, fake_gh_config)
     env = _gate_environment(bin_dir)
-    env.update(extra_env)
+    env.update(gate_env or {})
     return subprocess.run(
         ["bash", str(gate)],
         cwd=repo_root,
@@ -190,9 +206,12 @@ def test_review_unavailable_pattern_rejects_unrelated_separator(tmp_path: Path) 
     result = _run_gate(
         repo_root,
         bin_dir,
-        FAKE_GH_COMMENT_BODY=(
-            "Synthetic unrelated text: we couldnXt start this review. Head SHA: " + HEAD_SHA
-        ),
+        fake_gh_config={
+            "comment_body": (
+                "Synthetic unrelated text: we couldnXt start this review. Head SHA: "
+                + HEAD_SHA
+            )
+        },
     )
     output = result.stdout + result.stderr
 
@@ -209,7 +228,11 @@ def test_malformed_repository_identifier_fails_closed(tmp_path: Path) -> None:
     bin_dir.mkdir()
     _write_fake_gh(bin_dir)
 
-    result = _run_gate(repo_root, bin_dir, GITHUB_REPOSITORY="owner/repo/extra")
+    result = _run_gate(
+        repo_root,
+        bin_dir,
+        gate_env={"GITHUB_REPOSITORY": "owner/repo/extra"},
+    )
     output = result.stdout + result.stderr
 
     assert result.returncode != 0, output
@@ -238,7 +261,11 @@ def test_check_run_lookup_failure_is_an_explicit_blocker(tmp_path: Path) -> None
     bin_dir.mkdir()
     _write_fake_gh(bin_dir)
 
-    result = _run_gate(repo_root, bin_dir, FAKE_GH_FAIL_CHECK_RUNS="1")
+    result = _run_gate(
+        repo_root,
+        bin_dir,
+        fake_gh_config={"fail_check_runs": True},
+    )
     output = result.stdout + result.stderr
 
     assert result.returncode == 0, output
