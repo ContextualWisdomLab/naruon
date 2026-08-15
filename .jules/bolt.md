@@ -26,3 +26,6 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2024-05-27 - O(N) Array Lookup in O(N) Graph Rendering
+**Learning:** `Array.prototype.find()` nested inside loop operations effectively creates an O(M * N) complexity curve, harming main-thread frame rates.
+**Action:** Always rewrite O(N) array loops that perform internal array lookups against a shared key to utilize an initialized `Map` with `.get()` for reliable O(1) nested accesses.
