@@ -10,7 +10,6 @@ from fastapi import HTTPException
 
 import api.data as data_api
 from api.auth import AuthContext
-from api.data import _get_workspace_document
 from db.models import Document
 
 
@@ -254,7 +253,7 @@ async def test_workspace_document_lookup_rejects_cross_organization_idor() -> No
     session = _OrganizationAwareSession(document)
 
     with pytest.raises(HTTPException) as exc_info:
-        await _get_workspace_document(
+        await data_api._get_workspace_document(
             session,  # type: ignore[arg-type]
             _auth_context("org-a"),
             document.document_id,
@@ -274,7 +273,7 @@ async def test_workspace_document_lookup_preserves_same_organization_collaborati
     )
     session = _OrganizationAwareSession(document)
 
-    resolved = await _get_workspace_document(
+    resolved = await data_api._get_workspace_document(
         session,  # type: ignore[arg-type]
         _auth_context("org-a"),
         document.document_id,
@@ -295,7 +294,7 @@ async def test_personal_workspace_document_lookup_rejects_organization_document(
     session = _OrganizationAwareSession(document)
 
     with pytest.raises(HTTPException) as exc_info:
-        await _get_workspace_document(
+        await data_api._get_workspace_document(
             session,  # type: ignore[arg-type]
             _auth_context(None),
             document.document_id,
@@ -315,7 +314,7 @@ async def test_personal_workspace_document_lookup_preserves_personal_document() 
     )
     session = _OrganizationAwareSession(document)
 
-    resolved = await _get_workspace_document(
+    resolved = await data_api._get_workspace_document(
         session,  # type: ignore[arg-type]
         _auth_context(None),
         document.document_id,
