@@ -119,6 +119,18 @@ class ContextualOrchestratorClient:
 def _repair_port() -> None:
     """Make Judge submission and cancellation deterministic during shutdown."""
     path = Path("backend/services/email_writing_orchestrator_port.py")
+    _replace_once(
+        path,
+        "from collections.abc import Callable, Mapping, Sequence\n",
+        "from collections.abc import Callable, Sequence\n",
+        label="port collection imports",
+    )
+    _replace_once(
+        path,
+        "from typing import Any, ParamSpec, TypeVar\n",
+        "from typing import ParamSpec, TypeVar\n",
+        label="port typing imports",
+    )
     text = path.read_text(encoding="utf-8")
     start = text.index("    async def run_judge(")
     end = text.index("    async def aclose(", start)
