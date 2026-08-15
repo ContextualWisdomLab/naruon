@@ -306,7 +306,7 @@ async def get_emails(
         select(Email)
         .join(ranked_heads, ranked_heads.c.head_id == Email.id)
         .where(ranked_heads.c.thread_rank == 1)
-        .order_by(Email.date.desc())
+        .order_by(Email.date.desc(), Email.id.desc())
         .limit(head_candidate_limit)
     )
     head_emails = list(result.scalars().all())
@@ -337,7 +337,7 @@ async def get_emails(
                     Email.message_id.in_(thread_lookup),
                 ),
             )
-            .order_by(Email.date.desc())
+            .order_by(Email.date.desc(), Email.id.desc())
         )
         for email in messages_result.scalars().all():
             group_key = canonical_thread_key(email)
@@ -369,7 +369,9 @@ async def get_emails(
                 reply_count=reply_counts[group_key],
                 is_self_sent=message_is_self_sent(email, user_addresses),
                 requires_reply=thread_requires_reply(
-                    list(reversed(thread_messages[group_key])), user_addresses
+                    thread_messages[group_key],
+                    user_addresses,
+                    is_descending=True,
                 ),
             )
         )
