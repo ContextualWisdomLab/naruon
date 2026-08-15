@@ -60,6 +60,20 @@ def _signed_session_token() -> str:
     return f"{signing_input}.{_base64url_encode(signature)}"
 
 
+def _tampered_session_token() -> str:
+    """Return a structurally valid session token with a deliberately forged signature."""
+    token = _signed_session_token()
+    header_segment, payload_segment, signature_segment = token.split(".")
+    signature_padding = "=" * (-len(signature_segment) % 4)
+    signature = bytearray(
+        base64.urlsafe_b64decode(signature_segment + signature_padding)
+    )
+    signature[0] ^= 0x01
+    return (
+        f"{header_segment}.{payload_segment}.{_base64url_encode(bytes(signature))}"
+    )
+
+
 def test_content_checksum_api_executes_authenticated_request() -> None:
     """Startup registration and the authenticated execute route must work together."""
     with TestClient(app) as client:
@@ -89,8 +103,21 @@ def test_content_checksum_api_rejects_unauthenticated_request() -> None:
     assert response.json() == {"detail": "Authentication required"}
 
 
+def test_content_checksum_api_rejects_forged_signed_session() -> None:
+    """The checksum route must reject a structurally valid token with a forged signature."""
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/content_checksum_generator/execute",
+            headers={"Authorization": f"Bearer {_tampered_session_token()}"},
+            json={"parameters": {"text": "abc", "algorithm": "sha256"}},
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication required"}
+
+
 def test_content_checksum_api_maps_invalid_algorithm_to_execute_failure() -> None:
-    """Invalid tool input must use the generic ExecuteResponse failure contract."""
+    """Invalid tool input must expose a stable machine-readable failure code."""
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/content_checksum_generator/execute",
@@ -102,4 +129,5 @@ def test_content_checksum_api_maps_invalid_algorithm_to_execute_failure() -> Non
     payload = response.json()
     assert payload["status"] == "failed"
     assert payload["result"] is None
+    assert payload["error_code"] == "unsupported_checksum_algorithm"
     assert "Unsupported checksum algorithm" in payload["message"]
