@@ -1,3 +1,5 @@
+"""Track sent email messages that still await an external reply."""
+
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
