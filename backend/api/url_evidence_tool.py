@@ -191,9 +191,6 @@ async def url_evidence_handler(params: dict[str, Any]) -> dict[str, Any]:
     for source_match in _URL_CANDIDATE_RE.finditer(text):
         raw_candidate = source_match.group(0)
         raw_value = _trim_terminal_punctuation(raw_candidate)
-        if not raw_value:
-            continue
-
         candidate_bytes = raw_value.encode("utf-8")
         if len(candidate_bytes) > MAX_URL_CANDIDATE_UTF8_BYTES:
             raise ValueError(
