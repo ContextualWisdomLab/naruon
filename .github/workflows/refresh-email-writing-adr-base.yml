@@ -1,0 +1,94 @@
+name: Refresh Email Writing ADR Base
+
+on:
+  push:
+    branches:
+      - feat/inkspan-email-writing-guide
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-email-writing-adr-base
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONWARNINGS: error
+  DISABLE_BACKGROUND_WORKERS: "1"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/inkspan-email-writing-guide
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+      - name: Merge the current protected base
+        run: |
+          set -euo pipefail
+          git fetch origin develop
+          git config user.name "CWL Email Writing ADR Refresh"
+          git config user.email "actions@users.noreply.github.com"
+          git merge --no-edit --no-ff origin/develop
+      - name: Install hash-locked backend dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+      - name: Reproduce the former backend blocker
+        run: |
+          cd backend
+          python -m pytest -q \
+            'tests/test_text_safety.py::test_strip_html_markup_never_returns_raw_tag_like_payloads[<!--><script>alert(1)</script>-->-]'
+      - name: Validate ADR and implementation-plan structure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required = {
+              Path("docs/adr/0001-inkspan-backed-llm-email-writing-guidance.md"): (
+                  "## Decision",
+                  "## Security and privacy impact",
+                  "## Verification and acceptance evidence",
+                  "## Rollback or supersession",
+              ),
+              Path(
+                  "docs/superpowers/plans/"
+                  "2026-08-12-llm-email-writing-guidance-implementation.md"
+              ): (
+                  "Task 1",
+                  "Task 18",
+                  "NVIDIA_NIM_API_KEY",
+              ),
+              Path(
+                  "docs/doctoring/"
+                  "llm-email-writing-guidance-and-fast-mlsirm-judge.md"
+              ): (
+                  "## References",
+                  "APA",
+              ),
+          }
+          for path, markers in required.items():
+              text = path.read_text(encoding="utf-8")
+              missing = [marker for marker in markers if marker not in text]
+              if missing:
+                  raise SystemExit(f"{path}: missing {missing}")
+              if text.count("```") % 2:
+                  raise SystemExit(f"{path}: unbalanced Markdown fences")
+          print(f"Validated {len(required)} decision artifacts")
+          PY
+          git diff --check
+      - name: Remove the one-shot workflow and publish the refresh
+        run: |
+          set -euo pipefail
+          rm .github/workflows/refresh-email-writing-adr-base.yml
+          git add .github/workflows/refresh-email-writing-adr-base.yml
+          git commit -m "ci(email-writing): remove ADR base refresh workflow"
+          git push origin HEAD:feat/inkspan-email-writing-guide
