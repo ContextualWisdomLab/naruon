@@ -12,11 +12,11 @@ const requiredCategories = [
   "Naruon Colors",
   "Naruon Sidebar Colors",
   "Naruon Typography",
-  "Naruon Font Sizes",
-  "Naruon Line Heights",
-  "Naruon Spacing",
+  "Naruon Candidate Font Sizes",
+  "Naruon Candidate Line Heights",
+  "Naruon Candidate Spacing",
   "Naruon Radius",
-  "Naruon Elevation",
+  "Naruon Candidate Elevation",
 ] as const;
 
 const requiredLiveMappings = [
@@ -43,6 +43,16 @@ const aliasedLiveVariables = Array.from(
   ),
   (match) => match[1],
 );
+const tokenCategoryBlocks = Array.from(
+  tokenSource.matchAll(
+    /\/\*\*\s*\n\s*\*\s*@tokens ([^\n]+)\n([\s\S]*?)\*\/\s*((?:\s*--naruon-token-[a-z0-9-]+\s*:[^;]+;)+)/gim,
+  ),
+  (match) => ({
+    categoryName: match[1].trim(),
+    metadata: match[2],
+    declarations: match[3],
+  }),
+);
 
 describe("storybook design token contract", () => {
   it("keeps every token category annotated for the Storybook token panel", () => {
@@ -50,6 +60,7 @@ describe("storybook design token contract", () => {
       expect(tokenSource).toContain(`@tokens ${category}`);
     }
 
+    expect(tokenCategoryBlocks).toHaveLength(requiredCategories.length);
     expect(tokenSource.match(/@presenter /g)).toHaveLength(requiredCategories.length);
   });
 
@@ -72,6 +83,27 @@ describe("storybook design token contract", () => {
         liveVariableNames.has(liveVariable),
         `${liveVariable} must exist in globals.css`,
       ).toBe(true);
+    }
+  });
+
+  it("marks every literal-value category as a non-production candidate", () => {
+    const literalValueCategories = tokenCategoryBlocks.filter(({ declarations }) =>
+      declarations
+        .split("\n")
+        .some(
+          (declaration) =>
+            declaration.includes("--naruon-token-") &&
+            !declaration.includes("var("),
+        ),
+    );
+
+    expect(literalValueCategories.length).toBeGreaterThan(0);
+
+    for (const { categoryName, metadata } of literalValueCategories) {
+      expect(
+        metadata,
+        `${categoryName} must declare @status candidate`,
+      ).toMatch(/@status\s+candidate/i);
     }
   });
 

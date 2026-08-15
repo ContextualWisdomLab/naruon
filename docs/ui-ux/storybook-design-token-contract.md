@@ -2,7 +2,7 @@
 
 ## Buyer-visible gap
 
-Naruon has many screens and repeated interface objects, but a reviewer currently has to inspect the application manually to understand whether colors, typography, spacing, radius, elevation, focus, and state styling are shared product decisions or one-off styling. That slows product review, Figma handoff, accessibility review, white-label readiness, and safe reuse across CWL products.
+Naruon has many screens and repeated interface objects, but a reviewer currently has to inspect the application manually to understand whether colors, typography, spacing, radius, and elevation are shared product decisions or one-off styling. That slows product review, Figma handoff, accessibility review, and future white-label work.
 
 ## Decision
 
@@ -12,7 +12,7 @@ Naruon exposes a static Storybook-readable token adapter at:
 frontend/src/app/storybook-design-tokens.css
 ```
 
-The file mirrors live CSS custom properties from `frontend/src/app/globals.css` and annotates categories with the comment contract used by the community `storybook-design-token` addon:
+The adapter annotates categories with the comment contract used by the `storybook-design-token` addon:
 
 ```css
 /**
@@ -22,44 +22,59 @@ The file mirrors live CSS custom properties from `frontend/src/app/globals.css` 
 --naruon-token-primary: var(--primary);
 ```
 
-This slice does not add Storybook runtime dependencies or mutate the pnpm lockfile. It creates the reviewed token adapter and regression tests first, so a later dependency PR can add exact Storybook framework and addon versions without inventing the token model during installation.
+This slice does not add Storybook runtime dependencies or mutate the pnpm lockfile. It establishes a reviewable token surface and regression tests first, so the dependency PR can install an exact framework and addon set without inventing the token taxonomy during installation.
 
-The regression contract validates every alias target against `globals.css`, not merely a sampled list, and rejects duplicate Storybook token names and remote resource references.
+## Authority and maturity classes
 
-## Standards boundary
+The adapter contains two explicitly different classes of values.
 
-The CSS annotation grammar is addon-specific. It is useful for Storybook documentation but is not a tool-neutral exchange standard.
+### Runtime-backed aliases
 
-The first stable Design Tokens Community Group format is DTCG 2025.10. Before automated Figma synchronization or publication of tokens for other CWL products, Naruon must add either:
+Colors, sidebar colors, font families, and radii use `var(--...)` aliases that must resolve to custom properties in `frontend/src/app/globals.css`. The regression test verifies every alias, not only a sampled subset. These aliases document current production behavior.
 
-1. a validated DTCG 2025.10 artifact that becomes the authoritative semantic token source; or
-2. a deterministic, tested converter from the accepted production source to DTCG 2025.10.
+### Candidate scales
 
-An ADR must prevent circular generation and identify ownership of semantic names, theme modes, aliases, deprecations, and generated artifacts.
+Font sizes, line heights, spacing, and elevation currently use literal values because equivalent named production custom properties do not yet exist. Their category comments include:
+
+```css
+@status candidate
+```
+
+Candidate values are documentation hypotheses, not production truth. A component story, production component, Figma variable, or cross-repository package must not consume them until a reviewed follow-on change either:
+
+1. promotes them into the authoritative runtime/DTCG token graph and proves generated output parity; or
+2. removes or replaces them after auditing actual component usage.
+
+This distinction prevents a documentation adapter from silently becoming a second, conflicting design system.
 
 ## Storybook installation target
 
-Naruon is a Next.js 16.2 application. The eventual Storybook runtime should use one of the official Next.js framework packages:
+The follow-on runtime PR should use `@storybook/nextjs-vite`.
 
-- `@storybook/nextjs` for the Webpack-aligned path; or
-- `@storybook/nextjs-vite` when an executable spike proves the Vite-based path preserves the required Next.js behavior.
+Naruon already uses Vitest 4, and Storybook's official Vitest addon requires a Vite-based framework; for Next.js projects it explicitly requires `@storybook/nextjs-vite`. The runtime PR must still execute an exact compatibility spike against Naruon's current Next.js, React, App Router, server/client component boundaries, CSS pipeline, and browser test environment.
 
-The current Storybook documentation supports Next.js and Next.js with Vite, and Storybook 10.4 reports explicit Next.js 16.2 support. The selected framework must still be pinned and verified on Naruon's exact dependency graph. The selected `storybook-design-token` addon major must match the Storybook major: its v5 line targets Storybook 10 and newer, while v4 targets Storybook 9.
+The dependency PR must:
 
-The dependency PR must update `frontend/package.json` and `pnpm-lock.yaml` together and add `.storybook/main.ts`, `.storybook/preview.ts`, `storybook`, and `build-storybook` scripts.
+- pin the current stable Storybook 10.5-compatible package set;
+- pin `storybook-design-token` v5, which targets Storybook 10 and newer;
+- configure the Storybook Vitest addon as a separate Vitest project, as recommended for Vitest 4;
+- update `frontend/package.json` and `pnpm-lock.yaml` together;
+- add `.storybook/main.ts`, `.storybook/preview.ts`, and `.storybook/vitest.setup.ts`;
+- add `storybook`, `build-storybook`, and non-interactive CI test scripts;
+- disable telemetry and prohibit remote build-time assets.
 
 ## Token categories
 
-| Category | Purpose |
-|---|---|
-| Naruon Colors | App background, foreground, card, action, chart, status, border, and focus colors. |
-| Naruon Sidebar Colors | Global navigation and workspace shell colors. |
-| Naruon Typography | Korean-first UI and monospaced technical text font stacks. |
-| Naruon Font Sizes | Reusable caption, body, lead, title, and display scale. |
-| Naruon Line Heights | Compact UI, ordinary body text, and reading-dense email/document text. |
-| Naruon Spacing | Shared layout rhythm for cards, panels, drawers, and button groups. |
-| Naruon Radius | Surface and control corner scale. |
-| Naruon Elevation | Panel and floating-surface shadows. |
+| Category | Maturity | Purpose |
+|---|---|---|
+| Naruon Colors | Runtime-backed | App background, foreground, card, action, chart, status, border, and focus colors. |
+| Naruon Sidebar Colors | Runtime-backed | Global navigation and workspace shell colors. |
+| Naruon Typography | Runtime-backed | Korean-first UI and monospaced technical text font stacks. |
+| Naruon Candidate Font Sizes | Candidate | Proposed caption, body, lead, title, and display scale. |
+| Naruon Candidate Line Heights | Candidate | Proposed compact UI, ordinary body, and reading-dense text rhythm. |
+| Naruon Candidate Spacing | Candidate | Proposed layout rhythm for cards, panels, drawers, and button groups. |
+| Naruon Radius | Runtime-backed | Surface and control corner scale. |
+| Naruon Candidate Elevation | Candidate | Proposed panel and floating-surface shadows. |
 
 ## Security and privacy boundary
 
@@ -72,44 +87,45 @@ It must not:
 - include user content;
 - include provider credentials;
 - encode tenant-specific branding secrets;
-- replace runtime authorization, audit, or evidence controls;
-- allow Figma or Storybook automation to overwrite production values without a reviewed code change.
+- replace runtime authorization, audit, or evidence controls.
 
-Regression tests reject remote resources, duplicate token names, and aliases that do not resolve to a production CSS variable.
+A regression test rejects remote URL imports and external URLs from the token source.
 
-## Accessibility contract
+## DTCG, Figma, and component-library boundary
 
-Storybook component stories must make hard-to-reach states visible, but a rendered story is not accessibility evidence by itself.
+The CSS annotation grammar is a Storybook-addon adapter, not a tool-neutral exchange contract. Before automating Figma or publishing tokens to other CWL products, Naruon must add a validated Design Tokens Community Group 2025.10 artifact or a deterministic converter and accept an ADR that names one authoritative source.
 
-The follow-on library must:
+The required sequence is:
 
-- install Storybook's official accessibility addon;
-- configure production stories to fail CI on automated violations;
-- target WCAG 2.2 Level AA;
-- include keyboard focus, disabled, busy, success, recoverable error, destructive, dark-theme, narrow viewport, and 200% zoom states;
-- test keyboard activation, focus return, status announcements, and error recovery;
-- document manual checks for focus order, accessible names, screen-reader output, reflow, reduced motion, and high contrast.
+1. exact, reproducible `@storybook/nextjs-vite` runtime and browser tests;
+2. audited promotion or rejection of candidate scales;
+3. DTCG 2025.10 token graph with deterministic CSS generation or parity verification;
+4. component stories that consume only accepted semantic tokens;
+5. Figma variables and components mapped from stable token identifiers;
+6. Code Connect or equivalent mapping after code and Figma component APIs agree.
 
-Automated axe-based checks are a first-line heuristic and do not replace manual or assistive-technology testing.
+Figma remains a review and collaboration surface. It must not silently overwrite production values.
 
-## Figma and component-library boundary
+## First component families
 
-Figma should consume stable semantic token identifiers, preferably through the DTCG exchange artifact, but Figma remains a design-review workspace rather than an unreviewed source of production changes. Storybook documents component states against the same identifiers, while production code remains authoritative until an accepted ADR changes that boundary.
+The first reusable families should be selected by product frequency and decision risk:
 
-The next UI-system slices should add:
+1. Button and Async Action Button;
+2. Card and Evidence Card;
+3. global and local Navigation Item;
+4. Evidence Pill and confidence/source-state labels;
+5. Modal and destructive confirmation;
+6. empty, loading, permission-denied, provider-conflict, offline, and retry states.
 
-1. pinned Storybook dependencies and lockfile update;
-2. a token documentation page using the selected design-token addon;
-3. a DTCG 2025.10 exchange artifact or deterministic converter;
-4. first component stories for Button, Card, Navigation Item, Evidence Pill, Modal, and Async Action Button;
-5. interaction and accessibility tests for focus, disabled, loading, error, evidence-linked, offline, and provider-conflict states;
-6. Figma variable and component mapping only after the static Storybook surface is reproducible in CI.
+Each family must expose keyboard focus, disabled, busy, success, recoverable error, destructive, narrow viewport, 200% zoom, and dark-theme states where applicable.
 
 ## Done criteria for this slice
 
 - Token adapter exists in the frontend package.
-- Token categories are annotated for Storybook design-token documentation.
-- Token aliases mirror existing Naruon runtime CSS variable names.
-- Tests prove category coverage, unique names, complete alias resolution, required mappings, and no remote resources.
-- Doctoring records current Storybook, DTCG 2025.10, and WCAG 2.2 references.
-- Documentation does not imply that Storybook runtime, DTCG exchange, Figma mapping, or component accessibility evidence is already shipped.
+- Every category is annotated for Storybook token documentation.
+- Every runtime-backed alias resolves to a production custom property.
+- Every literal-value category is explicitly marked `@status candidate`.
+- Token names are unique.
+- Tests enforce the no-remote-resource boundary.
+- Doctoring records the current Storybook, DTCG, and WCAG references.
+- The documentation does not claim Storybook runtime, DTCG exchange, Figma mapping, or component stories are already shipped.

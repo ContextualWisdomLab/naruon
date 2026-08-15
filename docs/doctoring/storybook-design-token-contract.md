@@ -2,23 +2,52 @@
 
 ## Scope
 
-This note records the external design-system references used for the Naruon Storybook token bridge.
+This note records the external design-system and accessibility references used for the Naruon Storybook token bridge.
 
-The shipped slice adds a static CSS token source and regression tests only. It does not claim Storybook is installed, does not add npm dependencies, and does not change application runtime behavior.
+The shipped slice adds a static CSS token adapter and regression tests only. It does not claim Storybook is installed, does not add npm dependencies, and does not change application runtime behavior.
 
 ## Product interpretation
 
-Storybook describes itself as a frontend workshop for building UI components and pages in isolation and sharing hard-to-reach states and edge cases. For Naruon, that maps to evidence states that are hard to review inside the full product flow: async buttons, disabled provider writes, confidence badges, review queues, empty states, provider conflicts, and destructive confirmations.
+Storybook defines itself as a frontend workshop for developing and sharing UI components and hard-to-reach states in isolation. For Naruon, those states include async actions, disabled provider writes, confidence/evidence labels, review queues, empty states, provider conflicts, offline recovery, and destructive confirmations.
 
-The current Storybook documentation supports Next.js and Next.js with Vite. The installation requirements are compatible with Naruon's current Next.js 16.2, React 19, pnpm 11, TypeScript 6, and Vitest 4 baseline. Storybook 10.4 also reports explicit Next.js 16.2 support. The dependency PR must still validate the exact current stable Storybook release against Naruon's App Router, server/client component boundaries, CSS pipeline, and test environment before choosing `@storybook/nextjs` or `@storybook/nextjs-vite`.
+The current official documentation is on the Storybook 10.5 line. Its installation requirements cover Next.js 14+, Node.js 20+, pnpm 9+, TypeScript 4.9+, and Vitest 3+, all below Naruon's current Next.js 16.2, Node 26, pnpm 11, TypeScript 6, and Vitest 4 baselines. Compatibility must nevertheless be demonstrated by an executable exact-head build rather than inferred only from version ranges.
 
-The `storybook-design-token` package is a community addon listed in Storybook's integrations catalog, not a Storybook core standard. Its current compatibility contract is major-specific: addon v5 targets Storybook 10 and newer and is ESM-only, while addon v4 targets Storybook 9. The dependency PR must pin the addon major that matches the selected Storybook major and must not rely on an unversioned catalog page.
+## Framework decision
 
-The addon documents the CSS-comment annotation workflow used in this slice: `@tokens` categories and `@presenter` hints. The CSS file is therefore a Storybook documentation adapter over Naruon's existing runtime variables, not yet a tool-neutral token exchange artifact.
+The follow-on runtime PR should use `@storybook/nextjs-vite`.
 
-The Design Tokens Community Group published its first stable format, Design Tokens Format Module 2025.10, for interoperable token exchange between tools. Before Figma automation or cross-product token publication, Naruon should add a validated DTCG 2025.10 artifact or a deterministic converter and define which artifact is authoritative in an ADR. This avoids coupling Figma, Storybook, and production code to a community addon's private annotation grammar.
+Storybook's official Vitest addon requires a Vite-based Storybook framework. For Next.js projects, the documentation explicitly requires `@storybook/nextjs-vite`. It also recommends a separate Vitest project when an application already uses Vitest 4. This makes the Vite framework the coherent target for Naruon's existing test stack and avoids maintaining the superseded Jest-based Storybook test runner.
 
-Storybook's accessibility addon runs rendered-DOM heuristics through axe-core and can fail component tests in CI. The official documentation states that automation catches only a portion of WCAG issues, so component stories must supplement automated checks with keyboard, focus-order, zoom/reflow, screen-reader-name, reduced-motion, and high-contrast review.
+The dependency PR must still validate:
+
+- App Router routing and navigation mocks;
+- server/client component boundaries;
+- `next/font` behavior without remote CI fetches;
+- global CSS and Tailwind processing;
+- module aliases;
+- browser-mode interaction tests;
+- production static build output;
+- no telemetry or external resource dependency.
+
+## Addon boundary
+
+`storybook-design-token` is a community addon listed in Storybook's integration catalog, not a Storybook core standard. Addon v5 supports Storybook 10 and newer and is ESM-only. The CSS comments used by this slice—`@tokens` and `@presenter`—are therefore an addon adapter contract.
+
+Literal values in categories marked `@status candidate` are not production tokens. They must be audited and either promoted into an authoritative token graph or removed before components or Figma consume them.
+
+## Tool-neutral exchange boundary
+
+The Design Tokens Community Group's Design Tokens Format Module 2025.10 is the latest published stable exchange format. It specifies JSON-based, typed, aliasable design-token data intended to move between design, translation, documentation, and development tools.
+
+The report is a stable W3C Community Group report, not a W3C Recommendation or Standards Track document. Naruon can use it as the interoperability contract while recording that standards status accurately.
+
+Before Figma automation or cross-product publication, Naruon should add a validated DTCG 2025.10 artifact or deterministic converter and accept an ADR that names one authoritative source. This avoids coupling Figma, Storybook, and production code to a community addon's private annotation grammar.
+
+## Accessibility boundary
+
+Storybook's accessibility addon uses axe-core rendered-DOM heuristics and integrates with the Vitest addon. Storybook states that this automation catches up to 57% of WCAG issues, so a passing automated run is a first-line defect screen, not a WCAG conformance claim.
+
+WCAG 2.2 remains the target. Component stories must supplement automation with keyboard, focus order and visibility, accessible-name, screen-reader announcement, zoom/reflow, reduced-motion, target-size, high-contrast, and cognitive usability review.
 
 ## APA 7th references
 
@@ -28,11 +57,11 @@ Storybook. (2026). *Accessibility tests*. https://storybook.js.org/docs/writing-
 
 Storybook. (2026). *Get started with Storybook*. https://storybook.js.org/docs
 
-Storybook. (2026). *Install Storybook*. https://storybook.js.org/docs/get-started/install
-
-Storybook. (2026, May 18). *Storybook 10.4*. https://storybook.js.org/blog/storybook-10-4/
+Storybook. (2026). *Install Storybook*. https://storybook.js.org/docs/10.5/get-started/install
 
 Storybook. (2026). *Storybook Design Token*. https://storybook.js.org/addons/storybook-design-token
+
+Storybook. (2026). *Vitest addon*. https://storybook.js.org/docs/writing-tests/integrations/vitest-addon/
 
 World Wide Web Consortium. (2023, October 5). *Web Content Accessibility Guidelines (WCAG) 2.2*. https://www.w3.org/TR/WCAG22/
 
@@ -41,6 +70,7 @@ World Wide Web Consortium. (2023, October 5). *Web Content Accessibility Guideli
 - Static Storybook token adapter: shipped.
 - Token-source regression tests: shipped.
 - Complete alias-to-runtime-variable validation: shipped.
+- Candidate-status validation for literal scales: shipped.
 - Storybook runtime dependency: not shipped.
 - Storybook UI build: not shipped.
 - DTCG 2025.10 exchange artifact: not shipped.
@@ -52,13 +82,15 @@ World Wide Web Consortium. (2023, October 5). *Web Content Accessibility Guideli
 
 A future Storybook installation PR must show exact-head evidence for:
 
-1. lockfile-consistent dependency installation on the current stable Storybook major;
-2. explicit compatibility evidence for the selected Next.js framework and design-token addon majors;
-3. `storybook` and `build-storybook` scripts;
-4. `.storybook/main.ts` and `.storybook/preview.ts` matching the selected framework;
-5. token documentation rendering every category in `storybook-design-tokens.css`;
-6. at least one interactive component story per repeated UI primitive;
-7. WCAG 2.2-oriented a11y checks configured as CI failures for production stories;
-8. manual keyboard and screen-reader-name checks documented for states automation cannot establish;
-9. no remote font, analytics, or image fetch during the CI Storybook build;
-10. a DTCG 2025.10 exchange decision before Figma token automation.
+1. lockfile-consistent `@storybook/nextjs-vite` installation on Storybook 10.5;
+2. a separate Storybook Vitest 4 project using browser mode;
+3. explicit compatibility evidence for Next.js 16.2, React 19, and the design-token addon;
+4. `storybook`, `build-storybook`, and non-interactive CI scripts;
+5. `.storybook/main.ts`, `.storybook/preview.ts`, and `.storybook/vitest.setup.ts`;
+6. token documentation rendering every category and maturity class;
+7. at least one interactive story per repeated UI primitive;
+8. WCAG 2.2-oriented a11y checks configured as CI failures for production stories;
+9. manual keyboard and screen-reader-name evidence for states automation cannot establish;
+10. no remote font, analytics, image, or telemetry fetch during CI;
+11. a DTCG 2025.10 authority decision before Figma token automation;
+12. promotion or removal of candidate scales before production component consumption.

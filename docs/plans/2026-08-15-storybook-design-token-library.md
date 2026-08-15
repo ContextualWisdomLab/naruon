@@ -2,42 +2,64 @@
 
 ## Goal
 
-Turn Naruon's repeated UI objects into a reviewable component library without breaking the current Next.js runtime or adding unpinned design dependencies in the same slice as token-definition work.
+Turn Naruon's repeated UI objects into a reviewable component library without breaking the current Next.js runtime or allowing documentation-only values to masquerade as production tokens.
 
 ## Current slice
 
 This PR ships only the bounded first step:
 
 1. Add a Storybook-readable CSS token adapter.
-2. Test token categories, unique names, live CSS variable mappings, and the no-remote-resource boundary.
-3. Validate every CSS alias against `globals.css` rather than sampling a few declarations.
-4. Document the security, standards, and product boundary.
+2. Test token categories, unique names, complete live-variable alias resolution, candidate-value labeling, and the no-remote-resource boundary.
+3. Distinguish runtime-backed aliases from documentation-only candidate scales.
+4. Document the security, standards, product, and Figma boundaries.
 
 The CSS annotation file is a Storybook documentation adapter. It is not yet a tool-neutral Design Tokens Community Group (DTCG) exchange artifact.
 
 ## Follow-on implementation sequence
 
-### Task 1 — Storybook runtime dependency
+### Task 1 — Storybook 10.5 runtime and browser test baseline
 
-- Use the current stable Storybook major and pin exact compatible package versions.
-- Select `@storybook/nextjs` or `@storybook/nextjs-vite` only after an executable compatibility spike against Next.js 16.2, React 19, the App Router, Naruon's CSS pipeline, and Vitest 4.
-- Pin the `storybook-design-token` major that explicitly supports the selected Storybook major; addon v5 targets Storybook 10 and newer, whereas addon v4 targets Storybook 9.
-- Pin package versions in `frontend/package.json`.
+- Use `@storybook/nextjs-vite`; Storybook's official Vitest addon requires that framework for Next.js.
+- Pin an exact Storybook 10.5-compatible package set in `frontend/package.json`.
+- Pin `storybook-design-token` v5 for Storybook 10 compatibility.
 - Update `pnpm-lock.yaml` in the same commit.
-- Add `storybook` and `build-storybook` scripts.
-- Add `.storybook/main.ts` and `.storybook/preview.ts`.
-- Disable telemetry and remote assets in CI.
+- Add `storybook`, `build-storybook`, and non-interactive CI test scripts.
+- Add `.storybook/main.ts`, `.storybook/preview.ts`, and `.storybook/vitest.setup.ts`.
+- Create a separate Vitest project for Storybook browser tests because the application already uses Vitest 4.
+- Validate Next.js 16.2, React 19, App Router, server/client component boundaries, the CSS pipeline, and browser mode on the exact PR head.
+- Disable telemetry and prohibit remote assets in CI.
 
-### Task 2 — token docs and interoperable exchange
+### Task 2 — candidate-scale audit
 
-- Configure the selected design-token addon version.
-- Render categories from `frontend/src/app/storybook-design-tokens.css`.
-- Add a build test or smoke contract proving all categories are present.
-- Define a DTCG 2025.10 JSON artifact or deterministic converter for Figma and cross-product exchange.
-- Add an ADR that names the authoritative token source and prevents circular CSS ↔ JSON generation.
-- Validate aliases, token types, theme overrides, and generated artifacts deterministically.
+Audit actual frontend usage before promoting any literal scale.
 
-### Task 3 — repeated UI primitives
+- Inventory font size, line height, spacing, radius, and shadow values used by repeated components.
+- Detect one-off values and distinguish deliberate exceptions from drift.
+- Reconcile the inventory with the candidate categories in `storybook-design-tokens.css`.
+- Promote only accepted values into the authoritative token graph.
+- Remove rejected candidate values instead of preserving them for compatibility.
+- Add usage evidence linking each accepted token to at least one component family.
+
+### Task 3 — interoperable token graph
+
+- Define a DTCG 2025.10 JSON artifact or deterministic converter.
+- Add an ADR naming the authoritative token source and preventing circular CSS ↔ JSON generation.
+- Model primitive values separately from light/dark semantic aliases.
+- Preserve status and tenant-safe semantic modes without embedding tenant secrets.
+- Validate token names, types, references, cycles, theme completeness, and generated CSS deterministically.
+- Generate or verify the Storybook adapter from the accepted graph.
+- Add a migration note for any renamed CSS custom properties.
+
+### Task 4 — token documentation
+
+- Configure the selected design-token addon.
+- Render every category from `frontend/src/app/storybook-design-tokens.css`.
+- Show maturity (`runtime-backed` or `candidate`) and component usage.
+- Generate a usage map from source rather than maintaining it manually.
+- Add a static-build smoke test proving all required categories are present.
+- Prevent candidate tokens from appearing as approved component inputs.
+
+### Task 5 — repeated UI primitives
 
 Create stories for:
 
@@ -50,35 +72,39 @@ Create stories for:
 
 Each story set must include default, hover, keyboard focus, disabled, busy, success, recoverable error, destructive, narrow viewport, 200% zoom, and dark-theme states where the component supports them.
 
-### Task 4 — accessibility and interaction tests
+### Task 6 — accessibility and interaction tests
 
 - Install and pin Storybook's official accessibility addon.
 - Configure production stories with `parameters.a11y.test = "error"`.
-- Run WCAG 2.2-oriented rendered-DOM checks through the Storybook/Vitest integration.
-- Add play-function interaction tests for keyboard activation, focus return, busy-state announcements, and error recovery.
-- Record manual checks for focus order, accessible names, screen-reader announcements, zoom/reflow, reduced motion, and high-contrast behavior that automated heuristics cannot establish.
+- Run rendered-DOM checks through the Storybook/Vitest browser integration.
+- Add play-function tests for keyboard activation, focus return, busy-state announcements, and error recovery.
+- Record manual checks for focus order, accessible names, screen-reader announcements, zoom/reflow, reduced motion, target size, and high-contrast behavior that automated heuristics cannot establish.
+- Keep WCAG 2.2 as the conformance target without claiming that axe automation alone establishes conformance.
 
-### Task 5 — Figma bridge
+### Task 7 — Figma bridge
 
-- Map DTCG token identifiers—not display labels—to Figma variables.
-- Produce a component-mapping table before using Figma automation.
-- Preserve semantic modes for light, dark, status, and tenant-safe themes.
-- Keep production CSS as the current source of runtime truth unless an accepted ADR moves authority to the DTCG artifact.
-- Treat Figma as a review and collaboration surface, not a path that can silently overwrite production tokens.
+- Map accepted DTCG identifiers—not display labels or candidate literals—to Figma variables.
+- Create primitive and semantic collections with light/dark modes and explicit scopes.
+- Produce a code-to-Figma component mapping table before automation.
+- Preserve component state APIs and accessibility annotations.
+- Keep production/DTCG authority explicit; Figma must not silently overwrite code.
+- Add Code Connect only after the Storybook and Figma component APIs match.
 
-### Task 6 — CI and release gates
+### Task 8 — CI and release gates
 
-- Build Storybook in CI as a static artifact.
+- Build Storybook as a static artifact.
 - Prove no external font, analytics, image, or telemetry fetch is required.
 - Run component interaction and accessibility checks on the exact PR head.
-- Preserve the existing application test, coverage, typecheck, build, security, and dependency gates.
-- Publish component screenshots or a static Storybook artifact only after the build is reproducible and access-controlled where product states contain nonpublic information.
+- Preserve existing application tests, 100% production coverage, typecheck, build, security, and dependency gates.
+- Publish screenshots or a static Storybook artifact only after the build is reproducible and access-controlled where nonpublic product states are represented.
+- Add deterministic visual baselines only after fonts, viewport, browser, locale, time, and animation are fixed.
 
 ## Merge gate for this PR
 
-- Frontend test suite must pass on the exact head.
+- Frontend tests must pass on the exact head.
 - Every Storybook CSS alias must resolve to a production custom property.
+- Every literal-value category must be marked `@status candidate`.
 - Storybook-facing token names must be unique.
 - No package or lockfile drift is allowed in this slice.
-- Storybook dependency installation remains a separate review unit.
+- Storybook runtime installation remains a separate review unit.
 - No claim that DTCG exchange, Figma mapping, component stories, or Storybook runtime is already shipped is permitted.

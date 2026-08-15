@@ -1,9 +1,11 @@
 /**
  * Storybook-readable Naruon design-token surface.
  *
- * This file intentionally mirrors the live CSS custom properties in globals.css
- * without importing remote fonts, images, or runtime assets. It is a static
- * documentation bridge for Storybook token panels and design-system review.
+ * Runtime-backed categories alias the live CSS custom properties in globals.css.
+ * Categories marked `@status candidate` are documentation-only scales and MUST
+ * NOT be consumed by production components or Figma until a reviewed DTCG/runtime
+ * token change promotes them. This static bridge never imports remote fonts,
+ * images, or runtime assets.
  */
 :root {
   /**
@@ -52,7 +54,8 @@
   --naruon-token-font-mono: var(--font-naruon-mono);
 
   /**
-   * @tokens Naruon Font Sizes
+   * @tokens Naruon Candidate Font Sizes
+   * @status candidate
    * @presenter FontSize
    */
   --naruon-token-text-caption: 0.75rem;
@@ -62,7 +65,8 @@
   --naruon-token-text-display: 2rem;
 
   /**
-   * @tokens Naruon Line Heights
+   * @tokens Naruon Candidate Line Heights
+   * @status candidate
    * @presenter LineHeight
    */
   --naruon-token-leading-tight: 1.2;
@@ -70,7 +74,8 @@
   --naruon-token-leading-reading: 1.7;
 
   /**
-   * @tokens Naruon Spacing
+   * @tokens Naruon Candidate Spacing
+   * @status candidate
    * @presenter Spacing
    */
   --naruon-token-space-one: 0.25rem;
@@ -92,7 +97,8 @@
   --naruon-token-radius-2xl: var(--radius-2xl);
 
   /**
-   * @tokens Naruon Elevation
+   * @tokens Naruon Candidate Elevation
+   * @status candidate
    * @presenter Shadow
    */
   --naruon-token-shadow-soft: 0 10px 30px rgb(15 23 42 / 0.08);
