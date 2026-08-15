@@ -213,7 +213,7 @@ export default function NetworkGraph() {
       const selectNode = (nodeId: number | string) => {
         setRelationshipOptionId('');
         setNodeOptionId(String(nodeId));
-        setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, nodeId)}`);
+        setSelectedGraphDetail(`선택된 노드: ${nodeMap.get(String(nodeId)) ?? String(nodeId)}`);
         setGraphActionStatus('그래프에서 노드를 선택했습니다.');
       };
 
@@ -303,7 +303,7 @@ export default function NetworkGraph() {
     if (!isGraphId(node.id)) return;
     setRelationshipOptionId('');
     setNodeOptionId(String(node.id));
-    setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, node.id)}`);
+    setSelectedGraphDetail(`선택된 노드: ${nodeMap.get(String(node.id)) ?? String(node.id)}`);
     setGraphActionStatus(status);
     networkRef.current?.selectNodes?.([node.id]);
     networkRef.current?.fit?.({ nodes: [node.id], animation: false });
