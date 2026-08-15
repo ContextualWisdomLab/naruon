@@ -23,6 +23,7 @@ def _write_fake_gh(bin_dir: Path) -> None:
             f'''\
             #!/usr/bin/env python3
             import json
+            import os
             import sys
 
             HEAD = "{HEAD_SHA}"
@@ -70,6 +71,9 @@ def _write_fake_gh(bin_dir: Path) -> None:
                 endpoint = next((arg for arg in args[1:] if arg.startswith("repos/")), "")
 
                 if endpoint.endswith("/status"):
+                    if os.environ.get("FAKE_GH_FAIL_STATUS") == "1":
+                        print("synthetic commit-status outage", file=sys.stderr)
+                        raise SystemExit(1)
                     emit({{"statuses": [{{
                         "context": "CodeRabbit",
                         "state": "success",
@@ -80,6 +84,9 @@ def _write_fake_gh(bin_dir: Path) -> None:
                     raise SystemExit(0)
 
                 if "/check-runs" in endpoint:
+                    if os.environ.get("FAKE_GH_FAIL_CHECK_RUNS") == "1":
+                        print("synthetic check-runs outage", file=sys.stderr)
+                        raise SystemExit(1)
                     emit({{"check_runs": []}})
                     raise SystemExit(0)
 
@@ -118,15 +125,7 @@ def _write_fake_gh(bin_dir: Path) -> None:
     gh.chmod(0o755)
 
 
-def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: Path) -> None:
-    """A status-only success cannot certify a CodeRabbit review that never ran."""
-
-    repo_root = Path(__file__).resolve().parents[2]
-    gate = repo_root / "scripts" / "ci" / "pr_governance_gate.sh"
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    _write_fake_gh(bin_dir)
-
+def _gate_environment(bin_dir: Path) -> dict[str, str]:
     env = os.environ.copy()
     env.update(
         {
@@ -140,9 +139,17 @@ def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: P
             "PR_GOVERNANCE_RETRY_SLEEP_SECONDS": "0",
         }
     )
+    # The production implementation hardens PATH when GITHUB_ACTIONS is set,
+    # which would intentionally hide this test's deterministic fake `gh`.
     env.pop("GITHUB_ACTIONS", None)
+    return env
 
-    result = subprocess.run(
+
+def _run_gate(repo_root: Path, bin_dir: Path, **extra_env: str) -> subprocess.CompletedProcess[str]:
+    gate = repo_root / "scripts" / "ci" / "pr_governance_gate.sh"
+    env = _gate_environment(bin_dir)
+    env.update(extra_env)
+    return subprocess.run(
         ["bash", str(gate)],
         cwd=repo_root,
         env=env,
@@ -150,11 +157,53 @@ def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: P
         text=True,
         check=False,
     )
+
+
+def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: Path) -> None:
+    """A status-only success cannot certify a CodeRabbit review that never ran."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    result = _run_gate(repo_root, bin_dir)
     output = result.stdout + result.stderr
 
     assert result.returncode == 0, output
+    assert "Ignoring successful CodeRabbit commit status" in output
     assert (
         "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval"
         in output
     )
     assert "PR governance metadata gate is ready" not in output
+
+
+def test_actions_entrypoint_hardens_path_before_resolving_gh() -> None:
+    """Actions must resolve the trusted GitHub CLI only after PATH hardening."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "scripts" / "ci" / "pr_governance_gate.sh").read_text(
+        encoding="utf-8"
+    )
+    hardening = 'if [ -n "${GITHUB_ACTIONS:-}" ]; then'
+    resolution = 'PR_GOVERNANCE_REAL_GH="$(command -v gh || true)"'
+
+    assert hardening in source
+    assert source.index(hardening) < source.index(resolution)
+
+
+def test_check_run_lookup_failure_is_an_explicit_blocker(tmp_path: Path) -> None:
+    """A check-runs API outage must fail closed with a causal blocker."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    result = _run_gate(repo_root, bin_dir, FAKE_GH_FAIL_CHECK_RUNS="1")
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert "Current-head check runs could not be read" in output
+    assert "PR governance metadata gate errored" not in output
