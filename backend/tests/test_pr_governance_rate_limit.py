@@ -63,7 +63,11 @@ def _write_fake_gh(bin_dir: Path) -> None:
                 raise SystemExit(0)
 
             if args[:2] == ["pr", "checks"]:
-                emit([{{"name": "Application CI", "state": "SUCCESS", "link": "https://checks/app-ci"}}])
+                emit([{{
+                    "name": "Application CI",
+                    "state": CONFIG.get("required_check_state", "SUCCESS"),
+                    "link": "https://checks/app-ci",
+                }}])
                 raise SystemExit(0)
 
             if args and args[0] == "api":
@@ -188,6 +192,7 @@ def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: P
     output = result.stdout + result.stderr
 
     assert result.returncode == 0, output
+    assert "Ignoring successful CodeRabbit commit status" in output
     assert (
         "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval"
         in output
@@ -294,3 +299,26 @@ def test_gate_harness_ignores_ambient_fake_cli_controls(tmp_path: Path, monkeypa
         in output
     )
     assert "PR governance metadata gate is ready" not in output
+
+
+def test_skipped_and_neutral_required_checks_block_merge_readiness(tmp_path: Path) -> None:
+    """Required checks that did not pass must never be treated as successful."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+
+    for state in ("SKIPPED", "NEUTRAL"):
+        bin_dir = tmp_path / state.lower()
+        bin_dir.mkdir()
+        _write_fake_gh(bin_dir)
+
+        result = _run_gate(
+            repo_root,
+            bin_dir,
+            fake_gh_config={"required_check_state": state},
+        )
+        output = result.stdout + result.stderr
+
+        assert result.returncode == 0, output
+        assert f"Required check `Application CI` is {state} on the current head." in output
+        assert "PR governance metadata gate blocked" in output
+        assert "PR governance metadata gate is ready" not in output
