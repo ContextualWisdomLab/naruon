@@ -20,6 +20,15 @@ SECURITY_NOTE = (
 )
 
 
+class ContentChecksumError(ValueError):
+    """Expected checksum validation failure with a stable machine error code."""
+
+    def __init__(self, message: str, *, error_code: str) -> None:
+        """Initialize a customer-safe validation failure and deterministic code."""
+        super().__init__(message)
+        self.error_code = error_code
+
+
 def _sha256(payload: bytes) -> str:
     """Return the SHA-256 hexadecimal digest for ``payload``."""
     return hashlib.sha256(payload).hexdigest()
@@ -57,19 +66,24 @@ async def content_checksum_handler(params: dict[str, Any]) -> dict[str, Any]:
         length, encoding, and an authenticity warning.
 
     Raises:
-        ValueError: If the algorithm is not allowlisted or the encoded content
-            exceeds one MiB.
+        ContentChecksumError: If the algorithm is not allowlisted or the
+            encoded content exceeds one MiB. Each expected failure carries a
+            stable machine-readable ``error_code``.
     """
     text = params["text"]
     algorithm = params["algorithm"]
     if algorithm not in _HASHERS:
-        raise ValueError(
-            "Unsupported checksum algorithm; choose sha256, sha3_256, or blake2b_256"
+        raise ContentChecksumError(
+            "Unsupported checksum algorithm; choose sha256, sha3_256, or blake2b_256",
+            error_code="unsupported_checksum_algorithm",
         )
 
     payload = text.encode("utf-8")
     if len(payload) > MAX_CONTENT_BYTES:
-        raise ValueError(f"Content exceeds {MAX_CONTENT_BYTES} UTF-8 bytes")
+        raise ContentChecksumError(
+            f"Content exceeds {MAX_CONTENT_BYTES} UTF-8 bytes",
+            error_code="content_checksum_payload_too_large",
+        )
 
     return {
         "algorithm_code": algorithm,
