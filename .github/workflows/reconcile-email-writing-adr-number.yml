@@ -1,0 +1,178 @@
+name: Reconcile Email Writing ADR Number
+
+on:
+  push:
+    branches:
+      - feat/inkspan-email-writing-guide
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-email-writing-adr-number
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONWARNINGS: error
+  DISABLE_BACKGROUND_WORKERS: "1"
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/inkspan-email-writing-guide
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Merge current develop and resolve only the ADR index conflict
+        run: |
+          set -euo pipefail
+          git fetch origin develop
+          git config user.name "CWL Email Writing ADR Reconciliation"
+          git config user.email "actions@users.noreply.github.com"
+          set +e
+          git merge --no-commit --no-ff origin/develop
+          merge_status=$?
+          set -e
+          conflicts="$(git diff --name-only --diff-filter=U)"
+          if [[ "$merge_status" -ne 0 && "$conflicts" != "docs/adr/README.md" ]]; then
+            printf 'Unexpected merge conflicts:\n%s\n' "$conflicts" >&2
+            exit 1
+          fi
+          cat >docs/adr/README.md <<'EOF'
+          # Naruon Architecture Decision Records
+
+          This index records cross-cutting Naruon decisions that must survive beyond an
+          individual pull request, implementation plan, or chat. `Accepted` means only that
+          the Naruon decision governs its stated local scope; it does not transfer authority
+          to an external service or mean that a future integration is implemented.
+          `Proposed` records a discoverable target for later review and does not govern
+          implementation.
+
+          | ADR | Decision | Status | Capability effect |
+          |---|---|---|---|
+          | [ADR-0001](0001-topic-measurement-authority.md) | Consume structural topic measurement only from scientific authority, never a keyword or label heuristic | Accepted | `ACCEPTED-NARUON-POLICY`; no runtime promotion |
+          | [ADR-0002](0002-fitted-topic-artifact-consumption.md) | Conditionally consume only a versioned fitted topic artifact through a fail-closed adapter | Proposed | Target `PLANNED`; runtime `BLOCKED-UPSTREAM` |
+          | [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md) | Keep statistical topic measurement separate from agenda generation | Proposed | Future capability `PLANNED`; no implementation authorization |
+          | [ADR-0004](0004-inkspan-backed-llm-email-writing-guidance.md) | Compose Inkspan, contextual-orchestrator, and fast-mlsirm for LLM-native email guidance without lexical semantic fallback | Proposed | Design and TDD plan only; runtime remains unshipped |
+
+          The complete topic-intelligence requirements, architecture, contract, UML,
+          conceptual ERD, security, test, and operability graph is indexed at
+          [`docs/topic-intelligence/README.md`](../topic-intelligence/README.md).
+          Its [canonical digest inventory](../topic-intelligence/README.md#canonical-digest-inventory)
+          is the single cross-document list for the planned adapter profile.
+
+          ## Decision discipline
+
+          - **Proposed:** design and ownership boundaries are documented, but implementation
+            or operational acceptance evidence is incomplete.
+          - **Accepted:** protected `develop` contains the governing implementation or
+            process and its tests, security evidence, documentation, and rollback contract
+            are current.
+          - **Superseded:** retained for traceability but replaced by a later ADR.
+
+          ## Required ADR sections
+
+          Every material ADR records context, alternatives, decision, consequences, failure
+          and recovery, security and privacy, accessibility where applicable, compatibility
+          and migration, verification, research or standards traceability, and rollback or
+          supersession conditions.
+
+          ## Change rule
+
+          Create or update an ADR when a Naruon change adopts or declines an external service
+          contract, introduces a scientific or statistical inference contract, changes
+          persistence or tenant authority, changes model or credential trust boundaries, or
+          replaces a fail-closed product capability with a different production dependency.
+          A Naruon ADR records Naruon's decision only; it cannot assign authority to, or
+          accept a decision for, another service.
+
+          Every implementing PR must keep the corresponding source, tests, doctoring,
+          architecture and operability contract, and CHANGELOG maturity truthful. An active
+          PR, accepted local policy, or proposed target must not be described as protected-
+          branch implementation before it is integrated and independently verified.
+          EOF
+          git add docs/adr/README.md
+      - name: Assign the next non-conflicting ADR identifier
+        run: |
+          set -euo pipefail
+          git mv \
+            docs/adr/0001-inkspan-backed-llm-email-writing-guidance.md \
+            docs/adr/0004-inkspan-backed-llm-email-writing-guidance.md
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path(
+              "docs/adr/0004-inkspan-backed-llm-email-writing-guidance.md"
+          )
+          text = path.read_text(encoding="utf-8")
+          old = "# ADR 0001: Inkspan-backed, LLM-native email writing guidance\n"
+          new = "# ADR 0004: Inkspan-backed, LLM-native email writing guidance\n"
+          if text.count(old) != 1:
+              raise SystemExit("email-writing ADR heading anchor changed")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+      - name: Install hash-locked backend dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+      - name: Verify merged documentation and former base regression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          adr_dir = Path("docs/adr")
+          numbered = [
+              path
+              for path in adr_dir.glob("[0-9][0-9][0-9][0-9]-*.md")
+          ]
+          numbers = [path.name[:4] for path in numbered]
+          duplicates = sorted({number for number in numbers if numbers.count(number) > 1})
+          if duplicates:
+              raise SystemExit(f"Duplicate ADR identifiers: {duplicates}")
+
+          index = (adr_dir / "README.md").read_text(encoding="utf-8")
+          links = re.findall(r"\((\d{4}-[^)]+\.md)\)", index)
+          missing = [name for name in links if not (adr_dir / name).is_file()]
+          if missing:
+              raise SystemExit(f"Missing indexed ADR files: {missing}")
+
+          email_adr = (
+              adr_dir / "0004-inkspan-backed-llm-email-writing-guidance.md"
+          ).read_text(encoding="utf-8")
+          required = (
+              "# ADR 0004:",
+              "## Decision",
+              "## Security and privacy impact",
+              "## Verification and acceptance evidence",
+              "## Rollback or supersession",
+          )
+          absent = [marker for marker in required if marker not in email_adr]
+          if absent:
+              raise SystemExit(f"Email-writing ADR missing markers: {absent}")
+          if email_adr.count("```") % 2:
+              raise SystemExit("Email-writing ADR has unbalanced fences")
+          PY
+          cd backend
+          python -m pytest -q \
+            'tests/test_text_safety.py::test_strip_html_markup_never_returns_raw_tag_like_payloads[<!--><script>alert(1)</script>-->-]'
+          cd ..
+          git diff --check
+      - name: Commit the reconciled merge and remove the one-shot workflow
+        run: |
+          set -euo pipefail
+          rm .github/workflows/reconcile-email-writing-adr-number.yml
+          git add \
+            .github/workflows/reconcile-email-writing-adr-number.yml \
+            docs/adr/README.md \
+            docs/adr/0004-inkspan-backed-llm-email-writing-guidance.md
+          git commit -m "docs(adr): reconcile email-writing decision numbering"
+          git push origin HEAD:feat/inkspan-email-writing-guide
