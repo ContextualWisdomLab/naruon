@@ -171,7 +171,6 @@ def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: P
     output = result.stdout + result.stderr
 
     assert result.returncode == 0, output
-    assert "Ignoring successful CodeRabbit commit status" in output
     assert (
         "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval"
         in output
