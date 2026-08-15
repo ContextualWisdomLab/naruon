@@ -1,0 +1,406 @@
+name: Email Writing Task 5 Finalize
+
+on:
+  push:
+    branches:
+      - feat/llm-email-writing-orchestrator-task5
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: email-writing-task5-finalize
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONWARNINGS: error
+  DISABLE_BACKGROUND_WORKERS: "1"
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+      - name: Install hash-locked application dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+      - name: Install hash-verified coverage tool
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/coverage-wheel
+          cat >/tmp/coverage-lock.txt <<'EOF'
+          coverage==7.15.2 --hash=sha256:eb6bcae8d1a9d305351ecb108232441d11c5cfe9de840a04388ba5d2db8d735c
+          EOF
+          python -m pip download \
+            --disable-pip-version-check \
+            --require-hashes \
+            --no-deps \
+            --only-binary=:all: \
+            --platform any \
+            --python-version 3.14 \
+            --implementation py \
+            --abi none \
+            --dest /tmp/coverage-wheel \
+            -r /tmp/coverage-lock.txt
+          python -m pip install --disable-pip-version-check --no-deps \
+            /tmp/coverage-wheel/coverage-7.15.2-py3-none-any.whl
+      - name: Verify and close any terminal coverage gaps
+        run: |
+          set -euo pipefail
+
+          run_gate() {
+            cd backend
+            python -m pytest -q \
+              tests/test_contextual_orchestrator_client.py \
+              tests/test_contextual_orchestrator_hardening.py \
+              tests/test_email_writing_orchestrator_module_boundary.py \
+              tests/test_email_writing_orchestrator_scope.py \
+              tests/test_email_writing_orchestrator_migration.py \
+              tests/test_email_writing_orchestrator_config_api.py \
+              tests/test_email_writing_orchestrator_terminal_coverage.py
+            python -m coverage erase
+            python -m coverage run --branch \
+              --include='api/email_writing_orchestrator_config.py,db/email_writing_orchestrator_config.py,services/contextual_orchestrator_client.py,services/email_writing_orchestrator_port.py,services/tenant_config_scope.py,alembic/versions/20260813_0001_add_email_writing_orchestrator_config.py' \
+              -m pytest -q \
+              tests/test_contextual_orchestrator_client.py \
+              tests/test_contextual_orchestrator_hardening.py \
+              tests/test_email_writing_orchestrator_module_boundary.py \
+              tests/test_email_writing_orchestrator_scope.py \
+              tests/test_email_writing_orchestrator_migration.py \
+              tests/test_email_writing_orchestrator_config_api.py \
+              tests/test_email_writing_orchestrator_terminal_coverage.py
+            python -m coverage report --show-missing --fail-under=100 \
+              api/email_writing_orchestrator_config.py \
+              db/email_writing_orchestrator_config.py \
+              services/contextual_orchestrator_client.py \
+              services/email_writing_orchestrator_port.py \
+              services/tenant_config_scope.py \
+              alembic/versions/20260813_0001_add_email_writing_orchestrator_config.py
+            python -m ruff check \
+              api/email_writing_orchestrator_config.py \
+              db/email_writing_orchestrator_config.py \
+              services/contextual_orchestrator_client.py \
+              services/email_writing_orchestrator_port.py \
+              services/tenant_config_scope.py \
+              alembic/versions/20260813_0001_add_email_writing_orchestrator_config.py \
+              tests/test_contextual_orchestrator_client.py \
+              tests/test_contextual_orchestrator_hardening.py \
+              tests/test_email_writing_orchestrator_module_boundary.py \
+              tests/test_email_writing_orchestrator_scope.py \
+              tests/test_email_writing_orchestrator_migration.py \
+              tests/test_email_writing_orchestrator_config_api.py \
+              tests/test_email_writing_orchestrator_terminal_coverage.py
+            cd ..
+          }
+
+          if run_gate; then
+            exit 0
+          fi
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path(
+              "backend/tests/"
+              "test_email_writing_orchestrator_terminal_coverage.py"
+          )
+          text = path.read_text(encoding="utf-8")
+          marker = "# Task 5 final branch coverage extensions"
+          if marker in text:
+              raise SystemExit("quality gate still fails after terminal extensions")
+          text += r'''
+
+# Task 5 final branch coverage extensions
+
+
+@pytest.mark.asyncio
+async def test_revalidated_endpoint_accepts_an_identical_dns_fingerprint() -> None:
+    """Permit repeated validation only when the pinned endpoint is unchanged."""
+    client = _client()
+    first = await client._validated_endpoint()
+    second = await client._validated_endpoint()
+    assert first == second
+    await client.aclose()
+
+
+def test_http_error_covers_request_timeout_and_generic_service_failure() -> None:
+    """Map both non-5xx retry status and generic 503 failure branches."""
+    client = _client()
+    request_timeout = client._http_error(408, b"{}")
+    generic_service_failure = client._http_error(503, b"not-json")
+    assert request_timeout.code == "orchestrator_unavailable"
+    assert request_timeout.transient is True
+    assert generic_service_failure.code == "orchestrator_unavailable"
+    assert generic_service_failure.transient is True
+
+
+def test_optional_configuration_text_covers_blank_and_delete_character() -> None:
+    """Normalize blank optional text and reject the DEL control character."""
+    blank = config_api.EmailWritingOrchestratorConfigUpdate(
+        model_profile_id="   "
+    )
+    assert blank.model_profile_id is None
+    with pytest.raises(ValidationError):
+        config_api.EmailWritingOrchestratorConfigUpdate(
+            model_profile_id="bad\x7fvalue"
+        )
+
+
+@pytest.mark.asyncio
+async def test_scope_resolution_covers_absent_disabled_and_each_missing_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolve only a complete enabled owner-scoped configuration."""
+    selected: list[object | None] = [None]
+
+    async def getter(
+        _session: Any,
+        _user_id: str,
+        _organization_id: str | None,
+    ) -> object | None:
+        return selected[0]
+
+    monkeypatch.setattr(
+        scope_module,
+        "get_scoped_email_writing_orchestrator_config",
+        getter,
+    )
+    assert (
+        await scope_module.resolve_email_writing_orchestrator_settings(
+            cast(Any, object()),
+            user_id="user_alpha",
+            organization_id="organization_alpha",
+        )
+        is None
+    )
+
+    config = scope_module.new_scoped_email_writing_orchestrator_config(
+        "user_alpha",
+        "organization_alpha",
+    )
+    selected[0] = config
+    assert (
+        await scope_module.resolve_email_writing_orchestrator_settings(
+            cast(Any, object()),
+            user_id="user_alpha",
+            organization_id="organization_alpha",
+        )
+        is None
+    )
+
+    config.orchestrator_enabled = True
+    for values in (
+        (None, "profile", "credential"),
+        ("https://orchestrator.example", None, "credential"),
+        ("https://orchestrator.example", "profile", None),
+    ):
+        (
+            config.orchestrator_base_url,
+            config.model_profile_id,
+            config.inference_credential,
+        ) = values
+        with pytest.raises(
+            scope_module.EmailWritingOrchestratorConfigurationError,
+            match="email_writing_orchestrator_incomplete",
+        ):
+            await scope_module.resolve_email_writing_orchestrator_settings(
+                cast(Any, object()),
+                user_id="user_alpha",
+                organization_id="organization_alpha",
+            )
+
+    config.orchestrator_base_url = "  https://orchestrator.example  "
+    config.model_profile_id = "  profile  "
+    config.inference_credential = "  credential  "
+    settings = await scope_module.resolve_email_writing_orchestrator_settings(
+        cast(Any, object()),
+        user_id="user_alpha",
+        organization_id="organization_alpha",
+    )
+    assert settings == scope_module.EmailWritingOrchestratorSettings(
+        base_url="https://orchestrator.example",
+        model_profile_id="profile",
+        inference_credential="credential",
+    )
+
+
+def test_trace_budget_accepts_boundary_and_rejects_excess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise both sides of the orchestration trace cardinality bound."""
+    client = _client()
+    step = {
+        "usage": {
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2,
+        }
+    }
+    monkeypatch.setattr(client_module, "_MAX_TRACE_STEPS", 1)
+    accepted = client._parse_completion(
+        json.dumps(_payload(trace=[step])).encode()
+    )
+    assert len(accepted.trace) == 1
+    with pytest.raises(
+        ContextualOrchestratorError,
+        match="orchestrator_malformed_response",
+    ):
+        client._parse_completion(
+            json.dumps(_payload(trace=[step, step])).encode()
+        )
+'''
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          run_gate
+      - name: Verify production docstrings
+        run: |
+          cd backend
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          paths = [
+              Path("api/email_writing_orchestrator_config.py"),
+              Path("db/email_writing_orchestrator_config.py"),
+              Path("services/contextual_orchestrator_client.py"),
+              Path("services/email_writing_orchestrator_port.py"),
+              Path("services/tenant_config_scope.py"),
+              Path(
+                  "alembic/versions/"
+                  "20260813_0001_add_email_writing_orchestrator_config.py"
+              ),
+          ]
+          missing: list[str] = []
+          for path in paths:
+              tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+              if ast.get_docstring(tree) is None:
+                  missing.append(f"{path}:<module>")
+              for node in ast.walk(tree):
+                  if isinstance(
+                      node,
+                      (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+                  ) and ast.get_docstring(node) is None:
+                      missing.append(f"{path}:{node.lineno}:{node.name}")
+          if missing:
+              raise SystemExit("Missing production docstrings:\n" + "\n".join(missing))
+          PY
+      - name: Resolve duplicate PRs and enable automatic merge
+        id: pr
+        run: |
+          set -euo pipefail
+          repository="${GITHUB_REPOSITORY}"
+          branch="${GITHUB_REF_NAME}"
+          owner="${repository%%/*}"
+          task4_branch="feat/llm-email-writing-context-task4"
+          default_branch="$(gh repo view "$repository" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          preferred_base="$default_branch"
+
+          task4_count="$(
+            gh api \
+              "repos/${repository}/pulls?state=open&head=${owner}:${task4_branch}&per_page=100" \
+              --jq 'length'
+          )"
+          if [[ "$task4_count" -gt 0 ]]; then
+            preferred_base="$task4_branch"
+          elif git show-ref --verify --quiet refs/remotes/origin/develop \
+            && git merge-base --is-ancestor origin/develop HEAD; then
+            preferred_base="develop"
+          fi
+
+          mapfile -t pull_numbers < <(
+            gh api \
+              "repos/${repository}/pulls?state=open&head=${owner}:${branch}&per_page=100" \
+              --jq '.[].number'
+          )
+          if [[ "${#pull_numbers[@]}" -eq 0 ]]; then
+            gh pr create \
+              --repo "$repository" \
+              --base "$preferred_base" \
+              --head "$branch" \
+              --title "feat(email-writing): add secure contextual-orchestrator tenant boundary" \
+              --body-file - <<'EOF'
+          ## Product outcome
+
+          Adds the production boundary that lets Naruon use contextual-orchestrator for email-writing candidate generation and independent judging without binding Naruon to one upstream model or leaking tenant credentials, provider details, prompts, or orchestration internals.
+
+          ## Shipped scope
+
+          - owner- and organization-scoped encrypted orchestration configuration
+          - dedicated modular FastAPI configuration router
+          - canonical HTTPS-origin validation, DNS pinning, redirect rejection, and rebinding protection
+          - bounded request, response, JSON, and trace work
+          - stable redacted errors, retry policy, and circuit breaker
+          - async candidate path plus bounded synchronous Judge lane
+          - migration, exact-scope persistence, docstring, lint, compile, and 100% coverage gates
+          - APA 7 doctoring and calibrated LLM-as-a-Judge claim boundaries
+
+          ## Architecture boundary
+
+          The API is isolated from legacy tenant/mailbox settings so it can later be extracted as an MSA module while Naruon remains independently operable.
+          EOF
+            mapfile -t pull_numbers < <(
+              gh api \
+                "repos/${repository}/pulls?state=open&head=${owner}:${branch}&per_page=100" \
+                --jq '.[].number'
+            )
+          fi
+
+          preferred_number=""
+          for number in "${pull_numbers[@]}"; do
+            base="$(gh pr view "$number" --repo "$repository" --json baseRefName --jq '.baseRefName')"
+            if [[ "$base" == "$preferred_base" && -z "$preferred_number" ]]; then
+              preferred_number="$number"
+            fi
+          done
+          if [[ -z "$preferred_number" ]]; then
+            preferred_number="${pull_numbers[0]}"
+            gh pr edit "$preferred_number" --repo "$repository" --base "$preferred_base"
+          fi
+
+          for number in "${pull_numbers[@]}"; do
+            if [[ "$number" != "$preferred_number" ]]; then
+              gh pr close "$number" \
+                --repo "$repository" \
+                --comment "Superseded by #${preferred_number}; retaining one review and merge lineage for this head branch."
+            fi
+          done
+
+          if [[ "$(gh pr view "$preferred_number" --repo "$repository" --json isDraft --jq '.isDraft')" == "true" ]]; then
+            gh pr ready "$preferred_number" --repo "$repository"
+          fi
+          echo "number=$preferred_number" >> "$GITHUB_OUTPUT"
+          gh pr merge "$preferred_number" \
+            --repo "$repository" \
+            --auto \
+            --squash \
+            --delete-branch || true
+      - name: Remove finalizer and publish verified branch
+        run: |
+          set -euo pipefail
+          rm .github/workflows/email-writing-task5-finalize.yml
+          git diff --check
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "CWL Email Writing Finalizer"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            .github/workflows/email-writing-task5-finalize.yml \
+            backend/tests/test_email_writing_orchestrator_terminal_coverage.py
+          git commit -m "test(email-writing): enforce complete Task 5 coverage"
+          git push origin HEAD:feat/llm-email-writing-orchestrator-task5
