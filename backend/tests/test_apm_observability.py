@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).parent.parent.parent
 
+
 def test_observability_compose_file_exists():
     assert (ROOT_DIR / "docker-compose.infra.yml").exists()
 
@@ -89,3 +90,82 @@ def test_telemetry_logs_error_on_missing_hostname(monkeypatch, caplog):
         "Invalid OTEL exporter endpoint URL: missing hostname; continuing without tracing."
     ]
     assert telemetry_records[0].exc_info is None
+
+
+def test_telemetry_setup_success(monkeypatch, caplog):
+    import logging
+    from unittest.mock import patch
+    from fastapi import FastAPI
+    from core import telemetry
+
+    app = FastAPI()
+    monkeypatch.setenv("ENABLE_OTEL", "1")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_INSECURE", "1")
+    caplog.set_level(logging.INFO, logger=telemetry.logger.name)
+
+    with patch("opentelemetry.trace.set_tracer_provider") as mock_set_provider, patch(
+        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter"
+    ) as mock_exporter, patch(
+        "opentelemetry.sdk.trace.export.BatchSpanProcessor"
+    ) as mock_processor, patch(
+        "opentelemetry.instrumentation.fastapi.FastAPIInstrumentor"
+    ) as mock_instrumentor, patch(
+        "opentelemetry.sdk.trace.TracerProvider"
+    ) as mock_provider, patch(
+        "opentelemetry.sdk.resources.Resource"
+    ):
+
+        telemetry.setup_telemetry(app)
+
+        assert getattr(app.state, telemetry._TELEMETRY_STATE_KEY) is True
+        mock_provider.assert_called_once()
+        mock_set_provider.assert_called_once()
+        mock_exporter.assert_called_once_with(
+            endpoint="http://localhost:4317", insecure=True
+        )
+        mock_processor.assert_called_once()
+        mock_instrumentor.instrument_app.assert_called_once_with(app)
+
+        assert "OpenTelemetry instrumentation completed successfully." in [
+            r.message for r in caplog.records
+        ]
+
+
+def test_telemetry_early_return_if_already_configured(caplog):
+    import logging
+    from fastapi import FastAPI
+    from core import telemetry
+
+    app = FastAPI()
+    setattr(app.state, telemetry._TELEMETRY_STATE_KEY, True)
+    caplog.set_level(logging.DEBUG, logger=telemetry.logger.name)
+
+    telemetry.setup_telemetry(app)
+
+    assert "OpenTelemetry instrumentation is already configured." in [
+        r.message for r in caplog.records
+    ]
+
+
+def test_telemetry_setup_exception_handling(monkeypatch, caplog):
+    import logging
+    from unittest.mock import patch
+    from fastapi import FastAPI
+    from core import telemetry
+
+    app = FastAPI()
+    monkeypatch.setenv("ENABLE_OTEL", "1")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    caplog.set_level(logging.ERROR, logger=telemetry.logger.name)
+
+    with patch(
+        "opentelemetry.sdk.trace.TracerProvider",
+        side_effect=Exception("Mocked failure"),
+    ):
+        telemetry.setup_telemetry(app)
+
+    assert getattr(app.state, telemetry._TELEMETRY_STATE_KEY, False) is False
+    assert "OpenTelemetry setup failed; continuing without tracing." in [
+        r.message for r in caplog.records
+    ]
