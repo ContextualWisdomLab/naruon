@@ -128,6 +128,9 @@ class ExecuteResponse(BaseModel):
     status: str = Field(..., description="실행 상태 (예: success, failed)")
     result: Any = Field(..., description="실행 결과 데이터")
     message: Optional[str] = Field(default=None, description="결과 메시지")
+    error_code: Optional[str] = Field(
+        default=None, description="예상된 실패의 안정적인 기계 판독 오류 코드"
+    )
 
 
 class ToolRegistry:
@@ -889,4 +892,5 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
             status="failed",
             result=None,
             message=_safe_tool_failure_message(e),
+            error_code=getattr(e, "error_code", None),
         )
