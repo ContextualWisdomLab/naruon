@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 WORKFLOW_DIRECTORY = ".github/workflows/"
 WORKFLOW_PAGE_SIZE = 100
@@ -236,15 +236,13 @@ def _collect_workflows(
             raise AuditError("workflow_registry_count_exceeded")
         page_number += 1
 
-    assert expected_total is not None
-
     workflow_ids: set[int] = set()
     for record in workflows:
         if record.workflow_id in workflow_ids:
             raise AuditError("duplicate_workflow_id")
         workflow_ids.add(record.workflow_id)
 
-    return tuple(workflows), tuple(page_receipts), expected_total
+    return tuple(workflows), tuple(page_receipts), cast(int, expected_total)
 
 
 def _classify_records(
