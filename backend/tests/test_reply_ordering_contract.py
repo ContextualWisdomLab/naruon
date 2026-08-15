@@ -56,6 +56,22 @@ def _sent_email(message_id: str, email_id: int) -> Email:
     )
 
 
+def _external_email(message_id: str, email_id: int) -> Email:
+    """Build one equal-date external reply with a deterministic database id."""
+    return Email(
+        id=email_id,
+        user_id="user_1",
+        organization_id="org_1",
+        message_id=message_id,
+        thread_id="thread_1",
+        sender="client@example.com",
+        recipients="me@example.com",
+        subject="Reply ordering",
+        date=EQUAL_DATE,
+        body="Crossed in transit.",
+    )
+
+
 @pytest.mark.asyncio
 async def test_get_emails_orders_ranked_heads_by_date_then_id(monkeypatch) -> None:
     """Equal-date thread heads must have deterministic page membership by id."""
@@ -96,3 +112,35 @@ def test_descending_reply_candidate_matches_default_equal_date_tie_break() -> No
 
     assert default_candidate is higher_id
     assert descending_candidate is default_candidate
+
+
+def test_equal_date_higher_id_external_message_suppresses_sent_candidate() -> None:
+    """Database id must break equal-date ties in favor of the later external row."""
+    sent_message = _sent_email("sent-low", 1)
+    external_reply = _external_email("external-high", 2)
+
+    assert thread_reply_candidate(
+        [sent_message, external_reply],
+        USER_ADDRESSES,
+    ) is None
+    assert thread_reply_candidate(
+        [external_reply, sent_message],
+        USER_ADDRESSES,
+        is_descending=True,
+    ) is None
+
+
+def test_equal_date_higher_id_sent_message_remains_reply_candidate() -> None:
+    """A later sent row must not be suppressed by an earlier equal-date reply."""
+    external_message = _external_email("external-low", 1)
+    sent_message = _sent_email("sent-high", 2)
+
+    assert thread_reply_candidate(
+        [external_message, sent_message],
+        USER_ADDRESSES,
+    ) is sent_message
+    assert thread_reply_candidate(
+        [sent_message, external_message],
+        USER_ADDRESSES,
+        is_descending=True,
+    ) is sent_message
