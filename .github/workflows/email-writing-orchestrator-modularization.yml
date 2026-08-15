@@ -35,6 +35,21 @@ jobs:
         run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
       - name: Run test-first modularization
         run: python .github/scripts/modularize_email_writing_orchestrator.py
+      - name: Retarget hardening tests to the dedicated API module
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/tests/test_contextual_orchestrator_hardening.py")
+          text = path.read_text(encoding="utf-8")
+          old = "from api import tenant_config\n"
+          new = (
+              "from api import email_writing_orchestrator_config as tenant_config\n"
+          )
+          if text.count(old) != 1:
+              raise SystemExit("hardening API import anchor changed")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
       - name: Verify orchestration contracts
         run: |
           cd backend
@@ -52,6 +67,7 @@ jobs:
             api/email_writing_orchestrator_config.py \
             api/tenant_config.py \
             main.py \
+            tests/test_contextual_orchestrator_hardening.py \
             tests/test_email_writing_orchestrator_module_boundary.py \
             tests/test_email_writing_orchestrator_config_api.py
       - name: Compile modularized source
@@ -74,6 +90,7 @@ jobs:
             backend/api/email_writing_orchestrator_config.py \
             backend/api/tenant_config.py \
             backend/main.py \
+            backend/tests/test_contextual_orchestrator_hardening.py \
             backend/tests/test_email_writing_orchestrator_module_boundary.py \
             backend/tests/test_email_writing_orchestrator_config_api.py
           git commit -m "refactor(email-writing): isolate orchestration configuration API"
