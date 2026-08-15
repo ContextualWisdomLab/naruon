@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 import socket
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
@@ -44,7 +45,8 @@ SrvResolver = Callable[[str], list[tuple[str, int]]]
 TxtResolver = Callable[[str], list[str]]
 HttpClientFactory = Callable[[], Any]
 
-_MAX_CONTEXT_PATH_DECODE_ROUNDS = 5
+_MALFORMED_PERCENT_TRIPLET = re.compile(r"%(?![0-9A-Fa-f]{2})")
+_REMAINING_PERCENT_TRIPLET = re.compile(r"%[0-9A-Fa-f]{2}")
 
 
 @dataclass(frozen=True)
@@ -220,25 +222,23 @@ def _default_txt_resolver(name: str) -> list[str]:
 
 
 def _txt_context_path(records: list[str]) -> str | None:
-    """Extract and validate the RFC 6764 Section 6 TXT ``path`` hint."""
+    """Extract and validate a singly decoded RFC 6764 TXT ``path`` hint."""
     for record in records:
         for part in record.split(";"):
             key, _, value = part.strip().partition("=")
             if key.strip().lower() != "path":
                 continue
             path = value.strip()
-            decoded_path = path
-            for _ in range(_MAX_CONTEXT_PATH_DECODE_ROUNDS):
-                next_path = unquote(decoded_path)
-                if next_path == decoded_path:
-                    break
-                decoded_path = next_path
-            else:
-                # Reject values that still change after the decode budget. This
-                # keeps over-encoded traversal payloads from hiding another
-                # interpretation beyond the validation boundary.
-                if unquote(decoded_path) != decoded_path:
-                    continue
+            if _MALFORMED_PERCENT_TRIPLET.search(path):
+                continue
+            try:
+                decoded_path = unquote(path, errors="strict")
+            except UnicodeDecodeError:
+                continue
+            if _REMAINING_PERCENT_TRIPLET.search(decoded_path):
+                # A second decode would change the request target. Reject the
+                # ambiguous value instead of inventing a recursive decode count.
+                continue
             if (
                 decoded_path.startswith("/")
                 and "://" not in decoded_path
