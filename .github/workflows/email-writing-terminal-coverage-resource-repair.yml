@@ -43,15 +43,13 @@ jobs:
               "test_email_writing_orchestrator_terminal_coverage.py"
           )
           text = path.read_text(encoding="utf-8")
-          old = '''        assert not inspector.has_table(
-              "email_writing_orchestrator_config"
+          expected_tail = '        assert inspector.has_table("unrelated_record")\n'
+          if not text.endswith(expected_tail):
+              raise SystemExit("migration cleanup tail changed")
+          path.write_text(
+              text + "    engine.dispose()\n",
+              encoding="utf-8",
           )
-          assert inspector.has_table("unrelated_record")
-          '''
-          new = old + "    engine.dispose()\n"
-          if text.count(old) != 1:
-              raise SystemExit("migration cleanup anchor changed")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
       - name: Verify warning-free terminal suite
         run: |
