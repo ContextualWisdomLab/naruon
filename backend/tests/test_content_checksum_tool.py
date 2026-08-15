@@ -3,6 +3,7 @@
 import pytest
 
 import main  # noqa: F401  # Importing the application registers built-in tools.
+from api.content_checksum_tool import register_content_checksum_tool
 from api.tools import registry
 
 
@@ -10,6 +11,16 @@ SECURITY_NOTE = (
     "Use this digest to compare exact content bytes; it does not authenticate "
     "the sender or replace a MAC/signature."
 )
+
+
+def test_content_checksum_registration_is_idempotent() -> None:
+    """Repeated startup registration must preserve the existing catalog entry."""
+    original = registry.get("content_checksum_generator")
+
+    assert original is not None
+    register_content_checksum_tool()
+
+    assert registry.get("content_checksum_generator") is original
 
 
 @pytest.mark.asyncio
