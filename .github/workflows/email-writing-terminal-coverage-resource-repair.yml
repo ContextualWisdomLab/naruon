@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: backend/requirements-hashes.txt
       - name: Install hash-locked dependencies
         run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
-      - name: Dispose the migration rehearsal engine
+      - name: Repair migration rehearsal resource ownership
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -43,6 +43,13 @@ jobs:
               "test_email_writing_orchestrator_terminal_coverage.py"
           )
           text = path.read_text(encoding="utf-8")
+          unused_import = (
+              "from db.email_writing_orchestrator_config import "
+              "EmailWritingOrchestratorConfig\n"
+          )
+          if text.count(unused_import) != 1:
+              raise SystemExit("terminal coverage import anchor changed")
+          text = text.replace(unused_import, "", 1)
           expected_tail = '        assert inspector.has_table("unrelated_record")\n'
           if not text.endswith(expected_tail):
               raise SystemExit("migration cleanup tail changed")
