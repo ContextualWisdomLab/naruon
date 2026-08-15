@@ -37,4 +37,4 @@ The tool reports `algorithm_code`, `digest_hex`, `byte_length`, `encoding_code`,
 
 An unsupported algorithm or oversized payload fails closed with a deterministic validation error. Operators should change the requested algorithm to an allowlisted value or split/restructure the calling workflow; they should not bypass the limit or add a legacy digest solely to make a failed request pass.
 
-Architecture decision: [`ADR-0004`](../adr/0004-bounded-content-checksum-surface.md). Standards and APA 7 references: [`docs/doctoring/content-checksum-generator.md`](../doctoring/content-checksum-generator.md).
+Architecture decision: [`ADR-0007`](../adr/0007-bounded-content-checksum-surface.md). Standards and APA 7 references: [`docs/doctoring/content-checksum-generator.md`](../doctoring/content-checksum-generator.md).
