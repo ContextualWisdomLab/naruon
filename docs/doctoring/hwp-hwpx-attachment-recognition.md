@@ -30,8 +30,12 @@ sandboxed workers perform heavier extraction.
   compression, XML, resource, and expansion-ratio validation before extraction.
 - `.hwp` files with generic binary MIME types are resolved to the HWP parser
   family.
-- HWP bytes must carry the OLE Compound File binary signature before the file can
-  enter the sandboxed conversion queue.
+- HWP bytes must carry both the OLE Compound File container signature and the
+  HWP FileHeader identity marker `HWP Document File` before the file can enter
+  the sandboxed conversion queue. OLE magic by itself is not HWP authority.
+- The low-cost identity check does not prove CFB directory integrity, stream
+  ownership, encryption state, record validity, or safe convertibility; the
+  sandboxed HWP worker must parse and validate those structures again.
 - PDF behavior stays backward-compatible: callers that omit an expected content
   type from `decode_deferred_attachment_payload()` still get PDF validation.
 - Invalid HWPX/HWP/PDF payloads fail closed and are not retained as deferred
@@ -56,16 +60,26 @@ packages rather than widening a low-cost email-import boundary.
 
 The initial HWPX slice accepted a ZIP by member names alone. A generic ZIP could
 therefore imitate `mimetype`, `version.xml`, and section paths without carrying
-the HWPX signature, while a small source file could devote most of its bytes to a
-very large central directory.
+the HWPX signature, while a small source file could still devote most of its
+bytes to a very large central directory.
 
 Commit `4b51240eb8521459ef622e49bd463a1a6d783288` added failing public-boundary
 regressions for wrong and duplicate `mimetype` members, entry count,
 central-directory bytes, aggregate name bytes, and signature-member bytes.
 Commit `b737ae83c94ee8a5aaf9c22a8239056e26ffe029` then implemented the bounded
-end-of-central-directory preflight and exact signature validation. Hosted
-exact-head CI, security, coverage, and review evidence remains authoritative for
-merge.
+end-of-central-directory preflight and exact signature validation.
+
+The initial HWP slice likewise admitted any OLE Compound File if the caller
+supplied an HWP extension or media type. Commit
+`d97281ce7f452a10b0a5c76718d37d126958a4ae` added regressions proving that an
+unrelated OLE container must fail both import-time and deferred-decoder checks.
+Commit `07bd3b30abe483b50129653a4fd599f7ddc9488d` then required the published HWP
+FileHeader identity marker as a second admission signal; commit
+`c8837fb00d74bd4ddc3152e0fe793e71f9e1f41f` aligned the positive fixture with
+that real contract.
+
+Hosted exact-head CI, security, coverage, and review evidence remains
+authoritative for merge.
 
 ## Status codes
 
@@ -99,7 +113,11 @@ https://www.hancom.com/support/downloadCenter/hwpOwpml
 Hancom Inc. (n.d.). *Hancom SDK: HWP/HWPX document processing development kit*.
 Hancom SDK. https://sdk.hancom.com/sdks/1
 
-Hancom Tech. (n.d.). *HWPX format*. https://tech.hancom.com/hwpxformat/
+Hancom Tech. (2025a, February 24). *HWP format structure*.
+https://tech.hancom.com/%ED%95%9C-%EA%B8%80-%EB%AC%B8%EC%84%9C-%ED%8C%8C%EC%9D%BC-%ED%98%95%EC%8B%9D-hwp-%ED%8F%AC%EB%A7%B7-%EA%B5%AC%EC%A1%B0-%EC%82%B4%ED%8E%B4%EB%B3%B4%EA%B8%B0/
+
+Hancom Tech. (2025b, February 26). *HWPX format structure*.
+https://tech.hancom.com/hwpxformat/
 
 PKWARE, Inc. (2024). *APPNOTE.TXT: .ZIP file format specification*.
 https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
