@@ -28,6 +28,7 @@ _HWP_CONTENT_TYPES = (
     "application/haansofthwp",
 )
 _HWP_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_HWP_DOCUMENT_SIGNATURE = b"HWP Document File"
 _HWPX_MIMETYPE = b"application/hwp+zip"
 _ZIP_END_RECORD_SIGNATURE = b"PK\x05\x06"
 _ZIP_END_RECORD_SIZE = 22
@@ -371,9 +372,7 @@ def _deferred_payload_error_code(
         return "invalid_pdf_payload"
     if parse_content_type in _HWPX_CONTENT_TYPES and not _is_hwpx_payload(payload):
         return "invalid_hwpx_payload"
-    if parse_content_type in _HWP_CONTENT_TYPES and not payload.startswith(
-        _HWP_OLE_MAGIC
-    ):
+    if parse_content_type in _HWP_CONTENT_TYPES and not _is_hwp_payload(payload):
         return "invalid_hwp_payload"
     return None
 
@@ -469,6 +468,13 @@ def _is_hwpx_payload(payload: bytes) -> bool:
         and "version.xml" in names
         and (has_manifest or has_section)
     )
+
+
+def _is_hwp_payload(payload: bytes) -> bool:
+    """Require both the OLE container magic and HWP FileHeader identity."""
+    if not payload.startswith(_HWP_OLE_MAGIC):
+        return False
+    return payload.find(_HWP_DOCUMENT_SIGNATURE, len(_HWP_OLE_MAGIC)) >= 0
 
 
 def _coerce_text(raw_content: Any) -> str:
