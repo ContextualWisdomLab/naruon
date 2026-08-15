@@ -101,9 +101,10 @@ def _write_fake_gh(bin_dir: Path) -> None:
                         "id": 777,
                         "user": {{"login": "coderabbitai[bot]"}},
                         "created_at": "2026-08-15T00:00:00Z",
-                        "body": (
+                        "body": os.environ.get(
+                            "FAKE_GH_COMMENT_BODY",
                             "Review limit reached. We couldn't start this review. "
-                            "Next review available later. Head SHA: " + HEAD
+                            "Next review available later. Head SHA: " + HEAD,
                         ),
                     }}])
                     raise SystemExit(0)
@@ -176,6 +177,43 @@ def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: P
         in output
     )
     assert "PR governance metadata gate is ready" not in output
+
+
+def test_review_unavailable_pattern_rejects_unrelated_separator(tmp_path: Path) -> None:
+    """Only apostrophe variants may classify a review as not having started."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    result = _run_gate(
+        repo_root,
+        bin_dir,
+        FAKE_GH_COMMENT_BODY=(
+            "Synthetic unrelated text: we couldnXt start this review. Head SHA: " + HEAD_SHA
+        ),
+    )
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert "Ignoring successful CodeRabbit commit status" not in output
+    assert "PR governance metadata gate is ready" in output
+
+
+def test_malformed_repository_identifier_fails_closed(tmp_path: Path) -> None:
+    """Governance API scope must be exactly one owner/repository pair."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    result = _run_gate(repo_root, bin_dir, GITHUB_REPOSITORY="owner/repo/extra")
+    output = result.stdout + result.stderr
+
+    assert result.returncode != 0, output
+    assert "GitHub repository identifier must be owner/repo" in output
 
 
 def test_actions_entrypoint_hardens_path_before_resolving_gh() -> None:
