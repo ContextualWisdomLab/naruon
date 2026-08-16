@@ -1,4 +1,4 @@
-"""S3-aware workspace PDF upload route.
+"""S3-aware workspace PDF persistence and deletion routes.
 
 The broader data router remains responsible for data-quality and document
 workflow surfaces. This module owns only the raw-PDF persistence boundary so
@@ -12,6 +12,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import data as data_api
@@ -24,6 +25,7 @@ from services.document_object_storage import (
     DocumentObjectStorageError,
     StoredDocumentPayload,
     delete_configured_document_payload,
+    delete_document_object_record,
     store_configured_pdf_document,
 )
 from services.newsdom_pdf_recognition import PDF_DOM_RECOGNITION_PENDING_STATUS
@@ -145,3 +147,65 @@ async def upload_document_for_pdf_dom_recognition(
             "recognition; no provider write executed."
         ),
     )
+
+
+@router.delete(
+    "/documents/{document_id}",
+    response_model=DataDocumentActionResponse,
+)
+async def delete_workspace_document(
+    document_id: str,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataDocumentActionResponse:
+    """Delete one workspace-scoped document and its raw S3 source when present.
+
+    Authorization is established from the signed workspace before object metadata
+    is read. For S3-backed documents, remote deletion happens first; the owning
+    relational row is deleted only after that succeeds. If the database commit
+    later fails, the surviving locator makes the idempotent S3 DELETE retryable.
+    Inline-database documents have no object row and are removed relationally.
+    """
+    document = await data_api._get_workspace_document(
+        db,
+        auth_context,
+        document_id,
+    )
+    object_record = await db.scalar(
+        select(DocumentObjectRecord).where(
+            DocumentObjectRecord.document_id == document.document_id
+        )
+    )
+
+    if object_record is not None:
+        try:
+            await delete_document_object_record(object_record)
+        except DocumentObjectStorageError as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Configured document storage is unavailable.",
+            ) from exc
+
+    response = DataDocumentActionResponse(
+        document_id=document.document_id,
+        workspace_id=document.workspace_id,
+        document_name=document.document_name,
+        document_type=document.document_type,
+        document_status="deleted",
+        content_chars=0,
+        provider_write_executed=False,
+        provenance="server-authoritative",
+        audit_event="data.document.deleted",
+        message=(
+            "Document deleted from this workspace. Upload a new copy if you need "
+            "to process it again."
+        ),
+    )
+    try:
+        await db.delete(document)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    return response

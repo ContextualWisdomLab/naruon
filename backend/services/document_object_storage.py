@@ -172,6 +172,27 @@ async def delete_configured_document_payload(stored: StoredDocumentPayload) -> N
         await backend.aclose()
 
 
+async def delete_document_object_record(record: DocumentObjectRecord) -> None:
+    """Delete a raw S3 object for an explicit customer document removal.
+
+    This operation deliberately does not mutate lifecycle timestamps. The API
+    caller deletes the owning ``workspace_documents`` row in the relational half
+    of the saga, and the normalized object row is removed by its cascade. If that
+    database commit fails after S3 deletion, retrying this DELETE is safe because
+    S3 object deletion is idempotent and the locator metadata remains available.
+    """
+    stored_object = _stored_object_from_record(record)
+    backend = await _build_s3_backend_from_settings()
+    try:
+        await backend.delete_object(stored_object)
+    except (S3ObjectStorageError, ValueError) as exc:
+        raise DocumentObjectStorageError(
+            "Configured S3 document storage could not delete the customer payload"
+        ) from exc
+    finally:
+        await backend.aclose()
+
+
 async def mark_document_payload_consumed(
     session,
     document_id: str,
