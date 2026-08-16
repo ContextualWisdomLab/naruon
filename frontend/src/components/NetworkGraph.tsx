@@ -127,7 +127,11 @@ function titleText(value: unknown) {
   return value == null ? '' : String(value).trim();
 }
 
-function findNodeLabel(nodes: Node[], id: number | string) {
+function findNodeLabel(nodes: Node[], id: number | string, nodeMap?: Map<string | number, string>) {
+  if (nodeMap) {
+    const cached = nodeMap.get(String(id));
+    if (cached) return cached;
+  }
   const node = nodes.find((candidate) => graphIdEquals(candidate.id, id));
   return String(node?.label ?? id);
 }
@@ -138,8 +142,8 @@ function describeEdge(edge: Edge, nodes: Node[], nodeMap?: Map<string | number, 
     fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
     toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
   } else {
-    fromLabel = findNodeLabel(nodes, edge.from);
-    toLabel = findNodeLabel(nodes, edge.to);
+    fromLabel = findNodeLabel(nodes, edge.from, nodeMap);
+    toLabel = findNodeLabel(nodes, edge.to, nodeMap);
   }
   const title = titleText(edge.title);
   return title ? `${fromLabel} -> ${toLabel} (${title})` : `${fromLabel} -> ${toLabel}`;
@@ -213,7 +217,7 @@ export default function NetworkGraph() {
       const selectNode = (nodeId: number | string) => {
         setRelationshipOptionId('');
         setNodeOptionId(String(nodeId));
-        setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, nodeId)}`);
+        setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, nodeId, nodeMap)}`);
         setGraphActionStatus('그래프에서 노드를 선택했습니다.');
       };
 
@@ -303,7 +307,7 @@ export default function NetworkGraph() {
     if (!isGraphId(node.id)) return;
     setRelationshipOptionId('');
     setNodeOptionId(String(node.id));
-    setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, node.id)}`);
+    setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, node.id, nodeMap)}`);
     setGraphActionStatus(status);
     networkRef.current?.selectNodes?.([node.id]);
     networkRef.current?.fit?.({ nodes: [node.id], animation: false });

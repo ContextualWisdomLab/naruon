@@ -26,3 +26,8 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - Reused Existing Cache Map for O(1) Lookups in React Component Graph
+
+**Learning:** When displaying complex relationships (e.g. `NetworkGraph.tsx`), rendering related edge labels repeatedly triggers nested $O(N)$ inline array lookups (`nodes.find(...)`). Even though a `Map` was already pre-computed (`nodeMap`) higher up the component tree to handle labels efficiently, helper functions (`findNodeLabel`) were not utilizing it. This bypassed the intended caching strategy and degraded to $O(M * N)$.
+
+**Action:** When working with rendering layers that frequently resolve relational data (like nodes and edges in a graph), verify that helper functions actively accept and utilize the pre-computed `Map` instead of re-iterating over the source arrays. This transforms the bottleneck from $O(M * N)$ back to $O(M)$ operations without breaking readability.
