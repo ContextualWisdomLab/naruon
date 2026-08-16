@@ -174,7 +174,7 @@ async def test_s3_upload_persists_document_and_normalized_object_record(monkeypa
     async def store(**_kwargs):
         return stored
 
-    monkeypatch.setattr(data_module, "store_configured_pdf_document", store)
+    monkeypatch.setattr(data_module, "store_configured_pdf_upload", store)
     response = await data_module.upload_document_for_pdf_dom_recognition(
         file=_upload(),
         document_name="Quarterly evidence",
@@ -204,7 +204,7 @@ async def test_database_upload_preserves_existing_inline_behavior(monkeypatch) -
     async def store(**_kwargs):
         return StoredDocumentPayload.for_database(PDF_BYTES)
 
-    monkeypatch.setattr(data_module, "store_configured_pdf_document", store)
+    monkeypatch.setattr(data_module, "store_configured_pdf_upload", store)
     await data_module.upload_document_for_pdf_dom_recognition(
         file=_upload(),
         document_name=None,
@@ -230,7 +230,7 @@ async def test_database_failure_compensates_s3_upload(monkeypatch) -> None:
     async def delete(value: StoredDocumentPayload):
         deleted.append(value)
 
-    monkeypatch.setattr(data_module, "store_configured_pdf_document", store)
+    monkeypatch.setattr(data_module, "store_configured_pdf_upload", store)
     monkeypatch.setattr(data_module, "delete_configured_document_payload", delete)
 
     with pytest.raises(RuntimeError, match="database unavailable"):
@@ -252,7 +252,7 @@ async def test_storage_failure_returns_safe_service_unavailable(monkeypatch) -> 
     async def store(**_kwargs):
         raise DocumentObjectStorageError("bucket=secret-bucket key=private/source.pdf")
 
-    monkeypatch.setattr(data_module, "store_configured_pdf_document", store)
+    monkeypatch.setattr(data_module, "store_configured_pdf_upload", store)
 
     with pytest.raises(HTTPException) as error:
         await data_module.upload_document_for_pdf_dom_recognition(
@@ -275,7 +275,7 @@ async def test_rejects_non_pdf_before_touching_storage(monkeypatch) -> None:
     async def store(**_kwargs):  # pragma: no cover - must not run
         raise AssertionError("invalid content must not reach storage")
 
-    monkeypatch.setattr(data_module, "store_configured_pdf_document", store)
+    monkeypatch.setattr(data_module, "store_configured_pdf_upload", store)
 
     with pytest.raises(HTTPException) as error:
         await data_module.upload_document_for_pdf_dom_recognition(
