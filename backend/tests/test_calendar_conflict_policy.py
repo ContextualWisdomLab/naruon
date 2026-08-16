@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -110,6 +111,41 @@ def test_equivalent_instants_across_offsets_overlap() -> None:
     )
 
     assert result.decision_code == "blocked"
+
+
+def test_dst_fold_interval_order_uses_absolute_instants() -> None:
+    """A valid interval spanning the repeated DST hour must compare by UTC instant."""
+    new_york = ZoneInfo("America/New_York")
+    commitment = CalendarCommitment(
+        commitment_id="fall-back-span",
+        start_at=datetime.datetime(2026, 11, 1, 1, 30, tzinfo=new_york, fold=0),
+        end_at=datetime.datetime(2026, 11, 1, 1, 15, tzinfo=new_york, fold=1),
+        status="confirmed",
+    )
+
+    assert commitment.start_at.astimezone(UTC) < commitment.end_at.astimezone(UTC)
+
+
+def test_dst_fold_overlap_uses_absolute_instants() -> None:
+    """Repeated-hour wall times that are disjoint in UTC must remain non-conflicting."""
+    new_york = ZoneInfo("America/New_York")
+    proposed = CalendarCommitment(
+        commitment_id="first-hour",
+        start_at=datetime.datetime(2026, 11, 1, 1, 0, tzinfo=new_york, fold=0),
+        end_at=datetime.datetime(2026, 11, 1, 1, 30, tzinfo=new_york, fold=0),
+        status="desired",
+    )
+    existing = CalendarCommitment(
+        commitment_id="second-hour",
+        start_at=datetime.datetime(2026, 11, 1, 1, 15, tzinfo=new_york, fold=1),
+        end_at=datetime.datetime(2026, 11, 1, 1, 45, tzinfo=new_york, fold=1),
+        status="confirmed",
+    )
+
+    result = evaluate_calendar_conflicts(proposed, [existing])
+
+    assert result.decision_code == "available"
+    assert result.conflicts == ()
 
 
 def test_conflicts_are_deterministically_sorted_by_utc_start_and_identifier() -> None:
