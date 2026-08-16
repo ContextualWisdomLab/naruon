@@ -1,9 +1,10 @@
-"""Document-payload persistence across legacy database and S3 backends.
+"""Document-payload persistence across database and S3 backends.
 
 PostgreSQL remains the authoritative metadata, authorization, workflow, and
-parsed-text store. This module only moves immutable raw PDF bytes behind a
-small persistence seam so deployments can retain the current inline database
-mode or select an S3-compatible object store without changing API semantics.
+parsed-text store. Raw PDF bytes move behind a small persistence seam. The
+process environment selects only ``database`` or ``s3``; organization-scoped S3
+metadata and credentials are resolved from the Fernet-encrypted provider
+registry before a DNS-pinned request is built.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 import datetime
 import hashlib
@@ -26,6 +28,7 @@ from core.url_validation import (
 )
 from db.document_object_record import DocumentObjectRecord
 from db.models import Document
+from db.object_storage_provider import ObjectStorageProvider
 from services.llm_provider_urls import build_pinned_https_async_client
 from services.s3_object_storage import (
     AwsCredentials,
@@ -54,6 +57,24 @@ class DocumentUploadValidationError(ValueError):
 
 
 @dataclass(frozen=True)
+class DocumentStorageRuntimeConfig:
+    """Resolved backend authority for one organization-scoped operation."""
+
+    storage_backend: str
+    s3_configuration: S3ClientConfiguration | None = None
+    object_storage_provider_id: int | None = None
+    allowed_hosts: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if self.storage_backend not in {"database", "s3"}:
+            raise ValueError("Document storage runtime backend is unsupported")
+        if self.storage_backend == "database" and self.s3_configuration is not None:
+            raise ValueError("Database runtime must not include S3 configuration")
+        if self.storage_backend == "s3" and self.s3_configuration is None:
+            raise ValueError("S3 runtime requires S3 configuration")
+
+
+@dataclass(frozen=True)
 class ValidatedPDFUpload:
     """Integrity metadata produced by a bounded first pass over an upload."""
 
@@ -77,6 +98,7 @@ class StoredDocumentPayload:
     storage_backend: str
     document_content: str | None
     s3_object: S3StoredObject | None
+    object_storage_provider_id: int | None = None
 
     @classmethod
     def for_database(cls, payload: bytes) -> "StoredDocumentPayload":
@@ -86,15 +108,22 @@ class StoredDocumentPayload:
             storage_backend="database",
             document_content=base64.b64encode(payload).decode("ascii"),
             s3_object=None,
+            object_storage_provider_id=None,
         )
 
     @classmethod
-    def for_s3(cls, stored_object: S3StoredObject) -> "StoredDocumentPayload":
-        """Represent an S3-backed payload without duplicating its bytes in SQL."""
+    def for_s3(
+        cls,
+        stored_object: S3StoredObject,
+        *,
+        object_storage_provider_id: int | None = None,
+    ) -> "StoredDocumentPayload":
+        """Represent an S3 payload without duplicating its bytes in SQL."""
         return cls(
             storage_backend="s3",
             document_content=None,
             s3_object=stored_object,
+            object_storage_provider_id=object_storage_provider_id,
         )
 
     def to_object_record(self, document_id: str) -> DocumentObjectRecord | None:
@@ -103,6 +132,7 @@ class StoredDocumentPayload:
             return None
         return DocumentObjectRecord(
             document_id=document_id,
+            object_storage_provider_id=self.object_storage_provider_id,
             storage_backend="s3",
             bucket_name=self.s3_object.bucket_name,
             object_key=self.s3_object.object_key,
@@ -112,6 +142,124 @@ class StoredDocumentPayload:
             checksum_sha256=self.s3_object.checksum_sha256,
             storage_state="active",
         )
+
+
+async def resolve_document_storage_runtime_config(
+    session,
+    organization_id: str | None,
+) -> DocumentStorageRuntimeConfig:
+    """Resolve the selected backend without reading provider secrets from env."""
+    if settings.OBJECT_STORAGE_BACKEND == "database":
+        return DocumentStorageRuntimeConfig(storage_backend="database")
+    if settings.OBJECT_STORAGE_BACKEND != "s3":
+        raise DocumentObjectStorageError("Configured document backend is unsupported")
+    return await _resolve_s3_provider_runtime_config(session, organization_id)
+
+
+async def _resolve_s3_provider_runtime_config(
+    session,
+    organization_id: str | None,
+    *,
+    object_storage_provider_id: int | None = None,
+) -> DocumentStorageRuntimeConfig:
+    """Resolve an active or explicitly retained organization S3 provider row."""
+    if not organization_id:
+        raise DocumentObjectStorageError(
+            "S3 document storage requires an organization scope"
+        )
+
+    statement = select(ObjectStorageProvider).where(
+        ObjectStorageProvider.organization_id == organization_id,
+        ObjectStorageProvider.provider_type == "s3",
+    )
+    if object_storage_provider_id is None:
+        statement = statement.where(ObjectStorageProvider.is_active.is_(True)).order_by(
+            ObjectStorageProvider.updated_at.desc(),
+            ObjectStorageProvider.object_storage_provider_id.desc(),
+        )
+    else:
+        statement = statement.where(
+            ObjectStorageProvider.object_storage_provider_id
+            == object_storage_provider_id
+        )
+    provider = await session.scalar(statement.limit(1))
+    if provider is None:
+        raise DocumentObjectStorageError(
+            "No configured S3 document-storage provider is available"
+        )
+
+    try:
+        configuration, allowed_hosts = _configuration_from_provider(provider)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise DocumentObjectStorageError(
+            "Configured S3 document storage failed validation"
+        ) from exc
+    return DocumentStorageRuntimeConfig(
+        storage_backend="s3",
+        s3_configuration=configuration,
+        object_storage_provider_id=getattr(
+            provider,
+            "object_storage_provider_id",
+            None,
+        ),
+        allowed_hosts=allowed_hosts,
+    )
+
+
+def _configuration_from_provider(
+    provider: ObjectStorageProvider,
+) -> tuple[S3ClientConfiguration, frozenset[str]]:
+    """Build a validated S3 client configuration from one decrypted DB row."""
+    endpoint_url, allowed_hosts = _provider_endpoint_and_allowlist(provider)
+    configuration = S3ClientConfiguration(
+        region_name=provider.region_name,
+        endpoint_url=endpoint_url,
+        bucket_name=provider.bucket_name,
+        addressing_style=provider.addressing_style,
+        credentials=AwsCredentials(
+            access_key_id=provider.access_key_id,
+            secret_access_key=provider.secret_access_key,
+            session_token=provider.session_token,
+        ),
+        server_side_encryption=provider.server_side_encryption,
+        kms_key_id=provider.kms_key_id,
+        expected_bucket_owner=provider.expected_bucket_owner,
+        request_timeout_seconds=settings.OBJECT_STORAGE_REQUEST_TIMEOUT_SECONDS,
+    )
+    return configuration, allowed_hosts
+
+
+def _provider_endpoint_and_allowlist(
+    provider: ObjectStorageProvider,
+) -> tuple[str, frozenset[str]]:
+    """Derive AWS endpoints or enforce the operator custom-host allowlist."""
+    configured_endpoint = (provider.endpoint_url or "").strip()
+    if configured_endpoint:
+        if provider.addressing_style != "path":
+            raise ValueError("Custom S3 endpoints require path addressing")
+        normalized_endpoint = configured_endpoint.rstrip("/")
+        parsed = urlsplit(normalized_endpoint)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        allowed_hosts = parse_allowed_hosts(settings.OBJECT_STORAGE_S3_ALLOWED_HOSTS)
+        if host not in allowed_hosts:
+            raise ValueError("Configured S3 endpoint host is not allowlisted")
+        return normalized_endpoint, allowed_hosts
+
+    bucket_name = provider.bucket_name
+    region_name = provider.region_name
+    if provider.addressing_style == "path":
+        host = (
+            "s3.amazonaws.com"
+            if region_name == "us-east-1"
+            else f"s3.{region_name}.amazonaws.com"
+        )
+    else:
+        host = (
+            f"{bucket_name}.s3.amazonaws.com"
+            if region_name == "us-east-1"
+            else f"{bucket_name}.s3.{region_name}.amazonaws.com"
+        )
+    return f"https://{host}", frozenset({host})
 
 
 async def inspect_pdf_upload(
@@ -165,7 +313,7 @@ async def _iter_verified_upload(
     *,
     validated_upload: ValidatedPDFUpload,
     chunk_size: int,
-):
+) -> AsyncIterator[bytes]:
     """Yield a second bounded pass and reject content changed after inspection."""
     digest = hashlib.sha256()
     content_length = 0
@@ -217,30 +365,30 @@ async def store_configured_pdf_upload(
     organization_id: str | None,
     workspace_id: str,
     chunk_size: int = PDF_UPLOAD_CHUNK_BYTES,
+    runtime_config: DocumentStorageRuntimeConfig | None = None,
 ) -> StoredDocumentPayload:
-    """Persist an inspected upload through bounded database or S3 reads.
-
-    The default database mode still requires a bounded in-memory join before
-    base64 encoding for backward compatibility. The S3 mode never builds that
-    byte buffer: it sends the rewound spool through ``httpx`` as an async stream
-    with a signed, precomputed content length and SHA-256 digest.
-    """
+    """Persist an inspected upload through bounded database or S3 reads."""
     if chunk_size <= 0:
         raise ValueError("PDF upload chunk_size must be positive")
     if validated_upload.content_length > MAX_PDF_DOCUMENT_BYTES:
         raise DocumentUploadTooLargeError("PDF upload exceeds the size limit")
 
-    if settings.OBJECT_STORAGE_BACKEND == "database":
+    backend_name = (
+        runtime_config.storage_backend
+        if runtime_config is not None
+        else settings.OBJECT_STORAGE_BACKEND
+    )
+    if backend_name == "database":
         payload = await _read_verified_upload_bytes(
             upload,
             validated_upload=validated_upload,
             chunk_size=chunk_size,
         )
         return StoredDocumentPayload.for_database(payload)
-    if settings.OBJECT_STORAGE_BACKEND != "s3":
+    if backend_name != "s3":
         raise DocumentObjectStorageError("Configured document backend is unsupported")
 
-    backend = await _build_s3_backend_from_settings()
+    backend = await _backend_for_runtime(runtime_config)
     try:
         stored_object = await backend.put_object_stream(
             object_key=build_document_object_key(
@@ -264,7 +412,14 @@ async def store_configured_pdf_upload(
         ) from exc
     finally:
         await backend.aclose()
-    return StoredDocumentPayload.for_s3(stored_object)
+    return StoredDocumentPayload.for_s3(
+        stored_object,
+        object_storage_provider_id=(
+            runtime_config.object_storage_provider_id
+            if runtime_config is not None
+            else None
+        ),
+    )
 
 
 def _utc_now() -> datetime.datetime:
@@ -309,20 +464,21 @@ async def store_configured_pdf_document(
     document_id: str,
     organization_id: str | None,
     workspace_id: str,
+    runtime_config: DocumentStorageRuntimeConfig | None = None,
 ) -> StoredDocumentPayload:
-    """Persist already-materialized PDF bytes using the configured backend.
-
-    This byte-oriented seam remains for deterministic legacy-row backfill. New
-    HTTP uploads use :func:`store_configured_pdf_upload` so S3 mode does not
-    materialize the entire request body in application memory.
-    """
+    """Persist already-materialized legacy PDF bytes through the selected backend."""
     _validate_pdf_bytes(payload)
-    if settings.OBJECT_STORAGE_BACKEND == "database":
+    backend_name = (
+        runtime_config.storage_backend
+        if runtime_config is not None
+        else settings.OBJECT_STORAGE_BACKEND
+    )
+    if backend_name == "database":
         return StoredDocumentPayload.for_database(payload)
-    if settings.OBJECT_STORAGE_BACKEND != "s3":
+    if backend_name != "s3":
         raise DocumentObjectStorageError("Configured document backend is unsupported")
 
-    backend = await _build_s3_backend_from_settings()
+    backend = await _backend_for_runtime(runtime_config)
     try:
         stored_object = await backend.put_object(
             object_key=build_document_object_key(
@@ -340,14 +496,25 @@ async def store_configured_pdf_document(
         ) from exc
     finally:
         await backend.aclose()
-    return StoredDocumentPayload.for_s3(stored_object)
+    return StoredDocumentPayload.for_s3(
+        stored_object,
+        object_storage_provider_id=(
+            runtime_config.object_storage_provider_id
+            if runtime_config is not None
+            else None
+        ),
+    )
 
 
-async def delete_configured_document_payload(stored: StoredDocumentPayload) -> None:
+async def delete_configured_document_payload(
+    stored: StoredDocumentPayload,
+    *,
+    runtime_config: DocumentStorageRuntimeConfig | None = None,
+) -> None:
     """Compensate a persisted S3 object after a metadata commit failure."""
     if stored.s3_object is None:
         return
-    backend = await _build_s3_backend_from_settings()
+    backend = await _backend_for_runtime(runtime_config)
     try:
         await backend.delete_object(stored.s3_object)
     except (S3ObjectStorageError, ValueError) as exc:
@@ -358,17 +525,14 @@ async def delete_configured_document_payload(stored: StoredDocumentPayload) -> N
         await backend.aclose()
 
 
-async def delete_document_object_record(record: DocumentObjectRecord) -> None:
-    """Delete a raw S3 object for an explicit customer document removal.
-
-    This operation deliberately does not mutate lifecycle timestamps. The API
-    caller deletes the owning ``workspace_documents`` row in the relational half
-    of the saga, and the normalized object row is removed by its cascade. If that
-    database commit fails after S3 deletion, retrying this DELETE is safe because
-    S3 object deletion is idempotent and the locator metadata remains available.
-    """
+async def delete_document_object_record(
+    record: DocumentObjectRecord,
+    *,
+    runtime_config: DocumentStorageRuntimeConfig | None = None,
+) -> None:
+    """Delete a raw S3 object for an explicit customer document removal."""
     stored_object = _stored_object_from_record(record)
-    backend = await _build_s3_backend_from_settings()
+    backend = await _backend_for_runtime(runtime_config)
     try:
         await backend.delete_object(stored_object)
     except (S3ObjectStorageError, ValueError) as exc:
@@ -383,13 +547,7 @@ async def mark_document_payload_consumed(
     session,
     document_id: str,
 ) -> DocumentObjectRecord | None:
-    """Move an S3 document record from active to consumed idempotently.
-
-    ``None`` denotes the legacy inline-database backend, which has no external
-    object record. A consumed marker is committed with the parsed document
-    before remote deletion is attempted, so cleanup can be retried without
-    losing durable proof that recognition no longer needs the raw object.
-    """
+    """Move an S3 document record from active to consumed idempotently."""
     record = await session.scalar(
         select(DocumentObjectRecord).where(
             DocumentObjectRecord.document_id == document_id
@@ -416,12 +574,12 @@ async def mark_document_payload_consumed(
     raise DocumentObjectStorageError("Document object lifecycle state is unsupported")
 
 
-async def delete_consumed_document_payload(record: DocumentObjectRecord) -> None:
-    """Delete a consumed S3 object and mark deletion only after remote success.
-
-    Already-deleted records are idempotent no-ops. Any transport or integrity
-    failure leaves a consumed record intact so a later cleanup sweep can retry.
-    """
+async def delete_consumed_document_payload(
+    record: DocumentObjectRecord,
+    *,
+    runtime_config: DocumentStorageRuntimeConfig | None = None,
+) -> None:
+    """Delete a consumed S3 object and mark deletion only after remote success."""
     if record.storage_state == "deleted":
         if record.consumed_at is None or record.deleted_at is None:
             raise DocumentObjectStorageError(
@@ -438,7 +596,7 @@ async def delete_consumed_document_payload(record: DocumentObjectRecord) -> None
         )
 
     stored_object = _stored_object_from_record(record)
-    backend = await _build_s3_backend_from_settings()
+    backend = await _backend_for_runtime(runtime_config)
     try:
         await backend.delete_object(stored_object)
     except (S3ObjectStorageError, ValueError) as exc:
@@ -452,7 +610,7 @@ async def delete_consumed_document_payload(record: DocumentObjectRecord) -> None
 
 
 async def load_pending_pdf_document_bytes(session, document: Document) -> bytes:
-    """Load a pending PDF from inline SQL or its normalized S3 object record."""
+    """Load a pending PDF from inline SQL or its retained S3 provider record."""
     if document.document_content:
         return decode_legacy_pdf_payload(document.document_content)
 
@@ -468,8 +626,13 @@ async def load_pending_pdf_document_bytes(session, document: Document) -> bytes:
     if record.storage_state != "active":
         raise DocumentObjectStorageError("Document object record is not active")
 
+    runtime_config = await _resolve_s3_provider_runtime_config(
+        session,
+        document.organization_id,
+        object_storage_provider_id=record.object_storage_provider_id,
+    )
     stored_object = _stored_object_from_record(record)
-    backend = await _build_s3_backend_from_settings()
+    backend = await _build_s3_backend(runtime_config)
     try:
         payload = await backend.get_object(stored_object)
     except (S3ObjectStorageError, ValueError) as exc:
@@ -487,14 +650,41 @@ async def load_pending_pdf_document_bytes(session, document: Document) -> bytes:
     return payload
 
 
-async def _build_s3_backend_from_settings() -> S3ObjectStorageBackend:
+async def resolve_document_object_runtime_config(
+    session,
+    document: Document,
+    record: DocumentObjectRecord,
+) -> DocumentStorageRuntimeConfig:
+    """Resolve the provider retained by a normalized document-object record."""
+    return await _resolve_s3_provider_runtime_config(
+        session,
+        document.organization_id,
+        object_storage_provider_id=record.object_storage_provider_id,
+    )
+
+
+async def _backend_for_runtime(
+    runtime_config: DocumentStorageRuntimeConfig | None,
+) -> S3ObjectStorageBackend:
+    """Build a registry-backed backend or invoke the legacy test injection seam."""
+    if runtime_config is None:
+        return await _build_s3_backend_from_settings()
+    return await _build_s3_backend(runtime_config)
+
+
+async def _build_s3_backend(
+    runtime_config: DocumentStorageRuntimeConfig,
+) -> S3ObjectStorageBackend:
+    """Create a DNS-pinned client from a resolved registry configuration."""
+    configuration = runtime_config.s3_configuration
+    if runtime_config.storage_backend != "s3" or configuration is None:
+        raise DocumentObjectStorageError("Resolved document backend is not S3")
     try:
-        endpoint_url, allowed_hosts = _resolve_endpoint_and_allowlist()
         validated_endpoint = await asyncio.to_thread(
             validate_https_url_host_details,
             "OBJECT_STORAGE_S3_ENDPOINT_URL",
-            endpoint_url,
-            allowed_hosts,
+            configuration.endpoint_url,
+            runtime_config.allowed_hosts,
             "OBJECT_STORAGE_S3_ALLOWED_HOSTS",
         )
         http_client = build_pinned_https_async_client(
@@ -503,64 +693,29 @@ async def _build_s3_backend_from_settings() -> S3ObjectStorageBackend:
             validated_endpoint.port,
             validated_endpoint.addresses,
         )
-        access_key = settings.OBJECT_STORAGE_S3_ACCESS_KEY_ID
-        secret_key = settings.OBJECT_STORAGE_S3_SECRET_ACCESS_KEY
-        if access_key is None or secret_key is None:
-            raise ValueError("S3 credentials are incomplete")
-        session_token = settings.OBJECT_STORAGE_S3_SESSION_TOKEN
-        configuration = S3ClientConfiguration(
-            region_name=settings.OBJECT_STORAGE_S3_REGION_NAME,
+        pinned_configuration = S3ClientConfiguration(
+            region_name=configuration.region_name,
             endpoint_url=validated_endpoint.normalized_url.rstrip("/"),
-            bucket_name=settings.OBJECT_STORAGE_S3_BUCKET_NAME or "",
-            addressing_style=settings.OBJECT_STORAGE_S3_ADDRESSING_STYLE,
-            credentials=AwsCredentials(
-                access_key_id=access_key.get_secret_value(),
-                secret_access_key=secret_key.get_secret_value(),
-                session_token=(
-                    session_token.get_secret_value() if session_token is not None else None
-                ),
-            ),
-            server_side_encryption=(
-                settings.OBJECT_STORAGE_S3_SERVER_SIDE_ENCRYPTION
-            ),
-            kms_key_id=settings.OBJECT_STORAGE_S3_KMS_KEY_ID,
-            expected_bucket_owner=settings.OBJECT_STORAGE_S3_EXPECTED_BUCKET_OWNER,
-            request_timeout_seconds=(
-                settings.OBJECT_STORAGE_REQUEST_TIMEOUT_SECONDS
-            ),
+            bucket_name=configuration.bucket_name,
+            addressing_style=configuration.addressing_style,
+            credentials=configuration.credentials,
+            server_side_encryption=configuration.server_side_encryption,
+            kms_key_id=configuration.kms_key_id,
+            expected_bucket_owner=configuration.expected_bucket_owner,
+            request_timeout_seconds=configuration.request_timeout_seconds,
         )
     except ValueError as exc:
         raise DocumentObjectStorageError(
             "Configured S3 document storage failed validation"
         ) from exc
-    return S3ObjectStorageBackend(configuration, http_client)
+    return S3ObjectStorageBackend(pinned_configuration, http_client)
 
 
-def _resolve_endpoint_and_allowlist() -> tuple[str, frozenset[str]]:
-    configured_endpoint = settings.OBJECT_STORAGE_S3_ENDPOINT_URL
-    if configured_endpoint:
-        parsed = urlsplit(configured_endpoint)
-        host = (parsed.hostname or "").lower().rstrip(".")
-        allowed_hosts = parse_allowed_hosts(settings.OBJECT_STORAGE_S3_ALLOWED_HOSTS)
-        if host not in allowed_hosts:
-            raise ValueError("Configured S3 endpoint host is not allowlisted")
-        return configured_endpoint, allowed_hosts
-
-    bucket_name = settings.OBJECT_STORAGE_S3_BUCKET_NAME or ""
-    region_name = settings.OBJECT_STORAGE_S3_REGION_NAME
-    if settings.OBJECT_STORAGE_S3_ADDRESSING_STYLE == "path":
-        host = (
-            "s3.amazonaws.com"
-            if region_name == "us-east-1"
-            else f"s3.{region_name}.amazonaws.com"
-        )
-    else:
-        host = (
-            f"{bucket_name}.s3.amazonaws.com"
-            if region_name == "us-east-1"
-            else f"{bucket_name}.s3.{region_name}.amazonaws.com"
-        )
-    return f"https://{host}", frozenset({host})
+async def _build_s3_backend_from_settings() -> S3ObjectStorageBackend:
+    """Fail closed unless a test injects the retired environment-backed seam."""
+    raise DocumentObjectStorageError(
+        "S3 runtime configuration must come from the encrypted provider registry"
+    )
 
 
 def _validate_pdf_bytes(payload: bytes) -> None:
