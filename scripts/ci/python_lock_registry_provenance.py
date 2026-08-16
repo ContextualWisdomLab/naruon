@@ -415,9 +415,10 @@ def validate_repository_registry(
             raise RuntimeError("registry metadata unavailable")
         return metadata
 
+    discovered_locks = discover_hash_locks(repository_root)
     lock_receipts = [
         validate_lock_against_registry(path, repository_root, fetch_release=cached_fetch)
-        for path in discover_hash_locks(repository_root)
+        for path in discovered_locks
     ]
     violations = [
         violation
@@ -425,6 +426,14 @@ def validate_repository_registry(
         for violation in receipt["violations"]
         if isinstance(violation, dict)
     ]
+    if not discovered_locks:
+        violations.append(
+            _violation(
+                "registry-no-hash-locks",
+                ".",
+                "no active Python requirements hash lock was discovered",
+            )
+        )
     violations.sort(key=lambda item: (item["code"], item["path"], item["detail"]))
     return {
         "schema_version": SCHEMA_VERSION,
