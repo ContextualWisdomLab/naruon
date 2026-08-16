@@ -2,9 +2,9 @@
 
 NewsDOM recognition commits parsed document content together with an S3 object
 lifecycle transition from ``active`` to ``consumed``. This module performs the
-separate, retryable remote-delete phase. Each object is committed independently
-so one unavailable object store request cannot starve later cleanup work, and a
-failed database commit remains safe to retry because S3 DELETE is idempotent.
+separate, retryable remote-delete phase through the provider retained by each
+object record. Each object is committed independently so one unavailable
+provider cannot starve later cleanup work.
 """
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ import logging
 from sqlalchemy import select
 
 from db.document_object_record import DocumentObjectRecord
+from db.models import Document
 from db.session import AsyncSessionLocal
 import services.document_object_storage as document_storage
 
-# Public compatibility aliases used by the cleanup contract and its tests.
 DocumentObjectStorageError = document_storage.DocumentObjectStorageError
 delete_consumed_document_payload = document_storage.delete_consumed_document_payload
 
@@ -42,11 +42,10 @@ async def sweep_consumed_document_objects(
 ) -> DocumentObjectCleanupResult:
     """Delete a bounded batch of consumed S3 source objects without starvation.
 
-    Candidate identifiers are selected first, then each row is reloaded before
-    deletion. Reloading prevents stale selection state from deleting a row that
-    another safe actor already completed. A remote-delete or database-commit
-    failure is rolled back for that object and the sweep continues with later
-    candidates; the row therefore remains retryable on a future sweep.
+    Candidate identifiers are selected first, then each object and its owning
+    document are reloaded before provider resolution. A remote-delete or
+    database-commit failure is rolled back for that object and the sweep
+    continues with later candidates; the row therefore remains retryable.
     """
     if batch_limit <= 0:
         raise ValueError("Document object cleanup batch_limit must be positive")
@@ -66,7 +65,22 @@ async def sweep_consumed_document_objects(
         if record is None or record.storage_state != "consumed":
             continue
         try:
-            await delete_consumed_document_payload(record)
+            document = await session.get(Document, record.document_id)
+            if document is None:
+                raise DocumentObjectStorageError(
+                    "Consumed document object has no owning document"
+                )
+            runtime_config = (
+                await document_storage.resolve_document_object_runtime_config(
+                    session,
+                    document,
+                    record,
+                )
+            )
+            await delete_consumed_document_payload(
+                record,
+                runtime_config=runtime_config,
+            )
             await session.commit()
         except Exception:
             failed_count += 1
