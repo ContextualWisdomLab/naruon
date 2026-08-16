@@ -1,20 +1,23 @@
-"""Retryable cleanup for consumed workspace-document source objects.
+"""Retryable cleanup for retained workspace-document source objects.
 
 NewsDOM recognition commits parsed document content together with an S3 object
-lifecycle transition from ``active`` to ``consumed``. This module performs the
-separate, retryable remote-delete phase through the provider retained by each
-object record. Each object is committed independently so one unavailable
-provider cannot starve later cleanup work.
+lifecycle transition from ``active`` to ``consumed``. Consumed source objects
+remain available for the configured reprocessing-retention window before this
+module performs the separate, retryable remote-delete phase through the provider
+retained by each object record. Each object is committed independently so one
+unavailable provider cannot starve later cleanup work.
 """
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 import logging
 
 from sqlalchemy import select
 
+from core.object_storage_config import object_storage_settings
 from db.document_object_record import DocumentObjectRecord
 from db.models import Document
 from db.session import AsyncSessionLocal
@@ -39,20 +42,32 @@ async def sweep_consumed_document_objects(
     session,
     *,
     batch_limit: int,
+    retention_seconds: int,
 ) -> DocumentObjectCleanupResult:
-    """Delete a bounded batch of consumed S3 source objects without starvation.
+    """Delete retained consumed objects only after their reprocessing window.
 
-    Candidate identifiers are selected first, then each object and its owning
-    document are reloaded before provider resolution. A remote-delete or
-    database-commit failure is rolled back for that object and the sweep
-    continues with later candidates; the row therefore remains retryable.
+    Candidate identifiers older than the retention cutoff are selected first,
+    then each object and its owning document are reloaded before provider
+    resolution. A remote-delete or database-commit failure is rolled back for
+    that object and the sweep continues with later candidates; the row therefore
+    remains retryable.
     """
     if batch_limit <= 0:
         raise ValueError("Document object cleanup batch_limit must be positive")
+    if retention_seconds < 0:
+        raise ValueError(
+            "Document object cleanup retention_seconds must not be negative"
+        )
 
+    retention_cutoff = datetime.now(timezone.utc) - timedelta(
+        seconds=retention_seconds
+    )
     result = await session.execute(
         select(DocumentObjectRecord.document_object_record_id)
-        .where(DocumentObjectRecord.storage_state == "consumed")
+        .where(
+            DocumentObjectRecord.storage_state == "consumed",
+            DocumentObjectRecord.consumed_at <= retention_cutoff,
+        )
         .order_by(DocumentObjectRecord.document_object_record_id)
         .limit(batch_limit)
     )
@@ -102,7 +117,7 @@ async def sweep_consumed_document_objects(
 
 
 class DocumentObjectCleanupWorker:
-    """Continuously drain consumed raw-document objects in bounded batches.
+    """Continuously drain expired consumed document objects in bounded batches.
 
     The worker owns no business state: PostgreSQL lifecycle rows remain the
     durable retry queue. A fresh database session is opened for each sweep so a
@@ -114,15 +129,23 @@ class DocumentObjectCleanupWorker:
         *,
         interval_seconds: float = 60.0,
         batch_limit: int = 25,
+        retention_seconds: int = (
+            object_storage_settings.OBJECT_STORAGE_CONSUMED_RETENTION_SECONDS
+        ),
         session_factory=AsyncSessionLocal,
     ) -> None:
-        """Create a worker with finite polling and query bounds."""
+        """Create a worker with finite polling, query, and retention bounds."""
         if interval_seconds <= 0:
             raise ValueError("Document object cleanup interval_seconds must be positive")
         if batch_limit <= 0:
             raise ValueError("Document object cleanup batch_limit must be positive")
+        if retention_seconds < 0:
+            raise ValueError(
+                "Document object cleanup retention_seconds must not be negative"
+            )
         self.interval_seconds = interval_seconds
         self.batch_limit = batch_limit
+        self.retention_seconds = retention_seconds
         self.session_factory = session_factory
         self._task: asyncio.Task | None = None
         self._is_running = False
@@ -173,4 +196,5 @@ class DocumentObjectCleanupWorker:
             return await sweep_consumed_document_objects(
                 session,
                 batch_limit=self.batch_limit,
+                retention_seconds=self.retention_seconds,
             )
