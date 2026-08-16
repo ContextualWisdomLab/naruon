@@ -52,7 +52,7 @@ organization-scoped API:
 ```text
 GET    /api/object-storage-providers
 POST   /api/object-storage-providers
-PATCH  /api/object-storage-providers/{provider_id}
+PUT    /api/object-storage-providers/{provider_id}
 DELETE /api/object-storage-providers/{provider_id}
 ```
 
@@ -60,7 +60,17 @@ The API never returns stored credential values. Responses expose only redacted
 configuration state such as an access-key fingerprint and booleans indicating
 whether secret/session/KMS material is configured. Only one provider is active
 per organization; object metadata retains the provider that created each object
-so rotation or deactivation does not orphan previously stored documents.
+so credential rotation or deactivation does not orphan previously stored
+documents.
+
+Provider **topology is immutable after creation**. `bucket_name`, `region_name`,
+`endpoint_url`, `addressing_style`, and `expected_bucket_owner` define the
+locator/signing authority used by retained object rows and therefore cannot be
+changed in place. To move to another bucket, region, endpoint, addressing mode,
+or account owner, create a new provider and activate it; keep the old provider
+record until no retained document or cleanup lineage depends on it. `PUT` may
+rotate the provider display name, credentials/session token, future-write
+encryption policy, and activation state.
 
 ### AWS S3 provider example
 
@@ -155,6 +165,13 @@ Each document commits independently. If the relational metadata commit fails
 after an object write, Naruon attempts compensation through the same retained
 provider authority and leaves the original inline payload retryable.
 
+The object key is deterministic but contains only one-way scope/document hashes.
+If compensation itself failed after a successful immutable PUT, the next retry
+may receive the S3 precondition response for an occupied key. Naruon then adopts
+that object **only** after a GET proves the stored byte length and SHA-256 match
+the intended source exactly; a mismatched object remains a hard integrity error.
+This provides orphan reconciliation without granting bucket enumeration.
+
 A backfill run is complete only when a fresh bounded batch selects zero eligible
 rows. Do not delete inline customer data merely because an object write
 succeeded; the inline payload is cleared only in the same transaction that
@@ -187,8 +204,13 @@ persists normalized object metadata.
 7. Exercise deliberately invalid credentials in a test environment and verify
    the client receives only the generic storage failure contract and logs contain
    no credential, bucket, key, filename, or provider response body.
-8. Rotate/deactivate the active provider and verify pre-existing objects continue
-   to resolve through the provider ID retained on their metadata rows.
+8. Rotate credentials/deactivate the active provider and verify pre-existing
+   objects continue to resolve through the provider ID retained on their metadata
+   rows. Create a new provider rather than editing topology when testing a bucket
+   or endpoint migration.
+9. Inject a successful PUT followed by metadata failure and failed compensation;
+   retry the same upload and verify exact bytes are adopted, while a deliberately
+   different occupied object fails integrity validation.
 
 ## Observability and incident response
 
@@ -197,9 +219,10 @@ retryable at their durable PostgreSQL boundary. Do not add bucket names, object
 keys, credentials, or customer filenames to high-cardinality metric labels.
 
 For a failed metadata commit after successful upload or backfill, Naruon attempts
-a compensating delete. A fixed log event indicates compensation failure. Treat
-that event as a possible orphan requiring restricted operator reconciliation;
-never enumerate or expose object locators to end users.
+a compensating delete. If compensation fails, the deterministic-key retry path
+can recover an exact orphan by verifying length and SHA-256 before adoption.
+Never enumerate or expose object locators to end users; a mismatched occupied key
+is an integrity incident, not an object to overwrite.
 
 For integrity failures:
 
