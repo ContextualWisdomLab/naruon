@@ -1,18 +1,21 @@
 """Regression tests for retryable cleanup of consumed NewsDOM source objects.
 
 Recognition commits parsed text and the ``consumed`` lifecycle marker before any
-remote delete. These tests require a later cleanup sweep to delete consumed
-objects and to keep failed deletes retryable without starving subsequent rows.
+remote delete. These tests require a later cleanup sweep to resolve each retained
+provider, delete consumed objects, and keep failed deletes retryable without
+starving subsequent rows.
 """
 
 from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
 from db.document_object_record import DocumentObjectRecord
+from db.models import Document
 import services.document_object_cleanup as cleanup_module
 
 
@@ -34,18 +37,57 @@ class _CleanupSession:
 
     def __init__(self, records: list[DocumentObjectRecord]) -> None:
         self.records = {record.document_object_record_id: record for record in records}
+        self.documents = {
+            record.document_id: Document(
+                document_id=record.document_id,
+                workspace_id="workspace-one",
+                organization_id="organization-one",
+                document_name=f"{record.document_id}.pdf",
+                document_type="pdf",
+                document_content=None,
+                document_status="parsed",
+            )
+            for record in records
+        }
+        self.provider = SimpleNamespace(
+            object_storage_provider_id=77,
+            provider_name="primary-s3",
+            provider_type="s3",
+            bucket_name="naruon-documents",
+            region_name="us-east-1",
+            endpoint_url=None,
+            addressing_style="virtual",
+            access_key_id="access-key",
+            secret_access_key="secret-key",
+            session_token=None,
+            server_side_encryption="AES256",
+            kms_key_id=None,
+            expected_bucket_owner=None,
+            is_active=False,
+        )
         self.commits = 0
         self.rollbacks = 0
         self.execute_calls = 0
         self.get_calls: list[int] = []
+        self.document_get_calls: list[str] = []
+        self.scalar_calls = 0
 
     async def execute(self, _statement):
         self.execute_calls += 1
         return _ScalarRows(sorted(self.records))
 
-    async def get(self, _model, record_id: int):
-        self.get_calls.append(record_id)
-        return self.records.get(record_id)
+    async def get(self, model, record_id):
+        if model is DocumentObjectRecord:
+            self.get_calls.append(record_id)
+            return self.records.get(record_id)
+        if model is Document:
+            self.document_get_calls.append(record_id)
+            return self.documents.get(record_id)
+        raise AssertionError("unexpected cleanup model")
+
+    async def scalar(self, _statement):
+        self.scalar_calls += 1
+        return self.provider
 
     async def commit(self):
         self.commits += 1
@@ -105,6 +147,7 @@ def _consumed_record(record_id: int) -> DocumentObjectRecord:
     record = DocumentObjectRecord(
         document_object_record_id=record_id,
         document_id=f"document-{record_id}",
+        object_storage_provider_id=77,
         storage_backend="s3",
         bucket_name="naruon-documents",
         object_key=f"workspace-documents/scope/document-{record_id}/source.pdf",
@@ -125,7 +168,7 @@ async def test_consumed_object_cleanup_commits_each_remote_delete(monkeypatch):
     session = _CleanupSession([first, second])
     deleted_ids: list[int] = []
 
-    async def delete_consumed(record: DocumentObjectRecord) -> None:
+    async def delete_consumed(record: DocumentObjectRecord, **_kwargs) -> None:
         deleted_ids.append(record.document_object_record_id)
         record.storage_state = "deleted"
         record.deleted_at = _now_utc()
@@ -148,6 +191,8 @@ async def test_consumed_object_cleanup_commits_each_remote_delete(monkeypatch):
     )
     assert deleted_ids == [1, 2]
     assert session.get_calls == [1, 2]
+    assert session.document_get_calls == ["document-1", "document-2"]
+    assert session.scalar_calls == 2
     assert session.commits == 2
     assert session.rollbacks == 0
     assert first.storage_state == "deleted"
@@ -164,7 +209,7 @@ async def test_consumed_object_cleanup_failure_remains_retryable_and_does_not_st
     session = _CleanupSession([first, second])
     attempts: list[int] = []
 
-    async def delete_consumed(record: DocumentObjectRecord) -> None:
+    async def delete_consumed(record: DocumentObjectRecord, **_kwargs) -> None:
         attempts.append(record.document_object_record_id)
         if record.document_object_record_id == 1:
             raise cleanup_module.DocumentObjectStorageError(
@@ -206,7 +251,7 @@ async def test_consumed_object_cleanup_rechecks_state_after_selection(monkeypatc
     record.deleted_at = _now_utc()
     calls = 0
 
-    async def forbidden_delete(_record: DocumentObjectRecord) -> None:
+    async def forbidden_delete(_record: DocumentObjectRecord, **_kwargs) -> None:
         nonlocal calls
         calls += 1
 
