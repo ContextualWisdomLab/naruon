@@ -1,8 +1,8 @@
 """Regression tests for retryable cleanup of consumed NewsDOM source objects.
 
 Recognition commits parsed text and the ``consumed`` lifecycle marker before any
-remote delete. These tests require a later sweep to delete consumed objects and
-to keep failed deletes retryable without starving subsequent records.
+remote delete. These tests require a later cleanup sweep to delete consumed
+objects and to keep failed deletes retryable without starving subsequent rows.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import pytest
 
 from db.document_object_record import DocumentObjectRecord
-import services.newsdom_worker as worker_module
+import services.document_object_cleanup as cleanup_module
 
 
 class _ScalarRows:
@@ -89,15 +89,21 @@ async def test_consumed_object_cleanup_commits_each_remote_delete(monkeypatch):
         record.deleted_at = _now_utc()
 
     monkeypatch.setattr(
-        worker_module,
+        cleanup_module,
         "delete_consumed_document_payload",
         delete_consumed,
-        raising=False,
     )
 
-    worker = worker_module.NewsdomRecognitionWorker(batch_limit=5)
-    await worker._sweep_consumed_document_objects(session)
+    result = await cleanup_module.sweep_consumed_document_objects(
+        session,
+        batch_limit=5,
+    )
 
+    assert result == cleanup_module.DocumentObjectCleanupResult(
+        selected_count=2,
+        deleted_count=2,
+        failed_count=0,
+    )
     assert deleted_ids == [1, 2]
     assert session.get_calls == [1, 2]
     assert session.commits == 2
@@ -119,23 +125,62 @@ async def test_consumed_object_cleanup_failure_remains_retryable_and_does_not_st
     async def delete_consumed(record: DocumentObjectRecord) -> None:
         attempts.append(record.document_object_record_id)
         if record.document_object_record_id == 1:
-            raise worker_module.DocumentObjectStorageError("temporary object-store outage")
+            raise cleanup_module.DocumentObjectStorageError(
+                "temporary object-store outage"
+            )
         record.storage_state = "deleted"
         record.deleted_at = _now_utc()
 
     monkeypatch.setattr(
-        worker_module,
+        cleanup_module,
         "delete_consumed_document_payload",
         delete_consumed,
-        raising=False,
     )
 
-    worker = worker_module.NewsdomRecognitionWorker(batch_limit=5)
-    await worker._sweep_consumed_document_objects(session)
+    result = await cleanup_module.sweep_consumed_document_objects(
+        session,
+        batch_limit=5,
+    )
 
+    assert result == cleanup_module.DocumentObjectCleanupResult(
+        selected_count=2,
+        deleted_count=1,
+        failed_count=1,
+    )
     assert attempts == [1, 2]
     assert session.rollbacks == 1
     assert session.commits == 1
     assert first.storage_state == "consumed"
     assert first.deleted_at is None
     assert second.storage_state == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_rechecks_state_after_selection(monkeypatch):
+    """Skip a row that another safe actor completed after ID selection."""
+    record = _consumed_record(1)
+    session = _CleanupSession([record])
+    record.storage_state = "deleted"
+    record.deleted_at = _now_utc()
+    calls = 0
+
+    async def forbidden_delete(_record: DocumentObjectRecord) -> None:
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(
+        cleanup_module,
+        "delete_consumed_document_payload",
+        forbidden_delete,
+    )
+
+    result = await cleanup_module.sweep_consumed_document_objects(session, batch_limit=5)
+
+    assert result == cleanup_module.DocumentObjectCleanupResult(
+        selected_count=1,
+        deleted_count=0,
+        failed_count=0,
+    )
+    assert calls == 0
+    assert session.commits == 0
+    assert session.rollbacks == 0
