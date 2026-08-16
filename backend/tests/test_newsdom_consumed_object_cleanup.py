@@ -7,6 +7,7 @@ objects and to keep failed deletes retryable without starving subsequent rows.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 import pytest
@@ -51,6 +52,47 @@ class _CleanupSession:
 
     async def rollback(self):
         self.rollbacks += 1
+
+
+class _CleanupSessionContext:
+    """Expose one fake session through an async context-manager boundary."""
+
+    def __init__(self, session: _CleanupSession) -> None:
+        self.session = session
+
+    async def __aenter__(self) -> _CleanupSession:
+        return self.session
+
+    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
+        return None
+
+
+class _CleanupSessionFactory:
+    """Record worker session-factory use without a live database."""
+
+    def __init__(self, session: _CleanupSession) -> None:
+        self.session = session
+        self.calls = 0
+
+    def __call__(self) -> _CleanupSessionContext:
+        self.calls += 1
+        return _CleanupSessionContext(self.session)
+
+
+class _CancelledTask:
+    """Task substitute whose await path raises cancellation after cancel()."""
+
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def __await__(self):
+        async def cancelled_wait():
+            raise asyncio.CancelledError
+
+        return cancelled_wait().__await__()
 
 
 def _now_utc() -> datetime:
@@ -199,3 +241,138 @@ async def test_consumed_object_cleanup_rejects_nonpositive_batch_limit(batch_lim
         )
 
     assert session.execute_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("interval_seconds", "batch_limit", "message"),
+    [
+        (0.0, 25, "interval_seconds must be positive"),
+        (60.0, 0, "batch_limit must be positive"),
+    ],
+)
+def test_consumed_object_cleanup_worker_rejects_unbounded_runtime_configuration(
+    interval_seconds,
+    batch_limit,
+    message,
+):
+    """Refuse worker settings that can spin or issue an unbounded cleanup query."""
+    session_factory = _CleanupSessionFactory(_CleanupSession([]))
+
+    with pytest.raises(ValueError, match=message):
+        cleanup_module.DocumentObjectCleanupWorker(
+            interval_seconds=interval_seconds,
+            batch_limit=batch_limit,
+            session_factory=session_factory,
+        )
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_worker_sync_uses_bounded_session_factory(
+    monkeypatch,
+):
+    """Run one cleanup sweep through a fresh database session with the configured cap."""
+    session = _CleanupSession([])
+    session_factory = _CleanupSessionFactory(session)
+    observed: list[tuple[object, int]] = []
+    expected = cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
+
+    async def sweep(candidate_session, *, batch_limit):
+        observed.append((candidate_session, batch_limit))
+        return expected
+
+    monkeypatch.setattr(cleanup_module, "sweep_consumed_document_objects", sweep)
+    worker = cleanup_module.DocumentObjectCleanupWorker(
+        interval_seconds=60,
+        batch_limit=7,
+        session_factory=session_factory,
+    )
+
+    result = await worker._sync()
+
+    assert result == expected
+    assert observed == [(session, 7)]
+    assert session_factory.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_worker_start_stop_is_idempotent(monkeypatch):
+    """Start one background loop and shut it down without spawning duplicates."""
+    worker = cleanup_module.DocumentObjectCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        session_factory=_CleanupSessionFactory(_CleanupSession([])),
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocking_sync():
+        entered.set()
+        await release.wait()
+        return cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
+
+    monkeypatch.setattr(worker, "_sync", blocking_sync)
+
+    await worker.start()
+    first_task = worker._task
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    await worker.start()
+
+    assert worker._task is first_task
+    assert worker._is_running is True
+
+    release.set()
+    await asyncio.sleep(0)
+    await worker.stop()
+    await worker.stop()
+
+    assert worker._is_running is False
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_worker_recovers_after_one_sync_failure(
+    monkeypatch,
+):
+    """Log one transient sweep failure and continue to the next scheduled sweep."""
+    worker = cleanup_module.DocumentObjectCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        session_factory=_CleanupSessionFactory(_CleanupSession([])),
+    )
+    calls = 0
+
+    async def flaky_sync():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("temporary database outage")
+        worker._is_running = False
+        return cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
+
+    async def immediate_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(worker, "_sync", flaky_sync)
+    monkeypatch.setattr(cleanup_module.asyncio, "sleep", immediate_sleep)
+    worker._is_running = True
+
+    await worker._run_loop()
+
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_consumed_object_cleanup_worker_stop_handles_cancelled_task() -> None:
+    """Treat task cancellation during shutdown as the expected control path."""
+    worker = cleanup_module.DocumentObjectCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        session_factory=_CleanupSessionFactory(_CleanupSession([])),
+    )
+    task = _CancelledTask()
+    worker._is_running = True
+    worker._task = task
+
+    await worker.stop()
+
+    assert task.cancelled is True
+    assert worker._is_running is False
