@@ -31,7 +31,6 @@ if [ ! -x ".venv/bin/python" ]; then
 fi
 # shellcheck disable=SC1091
 . .venv/bin/activate
-python -m pip install --upgrade pip
 python -m pip install --require-hashes -r requirements-hashes.txt
 
 echo "==> [install] frontend dependencies (pnpm@11.5.3)"
