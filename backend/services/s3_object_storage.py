@@ -10,7 +10,7 @@ request-body streaming.
 from __future__ import annotations
 
 import base64
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -125,7 +125,7 @@ def build_document_object_key(
     document_id: str,
     extension: str,
 ) -> str:
-    """Build a deterministic key without exposing tenant or workspace identifiers."""
+    """Build a deterministic key that exposes no domain identifier directly."""
     normalized_document_id = document_id.strip()
     if not normalized_document_id or _CONTROL_CHARACTER_PATTERN.search(
         normalized_document_id
@@ -136,10 +136,16 @@ def build_document_object_key(
     normalized_extension = extension.strip().lower().lstrip(".")
     if not re.fullmatch(r"[a-z0-9]{1,16}", normalized_extension):
         raise ValueError("document extension is invalid for an object key")
-    scope_material = f"{organization_id or 'personal'}\x00{workspace_id}".encode()
+    scope_material = f"{organization_id or 'personal'}\x00{workspace_id}".encode(
+        "utf-8"
+    )
     scope_hash = hashlib.sha256(scope_material).hexdigest()[:32]
+    document_material = (
+        scope_material + b"\x00" + normalized_document_id.encode("utf-8")
+    )
+    document_hash = hashlib.sha256(document_material).hexdigest()[:32]
     return (
-        f"workspace-documents/{scope_hash}/{normalized_document_id}/"
+        f"workspace-documents/{scope_hash}/{document_hash}/"
         f"source.{normalized_extension}"
     )
 
@@ -239,6 +245,35 @@ def sign_s3_request(
     return canonical_headers
 
 
+async def _verified_stream_content(
+    content_stream: AsyncIterable[bytes],
+    *,
+    content_length: int,
+    checksum_sha256: str,
+) -> AsyncIterator[bytes]:
+    """Yield only bytes that match the length and SHA-256 used to sign the PUT."""
+    observed_length = 0
+    observed_digest = hashlib.sha256()
+    async for chunk in content_stream:
+        if not isinstance(chunk, bytes):
+            raise S3ObjectIntegrityError("S3 streamed object must yield bytes")
+        observed_length += len(chunk)
+        if observed_length > content_length:
+            raise S3ObjectIntegrityError(
+                "S3 streamed object failed integrity length verification"
+            )
+        observed_digest.update(chunk)
+        yield chunk
+    if observed_length != content_length:
+        raise S3ObjectIntegrityError(
+            "S3 streamed object failed integrity length verification"
+        )
+    if observed_digest.hexdigest() != checksum_sha256:
+        raise S3ObjectIntegrityError(
+            "S3 streamed object failed integrity checksum verification"
+        )
+
+
 class S3ObjectStorageBackend:
     """Signed S3 CRUD operations with checksum verification and safe errors."""
 
@@ -329,11 +364,20 @@ class S3ObjectStorageBackend:
                 self._configuration.kms_key_id
             )
         self._add_expected_owner_header(headers)
+        request_content: bytes | AsyncIterable[bytes]
+        if isinstance(content, bytes):
+            request_content = content
+        else:
+            request_content = _verified_stream_content(
+                content,
+                content_length=content_length,
+                checksum_sha256=checksum_sha256,
+            )
         response = await self._request(
             method="PUT",
             object_key=object_key,
             headers=headers,
-            content=content,
+            content=request_content,
             payload_sha256=checksum_sha256,
         )
         returned_checksum = response.headers.get("x-amz-checksum-sha256")
