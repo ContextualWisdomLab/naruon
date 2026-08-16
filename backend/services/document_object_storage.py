@@ -13,8 +13,10 @@ import base64
 import binascii
 from dataclasses import dataclass
 import datetime
+import hashlib
 from urllib.parse import urlsplit
 
+from fastapi import UploadFile
 from sqlalchemy import select
 
 from core.object_storage_config import object_storage_settings as settings
@@ -36,10 +38,36 @@ from services.s3_object_storage import (
 
 
 MAX_PDF_DOCUMENT_BYTES = 20 * 1024 * 1024
+PDF_UPLOAD_CHUNK_BYTES = 64 * 1024
 
 
 class DocumentObjectStorageError(RuntimeError):
     """Raised when a configured document backend cannot safely serve a payload."""
+
+
+class DocumentUploadTooLargeError(ValueError):
+    """Raised when a streamed document exceeds the configured upload ceiling."""
+
+
+class DocumentUploadValidationError(ValueError):
+    """Raised when streamed document bytes do not satisfy the PDF contract."""
+
+
+@dataclass(frozen=True)
+class ValidatedPDFUpload:
+    """Integrity metadata produced by a bounded first pass over an upload."""
+
+    content_length: int
+    checksum_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.content_length < 0:
+            raise ValueError("Validated PDF length must not be negative")
+        if len(self.checksum_sha256) != 64 or any(
+            character not in "0123456789abcdef"
+            for character in self.checksum_sha256
+        ):
+            raise ValueError("Validated PDF checksum must be lowercase SHA-256")
 
 
 @dataclass(frozen=True)
@@ -86,6 +114,159 @@ class StoredDocumentPayload:
         )
 
 
+async def inspect_pdf_upload(
+    upload: UploadFile,
+    *,
+    max_bytes: int = MAX_PDF_DOCUMENT_BYTES,
+    chunk_size: int = PDF_UPLOAD_CHUNK_BYTES,
+) -> ValidatedPDFUpload:
+    """Validate, hash, and rewind one PDF without buffering it in application RAM.
+
+    FastAPI's ``UploadFile`` is a spooled file. This first pass reads only
+    positive bounded chunks, enforces the byte ceiling while data is consumed,
+    validates the PDF signature, records the exact SHA-256 used for SigV4 and S3
+    checksum headers, and rewinds the spool for the persistence pass.
+    """
+    if max_bytes <= 0:
+        raise ValueError("PDF upload max_bytes must be positive")
+    if chunk_size <= 0:
+        raise ValueError("PDF upload chunk_size must be positive")
+
+    digest = hashlib.sha256()
+    prefix = bytearray()
+    content_length = 0
+    await upload.seek(0)
+    try:
+        while True:
+            chunk = await upload.read(chunk_size)
+            if not chunk:
+                break
+            if not isinstance(chunk, bytes):
+                raise DocumentUploadValidationError("PDF upload did not yield bytes")
+            content_length += len(chunk)
+            if content_length > max_bytes:
+                raise DocumentUploadTooLargeError("PDF upload exceeds the size limit")
+            if len(prefix) < 5:
+                prefix.extend(chunk[: 5 - len(prefix)])
+            digest.update(chunk)
+    finally:
+        await upload.seek(0)
+
+    if bytes(prefix) != b"%PDF-":
+        raise DocumentUploadValidationError("PDF upload does not have a PDF signature")
+    return ValidatedPDFUpload(
+        content_length=content_length,
+        checksum_sha256=digest.hexdigest(),
+    )
+
+
+async def _iter_verified_upload(
+    upload: UploadFile,
+    *,
+    validated_upload: ValidatedPDFUpload,
+    chunk_size: int,
+):
+    """Yield a second bounded pass and reject content changed after inspection."""
+    digest = hashlib.sha256()
+    content_length = 0
+    await upload.seek(0)
+    try:
+        while True:
+            chunk = await upload.read(chunk_size)
+            if not chunk:
+                break
+            if not isinstance(chunk, bytes):
+                raise ValueError("PDF upload did not yield bytes during persistence")
+            content_length += len(chunk)
+            if content_length > validated_upload.content_length:
+                raise ValueError("PDF upload changed after integrity inspection")
+            digest.update(chunk)
+            yield chunk
+        if (
+            content_length != validated_upload.content_length
+            or digest.hexdigest() != validated_upload.checksum_sha256
+        ):
+            raise ValueError("PDF upload changed after integrity inspection")
+    finally:
+        await upload.seek(0)
+
+
+async def _read_verified_upload_bytes(
+    upload: UploadFile,
+    *,
+    validated_upload: ValidatedPDFUpload,
+    chunk_size: int,
+) -> bytes:
+    """Collect bounded verified chunks for the legacy inline database backend."""
+    chunks = [
+        chunk
+        async for chunk in _iter_verified_upload(
+            upload,
+            validated_upload=validated_upload,
+            chunk_size=chunk_size,
+        )
+    ]
+    return b"".join(chunks)
+
+
+async def store_configured_pdf_upload(
+    *,
+    upload: UploadFile,
+    validated_upload: ValidatedPDFUpload,
+    document_id: str,
+    organization_id: str | None,
+    workspace_id: str,
+    chunk_size: int = PDF_UPLOAD_CHUNK_BYTES,
+) -> StoredDocumentPayload:
+    """Persist an inspected upload through bounded database or S3 reads.
+
+    The default database mode still requires a bounded in-memory join before
+    base64 encoding for backward compatibility. The S3 mode never builds that
+    byte buffer: it sends the rewound spool through ``httpx`` as an async stream
+    with a signed, precomputed content length and SHA-256 digest.
+    """
+    if chunk_size <= 0:
+        raise ValueError("PDF upload chunk_size must be positive")
+    if validated_upload.content_length > MAX_PDF_DOCUMENT_BYTES:
+        raise DocumentUploadTooLargeError("PDF upload exceeds the size limit")
+
+    if settings.OBJECT_STORAGE_BACKEND == "database":
+        payload = await _read_verified_upload_bytes(
+            upload,
+            validated_upload=validated_upload,
+            chunk_size=chunk_size,
+        )
+        return StoredDocumentPayload.for_database(payload)
+    if settings.OBJECT_STORAGE_BACKEND != "s3":
+        raise DocumentObjectStorageError("Configured document backend is unsupported")
+
+    backend = await _build_s3_backend_from_settings()
+    try:
+        stored_object = await backend.put_object_stream(
+            object_key=build_document_object_key(
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                document_id=document_id,
+                extension="pdf",
+            ),
+            content_stream=_iter_verified_upload(
+                upload,
+                validated_upload=validated_upload,
+                chunk_size=chunk_size,
+            ),
+            content_length=validated_upload.content_length,
+            checksum_sha256=validated_upload.checksum_sha256,
+            content_type="application/pdf",
+        )
+    except (S3ObjectStorageError, ValueError) as exc:
+        raise DocumentObjectStorageError(
+            "Configured S3 document storage could not persist the payload"
+        ) from exc
+    finally:
+        await backend.aclose()
+    return StoredDocumentPayload.for_s3(stored_object)
+
+
 def _utc_now() -> datetime.datetime:
     """Return an aware UTC timestamp for object lifecycle transitions."""
     return datetime.datetime.now(datetime.timezone.utc)
@@ -129,7 +310,12 @@ async def store_configured_pdf_document(
     organization_id: str | None,
     workspace_id: str,
 ) -> StoredDocumentPayload:
-    """Persist a PDF using the configured database or S3 backend."""
+    """Persist already-materialized PDF bytes using the configured backend.
+
+    This byte-oriented seam remains for deterministic legacy-row backfill. New
+    HTTP uploads use :func:`store_configured_pdf_upload` so S3 mode does not
+    materialize the entire request body in application memory.
+    """
     _validate_pdf_bytes(payload)
     if settings.OBJECT_STORAGE_BACKEND == "database":
         return StoredDocumentPayload.for_database(payload)
