@@ -21,15 +21,16 @@ from db.models import Base
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from db.models import Document
+    from db.object_storage_provider import ObjectStorageProvider
 
 
 class DocumentObjectRecord(Base):
     """Integrity-bearing locator for one raw workspace document stored in S3.
 
     The owning ``workspace_documents`` row remains authoritative for tenant
-    scope and workflow state. This table contains only the opaque object
-    locator, integrity metadata, and lifecycle timestamps; raw payload bytes
-    never enter this row.
+    scope and workflow state. This table contains only the provider reference,
+    opaque object locator, integrity metadata, and lifecycle timestamps; raw
+    payload bytes never enter this row.
     """
 
     __tablename__ = "document_object_records"
@@ -78,6 +79,10 @@ class DocumentObjectRecord(Base):
             "ix_document_object_records_checksum",
             "checksum_sha256",
         ),
+        Index(
+            "ix_document_object_records_provider",
+            "object_storage_provider_id",
+        ),
     )
 
     document_object_record_id: Mapped[int] = mapped_column(primary_key=True)
@@ -85,7 +90,17 @@ class DocumentObjectRecord(Base):
         ForeignKey("workspace_documents.document_id", ondelete="CASCADE"),
         nullable=False,
     )
+    object_storage_provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "object_storage_providers.object_storage_provider_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+    )
     document: Mapped["Document"] = relationship("Document")
+    object_storage_provider: Mapped["ObjectStorageProvider | None"] = relationship(
+        "ObjectStorageProvider"
+    )
     storage_backend: Mapped[str] = mapped_column(String(32), nullable=False)
     bucket_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
