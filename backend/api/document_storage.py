@@ -23,10 +23,13 @@ from db.models import Document
 from db.session import get_db
 from services.document_object_storage import (
     DocumentObjectStorageError,
+    DocumentUploadTooLargeError,
+    DocumentUploadValidationError,
     StoredDocumentPayload,
     delete_configured_document_payload,
     delete_document_object_record,
-    store_configured_pdf_document,
+    inspect_pdf_upload,
+    store_configured_pdf_upload,
 )
 from services.newsdom_pdf_recognition import PDF_DOM_RECOGNITION_PENDING_STATUS
 
@@ -80,28 +83,30 @@ async def upload_document_for_pdf_dom_recognition(
 ) -> DataDocumentActionResponse:
     """Persist a bounded PDF and queue NewsDOM recognition safely.
 
-    The database backend preserves the existing base64 contract for deployments
-    that have not opted into object storage. The S3 backend writes raw bytes once
-    and stores only normalized locator/integrity metadata in PostgreSQL.
-
-    The replacement route deliberately reads the legacy data-router limit at
-    request time so existing deployments and tests that tighten that boundary
-    continue to exercise the same fail-closed size policy after runtime routing.
+    Upload validation and hashing use bounded reads over FastAPI's spooled
+    ``UploadFile``. The database backend preserves the legacy base64 contract;
+    the S3 backend rewinds and streams the spool directly to a signed PUT while
+    PostgreSQL stores only normalized locator and integrity metadata.
     """
     upload_limit_bytes = data_api._MAX_PDF_DOM_UPLOAD_BYTES
-    raw = await file.read(upload_limit_bytes + 1)
-    if len(raw) > upload_limit_bytes:
-        raise HTTPException(status_code=413, detail="PDF upload is too large.")
-    if not raw.startswith(b"%PDF-"):
+    try:
+        validated_upload = await inspect_pdf_upload(
+            file,
+            max_bytes=upload_limit_bytes,
+        )
+    except DocumentUploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail="PDF upload is too large.") from exc
+    except DocumentUploadValidationError as exc:
         raise HTTPException(
             status_code=415,
             detail="Only application/pdf uploads are supported for DOM recognition.",
-        )
+        ) from exc
 
     document_id = f"doc_{uuid.uuid4().hex}"
     try:
-        stored_payload = await store_configured_pdf_document(
-            payload=raw,
+        stored_payload = await store_configured_pdf_upload(
+            upload=file,
+            validated_upload=validated_upload,
             document_id=document_id,
             organization_id=auth_context.organization_id,
             workspace_id=auth_context.workspace_id,
