@@ -7,7 +7,7 @@ to keep failed deletes retryable without starving subsequent records.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from datetime import datetime, timezone
 
 import pytest
 
@@ -53,6 +53,11 @@ class _CleanupSession:
         self.rollbacks += 1
 
 
+def _now_utc() -> datetime:
+    """Return an aware timestamp for fake persisted lifecycle records."""
+    return datetime.now(timezone.utc)
+
+
 def _consumed_record(record_id: int) -> DocumentObjectRecord:
     """Build one persisted-looking consumed object record."""
     record = DocumentObjectRecord(
@@ -66,7 +71,7 @@ def _consumed_record(record_id: int) -> DocumentObjectRecord:
         checksum_sha256="0" * 64,
         storage_state="consumed",
     )
-    record.consumed_at = worker_module._utc_now_for_object_cleanup()
+    record.consumed_at = _now_utc()
     return record
 
 
@@ -81,7 +86,7 @@ async def test_consumed_object_cleanup_commits_each_remote_delete(monkeypatch):
     async def delete_consumed(record: DocumentObjectRecord) -> None:
         deleted_ids.append(record.document_object_record_id)
         record.storage_state = "deleted"
-        record.deleted_at = worker_module._utc_now_for_object_cleanup()
+        record.deleted_at = _now_utc()
 
     monkeypatch.setattr(
         worker_module,
@@ -116,7 +121,7 @@ async def test_consumed_object_cleanup_failure_remains_retryable_and_does_not_st
         if record.document_object_record_id == 1:
             raise worker_module.DocumentObjectStorageError("temporary object-store outage")
         record.storage_state = "deleted"
-        record.deleted_at = worker_module._utc_now_for_object_cleanup()
+        record.deleted_at = _now_utc()
 
     monkeypatch.setattr(
         worker_module,
