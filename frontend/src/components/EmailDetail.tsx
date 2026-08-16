@@ -105,7 +105,6 @@ function normalizeLlmData(payload: unknown): LlmData {
 // ⚡ Bolt: Memoized EmailDetail to prevent unnecessary re-renders
 // 🎯 Why: Re-renders of EmailDetail when the parent components (like WorkspaceHome) re-render can cause performance issues, especially when switching active layout tabs or receiving polling updates that don't affect the selected email.
 // 📊 Impact: Significantly reduces React reconciliation work when the workspace state changes but the selected email remains the same.
-
 const ConversationMessage = memo(function ConversationMessage({
   msg,
   isSelected,
@@ -143,7 +142,6 @@ const ConversationMessage = memo(function ConversationMessage({
 });
 
 export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
-
   const [email, setEmail] = useState<EmailData | null>(null);
   const [threadEmails, setThreadEmails] = useState<EmailData[]>([]);
   const [llmData, setLlmData] = useState<LlmData | null>(null);
