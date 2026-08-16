@@ -320,6 +320,38 @@ async def test_customer_delete_removes_s3_payload_before_relational_document(mon
 
 
 @pytest.mark.asyncio
+async def test_customer_delete_db_commit_failure_preserves_retryable_locator(monkeypatch):
+    """Rollback relational deletion so idempotent S3 DELETE can be retried later."""
+    document = _stored_document()
+    object_record = _object_record(document)
+    session = DeletionSession(
+        document=document,
+        object_record=object_record,
+        commit_error=RuntimeError("database unavailable"),
+    )
+    remote_deleted: list[DocumentObjectRecord] = []
+
+    async def delete_remote(record: DocumentObjectRecord) -> None:
+        remote_deleted.append(record)
+
+    monkeypatch.setattr(data_module, "delete_document_object_record", delete_remote)
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await data_module.delete_workspace_document(
+            document_id=document.document_id,
+            auth_context=_auth_context(),
+            db=session,
+        )
+
+    assert remote_deleted == [object_record]
+    assert session.deleted == [document]
+    assert session.commit_count == 1
+    assert session.rollback_count == 1
+    assert session.object_record is object_record
+    assert object_record.object_key.endswith("source.pdf")
+
+
+@pytest.mark.asyncio
 async def test_customer_delete_storage_failure_is_safe_and_retryable(monkeypatch):
     """Keep database metadata when the external raw object cannot be deleted."""
     document = _stored_document()
