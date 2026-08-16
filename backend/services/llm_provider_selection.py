@@ -90,6 +90,12 @@ async def resolve_runtime_llm_provider(
     user_id: str,
     organization_id: str | None,
 ) -> RuntimeLLMProvider | None:
+    """Resolve the tenant Fernet LLM provider for search / chat / embeddings.
+
+    Noema is not a caller. Decision-agent completions go through
+    ``services.orchestrator_gateway.resolve_orchestrator_gateway`` so naruon
+    never places NVIDIA / OpenAI / OpenRouter / Bytez keys on that path.
+    """
     active_provider = await get_active_llm_provider(session, organization_id)
     if active_provider is not None:
         runtime_provider = _runtime_from_provider(active_provider)

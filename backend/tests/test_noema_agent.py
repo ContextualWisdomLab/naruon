@@ -9,6 +9,7 @@ These cover the seams without needing a live LLM or a database:
 """
 
 import datetime
+from pathlib import Path
 
 import pytest
 
@@ -504,3 +505,16 @@ async def test_agent_runs_tools_with_test_model(monkeypatch):
     expected_tools = {spec["name"] for spec in NOEMA_TOOL_SPECS}
     assert expected_tools <= set(deps.tool_calls)
     assert getattr(result, "output", None) is not None
+
+
+def test_noema_agent_source_does_not_import_tenant_llm_provider():
+    """Unique slice: Noema's LLM client is orchestrator-only.
+
+    ``resolve_runtime_llm_provider`` remains for search / chat / embeddings.
+    This file must not import that resolver or ``llm_provider_selection``.
+    """
+    source = Path(noema_agent.__file__).read_text(encoding="utf-8")
+    assert "llm_provider_selection" not in source
+    assert "resolve_runtime_llm_provider" not in source
+    assert "RuntimeLLMProvider" not in source
+    assert "from services.orchestrator_gateway import" in source
