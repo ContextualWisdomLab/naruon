@@ -14,6 +14,12 @@ from typing import Literal
 
 CommitmentStatus = Literal["confirmed", "tentative", "desired"]
 DecisionCode = Literal["available", "blocked", "review_required"]
+PolicyValidationCode = Literal[
+    "calendar_commitment_id_required",
+    "calendar_timestamp_timezone_required",
+    "calendar_interval_invalid",
+    "calendar_status_unsupported",
+]
 
 _STATUS_PRIORITY: dict[str, int] = {
     "desired": 1,
@@ -21,6 +27,20 @@ _STATUS_PRIORITY: dict[str, int] = {
     "confirmed": 3,
 }
 UTC = datetime.timezone.utc
+
+
+class CalendarPolicyValidationError(ValueError):
+    """Stable typed validation failure emitted by the calendar policy boundary.
+
+    Attributes:
+        error_code: Machine-readable code that remains stable when explanatory
+            wording changes.
+    """
+
+    def __init__(self, error_code: PolicyValidationCode, message: str) -> None:
+        """Create a validation failure with a stable public-facing code."""
+        super().__init__(message)
+        self.error_code = error_code
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,13 +62,22 @@ class CalendarCommitment:
     def __post_init__(self) -> None:
         """Fail closed when scheduling evidence is ambiguous or unsupported."""
         if not self.commitment_id.strip():
-            raise ValueError("commitment_id must be non-blank")
+            raise CalendarPolicyValidationError(
+                "calendar_commitment_id_required",
+                "commitment_id must be non-blank",
+            )
         _require_timezone_aware(self.start_at)
         _require_timezone_aware(self.end_at)
-        if self.end_at <= self.start_at:
-            raise ValueError("end_at must be later than start_at")
+        if _as_utc(self.end_at) <= _as_utc(self.start_at):
+            raise CalendarPolicyValidationError(
+                "calendar_interval_invalid",
+                "end_at must be later than start_at",
+            )
         if self.status not in _STATUS_PRIORITY:
-            raise ValueError(f"Unsupported commitment status: {self.status}")
+            raise CalendarPolicyValidationError(
+                "calendar_status_unsupported",
+                f"Unsupported commitment status: {self.status}",
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +94,15 @@ class CalendarConflictDecision:
 def _require_timezone_aware(value: datetime.datetime) -> None:
     """Reject local/naive timestamps whose absolute instant is ambiguous."""
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError("calendar commitment timestamps must be timezone-aware")
+        raise CalendarPolicyValidationError(
+            "calendar_timestamp_timezone_required",
+            "calendar commitment timestamps must be timezone-aware",
+        )
+
+
+def _as_utc(value: datetime.datetime) -> datetime.datetime:
+    """Return an already-validated aware timestamp in absolute UTC time."""
+    return value.astimezone(UTC)
 
 
 def _overlaps(
@@ -73,14 +110,18 @@ def _overlaps(
     right: CalendarCommitment,
 ) -> bool:
     """Return whether two half-open event intervals overlap in absolute time."""
-    return left.start_at < right.end_at and right.start_at < left.end_at
+    left_start = _as_utc(left.start_at)
+    left_end = _as_utc(left.end_at)
+    right_start = _as_utc(right.start_at)
+    right_end = _as_utc(right.end_at)
+    return left_start < right_end and right_start < left_end
 
 
 def _conflict_sort_key(
     commitment: CalendarCommitment,
 ) -> tuple[datetime.datetime, str]:
     """Sort provider evidence deterministically by UTC instant then opaque ID."""
-    return commitment.start_at.astimezone(UTC), commitment.commitment_id
+    return _as_utc(commitment.start_at), commitment.commitment_id
 
 
 def evaluate_calendar_conflicts(
