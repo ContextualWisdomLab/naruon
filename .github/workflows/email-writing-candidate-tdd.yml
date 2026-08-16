@@ -9,6 +9,7 @@ on:
       - backend/services/email_writing_candidate_review.py
       - backend/services/email_writing_prompt.py
       - backend/tests/test_email_writing_candidate_review.py
+      - backend/tests/test_email_writing_candidate_review_terminal_coverage.py
       - backend/tests/fixtures/email_writing/candidate_outputs.json
       - .github/workflows/email-writing-candidate-tdd.yml
   workflow_dispatch:
@@ -64,14 +65,18 @@ jobs:
       - name: Run Task 6 candidate-review tests
         run: |
           cd backend
-          python -m pytest -q tests/test_email_writing_candidate_review.py
+          python -m pytest -q \
+            tests/test_email_writing_candidate_review.py \
+            tests/test_email_writing_candidate_review_terminal_coverage.py
       - name: Verify Task 6 statement and branch coverage
         run: |
           cd backend
           python -m coverage erase
           python -m coverage run --branch \
             --include='services/email_writing_candidate_review.py,services/email_writing_prompt.py' \
-            -m pytest -q tests/test_email_writing_candidate_review.py
+            -m pytest -q \
+            tests/test_email_writing_candidate_review.py \
+            tests/test_email_writing_candidate_review_terminal_coverage.py
           python -m coverage report --show-missing --fail-under=100 \
             services/email_writing_candidate_review.py \
             services/email_writing_prompt.py
@@ -105,10 +110,12 @@ jobs:
           python -m ruff check \
             services/email_writing_candidate_review.py \
             services/email_writing_prompt.py \
-            tests/test_email_writing_candidate_review.py
+            tests/test_email_writing_candidate_review.py \
+            tests/test_email_writing_candidate_review_terminal_coverage.py
       - name: Compile Task 6 source and tests
         run: |
           python -m compileall -q \
             backend/services/email_writing_candidate_review.py \
             backend/services/email_writing_prompt.py \
-            backend/tests/test_email_writing_candidate_review.py
+            backend/tests/test_email_writing_candidate_review.py \
+            backend/tests/test_email_writing_candidate_review_terminal_coverage.py
