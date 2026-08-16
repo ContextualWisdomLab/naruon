@@ -83,7 +83,7 @@ async def test_pdf_inspection_reads_bounded_chunks_and_rewinds() -> None:
     assert upload.read_sizes
     assert max(upload.read_sizes) <= MAX_READ_BYTES
     assert upload.seek_offsets[-1] == 0
-    assert await upload.read(5) == b"%PDF"
+    assert await upload.read(5) == b"%PDF-"
 
 
 @pytest.mark.asyncio
