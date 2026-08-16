@@ -244,11 +244,20 @@ def _session_uses_postgresql(session: AsyncSession) -> bool:
 
 
 def _owner_import_quota_lock_key(user_id: str, organization_id: str) -> str:
-    # PostgreSQL text (and therefore hashtext()) cannot encode NUL (0x00), so a
-    # raw ``user_id\x00organization_id`` separator raises
-    # CharacterNotInRepertoireError on real Postgres. Derive a NUL-free,
-    # collision-resistant digest instead (same approach as the content-graph
-    # source-record uids below).
+    """Return a NUL-free SHA-256 digest for ``pg_advisory_lock(hashtext(...))``.
+
+    PostgreSQL ``text`` cannot store a 0x00 octet, so passing
+    ``f"{user_id}\\x00{organization_id}"`` to ``hashtext()`` raises
+    ``CharacterNotInRepertoireError`` on real Postgres (PostgreSQL Global
+    Development Group, n.d.). Hash the NUL-separated payload instead and bind
+    only the hex digest.
+
+    References
+    ----------
+    PostgreSQL Global Development Group. (n.d.). *Character set support*.
+    PostgreSQL Documentation.
+    https://www.postgresql.org/docs/current/multibyte.html
+    """
     payload = "\x00".join((user_id, organization_id))
     return hashlib.sha256(
         payload.encode("utf-8", errors="surrogatepass")

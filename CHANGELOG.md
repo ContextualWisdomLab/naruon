@@ -1,4 +1,5 @@
 ## [Unreleased]
+- Cloud Agent `.cursor/start.sh`는 `DATABASE_URL` 역할 비밀을 `psql -c`에 보간하지 않고 `scripts/reconcile_local_postgres_role.py`의 dollar-quoted stdin으로 맞춥니다. `install.sh`는 `requirements-hashes.txt`를 `--require-hashes`로 설치합니다. 신선한 DB에서 폐기된 `emails` 테이블을 가정하던 `0011_email_read_state`는 테이블이 없으면 no-op이고, `0018_email_record_read_state`가 정식 `email_records.is_read DEFAULT true`를 가드로 맞춥니다. 가져오기 quota advisory lock 키는 NUL 없는 SHA-256 hex입니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
 
