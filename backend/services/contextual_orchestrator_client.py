@@ -53,7 +53,11 @@ _MAX_SAFE_INTEGER = 2**53 - 1
 
 
 class _JsonObjectPairsHook(Protocol):
-    def __call__(self, pairs: list[tuple[str, Any]]) -> dict[str, Any]: ...
+    """Callable contract for strict JSON object-pairs decoding hooks."""
+
+    def __call__(self, pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        """Build one JSON object from the parser-provided key/value pairs."""
+        ...
 
 
 class ContextualOrchestratorError(RuntimeError):
