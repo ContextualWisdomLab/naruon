@@ -159,6 +159,8 @@ export default function NetworkGraph() {
   const [graphActionStatus, setGraphActionStatus] = useState('그래프 준비 완료');
   const [relationshipOptionId, setRelationshipOptionId] = useState('');
   const [nodeOptionId, setNodeOptionId] = useState('');
+  const edgeMap = useMemo(() => new Map(edges.map((e) => [String(e.id), e])), [edges]);
+  const nodeInstanceMap = useMemo(() => new Map(nodes.map((n) => [String(n.id), n])), [nodes]);
   const nodeMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const node of nodes) {
@@ -202,7 +204,7 @@ export default function NetworkGraph() {
       };
 
       const selectEdge = (edgeId: number | string) => {
-        const edge = edges.find((candidate) => graphIdEquals(candidate.id, edgeId));
+        const edge = edgeMap.get(String(edgeId));
         if (!edge) return;
         setRelationshipOptionId(String(edge.id));
         setNodeOptionId('');
@@ -213,7 +215,7 @@ export default function NetworkGraph() {
       const selectNode = (nodeId: number | string) => {
         setRelationshipOptionId('');
         setNodeOptionId(String(nodeId));
-        setSelectedGraphDetail(`선택된 노드: ${findNodeLabel(nodes, nodeId)}`);
+        setSelectedGraphDetail(`선택된 노드: ${nodeMap.get(String(nodeId)) ?? findNodeLabel(nodes, nodeId)}`);
         setGraphActionStatus('그래프에서 노드를 선택했습니다.');
       };
 
@@ -262,7 +264,7 @@ export default function NetworkGraph() {
         network.destroy();
       };
     }
-  }, [nodes, edges, nodeMap]);
+  }, [nodes, edges, nodeMap, edgeMap, nodeInstanceMap]);
 
   const nodeLabels = useMemo(() => {
     return nodes
@@ -315,13 +317,13 @@ export default function NetworkGraph() {
   };
 
   const handleRelationshipOptionChange = (value: string) => {
-    const edge = edges.find((candidate) => String(candidate.id) === value);
+    const edge = edgeMap.get(value);
     if (!edge) return;
     selectRelationship(edge, '선택한 관계를 열었습니다.');
   };
 
   const handleNodeOptionChange = (value: string) => {
-    const node = nodes.find((candidate) => String(candidate.id) === value);
+    const node = nodeInstanceMap.get(value);
     if (!node) return;
     selectGraphNode(node, '선택한 노드를 열었습니다.');
   };
