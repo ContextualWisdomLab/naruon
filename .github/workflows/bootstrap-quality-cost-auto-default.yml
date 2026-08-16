@@ -1,0 +1,87 @@
+name: Bootstrap adaptive contextual-orchestrator project-graph default
+
+on:
+  push:
+    branches:
+      - agent/bootstrap-quality-cost-auto-default-v2
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bootstrap-quality-cost-auto-default-naruon
+  cancel-in-progress: true
+
+jobs:
+  red-green-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TARGET_BRANCH: agent/quality-cost-auto-default
+      PYTHONWARNINGS: error
+      DISABLE_BACKGROUND_WORKERS: "1"
+    steps:
+      - name: Checkout bootstrap revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Preserve bounded bootstrap script
+        run: cp scripts/bootstrap_quality_cost_auto_default.py /tmp/bootstrap_quality_cost_auto_default.py
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-hashes.txt
+
+      - name: Install hash-locked backend dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+
+      - name: Create clean test-first product branch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin develop
+          git switch --force-create "$TARGET_BRANCH" origin/develop
+          python /tmp/bootstrap_quality_cost_auto_default.py test
+          git add backend/tests/test_project_graph_orchestrator_transport.py
+          git commit -m "test(ai): require adaptive project-graph orchestration"
+
+      - name: Prove the transport contract is red
+        shell: bash
+        working-directory: backend
+        run: |
+          set -Eeuo pipefail
+          if python -m pytest -q tests/test_project_graph_orchestrator_transport.py; then
+            echo "Adaptive project-graph transport unexpectedly passed before implementation." >&2
+            exit 1
+          fi
+
+      - name: Implement adaptive quality-cost transport
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python /tmp/bootstrap_quality_cost_auto_default.py implement
+          git add backend/services/project_graph/llm_extractor.py backend/services/project_graph/extractor_registry.py backend/tests/test_project_graph_orchestrator_transport.py CHANGELOG.md docs/adr/0100-adaptive-contextual-orchestrator-default.md
+          git commit -m "fix(ai): use adaptive orchestration for project graph extraction"
+
+      - name: Verify project-graph contracts
+        shell: bash
+        working-directory: backend
+        run: |
+          set -Eeuo pipefail
+          python -m ruff check services/project_graph tests/test_project_graph_orchestrator_transport.py tests/test_project_graph_llm_extractor.py tests/test_project_graph_extractor_registry.py
+          python -m pytest -q \
+            tests/test_project_graph_orchestrator_transport.py \
+            tests/test_project_graph_llm_extractor.py \
+            tests/test_project_graph_extractor_registry.py
+          python -m compileall -q services/project_graph tests/test_project_graph_orchestrator_transport.py
+          git diff --check origin/develop...HEAD
+
+      - name: Publish clean product branch
+        run: git push origin "HEAD:refs/heads/$TARGET_BRANCH"
