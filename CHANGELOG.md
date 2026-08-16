@@ -1,4 +1,20 @@
 ## [Unreleased]
+- EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
+### 주제 측정 경계 (Topic Measurement)
+
+- STM 결과로 오인될 수 있었던 하드코딩 용어표 기반
+  `email_categorizer`와 `meeting_agenda_generator`를 도구 레지스트리에서
+  제거했습니다. `keyword_extractor`는 결정론적 단어 빈도 유틸리티로 유지하되
+  주제 posterior 근거로 사용하지 않는 경계를 문서화했습니다. 현재 Naruon에는
+  fitted TEPP 모델 기반 production 주제 측정 API가 없으므로, 모델 부재 시
+  기본 라벨이나 템플릿으로 대체하지 않고 fail closed 합니다.
+- 이 경계의 PRD, TRD, ADR, Architecture, API 계약, JSON Schema, UML,
+  개념 ERD, 보안·위협 모델, 테스트·운영 전략, 추적성 및 문서 적합성 평가를
+  `docs/topic-intelligence/`에 하나의 상태 표시 문서 그래프로 정리했습니다.
+  이는 미래 계약의 설계 근거이며, 현재 runtime 구현이나 물리 DB 엔터티가
+  존재한다는 주장이 아닙니다.
+- UUID V4 제너레이터(`uuid_v4_generator`) 도구를 추가하여 런타임에서 범용 고유 식별자 버전 4를 랜덤으로 생성할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
+
 ### 보안 패치 (CodeQL extended current-head)
 
 - `nanoid` `5.1.6`의 High DoS 취약점(`CVE-2026-67214`, `GHSA-28wg-ghj8-5hjv`)을 패치 버전 `5.1.16`으로 올리고, package manifest·workspace override·frozen lockfile을 하나의 보안 계약으로 동기화했습니다. 실제 lockfile 회귀 테스트와 APA 7 근거는 `docs/doctoring/nanoid-cve-2026-67214.md`에 기록했습니다.
@@ -7,6 +23,7 @@
 - OIDC token endpoint는 운영 환경에서 서버 전용 `OIDC_ALLOWED_HOSTS` 정확 호스트 allowlist를 필수로 적용합니다. hostname의 모든 DNS 결과가 공인 주소인지 검증한 뒤 해당 주소 집합을 native HTTP(S) 연결의 `lookup`에 고정하고, 원래 issuer hostname은 Host/TLS SNI로 유지해 사설 주소 해석과 DNS rebinding 사이의 TOCTOU를 차단합니다. 실패 로그는 입력 URL·token 대신 고정된 configuration/DNS·transport/response/backend-verification reason code만 남깁니다.
 - Trivy 2026-07-26 DB에서 새로 확인된 Next.js High 4건·Medium 5건(`CVE-2026-64641`–`CVE-2026-64649`)과 PostCSS High 1건(`GHSA-r28c-9q8g-f849`)을 제거하기 위해 Next.js/`eslint-config-next`를 `16.2.11`, PostCSS를 `8.5.18`로 갱신했습니다. 이후 2026-08-04 DB가 `8.5.18`에서 추가 탐지한 PostCSS Medium(`CVE-2026-69153`, 최초 수정 `8.5.23`)도 제거하도록 manifest·workspace override·lock을 `8.5.24`로 동기화했으며 저장소의 release-age 정책을 우회하지 않습니다.
 - `pnpm audit`가 개발 도구 체인에서 추가 탐지한 `brace-expansion <=5.0.7` High DoS(`GHSA-mh99-v99m-4gvg`)와 이후 `5.0.8`까지 영향을 주는 우회형 High DoS(`GHSA-rgw5-rvv9-x895`)는 `5.0.9` 전역 override로 제거했습니다. CommonJS default export를 기대하는 legacy `minimatch 3.1.5`에는 `expand` named export도 수용하는 최소 pnpm 패치를 적용해 ESLint/glob 동작을 보존합니다. 같은 감사에서 확인된 `undici 7.28.0`의 High 1건·Moderate 4건(`GHSA-4cwx-7wf7-3272` 등)은 `jsdom 30.0.1` 및 release-age 정책을 통과하는 `undici 8.9.0`으로 갱신했습니다.
+- PostCSS의 Nano ID 해석을 `3.3.18`로 갱신해 사용자 제공 음수 크기에서 비보안 생성기가 무한 반복될 수 있는 High DoS(`CVE-2026-67214`, `GHSA-28wg-ghj8-5hjv`)를 제거했습니다. lockfile과 release-governance 회귀 테스트가 같은 최초 수정 3.x 버전을 강제합니다.
 - root·frontend Docker build의 frozen install 계층이 pnpm manifest와 함께 `frontend/patches`를 먼저 복사하도록 수정해, 이미지 검증에서도 lockfile의 patched dependency를 동일하게 재현합니다.
 - Scorecard SARIF normalizer는 고정 workspace artifact로 정규화되는 `./scorecard-results.sarif`와 절대 경로를 동일하게 허용하면서 symlink·workspace 이탈은 계속 거부합니다. 도구 실행 실패 API는 CR/LF·제어 문자를 escape하고 500자로 제한하며, 로그에는 raw 도구 코드·예외 text 대신 SHA-256 기반 코드·traceback 상관 식별자만 기록합니다.
 - 백엔드 origin 보안 경계를 `frontend/src/lib/backend-url.ts`의 단일 생성기로 통합해 API proxy·session·OIDC callback이 같은 검증을 사용합니다. UI smoke의 새 `NARUON_FULL_PRODUCT_SCREENSHOT_PROFILE` 이름은 실제 selector 의미를 드러내며, 기존 `..._SCREENSHOT_DIR`은 호환 alias로 계속 지원합니다.
