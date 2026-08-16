@@ -42,6 +42,7 @@ from core.version import get_release_version
 from services.document_object_cleanup import DocumentObjectCleanupWorker
 from services.imap_worker import ImapSyncWorker
 from services.newsdom_worker import NewsdomRecognitionWorker
+from services.object_storage_orphan_cleanup import ObjectStorageOrphanCleanupWorker
 from services.pop3_worker import Pop3SyncWorker
 from services.provider_writeback_retry_service import ProviderWritebackRetryWorker
 from services.reply_sla_scheduler import ReplySlaScheduler
@@ -52,6 +53,7 @@ pop3_worker = Pop3SyncWorker()
 reply_sla_scheduler = ReplySlaScheduler()
 newsdom_recognition_worker = NewsdomRecognitionWorker()
 document_object_cleanup_worker = DocumentObjectCleanupWorker()
+object_storage_orphan_cleanup_worker = ObjectStorageOrphanCleanupWorker()
 provider_writeback_retry_worker = ProviderWritebackRetryWorker(
     runner_manager.dispatch_command,
 )
@@ -70,10 +72,12 @@ async def lifespan(app: FastAPI):
         await reply_sla_scheduler.start()
         await newsdom_recognition_worker.start()
         await document_object_cleanup_worker.start()
+        await object_storage_orphan_cleanup_worker.start()
         await provider_writeback_retry_worker.start()
     yield
     if not DISABLE_WORKERS:
         await provider_writeback_retry_worker.stop()
+        await object_storage_orphan_cleanup_worker.stop()
         await document_object_cleanup_worker.stop()
         await newsdom_recognition_worker.stop()
         await reply_sla_scheduler.stop()
