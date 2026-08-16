@@ -14,7 +14,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, cast
 
 SCHEMA_VERSION = "naruon.python-lock-provenance.v1"
 _EXACT_PIN = re.compile(
@@ -31,6 +31,10 @@ _MANUAL_PIN = re.compile(
 _TEXT_PATH = re.compile(
     r"(?<!\S)(?P<path>[A-Za-z0-9_./-]+\.(?:txt|in))(?=\s|$)"
 )
+_REQUIREMENT_INCLUDE = re.compile(
+    r"^(?:-r\s*|--requirement(?:=|\s+))(?P<path>\S+)\s*$"
+)
+_MAX_REQUIREMENT_INCLUDE_DEPTH = 32
 
 
 def _normalized_name(name: str) -> str:
@@ -87,11 +91,12 @@ def _parse_source_pins(text: str) -> dict[str, str]:
 
 def _parse_lock(
     text: str, path: str
-) -> tuple[list[str], dict[str, str], int, list[dict[str, str]]]:
-    """Parse exact pins and SHA-256 evidence from one requirements lock."""
+) -> tuple[list[str], dict[str, str], int, list[str], list[dict[str, str]]]:
+    """Parse pins, hashes, and requirement includes from one lock file."""
     header_lines: list[str] = []
     pins: dict[str, str] = {}
     hash_count = 0
+    include_paths: list[str] = []
     violations: list[dict[str, str]] = []
     current_label: str | None = None
     current_hashes = 0
@@ -142,6 +147,21 @@ def _parse_lock(
             current_hashes += 1
             hash_count += 1
             continue
+        if stripped.startswith("-r") or stripped.startswith("--requirement"):
+            finalize()
+            seen_requirement = True
+            include_match = _REQUIREMENT_INCLUDE.fullmatch(stripped)
+            if include_match is None:
+                violations.append(
+                    _violation(
+                        "requirement-include-invalid",
+                        path,
+                        "requirements include must name exactly one file path",
+                    )
+                )
+            else:
+                include_paths.append(include_match.group("path"))
+            continue
         if stripped.startswith("-"):
             continue
 
@@ -172,7 +192,7 @@ def _parse_lock(
         pins[normalized_name] = match.group("version")
 
     finalize()
-    return header_lines, pins, hash_count, violations
+    return header_lines, pins, hash_count, include_paths, violations
 
 
 def _validate_generation(
@@ -289,30 +309,105 @@ def _validate_generation(
     return "manual", violations
 
 
-def validate_lock_file(lock_path: Path, repository_root: Path) -> dict[str, object]:
-    """Validate one in-repository lock file without following an escaping path."""
+def _failed_lock_receipt(
+    *,
+    relative_path: str,
+    code: str,
+    detail: str,
+) -> dict[str, object]:
+    """Return a deterministic unread-lock receipt for one path failure."""
+    return {
+        "path": relative_path,
+        "sha256": None,
+        "status": "failed",
+        "generation_mode": "unread",
+        "requirement_count": 0,
+        "sha256_hash_count": 0,
+        "included_files": [],
+        "violations": [_violation(code, relative_path, detail)],
+    }
+
+
+def _validate_lock_tree(
+    lock_path: Path,
+    repository_root: Path,
+    *,
+    ancestors: tuple[Path, ...],
+) -> dict[str, object]:
+    """Validate one lock and every safely contained requirements include."""
     relative_path = _relative_path(lock_path, repository_root)
     resolved_lock = _resolve_repository_path(lock_path, repository_root)
     if resolved_lock is None:
-        violations = [
-            _violation(
-                "lock-path-outside-repository",
-                relative_path,
-                "lock path resolves outside repository root",
-            )
-        ]
-        return {
-            "path": relative_path,
-            "sha256": None,
-            "status": "failed",
-            "generation_mode": "unread",
-            "requirement_count": 0,
-            "sha256_hash_count": 0,
-            "violations": violations,
-        }
+        return _failed_lock_receipt(
+            relative_path=relative_path,
+            code="lock-path-outside-repository",
+            detail="lock path resolves outside repository root",
+        )
 
     text = resolved_lock.read_text(encoding="utf-8")
-    header_lines, pins, hash_count, violations = _parse_lock(text, relative_path)
+    (
+        header_lines,
+        pins,
+        hash_count,
+        include_paths,
+        violations,
+    ) = _parse_lock(text, relative_path)
+    included_files: list[dict[str, object]] = []
+    requirement_count = len(pins)
+
+    for include_reference in include_paths:
+        if len(ancestors) >= _MAX_REQUIREMENT_INCLUDE_DEPTH:
+            violations.append(
+                _violation(
+                    "requirement-include-depth-exceeded",
+                    relative_path,
+                    "requirements include depth exceeds the bounded validation limit",
+                )
+            )
+            continue
+
+        include_candidate = resolved_lock.parent / include_reference
+        resolved_include = _resolve_repository_path(include_candidate, repository_root)
+        if resolved_include is None:
+            violations.append(
+                _violation(
+                    "requirement-include-outside-repository",
+                    relative_path,
+                    "included requirements path resolves outside repository root",
+                )
+            )
+            continue
+        if resolved_include in (*ancestors, resolved_lock):
+            violations.append(
+                _violation(
+                    "requirement-include-cycle",
+                    relative_path,
+                    "requirements include graph contains a cycle",
+                )
+            )
+            continue
+        if not resolved_include.is_file():
+            violations.append(
+                _violation(
+                    "requirement-include-missing",
+                    relative_path,
+                    "included requirements file is missing or not a regular file",
+                )
+            )
+            continue
+
+        child_receipt = _validate_lock_tree(
+            resolved_include,
+            repository_root,
+            ancestors=(*ancestors, resolved_lock),
+        )
+        included_files.append(child_receipt)
+        requirement_count += cast(int, child_receipt["requirement_count"])
+        hash_count += cast(int, child_receipt["sha256_hash_count"])
+        violations.extend(
+            cast(list[dict[str, str]], child_receipt["violations"])
+        )
+
     generation_mode, generation_violations = _validate_generation(
         repository_root=repository_root,
         header_lines=header_lines,
@@ -326,10 +421,16 @@ def validate_lock_file(lock_path: Path, repository_root: Path) -> dict[str, obje
         "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
         "status": "failed" if violations else "passed",
         "generation_mode": generation_mode,
-        "requirement_count": len(pins),
+        "requirement_count": requirement_count,
         "sha256_hash_count": hash_count,
+        "included_files": included_files,
         "violations": violations,
     }
+
+
+def validate_lock_file(lock_path: Path, repository_root: Path) -> dict[str, object]:
+    """Validate one in-repository lock and its bounded include graph."""
+    return _validate_lock_tree(lock_path, repository_root, ancestors=())
 
 
 def discover_hash_locks(repository_root: Path) -> list[Path]:
