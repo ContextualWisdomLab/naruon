@@ -48,7 +48,8 @@ jobs:
 
       - name: Validate Python lock provenance
         run: |
-          receipt="$(python scripts/ci/python_lock_provenance.py --json)"
+          status=0
+          receipt="$(python scripts/ci/python_lock_provenance.py --json)" || status=$?
           printf '%s\n' "$receipt"
           {
             echo '### Python lock provenance'
@@ -56,6 +57,7 @@ jobs:
             printf '%s\n' "$receipt"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Install backend dependencies
         run: |
