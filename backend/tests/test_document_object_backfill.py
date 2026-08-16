@@ -104,7 +104,25 @@ def _stored_payload(document_id: str) -> StoredDocumentPayload:
             content_type="application/pdf",
             content_length=13,
             checksum_sha256="a" * 64,
+        ),
+        object_storage_provider_id=77,
+    )
+
+
+def _install_runtime(monkeypatch) -> None:
+    """Resolve a stable organization provider without coupling tests to DNS."""
+
+    async def resolve(_session, organization_id):
+        assert organization_id == "organization-one"
+        return SimpleNamespace(
+            storage_backend="s3",
+            object_storage_provider_id=77,
         )
+
+    monkeypatch.setattr(
+        backfill_module,
+        "resolve_document_storage_runtime_config",
+        resolve,
     )
 
 
@@ -120,6 +138,7 @@ async def test_backfill_migrates_each_legacy_pending_pdf_atomically(monkeypatch)
         "settings",
         SimpleNamespace(OBJECT_STORAGE_BACKEND="s3"),
     )
+    _install_runtime(monkeypatch)
     monkeypatch.setattr(
         backfill_module,
         "decode_legacy_pdf_payload",
@@ -128,6 +147,7 @@ async def test_backfill_migrates_each_legacy_pending_pdf_atomically(monkeypatch)
 
     async def store_payload(**kwargs):
         stored_ids.append(kwargs["document_id"])
+        assert kwargs["runtime_config"].object_storage_provider_id == 77
         return _stored_payload(kwargs["document_id"])
 
     monkeypatch.setattr(backfill_module, "store_configured_pdf_document", store_payload)
@@ -147,6 +167,7 @@ async def test_backfill_migrates_each_legacy_pending_pdf_atomically(monkeypatch)
     assert session.rollback_count == 0
     records = [value for value in session.added if isinstance(value, DocumentObjectRecord)]
     assert [record.document_id for record in records] == ["doc-one", "doc-two"]
+    assert all(record.object_storage_provider_id == 77 for record in records)
 
 
 @pytest.mark.asyncio
@@ -160,6 +181,7 @@ async def test_backfill_failure_is_retryable_and_does_not_starve(monkeypatch):
         "settings",
         SimpleNamespace(OBJECT_STORAGE_BACKEND="s3"),
     )
+    _install_runtime(monkeypatch)
     monkeypatch.setattr(
         backfill_module,
         "decode_legacy_pdf_payload",
@@ -197,21 +219,18 @@ async def test_backfill_compensates_remote_object_after_commit_failure(monkeypat
         "settings",
         SimpleNamespace(OBJECT_STORAGE_BACKEND="s3"),
     )
+    _install_runtime(monkeypatch)
     monkeypatch.setattr(
         backfill_module,
         "decode_legacy_pdf_payload",
         lambda _payload: b"%PDF-1.7 real",
     )
-    monkeypatch.setattr(
-        backfill_module,
-        "store_configured_pdf_document",
-        lambda **_kwargs: None,
-    )
 
     async def store_payload(**kwargs):
         return _stored_payload(kwargs["document_id"])
 
-    async def compensate(stored):
+    async def compensate(stored, **kwargs):
+        assert kwargs["runtime_config"].object_storage_provider_id == 77
         compensated.append(stored)
 
     monkeypatch.setattr(backfill_module, "store_configured_pdf_document", store_payload)
