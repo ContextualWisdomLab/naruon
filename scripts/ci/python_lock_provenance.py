@@ -290,7 +290,7 @@ def validate_lock_file(lock_path: Path, repository_root: Path) -> dict[str, obje
 
 
 def discover_hash_locks(repository_root: Path) -> list[Path]:
-    """Discover active requirements files that contain SHA-256 hash pins."""
+    """Discover active or conventionally named hash-lock requirements files."""
     candidates: list[Path] = []
     for path in repository_root.rglob("requirements*.txt"):
         if any(part in {".git", ".venv", "node_modules"} for part in path.parts):
@@ -299,7 +299,7 @@ def discover_hash_locks(repository_root: Path) -> list[Path]:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        if _SHA256_PREFIX in text:
+        if _SHA256_PREFIX in text or "hash" in path.stem.lower():
             candidates.append(path)
     return sorted(candidates, key=lambda path: _relative_path(path, repository_root))
 
