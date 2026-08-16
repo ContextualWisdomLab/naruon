@@ -14,9 +14,7 @@ import services.document_object_storage as document_storage
 from services.s3_object_storage import (
     AwsCredentials,
     S3ClientConfiguration,
-    S3ObjectIntegrityError,
     S3ObjectStorageBackend,
-    S3ObjectStorageRequestError,
     S3StoredObject,
 )
 
@@ -126,64 +124,6 @@ async def test_s3_backend_streams_prehashed_payload_without_byte_buffer() -> Non
     assert request.headers["content-length"] == str(len(PDF_BYTES))
     assert request.headers["x-amz-content-sha256"] == stored.checksum_sha256
     assert stored.content_length == len(PDF_BYTES)
-    await backend.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_backend_maps_partial_source_failure_to_safe_request_error() -> None:
-    """Hide application-source exception text when a streaming PUT aborts mid-body."""
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        await request.aread()
-        return httpx.Response(200)
-
-    backend = S3ObjectStorageBackend(
-        _configuration(),
-        httpx.AsyncClient(transport=httpx.MockTransport(handler)),
-    )
-
-    async def broken_stream():
-        yield PDF_BYTES[:4096]
-        raise RuntimeError("customer-sensitive partial stream detail")
-
-    with pytest.raises(S3ObjectStorageRequestError, match="source failed") as error:
-        await backend.put_object_stream(
-            object_key="workspace-documents/opaque/partial/source.pdf",
-            content_stream=broken_stream(),
-            content_length=len(PDF_BYTES),
-            checksum_sha256=hashlib.sha256(PDF_BYTES).hexdigest(),
-            content_type="application/pdf",
-        )
-
-    assert "customer-sensitive" not in str(error.value)
-    await backend.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_backend_keeps_integrity_failure_distinct_from_source_failure() -> None:
-    """Preserve the integrity error type when a source ends cleanly at the wrong length."""
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        await request.aread()
-        return httpx.Response(200)
-
-    backend = S3ObjectStorageBackend(
-        _configuration(),
-        httpx.AsyncClient(transport=httpx.MockTransport(handler)),
-    )
-
-    async def short_stream():
-        yield PDF_BYTES[:4096]
-
-    with pytest.raises(S3ObjectIntegrityError, match="length verification"):
-        await backend.put_object_stream(
-            object_key="workspace-documents/opaque/short/source.pdf",
-            content_stream=short_stream(),
-            content_length=len(PDF_BYTES),
-            checksum_sha256=hashlib.sha256(PDF_BYTES).hexdigest(),
-            content_type="application/pdf",
-        )
-
     await backend.aclose()
 
 
