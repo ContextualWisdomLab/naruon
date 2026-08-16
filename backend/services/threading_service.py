@@ -12,6 +12,8 @@ import hashlib
 # Impact: Eliminates redundant inline compilation/caching overhead during repetitive
 # email header processing, yielding a measurable speedup when handling long reference lists.
 REFERENCE_PATTERN = re.compile(r"<([^>]+)>")
+BARE_MESSAGE_ID_PATTERN = re.compile(r"^[^<>\s@]+@[^<>\s@]+$")
+
 
 def generate_email_fingerprint(
     subject: str | None,
@@ -55,14 +57,21 @@ def extract_reference_ids(value: str | None) -> list[str]:
     (section 3.6.4) as ``1*msg-id`` -- one or more angle-bracketed Message-IDs,
     each optionally surrounded by CFWS -- so this extractor applies to either
     header. Ids are canonicalized with :func:`normalize_message_id` and
-    de-duplicated while preserving header order.
+    de-duplicated while preserving header order. For compatibility with
+    non-conforming senders that omit angle brackets, the fallback accepts only
+    unambiguous bare ``id-left@id-right`` tokens; arbitrary prose is ignored so
+    malformed References text cannot become synthetic ancestry.
     """
     if not value:
         return []
 
     refs = REFERENCE_PATTERN.findall(str(value))
     if not refs:
-        refs = str(value).split()
+        refs = [
+            token
+            for token in str(value).split()
+            if BARE_MESSAGE_ID_PATTERN.fullmatch(token)
+        ]
 
     normalized_refs: list[str] = []
     # Optimization: Use a set for O(1) membership checks to avoid O(n^2) scaling on long reference lists
