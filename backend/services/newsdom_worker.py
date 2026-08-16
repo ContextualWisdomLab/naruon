@@ -1,13 +1,13 @@
-"""Background worker glue for NewsDOM PDF DOM recognition.
+"""Background worker glue for deferred PDF and HWPX recognition.
 
-Attachments and workspace documents whose PDF recognition was deferred at
-import time are processed here: the sidecar is called (via
-:mod:`services.newsdom_pdf_recognition`) and the returned tree is landed into
-the persisted attachment/document content and, for attachments, the
-``content_nodes`` / ``content_segments`` graph.
+PDF attachments and workspace documents whose NewsDOM recognition was deferred
+at import time are processed through the configured sidecar. HWPX attachments
+are processed locally through the bounded OWPML recognizer. Both paths land
+recognized attachment text and provenance into ``content_nodes`` /
+``content_segments`` without allowing a pending payload to masquerade as parsed.
 
 The apply functions are deliberately session-free so they can be unit tested
-with in-memory model instances and a mocked NewsDOM client.
+with in-memory model instances and injected adapters.
 """
 
 from __future__ import annotations
@@ -31,6 +31,13 @@ from db.models import (
 from db.session import AsyncSessionLocal
 from services.attachment_parser import decode_deferred_attachment_payload
 from services.content_graph import ParseResult
+from services.hwpx_recognition import (
+    HWPX_FAILED_STATUS,
+    HWPX_PARSED_STATUS,
+    HWPX_PARSE_CONTENT_TYPE,
+    HwpxRecognitionRecords,
+    recognize_hwpx_package,
+)
 from services.newsdom_client import (
     NewsdomConfigurationError,
     NewsdomRequestError,
@@ -51,6 +58,9 @@ from services.newsdom_pdf_recognition import (
 
 logger = logging.getLogger(__name__)
 _sysrand = random.SystemRandom()
+
+HWPX_PENDING_STATUS = "hwpx_xml_package_pending"
+HWPX_PARSER_KEY = "hwpx"
 
 # How the worker resolves a runtime config for an organization. Injectable so
 # the per-item processors are unit-testable without a database.
@@ -123,6 +133,26 @@ def apply_recognition_to_attachment(
     )
 
 
+def apply_hwpx_recognition_to_attachment(
+    *,
+    email: Email,
+    attachment: Attachment,
+    records: HwpxRecognitionRecords,
+) -> None:
+    """Land recognized HWPX text and provenance on one attachment."""
+
+    attachment.content = records.parse_text
+    attachment.parse_content_type = HWPX_PARSE_CONTENT_TYPE
+    attachment.parser_key = HWPX_PARSER_KEY
+    attachment.parse_status = HWPX_PARSED_STATUS
+    attachment.parse_error_code = None
+    _append_parse_result_to_attachment(
+        email=email,
+        attachment=attachment,
+        parse_result=records.parse_result,
+    )
+
+
 def apply_recognition_to_document(
     *,
     document: Document,
@@ -154,6 +184,29 @@ async def recognize_attachment_pdf(
         request_fn=request_fn,
     )
     apply_recognition_to_attachment(email=email, attachment=attachment, records=records)
+    return records
+
+
+def recognize_attachment_hwpx(
+    *,
+    email: Email,
+    attachment: Attachment,
+    hwpx_bytes: bytes,
+    source_record_uid: str,
+) -> HwpxRecognitionRecords:
+    """Recognize a HWPX package and land its ordered text and graph."""
+
+    records = recognize_hwpx_package(
+        hwpx_bytes,
+        filename=attachment.filename or "attachment.hwpx",
+        source_kind="attachment",
+        source_record_uid=source_record_uid,
+    )
+    apply_hwpx_recognition_to_attachment(
+        email=email,
+        attachment=attachment,
+        records=records,
+    )
     return records
 
 
@@ -198,6 +251,14 @@ _SWEEP_LOCK_PARAMS = {
 }
 
 
+def _attachment_failed_status(attachment: Attachment) -> str:
+    """Return the parser-family-specific visible failure status."""
+
+    if attachment.parse_status == HWPX_PENDING_STATUS:
+        return HWPX_FAILED_STATUS
+    return PDF_DOM_RECOGNITION_FAILED_STATUS
+
+
 async def process_pending_attachment(
     *,
     session: AsyncSession,
@@ -205,18 +266,54 @@ async def process_pending_attachment(
     config_resolver: ConfigResolver = resolve_newsdom_config_from_db,
     request_fn: ParseRequestFn = request_pdf_dom,
 ) -> str:
-    """Recognize one pending attachment PDF, or record a safe outcome.
+    """Recognize one pending PDF or HWPX attachment, or record a safe outcome.
 
-    Returns ``RESULT_RECOGNIZED`` on success, ``RESULT_PENDING`` when no active
-    provider is configured yet (left pending to retry later), or
-    ``RESULT_FAILED`` when the payload or the sidecar response is unusable (a
-    visible failure status is recorded - never a false ``parsed``).
+    HWPX recognition is deterministic and local, so it never resolves a
+    NewsDOM provider. PDF recognition retains the provider-aware retry behavior:
+    ``RESULT_PENDING`` means no active provider is usable yet. Invalid retained
+    bytes or recognition failures are always recorded explicitly and never
+    reported as parsed.
     """
     email = attachment.email
     if email is None:
-        attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
+        attachment.parse_status = _attachment_failed_status(attachment)
         attachment.parse_error_code = "orphan_attachment"
         return RESULT_FAILED
+
+    if attachment.parse_status == HWPX_PENDING_STATUS:
+        try:
+            hwpx_bytes = decode_deferred_attachment_payload(
+                attachment.content,
+                attachment.parse_content_type or HWPX_PARSE_CONTENT_TYPE,
+            )
+        except ValueError as exc:
+            attachment.parse_status = HWPX_FAILED_STATUS
+            attachment.parse_error_code = "invalid_pending_payload"
+            logger.warning(
+                "HWPX attachment %s rejected before recognition: %s",
+                getattr(attachment, "id", "?"),
+                exc,
+            )
+            return RESULT_FAILED
+
+        try:
+            recognize_attachment_hwpx(
+                email=email,
+                attachment=attachment,
+                hwpx_bytes=hwpx_bytes,
+                source_record_uid=f"attachment-{attachment.id}",
+            )
+        except ValueError as exc:
+            attachment.parse_status = HWPX_FAILED_STATUS
+            attachment.parse_error_code = "recognition_failed"
+            logger.warning(
+                "HWPX attachment %s recognition failed: %s",
+                getattr(attachment, "id", "?"),
+                exc,
+            )
+            return RESULT_FAILED
+        return RESULT_RECOGNIZED
+
     try:
         pdf_bytes = decode_deferred_attachment_payload(attachment.content)
     except ValueError as exc:
@@ -365,13 +462,14 @@ async def _release_sweep_lease(session: AsyncSession) -> None:
 
 
 class NewsdomRecognitionWorker:
-    """Periodically recognize pending PDF attachments and workspace documents.
+    """Periodically recognize pending PDF/HWPX attachments and PDF documents.
 
     Mirrors :class:`ReplySlaScheduler`: a jittered periodic loop, a PostgreSQL
     advisory-lock lease so only one replica sweeps per cycle, and per-item
-    error isolation. Items whose organization has no active NewsDOM provider are
-    left pending (they recognize once a provider is configured); unusable
-    payloads/responses are marked failed rather than parsed.
+    error isolation. HWPX work is deterministic/local. PDF items whose
+    organization has no active NewsDOM provider remain pending until a provider
+    is configured; unusable payloads/responses are marked failed rather than
+    parsed.
     """
 
     def __init__(
@@ -444,8 +542,7 @@ class NewsdomRecognitionWorker:
             lease = await _try_acquire_sweep_lease(session)
             if lease is False:
                 logger.debug(
-                    "NewsDOM recognition sweep skipped: another replica holds "
-                    "the lease."
+                    "Recognition sweep skipped: another replica holds the lease."
                 )
                 return
             try:
@@ -471,22 +568,24 @@ class NewsdomRecognitionWorker:
                 await session.commit()
                 if result != RESULT_PENDING:
                     logger.info(
-                        "NewsDOM attachment %s recognition result: %s",
+                        "Attachment %s recognition result: %s",
                         attachment.id,
                         result,
                     )
             except Exception:
                 await session.rollback()
                 logger.error(
-                    "NewsDOM attachment %s recognition raised.",
+                    "Attachment %s recognition raised.",
                     getattr(attachment, "id", "?"),
                     exc_info=True,
                 )
 
     def _pending_attachment_statement(self, after_id: int | None):
-        """Build the next deterministic attachment batch query."""
+        """Build the next deterministic PDF/HWPX attachment batch query."""
         statement = select(Attachment).where(
-            Attachment.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+            Attachment.parse_status.in_(
+                (PDF_DOM_RECOGNITION_PENDING_STATUS, HWPX_PENDING_STATUS)
+            )
         )
         if after_id is not None:
             statement = statement.where(Attachment.id > after_id)
