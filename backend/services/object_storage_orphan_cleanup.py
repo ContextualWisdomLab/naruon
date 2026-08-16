@@ -14,8 +14,9 @@ from dataclasses import dataclass
 import datetime
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
+from db.document_object_record import DocumentObjectRecord
 from db.object_storage_cleanup_record import ObjectStorageCleanupRecord
 from db.session import AsyncSessionLocal
 import services.document_object_storage as document_storage
@@ -23,6 +24,7 @@ from services.document_object_storage import DocumentObjectStorageError
 from services.s3_object_storage import S3StoredObject
 
 logger = logging.getLogger(__name__)
+_MAX_RETRY_DELAY_SECONDS = 60 * 60
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,18 @@ class ObjectStorageOrphanCleanupResult:
     selected_count: int
     deleted_count: int
     failed_count: int
+
+
+def _utc_now() -> datetime.datetime:
+    """Return an aware UTC time for durable retry and terminal-state metadata."""
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _retry_delay(attempt_count: int) -> datetime.timedelta:
+    """Return bounded exponential backoff without introducing random scheduler state."""
+    exponent = min(max(attempt_count, 1), 12)
+    seconds = min(2**exponent, _MAX_RETRY_DELAY_SECONDS)
+    return datetime.timedelta(seconds=seconds)
 
 
 def _stored_payload(record: ObjectStorageCleanupRecord):
@@ -54,6 +68,69 @@ def _stored_payload(record: ObjectStorageCleanupRecord):
     )
 
 
+async def resolve_explicit_s3_provider_runtime_config(
+    session,
+    organization_id: str,
+    *,
+    object_storage_provider_id: int,
+):
+    """Resolve exactly the retained provider revision used by an orphan locator."""
+    return await document_storage._resolve_s3_provider_runtime_config(
+        session,
+        organization_id,
+        object_storage_provider_id=object_storage_provider_id,
+    )
+
+
+async def cancel_matching_object_storage_cleanup(
+    session,
+    *,
+    object_storage_provider_id: int,
+    stored_object: S3StoredObject,
+) -> ObjectStorageCleanupRecord | None:
+    """Cancel a stale orphan row when its exact object becomes live metadata again."""
+    result = await session.execute(
+        select(ObjectStorageCleanupRecord.object_storage_cleanup_record_id)
+        .where(
+            ObjectStorageCleanupRecord.object_storage_provider_id
+            == object_storage_provider_id,
+            ObjectStorageCleanupRecord.bucket_name == stored_object.bucket_name,
+            ObjectStorageCleanupRecord.object_key == stored_object.object_key,
+            ObjectStorageCleanupRecord.cleanup_status == "pending",
+        )
+        .limit(1)
+        .with_for_update()
+    )
+    record_ids = list(result.scalars().all())
+    if not record_ids:
+        return None
+    record = await session.get(ObjectStorageCleanupRecord, record_ids[0])
+    if record is None or record.cleanup_status != "pending":
+        return None
+    record.cleanup_status = "cancelled"
+    record.completed_at = _utc_now()
+    record.next_attempt_at = None
+    return record
+
+
+async def _live_document_reference(
+    session,
+    record: ObjectStorageCleanupRecord,
+) -> DocumentObjectRecord | None:
+    """Return a live SQL locator that makes destructive orphan cleanup unsafe."""
+    candidate = await session.scalar(
+        select(DocumentObjectRecord)
+        .where(
+            DocumentObjectRecord.object_storage_provider_id
+            == record.object_storage_provider_id,
+            DocumentObjectRecord.bucket_name == record.bucket_name,
+            DocumentObjectRecord.object_key == record.object_key,
+        )
+        .limit(1)
+    )
+    return candidate if isinstance(candidate, DocumentObjectRecord) else None
+
+
 async def delete_orphan_cleanup_record(
     record: ObjectStorageCleanupRecord,
     *,
@@ -71,14 +148,22 @@ async def sweep_object_storage_orphans(
     *,
     batch_limit: int,
 ) -> ObjectStorageOrphanCleanupResult:
-    """Retry a bounded set of pending provider-bound orphan deletions."""
+    """Retry a bounded set of due provider-bound orphan deletions safely."""
     if batch_limit <= 0:
         raise ValueError("Object storage orphan cleanup batch_limit must be positive")
 
+    now = _utc_now()
     result = await session.execute(
         select(ObjectStorageCleanupRecord.object_storage_cleanup_record_id)
-        .where(ObjectStorageCleanupRecord.cleanup_status == "pending")
+        .where(
+            ObjectStorageCleanupRecord.cleanup_status == "pending",
+            or_(
+                ObjectStorageCleanupRecord.next_attempt_at.is_(None),
+                ObjectStorageCleanupRecord.next_attempt_at <= now,
+            ),
+        )
         .order_by(
+            ObjectStorageCleanupRecord.next_attempt_at,
             ObjectStorageCleanupRecord.created_at,
             ObjectStorageCleanupRecord.object_storage_cleanup_record_id,
         )
@@ -92,21 +177,44 @@ async def sweep_object_storage_orphans(
         record = await session.get(ObjectStorageCleanupRecord, cleanup_record_id)
         if record is None or record.cleanup_status != "pending":
             continue
+
+        live_reference = await _live_document_reference(session, record)
+        if live_reference is not None:
+            record.cleanup_status = "cancelled"
+            record.completed_at = _utc_now()
+            record.next_attempt_at = None
+            await session.commit()
+            continue
+
+        attempt_started_at = _utc_now()
+        attempt_count = (record.attempt_count or 0) + 1
         try:
-            runtime_config = await document_storage._resolve_s3_provider_runtime_config(
+            runtime_config = await resolve_explicit_s3_provider_runtime_config(
                 session,
                 record.organization_id,
                 object_storage_provider_id=record.object_storage_provider_id,
             )
-            record.attempt_count += 1
-            record.last_attempt_at = datetime.datetime.now(datetime.timezone.utc)
+            record.attempt_count = attempt_count
+            record.last_attempt_at = attempt_started_at
             await delete_orphan_cleanup_record(record, runtime_config=runtime_config)
             record.cleanup_status = "completed"
-            record.completed_at = datetime.datetime.now(datetime.timezone.utc)
+            record.completed_at = _utc_now()
+            record.next_attempt_at = None
             await session.commit()
         except Exception:
             failed_count += 1
             await session.rollback()
+            retry_record = await session.get(
+                ObjectStorageCleanupRecord,
+                cleanup_record_id,
+            )
+            if retry_record is not None and retry_record.cleanup_status == "pending":
+                retry_record.attempt_count = attempt_count
+                retry_record.last_attempt_at = attempt_started_at
+                retry_record.next_attempt_at = attempt_started_at + _retry_delay(
+                    attempt_count
+                )
+                await session.commit()
             logger.warning(
                 "Object-storage orphan cleanup failed; leaving the locator retryable.",
                 exc_info=True,

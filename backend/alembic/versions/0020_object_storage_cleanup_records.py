@@ -27,12 +27,13 @@ def upgrade() -> None:
         sa.Column("bucket_name", sa.String(), nullable=False),
         sa.Column("object_key", sa.String(), nullable=False),
         sa.Column("content_type", sa.String(), nullable=False),
-        sa.Column("content_length", sa.Integer(), nullable=False),
+        sa.Column("content_length", sa.BigInteger(), nullable=False),
         sa.Column("checksum_sha256", sa.String(length=64), nullable=False),
         sa.Column("cleanup_reason", sa.String(), nullable=False),
         sa.Column("cleanup_status", sa.String(), nullable=False),
         sa.Column("attempt_count", sa.Integer(), nullable=False),
         sa.Column("last_attempt_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("next_attempt_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
@@ -44,7 +45,7 @@ def upgrade() -> None:
             name="ck_object_storage_cleanup_records_attempt_count",
         ),
         sa.CheckConstraint(
-            "cleanup_status IN ('pending', 'completed')",
+            "cleanup_status IN ('pending', 'completed', 'cancelled')",
             name="ck_object_storage_cleanup_records_status",
         ),
         sa.ForeignKeyConstraint(
@@ -66,16 +67,16 @@ def upgrade() -> None:
         ["organization_id"],
     )
     op.create_index(
-        "ix_object_storage_cleanup_records_status_created",
+        "ix_object_storage_cleanup_records_status_due",
         "object_storage_cleanup_records",
-        ["cleanup_status", "created_at"],
+        ["cleanup_status", "next_attempt_at", "created_at"],
     )
 
 
 def downgrade() -> None:
     """Remove orphan cleanup retry records without altering stored objects."""
     op.drop_index(
-        "ix_object_storage_cleanup_records_status_created",
+        "ix_object_storage_cleanup_records_status_due",
         table_name="object_storage_cleanup_records",
     )
     op.drop_index(

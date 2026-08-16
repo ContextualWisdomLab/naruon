@@ -36,6 +36,9 @@ from services.document_object_storage import (
     store_configured_pdf_upload,
 )
 from services.newsdom_pdf_recognition import PDF_DOM_RECOGNITION_PENDING_STATUS
+from services.object_storage_orphan_cleanup import (
+    cancel_matching_object_storage_cleanup,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -207,6 +210,17 @@ async def upload_document_for_pdf_dom_recognition(
         db.add(document)
         if object_record is not None:
             db.add(object_record)
+            if (
+                stored_payload.s3_object is not None
+                and runtime_config.object_storage_provider_id is not None
+            ):
+                await cancel_matching_object_storage_cleanup(
+                    db,
+                    object_storage_provider_id=(
+                        runtime_config.object_storage_provider_id
+                    ),
+                    stored_object=stored_payload.s3_object,
+                )
         await db.commit()
         await db.refresh(document)
     except Exception:
