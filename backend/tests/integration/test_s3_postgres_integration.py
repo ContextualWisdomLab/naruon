@@ -14,7 +14,6 @@ import asyncio
 from collections.abc import AsyncIterator
 import hashlib
 import os
-from pathlib import Path
 
 from alembic import command
 import asyncpg
