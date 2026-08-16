@@ -184,3 +184,18 @@ async def test_consumed_object_cleanup_rechecks_state_after_selection(monkeypatc
     assert calls == 0
     assert session.commits == 0
     assert session.rollbacks == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch_limit", [0, -1])
+async def test_consumed_object_cleanup_rejects_nonpositive_batch_limit(batch_limit):
+    """Reject values that could turn a bounded cleanup sweep into an unbounded query."""
+    session = _CleanupSession([])
+
+    with pytest.raises(ValueError, match="batch_limit must be positive"):
+        await cleanup_module.sweep_consumed_document_objects(
+            session,
+            batch_limit=batch_limit,
+        )
+
+    assert session.execute_calls == 0
