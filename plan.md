@@ -1,12 +1,20 @@
-1. Modify `frontend/src/components/NetworkGraph.tsx` to pre-compute an `edgeMap` and a `nodeInstanceMap` using `useMemo`.
-   - Add `const edgeMap = useMemo(() => new Map(edges.map(e => [String(e.id), e])), [edges]);`
-   - Add `const nodeInstanceMap = useMemo(() => new Map(nodes.map(n => [String(n.id), n])), [nodes]);`
-   - Update `selectEdge` inside `useEffect` (line 204) to use `edgeMap.get(String(edgeId))` instead of `edges.find(...)`. Pass `edgeMap` as dependency.
-   - Update `handleRelationshipOptionChange` (line 317) to use `edgeMap.get(value)` instead of `edges.find(...)`.
-   - Update `handleNodeOptionChange` (line 323) to use `nodeInstanceMap.get(value)` instead of `nodes.find(...)`.
+# NetworkGraph constant-time lookup plan
 
-2. Pre-commit check
-   - Use `pre_commit_instructions` and follow its instructions to make sure proper testing, verifications, reviews and reflections are done.
+1. Pre-compute `edgeMap` and `nodeInstanceMap` with `useMemo`, and keep the existing `nodeMap` as the authoritative node-label lookup for rendered selections.
+   - `selectEdge` uses `edgeMap.get(String(edgeId))`.
+   - `selectNode` uses `nodeMap.get(String(nodeId))` with the node identifier as the no-entry fallback.
+   - `selectGraphNode` uses `nodeMap.get(String(node.id))` with the node identifier as the no-entry fallback.
+   - `handleRelationshipOptionChange` uses `edgeMap.get(value)`.
+   - `handleNodeOptionChange` uses `nodeInstanceMap.get(value)`.
+   - Selection handlers must not fall back to `Array.prototype.find()` or `findNodeLabel()` scans.
 
-3. Submit the change
-   - Submit the PR with the title "⚡ Bolt: [O(1) Map lookups in NetworkGraph]".
+2. Verify the exact branch head from `frontend/` with these commands:
+
+   ```bash
+   pnpm test -- src/components/NetworkGraph.test.tsx src/components/NetworkGraph.map-lookup.test.ts
+   pnpm exec eslint src/components/NetworkGraph.tsx src/components/NetworkGraph.test.tsx src/components/NetworkGraph.map-lookup.test.ts
+   pnpm typecheck
+   pnpm build
+   ```
+
+3. Keep the pull request open until the unchanged exact head has terminal-success required checks, all addressed review threads are resolved, and protected-branch review requirements are satisfied without bypass.
