@@ -9,12 +9,14 @@ failed database commit remains safe to retry because S3 DELETE is idempotent.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import logging
 
 from sqlalchemy import select
 
 from db.document_object_record import DocumentObjectRecord
+from db.session import AsyncSessionLocal
 import services.document_object_storage as document_storage
 
 # Public compatibility aliases used by the cleanup contract and its tests.
@@ -83,3 +85,78 @@ async def sweep_consumed_document_objects(
         deleted_count=deleted_count,
         failed_count=failed_count,
     )
+
+
+class DocumentObjectCleanupWorker:
+    """Continuously drain consumed raw-document objects in bounded batches.
+
+    The worker owns no business state: PostgreSQL lifecycle rows remain the
+    durable retry queue. A fresh database session is opened for each sweep so a
+    failed remote delete or stale connection cannot poison later iterations.
+    """
+
+    def __init__(
+        self,
+        *,
+        interval_seconds: float = 60.0,
+        batch_limit: int = 25,
+        session_factory=AsyncSessionLocal,
+    ) -> None:
+        """Create a worker with finite polling and query bounds."""
+        if interval_seconds <= 0:
+            raise ValueError("Document object cleanup interval_seconds must be positive")
+        if batch_limit <= 0:
+            raise ValueError("Document object cleanup batch_limit must be positive")
+        self.interval_seconds = interval_seconds
+        self.batch_limit = batch_limit
+        self.session_factory = session_factory
+        self._task: asyncio.Task | None = None
+        self._is_running = False
+
+    async def start(self) -> None:
+        """Start exactly one cleanup loop for this worker instance."""
+        if self._is_running:
+            logger.warning("DocumentObjectCleanupWorker is already running.")
+            return
+        self._is_running = True
+        self._task = asyncio.create_task(self._run_loop())
+        logger.info("DocumentObjectCleanupWorker started.")
+
+    async def stop(self) -> None:
+        """Cancel the cleanup loop and tolerate normal task cancellation."""
+        if not self._is_running:
+            return
+        self._is_running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                logger.debug(
+                    "DocumentObjectCleanupWorker cancellation acknowledged during shutdown."
+                )
+        logger.info("DocumentObjectCleanupWorker stopped.")
+
+    async def _run_loop(self) -> None:
+        """Keep later sweeps alive after one transient database/storage failure."""
+        while self._is_running:
+            try:
+                await self._sync()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.error("Error in DocumentObjectCleanupWorker loop", exc_info=True)
+
+            if self._is_running:
+                try:
+                    await asyncio.sleep(self.interval_seconds)
+                except asyncio.CancelledError:
+                    break
+
+    async def _sync(self) -> DocumentObjectCleanupResult:
+        """Run one bounded sweep through an independently scoped database session."""
+        async with self.session_factory() as session:
+            return await sweep_consumed_document_objects(
+                session,
+                batch_limit=self.batch_limit,
+            )
