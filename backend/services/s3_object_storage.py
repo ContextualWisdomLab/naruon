@@ -3,12 +3,14 @@
 The implementation deliberately uses Naruon's existing hardened ``httpx``
 transport rather than a provider SDK. That keeps the runtime dependency set
 stable while preserving exact-host validation, DNS pinning, bounded timeouts,
-checksums, server-side encryption, and redacted failure messages.
+checksums, server-side encryption, redacted failure messages, and bounded
+request-body streaming.
 """
 
 from __future__ import annotations
 
 import base64
+from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -25,6 +27,7 @@ _SERVICE_NAME = "s3"
 _BUCKET_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 _REGION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 _EXPECTED_OWNER_PATTERN = re.compile(r"^[0-9]{12}$")
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -110,7 +113,7 @@ class S3StoredObject:
     def __post_init__(self) -> None:
         if self.content_length < 0:
             raise ValueError("S3 stored-object length must not be negative")
-        if not re.fullmatch(r"[0-9a-f]{64}", self.checksum_sha256):
+        if not _SHA256_PATTERN.fullmatch(self.checksum_sha256):
             raise ValueError("S3 stored-object checksum must be lowercase SHA-256")
         _validate_object_key(self.object_key)
 
@@ -146,7 +149,8 @@ def sign_s3_request(
     method: str,
     url: str,
     headers: Mapping[str, str],
-    payload: bytes,
+    payload: bytes | None = None,
+    payload_sha256: str | None = None,
     credentials: AwsCredentials,
     region_name: str,
     request_time: datetime | None = None,
@@ -155,7 +159,9 @@ def sign_s3_request(
 
     Canonicalization follows the AWS S3 Signature Version 4 header-authentication
     specification, including URI/query encoding, whitespace normalization,
-    signed payload hashes, and temporary-credential session tokens.
+    signed payload hashes, and temporary-credential session tokens. Streaming
+    callers may supply a precomputed lower-case SHA-256 digest instead of an
+    in-memory payload; callers supplying both must provide matching values.
     """
     parsed = urlsplit(url)
     if parsed.scheme.lower() != "https" or not parsed.hostname:
@@ -166,13 +172,23 @@ def sign_s3_request(
     if normalized_method not in {"GET", "PUT", "DELETE", "HEAD"}:
         raise ValueError("S3 request method is not supported")
 
+    if payload_sha256 is None:
+        if payload is None:
+            raise ValueError("S3 request requires a payload or precomputed SHA-256")
+        payload_hash = hashlib.sha256(payload).hexdigest()
+    else:
+        if not _SHA256_PATTERN.fullmatch(payload_sha256):
+            raise ValueError("S3 payload SHA-256 must be lowercase hexadecimal")
+        if payload is not None and hashlib.sha256(payload).hexdigest() != payload_sha256:
+            raise ValueError("S3 payload bytes do not match the supplied SHA-256")
+        payload_hash = payload_sha256
+
     instant = request_time or datetime.now(timezone.utc)
     if instant.tzinfo is None:
         instant = instant.replace(tzinfo=timezone.utc)
     instant = instant.astimezone(timezone.utc)
     amz_date = instant.strftime("%Y%m%dT%H%M%SZ")
     date_stamp = instant.strftime("%Y%m%d")
-    payload_hash = hashlib.sha256(payload).hexdigest()
 
     canonical_headers = _normalize_headers(headers)
     canonical_headers["host"] = parsed.netloc
@@ -253,14 +269,55 @@ class S3ObjectStorageBackend:
         payload: bytes,
         content_type: str,
     ) -> S3StoredObject:
-        """Create one immutable object and return integrity metadata."""
+        """Create one immutable in-memory object and return integrity metadata."""
+        checksum_sha256 = hashlib.sha256(payload).hexdigest()
+        return await self._put_object_content(
+            object_key=object_key,
+            content=payload,
+            content_length=len(payload),
+            checksum_sha256=checksum_sha256,
+            content_type=content_type,
+        )
+
+    async def put_object_stream(
+        self,
+        *,
+        object_key: str,
+        content_stream: AsyncIterable[bytes],
+        content_length: int,
+        checksum_sha256: str,
+        content_type: str,
+    ) -> S3StoredObject:
+        """Create one immutable object from a bounded prehashed async byte stream."""
+        if content_length < 0:
+            raise ValueError("S3 streamed object length must not be negative")
+        if not _SHA256_PATTERN.fullmatch(checksum_sha256):
+            raise ValueError("S3 streamed object checksum must be lowercase SHA-256")
+        return await self._put_object_content(
+            object_key=object_key,
+            content=content_stream,
+            content_length=content_length,
+            checksum_sha256=checksum_sha256,
+            content_type=content_type,
+        )
+
+    async def _put_object_content(
+        self,
+        *,
+        object_key: str,
+        content: bytes | AsyncIterable[bytes],
+        content_length: int,
+        checksum_sha256: str,
+        content_type: str,
+    ) -> S3StoredObject:
+        """Execute the common signed immutable PUT for bytes or an async stream."""
         _validate_content_type(content_type)
-        checksum_digest = hashlib.sha256(payload).digest()
-        checksum_hex = checksum_digest.hex()
-        checksum_base64 = base64.b64encode(checksum_digest).decode("ascii")
+        checksum_base64 = base64.b64encode(
+            bytes.fromhex(checksum_sha256)
+        ).decode("ascii")
         headers = {
             "content-type": content_type,
-            "content-length": str(len(payload)),
+            "content-length": str(content_length),
             "if-none-match": "*",
             "x-amz-checksum-sha256": checksum_base64,
             "x-amz-server-side-encryption": (
@@ -276,7 +333,8 @@ class S3ObjectStorageBackend:
             method="PUT",
             object_key=object_key,
             headers=headers,
-            payload=payload,
+            content=content,
+            payload_sha256=checksum_sha256,
         )
         returned_checksum = response.headers.get("x-amz-checksum-sha256")
         if returned_checksum is not None and returned_checksum != checksum_base64:
@@ -285,8 +343,8 @@ class S3ObjectStorageBackend:
             bucket_name=self._configuration.bucket_name,
             object_key=object_key,
             content_type=content_type,
-            content_length=len(payload),
-            checksum_sha256=checksum_hex,
+            content_length=content_length,
+            checksum_sha256=checksum_sha256,
         )
 
     async def get_object(self, stored_object: S3StoredObject) -> bytes:
@@ -298,7 +356,8 @@ class S3ObjectStorageBackend:
             method="GET",
             object_key=stored_object.object_key,
             headers=headers,
-            payload=b"",
+            content=b"",
+            payload_sha256=hashlib.sha256(b"").hexdigest(),
         )
         payload = response.content
         if len(payload) != stored_object.content_length:
@@ -316,7 +375,8 @@ class S3ObjectStorageBackend:
             method="DELETE",
             object_key=stored_object.object_key,
             headers=headers,
-            payload=b"",
+            content=b"",
+            payload_sha256=hashlib.sha256(b"").hexdigest(),
         )
 
     async def aclose(self) -> None:
@@ -329,14 +389,15 @@ class S3ObjectStorageBackend:
         method: str,
         object_key: str,
         headers: Mapping[str, str],
-        payload: bytes,
+        content: bytes | AsyncIterable[bytes],
+        payload_sha256: str,
     ) -> httpx.Response:
         url = self.object_url(object_key)
         signed_headers = sign_s3_request(
             method=method,
             url=url,
             headers=headers,
-            payload=payload,
+            payload_sha256=payload_sha256,
             credentials=self._configuration.credentials,
             region_name=self._configuration.region_name,
         )
@@ -345,7 +406,7 @@ class S3ObjectStorageBackend:
                 method,
                 url,
                 headers=signed_headers,
-                content=payload,
+                content=content,
                 timeout=self._configuration.request_timeout_seconds,
             )
         except httpx.HTTPError as exc:
