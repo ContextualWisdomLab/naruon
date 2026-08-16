@@ -16,6 +16,7 @@ def test_install_sh_pins_python_requirements_with_hashes() -> None:
     assert "requirements-hashes.txt" in INSTALL_SH
     assert "--require-hashes" in INSTALL_SH
     assert "pip install -r requirements.txt" not in INSTALL_SH
+    assert "pip install --upgrade pip" not in INSTALL_SH
 
 
 def test_start_sh_does_not_interpolate_role_secret_into_sql() -> None:
