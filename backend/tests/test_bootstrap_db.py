@@ -138,6 +138,8 @@ def test_schema_backfill_adds_email_indexes(monkeypatch):
         "create index if not exists ix_email_records_date" in statement
         for statement in statements
     )
+    assert all(" on emails " not in statement for statement in statements)
+    assert all("ix_emails_owner_date" not in statement for statement in statements)
 
 
 def test_schema_backfill_adds_llm_provider_columns_and_indexes(monkeypatch):

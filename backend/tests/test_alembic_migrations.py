@@ -438,6 +438,43 @@ def test_merge_revision_reconciles_newsdom_provider_branch():
     assert "op.drop_column(" not in revision_text
 
 
+def test_email_read_state_revision_is_retired_emails_table_only() -> None:
+    revision_path = BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0011_email_read_state"' in revision_text
+    assert 'down_revision = "0009_project_graph_projection"' in revision_text
+    assert 'has_table("emails")' in revision_text
+    assert 'op.add_column(\n        "emails"' in revision_text
+    assert 'op.add_column(\n        "email_records"' not in revision_text
+    # Downgrade must not drop a pre-existing emails.is_read this revision did
+    # not create. Retired-table reconciliation is a documented no-op.
+    assert "op.drop_column(" not in revision_text
+
+
+def test_email_record_read_state_revision_guards_canonical_table() -> None:
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0018_email_record_read_state.py"
+    )
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0018_email_record_read_state"' in revision_text
+    assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
+    assert len("0018_email_record_read_state") <= 32
+    assert '_EMAIL_RECORDS_TABLE = "email_records"' in revision_text
+    assert "has_table(_EMAIL_RECORDS_TABLE)" in revision_text
+    assert "_READ_STATE_COLUMN" in revision_text
+    assert '"is_read"' in revision_text
+    assert "server_default=sa.text(\"true\")" in revision_text or (
+        'server_default=sa.text("true")' in revision_text
+    )
+    assert "op.add_column(" in revision_text
+    assert "sa.text(f" not in revision_text
+    # Additive default only; do not drop a column create_all may already own.
+    assert "op.drop_column(" not in revision_text
+
+
 def test_merge_revision_reconciles_newsdom_document_and_carddav_heads():
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0017_merge_newsdom_carddav_heads.py"

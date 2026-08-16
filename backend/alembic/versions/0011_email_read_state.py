@@ -39,11 +39,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    if not inspector.has_table("emails"):
-        return
-    existing_columns = {column["name"] for column in inspector.get_columns("emails")}
-    if "is_read" not in existing_columns:
-        return
-    op.drop_column("emails", "is_read")
+    # No-op: this revision only reconciles a retired ``emails`` table. Dropping
+    # ``is_read`` when the column is present would also remove a pre-existing
+    # column this revision did not create.
+    return
