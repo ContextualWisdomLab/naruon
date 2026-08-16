@@ -77,3 +77,28 @@ async def test_references_header_does_not_fall_back_to_existing_in_reply_to_thre
     )
 
     assert thread_id == "root@example.com"
+
+
+@pytest.mark.asyncio
+async def test_malformed_references_text_falls_back_to_valid_in_reply_to():
+    """Non-msg-id References text must not override a valid parent Message-ID.
+
+    RFC 5322 ``msg-id`` syntax is angle-bracket delimited. RFC 5256 only gives
+    References precedence when that field contains at least one valid Message-ID.
+    Arbitrary prose in a malformed References field therefore cannot become a
+    synthetic thread root or suppress a valid In-Reply-To fallback.
+    """
+    session = _Session([("<parent@example.com>", "thread-parent")])
+
+    thread_id = await assign_thread_id(
+        session,
+        {
+            "message_id": "<reply@example.com>",
+            "in_reply_to": "<parent@example.com>",
+            "references": "legacy gateway removed ancestry",
+        },
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert thread_id == "thread-parent"
