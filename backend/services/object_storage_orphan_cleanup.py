@@ -20,7 +20,6 @@ from db.document_object_record import DocumentObjectRecord
 from db.object_storage_cleanup_record import ObjectStorageCleanupRecord
 from db.session import AsyncSessionLocal
 import services.document_object_storage as document_storage
-from services.document_object_storage import DocumentObjectStorageError
 from services.s3_object_storage import S3StoredObject
 
 logger = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ def _stored_payload(record: ObjectStorageCleanupRecord):
             checksum_sha256=record.checksum_sha256,
         )
     except ValueError as exc:
-        raise DocumentObjectStorageError(
+        raise document_storage.DocumentObjectStorageError(
             "Object-storage orphan metadata failed validation"
         ) from exc
     return document_storage.StoredDocumentPayload.for_s3(
