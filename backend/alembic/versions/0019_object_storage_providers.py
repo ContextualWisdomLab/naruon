@@ -18,7 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    """Create normalized provider metadata and encrypted credential columns."""
+    """Create provider rows and bind document locators to their provider."""
     op.create_table(
         "object_storage_providers",
         sa.Column("object_storage_provider_id", sa.Integer(), primary_key=True),
@@ -72,10 +72,37 @@ def upgrade() -> None:
         "object_storage_providers",
         ["organization_id", "is_active", "updated_at"],
     )
+    op.add_column(
+        "document_object_records",
+        sa.Column("object_storage_provider_id", sa.Integer(), nullable=True),
+    )
+    op.create_foreign_key(
+        "fk_document_object_records_provider",
+        "document_object_records",
+        "object_storage_providers",
+        ["object_storage_provider_id"],
+        ["object_storage_provider_id"],
+        ondelete="RESTRICT",
+    )
+    op.create_index(
+        "ix_document_object_records_provider",
+        "document_object_records",
+        ["object_storage_provider_id"],
+    )
 
 
 def downgrade() -> None:
-    """Remove the provider registry without touching stored document metadata."""
+    """Remove provider lineage and the encrypted provider registry."""
+    op.drop_index(
+        "ix_document_object_records_provider",
+        table_name="document_object_records",
+    )
+    op.drop_constraint(
+        "fk_document_object_records_provider",
+        "document_object_records",
+        type_="foreignkey",
+    )
+    op.drop_column("document_object_records", "object_storage_provider_id")
     op.drop_index(
         "ix_object_storage_providers_org_active",
         table_name="object_storage_providers",
