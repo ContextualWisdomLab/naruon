@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -803,7 +804,12 @@ class Email(Base):
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
     body: Mapped[str] = mapped_column(Text)
     # IMAP \Seen read state; defaults read so historical/file imports don't nag.
-    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # A DB-level server_default keeps create_all/bootstrap_db consistent with the
+    # 0011_email_read_state migration intent so raw inserts that omit is_read
+    # (e.g. postgres smoke seeds) don't hit a NOT NULL violation.
+    is_read: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     # Defer large pgvector payloads on default entity loads.
     embedding = mapped_column(Vector(1536), deferred=True)
     attachments: Mapped[list["Attachment"]] = relationship(
