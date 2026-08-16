@@ -82,14 +82,25 @@ def test_state_changing_api_rejects_untrusted_origin():
     assert response.json() == {"error_code": "csrf_origin_rejected"}
 
 
-def test_state_changing_api_rejects_missing_origin_and_referer():
+def test_browser_state_change_rejects_missing_origin_and_referer():
     response = client.put(
         "/api/accounts/config",
+        headers={"Sec-Fetch-Site": "same-origin"},
         json={"smtp_server": "mail.example.com"},
     )
 
     assert response.status_code == 403
     assert response.json() == {"error_code": "csrf_referer_rejected"}
+
+
+def test_non_browser_state_change_without_provenance_reaches_auth_gate():
+    response = client.put(
+        "/api/accounts/config",
+        json={"smtp_server": "mail.example.com"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication required"}
 
 
 def test_state_changing_api_allows_trusted_origin_to_reach_auth_gate():
