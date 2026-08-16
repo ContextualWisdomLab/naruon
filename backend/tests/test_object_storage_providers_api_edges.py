@@ -6,12 +6,12 @@ import datetime
 from types import SimpleNamespace
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 import api.object_storage_providers as provider_api
 from db.object_storage_provider import ObjectStorageProvider
-import services.document_object_storage as storage_module
 
 
 class _Rows:
@@ -147,6 +147,28 @@ def test_redaction_helpers_cover_empty_and_short_optional_values() -> None:
         provider_api._stripped_required("   ", "provider_name")
 
 
+def test_provider_input_models_reject_unknown_and_locator_mutation_fields() -> None:
+    with pytest.raises(ValidationError, match="extra"):
+        provider_api.ObjectStorageProviderCreate(
+            provider_name="primary-s3",
+            bucket_name="naruon-documents",
+            region_name="us-east-1",
+            access_key_id="access-key",
+            secret_access_key="secret-key",
+            unknown_secret="must-not-be-ignored",
+        )
+
+    for field_name, value in (
+        ("bucket_name", "replacement-bucket"),
+        ("region_name", "ap-northeast-2"),
+        ("endpoint_url", "https://objects.example.com"),
+        ("addressing_style", "path"),
+        ("expected_bucket_owner", "111122223333"),
+    ):
+        with pytest.raises(ValidationError, match="extra"):
+            provider_api.ObjectStorageProviderUpdate(**{field_name: value})
+
+
 @pytest.mark.asyncio
 async def test_admin_access_success_and_provider_list() -> None:
     auth_context = _auth()
@@ -183,29 +205,19 @@ async def test_create_integrity_conflict_rolls_back(failure_stage: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_rotates_all_supported_fields_and_activates_exclusively(monkeypatch) -> None:
+async def test_update_rotates_credentials_and_write_policy_without_moving_provider() -> None:
     provider = _provider()
     session = _Session([_Rows([provider]), _Rows()])
-    monkeypatch.setattr(
-        storage_module.settings,
-        "OBJECT_STORAGE_S3_ALLOWED_HOSTS",
-        "objects.example.com",
-    )
 
     response = await provider_api.update_object_storage_provider(
         21,
         provider_api.ObjectStorageProviderUpdate(
             provider_name=" replacement-s3 ",
-            bucket_name="replacement-bucket",
-            region_name="ap-northeast-2",
-            endpoint_url="https://objects.example.com/",
-            addressing_style="path",
             access_key_id="rotated-access",
             secret_access_key="rotated-secret",
             session_token=" rotated-token ",
             server_side_encryption="aws:kms",
             kms_key_id=" key-reference ",
-            expected_bucket_owner="111122223333",
             is_active=True,
         ),
         db=session,
@@ -213,8 +225,10 @@ async def test_update_rotates_all_supported_fields_and_activates_exclusively(mon
     )
 
     assert provider.provider_name == "replacement-s3"
-    assert provider.endpoint_url == "https://objects.example.com/"
-    assert provider.addressing_style == "path"
+    assert provider.bucket_name == "naruon-documents"
+    assert provider.region_name == "us-east-1"
+    assert provider.endpoint_url is None
+    assert provider.addressing_style == "virtual"
     assert provider.access_key_id == "rotated-access"
     assert provider.secret_access_key == "rotated-secret"
     assert provider.session_token == "rotated-token"
@@ -229,10 +243,8 @@ async def test_update_rotates_all_supported_fields_and_activates_exclusively(mon
 
 
 @pytest.mark.asyncio
-async def test_update_can_clear_optional_values_without_rotating_required_secrets() -> None:
+async def test_update_can_clear_rotatable_optional_values_without_moving_provider() -> None:
     provider = _provider(
-        endpoint_url="https://objects.example.com",
-        addressing_style="path",
         session_token="temporary",
         kms_key_id="key-reference",
     )
@@ -241,8 +253,6 @@ async def test_update_can_clear_optional_values_without_rotating_required_secret
     response = await provider_api.update_object_storage_provider(
         21,
         provider_api.ObjectStorageProviderUpdate(
-            endpoint_url="",
-            addressing_style="virtual",
             session_token="",
             kms_key_id="",
         ),
@@ -250,23 +260,27 @@ async def test_update_can_clear_optional_values_without_rotating_required_secret
         auth_context=_auth(),
     )
 
-    assert provider.endpoint_url is None
     assert provider.session_token is None
     assert provider.kms_key_id is None
     assert provider.secret_access_key == "secret-key"
+    assert provider.bucket_name == "naruon-documents"
+    assert provider.region_name == "us-east-1"
     assert response.session_token_configured is False
     assert response.kms_key_configured is False
 
 
 @pytest.mark.asyncio
-async def test_update_invalid_configuration_rolls_back() -> None:
+async def test_update_invalid_rotatable_configuration_rolls_back() -> None:
     provider = _provider()
     session = _Session([_Rows([provider])])
 
     with pytest.raises(HTTPException) as error:
         await provider_api.update_object_storage_provider(
             21,
-            provider_api.ObjectStorageProviderUpdate(addressing_style="invalid"),
+            provider_api.ObjectStorageProviderUpdate(
+                server_side_encryption="aws:kms",
+                kms_key_id="",
+            ),
             db=session,
             auth_context=_auth(),
         )
