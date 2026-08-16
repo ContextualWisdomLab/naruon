@@ -136,30 +136,18 @@ in this repo.
   `.github/workflows/opencode-review.yml`, `.github/workflows/strix.yml`,
   `.github/workflows/strix-selftest.yml`, or
   `.github/workflows/pr-review-merge-scheduler.yml`.
-- The central Strix Security Scan uses GitHub Models by default through
-  `STRIX_GITHUB_MODELS_TOKEN`, `STRIX_LLM=openai/gpt-5`, and
-  `LLM_API_BASE_FILE` pointing at a trusted file containing
-  `https://models.github.ai/inference`; GitHub Models scans must try the
-  configured GPT-5-or-newer model first and may fall back to the explicit
-  workflow fallback list, currently
-  `github_models/deepseek/deepseek-r1-0528` and
-  `github_models/deepseek/deepseek-v3-0324`, when GitHub Models provider
-  capacity or model availability blocks the primary run. The Strix gate must
-  route these fallback names through the GitHub Models endpoint with
-  OpenAI-compatible child model names such as
-  `openai/deepseek/deepseek-r1-0528`, not the public DeepSeek API. Do not use
-  GPT-4.1 or weaker GitHub Models fallbacks for Strix or OpenCode PR review
-  evidence. Keep the GitHub Models endpoint in a trusted input file and pass
-  the token only through
-  the provider-scoped Strix child-process key path. Legacy `STRIX_LLM` secrets
-  must not override PR, push, or scheduled Strix defaults. Vertex remains
-  available only for manual
-  `workflow_dispatch` evidence when the `strix_llm` input
-  explicitly selects `vertex_ai/gemini-3.1-pro-preview-customtools` or
-  `vertex_ai/gemini-2.5-flash` with `GCP_SA_KEY`; expose Google/Vertex
-  credentials only for Vertex provider mode. Direct OpenAI GPT-5.4-or-newer
-  scans remain supported only for manual `strix_llm` selections with
-  `STRIX_OPENAI_API_KEY`. Do not silently fall back between providers, and
+- ContextualWisdomLab review and Strix evidence use NVIDIA NIM only. This
+  repository's `opencode.jsonc` must set `enabled_providers` to
+  `["nvidia-nim"]`, provider `nvidia-nim` at
+  `https://integrate.api.nvidia.com/v1` with `apiKey: {env:NVIDIA_API_KEY}`
+  (org secret `NVIDIA_NIM_API_KEY` is bound to `NVIDIA_API_KEY`), and default
+  model `nvidia-nim/nvidia/llama-3.3-nemotron-super-49b-v1.5`. Do not
+  reintroduce `github-models`, `STRIX_GITHUB_MODELS_TOKEN`,
+  `COPILOT_GITHUB_TOKEN`, GPT-5, or DeepSeek-via-GitHub-Models routes in the
+  OpenCode review config. Do not copy TEPP-style `permission.edit` or broad
+  `bash` allow into this review config. Legacy `STRIX_LLM` secrets must not
+  override PR, push, or scheduled Strix defaults. Do not silently fall back
+  between providers, and
   do not treat timeout-class provider infrastructure failures as clean PR
   evidence even when Strix printed zero vulnerabilities before failing. Disable
   silent Vertex fallback models in the workflow unless a future PR proves a new
@@ -179,8 +167,9 @@ in this repo.
   copy the entire PR-head repository tree by default because either breaks
   Strix's required whole-context and bounded-input contract. Keep architecture
   docs and reusable Strix gate tests aligned with this rule so stale
-  Vertex-default, OpenAI-only, unavailable-model, blanket-warning, or generic-key
-  examples cannot re-enter copied workflow guidance.
+  GitHub-Models-default, Vertex-default, OpenAI-only, unavailable-model,
+  blanket-warning, or generic-key examples cannot re-enter copied workflow
+  guidance.
 - HMAC fallback sessions are local/control-plane compatibility credentials, not
   authoritative workspace-membership evidence. Sensitive tenant security posture
   surfaces must require OIDC/JWKS-backed membership or an explicit dependency
@@ -224,7 +213,8 @@ in this repo.
 - Strix logs may print the report's `Model ...` line after the title, endpoint,
   and Code Locations block. Failed-check evidence parsers and OpenCode review
   validators must attribute each vulnerability to that in-report model line, not
-  to a previous retry attempt such as a failed primary `openai/gpt-5` run.
+  to a previous retry attempt such as a failed primary
+  `nvidia-nim/nvidia/llama-3.3-nemotron-super-49b-v1.5` run.
 - OpenCode Agent PR reviews must be general-purpose and meticulous rather than
   narrowly scenario-specific. Configure the review prompt to use all relevant
   MCP sources: CodeGraph for structural source evidence, DeepWiki for repo docs,
@@ -451,8 +441,9 @@ in this repo.
   responses must include `Referrer-Policy`, and `target="_blank"` links must
   use explicit `rel="noopener noreferrer"`.
 - When robot review cites an obsolete Strix provider policy, update the docs and
-  tests to the current GitHub Models default contract before accepting a
-  rollback suggestion; do not reintroduce generic `LLM_API_KEY` or
+  tests to the current NVIDIA NIM default contract before accepting a
+  rollback suggestion; do not reintroduce GitHub Models,
+  `STRIX_GITHUB_MODELS_TOKEN`, generic `LLM_API_KEY`, or
   cross-provider credential forwarding while trying to satisfy old comments.
 - When reviews find inert navigation/dead-space controls, either wire them to an
   implemented workspace route/API or remove the control; do not leave
@@ -642,8 +633,9 @@ in this repo.
   `codegraph init -i` autonomously without asking first; keep generated
   `.codegraph/` and `.cursor/rules/codegraph.mdc` artifacts local unless a
   future repository policy explicitly says to commit them. OpenCode PR review
-  uses the project `opencode.jsonc` MCP servers for CodeGraph, DeepWiki,
-  Context7, and web search. It must initialize CodeGraph before review so
+  uses the project `opencode.jsonc` NVIDIA NIM provider
+  (`enabled_providers: ["nvidia-nim"]` only) and MCP servers for CodeGraph,
+  DeepWiki, Context7, and web search. It must initialize CodeGraph before review so
   structural findings cite graph-backed evidence instead of relying only on grep
   or raw file reads; use Context7 for current library docs, DeepWiki for
   repository documentation, and web search only for bounded external lookups.

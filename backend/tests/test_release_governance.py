@@ -645,6 +645,53 @@ def test_review_automation_uses_central_required_workflows_without_local_copies(
     assert "openai/openai/gpt-4.1" not in architecture
 
 
+def test_opencode_review_config_uses_nvidia_nim_only() -> None:
+    """OpenCode review config must be NVIDIA NIM only, not GitHub Models."""
+    raw = read_repo_text("opencode.jsonc")
+    config = json.loads(raw)
+    agents = read_repo_text("AGENTS.md")
+
+    forbidden_tokens = (
+        "github-models",
+        "STRIX_GITHUB_MODELS_TOKEN",
+        "COPILOT_GITHUB_TOKEN",
+        "models.github.ai",
+        "openai/gpt-5",
+        "gpt-5.6",
+        "deepseek/deepseek",
+    )
+    for token in forbidden_tokens:
+        assert token not in raw, f"retired GitHub Models token remains in opencode.jsonc: {token}"
+
+    assert config["model"] == "nvidia-nim/nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert config["small_model"] == "nvidia-nim/meta/llama-3.3-70b-instruct"
+    assert config["enabled_providers"] == ["nvidia-nim"]
+    assert config.get("share") == "disabled"
+
+    provider = config["provider"]
+    assert list(provider) == ["nvidia-nim"]
+    nim = provider["nvidia-nim"]
+    assert nim["npm"] == "@ai-sdk/openai-compatible"
+    assert nim["options"]["baseURL"] == "https://integrate.api.nvidia.com/v1"
+    assert nim["options"]["apiKey"] == "{env:NVIDIA_API_KEY}"
+    assert "nvidia/llama-3.3-nemotron-super-49b-v1.5" in nim["models"]
+    assert "meta/llama-3.3-70b-instruct" in nim["models"]
+
+    permission = config.get("permission") or {}
+    assert permission.get("edit") != "allow"
+    bash_permission = permission.get("bash")
+    if isinstance(bash_permission, dict):
+        assert "cwl-safe-exec *" not in bash_permission
+        assert bash_permission.get("*") != "allow"
+    else:
+        assert bash_permission != "allow"
+
+    assert "nvidia-nim" in agents
+    assert "{env:NVIDIA_API_KEY}" in agents
+    assert "The central Strix Security Scan uses GitHub Models by default" not in agents
+    assert "current GitHub Models default contract" not in agents
+
+
 def test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushes() -> (
     None
 ):

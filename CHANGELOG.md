@@ -1,4 +1,11 @@
 ## [Unreleased]
+- OpenCode review config (`opencode.jsonc`) now uses NVIDIA NIM only:
+  provider `nvidia-nim` at `https://integrate.api.nvidia.com/v1` with
+  `apiKey: {env:NVIDIA_API_KEY}`, default model
+  `nvidia-nim/nvidia/llama-3.3-nemotron-super-49b-v1.5`, and
+  `enabled_providers: ["nvidia-nim"]`. GitHub Models, `STRIX_GITHUB_MODELS_TOKEN`,
+  and GPT-5/DeepSeek review routes are removed. Review permissions stay
+  read-oriented; TEPP-style edit/bash allow is not copied into this file.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
 
