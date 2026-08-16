@@ -11,12 +11,14 @@ from db.models import Base, EncryptedString
 
 
 class ObjectStorageProvider(Base):
-    """Store one organization-owned S3-compatible provider configuration.
+    """Store one organization-owned S3-compatible provider revision.
 
-    PostgreSQL holds provider metadata and Fernet-encrypted credentials. The
-    process environment selects only the broad storage mode and trusted custom
-    endpoint hosts; runtime object requests resolve the active organization row
-    through a signed, scoped database session.
+    PostgreSQL holds immutable storage-topology metadata and Fernet-encrypted
+    credentials. The process environment selects only the broad storage mode and
+    trusted custom endpoint hosts; runtime object requests resolve the active
+    organization row through a signed, scoped database session. A provider row
+    is a retained revision: create a new row to change bucket, region, endpoint,
+    addressing, encryption, KMS key, or expected bucket owner.
     """
 
     __tablename__ = "object_storage_providers"
@@ -76,3 +78,11 @@ class ObjectStorageProvider(Base):
         onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
     )
+
+
+Index(
+    "uq_object_storage_providers_active_org",
+    ObjectStorageProvider.organization_id,
+    unique=True,
+    postgresql_where=ObjectStorageProvider.is_active.is_(True),
+)
