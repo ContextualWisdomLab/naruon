@@ -269,6 +269,7 @@ def _source_policy(
     workspace_id: str,
     writeback_enabled: bool,
 ) -> ResourcePolicy:
+    """Build a source policy that preserves tenant scope for every admin tier."""
     delegated_user_ids: tuple[str, ...] = (
         (auth_context.user_id,)
         if (
@@ -281,7 +282,14 @@ def _source_policy(
     return ResourcePolicy(
         owner_id=owner_id,
         organization_id=organization_id,
-        permitted_roles=("tenant_admin", "organization_admin", "group_admin", "member"),
+        permitted_roles=(
+            "system_admin",
+            "platform_admin",
+            "tenant_admin",
+            "organization_admin",
+            "group_admin",
+            "member",
+        ),
         permitted_group_ids=auth_context.group_ids,
         data_region=settings.DATA_REGION,
         required_consent_scopes=required_consent,
