@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dav", tags=["dav"])
 
+IMPLEMENTED_DAV_METHODS = ("OPTIONS", "PROPFIND")
 _DAV_AUTHORIZATION_PATH_MAX_CHARACTERS = 8192
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 _DAV_STRUCTURAL_OCTETS = frozenset(
@@ -209,20 +210,20 @@ async def _handle_project_propfind(
 
 @router.api_route(
     "/{path:path}",
-    methods=["PROPFIND", "REPORT", "MKCOL", "GET", "PUT", "DELETE", "OPTIONS"],
+    methods=list(IMPLEMENTED_DAV_METHODS),
 )
 async def dav_handler(
     request: Request,
     path: str,
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
-):
-    """
-    Route the authenticated DAV surface that is implemented for this slice.
+) -> Response:
+    """Serve only the authenticated DAV capabilities implemented in production.
 
-    Collection discovery is served from the server-side project registry.
-    Provider-backed writeback stays fail-closed until source capability and
-    ETag/If-Match enforcement are available through signed writeback intents.
+    Project collection discovery is available through ``PROPFIND``. Unsupported
+    writeback and richer DAV verbs are deliberately not registered, so clients
+    receive ``405 Method Not Allowed`` instead of a misleading advertised
+    capability that can only return ``501 Not Implemented``.
     """
     normalized_path = _normalize_dav_authorization_path(path)
     _ensure_dav_owner_scope(normalized_path, auth_context)
@@ -230,52 +231,17 @@ async def dav_handler(
     logger.info("DAV Request: %s /%s", request.method, safe_path)
 
     if request.method == "OPTIONS":
-        headers = {
-            "DAV": "1, 2, 3, calendar-access, addressbook",
-            "Allow": (
-                "OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, COPY, MOVE, MKCOL, "
-                "PROPFIND, PROPPATCH, LOCK, UNLOCK, REPORT"
-            ),
-        }
-        return Response(status_code=200, headers=headers)
-
-    if request.method == "PROPFIND":
-        return await _handle_project_propfind(
-            request=request,
-            path=normalized_path,
-            auth_context=auth_context,
-            db=db,
-        )
-
-    if request.method == "PUT":
-        body = await request.body()
-        logger.info("DAV PUT received %s bytes at /%s", len(body), safe_path)
-        logger.warning(
-            "DAV PUT rejected at /%s: provider-backed DAV writeback is not "
-            "implemented; signed writeback-intent API is required",
-            safe_path,
-        )
         return Response(
-            content=(
-                "Provider-backed DAV writeback is not implemented; use signed "
-                "writeback-intent APIs until source, capability, and "
-                "ETag/If-Match checks are enforced."
-            ),
-            media_type="text/plain",
-            status_code=501,
+            status_code=200,
+            headers={
+                "DAV": "1",
+                "Allow": ", ".join(IMPLEMENTED_DAV_METHODS),
+            },
         )
 
-    logger.warning(
-        "DAV %s rejected at /%s: method is not implemented for the "
-        "provider-backed DAV gateway",
-        request.method,
-        safe_path,
-    )
-    return Response(
-        content=(
-            "Provider-backed DAV method is not implemented; use supported "
-            "PROPFIND/OPTIONS discovery or signed writeback-intent APIs."
-        ),
-        media_type="text/plain",
-        status_code=501,
+    return await _handle_project_propfind(
+        request=request,
+        path=normalized_path,
+        auth_context=auth_context,
+        db=db,
     )
