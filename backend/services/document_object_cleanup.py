@@ -46,6 +46,9 @@ async def sweep_consumed_document_objects(
     failure is rolled back for that object and the sweep continues with later
     candidates; the row therefore remains retryable on a future sweep.
     """
+    if batch_limit <= 0:
+        raise ValueError("Document object cleanup batch_limit must be positive")
+
     result = await session.execute(
         select(DocumentObjectRecord.document_object_record_id)
         .where(DocumentObjectRecord.storage_state == "consumed")
