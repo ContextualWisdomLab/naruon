@@ -174,8 +174,9 @@ def fetch_pypi_release(
     if max_metadata_bytes <= 0:
         raise ValueError("max_metadata_bytes must be positive")
 
+    release_url = build_pypi_release_url(project, version)
     request = urllib.request.Request(
-        build_pypi_release_url(project, version),
+        release_url,
         headers={
             "Accept": "application/json",
             "User-Agent": "naruon-lock-provenance/1",
@@ -183,6 +184,10 @@ def fetch_pypi_release(
         method="GET",
     )
     with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        final_url_getter = getattr(response, "geturl", None)
+        final_url = final_url_getter() if callable(final_url_getter) else release_url
+        if final_url != release_url:
+            raise ValueError("PyPI metadata response left the trusted PyPI origin")
         content_type = response.headers.get("Content-Type", "")
         if not content_type.lower().startswith("application/json"):
             raise ValueError("PyPI release metadata must be JSON")
