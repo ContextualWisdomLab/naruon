@@ -61,8 +61,8 @@ The process environment controls only broad deployment policy:
   encryption, or credentials.
 - Organization administrators manage provider configuration through the
   authenticated `/api/object-storage-providers` API.
-- The server creates an opaque object key from a one-way scope digest and the
-  generated document ID. It does not include organization IDs, workspace IDs,
+- The server creates an opaque deterministic object key from one-way scope and
+  document digests. It does not include organization IDs, workspace IDs,
   filenames, email addresses, or other PII.
 - Reads are server-mediated and continue to use Naruon's signed workspace and
   organization authorization. There is no public bucket, object ACL, browser
@@ -74,6 +74,21 @@ The process environment controls only broad deployment policy:
 - Existing objects retain the provider record that created them so later
   credential rotation or active-provider changes do not silently change their
   storage authority.
+
+### Immutable provider topology
+
+A provider row's `bucket_name`, `region_name`, `endpoint_url`,
+`addressing_style`, and `expected_bucket_owner` define the locator/signing
+authority for retained object records and cannot be updated in place. Moving to
+a different storage topology requires a new provider row and activation of that
+revision. The previous provider remains retained while any document/object
+lineage references it.
+
+The provider display name, credentials/session token, active state, and
+server-side encryption policy used for **future writes** may rotate in place.
+Existing object reads and deletes remain bound to their stored bucket/key and
+provider authority; S3 transparently handles the encryption metadata of objects
+already written.
 
 ### Integrity and confidentiality
 
@@ -96,11 +111,24 @@ Every object read validates:
 - the payload still begins with the PDF signature and respects the upload size
   ceiling.
 
+Arbitrary request-body producer failures are translated into a fixed redacted
+storage-request error; explicit S3 integrity errors retain their distinct type.
+Raw exception text is not exposed to API callers.
+
+### Compensation and orphan reconciliation
+
 A database metadata failure after a successful upload or backfill triggers a
-bounded compensating delete. If compensation itself fails, the original
-database error remains authoritative and logs use a fixed redacted event rather
-than credentials, bucket names, object keys, source filenames, provider bodies,
-or exception text.
+bounded compensating delete. If compensation itself fails, the original database
+error remains authoritative and logs use a fixed redacted event rather than
+credentials, bucket names, object keys, source filenames, provider bodies, or
+exception text.
+
+The deterministic object key makes a later retry safe without bucket listing.
+If immutable PUT returns HTTP 412 because that key is occupied, Naruon performs a
+server-mediated GET and adopts the existing object **only** if its exact byte
+length and SHA-256 match the intended source. A different occupied object is an
+integrity failure and is never overwritten or silently adopted. This covers the
+recoverable backfill/operation retry case without granting `s3:ListBucket`.
 
 ### Credential scope and rotation
 
@@ -146,7 +174,7 @@ A bounded backfill service migrates pending legacy base64 PDFs. Each candidate:
 1. revalidates pending PDF state and absence of object metadata;
 2. resolves the active organization provider;
 3. decodes and validates the legacy payload;
-4. writes the object and obtains integrity metadata;
+4. writes or safely re-adopts the exact object and obtains integrity metadata;
 5. inserts `document_object_records` and clears inline content in one database
    transaction;
 6. compensates the just-written object if that relational commit fails.
@@ -175,6 +203,18 @@ Rejected. Normalized provider and object lifecycle records separate optional
 storage concerns from the document entity, avoid repeated credential/config
 fields, and allow lifecycle/provider rotation to evolve without nullable S3
 columns on every document.
+
+### Mutate a provider's storage topology in place
+
+Rejected. Existing object rows retain the provider ID, so rebinding that ID to a
+different bucket/region/endpoint/account could make existing objects unreadable
+or undeletable. A topology move is represented as a new provider revision.
+
+### Grant `s3:ListBucket` for orphan discovery
+
+Rejected for the document runtime. Deterministic keys, compensation, and
+byte-for-byte adoption on immutable-PUT conflict resolve recoverable orphans
+without expanding listing authority.
 
 ### Put object-storage credentials in process environment variables
 
@@ -213,6 +253,8 @@ and recovery policy make immediate cleanup appropriate.
   services.
 - Organization-scoped encrypted provider configuration supports controlled
   rotation without ambient process credentials.
+- Deterministic immutable keys support exact orphan recovery without bucket
+  enumeration.
 - A bounded raw-source window supports reprocessing without indefinite
   retention.
 - Backfill and cleanup are retryable database-backed workflows rather than
@@ -223,15 +265,14 @@ and recovery policy make immediate cleanup appropriate.
 ### Negative
 
 - S3-backed uploads span object storage and PostgreSQL without a distributed
-  transaction; compensation and orphan reconciliation remain operational
-  responsibilities.
+  transaction; compensation and exact-object adoption remain saga semantics.
 - The initial credential model still requires explicit secret material rather
   than cloud workload identity.
 - Custom endpoints require DNS availability when their backend client is built.
+- Private-address MinIO/Ceph endpoints are intentionally excluded until a
+  separately reviewed private-network allowlist/CIDR trust contract exists.
 - Real object deletion occurs after a retention delay and therefore consumes
   object-storage capacity during that window.
-- A dedicated real PostgreSQL + real object-store integration lane is still
-  required in addition to deterministic transport/contract tests.
 
 ## Verification and release gates
 
@@ -240,9 +281,12 @@ and recovery policy make immediate cleanup appropriate.
   expected owner, path-style endpoints, safe errors, and read integrity are
   tested with deterministic transports.
 - Provider API tests verify organization scope, encrypted credential handling,
-  redacted responses, activation, rotation, and retained-provider resolution.
+  redacted responses, activation, topology immutability, rotation, and retained
+  provider resolution.
 - Upload tests verify bounded streaming, PDF signature/size/hash validation,
   metadata persistence, and compensation.
+- Orphan tests verify exact immutable-object adoption, mismatched-object refusal,
+  and stream-producer error redaction.
 - NewsDOM worker tests cover legacy inline and S3-backed reads plus lifecycle
   transition behavior.
 - Backfill tests cover retryability and commit compensation.
@@ -251,8 +295,8 @@ and recovery policy make immediate cleanup appropriate.
 - The migration graph must retain exactly one Alembic head.
 - New production modules require 100% statement and branch coverage and complete
   public docstrings.
-- A release cannot claim #1076 complete until a real PostgreSQL + object-store
-  integration lane covers put/get/delete timeout and partial-upload failure
+- The dedicated PostgreSQL + LocalStack workflow must pass on the exact merge
+  candidate and cover real put/get/delete plus timeout and partial-upload failure
   behavior.
 
 ## References
