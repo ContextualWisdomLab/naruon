@@ -50,6 +50,8 @@ class EmailMediaArtifact:
     llm_safe: bool
     visual_classification: str
     reason_code: str
+    pixel_width: int | None
+    pixel_height: int | None
 
 
 @dataclass(frozen=True)
@@ -486,6 +488,8 @@ def _build_artifact(content_type: str, payload: bytes) -> EmailMediaArtifact:
             False,
             "unsupported_media",
             "image_size_limit_exceeded",
+            pixel_width=None,
+            pixel_height=None,
         )
     inferred_type = _infer_image_content_type(payload)
     if normalized_type not in _SUPPORTED_IMAGE_TYPES:
@@ -498,6 +502,8 @@ def _build_artifact(content_type: str, payload: bytes) -> EmailMediaArtifact:
             False,
             "unsupported_media",
             "unsupported_image_content_type",
+            pixel_width=None,
+            pixel_height=None,
         )
     if inferred_type != normalized_type:
         return EmailMediaArtifact(
@@ -509,8 +515,13 @@ def _build_artifact(content_type: str, payload: bytes) -> EmailMediaArtifact:
             False,
             "unsupported_media",
             "image_content_type_mismatch",
+            pixel_width=None,
+            pixel_height=None,
         )
     dimensions = _image_dimensions(normalized_type, payload)
+    pixel_width, pixel_height = (
+        dimensions if dimensions is not None else (None, None)
+    )
     visual_classification = (
         "tracking_candidate" if dimensions == (1, 1) else "unclassified"
     )
@@ -523,6 +534,8 @@ def _build_artifact(content_type: str, payload: bytes) -> EmailMediaArtifact:
         True,
         visual_classification,
         "llm_safe_image",
+        pixel_width,
+        pixel_height,
     )
 
 

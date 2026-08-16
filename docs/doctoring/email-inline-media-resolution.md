@@ -26,7 +26,7 @@ The resolver enforces independent per-message bounds for raw message bytes, indi
 
 Content-addressing never becomes a safety-authority shortcut. When the same payload digest appears under both a valid declaration and a mismatched declaration, the resolver may retain one canonical safe payload artifact, but each MIME and CID occurrence keeps the validation result of its own declaration. A mismatched occurrence therefore remains `unsafe_media` regardless of traversal order and cannot inherit another occurrence's `llm_safe` state.
 
-A 1×1 PNG/GIF can be labelled `tracking_candidate` because dimensions are deterministic low-level evidence. That label is intentionally a candidate, not a finding that the sender used behavioral tracking. Logos, signatures, screenshots, charts, document scans, and table images remain `unclassified` until a later evidence-bound vision stage can make and explain those semantic distinctions.
+A 1×1 PNG/GIF can be labelled `tracking_candidate` because dimensions are deterministic low-level evidence. That label is intentionally a candidate, not a finding that the sender used behavioral tracking. Logos, signatures, screenshots, charts, document scans, and table images remain `unclassified` until a later evidence-bound vision stage can make and explain those semantic distinctions. Safe PNG and GIF artifacts also expose header-derived `pixel_width` and `pixel_height`; admitted formats without a bounded header parser, and every rejected payload, keep those fields as explicit `None` rather than guessed sizes.
 
 ## Verification evidence
 
