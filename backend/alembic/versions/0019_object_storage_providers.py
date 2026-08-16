@@ -72,6 +72,13 @@ def upgrade() -> None:
         "object_storage_providers",
         ["organization_id", "is_active", "updated_at"],
     )
+    op.create_index(
+        "uq_object_storage_providers_active_org",
+        "object_storage_providers",
+        ["organization_id"],
+        unique=True,
+        postgresql_where=sa.text("is_active IS TRUE"),
+    )
     op.add_column(
         "document_object_records",
         sa.Column("object_storage_provider_id", sa.Integer(), nullable=True),
@@ -103,6 +110,10 @@ def downgrade() -> None:
         type_="foreignkey",
     )
     op.drop_column("document_object_records", "object_storage_provider_id")
+    op.drop_index(
+        "uq_object_storage_providers_active_org",
+        table_name="object_storage_providers",
+    )
     op.drop_index(
         "ix_object_storage_providers_org_active",
         table_name="object_storage_providers",
