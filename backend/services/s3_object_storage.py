@@ -16,11 +16,16 @@ from typing import Mapping
 
 import httpx
 
-from services.s3_object_storage_core import *  # noqa: F403
 from services import s3_object_storage_core as _core
+from services.s3_object_storage_core import (
+    S3ObjectStorageError,
+    S3ObjectStorageRequestError,
+    S3StoredObject,
+    sign_s3_request,
+)
 
 
-class _S3ObjectAlreadyExistsError(S3ObjectStorageRequestError):  # noqa: F405
+class _S3ObjectAlreadyExistsError(S3ObjectStorageRequestError):
     """Internal signal that immutable PUT found an already occupied object key."""
 
 
@@ -35,7 +40,7 @@ class S3ObjectStorageBackend(_core.S3ObjectStorageBackend):
         content_length: int,
         checksum_sha256: str,
         content_type: str,
-    ) -> S3StoredObject:  # noqa: F405
+    ) -> S3StoredObject:
         """Create an immutable object or safely adopt its exact existing bytes."""
         try:
             return await super()._put_object_content(
@@ -46,7 +51,7 @@ class S3ObjectStorageBackend(_core.S3ObjectStorageBackend):
                 content_type=content_type,
             )
         except _S3ObjectAlreadyExistsError:
-            candidate = S3StoredObject(  # noqa: F405
+            candidate = S3StoredObject(
                 bucket_name=self._configuration.bucket_name,
                 object_key=object_key,
                 content_type=content_type,
@@ -67,7 +72,7 @@ class S3ObjectStorageBackend(_core.S3ObjectStorageBackend):
     ) -> httpx.Response:
         """Send one signed request while redacting transport and producer failures."""
         url = self.object_url(object_key)
-        signed_headers = sign_s3_request(  # noqa: F405
+        signed_headers = sign_s3_request(
             method=method,
             url=url,
             headers=headers,
@@ -83,14 +88,14 @@ class S3ObjectStorageBackend(_core.S3ObjectStorageBackend):
                 content=content,
                 timeout=self._configuration.request_timeout_seconds,
             )
-        except S3ObjectStorageError:  # noqa: F405
+        except S3ObjectStorageError:
             raise
         except httpx.HTTPError as exc:
-            raise S3ObjectStorageRequestError(  # noqa: F405
+            raise S3ObjectStorageRequestError(
                 "S3 object request failed before receiving a response"
             ) from exc
         except Exception as exc:
-            raise S3ObjectStorageRequestError(  # noqa: F405
+            raise S3ObjectStorageRequestError(
                 "S3 object request source failed before completion"
             ) from exc
 
@@ -99,7 +104,7 @@ class S3ObjectStorageBackend(_core.S3ObjectStorageBackend):
                 "S3 immutable object key is already occupied"
             )
         if not 200 <= response.status_code < 300:
-            raise S3ObjectStorageRequestError(  # noqa: F405
+            raise S3ObjectStorageRequestError(
                 f"S3 object request failed with status {response.status_code}"
             )
         return response
