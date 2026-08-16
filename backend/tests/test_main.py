@@ -155,6 +155,12 @@ async def test_lifespan_starts_all_background_workers_in_dependency_order(monkey
     )
     monkeypatch.setattr(
         main,
+        "object_storage_orphan_cleanup_worker",
+        FakeWorker("object_storage_orphan_cleanup"),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
         "provider_writeback_retry_worker",
         FakeWorker("provider_writeback_retry"),
         raising=False,
@@ -167,6 +173,7 @@ async def test_lifespan_starts_all_background_workers_in_dependency_order(monkey
             "start:reply_sla",
             "start:newsdom_recognition",
             "start:document_object_cleanup",
+            "start:object_storage_orphan_cleanup",
             "start:provider_writeback_retry",
         ]
 
@@ -176,8 +183,10 @@ async def test_lifespan_starts_all_background_workers_in_dependency_order(monkey
         "start:reply_sla",
         "start:newsdom_recognition",
         "start:document_object_cleanup",
+        "start:object_storage_orphan_cleanup",
         "start:provider_writeback_retry",
         "stop:provider_writeback_retry",
+        "stop:object_storage_orphan_cleanup",
         "stop:document_object_cleanup",
         "stop:newsdom_recognition",
         "stop:reply_sla",
