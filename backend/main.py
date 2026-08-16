@@ -131,14 +131,20 @@ def _origin_from_referer(header_value: str | None) -> str | None:
 
 def _is_trusted_browser_origin(origin: str | None) -> bool:
     if origin is None:
-        return True
+        return False
     return origin in set(settings.ALLOWED_CORS_ORIGINS_LIST)
 
 
 def _requires_browser_origin_check(request: Request) -> bool:
-    return (
-        request.method.upper() in STATE_CHANGING_API_METHODS
-        and request.url.path.startswith("/api/")
+    """Return whether a state-changing API request carries browser provenance."""
+    if (
+        request.method.upper() not in STATE_CHANGING_API_METHODS
+        or not request.url.path.startswith("/api/")
+    ):
+        return False
+    return any(
+        request.headers.get(header_name) is not None
+        for header_name in ("origin", "referer", "sec-fetch-site")
     )
 
 
@@ -159,7 +165,7 @@ async def reject_cross_site_state_changing_api_requests(request: Request, call_n
                 status_code=403,
                 content={"error_code": "csrf_origin_rejected"},
             )
-        if not _is_trusted_browser_origin(origin):
+        if origin is not None and not _is_trusted_browser_origin(origin):
             return JSONResponse(
                 status_code=403,
                 content={"error_code": "csrf_origin_rejected"},
