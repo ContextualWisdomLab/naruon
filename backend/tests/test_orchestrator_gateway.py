@@ -100,7 +100,6 @@ def test_gateway_modules_do_not_read_env_or_hold_provider_keys():
     roots = [
         Path(__file__).resolve().parents[1] / "services" / "orchestrator_gateway.py",
         Path(__file__).resolve().parents[1] / "services" / "noema_agent.py",
-        Path(__file__).resolve().parents[1] / "api" / "noema.py",
     ]
     for path in roots:
         source = path.read_text(encoding="utf-8")

@@ -1,4 +1,4 @@
-"""Fast, mocked tests for the Noema decision agent.
+"""Fast, mocked tests for the Noema general agent.
 
 These cover the seams without needing a live LLM or a database:
 
@@ -26,7 +26,6 @@ from services.noema_agent import (
     NoemaAgentDeps,
     build_noema_agent,
     run_noema_agent,
-    run_noema_decision,
     tool_content_graph_query,
     tool_dispatch_writeback,
     tool_list_tasks,
@@ -363,7 +362,7 @@ async def test_run_agent_uses_orchestrator_gateway_and_degrades_without_runtime(
 
 
 @pytest.mark.asyncio
-async def test_run_decision_uses_single_orchestrator_alias(monkeypatch):
+async def test_run_agent_uses_single_orchestrator_alias(monkeypatch):
     captured: dict[str, object] = {}
 
     async def _gateway_from_kv(*args, **kwargs):
@@ -385,17 +384,15 @@ async def test_run_decision_uses_single_orchestrator_alias(monkeypatch):
     monkeypatch.setattr(noema_agent, "resolve_orchestrator_gateway", _gateway_from_kv)
     monkeypatch.setattr(noema_agent, "build_noema_agent", _fake_build)
 
-    result = await run_noema_decision(
+    result = await run_noema_agent(
         _QueueSession([]),
         user_id="user-1",
         organization_id="org-1",
         workspace_id="workspace-org-1",
-        judgment_kind="mail.triage",
         prompt="Should I reply today?",
     )
     assert result.status == "ok"
-    assert result.judgment_kind == "mail.triage"
-    assert result.recommendation == "Hold the reply until Friday."
+    assert result.output == "Hold the reply until Friday."
     assert result.model_alias == "contextual-orchestrator"
     assert result.error_code is None
     gateway = captured["gateway"]
@@ -455,6 +452,7 @@ async def test_build_agent_targets_orchestrator_alias_only(monkeypatch):
     assert captured["base_url"] == "https://orchestrator.example/v1"
     assert captured["model_name"] == "contextual-orchestrator"
     assert captured["model_name"] != "gpt-4o"
+    assert "chat_model" not in captured
     await closer()
 
 
@@ -517,4 +515,11 @@ def test_noema_agent_source_does_not_import_tenant_llm_provider():
     assert "llm_provider_selection" not in source
     assert "resolve_runtime_llm_provider" not in source
     assert "RuntimeLLMProvider" not in source
+    assert "model_profile_id" not in source
+    assert "contextual_orchestrator_client" not in source
+    assert "gpt-4o" not in source
     assert "from services.orchestrator_gateway import" in source
+    assert "run_noema_decision" not in source
+    assert "COPILOT_GITHUB_TOKEN" not in source
+    assert "models.github.ai" not in source
+    assert "api.githubcopilot.com" not in source

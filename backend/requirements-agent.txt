@@ -1,4 +1,4 @@
-# Optional dependencies for the Noema decision agent (services/noema_agent.py).
+# Optional dependencies for the Noema general agent (services/noema_agent.py).
 #
 # Pydantic-AI is MIT licensed and builds on the OpenAI-compatible
 # contextual-orchestrator gateway (openai, httpx, pydantic). Installing this

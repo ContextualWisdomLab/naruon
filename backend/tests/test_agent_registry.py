@@ -17,13 +17,12 @@ def teardown_function() -> None:
     clear_registry_cache()
 
 
-def test_noema_agent_is_registered_as_decision_agent():
+def test_noema_agent_is_registered_on_orchestrator():
     agents = load_registered_agents()
     assert "noema-general-agent" in agents
 
     agent = get_registered_agent("noema-general-agent")
     assert agent is not None
-    assert agent.agent_role == "decision"
     assert agent.framework == "pydantic-ai"
     assert agent.entrypoint == "services.noema_agent:run_noema_agent"
     assert agent.enabled is True
@@ -31,30 +30,30 @@ def test_noema_agent_is_registered_as_decision_agent():
     assert agent.provider_source == "contextual-orchestrator"
     assert agent.model_alias == "contextual-orchestrator"
     assert agent.sequential_failover is False
+    assert agent.provider_source != "runtime_llm_provider"
     # The opt-in + audit-logged writeback contract is declared in the catalog.
     assert agent.writeback_opt_in is True
     assert agent.writeback_audit_logged is True
-    assert "judgment.decide" in agent.capabilities
     assert "mail.search" in agent.capabilities
     assert "calendar.writeback" in agent.capabilities
+    assert "judgment.decide" not in agent.capabilities
 
 
-def test_task_mapping_resolves_judgments_to_noema_agent():
+def test_task_mapping_stays_catalog_only():
     mapping = load_task_agent_mapping()
     assert mapping.get("general") == "noema-general-agent"
-    assert mapping.get("judgment.decide") == "noema-general-agent"
+    assert "judgment.decide" not in mapping
 
     for task_type in (
         "mail.triage",
         "mail.search",
         "tasks.followup",
         "calendar.writeback",
-        "judgment.decide",
     ):
         agent = resolve_agent_for_task(task_type)
         assert agent is not None
         assert agent.agent_id == "noema-general-agent"
-        assert agent.agent_role == "decision"
+        assert agent.provider_source == "contextual-orchestrator"
         assert agent.model_alias == "contextual-orchestrator"
         assert agent.sequential_failover is False
 

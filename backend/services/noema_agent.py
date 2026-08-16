@@ -1,12 +1,14 @@
-"""Noema decision agent.
+"""Noema general agent.
 
 An in-process `Pydantic-AI <https://ai.pydantic.dev>`_ (MIT) agent that naruon
-uses for workspace judgments and decisions (mail triage, follow-ups, writeback
-intent, general decide). LLM calls go only to the contextual-orchestrator
-gateway: dedicated inference token + HTTPS ``/v1`` base URL from the Fernet
-tenant KV, and the single model alias ``contextual-orchestrator``. naruon does
-not hold upstream provider keys at request time, does not read ``os.getenv``
-for those secrets, and does not sequentially fail over to the next model.
+keeps as the existing tool surface (mail, content graph, tasks, opt-in writeback).
+LLM calls go only to the contextual-orchestrator gateway: dedicated inference
+token + HTTPS ``/v1`` base URL from the Fernet tenant KV, and the single model
+alias ``contextual-orchestrator``. naruon does not resolve a tenant LLM
+provider record, does not pick a tenant chat-model name, does not hold
+upstream provider keys at request time, and does not sequentially fail over
+to the next model. Catalog mappings stay catalog-only; this module does not
+dispatch Decision Points or ``mail.triage``.
 
 Tools stay owner-scoped:
 
@@ -108,24 +110,6 @@ class NoemaAgentResult:
     provider_name: str | None = None
     model_alias: str | None = None
     error_code: str | None = None
-    tool_calls: tuple[str, ...] = ()
-
-    @property
-    def ok(self) -> bool:
-        return self.status == "ok"
-
-
-@dataclass(frozen=True)
-class NoemaDecisionResult:
-    """Structured judgment returned to naruon call sites."""
-
-    status: Literal["ok", "unavailable", "error"]
-    judgment_kind: str
-    recommendation: str = ""
-    rationale: str = ""
-    notice: str | None = None
-    error_code: str | None = None
-    model_alias: str | None = None
     tool_calls: tuple[str, ...] = ()
 
     @property
@@ -459,14 +443,14 @@ NOEMA_TOOL_SPECS: tuple[dict[str, Any], ...] = (
 )
 
 SYSTEM_PROMPT = (
-    "You are Noema, the in-process decision agent for a naruon email workspace. "
-    "Issue a single recommended judgment. Do not try alternate models or "
-    "providers; contextual-orchestrator selects the model. Use the provided "
-    "tools to read and search the owner's mail, inspect the content graph of "
-    "an email, and manage tasks. Only change task status or dispatch a "
-    "writeback when the user clearly asks for it. Writebacks target the "
-    "customer's own systems and require opt-in; if a writeback is skipped, "
-    "explain that it must be enabled. Be concise and cite message ids you used."
+    "You are Noema, the general assistant for a naruon email workspace. "
+    "Do not try alternate models or providers; contextual-orchestrator "
+    "selects the model. Use the provided tools to read and search the "
+    "owner's mail, inspect the content graph of an email, and manage tasks. "
+    "Only change task status or dispatch a writeback when the user clearly "
+    "asks for it. Writebacks target the customer's own systems and require "
+    "opt-in; if a writeback is skipped, explain that it must be enabled. "
+    "Be concise and cite message ids you used."
 )
 
 
@@ -641,43 +625,4 @@ async def run_noema_agent(
         )
     finally:
         await closer()
-
-
-async def run_noema_decision(
-    session: AsyncSession,
-    *,
-    user_id: str,
-    organization_id: str | None,
-    workspace_id: str,
-    judgment_kind: str,
-    prompt: str,
-    writeback_enabled: bool = False,
-    dispatcher: RunnerDispatcher | None = None,
-) -> NoemaDecisionResult:
-    """Ask Noema for a single judgment through the orchestrator gateway."""
-    decision_prompt = (
-        f"Judgment kind: {judgment_kind}\n"
-        "Return one recommended decision and a short rationale. "
-        "Do not try alternate models.\n\n"
-        f"{prompt}"
-    )
-    result = await run_noema_agent(
-        session,
-        user_id=user_id,
-        organization_id=organization_id,
-        workspace_id=workspace_id,
-        prompt=decision_prompt,
-        writeback_enabled=writeback_enabled,
-        dispatcher=dispatcher,
-    )
-    return NoemaDecisionResult(
-        status=result.status,
-        judgment_kind=judgment_kind,
-        recommendation=result.output,
-        rationale=result.notice or "",
-        notice=result.notice,
-        error_code=result.error_code,
-        model_alias=result.model_alias,
-        tool_calls=result.tool_calls,
-    )
 

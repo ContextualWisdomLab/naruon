@@ -1,8 +1,10 @@
-# Noema decision agent
+# Noema orchestrator routing
 
-Status: implemented. Noema runs as an in-process decision agent inside naruon
-for workspace judgments. It is not limited to the GitHub review bot. The
-runnable contract lives in
+Status: first slice implemented. `run_noema_agent` sends completions only to
+contextual-orchestrator. Catalog files stay catalog-only. A Decision Points
+/ `mail.triage` dispatcher is a later slice and is not in this change.
+
+The runnable contract lives in
 [`backend/services/noema_agent.py`](../../backend/services/noema_agent.py) and
 [`backend/services/orchestrator_gateway.py`](../../backend/services/orchestrator_gateway.py).
 
@@ -10,10 +12,14 @@ runnable contract lives in
 
 naruon already registered a Noema stub (`registered_agents.json` →
 `run_noema_agent`) that called the tenant LLM provider directly through
-`resolve_runtime_llm_provider`. That path held or reused upstream provider
-credentials at request time and left model choice inside naruon. The owner
-requirement is the opposite: Noema must be usable for judgments inside naruon,
-and **model selection must go through contextual-orchestrator**.
+`resolve_runtime_llm_provider`. That path used a tenant `OpenAIChatModel`
+(default `gpt-4o`) and left model choice inside naruon. The owner
+requirement is the opposite: **model selection must go through
+contextual-orchestrator**.
+
+`run_noema_agent` has no production callers. `registered_agents.json` and
+`task_agent_mapping.json` are catalog only. Wiring Decision Points first
+would lock the wrong picker.
 
 ## Design
 
@@ -33,16 +39,15 @@ There is no sequential model list and no fail-over to the next agent or
 provider inside naruon. Missing or rejected gateway config fails closed with
 `error_code=orchestrator_gateway_unavailable`.
 
+This slice does **not** copy draft email-writing clients that still require a
+tenant `model_profile_id`. Keep the existing tools, owner-scope, and opt-in
+writeback surface.
+
 Upstream org secrets (`NVIDIA_NIM_API_KEY`, `NVIDIA_NIM_API_KEY_SUB`,
 `BYTEZ_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`) belong in the
 orchestrator KV. naruon must not read them at request time. GitHub Models and
 `COPILOT_GITHUB_TOKEN` are never a Noema path. OpenCode sidecar model lists
 are not copied here.
-
-Judgment call sites use `run_noema_decision` or signed
-`POST /api/noema/decisions`. Task types in `task_agent_mapping.json`
-(`mail.triage`, `tasks.followup`, `calendar.writeback`, `judgment.decide`)
-resolve to the registered decision agent.
 
 ## Grounding
 

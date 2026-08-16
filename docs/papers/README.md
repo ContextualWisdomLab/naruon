@@ -21,7 +21,7 @@ threads, and this literature grounds that requirements-engineering work.
 ## LLM cost, routing, and load balancing
 
 Background for routing batch-tolerant embedding work and in-process Noema
-judgments through **contextual-orchestrator** (the routing / cost hub) instead
+completions through **contextual-orchestrator** (the routing / cost hub) instead
 of calling a provider or batch engine directly. The orchestrator owns provider
 selection, load balancing, and cost accounting; naruon submits a batch or a
 single `contextual-orchestrator` chat alias and records the reported cost. See

@@ -110,7 +110,7 @@ indexes, and auditable writeback intent. `ARCHITECTURE.md` and
 ```
 Next.js frontend ──> FastAPI backend (control plane) ──> Postgres + pgvector
                             │
-                            ├──> Noema decision agent ──> contextual-orchestrator (/v1)
+                            ├──> Noema agent LLM ──> contextual-orchestrator (/v1)
                             ├──> OpenAI-compatible LLM providers (Ollama locally)
                             └──> outbound-only self-hosted connector (connector/)
                                      └──> customer IMAP/POP3/SMTP + CalDAV/CardDAV/WebDAV
@@ -122,11 +122,12 @@ Next.js frontend ──> FastAPI backend (control plane) ──> Postgres + pgve
   (`services/threading_service.py` is the only thread-id assignment owner),
   vector search, AI summaries, ticket tasks, and server-authoritative
   calendar/WebDAV writeback intents. Authorization is deny-first RBAC + ABAC.
-  In-process **Noema** (`services/noema_agent.py`, `POST /api/noema/decisions`)
-  is the decision agent for workspace judgments; its LLM calls go only to
+  In-process **Noema** (`services/noema_agent.py`) keeps the existing
+  owner-scoped tool surface; its LLM calls go only to
   contextual-orchestrator (model alias `contextual-orchestrator`, dedicated
   gateway token + HTTPS `/v1` URL from the Fernet KV). naruon does not hold
-  upstream provider keys or sequentially fail over models.
+  upstream provider keys, pick tenant `gpt-4o`, or sequentially fail over
+  models. Catalog mappings are not a live dispatcher.
 - `frontend/` — Next.js workspace shell (Today dashboard, Mail, Calendar,
   Tasks, Projects, Context Search, AI Hub, Data, Security, Settings). Browser
   writes go through the same-origin `/api/*` proxy, which converts the HttpOnly
