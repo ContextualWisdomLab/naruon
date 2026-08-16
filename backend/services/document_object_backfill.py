@@ -4,7 +4,8 @@ The backfill is intentionally bounded and retryable. PostgreSQL remains the
 source of truth for document ownership and workflow state; raw bytes move to S3
 only after the object write succeeds, and the inline payload is cleared only in
 the same transaction that inserts normalized object metadata. A failed metadata
-commit compensates the just-written remote object before the row is retried.
+commit compensates the just-written remote object through the same retained
+provider authority before the row is retried.
 """
 
 from __future__ import annotations
@@ -20,9 +21,11 @@ from db.models import Document
 from db.session import AsyncSessionLocal
 from services.document_object_storage import (
     DocumentObjectStorageError,
+    DocumentStorageRuntimeConfig,
     StoredDocumentPayload,
     decode_legacy_pdf_payload,
     delete_configured_document_payload,
+    resolve_document_storage_runtime_config,
     store_configured_pdf_document,
 )
 from services.newsdom_pdf_recognition import PDF_DOM_RECOGNITION_PENDING_STATUS
@@ -50,10 +53,16 @@ class DocumentObjectBackfillRunResult:
     failed_count: int
 
 
-async def _compensate_backfill_object(stored: StoredDocumentPayload) -> None:
+async def _compensate_backfill_object(
+    stored: StoredDocumentPayload,
+    runtime_config: DocumentStorageRuntimeConfig,
+) -> None:
     """Best-effort delete an S3 object whose relational migration did not commit."""
     try:
-        await delete_configured_document_payload(stored)
+        await delete_configured_document_payload(
+            stored,
+            runtime_config=runtime_config,
+        )
     except DocumentObjectStorageError:
         logger.error(
             "Document object backfill compensation failed; orphan reconciliation "
@@ -70,10 +79,10 @@ async def backfill_legacy_document_payloads(
     """Move a bounded batch of legacy pending PDF payloads into S3 safely.
 
     Only pending PDF rows with non-empty inline content are candidates. Each
-    candidate is reloaded and checked for pre-existing object metadata before
-    any remote write, preventing an ambiguous SQL/S3 split-brain row from being
-    overwritten. Successful migrations commit independently so one corrupt row
-    or transient object-store failure cannot starve later documents.
+    candidate is reloaded, resolves its organization provider, and is checked
+    for pre-existing object metadata before any remote write. Successful
+    migrations commit independently so one corrupt row, missing provider, or
+    transient object-store failure cannot starve later documents.
     """
     if batch_limit <= 0:
         raise ValueError("Document object backfill batch_limit must be positive")
@@ -109,6 +118,7 @@ async def backfill_legacy_document_payloads(
 
         original_content = document.document_content
         stored_payload: StoredDocumentPayload | None = None
+        runtime_config: DocumentStorageRuntimeConfig | None = None
         try:
             existing_record = await session.scalar(
                 select(DocumentObjectRecord).where(
@@ -120,12 +130,17 @@ async def backfill_legacy_document_payloads(
                     "Legacy document already has object metadata; refusing split-brain backfill"
                 )
 
+            runtime_config = await resolve_document_storage_runtime_config(
+                session,
+                document.organization_id,
+            )
             payload = decode_legacy_pdf_payload(original_content)
             stored_payload = await store_configured_pdf_document(
                 payload=payload,
                 document_id=document.document_id,
                 organization_id=document.organization_id,
                 workspace_id=document.workspace_id,
+                runtime_config=runtime_config,
             )
             object_record = stored_payload.to_object_record(document.document_id)
             if stored_payload.storage_backend != "s3" or object_record is None:
@@ -140,8 +155,15 @@ async def backfill_legacy_document_payloads(
             failed_count += 1
             await session.rollback()
             document.document_content = original_content
-            if stored_payload is not None and stored_payload.s3_object is not None:
-                await _compensate_backfill_object(stored_payload)
+            if (
+                stored_payload is not None
+                and stored_payload.s3_object is not None
+                and runtime_config is not None
+            ):
+                await _compensate_backfill_object(
+                    stored_payload,
+                    runtime_config,
+                )
             logger.warning(
                 "Document object backfill failed for %s; leaving the inline payload "
                 "retryable.",
