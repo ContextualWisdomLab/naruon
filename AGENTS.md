@@ -65,6 +65,27 @@ in this repo.
   add further `os.getenv` secret reads, and migrate toward the KV pattern as it
   is adopted.
 
+### Noema decision agent (orchestrator-only)
+
+- **Noema is an in-process decision agent inside naruon**, not only a GitHub
+  review bot. Judgment call sites (`mail.triage`, `tasks.followup`,
+  `calendar.writeback`, `judgment.decide`) resolve through
+  `registered_agents.json` / `task_agent_mapping.json` to
+  `services.noema_agent:run_noema_agent` and the signed
+  `POST /api/noema/decisions` route.
+- **Model selection is owned by contextual-orchestrator.** naruon sends the
+  single model alias `contextual-orchestrator` to a dedicated gateway inference
+  token + HTTPS base URL ending in `/v1`, both stored in the Fernet tenant KV
+  (`noema_orchestrator_token`, `noema_orchestrator_base_url`). Do not
+  sequentially fail over to the next agent or model inside naruon or Noema.
+  Do not copy OpenCode sidecar model lists. Never use `COPILOT_GITHUB_TOKEN` or
+  GitHub Models for Noema.
+- **Upstream provider keys stay in the orchestrator KV**, not in naruon at
+  request time: `NVIDIA_NIM_API_KEY`, `NVIDIA_NIM_API_KEY_SUB`,
+  `BYTEZ_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`. List prices for
+  free-but-priced models are stored in the orchestrator, not here. Do not
+  reimplement the orchestrator catalog in this repo.
+
 ### This repo's role in the ecosystem
 
 - **This repo (naruon) is the ECOSYSTEM HUB:** email/PIM that DOM-decomposes

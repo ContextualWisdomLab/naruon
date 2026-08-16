@@ -1,4 +1,18 @@
 ## [Unreleased]
+- **Noema in-process decision agent.** Noema is now a first-class decision
+  agent inside naruon (not only a GitHub review bot). Judgment kinds
+  (`mail.triage`, `tasks.followup`, `calendar.writeback`, `judgment.decide`)
+  resolve through `registered_agents.json` to
+  `services.noema_agent:run_noema_decision`, exposed as signed
+  `POST /api/noema/decisions`. LLM calls go only to contextual-orchestrator:
+  dedicated Fernet-KV inference token (`noema_orchestrator_token`), HTTPS
+  base URL ending in `/v1` (`noema_orchestrator_base_url`), and the single
+  model alias `contextual-orchestrator`. naruon does not sequentially fail
+  over models, does not read upstream provider keys
+  (`NVIDIA_NIM_API_KEY`, `BYTEZ_API_KEY`, `OPENROUTER_API_KEY`,
+  `OPENAI_API_KEY`, `COPILOT_GITHUB_TOKEN`) at request time, and does not
+  reimplement the orchestrator catalog. See
+  `docs/architecture/noema-decision-agent.md`.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
 

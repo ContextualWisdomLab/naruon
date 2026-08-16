@@ -1,12 +1,14 @@
 {
   "noema-general-agent": {
     "agent_id": "noema-general-agent",
-    "name": "Noema General Agent",
+    "name": "Noema Decision Agent",
+    "agent_role": "decision",
     "framework": "pydantic-ai",
     "framework_license": "MIT",
     "entrypoint": "services.noema_agent:run_noema_agent",
-    "description": "General-purpose assistant that reasons over the naruon workspace (mail, content graph, tasks) on the tenant's configured LLM provider and dispatches opt-in, audit-logged writebacks through the self-hosted runner.",
+    "description": "In-process decision agent for naruon judgments (mail triage, follow-ups, writeback intent, general decide). LLM calls go only to the contextual-orchestrator gateway using the dedicated inference token and the single model alias contextual-orchestrator. naruon does not hold upstream provider keys or sequentially fail over models.",
     "capabilities": [
+      "judgment.decide",
       "mail.search",
       "mail.read",
       "content_graph.query",
@@ -14,7 +16,9 @@
       "tasks.update",
       "calendar.writeback"
     ],
-    "provider_source": "runtime_llm_provider",
+    "provider_source": "contextual-orchestrator",
+    "model_alias": "contextual-orchestrator",
+    "sequential_failover": false,
     "writeback": {
       "opt_in": true,
       "audit_logged": true

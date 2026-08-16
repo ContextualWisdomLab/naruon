@@ -29,6 +29,7 @@ from api.webdav import router as webdav_router
 from api.security import router as security_router
 from api.data import router as data_router
 from api.ai_hub import router as ai_hub_router
+from api.noema import router as noema_router
 from api.projects import router as projects_router
 from api.session import router as auth_session_router
 from core.config import canonical_origin, settings
@@ -235,6 +236,7 @@ app.include_router(webdav_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(security_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(data_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(ai_hub_router, dependencies=PRIVATE_API_DEPENDENCIES)
+app.include_router(noema_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(projects_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(auth_session_router, dependencies=PRIVATE_API_DEPENDENCIES)
 

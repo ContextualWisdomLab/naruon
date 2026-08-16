@@ -178,6 +178,18 @@ syntax, no userinfo/query or fragment, exact host membership in
 Missing allowlist configuration fails closed; the default provider path should
 leave `base_url` unset.
 
+## Noema decision agent
+
+Noema is an in-process decision agent inside naruon for workspace judgments
+(mail triage, follow-ups, writeback intent, general decide). It is registered
+in `registered_agents.json` with `agent_role=decision` and called through
+`POST /api/noema/decisions` or `services.noema_agent.run_noema_decision`.
+LLM calls go only to **contextual-orchestrator**: dedicated Fernet-KV
+inference token, HTTPS base URL ending in `/v1`, and the single model alias
+`contextual-orchestrator`. naruon does not hold upstream provider keys at
+request time and does not sequentially fail over models. Design:
+[`docs/architecture/noema-decision-agent.md`](docs/architecture/noema-decision-agent.md).
+
 ## Batch embedding routing boundary
 
 Bulk, latency-tolerant embedding work (email import, backfills) does not call a

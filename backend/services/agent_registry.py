@@ -39,6 +39,9 @@ class RegisteredAgent:
     description: str = ""
     capabilities: tuple[str, ...] = ()
     provider_source: str = ""
+    agent_role: str = ""
+    model_alias: str = ""
+    sequential_failover: bool = False
     writeback_opt_in: bool = False
     writeback_audit_logged: bool = False
     degrades_gracefully: bool = False
@@ -75,6 +78,9 @@ def _agent_from_entry(agent_id: str, entry: dict[str, Any]) -> RegisteredAgent |
         description=str(entry.get("description", "") or ""),
         capabilities=_coerce_capabilities(entry.get("capabilities")),
         provider_source=str(entry.get("provider_source", "") or ""),
+        agent_role=str(entry.get("agent_role", "") or ""),
+        model_alias=str(entry.get("model_alias", "") or ""),
+        sequential_failover=bool(entry.get("sequential_failover", False)),
         writeback_opt_in=bool(writeback.get("opt_in", False)),
         writeback_audit_logged=bool(writeback.get("audit_logged", False)),
         degrades_gracefully=bool(entry.get("degrades_gracefully", False)),

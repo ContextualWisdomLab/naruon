@@ -78,6 +78,14 @@ def _get_add_columns_statements() -> list[Executable]:
             "ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS pop3_password varchar"
         ),
         text(
+            "ALTER TABLE tenant_configs "
+            "ADD COLUMN IF NOT EXISTS noema_orchestrator_base_url varchar"
+        ),
+        text(
+            "ALTER TABLE tenant_configs "
+            "ADD COLUMN IF NOT EXISTS noema_orchestrator_token varchar"
+        ),
+        text(
             "ALTER TABLE sender_relationships "
             "ADD COLUMN IF NOT EXISTS source_message_id varchar"
         ),
