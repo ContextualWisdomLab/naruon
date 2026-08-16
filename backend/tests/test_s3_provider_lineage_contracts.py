@@ -1,4 +1,4 @@
-"""Red-green contracts for provider revisions and single-active authority."""
+"""Contracts for provider revisions and single-active authority."""
 
 from __future__ import annotations
 
@@ -10,14 +10,12 @@ from db.object_storage_provider import ObjectStorageProvider
 
 
 def test_provider_update_rejects_storage_topology_changes() -> None:
-    """Existing object locators must not be rebound to a different storage topology."""
+    """Existing object locators must not be rebound to a different authority."""
     forbidden_updates = [
         {"bucket_name": "different-bucket"},
         {"region_name": "eu-west-1"},
         {"endpoint_url": "https://objects.example.com"},
         {"addressing_style": "path"},
-        {"server_side_encryption": "aws:kms"},
-        {"kms_key_id": "different-key"},
         {"expected_bucket_owner": "111122223333"},
     ]
     for update in forbidden_updates:
@@ -25,13 +23,15 @@ def test_provider_update_rejects_storage_topology_changes() -> None:
             ObjectStorageProviderUpdate(**update)
 
 
-def test_provider_update_allows_only_identity_safe_rotation_fields() -> None:
-    """Names, credentials, session tokens, and activation may rotate in place."""
+def test_provider_update_allows_identity_safe_rotation_and_future_write_policy() -> None:
+    """Credentials, activation, and encryption for future writes may rotate."""
     update = ObjectStorageProviderUpdate(
         provider_name="rotated-credentials",
         access_key_id="new-access-key",
         secret_access_key="new-secret-key",
         session_token="new-session-token",
+        server_side_encryption="aws:kms",
+        kms_key_id="new-write-key",
         is_active=True,
     )
     assert update.model_dump(exclude_unset=True) == {
@@ -39,6 +39,8 @@ def test_provider_update_allows_only_identity_safe_rotation_fields() -> None:
         "access_key_id": "new-access-key",
         "secret_access_key": "new-secret-key",
         "session_token": "new-session-token",
+        "server_side_encryption": "aws:kms",
+        "kms_key_id": "new-write-key",
         "is_active": True,
     }
 
