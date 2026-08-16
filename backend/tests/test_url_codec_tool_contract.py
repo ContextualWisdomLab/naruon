@@ -7,11 +7,15 @@ separate from the canonical checksum surface owned by the content checksum PR.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 import pytest
 
 from api.tools import registry, url_decoder_handler, url_encoder_handler
 
 URL_CODEC_MAX_INPUT_BYTES = 262_144
+URL_CODEC_TEXT_ERROR = "URL codec text must be a string"
 
 
 def test_hash_generator_is_not_a_parallel_checksum_authority() -> None:
@@ -59,12 +63,27 @@ async def test_url_decoder_rejects_non_utf8_octets() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("handler", [url_encoder_handler, url_decoder_handler])
-async def test_url_codec_rejects_oversized_utf8_input(handler) -> None:
+async def test_url_codec_rejects_oversized_utf8_input(
+    handler: Callable[[dict[str, Any]], Any],
+) -> None:
     """Both directions enforce the same byte-oriented resource boundary."""
 
     oversized = "가" * ((URL_CODEC_MAX_INPUT_BYTES // 3) + 1)
     with pytest.raises(ValueError, match="URL codec input must not exceed"):
         await handler({"text": oversized})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handler", [url_encoder_handler, url_decoder_handler])
+@pytest.mark.parametrize("invalid_text", [None, 17, b"bytes", ["text"]])
+async def test_url_codec_rejects_non_string_text_with_stable_error(
+    handler: Callable[[dict[str, Any]], Any],
+    invalid_text: object,
+) -> None:
+    """Reject type-confused tool payloads before string operations run."""
+
+    with pytest.raises(ValueError, match=URL_CODEC_TEXT_ERROR):
+        await handler({"text": invalid_text})
 
 
 def test_url_codec_tools_have_one_required_text_parameter() -> None:
