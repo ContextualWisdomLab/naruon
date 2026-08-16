@@ -4,7 +4,7 @@
 
 **Protected `develop` shipped truth (before PR #1369):** naruon installs its active Python lock files with pip hash-checking mode, but protected `develop` does not first attest that each repository-controlled lock declaration still agrees with its declared generator/source contract.
 
-**Active PR #1369:** adds an offline, deterministic declaration receipt before backend dependency installation. The receipt covers repository-controlled exact pins, SHA-256 hash syntax/presence, recognized generator command binding, declared `uv pip compile` output/source paths, and agreement between exact direct source pins and the generated lock.
+**Active PR #1369:** adds an offline, deterministic declaration receipt before backend dependency installation. The receipt covers repository-controlled exact pins, SHA-256 hash syntax/presence, recognized generator command binding, declared `uv pip compile` output/source paths (including conventional `requirements.in` inputs), PEP 508-style extras on manual `pip download` pins, agreement between exact direct source pins and the generated lock, and repository-root containment before any candidate lock/source payload is read.
 
 **Planned follow-on work for issue #1229:** registry metadata resolution, platform-specific artifact selection/hash matching, and a clean `pip install --require-hashes` rehearsal. Those controls are not shipped by this PR and must not be inferred from an offline passing receipt.
 
@@ -12,7 +12,7 @@
 
 A passing receipt means that the checked-in Python lock declarations are internally consistent with the repository evidence this validator can verify without network access. It does **not** prove that a package index currently serves the expected distributions, that a distribution is available for the target platform, that a remote artifact's bytes match the checked-in hash, or that a clean installation succeeds.
 
-A failing receipt is actionable and fail-closed. The operator should read the stable reason code and affected relative path, regenerate or repair the affected lock from its declared source/generator, review the resulting dependency delta, and rerun Application CI. Do not bypass the receipt or remove hash-checking mode to make a dependency update green.
+A failing receipt is actionable and fail-closed. The operator should read the stable reason code and affected relative path, regenerate or repair the affected lock from its declared source/generator, review the resulting dependency delta, and rerun Application CI. Do not bypass the receipt or remove hash-checking mode to make a dependency update green. A path-containment failure means the declaration or symlink must first be moved back under the repository root; the validator intentionally does not read the escaping payload.
 
 ## Evidence flow
 
@@ -20,17 +20,21 @@ A failing receipt is actionable and fail-closed. The operator should read the st
 flowchart LR
     A[Checked-in requirements sources] --> B[Declared lock generator]
     B --> C[Hash-pinned lock files]
-    C --> D[Offline provenance validator]
+    C --> D[Repository-root containment]
     A --> D
-    D -->|pass| E[Deterministic JSON receipt]
-    D -->|fail| F[Stable reason code + relative path]
-    E --> G[pip install --require-hashes]
-    F --> H[Regenerate / repair / review]
-    H --> D
-    G --> I[Follow-on registry + artifact + clean-install evidence]
+    D -->|contained| E[Offline provenance validator]
+    D -->|escapes root| F[Stable containment reason code]
+    E -->|pass| G[Deterministic JSON receipt]
+    E -->|fail| H[Stable reason code + relative path]
+    G --> I[pip install --require-hashes]
+    F --> J[Repair path / symlink]
+    H --> K[Regenerate / repair / review]
+    J --> D
+    K --> E
+    I --> L[Follow-on registry + artifact + clean-install evidence]
 ```
 
-The validator emits only repository-relative paths, SHA-256 digests of the checked-in lock text, requirement/hash counts, generation mode, and stable validation findings. It performs no network request and reads no credentials or package-index tokens.
+For safely contained lock paths, the validator emits repository-relative paths, SHA-256 digests of the checked-in lock text, requirement/hash counts, generation mode, and stable validation findings. For an escaping lock path, it emits a failed receipt with `sha256: null`, zero counts, and a containment reason code without reading the target payload. It performs no network request and reads no credentials or package-index tokens.
 
 ## Validation contract
 
@@ -39,10 +43,11 @@ The active slice discovers `requirements*.txt` files containing SHA-256 lock ent
 - each requirement declaration is an exact `==` pin;
 - each pinned requirement carries at least one syntactically valid SHA-256 entry;
 - detached hashes, malformed SHA-256 entries, and duplicate project declarations fail with stable reason codes;
-- a recognized manual `pip download` regeneration command names at least one exact package/version and agrees with the lock;
-- a recognized `uv pip compile` command names the lock output and source requirements file, and exact direct pins from that source agree with the generated lock;
-- the machine receipt is deterministic and does not serialize an absolute runner path;
-- Application CI publishes the receipt before network dependency installation and fails closed when validation exits nonzero.
+- a recognized manual `pip download` regeneration command names at least one exact package/version, accepts standard extras such as `SomePackage[PDF]==3.0`, and agrees with the lock;
+- a recognized `uv pip compile` command names the lock output and a `.txt` or `.in` source requirements file, and exact direct pins from that source agree with the generated lock;
+- resolved lock/source candidates must remain under the resolved repository root before file existence checks or payload reads, including symlink targets and `..` traversal;
+- the machine receipt is deterministic and does not serialize an absolute runner path or an escaping file payload;
+- Application CI publishes the receipt before network dependency installation even when validation fails, then exits with the validator status.
 
 The implementation intentionally ignores arbitrary explanatory prose as provenance metadata. Only recognized generator command forms create generator-binding obligations. This prevents stale narrative comments from being mistaken for executable provenance while still failing closed on a recognized but incomplete generator declaration.
 
@@ -58,13 +63,15 @@ The implementation intentionally ignores arbitrary explanatory prose as provenan
 | `generation-output-missing` | A recognized `uv` generator omits its output lock path. | Restore the exact `--output-file` declaration and regenerate. |
 | `generation-output-mismatch` | The declared generator output is a different lock file. | Correct the generator command or validate the intended lock. |
 | `generation-input-missing` | A recognized generator does not identify a usable source/package pin. | Restore the source requirement path or exact manual package pin, then regenerate. |
+| `generation-input-outside-repository` | A declared `uv` source resolves outside the repository root. | Move or rewrite the source declaration so the resolved file stays inside the repository; do not expose the external payload to CI. |
 | `generation-version-mismatch` | The generator/source exact pin disagrees with the lock. | Regenerate from the current source declaration and review the dependency delta. |
+| `lock-path-outside-repository` | A discovered or directly validated lock resolves outside the repository root, including through a symlink. | Replace the escaping path/symlink with an in-repository lock before validation. |
 
 ## TDD and acceptance evidence
 
-The first PR head intentionally introduced tests before the validator existed so collection failed closed rather than silently passing. Follow-up regressions cover a stale manual generator version, missing manual generator pin, unpinned/unhashed declarations, malformed/orphan/duplicate hash structure, missing or mismatched `uv` source/output bindings, deterministic path-relative receipts, CLI exit behavior, the direct-script guard, the current repository lock inventory, and CI ordering.
+The first PR head intentionally introduced tests before the validator existed so collection failed closed rather than silently passing. Follow-up regressions cover a stale manual generator version, missing manual generator pin, manual extras, unpinned/unhashed declarations, malformed/orphan/duplicate hash structure, `.txt` and `.in` uv sources, missing or mismatched `uv` source/output bindings, traversal and symlink escapes, deterministic path-relative receipts without escaping payload disclosure, CLI exit behavior, the direct-script guard, the current repository lock inventory, job-scoped workflow ordering, and failure-receipt publication before CI exits.
 
-For the current exact PR head, merge evidence remains the live protected-branch gate set, not this document and not predecessor-head success. Required CI/security/review evidence must be terminal and exact-head current before the PR can leave Draft and before merge is considered.
+For the current exact PR head, merge evidence remains the live protected-branch gate set, not this document and not predecessor-head success. Required CI/security/review evidence must be terminal and exact-head current before merge is considered.
 
 ## Standards and primary technical grounding
 
