@@ -17,6 +17,7 @@ from sqlalchemy import select
 from core.object_storage_config import object_storage_settings as settings
 from db.document_object_record import DocumentObjectRecord
 from db.models import Document
+from db.session import AsyncSessionLocal
 from services.document_object_storage import (
     DocumentObjectStorageError,
     StoredDocumentPayload,
@@ -33,6 +34,17 @@ logger = logging.getLogger(__name__)
 class DocumentObjectBackfillResult:
     """Summarize one bounded legacy-payload migration sweep."""
 
+    selected_count: int
+    migrated_count: int
+    failed_count: int
+
+
+@dataclass(frozen=True)
+class DocumentObjectBackfillRunResult:
+    """Summarize one bounded operator backfill run across fresh sessions."""
+
+    completed: bool
+    batch_count: int
     selected_count: int
     migrated_count: int
     failed_count: int
@@ -141,6 +153,57 @@ async def backfill_legacy_document_payloads(
 
     return DocumentObjectBackfillResult(
         selected_count=len(selected_ids),
+        migrated_count=migrated_count,
+        failed_count=failed_count,
+    )
+
+
+async def run_document_object_backfill_batches(
+    *,
+    batch_limit: int,
+    max_batches: int,
+    session_factory=AsyncSessionLocal,
+) -> DocumentObjectBackfillRunResult:
+    """Run a bounded operator migration until an empty batch proves completion.
+
+    Every batch receives a fresh database session so transaction state and
+    identity-map contents cannot leak across retries. The explicit batch budget
+    prevents a persistently failing legacy row from creating an unbounded
+    operator process. ``completed`` is true only after a subsequent empty batch
+    proves that no eligible inline payload remains at that instant.
+    """
+    if batch_limit <= 0:
+        raise ValueError("Document object backfill batch_limit must be positive")
+    if max_batches <= 0:
+        raise ValueError("Document object backfill max_batches must be positive")
+
+    selected_count = 0
+    migrated_count = 0
+    failed_count = 0
+
+    for batch_count in range(1, max_batches + 1):
+        async with session_factory() as session:
+            batch_result = await backfill_legacy_document_payloads(
+                session,
+                batch_limit=batch_limit,
+            )
+
+        selected_count += batch_result.selected_count
+        migrated_count += batch_result.migrated_count
+        failed_count += batch_result.failed_count
+        if batch_result.selected_count == 0:
+            return DocumentObjectBackfillRunResult(
+                completed=True,
+                batch_count=batch_count,
+                selected_count=selected_count,
+                migrated_count=migrated_count,
+                failed_count=failed_count,
+            )
+
+    return DocumentObjectBackfillRunResult(
+        completed=False,
+        batch_count=max_batches,
+        selected_count=selected_count,
         migrated_count=migrated_count,
         failed_count=failed_count,
     )
