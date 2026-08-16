@@ -12,6 +12,7 @@ import pytest
 import api.document_storage as data_module
 from db.document_object_record import DocumentObjectRecord
 from db.models import Document
+from db.object_storage_cleanup_record import ObjectStorageCleanupRecord
 from services.document_object_storage import (
     DocumentObjectStorageError,
     StoredDocumentPayload,
@@ -264,6 +265,65 @@ async def test_database_failure_compensates_s3_upload(monkeypatch) -> None:
 
     assert session.rollback_count == 1
     assert deleted == [stored]
+
+
+@pytest.mark.asyncio
+async def test_failed_s3_compensation_is_durably_queued(monkeypatch) -> None:
+    session = RecordingSession()
+    stored = _s3_payload()
+    runtime_config = SimpleNamespace(
+        storage_backend="s3",
+        object_storage_provider_id=77,
+    )
+
+    async def fail_delete(*_args, **_kwargs):
+        raise DocumentObjectStorageError("provider body must remain private")
+
+    monkeypatch.setattr(data_module, "delete_configured_document_payload", fail_delete)
+    await data_module._compensate_failed_metadata_commit(
+        session,
+        stored,
+        runtime_config,
+        "organization-1",
+    )
+
+    orphan = next(
+        item for item in session.added if isinstance(item, ObjectStorageCleanupRecord)
+    )
+    assert orphan.object_storage_provider_id == 77
+    assert orphan.organization_id == "organization-1"
+    assert orphan.bucket_name == "naruon-documents"
+    assert orphan.object_key.endswith("source.pdf")
+    assert orphan.cleanup_status == "pending"
+    assert orphan.cleanup_reason == "metadata_commit_compensation_failed"
+    assert session.commit_count == 1
+
+
+@pytest.mark.asyncio
+async def test_incomplete_s3_compensation_scope_does_not_create_bad_cleanup_row() -> None:
+    session = RecordingSession()
+    await data_module._persist_failed_compensation_orphan(
+        session,
+        _s3_payload(),
+        SimpleNamespace(storage_backend="s3", object_storage_provider_id=None),
+        "organization-1",
+    )
+    assert session.added == []
+    assert session.commit_count == 0
+
+
+@pytest.mark.asyncio
+async def test_cleanup_queue_persistence_failure_rolls_back_without_masking() -> None:
+    session = RecordingSession(commit_error=RuntimeError("database still unavailable"))
+    await data_module._persist_failed_compensation_orphan(
+        session,
+        _s3_payload(),
+        SimpleNamespace(storage_backend="s3", object_storage_provider_id=77),
+        "organization-1",
+    )
+    assert any(isinstance(item, ObjectStorageCleanupRecord) for item in session.added)
+    assert session.commit_count == 1
+    assert session.rollback_count == 1
 
 
 @pytest.mark.asyncio
