@@ -20,6 +20,7 @@ from api.auth import AuthContext, get_auth_context
 from api.data import DataDocumentActionResponse, _document_response, _safe_display_text
 from db.document_object_record import DocumentObjectRecord
 from db.models import Document
+from db.object_storage_cleanup_record import ObjectStorageCleanupRecord
 from db.session import get_db
 from services.document_object_storage import (
     DocumentObjectStorageError,
@@ -63,11 +64,59 @@ def remove_legacy_pdf_upload_route(data_router: APIRouter) -> bool:
     return True
 
 
-async def _compensate_failed_metadata_commit(
+async def _persist_failed_compensation_orphan(
+    db: AsyncSession,
     stored: StoredDocumentPayload,
     runtime_config: DocumentStorageRuntimeConfig,
+    organization_id: str | None,
 ) -> None:
-    """Best-effort delete a just-written object after relational commit failure."""
+    """Persist one explicit cleanup locator after remote compensation fails.
+
+    This is a second transaction after the failed document transaction has been
+    rolled back. It never lists the bucket and stores only the provider-bound
+    locator plus the integrity evidence already known from the successful PUT.
+    """
+    if (
+        stored.s3_object is None
+        or runtime_config.object_storage_provider_id is None
+        or not organization_id
+    ):
+        logger.error(
+            "Document object compensation orphan could not be queued because "
+            "provider scope metadata is incomplete"
+        )
+        return
+
+    orphan = ObjectStorageCleanupRecord(
+        object_storage_provider_id=runtime_config.object_storage_provider_id,
+        organization_id=organization_id,
+        bucket_name=stored.s3_object.bucket_name,
+        object_key=stored.s3_object.object_key,
+        content_type=stored.s3_object.content_type,
+        content_length=stored.s3_object.content_length,
+        checksum_sha256=stored.s3_object.checksum_sha256,
+        cleanup_reason="metadata_commit_compensation_failed",
+        cleanup_status="pending",
+        attempt_count=0,
+    )
+    db.add(orphan)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.error(
+            "Document object compensation orphan could not be persisted for retry",
+            exc_info=True,
+        )
+
+
+async def _compensate_failed_metadata_commit(
+    db: AsyncSession,
+    stored: StoredDocumentPayload,
+    runtime_config: DocumentStorageRuntimeConfig,
+    organization_id: str | None,
+) -> None:
+    """Delete a just-written object or durably queue its failed compensation."""
     try:
         await delete_configured_document_payload(
             stored,
@@ -77,6 +126,12 @@ async def _compensate_failed_metadata_commit(
         logger.error(
             "Document object compensation failed after metadata commit failure",
             exc_info=True,
+        )
+        await _persist_failed_compensation_orphan(
+            db,
+            stored,
+            runtime_config,
+            organization_id,
         )
 
 
@@ -156,7 +211,12 @@ async def upload_document_for_pdf_dom_recognition(
         await db.refresh(document)
     except Exception:
         await db.rollback()
-        await _compensate_failed_metadata_commit(stored_payload, runtime_config)
+        await _compensate_failed_metadata_commit(
+            db,
+            stored_payload,
+            runtime_config,
+            auth_context.organization_id,
+        )
         raise
 
     return _document_response(
