@@ -11,14 +11,17 @@ from db.models import Base, EncryptedString
 
 
 class ObjectStorageProvider(Base):
-    """Store one organization-owned S3-compatible provider revision.
+    """Store one organization-owned S3-compatible provider authority.
 
     PostgreSQL holds immutable storage-topology metadata and Fernet-encrypted
     credentials. The process environment selects only the broad storage mode and
     trusted custom endpoint hosts; runtime object requests resolve the active
-    organization row through a signed, scoped database session. A provider row
-    is a retained revision: create a new row to change bucket, region, endpoint,
-    addressing, encryption, KMS key, or expected bucket owner.
+    organization row through a signed, scoped database session. Bucket, region,
+    endpoint, addressing mode, and expected owner define retained object
+    authority and therefore require a new provider row when they change.
+    Credentials, activation, and encryption policy for future writes may rotate
+    in place because S3 reads/deletes of existing objects do not depend on the
+    provider row's current write-encryption header.
     """
 
     __tablename__ = "object_storage_providers"
