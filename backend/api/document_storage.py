@@ -23,12 +23,15 @@ from db.models import Document
 from db.session import get_db
 from services.document_object_storage import (
     DocumentObjectStorageError,
+    DocumentStorageRuntimeConfig,
     DocumentUploadTooLargeError,
     DocumentUploadValidationError,
     StoredDocumentPayload,
     delete_configured_document_payload,
     delete_document_object_record,
     inspect_pdf_upload,
+    resolve_document_object_runtime_config,
+    resolve_document_storage_runtime_config,
     store_configured_pdf_upload,
 )
 from services.newsdom_pdf_recognition import PDF_DOM_RECOGNITION_PENDING_STATUS
@@ -60,10 +63,16 @@ def remove_legacy_pdf_upload_route(data_router: APIRouter) -> bool:
     return True
 
 
-async def _compensate_failed_metadata_commit(stored: StoredDocumentPayload) -> None:
+async def _compensate_failed_metadata_commit(
+    stored: StoredDocumentPayload,
+    runtime_config: DocumentStorageRuntimeConfig,
+) -> None:
     """Best-effort delete a just-written object after relational commit failure."""
     try:
-        await delete_configured_document_payload(stored)
+        await delete_configured_document_payload(
+            stored,
+            runtime_config=runtime_config,
+        )
     except DocumentObjectStorageError:
         logger.error(
             "Document object compensation failed after metadata commit failure",
@@ -85,8 +94,9 @@ async def upload_document_for_pdf_dom_recognition(
 
     Upload validation and hashing use bounded reads over FastAPI's spooled
     ``UploadFile``. The database backend preserves the legacy base64 contract;
-    the S3 backend rewinds and streams the spool directly to a signed PUT while
-    PostgreSQL stores only normalized locator and integrity metadata.
+    the S3 backend resolves encrypted organization credentials, rewinds and
+    streams the spool directly to a signed PUT, and stores only normalized
+    locator and integrity metadata in PostgreSQL.
     """
     upload_limit_bytes = data_api._MAX_PDF_DOM_UPLOAD_BYTES
     try:
@@ -104,12 +114,17 @@ async def upload_document_for_pdf_dom_recognition(
 
     document_id = f"doc_{uuid.uuid4().hex}"
     try:
+        runtime_config = await resolve_document_storage_runtime_config(
+            db,
+            auth_context.organization_id,
+        )
         stored_payload = await store_configured_pdf_upload(
             upload=file,
             validated_upload=validated_upload,
             document_id=document_id,
             organization_id=auth_context.organization_id,
             workspace_id=auth_context.workspace_id,
+            runtime_config=runtime_config,
         )
     except DocumentObjectStorageError as exc:
         raise HTTPException(
@@ -141,7 +156,7 @@ async def upload_document_for_pdf_dom_recognition(
         await db.refresh(document)
     except Exception:
         await db.rollback()
-        await _compensate_failed_metadata_commit(stored_payload)
+        await _compensate_failed_metadata_commit(stored_payload, runtime_config)
         raise
 
     return _document_response(
@@ -149,7 +164,7 @@ async def upload_document_for_pdf_dom_recognition(
         audit_event="data.document.pdf_dom_recognition_upload",
         message=(
             "PDF stored in the configured document backend pending NewsDOM DOM "
-            "recognition; no provider write executed."
+            "recognition; no downstream provider write executed."
         ),
     )
 
@@ -166,10 +181,10 @@ async def delete_workspace_document(
     """Delete one workspace-scoped document and its raw S3 source when present.
 
     Authorization is established from the signed workspace before object metadata
-    is read. For S3-backed documents, remote deletion happens first; the owning
-    relational row is deleted only after that succeeds. If the database commit
-    later fails, the surviving locator makes the idempotent S3 DELETE retryable.
-    Inline-database documents have no object row and are removed relationally.
+    is read. For S3-backed documents, the retained provider reference is resolved
+    and remote deletion happens first; the owning relational row is deleted only
+    after that succeeds. Inline-database documents have no object row and are
+    removed relationally.
     """
     document = await data_api._get_workspace_document(
         db,
@@ -184,7 +199,15 @@ async def delete_workspace_document(
 
     if object_record is not None:
         try:
-            await delete_document_object_record(object_record)
+            runtime_config = await resolve_document_object_runtime_config(
+                db,
+                document,
+                object_record,
+            )
+            await delete_document_object_record(
+                object_record,
+                runtime_config=runtime_config,
+            )
         except DocumentObjectStorageError as exc:
             await db.rollback()
             raise HTTPException(
