@@ -863,7 +863,11 @@ def delete_tool(code: str) -> None:
     registry.unregister(code)
 
 
-@router.post("/tools/{code}/execute", response_model=ExecuteResponse)
+@router.post(
+    "/tools/{code}/execute",
+    response_model=ExecuteResponse,
+    response_model_exclude_none=True,
+)
 async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
     """
     특정 도구를 실행합니다.
