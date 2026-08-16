@@ -1,9 +1,9 @@
 """Regression tests for retryable cleanup of consumed NewsDOM source objects.
 
 Recognition commits parsed text and the ``consumed`` lifecycle marker before any
-remote delete. These tests require a later cleanup sweep to resolve each retained
-provider, delete consumed objects, and keep failed deletes retryable without
-starving subsequent rows.
+remote delete. These tests require a later cleanup sweep to respect a bounded
+reprocessing-retention window, resolve each retained provider, delete eligible
+consumed objects, and keep failed deletes retryable without starving later rows.
 """
 
 from __future__ import annotations
@@ -68,12 +68,14 @@ class _CleanupSession:
         self.commits = 0
         self.rollbacks = 0
         self.execute_calls = 0
+        self.statements = []
         self.get_calls: list[int] = []
         self.document_get_calls: list[str] = []
         self.scalar_calls = 0
 
-    async def execute(self, _statement):
+    async def execute(self, statement):
         self.execute_calls += 1
+        self.statements.append(statement)
         return _ScalarRows(sorted(self.records))
 
     async def get(self, model, record_id):
@@ -182,6 +184,7 @@ async def test_consumed_object_cleanup_commits_each_remote_delete(monkeypatch):
     result = await cleanup_module.sweep_consumed_document_objects(
         session,
         batch_limit=5,
+        retention_seconds=0,
     )
 
     assert result == cleanup_module.DocumentObjectCleanupResult(
@@ -227,6 +230,7 @@ async def test_consumed_object_cleanup_failure_remains_retryable_and_does_not_st
     result = await cleanup_module.sweep_consumed_document_objects(
         session,
         batch_limit=5,
+        retention_seconds=0,
     )
 
     assert result == cleanup_module.DocumentObjectCleanupResult(
@@ -261,7 +265,11 @@ async def test_consumed_object_cleanup_rechecks_state_after_selection(monkeypatc
         forbidden_delete,
     )
 
-    result = await cleanup_module.sweep_consumed_document_objects(session, batch_limit=5)
+    result = await cleanup_module.sweep_consumed_document_objects(
+        session,
+        batch_limit=5,
+        retention_seconds=0,
+    )
 
     assert result == cleanup_module.DocumentObjectCleanupResult(
         selected_count=1,
@@ -274,39 +282,80 @@ async def test_consumed_object_cleanup_rechecks_state_after_selection(monkeypatc
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("batch_limit", [0, -1])
-async def test_consumed_object_cleanup_rejects_nonpositive_batch_limit(batch_limit):
-    """Reject values that could turn a bounded cleanup sweep into an unbounded query."""
+async def test_consumed_object_cleanup_query_enforces_reprocessing_retention() -> None:
+    """Select only records whose consumed timestamp is older than the retention window."""
+    session = _CleanupSession([])
+    before = _now_utc()
+
+    result = await cleanup_module.sweep_consumed_document_objects(
+        session,
+        batch_limit=5,
+        retention_seconds=3600,
+    )
+
+    after = _now_utc()
+    assert result == cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
+    compiled = session.statements[0].compile()
+    sql_text = str(compiled)
+    assert "document_object_records.consumed_at <=" in sql_text
+    timestamp_values = [
+        value for value in compiled.params.values() if isinstance(value, datetime)
+    ]
+    assert len(timestamp_values) == 1
+    cutoff = timestamp_values[0]
+    assert 3599 <= (before - cutoff).total_seconds() <= 3601
+    assert 3599 <= (after - cutoff).total_seconds() <= 3601
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("batch_limit", "retention_seconds", "message"),
+    [
+        (0, 0, "batch_limit must be positive"),
+        (-1, 0, "batch_limit must be positive"),
+        (5, -1, "retention_seconds must not be negative"),
+    ],
+)
+async def test_consumed_object_cleanup_rejects_unbounded_query_configuration(
+    batch_limit,
+    retention_seconds,
+    message,
+):
+    """Reject values that could invalidate the bounded retention query."""
     session = _CleanupSession([])
 
-    with pytest.raises(ValueError, match="batch_limit must be positive"):
+    with pytest.raises(ValueError, match=message):
         await cleanup_module.sweep_consumed_document_objects(
             session,
             batch_limit=batch_limit,
+            retention_seconds=retention_seconds,
         )
 
     assert session.execute_calls == 0
 
 
 @pytest.mark.parametrize(
-    ("interval_seconds", "batch_limit", "message"),
+    ("interval_seconds", "batch_limit", "retention_seconds", "message"),
     [
-        (0.0, 25, "interval_seconds must be positive"),
-        (60.0, 0, "batch_limit must be positive"),
+        (0.0, 25, 86400, "interval_seconds must be positive"),
+        (60.0, 0, 86400, "batch_limit must be positive"),
+        (60.0, 25, -1, "retention_seconds must not be negative"),
     ],
 )
 def test_consumed_object_cleanup_worker_rejects_unbounded_runtime_configuration(
     interval_seconds,
     batch_limit,
+    retention_seconds,
     message,
 ):
-    """Refuse worker settings that can spin or issue an unbounded cleanup query."""
+    """Refuse worker settings that can spin or bypass the retention boundary."""
     session_factory = _CleanupSessionFactory(_CleanupSession([]))
 
     with pytest.raises(ValueError, match=message):
         cleanup_module.DocumentObjectCleanupWorker(
             interval_seconds=interval_seconds,
             batch_limit=batch_limit,
+            retention_seconds=retention_seconds,
             session_factory=session_factory,
         )
 
@@ -315,27 +364,28 @@ def test_consumed_object_cleanup_worker_rejects_unbounded_runtime_configuration(
 async def test_consumed_object_cleanup_worker_sync_uses_bounded_session_factory(
     monkeypatch,
 ):
-    """Run one cleanup sweep through a fresh database session with the configured cap."""
+    """Run one cleanup sweep with the configured batch and retention bounds."""
     session = _CleanupSession([])
     session_factory = _CleanupSessionFactory(session)
-    observed: list[tuple[object, int]] = []
+    observed: list[tuple[object, int, int]] = []
     expected = cleanup_module.DocumentObjectCleanupResult(0, 0, 0)
 
-    async def sweep(candidate_session, *, batch_limit):
-        observed.append((candidate_session, batch_limit))
+    async def sweep(candidate_session, *, batch_limit, retention_seconds):
+        observed.append((candidate_session, batch_limit, retention_seconds))
         return expected
 
     monkeypatch.setattr(cleanup_module, "sweep_consumed_document_objects", sweep)
     worker = cleanup_module.DocumentObjectCleanupWorker(
         interval_seconds=60,
         batch_limit=7,
+        retention_seconds=7200,
         session_factory=session_factory,
     )
 
     result = await worker._sync()
 
     assert result == expected
-    assert observed == [(session, 7)]
+    assert observed == [(session, 7, 7200)]
     assert session_factory.calls == 1
 
 
@@ -345,6 +395,7 @@ async def test_consumed_object_cleanup_worker_start_stop_is_idempotent(monkeypat
     worker = cleanup_module.DocumentObjectCleanupWorker(
         interval_seconds=60,
         batch_limit=5,
+        retention_seconds=0,
         session_factory=_CleanupSessionFactory(_CleanupSession([])),
     )
     entered = asyncio.Event()
@@ -381,6 +432,7 @@ async def test_consumed_object_cleanup_worker_recovers_after_one_sync_failure(
     worker = cleanup_module.DocumentObjectCleanupWorker(
         interval_seconds=60,
         batch_limit=5,
+        retention_seconds=0,
         session_factory=_CleanupSessionFactory(_CleanupSession([])),
     )
     calls = 0
@@ -411,6 +463,7 @@ async def test_consumed_object_cleanup_worker_stop_handles_cancelled_task() -> N
     worker = cleanup_module.DocumentObjectCleanupWorker(
         interval_seconds=60,
         batch_limit=5,
+        retention_seconds=0,
         session_factory=_CleanupSessionFactory(_CleanupSession([])),
     )
     task = _CancelledTask()
