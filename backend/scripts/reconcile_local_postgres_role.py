@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 import secrets
-import subprocess
+import subprocess  # nosec B404 -- fixed executable argv, shell=False, secret on stdin.
 import sys
 from collections.abc import Callable
 from pathlib import Path
