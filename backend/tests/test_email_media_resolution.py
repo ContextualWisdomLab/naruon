@@ -70,6 +70,8 @@ def test_resolves_cid_inside_related_scope_with_exact_source_span() -> None:
     artifact = result.artifacts[0]
     assert artifact.llm_safe is True
     assert artifact.visual_classification == "tracking_candidate"
+    assert artifact.pixel_width == 1
+    assert artifact.pixel_height == 1
     assert artifact.content_type == "image/png"
     assert artifact.payload_bytes == _png(1, 1)
 
@@ -109,6 +111,8 @@ def test_data_image_is_bounded_and_resolved_locally() -> None:
     assert artifact.content_type == "image/gif"
     assert artifact.byte_length == len(_gif(4, 5))
     assert artifact.visual_classification == "unclassified"
+    assert artifact.pixel_width == 4
+    assert artifact.pixel_height == 5
     occurrence = result.occurrences[0]
     assert occurrence.occurrence_kind == "html_data"
     assert occurrence.resolution_status == "resolved"
