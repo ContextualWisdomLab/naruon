@@ -1,9 +1,10 @@
 """Validated deployment policy for raw document object storage.
 
 The process environment selects only the broad backend mode, trusted custom
-endpoint hosts, and a transport timeout. Organization-owned bucket metadata,
-encryption choices, and credentials live in the Fernet-encrypted PostgreSQL
-provider registry and are resolved through a scoped runtime session.
+endpoint hosts, transport timeout, and the bounded reprocessing-retention
+window. Organization-owned bucket metadata, encryption choices, and credentials
+live in the Fernet-encrypted PostgreSQL provider registry and are resolved
+through a scoped runtime session.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ class ObjectStorageSettings(BaseSettings):
     OBJECT_STORAGE_BACKEND: str = "database"
     OBJECT_STORAGE_S3_ALLOWED_HOSTS: str = ""
     OBJECT_STORAGE_REQUEST_TIMEOUT_SECONDS: float = 30.0
+    OBJECT_STORAGE_CONSUMED_RETENTION_SECONDS: int = 86400
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATHS,
@@ -37,13 +39,17 @@ class ObjectStorageSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_object_storage(self) -> "ObjectStorageSettings":
-        """Normalize backend policy and reject unsafe host or timeout settings."""
+        """Normalize backend policy and reject unsafe transport/retention settings."""
         self.OBJECT_STORAGE_BACKEND = self.OBJECT_STORAGE_BACKEND.strip().lower()
         if self.OBJECT_STORAGE_BACKEND not in {"database", "s3"}:
             raise ValueError("OBJECT_STORAGE_BACKEND must be database or s3")
         if not 0 < self.OBJECT_STORAGE_REQUEST_TIMEOUT_SECONDS <= 300:
             raise ValueError(
                 "OBJECT_STORAGE_REQUEST_TIMEOUT_SECONDS must be between 0 and 300"
+            )
+        if not 0 <= self.OBJECT_STORAGE_CONSUMED_RETENTION_SECONDS <= 2592000:
+            raise ValueError(
+                "OBJECT_STORAGE_CONSUMED_RETENTION_SECONDS must be between 0 and 2592000"
             )
         allowed_hosts = parse_allowed_hosts(self.OBJECT_STORAGE_S3_ALLOWED_HOSTS)
         if any("*" in host for host in allowed_hosts):
