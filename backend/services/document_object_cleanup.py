@@ -15,10 +15,10 @@ import logging
 from sqlalchemy import select
 
 from db.document_object_record import DocumentObjectRecord
-from services.document_object_storage import (
-    DocumentObjectStorageError,
-    delete_consumed_document_payload,
-)
+import services.document_object_storage as document_storage
+
+# Public compatibility alias used by the cleanup contract and its tests.
+DocumentObjectStorageError = document_storage.DocumentObjectStorageError
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ async def sweep_consumed_document_objects(
         if record is None or record.storage_state != "consumed":
             continue
         try:
-            await delete_consumed_document_payload(record)
+            await document_storage.delete_consumed_document_payload(record)
             await session.commit()
         except Exception:
             failed_count += 1
