@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import importlib.util
+import tomllib
 from pathlib import Path
 
 import pytest
