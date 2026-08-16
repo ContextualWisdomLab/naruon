@@ -282,6 +282,7 @@ async def process_pending_document(
     request_fn: ParseRequestFn = request_pdf_dom,
 ) -> str:
     """Recognize one pending workspace-document PDF, or record a safe outcome."""
+    source_uses_object_storage = not bool(document.document_content)
     try:
         pdf_bytes = await load_pending_pdf_document_bytes(session, document)
     except (ValueError, DocumentObjectStorageError) as exc:
@@ -330,7 +331,8 @@ async def process_pending_document(
     # Keep parsed document state and object-lifecycle state in the same
     # transaction. The enclosing sweep commits both changes together; an
     # unexpected lifecycle failure propagates so the sweep rolls the item back.
-    await mark_document_payload_consumed(session, document.document_id)
+    if source_uses_object_storage:
+        await mark_document_payload_consumed(session, document.document_id)
     return RESULT_RECOGNIZED
 
 
