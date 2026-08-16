@@ -59,6 +59,31 @@ class _BackfillSession:
         self.rollback_count += 1
 
 
+class _BackfillSessionContext:
+    """Expose one operator backfill session through an async context manager."""
+
+    def __init__(self, session: object) -> None:
+        self.session = session
+
+    async def __aenter__(self):
+        return self.session
+
+    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
+        return None
+
+
+class _BackfillSessionFactory:
+    """Return fresh sentinel sessions and record each bounded batch."""
+
+    def __init__(self) -> None:
+        self.sessions: list[object] = []
+
+    def __call__(self) -> _BackfillSessionContext:
+        session = object()
+        self.sessions.append(session)
+        return _BackfillSessionContext(session)
+
+
 def _pending_document(document_id: str) -> Document:
     return Document(
         document_id=document_id,
@@ -240,3 +265,90 @@ async def test_backfill_refuses_non_s3_backend_and_split_brain_rows(monkeypatch)
     assert result.failed_count == 1
     assert document.document_content is not None
     assert session.rollback_count == 1
+
+
+@pytest.mark.asyncio
+async def test_operator_backfill_runner_uses_fresh_sessions_and_stops_on_empty_batch(
+    monkeypatch,
+):
+    """Bound an operator migration run while proving completion with an empty batch."""
+    session_factory = _BackfillSessionFactory()
+    results = iter(
+        [
+            backfill_module.DocumentObjectBackfillResult(2, 2, 0),
+            backfill_module.DocumentObjectBackfillResult(0, 0, 0),
+        ]
+    )
+    observed: list[tuple[object, int]] = []
+
+    async def backfill(session, *, batch_limit):
+        observed.append((session, batch_limit))
+        return next(results)
+
+    monkeypatch.setattr(backfill_module, "backfill_legacy_document_payloads", backfill)
+
+    result = await backfill_module.run_document_object_backfill_batches(
+        batch_limit=2,
+        max_batches=5,
+        session_factory=session_factory,
+    )
+
+    assert result.completed is True
+    assert result.batch_count == 2
+    assert result.selected_count == 2
+    assert result.migrated_count == 2
+    assert result.failed_count == 0
+    assert len(session_factory.sessions) == 2
+    assert [batch_limit for _, batch_limit in observed] == [2, 2]
+    assert observed[0][0] is not observed[1][0]
+
+
+@pytest.mark.asyncio
+async def test_operator_backfill_runner_fails_closed_at_batch_budget(monkeypatch):
+    """Stop at the explicit operator budget instead of retrying forever."""
+    session_factory = _BackfillSessionFactory()
+
+    async def persistently_failing(_session, *, batch_limit):
+        assert batch_limit == 1
+        return backfill_module.DocumentObjectBackfillResult(1, 0, 1)
+
+    monkeypatch.setattr(
+        backfill_module,
+        "backfill_legacy_document_payloads",
+        persistently_failing,
+    )
+
+    result = await backfill_module.run_document_object_backfill_batches(
+        batch_limit=1,
+        max_batches=2,
+        session_factory=session_factory,
+    )
+
+    assert result.completed is False
+    assert result.batch_count == 2
+    assert result.selected_count == 2
+    assert result.migrated_count == 0
+    assert result.failed_count == 2
+    assert len(session_factory.sessions) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("batch_limit", "max_batches", "message"),
+    [
+        (0, 1, "batch_limit must be positive"),
+        (1, 0, "max_batches must be positive"),
+    ],
+)
+async def test_operator_backfill_runner_rejects_unbounded_limits(
+    batch_limit,
+    max_batches,
+    message,
+):
+    """Refuse operator arguments that remove either database or run bounds."""
+    with pytest.raises(ValueError, match=message):
+        await backfill_module.run_document_object_backfill_batches(
+            batch_limit=batch_limit,
+            max_batches=max_batches,
+            session_factory=_BackfillSessionFactory(),
+        )
