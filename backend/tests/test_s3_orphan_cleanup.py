@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -68,6 +69,47 @@ class _Session:
 
     async def rollback(self):
         self.rollbacks += 1
+
+
+class _SessionContext:
+    """Expose one fake session through an asynchronous context manager."""
+
+    def __init__(self, session: _Session) -> None:
+        self.session = session
+
+    async def __aenter__(self) -> _Session:
+        return self.session
+
+    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
+        return None
+
+
+class _SessionFactory:
+    """Count bounded worker session creation."""
+
+    def __init__(self, session: _Session) -> None:
+        self.session = session
+        self.calls = 0
+
+    def __call__(self) -> _SessionContext:
+        self.calls += 1
+        return _SessionContext(self.session)
+
+
+class _CancelledTask:
+    """Awaitable task substitute that acknowledges cancellation."""
+
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def __await__(self):
+        async def cancelled_wait():
+            raise asyncio.CancelledError
+
+        return cancelled_wait().__await__()
 
 
 def _record(record_id: int) -> ObjectStorageCleanupRecord:
@@ -137,8 +179,142 @@ async def test_orphan_cleanup_failure_is_retryable_and_does_not_starve(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_orphan_cleanup_skips_completed_or_missing_rows(monkeypatch) -> None:
+    completed = _record(1)
+    completed.cleanup_status = "completed"
+    session = _Session([completed])
+    calls = 0
+
+    async def forbidden_delete(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(cleanup_module, "delete_orphan_cleanup_record", forbidden_delete)
+    result = await cleanup_module.sweep_object_storage_orphans(session, batch_limit=5)
+
+    assert result == cleanup_module.ObjectStorageOrphanCleanupResult(1, 0, 0)
+    assert calls == 0
+    assert session.commits == 0
+
+
+@pytest.mark.asyncio
 async def test_orphan_cleanup_rejects_unbounded_batch() -> None:
     session = _Session([])
     with pytest.raises(ValueError, match="batch_limit must be positive"):
         await cleanup_module.sweep_object_storage_orphans(session, batch_limit=0)
     assert session.statements == []
+
+
+@pytest.mark.parametrize(
+    ("interval_seconds", "batch_limit", "message"),
+    [
+        (0.0, 25, "interval_seconds must be positive"),
+        (60.0, 0, "batch_limit must be positive"),
+    ],
+)
+def test_orphan_cleanup_worker_rejects_unbounded_configuration(
+    interval_seconds,
+    batch_limit,
+    message,
+) -> None:
+    factory = _SessionFactory(_Session([]))
+    with pytest.raises(ValueError, match=message):
+        cleanup_module.ObjectStorageOrphanCleanupWorker(
+            interval_seconds=interval_seconds,
+            batch_limit=batch_limit,
+            session_factory=factory,
+        )
+
+
+@pytest.mark.asyncio
+async def test_orphan_cleanup_worker_sync_uses_bounded_session(monkeypatch) -> None:
+    session = _Session([])
+    factory = _SessionFactory(session)
+    expected = cleanup_module.ObjectStorageOrphanCleanupResult(0, 0, 0)
+    observed: list[tuple[object, int]] = []
+
+    async def sweep(candidate_session, *, batch_limit):
+        observed.append((candidate_session, batch_limit))
+        return expected
+
+    monkeypatch.setattr(cleanup_module, "sweep_object_storage_orphans", sweep)
+    worker = cleanup_module.ObjectStorageOrphanCleanupWorker(
+        interval_seconds=60,
+        batch_limit=7,
+        session_factory=factory,
+    )
+
+    assert await worker._sync() == expected
+    assert observed == [(session, 7)]
+    assert factory.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_orphan_cleanup_worker_start_stop_is_idempotent(monkeypatch) -> None:
+    worker = cleanup_module.ObjectStorageOrphanCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        session_factory=_SessionFactory(_Session([])),
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocking_sync():
+        entered.set()
+        await release.wait()
+        return cleanup_module.ObjectStorageOrphanCleanupResult(0, 0, 0)
+
+    monkeypatch.setattr(worker, "_sync", blocking_sync)
+    await worker.start()
+    first_task = worker._task
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    await worker.start()
+    assert worker._task is first_task
+
+    release.set()
+    await asyncio.sleep(0)
+    await worker.stop()
+    await worker.stop()
+    assert worker._is_running is False
+
+
+@pytest.mark.asyncio
+async def test_orphan_cleanup_worker_recovers_after_one_sync_failure(monkeypatch) -> None:
+    worker = cleanup_module.ObjectStorageOrphanCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        session_factory=_SessionFactory(_Session([])),
+    )
+    calls = 0
+
+    async def flaky_sync():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("temporary database outage")
+        worker._is_running = False
+        return cleanup_module.ObjectStorageOrphanCleanupResult(0, 0, 0)
+
+    async def immediate_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(worker, "_sync", flaky_sync)
+    monkeypatch.setattr(cleanup_module.asyncio, "sleep", immediate_sleep)
+    worker._is_running = True
+    await worker._run_loop()
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_orphan_cleanup_worker_stop_handles_cancelled_task() -> None:
+    worker = cleanup_module.ObjectStorageOrphanCleanupWorker(
+        interval_seconds=60,
+        batch_limit=5,
+        session_factory=_SessionFactory(_Session([])),
+    )
+    task = _CancelledTask()
+    worker._is_running = True
+    worker._task = task
+    await worker.stop()
+    assert task.cancelled is True
+    assert worker._is_running is False
