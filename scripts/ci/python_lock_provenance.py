@@ -79,13 +79,12 @@ def _parse_lock(
     pins: dict[str, str] = {}
     hash_count = 0
     violations: list[dict[str, str]] = []
-    current_name: str | None = None
     current_label: str | None = None
     current_hashes = 0
     seen_requirement = False
 
     def finalize() -> None:
-        nonlocal current_name, current_label, current_hashes
+        nonlocal current_label, current_hashes
         if current_label is not None and current_hashes == 0:
             violations.append(
                 _violation(
@@ -94,7 +93,6 @@ def _parse_lock(
                     f"{current_label} has no SHA-256 hash entry",
                 )
             )
-        current_name = None
         current_label = None
         current_hashes = 0
 
@@ -148,16 +146,16 @@ def _parse_lock(
             continue
 
         current_label = f"{match.group('name')}=={match.group('version')}"
-        current_name = _normalized_name(match.group("name"))
-        if current_name in pins:
+        normalized_name = _normalized_name(match.group("name"))
+        if normalized_name in pins:
             violations.append(
                 _violation(
                     "duplicate-requirement",
                     path,
-                    f"{current_label} duplicates project {current_name}",
+                    f"{current_label} duplicates project {normalized_name}",
                 )
             )
-        pins[current_name] = match.group("version")
+        pins[normalized_name] = match.group("version")
 
     finalize()
     return header_lines, pins, hash_count, violations
@@ -165,7 +163,6 @@ def _parse_lock(
 
 def _validate_generation(
     *,
-    lock_path: Path,
     repository_root: Path,
     header_lines: list[str],
     pins: dict[str, str],
@@ -221,11 +218,15 @@ def _validate_generation(
         for name, version in sorted(source_pins.items()):
             locked_version = pins.get(name)
             if locked_version != version:
+                locked_description = locked_version or "missing"
                 violations.append(
                     _violation(
                         "generation-version-mismatch",
                         relative_path,
-                        f"source pin {name}=={version} is locked as {locked_version or 'missing'}",
+                        (
+                            f"source pin {name}=={version} is locked as "
+                            f"{locked_description}"
+                        ),
                     )
                 )
         return "uv", violations
@@ -236,14 +237,27 @@ def _validate_generation(
             _normalized_name(match.group("name")): match.group("version")
             for match in _MANUAL_PIN.finditer(pip_command)
         }
+        if not command_pins:
+            violations.append(
+                _violation(
+                    "generation-input-missing",
+                    relative_path,
+                    "pip download generation command does not name an exact package pin",
+                )
+            )
+            return "pip-download", violations
         for name, version in sorted(command_pins.items()):
             locked_version = pins.get(name)
             if locked_version != version:
+                locked_description = locked_version or "missing"
                 violations.append(
                     _violation(
                         "generation-version-mismatch",
                         relative_path,
-                        f"generator pin {name}=={version} is locked as {locked_version or 'missing'}",
+                        (
+                            f"generator pin {name}=={version} is locked as "
+                            f"{locked_description}"
+                        ),
                     )
                 )
         return "pip-download", violations
@@ -257,7 +271,6 @@ def validate_lock_file(lock_path: Path, repository_root: Path) -> dict[str, obje
     relative_path = _relative_path(lock_path, repository_root)
     header_lines, pins, hash_count, violations = _parse_lock(text, relative_path)
     generation_mode, generation_violations = _validate_generation(
-        lock_path=lock_path,
         repository_root=repository_root,
         header_lines=header_lines,
         pins=pins,
@@ -340,7 +353,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     else:
         print(f"Python lock provenance: {receipt['status']}")
         for violation in receipt["violations"]:
-            print(f"{violation['code']}: {violation['path']}: {violation['detail']}")
+            print(
+                f"{violation['code']}: {violation['path']}: {violation['detail']}"
+            )
     return 0 if receipt["status"] == "passed" else 1
 
 
