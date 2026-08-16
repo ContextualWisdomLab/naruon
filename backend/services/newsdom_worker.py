@@ -34,6 +34,7 @@ from services.content_graph import ParseResult
 from services.document_object_storage import (
     DocumentObjectStorageError,
     load_pending_pdf_document_bytes,
+    mark_document_payload_consumed,
 )
 from services.newsdom_client import (
     NewsdomConfigurationError,
@@ -325,6 +326,11 @@ async def process_pending_document(
             exc,
         )
         return RESULT_FAILED
+
+    # Keep parsed document state and object-lifecycle state in the same
+    # transaction. The enclosing sweep commits both changes together; an
+    # unexpected lifecycle failure propagates so the sweep rolls the item back.
+    await mark_document_payload_consumed(session, document.document_id)
     return RESULT_RECOGNIZED
 
 
