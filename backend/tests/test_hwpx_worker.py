@@ -158,6 +158,32 @@ async def test_pending_hwpx_attachment_records_recognizer_failure() -> None:
     assert attachment.content_segments == []
 
 
+@pytest.mark.asyncio
+async def test_orphan_pending_hwpx_attachment_uses_hwpx_failure_status() -> None:
+    """An orphan HWPX row fails visibly without being mislabeled as PDF."""
+
+    attachment = Attachment(
+        id=74,
+        filename="orphan.hwpx",
+        content=base64.b64encode(_hwpx_payload()).decode("ascii"),
+        content_type="application/hwp+zip",
+        parse_content_type="application/hwp+zip",
+        parser_key="hwpx",
+        parse_status=HWPX_PENDING_STATUS,
+    )
+
+    result = await process_pending_attachment(
+        session=object(),
+        attachment=attachment,
+        config_resolver=_must_not_resolve_provider,
+        request_fn=_must_not_call_newsdom,
+    )
+
+    assert result == RESULT_FAILED
+    assert attachment.parse_status == HWPX_FAILED_STATUS
+    assert attachment.parse_error_code == "orphan_attachment"
+
+
 def test_worker_selects_pdf_and_hwpx_pending_attachments() -> None:
     """The bounded sweep must include both deferred attachment families."""
 
