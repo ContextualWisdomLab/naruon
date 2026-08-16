@@ -4,18 +4,21 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from services.calendar_conflict_policy import (
     CalendarCommitment,
     CalendarConflictDecision,
+    CalendarPolicyValidationError,
     CommitmentStatus,
     evaluate_calendar_conflicts,
 )
 
 router = APIRouter(prefix="/api/calendar/conflicts", tags=["calendar"])
 MAX_EXISTING_COMMITMENTS = 500
+POLICY_VALIDATION_HTTP_STATUS = 422
 
 
 class CalendarCommitmentPayload(BaseModel):
@@ -60,6 +63,13 @@ class CalendarConflictResponse(BaseModel):
     policy_version: str
 
 
+class CalendarConflictErrorResponse(BaseModel):
+    """Stable machine code plus safe explanation for policy validation failures."""
+
+    error_code: str
+    detail: str
+
+
 def _to_commitment(payload: CalendarCommitmentPayload) -> CalendarCommitment:
     """Convert a validated transport payload into deterministic policy evidence."""
     return CalendarCommitment(
@@ -89,15 +99,26 @@ def _to_response(decision: CalendarConflictDecision) -> CalendarConflictResponse
     )
 
 
-@router.post("/evaluate", response_model=CalendarConflictResponse)
+@router.post(
+    "/evaluate",
+    response_model=CalendarConflictResponse,
+    responses={POLICY_VALIDATION_HTTP_STATUS: {"model": CalendarConflictErrorResponse}},
+)
 def evaluate_calendar_conflict_request(
     request: CalendarConflictRequest,
-) -> CalendarConflictResponse:
+) -> CalendarConflictResponse | JSONResponse:
     """Evaluate double-booking risk without mutating any provider calendar."""
     try:
         proposed = _to_commitment(request.proposed)
         existing = [_to_commitment(item) for item in request.existing]
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except CalendarPolicyValidationError as exc:
+        error = CalendarConflictErrorResponse(
+            error_code=exc.error_code,
+            detail=str(exc),
+        )
+        return JSONResponse(
+            status_code=POLICY_VALIDATION_HTTP_STATUS,
+            content=error.model_dump(),
+        )
 
     return _to_response(evaluate_calendar_conflicts(proposed, existing))
