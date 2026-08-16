@@ -38,6 +38,7 @@ from api.session import router as auth_session_router
 from core.config import canonical_origin, settings
 from core.telemetry import setup_telemetry
 from core.version import get_release_version
+from services.document_object_cleanup import DocumentObjectCleanupWorker
 from services.imap_worker import ImapSyncWorker
 from services.newsdom_worker import NewsdomRecognitionWorker
 from services.pop3_worker import Pop3SyncWorker
@@ -49,6 +50,7 @@ imap_worker = ImapSyncWorker()
 pop3_worker = Pop3SyncWorker()
 reply_sla_scheduler = ReplySlaScheduler()
 newsdom_recognition_worker = NewsdomRecognitionWorker()
+document_object_cleanup_worker = DocumentObjectCleanupWorker()
 provider_writeback_retry_worker = ProviderWritebackRetryWorker(
     runner_manager.dispatch_command,
 )
@@ -66,10 +68,12 @@ async def lifespan(app: FastAPI):
         await pop3_worker.start()
         await reply_sla_scheduler.start()
         await newsdom_recognition_worker.start()
+        await document_object_cleanup_worker.start()
         await provider_writeback_retry_worker.start()
     yield
     if not DISABLE_WORKERS:
         await provider_writeback_retry_worker.stop()
+        await document_object_cleanup_worker.stop()
         await newsdom_recognition_worker.stop()
         await reply_sla_scheduler.stop()
         await pop3_worker.stop()
