@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -757,6 +759,39 @@ async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
 
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+    encoded_text = text.encode("utf-8")
+
+    if algorithm == "md5":
+        hash_obj = hashlib.md5(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha1":
+        hash_obj = hashlib.sha1(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha256":
+        hash_obj = hashlib.sha256(encoded_text)
+    elif algorithm == "sha512":
+        hash_obj = hashlib.sha512(encoded_text)
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+    return {"hash": hash_obj.hexdigest()}
+
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"encoded_text": urllib.parse.quote(text, safe="")}
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    try:
+        decoded = urllib.parse.unquote(text, errors="strict")
+        return {"decoded_text": decoded}
+    except UnicodeDecodeError as e:
+        raise ValueError("Invalid URL encoded string") from e
+
+
 registry.register(
     ToolInfo(
         code="uuid_v4_generator",
@@ -768,6 +803,38 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="지정된 알고리즘(MD5, SHA1, SHA256, SHA512)을 사용하여 문자열의 해시값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="문자열을 URL 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩된 문자열을 디코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_decoder_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])

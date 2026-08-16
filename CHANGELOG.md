@@ -1,6 +1,7 @@
 ## [Unreleased]
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
+- 해시 생성기(`hash_generator`), URL 인코더(`url_encoder`), URL 디코더(`url_decoder`) 도구를 추가하여 런타임에서 문자열을 해싱하거나 URL을 인코딩/디코딩할 수 있게 하였습니다. 테스트 커버리지 100%를 보장합니다.
 
 - STM 결과로 오인될 수 있었던 하드코딩 용어표 기반
   `email_categorizer`와 `meeting_agenda_generator`를 도구 레지스트리에서

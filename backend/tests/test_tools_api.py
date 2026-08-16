@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,77 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_tool_success():
+    from api.tools import hash_generator_handler
+
+    # Test MD5
+    result = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
+    assert result == {"hash": hashlib.md5(b"hello").hexdigest()}
+
+    # Test SHA1
+    result = await hash_generator_handler({"text": "hello", "algorithm": "sha1"})
+    assert result == {"hash": hashlib.sha1(b"hello").hexdigest()}
+
+    # Test SHA256
+    result = await hash_generator_handler({"text": "hello", "algorithm": "sha256"})
+    assert result == {"hash": hashlib.sha256(b"hello").hexdigest()}
+
+    # Test SHA512
+    result = await hash_generator_handler({"text": "hello", "algorithm": "sha512"})
+    assert result == {"hash": hashlib.sha512(b"hello").hexdigest()}
+
+    # Test Default (SHA256)
+    result = await hash_generator_handler({"text": "hello"})
+    assert result == {"hash": hashlib.sha256(b"hello").hexdigest()}
+
+    # Test Invalid Algorithm
+    try:
+        await hash_generator_handler({"text": "hello", "algorithm": "invalid_algo"})
+        assert False, "Should raise ValueError"
+    except ValueError as e:
+        assert "Unsupported algorithm" in str(e)
+
+
+@pytest.mark.asyncio
+async def test_url_encoder_tool_success():
+    from api.tools import url_encoder_handler
+
+    # Test basic
+    result = await url_encoder_handler({"text": "hello world"})
+    assert result == {"encoded_text": "hello%20world"}
+
+    # Test slash
+    result = await url_encoder_handler({"text": "path/to/resource"})
+    assert result == {"encoded_text": "path%2Fto%2Fresource"}
+
+    # Test default empty
+    result = await url_encoder_handler({})
+    assert result == {"encoded_text": ""}
+
+
+@pytest.mark.asyncio
+async def test_url_decoder_tool_success():
+    from api.tools import url_decoder_handler
+
+    # Test basic
+    result = await url_decoder_handler({"text": "hello%20world"})
+    assert result == {"decoded_text": "hello world"}
+
+    # Test slash
+    result = await url_decoder_handler({"text": "path%2Fto%2Fresource"})
+    assert result == {"decoded_text": "path/to/resource"}
+
+    # Test default empty
+    result = await url_decoder_handler({})
+    assert result == {"decoded_text": ""}
+
+    # Test UnicodeDecodeError handling
+    try:
+        # %FF is invalid utf-8 byte sequence
+        await url_decoder_handler({"text": "%FF"})
+        assert False, "Should raise ValueError"
+    except ValueError as e:
+        assert str(e) == "Invalid URL encoded string"
