@@ -118,7 +118,8 @@ def _s3_payload() -> StoredDocumentPayload:
             checksum_sha256=(
                 "b321c014fccbc2ee5cf1e362ef06e657878115ef12cce0ef35aac5023ac30b15"
             ),
-        )
+        ),
+        object_storage_provider_id=77,
     )
 
 
@@ -139,6 +140,7 @@ def _object_record(document: Document) -> DocumentObjectRecord:
     """Build the normalized raw-object locator owned by a test document."""
     return DocumentObjectRecord(
         document_id=document.document_id,
+        object_storage_provider_id=77,
         storage_backend="s3",
         bucket_name="naruon-documents",
         object_key="workspace-documents/opaque/doc_delete_me/source.pdf",
@@ -147,6 +149,23 @@ def _object_record(document: Document) -> DocumentObjectRecord:
         content_length=len(PDF_BYTES),
         checksum_sha256="a" * 64,
         storage_state="active",
+    )
+
+
+def _install_delete_runtime(monkeypatch) -> None:
+    """Resolve a retained provider without making deletion tests perform DNS."""
+
+    async def resolve(_db, document, object_record):
+        assert object_record.document_id == document.document_id
+        return SimpleNamespace(
+            storage_backend="s3",
+            object_storage_provider_id=77,
+        )
+
+    monkeypatch.setattr(
+        data_module,
+        "resolve_document_object_runtime_config",
+        resolve,
     )
 
 
@@ -190,6 +209,7 @@ async def test_s3_upload_persists_document_and_normalized_object_record(monkeypa
     assert document.document_content is None
     assert document.document_status == "pdf_dom_recognition_pending"
     assert object_record.storage_backend == "s3"
+    assert object_record.object_storage_provider_id == 77
     assert object_record.bucket_name == "naruon-documents"
     assert object_record.object_key.endswith("source.pdf")
     assert response.document_id == document.document_id
@@ -227,7 +247,8 @@ async def test_database_failure_compensates_s3_upload(monkeypatch) -> None:
     async def store(**_kwargs):
         return stored
 
-    async def delete(value: StoredDocumentPayload):
+    async def delete(value: StoredDocumentPayload, **kwargs):
+        assert kwargs["runtime_config"].storage_backend == "database"
         deleted.append(value)
 
     monkeypatch.setattr(data_module, "store_configured_pdf_upload", store)
@@ -296,8 +317,10 @@ async def test_customer_delete_removes_s3_payload_before_relational_document(mon
     object_record = _object_record(document)
     session = DeletionSession(document=document, object_record=object_record)
     remote_deleted: list[DocumentObjectRecord] = []
+    _install_delete_runtime(monkeypatch)
 
-    async def delete_remote(record: DocumentObjectRecord) -> None:
+    async def delete_remote(record: DocumentObjectRecord, **kwargs) -> None:
+        assert kwargs["runtime_config"].object_storage_provider_id == 77
         remote_deleted.append(record)
 
     monkeypatch.setattr(data_module, "delete_document_object_record", delete_remote)
@@ -330,8 +353,9 @@ async def test_customer_delete_db_commit_failure_preserves_retryable_locator(mon
         commit_error=RuntimeError("database unavailable"),
     )
     remote_deleted: list[DocumentObjectRecord] = []
+    _install_delete_runtime(monkeypatch)
 
-    async def delete_remote(record: DocumentObjectRecord) -> None:
+    async def delete_remote(record: DocumentObjectRecord, **_kwargs) -> None:
         remote_deleted.append(record)
 
     monkeypatch.setattr(data_module, "delete_document_object_record", delete_remote)
@@ -357,8 +381,9 @@ async def test_customer_delete_storage_failure_is_safe_and_retryable(monkeypatch
     document = _stored_document()
     object_record = _object_record(document)
     session = DeletionSession(document=document, object_record=object_record)
+    _install_delete_runtime(monkeypatch)
 
-    async def delete_remote(_record: DocumentObjectRecord) -> None:
+    async def delete_remote(_record: DocumentObjectRecord, **_kwargs) -> None:
         raise DocumentObjectStorageError("bucket=secret-bucket key=private/source.pdf")
 
     monkeypatch.setattr(data_module, "delete_document_object_record", delete_remote)
@@ -384,7 +409,7 @@ async def test_customer_delete_is_workspace_scoped_before_storage_access(monkeyp
     session = DeletionSession(document=None, object_record=None)
     remote_calls = 0
 
-    async def forbidden_delete(_record: DocumentObjectRecord) -> None:
+    async def forbidden_delete(_record: DocumentObjectRecord, **_kwargs) -> None:
         nonlocal remote_calls
         remote_calls += 1
 
