@@ -24,10 +24,13 @@ _EXACT_PIN = re.compile(
 _SHA256 = re.compile(r"^--hash=sha256:(?P<digest>[0-9a-fA-F]{64})\s*\\?$")
 _SHA256_PREFIX = "--hash=sha256:"
 _MANUAL_PIN = re.compile(
-    r"(?<![A-Za-z0-9._-])(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
+    r"(?<![A-Za-z0-9._-])"
+    r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9._,-]+\])?)"
     r"==(?P<version>[A-Za-z0-9][A-Za-z0-9.!+_-]*)"
 )
-_TEXT_PATH = re.compile(r"(?<!\S)(?P<path>[A-Za-z0-9_./-]+\.txt)(?=\s|$)")
+_TEXT_PATH = re.compile(
+    r"(?<!\S)(?P<path>[A-Za-z0-9_./-]+\.(?:txt|in))(?=\s|$)"
+)
 
 
 def _normalized_name(name: str) -> str:
@@ -42,6 +45,17 @@ def _relative_path(path: Path, repository_root: Path) -> str:
     except ValueError:
         return path.name
     return relative.as_posix()
+
+
+def _resolve_repository_path(path: Path, repository_root: Path) -> Path | None:
+    """Resolve ``path`` only when its target remains within ``repository_root``."""
+    root = repository_root.resolve()
+    candidate = path.resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate
 
 
 def _violation(code: str, path: str, detail: str) -> dict[str, str]:
@@ -204,17 +218,27 @@ def _validate_generation(
             return "uv", violations
 
         source_path = repository_root / source_paths[-1]
-        if not source_path.is_file():
+        resolved_source = _resolve_repository_path(source_path, repository_root)
+        if resolved_source is None:
+            violations.append(
+                _violation(
+                    "generation-input-outside-repository",
+                    relative_path,
+                    "declared source resolves outside repository root",
+                )
+            )
+            return "uv", violations
+        if not resolved_source.is_file():
             violations.append(
                 _violation(
                     "generation-input-missing",
                     relative_path,
-                    f"declared source {source_paths[-1]} is missing",
+                    "declared source requirements file is missing",
                 )
             )
             return "uv", violations
 
-        source_pins = _parse_source_pins(source_path.read_text(encoding="utf-8"))
+        source_pins = _parse_source_pins(resolved_source.read_text(encoding="utf-8"))
         for name, version in sorted(source_pins.items()):
             locked_version = pins.get(name)
             if locked_version != version:
@@ -266,9 +290,28 @@ def _validate_generation(
 
 
 def validate_lock_file(lock_path: Path, repository_root: Path) -> dict[str, object]:
-    """Validate one lock file and return a deterministic offline receipt."""
-    text = lock_path.read_text(encoding="utf-8")
+    """Validate one in-repository lock file without following an escaping path."""
     relative_path = _relative_path(lock_path, repository_root)
+    resolved_lock = _resolve_repository_path(lock_path, repository_root)
+    if resolved_lock is None:
+        violations = [
+            _violation(
+                "lock-path-outside-repository",
+                relative_path,
+                "lock path resolves outside repository root",
+            )
+        ]
+        return {
+            "path": relative_path,
+            "sha256": None,
+            "status": "failed",
+            "generation_mode": "unread",
+            "requirement_count": 0,
+            "sha256_hash_count": 0,
+            "violations": violations,
+        }
+
+    text = resolved_lock.read_text(encoding="utf-8")
     header_lines, pins, hash_count, violations = _parse_lock(text, relative_path)
     generation_mode, generation_violations = _validate_generation(
         repository_root=repository_root,
@@ -290,13 +333,17 @@ def validate_lock_file(lock_path: Path, repository_root: Path) -> dict[str, obje
 
 
 def discover_hash_locks(repository_root: Path) -> list[Path]:
-    """Discover active or conventionally named hash-lock requirements files."""
+    """Discover hash locks without reading files whose targets escape the repository."""
     candidates: list[Path] = []
     for path in repository_root.rglob("requirements*.txt"):
         if any(part in {".git", ".venv", "node_modules"} for part in path.parts):
             continue
+        resolved_path = _resolve_repository_path(path, repository_root)
+        if resolved_path is None:
+            candidates.append(path)
+            continue
         try:
-            text = path.read_text(encoding="utf-8")
+            text = resolved_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
         if _SHA256_PREFIX in text or "hash" in path.stem.lower():
