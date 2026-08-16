@@ -63,11 +63,19 @@ def test_dav_route_uses_signed_session_dependency():
     assert response.status_code == 401
 
 
-def test_dav_options(dev_auth_dependency_overrides):
+def test_dav_options_advertises_only_implemented_capabilities(
+    dev_auth_dependency_overrides,
+):
     with TestClient(app) as client:
         response = client.options("/dav/user123/projects/", headers=AUTH_HEADERS)
-        assert response.status_code == 200
-        assert "calendar-access" in response.headers.get("DAV", "")
+
+    assert response.status_code == 200
+    assert response.headers["DAV"] == "1"
+    assert {
+        method.strip()
+        for method in response.headers["Allow"].split(",")
+        if method.strip()
+    } == {"OPTIONS", "PROPFIND"}
 
 
 def test_dav_rejects_different_user_path(dev_auth_dependency_overrides):
@@ -207,42 +215,40 @@ def test_dav_propfind_escapes_path_values(
         ET.fromstring(response.text)
 
 
-def test_dav_put(dev_auth_dependency_overrides, caplog):
-    import logging
-
-    caplog.set_level(logging.WARNING, logger="api.dav")
+@pytest.mark.parametrize(
+    "method",
+    [
+        "GET",
+        "PUT",
+        "DELETE",
+        "MKCOL",
+        "REPORT",
+        "PROPPATCH",
+        "COPY",
+        "MOVE",
+        "LOCK",
+        "UNLOCK",
+    ],
+)
+def test_dav_unimplemented_methods_are_not_registered(
+    dev_auth_dependency_overrides,
+    method,
+):
     with TestClient(app) as client:
-        response = client.put(
+        response = client.request(
+            method,
             "/dav/user123/projects/file.ics",
-            content=b"BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+            content=b"BEGIN:VCALENDAR\r\nEND:VCALENDAR" if method == "PUT" else None,
             headers=AUTH_HEADERS,
         )
-        assert response.status_code == 501
-        assert "Provider-backed DAV writeback is not implemented" in response.text
-        assert "etag" not in {header.lower() for header in response.headers}
-        assert any(
-            "provider-backed DAV writeback is not implemented" in record.getMessage()
-            for record in caplog.records
-        )
 
-
-def test_dav_unsupported_method_logs_reason(dev_auth_dependency_overrides, caplog):
-    import logging
-
-    caplog.set_level(logging.WARNING, logger="api.dav")
-    with TestClient(app) as client:
-        response = client.delete(
-            "/dav/user123/projects/file.ics",
-            headers=AUTH_HEADERS,
-        )
-
-    assert response.status_code == 501
-    assert "Provider-backed DAV method is not implemented" in response.text
-    assert any(
-        "method is not implemented for the provider-backed DAV gateway"
-        in record.getMessage()
-        for record in caplog.records
-    )
+    assert response.status_code == 405
+    assert "etag" not in {header.lower() for header in response.headers}
+    assert {
+        allowed.strip()
+        for allowed in response.headers["Allow"].split(",")
+        if allowed.strip()
+    } == {"OPTIONS", "PROPFIND"}
 
 
 def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
