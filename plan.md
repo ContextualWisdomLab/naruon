@@ -7,6 +7,7 @@
    - `handleRelationshipOptionChange` uses `edgeMap.get(value)`.
    - `handleNodeOptionChange` uses `nodeInstanceMap.get(value)`.
    - Selection handlers must not fall back to `Array.prototype.find()` or `findNodeLabel()` scans.
+   - `edgeMap` and `nodeInstanceMap` are first-wins, matching `nodeMap` and the previous `.find()` path. Last-wins `new Map(items.map(...))` construction is rejected.
 
 2. Verify the exact branch head from `frontend/` with these commands:
 

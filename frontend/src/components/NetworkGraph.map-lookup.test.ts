@@ -57,4 +57,10 @@ describe("NetworkGraph constant-time selection lookup contract", () => {
     expect(nodeControl).toContain("nodeInstanceMap.get(value)");
     expect(nodeControl).not.toContain(".find(");
   });
+
+  it("builds edge and node instance maps as first-wins lookups", () => {
+    expect(networkGraphSource).toContain("firstGraphEntryById(edges");
+    expect(networkGraphSource).toContain("firstGraphEntryById(nodes");
+    expect(networkGraphSource).not.toMatch(/new Map\((edges|nodes)\.map\(/);
+  });
 });
