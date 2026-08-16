@@ -13,6 +13,7 @@ on:
       - "backend/db/object_storage_provider.py"
       - "backend/services/document_object_*.py"
       - "backend/services/s3_object_storage.py"
+      - "backend/services/s3_object_storage_core.py"
       - "backend/alembic/versions/0018_document_object_records.py"
       - "backend/alembic/versions/0019_object_storage_providers.py"
       - "backend/tests/integration/test_s3_postgres_integration.py"
