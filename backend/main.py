@@ -136,9 +136,15 @@ def _is_trusted_browser_origin(origin: str | None) -> bool:
 
 
 def _requires_browser_origin_check(request: Request) -> bool:
-    return (
-        request.method.upper() in STATE_CHANGING_API_METHODS
-        and request.url.path.startswith("/api/")
+    """Return whether a state-changing API request carries browser provenance."""
+    if (
+        request.method.upper() not in STATE_CHANGING_API_METHODS
+        or not request.url.path.startswith("/api/")
+    ):
+        return False
+    return any(
+        request.headers.get(header_name) is not None
+        for header_name in ("origin", "referer", "sec-fetch-site")
     )
 
 
