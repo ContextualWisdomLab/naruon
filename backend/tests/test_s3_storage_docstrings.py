@@ -15,6 +15,7 @@ import services.document_object_backfill as document_object_backfill
 import services.document_object_cleanup as document_object_cleanup
 import services.document_object_storage as document_storage
 import services.s3_object_storage as s3_storage
+import services.s3_object_storage_core as s3_storage_core
 
 
 @pytest.mark.parametrize(
@@ -29,6 +30,7 @@ import services.s3_object_storage as s3_storage
         document_object_cleanup,
         document_storage,
         s3_storage,
+        s3_storage_core,
     ],
 )
 def test_public_storage_symbols_have_docstrings(module) -> None:
