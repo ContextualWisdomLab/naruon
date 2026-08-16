@@ -25,6 +25,10 @@ for _ in $(seq 1 30); do
   if sudo -u postgres pg_isready -q; then break; fi
   sleep 1
 done
+if ! sudo -u postgres pg_isready -q; then
+  echo "==> [start] PostgreSQL did not become ready" >&2
+  exit 1
+fi
 
 echo "==> [start] generating local dev .env on first boot (secrets are per-VM)"
 if [ ! -f "$ENV_FILE" ]; then
@@ -60,21 +64,9 @@ PYGEN
 fi
 
 echo "==> [start] reconciling database role, database, and pgvector extension"
-DB_PASSWORD="$(
-  "$PY" - "$ENV_FILE" <<'PYPW'
-import sys
-from pathlib import Path
-from urllib.parse import unquote, urlsplit
-
-for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
-    if line.startswith("DATABASE_URL="):
-        print(unquote(urlsplit(line.split("=", 1)[1]).password or ""))
-        break
-PYPW
-)"
-# Keep the local postgres role password in sync with the generated DATABASE_URL.
-sudo -u postgres psql -v ON_ERROR_STOP=1 \
-  -c "ALTER USER postgres WITH PASSWORD '${DB_PASSWORD}';" >/dev/null
+# Keep the local postgres role secret in sync with DATABASE_URL without
+# interpolating it into SQL or the process argument list.
+"$PY" "$REPO_ROOT/backend/scripts/reconcile_local_postgres_role.py" --env-file "$ENV_FILE"
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='ai_email'" | grep -q 1; then
   sudo -u postgres createdb ai_email
 fi

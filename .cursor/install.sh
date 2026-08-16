@@ -32,7 +32,7 @@ fi
 # shellcheck disable=SC1091
 . .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements-hashes.txt
 
 echo "==> [install] frontend dependencies (pnpm@11.5.3)"
 cd "$REPO_ROOT/frontend"
