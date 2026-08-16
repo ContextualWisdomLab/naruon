@@ -1212,38 +1212,6 @@ def test_execute_analysis_tool_rejects_oversized_text():
 
 
 @pytest.mark.asyncio
-async def test_hash_generator_tool_success():
-    from api.tools import hash_generator_handler
-
-    # Test MD5
-    result = await hash_generator_handler({"text": "hello", "algorithm": "md5"})
-    assert result == {"hash": hashlib.md5(b"hello").hexdigest()}
-
-    # Test SHA1
-    result = await hash_generator_handler({"text": "hello", "algorithm": "sha1"})
-    assert result == {"hash": hashlib.sha1(b"hello").hexdigest()}
-
-    # Test SHA256
-    result = await hash_generator_handler({"text": "hello", "algorithm": "sha256"})
-    assert result == {"hash": hashlib.sha256(b"hello").hexdigest()}
-
-    # Test SHA512
-    result = await hash_generator_handler({"text": "hello", "algorithm": "sha512"})
-    assert result == {"hash": hashlib.sha512(b"hello").hexdigest()}
-
-    # Test Default (SHA256)
-    result = await hash_generator_handler({"text": "hello"})
-    assert result == {"hash": hashlib.sha256(b"hello").hexdigest()}
-
-    # Test Invalid Algorithm
-    try:
-        await hash_generator_handler({"text": "hello", "algorithm": "invalid_algo"})
-        assert False, "Should raise ValueError"
-    except ValueError as e:
-        assert "Unsupported algorithm" in str(e)
-
-
-@pytest.mark.asyncio
 async def test_url_encoder_tool_success():
     from api.tools import url_encoder_handler
 
@@ -1282,4 +1250,4 @@ async def test_url_decoder_tool_success():
         await url_decoder_handler({"text": "%FF"})
         assert False, "Should raise ValueError"
     except ValueError as e:
-        assert str(e) == "Invalid URL encoded string"
+        assert str(e) == "Invalid UTF-8 percent-encoding"

@@ -759,37 +759,36 @@ async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
 
-async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
-    algorithm = params.get("algorithm", "sha256").lower()
-    encoded_text = text.encode("utf-8")
-
-    if algorithm == "md5":
-        hash_obj = hashlib.md5(encoded_text, usedforsecurity=False)  # nosemgrep
-    elif algorithm == "sha1":
-        hash_obj = hashlib.sha1(encoded_text, usedforsecurity=False)  # nosemgrep
-    elif algorithm == "sha256":
-        hash_obj = hashlib.sha256(encoded_text)
-    elif algorithm == "sha512":
-        hash_obj = hashlib.sha512(encoded_text)
-    else:
-        raise ValueError(f"Unsupported algorithm: {algorithm}")
-
-    return {"hash": hash_obj.hexdigest()}
+URL_CODEC_MAX_INPUT_BYTES = 262144
 
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
+    if len(text.encode("utf-8")) > URL_CODEC_MAX_INPUT_BYTES:
+        raise ValueError(
+            f"URL codec input must not exceed {URL_CODEC_MAX_INPUT_BYTES} bytes"
+        )
     return {"encoded_text": urllib.parse.quote(text, safe="")}
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
+    if len(text.encode("utf-8")) > URL_CODEC_MAX_INPUT_BYTES:
+        raise ValueError(
+            f"URL codec input must not exceed {URL_CODEC_MAX_INPUT_BYTES} bytes"
+        )
+
+    # Manually check for malformed percent encoding
+    import re
+
+    if re.search(r"%(?![0-9a-fA-F]{2})", text):
+        raise ValueError("Malformed percent-encoding")
+
     try:
         decoded = urllib.parse.unquote(text, errors="strict")
         return {"decoded_text": decoded}
     except UnicodeDecodeError as e:
-        raise ValueError("Invalid URL encoded string") from e
+        raise ValueError("Invalid UTF-8 percent-encoding") from e
 
 
 registry.register(
@@ -803,16 +802,6 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
-registry.register(
-    ToolInfo(
-        code="hash_generator",
-        name="해시 생성기 (Hash Generator)",
-        description="지정된 알고리즘(MD5, SHA1, SHA256, SHA512)을 사용하여 문자열의 해시값을 생성합니다.",
-        category="유틸리티",
-        parameters={"text": "string", "algorithm": "string"},
-    ),
-    hash_generator_handler,
-)
 
 registry.register(
     ToolInfo(
