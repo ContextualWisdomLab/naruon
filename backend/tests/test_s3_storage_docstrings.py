@@ -10,10 +10,12 @@ import api.document_storage as document_storage_api
 import api.object_storage_providers as object_storage_providers_api
 import core.object_storage_config as object_storage_config
 import db.document_object_record as document_object_record
+import db.object_storage_cleanup_record as object_storage_cleanup_record
 import db.object_storage_provider as object_storage_provider
 import services.document_object_backfill as document_object_backfill
 import services.document_object_cleanup as document_object_cleanup
 import services.document_object_storage as document_storage
+import services.object_storage_orphan_cleanup as object_storage_orphan_cleanup
 import services.s3_object_storage as s3_storage
 import services.s3_object_storage_core as s3_storage_core
 
@@ -25,10 +27,12 @@ import services.s3_object_storage_core as s3_storage_core
         object_storage_providers_api,
         object_storage_config,
         document_object_record,
+        object_storage_cleanup_record,
         object_storage_provider,
         document_object_backfill,
         document_object_cleanup,
         document_storage,
+        object_storage_orphan_cleanup,
         s3_storage,
         s3_storage_core,
     ],
