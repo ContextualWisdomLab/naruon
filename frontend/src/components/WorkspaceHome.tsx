@@ -1,4 +1,5 @@
 "use client";
+import React from 'react';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -626,7 +627,7 @@ function StartupCalendar({ onOpenView }: { onOpenView: (view: WorkspaceStartupVi
   );
 }
 
-export function WorkspaceHome({
+export const WorkspaceHome = React.memo(function WorkspaceHome({
   forcedStartupView,
   mailFolder = 'inbox',
 }: {
@@ -929,6 +930,7 @@ export function WorkspaceHome({
       </div>
     </>
   );
-}
+});
+
 
 export default WorkspaceHome;
