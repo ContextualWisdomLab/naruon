@@ -1,0 +1,20 @@
+{
+  "name": "Naruon dev (backend + frontend + Postgres/pgvector)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "cd backend && . .venv/bin/activate && python scripts/start_backend.py --host 0.0.0.0 --port 8000"
+    },
+    {
+      "name": "frontend",
+      "command": "cd frontend && corepack pnpm@11.5.3 dev --port 3000 --hostname 0.0.0.0"
+    }
+  ],
+  "ports": [
+    { "name": "backend", "port": 8000 },
+    { "name": "frontend", "port": 3000 }
+  ]
+}
