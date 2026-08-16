@@ -40,22 +40,29 @@ class ObjectStorageProviderCreate(BaseModel):
     expected_bucket_owner: str | None = Field(default=None, max_length=12)
     is_active: bool = False
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class ObjectStorageProviderUpdate(BaseModel):
-    """Rotate or change selected fields without returning stored credentials."""
+    """Rotate credentials/write policy without moving retained object authority.
+
+    Bucket, region, endpoint, addressing style, and expected bucket owner define
+    the locator/signing authority retained by object rows. Moving any of those
+    values in-place could make already persisted objects unreadable or
+    undeletable. Administrators must create and activate a new provider for a
+    different storage location; this update contract is therefore limited to
+    metadata, credentials, write-encryption policy, and activation state.
+    """
 
     provider_name: str | None = Field(default=None, min_length=1, max_length=120)
-    bucket_name: str | None = Field(default=None, min_length=3, max_length=63)
-    region_name: str | None = Field(default=None, min_length=1, max_length=63)
-    endpoint_url: str | None = None
-    addressing_style: str | None = None
     access_key_id: str | None = Field(default=None, min_length=1, max_length=512)
     secret_access_key: str | None = Field(default=None, min_length=1, max_length=4096)
     session_token: str | None = Field(default=None, max_length=8192)
     server_side_encryption: str | None = None
     kms_key_id: str | None = Field(default=None, max_length=2048)
-    expected_bucket_owner: str | None = Field(default=None, max_length=12)
     is_active: bool | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ObjectStorageProviderResponse(BaseModel):
@@ -316,27 +323,19 @@ async def update_object_storage_provider(
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(check_object_storage_admin_access),
 ) -> ObjectStorageProviderResponse:
-    """Rotate credentials or provider metadata without exposing stored values."""
+    """Rotate credentials/write policy without changing retained object location."""
     provider = await _scoped_provider(db, auth_context, provider_id)
     fields = data.model_fields_set
     text_updates = {
         "provider_name": data.provider_name,
-        "bucket_name": data.bucket_name,
-        "region_name": data.region_name,
-        "addressing_style": data.addressing_style,
         "access_key_id": data.access_key_id,
         "secret_access_key": data.secret_access_key,
         "server_side_encryption": data.server_side_encryption,
-        "expected_bucket_owner": data.expected_bucket_owner,
     }
     for field_name, value in text_updates.items():
         if field_name in fields and value is not None:
-            normalized = _stripped_required(value, field_name)
-            if field_name in {"region_name", "addressing_style"}:
-                normalized = normalized.lower()
-            setattr(provider, field_name, normalized)
+            setattr(provider, field_name, _stripped_required(value, field_name))
     for field_name, value in {
-        "endpoint_url": data.endpoint_url,
         "session_token": data.session_token,
         "kms_key_id": data.kms_key_id,
     }.items():
