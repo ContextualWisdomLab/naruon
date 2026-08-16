@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from api.auth import get_auth_context
 from main import app
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
@@ -71,8 +72,8 @@ def test_calendar_conflict_decision_rejects_naive_timestamps() -> None:
     assert response.status_code == 422
 
 
-def test_calendar_conflict_decision_rejects_invalid_interval() -> None:
-    """Zero-length or reversed intervals must fail closed before a decision is emitted."""
+def test_calendar_conflict_decision_rejects_invalid_interval_with_stable_code() -> None:
+    """Policy validation must expose a stable code instead of raw implementation text."""
     payload = _request_payload()
     proposed = payload["proposed"]
     assert isinstance(proposed, dict)
@@ -81,7 +82,30 @@ def test_calendar_conflict_decision_rejects_invalid_interval() -> None:
     response = client.post("/api/calendar/conflicts/evaluate", json=payload)
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "end_at must be later than start_at"}
+    assert response.json() == {
+        "error_code": "calendar_interval_invalid",
+        "detail": "end_at must be later than start_at",
+    }
+
+
+def test_calendar_conflict_decision_requires_authentication() -> None:
+    """The private conflict evaluator must reject a request with no authenticated session."""
+    original_override = app.dependency_overrides.pop(get_auth_context, None)
+    try:
+        unauthenticated_client = TestClient(
+            app,
+            headers={"Origin": "http://localhost:3000"},
+        )
+        response = unauthenticated_client.post(
+            "/api/calendar/conflicts/evaluate",
+            json=_request_payload(),
+        )
+    finally:
+        if original_override is not None:
+            app.dependency_overrides[get_auth_context] = original_override
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication required"}
 
 
 def test_calendar_conflict_decision_bounds_existing_evidence_batch() -> None:
