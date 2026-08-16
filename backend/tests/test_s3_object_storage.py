@@ -85,24 +85,27 @@ def test_signature_matches_aws_s3_published_get_object_vector() -> None:
 
 
 def test_document_object_key_is_opaque_and_deterministic() -> None:
+    document_id = "doc_0123456789abcdef"
     key = build_document_object_key(
         organization_id="customer-secret-org",
         workspace_id="customer-secret-workspace",
-        document_id="doc_0123456789abcdef",
+        document_id=document_id,
         extension="pdf",
     )
     repeated = build_document_object_key(
         organization_id="customer-secret-org",
         workspace_id="customer-secret-workspace",
-        document_id="doc_0123456789abcdef",
+        document_id=document_id,
         extension="pdf",
     )
 
     assert key == repeated
     assert key.startswith("workspace-documents/")
-    assert key.endswith("/doc_0123456789abcdef/source.pdf")
+    assert key.endswith("/source.pdf")
+    assert key.count("/") == 3
     assert "customer-secret-org" not in key
     assert "customer-secret-workspace" not in key
+    assert document_id not in key
 
 
 @pytest.mark.parametrize(
