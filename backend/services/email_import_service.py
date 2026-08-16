@@ -243,6 +243,18 @@ def _session_uses_postgresql(session: AsyncSession) -> bool:
     return getattr(getattr(bind, "dialect", None), "name", None) == "postgresql"
 
 
+def _owner_import_quota_lock_key(user_id: str, organization_id: str) -> str:
+    # PostgreSQL text (and therefore hashtext()) cannot encode NUL (0x00), so a
+    # raw ``user_id\x00organization_id`` separator raises
+    # CharacterNotInRepertoireError on real Postgres. Derive a NUL-free,
+    # collision-resistant digest instead (same approach as the content-graph
+    # source-record uids below).
+    payload = "\x00".join((user_id, organization_id))
+    return hashlib.sha256(
+        payload.encode("utf-8", errors="surrogatepass")
+    ).hexdigest()
+
+
 async def _acquire_owner_import_quota_lock(
     session: AsyncSession, *, user_id: str, organization_id: str
 ) -> bool:
@@ -250,7 +262,7 @@ async def _acquire_owner_import_quota_lock(
         return False
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_quota_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
@@ -269,7 +281,7 @@ async def _release_owner_import_quota_lock(
 ) -> None:
     lock_params = {
         "namespace_key": EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE,
-        "owner_key": f"{user_id}\x00{organization_id}",
+        "owner_key": _owner_import_quota_lock_key(user_id, organization_id),
     }
     await session.execute(
         select(
