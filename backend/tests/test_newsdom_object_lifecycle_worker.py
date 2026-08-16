@@ -1,11 +1,10 @@
 """Regression tests for NewsDOM document-object lifecycle transitions.
 
 These tests keep the worker's parsed-document state and object-storage state in
-one transaction boundary. A source object must become ``consumed`` only after
-successful recognition; retryable pending work must retain its active payload.
+one transaction boundary. An object-backed source must become ``consumed`` only
+after successful recognition; retryable pending work must retain its active
+payload.
 """
-
-import base64
 
 import pytest
 
@@ -17,17 +16,15 @@ from services.newsdom_pdf_recognition import (
 import services.newsdom_worker as newsdom_worker_module
 
 
-def _pending_document(document_id: str) -> Document:
-    """Build a pending legacy-backed PDF that exercises the worker entrypoint."""
+def _pending_object_document(document_id: str) -> Document:
+    """Build a pending PDF whose raw payload lives in external object storage."""
     return Document(
         document_id=document_id,
         workspace_id="workspace-1",
         organization_id="organization-1",
         document_name="evidence.pdf",
         document_type="pdf",
-        document_content=base64.b64encode(b"%PDF-1.7 realistic-payload").decode(
-            "ascii"
-        ),
+        document_content=None,
         document_status=PDF_DOM_RECOGNITION_PENDING_STATUS,
     )
 
@@ -70,11 +67,16 @@ async def _recognized_response(**_kwargs):
     }
 
 
+async def _load_object_payload(_session, _document):
+    """Return the bytes that a validated active S3 metadata row would resolve."""
+    return b"%PDF-1.7 realistic-object-payload"
+
+
 @pytest.mark.asyncio
 async def test_successful_document_recognition_consumes_source_object(monkeypatch):
-    """Mark the source object consumed in the same unit of work as parsing."""
+    """Mark an object-backed source consumed in the same unit of work as parsing."""
     session = object()
-    document = _pending_document("document-success")
+    document = _pending_object_document("document-success")
     transitions = []
 
     async def mark_consumed(actual_session, document_id):
@@ -82,9 +84,13 @@ async def test_successful_document_recognition_consumes_source_object(monkeypatc
 
     monkeypatch.setattr(
         newsdom_worker_module,
+        "load_pending_pdf_document_bytes",
+        _load_object_payload,
+    )
+    monkeypatch.setattr(
+        newsdom_worker_module,
         "mark_document_payload_consumed",
         mark_consumed,
-        raising=False,
     )
 
     result = await newsdom_worker_module.process_pending_document(
@@ -101,9 +107,9 @@ async def test_successful_document_recognition_consumes_source_object(monkeypatc
 
 @pytest.mark.asyncio
 async def test_pending_document_does_not_consume_retryable_source_object(monkeypatch):
-    """Keep source bytes active while recognition is waiting for configuration."""
+    """Keep object-backed source bytes active while configuration is unavailable."""
     session = object()
-    document = _pending_document("document-pending")
+    document = _pending_object_document("document-pending")
     transitions = []
 
     async def mark_consumed(actual_session, document_id):
@@ -111,9 +117,13 @@ async def test_pending_document_does_not_consume_retryable_source_object(monkeyp
 
     monkeypatch.setattr(
         newsdom_worker_module,
+        "load_pending_pdf_document_bytes",
+        _load_object_payload,
+    )
+    monkeypatch.setattr(
+        newsdom_worker_module,
         "mark_document_payload_consumed",
         mark_consumed,
-        raising=False,
     )
 
     result = await newsdom_worker_module.process_pending_document(
