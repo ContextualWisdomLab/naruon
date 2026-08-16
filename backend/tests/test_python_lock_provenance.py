@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "ci" / "python_lock_provenance.py"
@@ -82,6 +83,23 @@ def test_manual_download_generation_matching_version_passes(tmp_path: Path) -> N
     assert receipt["requirement_count"] == 1
     assert receipt["sha256_hash_count"] == 1
     assert receipt["generation_mode"] == "pip-download"
+
+
+def test_manual_download_generation_with_extras_passes(tmp_path: Path) -> None:
+    """PEP 508 extras remain bound to the same normalized project/version pin."""
+    lock_path = _write(
+        tmp_path / "requirements-hashes.txt",
+        "# Regenerate with:\n"
+        "#   python3 -m pip download 'SomePackage[PDF]==3.0'\n"
+        "SomePackage[PDF]==3.0 \\\n"
+        f"    --hash=sha256:{_sha('d')}\n",
+    )
+
+    receipt = python_lock_provenance.validate_lock_file(lock_path, tmp_path)
+
+    assert receipt["status"] == "passed"
+    assert receipt["generation_mode"] == "pip-download"
+    assert receipt["violations"] == []
 
 
 def test_manual_download_without_exact_generator_pin_is_rejected(tmp_path: Path) -> None:
@@ -160,6 +178,22 @@ def test_uv_generation_source_version_mismatch_is_rejected(tmp_path: Path) -> No
     assert _violation_codes(receipt) == {"generation-version-mismatch"}
 
 
+def test_uv_generation_accepts_requirements_in_source(tmp_path: Path) -> None:
+    """The conventional requirements.in source form is valid uv provenance."""
+    _write(tmp_path / "requirements.in", "example==1.0\n")
+    lock_path = _write(
+        tmp_path / "requirements-hashes.txt",
+        "# uv pip compile requirements.in --generate-hashes --output-file requirements-hashes.txt\n"
+        + _simple_lock(),
+    )
+
+    receipt = python_lock_provenance.validate_lock_file(lock_path, tmp_path)
+
+    assert receipt["status"] == "passed"
+    assert receipt["generation_mode"] == "uv"
+    assert receipt["violations"] == []
+
+
 def test_uv_generation_missing_input_is_rejected(tmp_path: Path) -> None:
     """A generated lock cannot claim provenance from a source file that is absent."""
     lock_path = _write(
@@ -206,6 +240,26 @@ def test_uv_generation_output_path_mismatch_is_rejected(tmp_path: Path) -> None:
     assert _violation_codes(receipt) == {"generation-output-mismatch"}
 
 
+def test_uv_generation_rejects_source_outside_repository(tmp_path: Path) -> None:
+    """A generator declaration cannot make CI read a source outside the repo."""
+    repository_root = tmp_path / "repo"
+    repository_root.mkdir()
+    _write(tmp_path / "outside" / "requirements.in", "external-secret==9.9\n")
+    lock_path = _write(
+        repository_root / "requirements-hashes.txt",
+        "# uv pip compile ../outside/requirements.in --output-file requirements-hashes.txt\n"
+        + _simple_lock(),
+    )
+
+    receipt = python_lock_provenance.validate_lock_file(lock_path, repository_root)
+    serialized = json.dumps(receipt, sort_keys=True)
+
+    assert receipt["status"] == "failed"
+    assert _violation_codes(receipt) == {"generation-input-outside-repository"}
+    assert "external-secret" not in serialized
+    assert str(tmp_path) not in serialized
+
+
 def test_repository_receipt_covers_every_active_hash_lock() -> None:
     """The current repository must expose one passing receipt for every active lock."""
     receipt = python_lock_provenance.validate_repository(REPO_ROOT)
@@ -245,15 +299,42 @@ def test_repository_receipt_is_deterministic_and_path_relative(tmp_path: Path) -
     ]
 
 
-def test_outside_repository_lock_uses_only_file_name(tmp_path: Path) -> None:
-    """A directly validated out-of-root fixture never serializes its absolute path."""
+def test_outside_repository_lock_fails_without_reading_payload(tmp_path: Path) -> None:
+    """Direct validation rejects an out-of-root lock without serializing its data."""
     root = tmp_path / "root"
     root.mkdir()
-    lock_path = _write(tmp_path / "outside" / "requirements-hashes.txt", _simple_lock())
+    lock_path = _write(
+        tmp_path / "outside" / "requirements-hashes.txt",
+        "TOP_SECRET_PACKAGE>=9.9\n",
+    )
 
     receipt = python_lock_provenance.validate_lock_file(lock_path, root)
+    serialized = json.dumps(receipt, sort_keys=True)
 
+    assert receipt["status"] == "failed"
     assert receipt["path"] == "requirements-hashes.txt"
+    assert _violation_codes(receipt) == {"lock-path-outside-repository"}
+    assert "TOP_SECRET_PACKAGE" not in serialized
+    assert str(tmp_path) not in serialized
+
+
+def test_discovery_rejects_symlinked_lock_outside_repository(tmp_path: Path) -> None:
+    """Repository discovery never follows a requirements symlink outside root."""
+    repository_root = tmp_path / "repo"
+    repository_root.mkdir()
+    outside_lock = _write(
+        tmp_path / "outside" / "secret.txt",
+        "TOP_SECRET_PACKAGE>=9.9\n",
+    )
+    (repository_root / "requirements-hashes.txt").symlink_to(outside_lock)
+
+    receipt = python_lock_provenance.validate_repository(repository_root)
+    serialized = json.dumps(receipt, sort_keys=True)
+
+    assert receipt["status"] == "failed"
+    assert _violation_codes(receipt) == {"lock-path-outside-repository"}
+    assert "TOP_SECRET_PACKAGE" not in serialized
+    assert str(tmp_path) not in serialized
 
 
 def test_cli_json_and_human_modes_report_pass_and_fail(
@@ -292,14 +373,30 @@ def test_script_main_guard_propagates_failed_exit(
 
 
 def test_application_ci_publishes_lock_provenance_receipt() -> None:
-    """Application CI must publish the deterministic receipt before installing locks."""
-    workflow = (REPO_ROOT / ".github" / "workflows" / "app-ci.yml").read_text(
-        encoding="utf-8"
-    )
+    """The backend install job must publish validation evidence before installation."""
+    workflow_path = REPO_ROOT / ".github" / "workflows" / "app-ci.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    backend_jobs = [
+        job
+        for job in jobs.values()
+        if any(
+            step.get("name") == "Install backend dependencies"
+            for step in job.get("steps", [])
+            if isinstance(step, dict)
+        )
+    ]
+    assert len(backend_jobs) == 1
 
-    assert "Validate Python lock provenance" in workflow
-    assert "python scripts/ci/python_lock_provenance.py --json" in workflow
-    assert "GITHUB_STEP_SUMMARY" in workflow
-    assert workflow.index("Validate Python lock provenance") < workflow.index(
-        "Install backend dependencies"
-    )
+    steps = backend_jobs[0]["steps"]
+    step_names = [step.get("name") for step in steps]
+    validation_index = step_names.index("Validate Python lock provenance")
+    install_index = step_names.index("Install backend dependencies")
+    assert validation_index < install_index
+
+    validation_step = steps[validation_index]
+    validation_run = validation_step["run"]
+    assert "python scripts/ci/python_lock_provenance.py --json" in validation_run
+    assert "GITHUB_STEP_SUMMARY" in validation_run
+    assert "|| status=$?" in validation_run
+    assert 'exit "$status"' in validation_run
