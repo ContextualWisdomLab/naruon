@@ -1,4 +1,11 @@
 ## [Unreleased]
+- `/api/emails/send` now reserves one shared atomic rate-limit slot per
+  authorized `(organization_id, user_id)` scope in `email_send_limit_windows`.
+  Ten successful sends in a 60-second window still return `429 Email send rate
+  limit exceeded` on the next attempt; an unavailable shared store fails closed
+  with `503 Email send rate limit unavailable` instead of a process-local
+  dictionary. Limiter rows store only scope identifiers, attempt counts, and
+  timestamps.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
 

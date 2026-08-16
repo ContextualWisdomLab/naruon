@@ -395,6 +395,14 @@ in this repo.
   forms such as decimal integers, hexadecimal integers, and octal dotted forms
   before DNS or socket connection; `socket.getaddrinfo` may resolve those forms
   to loopback/private addresses even when `ipaddress.ip_address` rejects them.
+- `/api/emails/send` must enforce one server-authoritative, atomic rate-limit
+  decision per authorized `(organization_id, user_id)` scope across workers and
+  replicas. Do not keep process-local attempt dictionaries as a silent fallback.
+  Quota exhaustion stays `429 Email send rate limit exceeded`; shared-state
+  unavailability stays a distinct fail-closed `503` with
+  `email_send_limit_unavailable`. Limiter state may store only scope
+  identifiers, attempt counts, and timestamps — never message body, recipients,
+  subject, or credentials.
 - GitHub Actions `run:` blocks must not directly interpolate `${{ github.* }}`,
   `${{ inputs.* }}`, or other expression data into shell conditions or commands.
   Pass expression values through step `env:` keys first, then quote shell

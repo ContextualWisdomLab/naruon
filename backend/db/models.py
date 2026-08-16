@@ -1593,3 +1593,44 @@ class Document(Base):
     workspace_entity: Mapped["Workspace"] = relationship(
         back_populates="workspace_documents"
     )
+
+
+class EmailSendLimitWindow(Base):
+    """Current send-limit window for one authorized organization/user scope.
+
+    The table stores only occupancy metadata. Message bodies, recipients,
+    subjects, and credentials must never be written here.
+    """
+
+    __tablename__ = "email_send_limit_windows"
+
+    window_uid: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        default=lambda: uuid.uuid4().hex,
+    )
+    organization_id: Mapped[str] = mapped_column(String, nullable=False)
+    owner_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    window_started_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "owner_user_id",
+            name="uq_email_send_limit_windows_scope",
+        ),
+        Index(
+            "ix_email_send_limit_windows_scope_time",
+            "organization_id",
+            "owner_user_id",
+            "window_started_at",
+        ),
+    )

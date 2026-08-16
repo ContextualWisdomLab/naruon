@@ -452,3 +452,28 @@ def test_merge_revision_reconciles_newsdom_document_and_carddav_heads():
     assert "op.create_table(" not in revision_text
     assert "op.add_column(" not in revision_text
     assert "op.drop_column(" not in revision_text
+
+
+def test_email_send_limit_windows_have_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0018_email_send_limit.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0018_email_send_limit"' in revision_text
+    assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
+    assert '"email_send_limit_windows"' in revision_text
+    assert '"window_uid"' in revision_text
+    assert '"organization_id"' in revision_text
+    assert '"owner_user_id"' in revision_text
+    assert '"window_started_at"' in revision_text
+    assert '"attempt_count"' in revision_text
+    assert "uq_email_send_limit_windows_scope" in revision_text
+    assert "ix_email_send_limit_windows_scope_time" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+    assert "sa.text(" not in revision_text

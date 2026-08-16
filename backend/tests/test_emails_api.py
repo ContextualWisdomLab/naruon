@@ -16,6 +16,7 @@ from pydantic import SecretStr
 
 from api import emails as emails_api
 from api.auth import get_auth_context as auth_get_auth_context
+from services.email_send_rate_limit import SharedMemoryEmailSendLimitStore
 from core.config import settings
 from db.models import Email, LLMProvider
 from main import app
@@ -344,6 +345,15 @@ def sample_email():
 def db_session(sample_email):
     # Mock the database session
     return MockSession([sample_email])
+
+
+@pytest.fixture(autouse=True)
+def override_send_limit_store():
+    store = SharedMemoryEmailSendLimitStore()
+    emails_api._send_limit_store_factory = lambda: store
+    yield store
+    emails_api._send_limit_store_factory = None
+    emails_api._send_limit_clock = None
 
 
 @pytest.fixture(autouse=True)
@@ -1865,25 +1875,58 @@ def test_send_email_endpoint_rate_limits_per_user(mock_send_email, monkeypatch):
         "api.emails.validate_smtp_destination", fake_validate_smtp_destination
     )
     monkeypatch.setattr(emails_api, "_SEND_EMAIL_RATE_LIMIT_MAX_ATTEMPTS", 1)
-    monkeypatch.setattr(emails_api.time, "monotonic", lambda: 100.0)
-    emails_api._email_send_attempts_by_scope.clear()
+    emails_api._send_limit_clock = lambda: datetime.datetime(
+        2026, 8, 16, 16, 0, tzinfo=datetime.timezone.utc
+    )
 
-    try:
-        client = TestClient(app, headers={"X-User-Id": "testuser"})
-        payload = {
-            "to": "test@example.com",
-            "subject": "Re: Test",
-            "body": "This is a reply.",
-        }
+    client = TestClient(app, headers={"X-User-Id": "testuser"})
+    payload = {
+        "to": "test@example.com",
+        "subject": "Re: Test",
+        "body": "This is a reply.",
+    }
 
-        assert client.post("/api/emails/send", json=payload).status_code == 200
-        response = client.post("/api/emails/send", json=payload)
-    finally:
-        emails_api._email_send_attempts_by_scope.clear()
+    assert client.post("/api/emails/send", json=payload).status_code == 200
+    response = client.post("/api/emails/send", json=payload)
 
     assert response.status_code == 429
     assert response.json() == {"detail": "Email send rate limit exceeded"}
     mock_send_email.assert_called_once()
+
+
+@patch("api.emails.send_email", return_value={"status": "sent", "simulated": False})
+def test_send_email_endpoint_fails_closed_when_limit_store_unavailable(
+    mock_send_email, monkeypatch
+):
+    from fastapi.testclient import TestClient
+    from main import app
+    from services.email_send_rate_limit import EmailSendLimitStoreUnavailable
+
+    def fake_validate_smtp_destination(smtp_server, smtp_port, *, resolve_host=True):
+        return smtp_server, smtp_port
+
+    class _UnavailableStore:
+        async def reserve_attempt(self, **_kwargs):
+            raise EmailSendLimitStoreUnavailable("shared send-limit state unavailable")
+
+    monkeypatch.setattr(
+        "api.emails.validate_smtp_destination", fake_validate_smtp_destination
+    )
+    emails_api._send_limit_store_factory = lambda: _UnavailableStore()
+
+    client = TestClient(app, headers={"X-User-Id": "testuser"})
+    response = client.post(
+        "/api/emails/send",
+        json={
+            "to": "test@example.com",
+            "subject": "Re: Test",
+            "body": "This is a reply.",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Email send rate limit unavailable"}
+    mock_send_email.assert_not_called()
 
 
 @patch("api.emails.send_email", return_value={"status": "simulated", "simulated": True})

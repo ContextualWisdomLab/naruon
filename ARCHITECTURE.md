@@ -150,7 +150,12 @@ existing local databases.
 Outbound replies preserve `In-Reply-To` and `References` headers in the built
 message payload. Local/dev behavior is explicit: missing SMTP config returns a
 400, and simulated send results are marked with `simulated: true` rather than
-described as real delivery.
+described as real delivery. Send occupancy is a shared control-plane decision:
+`services.email_send_rate_limit` reserves one atomic slot per authorized
+`(organization_id, user_id)` window in `email_send_limit_windows`. Exhausted
+windows return `429`; an unavailable shared store fails closed with `503`
+instead of falling back to a process-local dictionary. The limiter never stores
+message body, recipients, subject, or credentials.
 
 Tenant-provided SMTP destinations are not a general outbound socket primitive.
 `backend/api/tenant_config.py`, `backend/api/emails.py`, and the final

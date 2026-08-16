@@ -1,5 +1,4 @@
 from collections import defaultdict
-from threading import Lock
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
@@ -7,7 +6,6 @@ from db.session import get_db
 from db.models import Email
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
-import time
 from typing import Literal
 from services.email_client import (
     EmailMessageParams,
@@ -45,37 +43,62 @@ import logging
 from api.auth import AuthContext, get_auth_context
 from api.search import thread_group_key as sql_thread_group_key
 from services.tenant_config_scope import get_scoped_tenant_config
+from services.email_send_rate_limit import (
+    DEFAULT_EMAIL_SEND_LIMIT_MAX_ATTEMPTS,
+    DEFAULT_EMAIL_SEND_LIMIT_WINDOW_SECONDS,
+    EmailSendLimitStore,
+    SqlAlchemyEmailSendLimitStore,
+    reserve_email_send_attempt,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/emails")
 
-_SEND_EMAIL_RATE_LIMIT_MAX_ATTEMPTS = 10
-_SEND_EMAIL_RATE_LIMIT_WINDOW_SECONDS = 60.0
-_email_send_attempts_by_scope: dict[tuple[str | None, str], list[float]] = {}
-_email_send_rate_limit_lock = Lock()
+_SEND_EMAIL_RATE_LIMIT_MAX_ATTEMPTS = DEFAULT_EMAIL_SEND_LIMIT_MAX_ATTEMPTS
+_SEND_EMAIL_RATE_LIMIT_WINDOW_SECONDS = DEFAULT_EMAIL_SEND_LIMIT_WINDOW_SECONDS
+_send_limit_store_factory = None
+_send_limit_clock = None
 
 
-def _enforce_send_email_rate_limit(auth_context: AuthContext) -> None:
-    now = time.monotonic()
-    cutoff = now - _SEND_EMAIL_RATE_LIMIT_WINDOW_SECONDS
-    key = (auth_context.organization_id, auth_context.user_id)
+def _current_send_limit_clock() -> datetime.datetime:
+    if _send_limit_clock is not None:
+        return _send_limit_clock()
+    return datetime.datetime.now(datetime.timezone.utc)
 
-    # ponytail: process-local throttle; move to Redis when multi-worker send volume matters.
-    with _email_send_rate_limit_lock:
-        attempts = [
-            attempt
-            for attempt in _email_send_attempts_by_scope.get(key, [])
-            if attempt > cutoff
-        ]
-        if len(attempts) >= _SEND_EMAIL_RATE_LIMIT_MAX_ATTEMPTS:
-            _email_send_attempts_by_scope[key] = attempts
-            raise HTTPException(
-                status_code=429,
-                detail="Email send rate limit exceeded",
-            )
-        attempts.append(now)
-        _email_send_attempts_by_scope[key] = attempts
+
+def _send_limit_store(db: AsyncSession) -> EmailSendLimitStore:
+    if _send_limit_store_factory is not None:
+        return _send_limit_store_factory()
+    return SqlAlchemyEmailSendLimitStore(db)
+
+
+async def _enforce_send_email_rate_limit(
+    auth_context: AuthContext,
+    db: AsyncSession,
+) -> None:
+    decision = await reserve_email_send_attempt(
+        _send_limit_store(db),
+        organization_id=auth_context.organization_id,
+        owner_user_id=auth_context.user_id,
+        observed_at=_current_send_limit_clock(),
+        max_attempts=_SEND_EMAIL_RATE_LIMIT_MAX_ATTEMPTS,
+        window_seconds=_SEND_EMAIL_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    if decision.decision_code == "unavailable":
+        logger.warning(
+            "Email send rate limit unavailable",
+            extra={"error_code": decision.error_code},
+        )
+        raise HTTPException(
+            status_code=decision.http_status_code,
+            detail=decision.user_message,
+        )
+    if decision.decision_code == "blocked":
+        raise HTTPException(
+            status_code=decision.http_status_code,
+            detail=decision.user_message,
+        )
 
 
 def canonical_thread_key(email: Email) -> str:
@@ -756,7 +779,7 @@ async def send_email_endpoint(
             in_reply_to=request.in_reply_to,
             references=request.references,
         )
-        _enforce_send_email_rate_limit(auth_context)
+        await _enforce_send_email_rate_limit(auth_context, db)
         smtp_config = SmtpConfig(
             smtp_server=smtp_server,
             smtp_port=smtp_port,
