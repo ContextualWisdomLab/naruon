@@ -95,6 +95,7 @@ async def test_pending_hwpx_attachment_is_recognized_without_provider() -> None:
     """A pending HWPX package becomes searchable text plus graph provenance."""
 
     attachment = _pending_hwpx_attachment(_hwpx_payload())
+    attachment.parse_content_type = ""
 
     result = await process_pending_attachment(
         session=object(),
