@@ -604,8 +604,8 @@ def test_scorecard_sarif_normalizer_rejects_escape_links_and_large_input(
 def test_review_automation_uses_central_required_workflows_without_local_copies() -> (
     None
 ):
-    readme = read_repo_text("README.md")
-    normalized_readme = " ".join(readme.split())
+    merge_gate_policy = read_repo_text("docs/development/merge-gate-policy.md")
+    normalized_merge_gate_policy = " ".join(merge_gate_policy.split())
     architecture = read_repo_text("ARCHITECTURE.md")
     security = read_repo_text("SECURITY.md")
     normalized_security = " ".join(security.split())
@@ -633,11 +633,18 @@ def test_review_automation_uses_central_required_workflows_without_local_copies(
             f"central review automation must not be copied locally: {relative_path}"
         )
 
-    assert "ContextualWisdomLab central required workflows" in normalized_readme
-    assert "This repository does not carry repo-local" in normalized_readme
-    assert "OpenCode, Strix, or merge-scheduler workflow copies" in normalized_readme
     assert (
-        "branch updates, auto-merge, and mechanical merge actions" in normalized_readme
+        "ContextualWisdomLab central required workflows"
+        in normalized_merge_gate_policy
+    )
+    assert "This repository does not carry repo-local" in normalized_merge_gate_policy
+    assert (
+        "OpenCode, Strix, or merge-scheduler workflow copies"
+        in normalized_merge_gate_policy
+    )
+    assert (
+        "branch updates, auto-merge, and mechanical merge actions"
+        in normalized_merge_gate_policy
     )
     assert "central required workflows" in architecture
     assert "ContextualWisdomLab/.github" in architecture

@@ -7,6 +7,11 @@
 3. For manual backend work, run commands from `backend/`.
 4. For frontend work, run `npm install` before lint/build/test.
 
+Agent writer-boundary, PR-stacking, and Phase 10 rules live in
+[`docs/development/agent-operating-rules.md`](docs/development/agent-operating-rules.md).
+Merge-gate and current-head robot-review evidence live in
+[`docs/development/merge-gate-policy.md`](docs/development/merge-gate-policy.md).
+
 ## Verification before opening a PR
 
 ```bash

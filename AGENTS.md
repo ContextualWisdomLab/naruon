@@ -696,6 +696,10 @@ in this repo.
 
 ## Phase 10 development rules
 
+Customer-facing onboarding stays in `README.md`. The same Phase 10, writer-boundary,
+and stacking rules for agents are also indexed in
+`docs/development/agent-operating-rules.md`.
+
 - **Stepwise execution**: Each phase requires an atomic PR, GitHub PR Tracking, Push, and Robot Review. A phase only ends when merged. Do not proceed without merge.
 - **TDD + DDD**: Practice TDD, micro TDD, nano TDD, Domain Driven Development, and Context Driven Development.
 - **API Wiring**: Always work with API wiring completed.

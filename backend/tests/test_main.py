@@ -14,6 +14,18 @@ def test_read_root():
     assert response.json() == {"status": "ok", "message": "AI Email Client API"}
 
 
+def test_openapi_publishes_stable_sibling_call_routes():
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["info"]["title"] == "Naruon Backend"
+    paths = payload["paths"]
+    assert "/" in paths
+    assert "/api/emails" in paths
+    assert "/api/search" in paths
+    assert "/api/tasks" in paths
+
+
 def test_root_response_has_security_headers():
     response = client.get("/")
 

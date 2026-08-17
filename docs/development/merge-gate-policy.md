@@ -5,6 +5,18 @@ review threads must be resolved, and the current PR head must have current-head
 CodeRabbit or structured OpenCode App robot-review evidence. Human review is not
 awaited by default.
 
+OpenCode Review, Strix Security Scan, and PR Review Merge Scheduler are
+supplied by the ContextualWisdomLab central required workflows from
+`ContextualWisdomLab/.github`. This repository does not carry repo-local
+OpenCode, Strix, or merge-scheduler workflow copies; branch updates,
+auto-merge, and mechanical merge actions run as the target repository's
+`github-actions[bot]` through the central workflow. Pending CodeRabbit or
+required-check evidence is a wait state, not a hard blocker.
+
+Agent writer-boundary, PR-stacking, and Phase 10 operating rules live in
+[`agent-operating-rules.md`](agent-operating-rules.md). The root README stays
+customer/operator first and only points here.
+
 ## Required gate contract
 
 - Required status checks must pass on the current head SHA.
@@ -131,6 +143,7 @@ Handling policy:
 
 ## Related operations docs
 
+- `docs/development/agent-operating-rules.md`
 - `docs/operations/release-deployment-architecture.md`
 - `docs/operations/open-source-apm.md`
 - `docs/operations/email-relay-proxy-boundary.md`

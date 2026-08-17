@@ -305,3 +305,39 @@ def test_readme_uses_cross_platform_browser_command():
         "python -m webbrowser http://localhost:3000" in readme
         or "python3 -m webbrowser http://localhost:3000" in readme
     )
+
+
+def test_readme_is_customer_first_standalone_composition_hub():
+    readme = (REPO_ROOT / "README.md").read_text()
+    normalized = " ".join(readme.split())
+
+    assert "not an SMTP" in normalized
+    assert "IMAP" in readme
+    assert "./scripts/naruon_compose.sh up -d --build" in readme
+    assert "AUTH_SESSION_HMAC_SECRET" in readme
+    assert "ENCRYPTION_KEY" in readme
+    assert "curl -s http://localhost:8000/" in readme
+    assert "/openapi.json" in readme
+    assert "/api/emails" in readme
+    assert "/api/search" in readme
+    assert "/api/tasks" in readme
+    assert "Authorization: Bearer" in readme
+    assert "optional" in normalized.lower()
+    assert (
+        "never sibling checkouts" in normalized
+        or "never a sibling checkout" in normalized
+    )
+    assert "## Phase 10 development rules" not in readme
+    assert "docs/development/merge-gate-policy.md" in readme
+    assert "docs/development/agent-operating-rules.md" in readme
+
+
+def test_default_compose_stack_does_not_require_sibling_checkouts():
+    compose = (REPO_ROOT / "docker-compose.yml").read_text()
+    overlay = (REPO_ROOT / "docker-compose.pg-llm-batch.yml").read_text()
+
+    assert not (REPO_ROOT / ".gitmodules").exists()
+    assert "context: ../" not in compose
+    assert "context: ${PG_LLM_BATCH_CHECKOUT" not in compose
+    assert "NOT part of the default naruon stack" in overlay
+    assert "default `docker compose up` does not need that checkout" in overlay

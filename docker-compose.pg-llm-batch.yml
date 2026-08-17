@@ -10,7 +10,7 @@
 #
 # naruon runs fine without this file and without a local pg-llm-batch checkout:
 # the batch embedding path degrades to the per-item embedding path when
-# unconfigured.
+# unconfigured. The default `docker compose up` does not need that checkout.
 #
 # Prerequisites:
 #   git clone https://github.com/ContextualWisdomLab/pg-llm-batch.git ../pg-llm-batch
