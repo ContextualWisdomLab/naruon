@@ -7,6 +7,22 @@
   and GPT-5/DeepSeek review routes are removed. Review permissions stay
   read-oriented; TEPP-style edit/bash allow is not copied into this file.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
+
+### 캘린더 충돌 (Status-weighted conflicts)
+
+- 상태 가중 일정 충돌 평가가 RFC 5545 `VEVENT` 증거를 직접 받습니다.
+  `POST /api/calendar/conflicts/evaluate`는 구조화 commitment 또는
+  `proposed_ics`/`existing_ics`를 받아 `available` / `review_required` /
+  `blocked`와 다음 행동을 반환합니다. `STATUS:CANCELLED`는 유효한 증거라
+  시간을 차지하지 않으므로, 취소된 기존 일정과 겹치는 확정 제안은 진행할 수
+  있습니다. 잠정 겹침은 검토를, 확정 겹침은 이중 예약을 차단합니다.
+  Calendar 회의 조율 화면은 서명된 writeback 원본만 선택하고, 알려진 `.ics`
+  쌍은 테스트 고정값으로만 유지합니다. 요청 검증 실패는
+  `calendar_proposed_source_missing` 또는 `calendar_request_invalid` 봉투를
+  반환합니다. 반복 VEVENT와 과도한 ICS 바이트는 fail-closed 합니다. 공급자
+  CalDAV 쓰기는 하지 않습니다.
+- 검증: `python -m pytest backend/tests/test_calendar_conflict_policy.py backend/tests/test_calendar_conflict_ics.py backend/tests/test_calendar_conflict_api.py -q`,
+  `corepack pnpm@11.5.3 --dir frontend exec vitest run src/app/calendar/page.test.tsx`.
 ### 주제 측정 경계 (Topic Measurement)
 
 - STM 결과로 오인될 수 있었던 하드코딩 용어표 기반
