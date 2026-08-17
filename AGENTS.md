@@ -353,7 +353,11 @@ in this repo.
   image references fail closed and must not be sent to OCR/VLM or treated as
   document evidence. Classify 1×1 / tracker-header pixels as `tracking_pixel`
   from local header and dimension evidence only; do not fetch remote pixels
-  and do not invent a new egress policy in this slice.
+  and do not invent a new egress policy in this slice. Later local
+  parse/resolution paths must call `admit_email_inline_media()` through
+  `resolve_email_inline_media()` and continue only `document_image`
+  results; do not send `tracking_pixel`, `unsupported_media`, or
+  `unresolved_cid_reference` outcomes to a model.
 - Home/Today dashboard reply-wait surfaces must read signed
   `/api/emails/pending-replies` data instead of inferring pending replies from
   generic inbox fixtures or static copy. Tests and E2E mocks must verify the

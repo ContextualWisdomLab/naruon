@@ -38,6 +38,20 @@ Admission therefore:
 `http` and `https` image references remain recorded as no-fetch
 (`remote_fetch_policy=disabled`). They are not admitted as document images.
 
+## Resolution wiring boundary
+
+Admission alone does not stop a later parse or OCR step from treating a
+classified beacon as document input. `services.email_media_resolution`
+therefore calls `admit_email_inline_media()` first. Only `document_image`
+admissions continue. `tracking_pixel`, `unsupported_media`, and
+`unresolved_cid_reference` are quarantined with those stable error_codes and
+are dropped from filename-bearing image attachments on the existing
+`parse_eml` / `parse_eml_bytes` path. This wiring does not add OCR, a VLM,
+NewsDOM, egress, or the #1376 `EmailMediaArtifact` pixel contract.
+
+Customer next action: send only `document_image` continuations downstream.
+Do not send a tracker, unsupported part, or unresolved CID to a model.
+
 ## Standards-to-code trace
 
 | Requirement | Primary basis | Naruon behavior |
@@ -68,8 +82,10 @@ Focused product tests cover four realistic `.eml` fixtures: a resolving CID
 chart, an unresolved CID, a 1×1 GIF with a Mailchimp-style Content-Location,
 and two identical base64 PNG parts that share one SHA-256. Boundary tests
 cover unsupported media, remote no-fetch, ambiguous Content-ID, and helper
-fail-closed paths. Owned module statement and branch coverage is 100% on the
-focused harness.
+fail-closed paths. The wiring tests prove a named 1×1 CID tracker and an
+unresolved CID do not continue as document evidence on `parse_eml_bytes`,
+while a resolving CID chart does. Owned admission and resolution module
+statement and branch coverage is 100% on the focused harness.
 
 ## References
 
