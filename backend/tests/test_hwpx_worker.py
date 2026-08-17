@@ -34,6 +34,8 @@ def _hwpx_payload(*, include_section: bool = True) -> bytes:
     package = io.BytesIO()
     with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_STORED) as archive:
         archive.writestr("mimetype", b"application/hwp+zip")
+        # Parent #1353 admission requires version.xml before a payload can be pending.
+        archive.writestr("version.xml", b'<version app="Naruon" />')
         archive.writestr(
             "Contents/content.hpf",
             b"""<?xml version='1.0' encoding='UTF-8'?>

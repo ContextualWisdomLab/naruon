@@ -58,6 +58,7 @@ def _hwpx_package(
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("mimetype", b"application/hwp+zip")
+        archive.writestr("version.xml", b'<version app="Naruon" />')
         archive.writestr(
             "Contents/content.hpf",
             _content_hpf(
