@@ -527,6 +527,10 @@ in this repo.
 - Calendar writeback UI must fail closed while the signed source registry is
   loading or errored; do not emit intent POSTs without a confirmed opaque
   `target_source_id`, and keep tests covering the loading/error boundary.
+- Calendar coordination must not present canned ICS documents or fixed
+  conflict outcomes as production evidence. Use selectable sources from the
+  signed `/api/calendar/writeback-sources` registry, or omit the evaluate call
+  until source-backed VEVENT evidence exists. Known `.ics` pairs stay in tests.
 - Calendar and WebDAV workspaces must expose the current opaque writeback source
   as a deliberate user selection with capability and ETag/If-Match state.
   Automatic first-source fallback may initialize the control, but intent POSTs
