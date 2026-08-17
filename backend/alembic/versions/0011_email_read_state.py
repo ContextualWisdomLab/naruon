@@ -39,11 +39,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    if not inspector.has_table("emails"):
-        return
-    existing_columns = {column["name"] for column in inspector.get_columns("emails")}
-    if "is_read" not in existing_columns:
-        return
-    op.drop_column("emails", "is_read")
+    # Intentionally a no-op. The upgrade only ever adds ``emails.is_read`` to a
+    # legacy database that still carries the retired ``emails`` table, and it
+    # skips the add when the column already exists. Because that makes the
+    # upgrade conditional, downgrade cannot tell whether this revision created
+    # the column or whether it predated the revision, so dropping it here would
+    # risk destroying data the revision never owned. Rolling back past this
+    # revision therefore leaves the column in place.
+    return None
