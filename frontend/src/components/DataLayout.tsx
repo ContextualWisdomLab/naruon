@@ -32,6 +32,8 @@ import {
   getSafeErrorSummary,
   getDocumentTypeForFile,
   isTextDocumentUploadType,
+  PENDING_REPOSITORY_ASSET_PREVIEW_MAX_ATTEMPTS,
+  PENDING_REPOSITORY_ASSET_PREVIEW_RETRY_MS,
 } from './data-layout/utils';
 
 
@@ -345,6 +347,8 @@ export function DataLayout() {
       return undefined;
     }
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
     const loadPreview = async () => {
       try {
         const preview = await apiClient.get<RepositoryAssetPreview>(
@@ -352,6 +356,15 @@ export function DataLayout() {
         );
         if (cancelled) return;
         setAssetPreviewByKey((current) => ({ ...current, [assetKey]: preview }));
+        if (
+          preview.preview_state === 'pending'
+          && attempt < PENDING_REPOSITORY_ASSET_PREVIEW_MAX_ATTEMPTS - 1
+        ) {
+          attempt += 1;
+          retryTimer = setTimeout(() => {
+            void loadPreview();
+          }, PENDING_REPOSITORY_ASSET_PREVIEW_RETRY_MS);
+        }
       } catch (error: unknown) {
         if (cancelled) return;
         const unavailablePreview: RepositoryAssetPreview = {
@@ -378,6 +391,9 @@ export function DataLayout() {
     void loadPreview();
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) {
+        clearTimeout(retryTimer);
+      }
     };
   }, [selectedRepositoryAsset?.asset_key, selectedRepositoryAsset?.asset_type]);
 

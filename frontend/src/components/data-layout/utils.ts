@@ -10,6 +10,9 @@ import {
   RepositoryAssetPreviewState,
 } from './types';
 
+export const PENDING_REPOSITORY_ASSET_PREVIEW_RETRY_MS = 2500;
+export const PENDING_REPOSITORY_ASSET_PREVIEW_MAX_ATTEMPTS = 4;
+
 export function getApiErrorStatus(error: unknown) {
   const shapedError = error as { status?: unknown; response?: { status?: unknown } } | null;
   if (typeof shapedError?.status === 'number') return shapedError.status;
