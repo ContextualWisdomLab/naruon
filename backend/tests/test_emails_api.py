@@ -22,7 +22,6 @@ from main import app
 import datetime
 from unittest.mock import AsyncMock, patch
 from services.embedding import STORAGE_EMBEDDING_DIMENSION
-from services.email_import_service import _owner_import_quota_lock_key
 from services.email_service import generate_email_fingerprint
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
@@ -1279,8 +1278,12 @@ async def test_import_email_files_serializes_quota_with_postgres_owner_lock(
     assert "hashtext(:namespace_key)" in advisory_queries[0]
     assert ":owner_key" in advisory_queries[0]
     # PostgreSQL text/hashtext cannot encode NUL (0x00); the owner key must be a
-    # NUL-free digest, not a raw ``user\x00org`` separator.
-    expected_owner_key = _owner_import_quota_lock_key("testuser", "org-acme")
+    # NUL-free digest, not a raw ``user\x00org`` separator. Compute the expected
+    # digest independently (not via the production helper) so a change to the
+    # helper's key-derivation formula is caught by this test.
+    expected_owner_key = hashlib.sha256(
+        "testuser\x00org-acme".encode("utf-8", errors="surrogatepass")
+    ).hexdigest()
     assert "\x00" not in expected_owner_key
     assert advisory_query_params(session) == [
         {
@@ -1345,7 +1348,9 @@ async def test_import_email_files_rejects_when_owner_quota_is_exhausted(
     advisory_queries = advisory_query_texts(session)
     assert "pg_advisory_lock" in advisory_queries[0]
     assert "pg_advisory_unlock" in advisory_queries[-1]
-    expected_owner_key = _owner_import_quota_lock_key("testuser", "org-acme")
+    expected_owner_key = hashlib.sha256(
+        "testuser\x00org-acme".encode("utf-8", errors="surrogatepass")
+    ).hexdigest()
     assert "\x00" not in expected_owner_key
     assert advisory_query_params(session) == [
         {
