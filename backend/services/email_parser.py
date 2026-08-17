@@ -1,4 +1,4 @@
-from email import message_from_binary_file, message_from_bytes, policy
+from email import message_from_bytes, policy
 from email.message import Message
 from pathlib import Path
 import datetime
@@ -7,6 +7,12 @@ from email.utils import getaddresses
 from email.utils import parsedate_to_datetime
 from typing import NotRequired, TypedDict
 from .attachment_parser import parse_email_attachment
+from .email_media_resolution import (
+    EmailInlineMediaResolution,
+    image_bytes_are_document_evidence,
+    normalize_image_content_id,
+    resolve_email_inline_media,
+)
 from .exceptions import EmailParseError
 from .text_safety import strip_html_markup
 
@@ -27,6 +33,7 @@ class EmailData(TypedDict):
     body_content_type: NotRequired[str]
     body_parse_content: NotRequired[str]
     attachments: list[dict]
+    inline_media_resolution: NotRequired[EmailInlineMediaResolution]
 
 
 def _sanitize_nul(text: str) -> str:
@@ -80,7 +87,10 @@ def _sanitize_address_display_text(text: str) -> str:
     return _sanitize_display_text(text)
 
 
-def _process_multipart_body(msg: Message) -> tuple[str, str, list[dict]]:
+def _process_multipart_body(
+    msg: Message,
+    media_resolution: EmailInlineMediaResolution,
+) -> tuple[str, str, list[dict]]:
     plain_body = ""
     html_body = ""
     attachments = []
@@ -90,6 +100,8 @@ def _process_multipart_body(msg: Message) -> tuple[str, str, list[dict]]:
         filename = part.get_filename()
         # Skip attachments
         if filename:
+            if _should_drop_image_attachment(part, media_resolution):
+                continue
             parsed_attachment = parse_email_attachment(
                 filename=filename,
                 content_type=content_type,
@@ -141,9 +153,31 @@ def _process_singlepart_body(msg: Message) -> tuple[str, str, list[dict]]:
     return plain_body, html_body, []
 
 
-def _extract_body_and_attachments(msg: Message) -> tuple[str, str, list[dict]]:
+def _should_drop_image_attachment(
+    part: Message,
+    media_resolution: EmailInlineMediaResolution,
+) -> bool:
+    """Drop image attachments that admission did not continue as document evidence."""
+    if part.get_content_maintype().casefold() != "image":
+        return False
+    raw_payload = part.get_payload(decode=True)
+    payload_bytes = raw_payload if isinstance(raw_payload, bytes) else b""
+    return not image_bytes_are_document_evidence(
+        payload_bytes=payload_bytes,
+        content_id=normalize_image_content_id(part.get("Content-ID")),
+        media_resolution=media_resolution,
+    )
+
+
+def _extract_body_and_attachments(
+    msg: Message,
+    media_resolution: EmailInlineMediaResolution,
+) -> tuple[str, str, list[dict]]:
     if msg.is_multipart():
-        plain_body, html_body, attachments = _process_multipart_body(msg)
+        plain_body, html_body, attachments = _process_multipart_body(
+            msg,
+            media_resolution,
+        )
     else:
         plain_body, html_body, attachments = _process_singlepart_body(msg)
 
@@ -191,8 +225,12 @@ def _extract_thread_id(msg: Message, message_id: str) -> str | None:
     return message_id
 
 
-def _message_to_email_data(msg: Message) -> EmailData:
-    body, body_content_type, attachments = _extract_body_and_attachments(msg)
+def _message_to_email_data(msg: Message, *, raw_message: bytes) -> EmailData:
+    media_resolution = resolve_email_inline_media(raw_message)
+    body, body_content_type, attachments = _extract_body_and_attachments(
+        msg,
+        media_resolution,
+    )
     parsed_date = _extract_date(msg)
     message_id = _sanitize_nul(msg.get("Message-ID", ""))
     thread_id = _extract_thread_id(msg, message_id)
@@ -221,6 +259,7 @@ def _message_to_email_data(msg: Message) -> EmailData:
         "body_content_type": body_content_type,
         "body_parse_content": _sanitize_nul(body),
         "attachments": attachments,
+        "inline_media_resolution": media_resolution,
     }
 
 
@@ -232,11 +271,12 @@ def parse_eml(file_path: str | Path) -> EmailData:
     """
     try:
         with open(file_path, "rb") as f:
-            msg = message_from_binary_file(f, policy=policy.default)
+            raw_message = f.read()
     except OSError as e:
         raise EmailParseError(f"Failed to read file {file_path}: {e}") from e
 
-    return _message_to_email_data(msg)
+    msg = message_from_bytes(raw_message, policy=policy.default)
+    return _message_to_email_data(msg, raw_message=raw_message)
 
 
 def parse_eml_bytes(content: bytes) -> EmailData:
@@ -246,4 +286,4 @@ def parse_eml_bytes(content: bytes) -> EmailData:
     except Exception as e:
         raise EmailParseError("Failed to parse provider email bytes") from e
 
-    return _message_to_email_data(msg)
+    return _message_to_email_data(msg, raw_message=content)
