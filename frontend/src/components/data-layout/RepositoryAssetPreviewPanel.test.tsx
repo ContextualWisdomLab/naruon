@@ -4,7 +4,25 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { RepositoryAssetPreviewPanel } from "./RepositoryAssetPreviewPanel";
-import type { RepositoryAssetPreview } from "./types";
+import type { InkspanEditHandoff, RepositoryAssetPreview } from "./types";
+import { getInkspanEditHandoffNextActionLabel } from "./utils";
+
+function unavailableHwpxHandoff(): InkspanEditHandoff {
+  return {
+    source_asset_key: "asset_hwpx_recognized",
+    source_asset_type: "email_attachment",
+    parser_family: "hwpx",
+    handoff_state: "unavailable",
+    editor_capability_name: "inkspan_hangul_document_engine",
+    mutation_allowed: false,
+    converts_source_to_plain_text: false,
+    overwrites_original: false,
+    provider_write_executed: false,
+    next_action: "keep_reading_recognized_text",
+    error_code: "inkspan_hangul_capability_unavailable",
+    editable_document_payload: null,
+  };
+}
 
 function recognizedPreview(): RepositoryAssetPreview {
   return {
@@ -17,6 +35,7 @@ function recognizedPreview(): RepositoryAssetPreview {
     next_action: "read_recognized_text",
     error_code: null,
     provider_write_executed: false,
+    edit_handoff: unavailableHwpxHandoff(),
   };
 }
 
@@ -93,6 +112,30 @@ describe("RepositoryAssetPreviewPanel", () => {
     expect(panel?.textContent).toContain("Approve the next action.");
     expect(panel?.textContent).not.toContain("본문이 없습니다");
     expect(container?.textContent).toContain("content and thread evidence ready");
+  });
+
+  it("offers a fail-closed Edit in Inkspan control for recognized HWPX", () => {
+    renderPanel({
+      currentDetailText: "content and thread evidence ready",
+      fileName: "decision.hwpx",
+      preview: recognizedPreview(),
+    });
+
+    const editButton = container?.querySelector<HTMLButtonElement>(
+      '[aria-label="decision.hwpx Inkspan에서 편집"]',
+    );
+    expect(editButton).not.toBeNull();
+    expect(editButton?.disabled).toBe(true);
+    expect(editButton?.getAttribute("aria-disabled")).toBe("true");
+    expect(container?.textContent).toContain("Inkspan에서 편집");
+    expect(container?.textContent).toContain(
+      "설치된 Inkspan에 HWPX 편집 기능이 없습니다. 인식된 본문을 계속 읽거나 다른 파일을 선택하세요.",
+    );
+    expect(container?.textContent).not.toContain("asset_hwpx_recognized");
+    expect(container?.textContent).not.toContain("inkspan_hangul_document_engine");
+    expect(getInkspanEditHandoffNextActionLabel("keep_reading_recognized_text")).toBe(
+      "인식된 본문을 계속 읽거나 다른 파일을 선택하세요.",
+    );
   });
 
   it("tells the buyer to wait when HWPX recognition is still pending", () => {

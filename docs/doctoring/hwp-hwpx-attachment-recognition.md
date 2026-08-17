@@ -177,6 +177,7 @@ traceability, not a substitute for current-head gates.
 | Parsed attachment text + graph provenance | shared content-graph landing path | HWPX worker + recognizer tests | Active stacked PR #1373 |
 | Buyer-visible recognized HWPX paragraph preview | `backend/services/repository_asset_preview.py`, Data attachment view | `test_repository_asset_preview.py`, `RepositoryAssetPreviewPanel.test.tsx` | Active stacked preview PR |
 | Mail-detail HWPX preview via the same read-only contract | `backend/api/emails.py`, `MailAttachmentPreview` | `test_email_attachment_preview.py`, `MailAttachmentPreview.test.tsx` | Active stacked mail preview PR |
+| Fail-closed Inkspan edit handoff for recognized HWPX | `backend/services/inkspan_edit_handoff.py`, preview panel | `test_inkspan_edit_handoff.py`, `MailAttachmentPreview.test.tsx` | Active stacked handoff PR |
 | Binary HWP conversion | future sandboxed converter | none yet | Planned / out of this slice |
 | HWPX tables, images, layout fidelity | future bounded recognizers | none yet | Planned / out of this slice |
 | Protected-`develop` shipped HWP/HWPX recognition | protected branch | integrated release gates | Not yet shipped |
@@ -221,6 +222,24 @@ preview still means choose another file. Missing text is never presented as
 empty document content. Unknown and cross-workspace resources remain one
 indistinguishable 404.
 
+## Buyer-visible Inkspan edit handoff — stacked on PR #1406
+
+Reading recognized paragraphs is not an edit path. This slice adds an
+accessible **Inkspan에서 편집** control on recognized HWPX preview. The
+control preserves the exact opaque `asset_key` already authorized by the
+preview lookup and does not create a new document, overwrite the original
+attachment, or pass paragraph text to Markdown/HTML Inkspan.
+
+Released Inkspan remains a Markdown/HTML editor (ContextualWisdomLab, 2026).
+Bounded HWP/HWPX import/edit/export is owned by unreleased inkspan Draft #320
+and is frozen under inkspan #118, so the host adapter is absent. The handoff
+therefore fails closed and tells the buyer to keep reading the recognized
+text or choose another file. No write API is introduced.
+
+This capability probe does not change KS X 6101/OWPML recognition or the
+#1353/#1373/#1404/#1406 preview contract (Korean Agency for Technology and
+Standards, 2024; Hancom Tech, 2025b, 2025c).
+
 ## Out of scope
 
 This slice does not reconstruct HWPX tables, images, charts, layout, styles, or
@@ -260,6 +279,10 @@ https://tech.hancom.com/python-hwpx-parsing-1/
 
 Hancom Tech. (2025d). *Parsing HWPX format with Python (Part 2)*.
 https://tech.hancom.com/python-hwpx-parsing-2/
+
+ContextualWisdomLab. (2026). *Inkspan: commercial-grade Markdown + HTML WYSIWYG
+editor module* (Version 0.3.1) [Computer software].
+https://github.com/ContextualWisdomLab/inkspan/releases/tag/v0.3.1
 
 PKWARE, Inc. (2024). *APPNOTE.TXT: .ZIP file format specification*.
 https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT

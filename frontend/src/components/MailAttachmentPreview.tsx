@@ -88,6 +88,7 @@ export function MailAttachmentPreview({ attachments }: MailAttachmentPreviewProp
       {selectedAttachment ? (
         <RepositoryAssetPreviewPanel
           currentDetailText={selectedAttachment.file_name}
+          fileName={toMailDisplayText(selectedAttachment.file_name, '첨부 파일')}
           preview={selectedPreview}
         />
       ) : null}

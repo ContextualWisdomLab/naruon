@@ -497,6 +497,27 @@ export type RepositoryAssetPreviewNextAction =
   | 'wait_for_recognition'
   | 'choose_another_file';
 
+export type InkspanEditHandoffState = 'unavailable';
+export type InkspanEditHandoffNextAction = 'keep_reading_recognized_text';
+export type InkspanEditHandoffErrorCode =
+  | 'inkspan_hangul_capability_unavailable'
+  | 'inkspan_edit_contract_unavailable';
+
+export type InkspanEditHandoff = {
+  source_asset_key: string;
+  source_asset_type: 'email_attachment' | 'workspace_document';
+  parser_family: string | null;
+  handoff_state: InkspanEditHandoffState;
+  editor_capability_name: string;
+  mutation_allowed: boolean;
+  converts_source_to_plain_text: boolean;
+  overwrites_original: boolean;
+  provider_write_executed: boolean;
+  next_action: InkspanEditHandoffNextAction;
+  error_code: InkspanEditHandoffErrorCode;
+  editable_document_payload: null;
+};
+
 export type RepositoryAssetPreview = {
   asset_key: string;
   asset_type: 'email_attachment' | 'workspace_document';
@@ -507,6 +528,7 @@ export type RepositoryAssetPreview = {
   next_action: RepositoryAssetPreviewNextAction;
   error_code: string | null;
   provider_write_executed: boolean;
+  edit_handoff?: InkspanEditHandoff | null;
 };
 
 export const duplicateImportCandidates = [
