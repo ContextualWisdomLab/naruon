@@ -452,3 +452,32 @@ def test_merge_revision_reconciles_newsdom_document_and_carddav_heads():
     assert "op.create_table(" not in revision_text
     assert "op.add_column(" not in revision_text
     assert "op.drop_column(" not in revision_text
+
+
+def test_email_media_quarantine_has_incremental_revision():
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0018_email_media_quarantine.py"
+    )
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0018_email_media_quarantine"' in revision_text
+    assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
+    assert '"email_media_quarantine_records"' in revision_text
+    assert '"quarantine_record_id"' in revision_text
+    assert '"message_record_id"' in revision_text
+    assert '"source_part_index"' in revision_text
+    assert '"content_id_value"' in revision_text
+    assert '"source_bytes_sha256"' in revision_text
+    assert '"admission_error_code"' in revision_text
+    assert '"evidence_boundary_label"' in revision_text
+    assert '"created_at"' in revision_text
+    assert "uq_email_media_quarantine_identity" in revision_text
+    assert "ix_email_media_quarantine_message_time" in revision_text
+    assert "has_table" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "if_not_exists=True" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "if_exists=True" in revision_text
+    assert "sa.text(" not in revision_text
