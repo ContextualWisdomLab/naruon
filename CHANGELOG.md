@@ -1,4 +1,5 @@
 ## [Unreleased]
+- `python:3.14-slim` digest `ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4`를 root `FROM`, connector `FROM`, 그리고 OCI `base.digest`/`base.name` 기본 ARG에 동기화해 Dependabot가 root Dockerfile만 갱신한 뒤 남기던 provenance drift를 제거합니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
 
