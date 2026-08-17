@@ -52,6 +52,31 @@ NewsDOM, egress, or the #1376 `EmailMediaArtifact` pixel contract.
 Customer next action: send only `document_image` continuations downstream.
 Do not send a tracker, unsupported part, or unresolved CID to a model.
 
+## Buyer-visible quarantine persist
+
+Admission and wiring drop those three codes from filename-bearing image
+attachments, but a later parse of the same message must still tell the
+customer what was withheld and why. `services.email_media_quarantine`
+therefore upserts a purpose-bound row on the existing `parse_eml` /
+`parse_eml_bytes` / `resolve_email_inline_media` path when a message
+identity and store are available, and import/IMAP save paths persist from
+the same resolution after the `email_records` row is flushed.
+
+The closed persist set is `tracking_pixel`, `unsupported_media`, and
+`unresolved_cid_reference`. `document_image` is never a quarantine. Stored
+fields are message identity, source part index, Content-ID, SHA-256 of the
+exact decoded source bytes, the admission error_code, the known/unknown
+evidence boundary, and `created_at`. Decoded image bytes, the full email
+body, and remote URLs are not stored. Remote `http(s)` remains no-fetch.
+Re-parse of the same message is an idempotent upsert. Persist failure is
+fail-closed.
+
+Customer next action examples:
+
+- "This inline image was withheld as a tracking pixel. It was not sent to a model."
+- "This inline image was withheld as unsupported media. It was not sent to a model."
+- "This inline image was withheld as an unresolved CID reference. It was not sent to a model."
+
 ## Standards-to-code trace
 
 | Requirement | Primary basis | Naruon behavior |
@@ -84,7 +109,7 @@ and two identical base64 PNG parts that share one SHA-256. Boundary tests
 cover unsupported media, remote no-fetch, ambiguous Content-ID, and helper
 fail-closed paths. The wiring tests prove a named 1×1 CID tracker and an
 unresolved CID do not continue as document evidence on `parse_eml_bytes`,
-while a resolving CID chart does. Owned admission and resolution module
+while a resolving CID chart does. Owned admission, resolution, and quarantine-persist module
 statement and branch coverage is 100% on the focused harness.
 
 ## References
