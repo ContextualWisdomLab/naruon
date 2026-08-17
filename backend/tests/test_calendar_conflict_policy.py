@@ -211,7 +211,30 @@ def test_commitment_requires_non_blank_identifier() -> None:
         _commitment("   ", 10, 11, "confirmed")
 
 
+def test_cancelled_existing_commitment_does_not_block_confirmed_proposal() -> None:
+    """RFC 5545 STATUS:CANCELLED does not occupy the interval, so booking may proceed."""
+    result = evaluate_calendar_conflicts(
+        _commitment("proposal", 10, 11, "confirmed"),
+        [_commitment("cancelled-prior", 10, 11, "cancelled")],
+    )
+
+    assert result.decision_code == "available"
+    assert result.reason_code == "no_overlapping_commitment"
+    assert result.conflicts == ()
+
+
+def test_cancelled_proposal_does_not_claim_the_interval() -> None:
+    """A cancelled proposal is not a booking and must not create a conflict decision."""
+    result = evaluate_calendar_conflicts(
+        _commitment("cancelled-proposal", 10, 11, "cancelled"),
+        [_commitment("existing", 10, 11, "confirmed")],
+    )
+
+    assert result.decision_code == "available"
+    assert result.conflicts == ()
+
+
 def test_commitment_rejects_unknown_status() -> None:
     """Unknown participation states must fail closed instead of gaining a rank."""
     with pytest.raises(ValueError, match="Unsupported commitment status"):
-        _commitment("unknown-status", 10, 11, "cancelled")
+        _commitment("unknown-status", 10, 11, "busy")

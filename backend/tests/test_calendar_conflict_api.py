@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -118,3 +120,51 @@ def test_calendar_conflict_decision_bounds_existing_evidence_batch() -> None:
     response = client.post("/api/calendar/conflicts/evaluate", json=payload)
 
     assert response.status_code == 422
+
+
+def test_calendar_conflict_decision_evaluates_known_ics_cancelled_pair() -> None:
+    """CalDAV-native STATUS:CANCELLED overlap must allow the confirmed proposal."""
+    fixture_dir = Path(__file__).parent / "fixtures" / "calendar"
+    response = client.post(
+        "/api/calendar/conflicts/evaluate",
+        json={
+            "proposed_ics": (fixture_dir / "proposed-confirmed-1000z.ics").read_text(
+                encoding="utf-8"
+            ),
+            "existing_ics": (fixture_dir / "existing-cancelled-1000z.ics").read_text(
+                encoding="utf-8"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision_code"] == "available"
+    assert body["reason_code"] == "no_overlapping_commitment"
+    assert body["conflicts"] == []
+    assert "Proceed" in body["recommended_action"]
+
+
+def test_calendar_conflict_decision_evaluates_known_ics_confirmed_pair() -> None:
+    """CalDAV-native STATUS:CONFIRMED overlap must block silent double-booking."""
+    fixture_dir = Path(__file__).parent / "fixtures" / "calendar"
+    response = client.post(
+        "/api/calendar/conflicts/evaluate",
+        json={
+            "proposed_ics": (fixture_dir / "proposed-tentative-1000z.ics").read_text(
+                encoding="utf-8"
+            ),
+            "existing_ics": (fixture_dir / "existing-confirmed-1000z.ics").read_text(
+                encoding="utf-8"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision_code"] == "blocked"
+    assert body["reason_code"] == "equal_or_higher_priority_conflict"
+    assert [item["commitment_id"] for item in body["conflicts"]] == [
+        "existing-confirmed-1000z"
+    ]
+    assert "Choose another time" in body["recommended_action"]

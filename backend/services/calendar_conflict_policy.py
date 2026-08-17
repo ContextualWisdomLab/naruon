@@ -1,9 +1,11 @@
 """Deterministic policy for preventing silent calendar double-booking.
 
 The policy treats event time ranges as half-open intervals (inclusive start,
-exclusive end) and ranks Naruon commitment statuses as confirmed > tentative >
-desired. The rank is a product policy, not an iCalendar standard requirement.
-No lower-priority event is mutated or displaced automatically.
+exclusive end) and ranks occupying Naruon commitment statuses as confirmed >
+tentative > desired. RFC 5545 STATUS:CANCELLED is valid evidence and does not
+occupy the interval. The occupying rank is a product policy, not an iCalendar
+standard requirement. No lower-priority event is mutated or displaced
+automatically.
 """
 
 from __future__ import annotations
@@ -12,13 +14,21 @@ import datetime
 from dataclasses import dataclass
 from typing import Literal
 
-CommitmentStatus = Literal["confirmed", "tentative", "desired"]
+CommitmentStatus = Literal["confirmed", "tentative", "desired", "cancelled"]
 DecisionCode = Literal["available", "blocked", "review_required"]
 PolicyValidationCode = Literal[
     "calendar_commitment_id_required",
     "calendar_timestamp_timezone_required",
     "calendar_interval_invalid",
     "calendar_status_unsupported",
+    "calendar_ics_invalid",
+    "calendar_ics_vevent_required",
+    "calendar_ics_uid_required",
+    "calendar_ics_dtstart_required",
+    "calendar_ics_interval_required",
+    "calendar_ics_datetime_required",
+    "calendar_ics_single_vevent_required",
+    "calendar_existing_batch_exceeded",
 ]
 
 _STATUS_PRIORITY: dict[str, int] = {
@@ -26,6 +36,8 @@ _STATUS_PRIORITY: dict[str, int] = {
     "tentative": 2,
     "confirmed": 3,
 }
+_OCCUPYING_STATUSES = frozenset(_STATUS_PRIORITY)
+_KNOWN_STATUSES = frozenset((*_STATUS_PRIORITY, "cancelled"))
 UTC = datetime.timezone.utc
 
 
@@ -51,7 +63,7 @@ class CalendarCommitment:
         commitment_id: Opaque non-blank identifier used to correlate evidence.
         start_at: Inclusive timezone-aware start instant.
         end_at: Exclusive timezone-aware end instant, strictly after ``start_at``.
-        status: Naruon commitment priority: confirmed, tentative, or desired.
+        status: Naruon commitment priority or RFC 5545 cancelled (non-occupying).
     """
 
     commitment_id: str
@@ -73,7 +85,7 @@ class CalendarCommitment:
                 "calendar_interval_invalid",
                 "end_at must be later than start_at",
             )
-        if self.status not in _STATUS_PRIORITY:
+        if self.status not in _KNOWN_STATUSES:
             raise CalendarPolicyValidationError(
                 "calendar_status_unsupported",
                 f"Unsupported commitment status: {self.status}",
@@ -105,6 +117,16 @@ def _as_utc(value: datetime.datetime) -> datetime.datetime:
     return value.astimezone(UTC)
 
 
+def occupies_interval(commitment: CalendarCommitment) -> bool:
+    """Return whether the commitment claims its half-open interval.
+
+    RFC 5545 ``STATUS:CANCELLED`` remains valid scheduling evidence, but the
+    cancelled VEVENT no longer occupies the slot. Naruon ``desired``,
+    ``tentative``, and ``confirmed`` commitments do occupy the interval.
+    """
+    return commitment.status in _OCCUPYING_STATUSES
+
+
 def _overlaps(
     left: CalendarCommitment,
     right: CalendarCommitment,
@@ -132,7 +154,8 @@ def evaluate_calendar_conflicts(
 
     Existing commitments with the same opaque identifier are treated as the
     current representation of the proposal rather than as a self-conflict.
-    Equal or higher-priority overlaps block scheduling. Lower-priority overlaps
+    Cancelled commitments do not occupy an interval. Equal or higher-priority
+    occupying overlaps block scheduling. Lower-priority occupying overlaps
     require explicit human review instead of automatic displacement.
 
     Args:
@@ -143,12 +166,21 @@ def evaluate_calendar_conflicts(
         A deterministic decision with sorted conflict evidence and a concrete
         next action for the customer.
     """
+    if not occupies_interval(proposed):
+        return CalendarConflictDecision(
+            decision_code="available",
+            reason_code="no_overlapping_commitment",
+            conflicts=(),
+            recommended_action="Proceed with scheduling.",
+        )
+
     conflicts = tuple(
         sorted(
             (
                 commitment
                 for commitment in existing
                 if commitment.commitment_id != proposed.commitment_id
+                and occupies_interval(commitment)
                 and _overlaps(proposed, commitment)
             ),
             key=_conflict_sort_key,
