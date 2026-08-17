@@ -643,7 +643,7 @@ git commit -m "test(email-writing): verify secure contextual guidance end to end
 - Modify: `docs/TEST_STRATEGY.md`
 - Modify: `docs/OPERABILITY.md`
 - Modify: `docs/TRACEABILITY.md`
-- Modify: `docs/adr/0001-inkspan-backed-llm-email-writing-guidance.md`
+- Modify: `docs/adr/0005-inkspan-backed-llm-email-writing-guidance.md`
 - Modify: `docs/adr/README.md`
 - Modify: `docs/doctoring/llm-email-writing-guidance-and-fast-mlsirm-judge.md`
 - Create: `backend/tests/test_email_writing_documentation_contract.py`
@@ -655,7 +655,7 @@ git commit -m "test(email-writing): verify secure contextual guidance end to end
 - [ ] Document candidate/Judge/adjudicator separation, compute allocation, reasoning-effort ablations, and why speed is not the primary acceptance criterion.
 - [ ] Add an operational runbook for orchestrator outage, policy expiry/revocation, Judge disagreement, capacity saturation, high stale rate, calibration drift, model retirement, feedback backlog, retention deletion, rollback, and incident evidence.
 - [ ] Add traceability from every ADR requirement to source, test, benchmark, policy artifact, workflow, database constraint, frontend state, and release gate.
-- [ ] Keep ADR 0001 `Proposed` until protected `develop` contains the runtime implementation and exact-head acceptance evidence; promote only during release reconciliation.
+- [ ] Keep ADR-0005 `Proposed` until protected `develop` contains the runtime implementation and exact-head acceptance evidence; promote only during release reconciliation.
 - [ ] Update `CHANGELOG.md` under `Unreleased` without claiming a validated language/model profile before Task 14 passes.
 - [ ] Add documentation contract tests that fail if keyword fallback, direct provider calls, unjudged candidate mutation, implicit send gating, raw-content telemetry, mutable dependencies, or synchronous model fitting reappear.
 - [ ] Ensure all research and standards citations in doctoring use APA 7th and are tied to explicit product decisions and limitations.
@@ -669,7 +669,7 @@ python -m pytest -q tests/test_email_writing_documentation_contract.py
 - [ ] Commit:
 
 ```bash
-git add README.md AGENTS.md ARCHITECTURE.md CHANGELOG.md docs/architecture/naruon-product-spec.md docs/PRD.md docs/TRD.md docs/API_CONTRACT.md docs/DATA_MODEL.md docs/THREAT_MODEL.md docs/TEST_STRATEGY.md docs/OPERABILITY.md docs/TRACEABILITY.md docs/adr/0001-inkspan-backed-llm-email-writing-guidance.md docs/adr/README.md docs/doctoring/llm-email-writing-guidance-and-fast-mlsirm-judge.md backend/tests/test_email_writing_documentation_contract.py
+git add README.md AGENTS.md ARCHITECTURE.md CHANGELOG.md docs/architecture/naruon-product-spec.md docs/PRD.md docs/TRD.md docs/API_CONTRACT.md docs/DATA_MODEL.md docs/THREAT_MODEL.md docs/TEST_STRATEGY.md docs/OPERABILITY.md docs/TRACEABILITY.md docs/adr/0005-inkspan-backed-llm-email-writing-guidance.md docs/adr/README.md docs/doctoring/llm-email-writing-guidance-and-fast-mlsirm-judge.md backend/tests/test_email_writing_documentation_contract.py
 git commit -m "docs(email-writing): reconcile product and assurance contracts"
 ```
 
@@ -693,7 +693,7 @@ git commit -m "docs(email-writing): reconcile product and assurance contracts"
 ## Task 18: Versioned Release, Rollback Rehearsal, and Post-Release Drift Monitoring
 
 - [ ] Open a separate release-only PR after feature merge.
-- [ ] Promote ADR 0001 to `Accepted` only with protected-branch implementation and exact-head evidence.
+- [ ] Promote ADR-0005 to `Accepted` only with protected-branch implementation and exact-head evidence.
 - [ ] Increase backend/frontend/repository versions consistently and create the final CHANGELOG release section.
 - [ ] Bind the release to exact Inkspan, fast-mlsirm, contextual-orchestrator API, rubric, prompt, approved policy, dataset, and source commit versions.
 - [ ] Generate immutable artifacts, SBOM, provenance, migration manifest, policy manifest, benchmark report, rollback instructions, and operator acceptance packet.
