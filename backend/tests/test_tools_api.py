@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,63 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_tool_url_encoder():
+    from api.tools import url_encoder_handler
+
+    result1 = await url_encoder_handler({"text": "hello world!"})
+    assert result1["encoded"] == "hello%20world%21"
+
+    result2 = await url_encoder_handler({"text": "a/b/c", "safe": ""})
+    assert result2["encoded"] == "a%2Fb%2Fc"
+
+    result3 = await url_encoder_handler({"text": "a/b/c", "safe": "/"})
+    assert result3["encoded"] == "a/b/c"
+
+
+@pytest.mark.asyncio
+async def test_tool_url_decoder():
+    from api.tools import url_decoder_handler
+
+    result = await url_decoder_handler({"text": "hello%20world%21"})
+    assert result["decoded"] == "hello world!"
+
+
+@pytest.mark.asyncio
+async def test_tool_sha256_generator():
+    from api.tools import sha256_generator_handler
+
+    result = await sha256_generator_handler({"text": "hello world"})
+    assert (
+        result["hash"]
+        == "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_url_encoder_null():
+    from api.tools import url_encoder_handler
+
+    result = await url_encoder_handler({"text": None, "safe": None})
+    assert result["encoded"] == ""
+
+
+@pytest.mark.asyncio
+async def test_tool_url_decoder_null():
+    from api.tools import url_decoder_handler
+
+    result = await url_decoder_handler({"text": None})
+    assert result["decoded"] == ""
+
+
+@pytest.mark.asyncio
+async def test_tool_sha256_generator_null():
+    from api.tools import sha256_generator_handler
+
+    result = await sha256_generator_handler({"text": None})
+    assert (
+        result["hash"]
+        == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    )

@@ -1,4 +1,4 @@
-## [Unreleased]
+## [Unreleased]nn### 도구 추가 (Tools Added)nn- URL 인코더(`url_encoder`) 도구를 추가하여 입력된 텍스트를 URL 퍼센트 인코딩할 수 있게 하였습니다.n- URL 디코더(`url_decoder`) 도구를 추가하여 URL 인코딩된 텍스트를 디코딩할 수 있게 하였습니다.n- SHA-256 해시 생성기(`sha256_generator`) 도구를 추가하여 입력된 텍스트의 SHA-256 해시값을 생성할 수 있게 하였습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
 

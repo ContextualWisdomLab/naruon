@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,60 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    safe = params.get("safe") or ""
+    return {"encoded": urllib.parse.quote(text, safe=safe)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="입력된 텍스트를 URL 인코딩(퍼센트 인코딩)합니다.",
+        category="유틸리티",
+        parameters={
+            "text": "string",
+            "safe": "string (옵션, 인코딩에서 제외할 문자열, 기본값: '')",
+        },
+    ),
+    url_encoder_handler,
+)
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    return {"decoded": urllib.parse.unquote(text)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩(퍼센트 인코딩)된 텍스트를 디코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_decoder_handler,
+)
+
+
+async def sha256_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    return {"hash": hashlib.sha256(text.encode("utf-8")).hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="sha256_generator",
+        name="SHA-256 해시 생성기 (SHA-256 Hash Generator)",
+        description="입력된 텍스트의 SHA-256 해시값을 생성합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    sha256_generator_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
