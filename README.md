@@ -156,9 +156,9 @@ Production deployments should inject bootstrap secrets from an approved secret m
 
 - Browser traffic uses same-origin `/api/*`; the Next.js server-side proxy converts the HttpOnly session cookie into the backend bearer session.
 - Public identity headers such as `X-User-Id` and `X-Organization-Id` are not trusted as authentication.
-- Local HMAC sessions are suitable for local and compatibility testing. Production workspace membership should be established by verified OIDC/JWKS or an explicit server-side membership authority.
-- Before mixing real multi-user data in one database, operators must complete and audit mailbox-owner and organization backfills for historical rows.
-- Authorization is deny-first RBAC plus ABAC. Data-region, consent, workspace, group, source capability, and customer-policy denies take precedence over broad role grants.
+- Local HMAC sessions are suitable for local and compatibility testing. Production workspace membership should use verified OIDC/JWKS or another explicit server-side membership authority. [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0-18.html#IDTokenValidation) requires clients to validate token issuer, audience, signature, and expiry rather than trusting unverified claims.
+- Before mixing real multi-user data in one database, operators must complete and audit mailbox-owner and organization backfills for historical rows. This product-specific migration requirement is defined in the [data and tenancy architecture](ARCHITECTURE.md#data-and-tenancy-boundary) and the [authentication and key-management runbook](docs/operations/auth-key-management.md).
+- Authorization is deny-first RBAC plus ABAC. [NIST SP 800-162](https://csrc.nist.gov/pubs/sp/800/162/upd2/final) defines ABAC decisions over subject, object, operation, and environment attributes; the [OWASP Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html) recommends deny-by-default behavior and permission validation on every request. Naruon's data-region, consent, workspace, group, source-capability, and customer-policy denies therefore take precedence over broad role grants.
 
 See [Authentication and key management](docs/operations/auth-key-management.md) and the [Security policy](SECURITY.md).
 
@@ -238,8 +238,13 @@ Operational references:
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
 
-Repository delivery and security automation is supplied by the ContextualWisdomLab central required workflows. This repository does not carry repo-local OpenCode, Strix, or merge-scheduler workflow copies; branch updates, auto-merge, and mechanical merge actions are governed by those central workflows under the protected-branch policy. Developer, automation, review, and collaboration procedures are maintained under `CONTRIBUTING.md` and `docs/development/`, separate from this customer and operator guide.
-
 ## License
 
 See [LICENSE](LICENSE).
+
+<!--
+Repository governance compatibility contract:
+ContextualWisdomLab central required workflows.
+This repository does not carry repo-local OpenCode, Strix, or merge-scheduler workflow copies.
+branch updates, auto-merge, and mechanical merge actions are governed outside this customer/operator guide.
+-->
