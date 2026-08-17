@@ -24,7 +24,6 @@ vi.mock("lucide-react", () => ({
 }));
 
 import type { RepositoryAssetPreview } from "@/components/data-layout/types";
-import { PENDING_REPOSITORY_ASSET_PREVIEW_RETRY_MS } from "@/components/data-layout/utils";
 import DataPage from "./page";
 
 const acquisitionRemediationActions = [
@@ -1934,7 +1933,6 @@ describe("DataPage", () => {
     );
     expect(pendingAsset).toBeDefined();
 
-    vi.useFakeTimers();
     await act(async () => {
       pendingAsset?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -1942,9 +1940,12 @@ describe("DataPage", () => {
     const pendingPanel = container.querySelector('[aria-label="선택한 자산 본문 미리보기"]');
     expect(pendingPanel?.textContent).toContain("인식이 끝날 때까지 기다리거나 다른 파일을 선택하세요");
     expect(pendingPanel?.querySelector("[data-preview-paragraphs]")).toBeNull();
+    const refresh = pendingPanel?.querySelector('[aria-label="인식 결과 다시 확인"]');
+    expect(refresh).not.toBeNull();
+    expect(pendingPreviewCalls).toBe(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(PENDING_REPOSITORY_ASSET_PREVIEW_RETRY_MS);
+      refresh?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     const recognizedPanel = container.querySelector('[aria-label="선택한 자산 본문 미리보기"]');

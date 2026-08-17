@@ -68,6 +68,7 @@ interface DocumentRepositoryTabProps {
   selectedWorkspaceDocument: any;
   requestDocumentAction: (action: 'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent') => void;
   selectedAssetPreview: RepositoryAssetPreview | null;
+  onRefreshSelectedAssetPreview: () => void;
 }
 
 export function DocumentRepositoryTab({
@@ -98,6 +99,7 @@ export function DocumentRepositoryTab({
   selectedWorkspaceDocument,
   requestDocumentAction,
   selectedAssetPreview,
+  onRefreshSelectedAssetPreview,
   connectorEvents,
 
   writebackStatus,
@@ -441,6 +443,7 @@ return (
                   <RepositoryAssetPreviewPanel
                     currentDetailText={selectedRepositoryAsset.detail_text}
                     preview={selectedAssetPreview}
+                    onRefreshPreview={onRefreshSelectedAssetPreview}
                   />
                 </section>
               )}

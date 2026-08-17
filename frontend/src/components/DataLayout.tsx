@@ -32,8 +32,6 @@ import {
   getSafeErrorSummary,
   getDocumentTypeForFile,
   isTextDocumentUploadType,
-  PENDING_REPOSITORY_ASSET_PREVIEW_MAX_ATTEMPTS,
-  PENDING_REPOSITORY_ASSET_PREVIEW_RETRY_MS,
 } from './data-layout/utils';
 
 
@@ -76,6 +74,7 @@ export function DataLayout() {
   const [dataEvidenceSnapshot, setDataEvidenceSnapshot] = useState<DataEvidenceSnapshotResponse | null>(null);
   const [selectedRepositoryAssetKey, setSelectedRepositoryAssetKey] = useState<string | null>(null);
   const [assetPreviewByKey, setAssetPreviewByKey] = useState<Record<string, RepositoryAssetPreview>>({});
+  const [previewRefreshNonce, setPreviewRefreshNonce] = useState(0);
 
   const webdavAccountMap = useMemo<WebdavAccountLookup>(
     () => new Map(webdavAccounts.map((account, index) => [
@@ -347,8 +346,6 @@ export function DataLayout() {
       return undefined;
     }
     let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let attempt = 0;
     const loadPreview = async () => {
       try {
         const preview = await apiClient.get<RepositoryAssetPreview>(
@@ -356,15 +353,6 @@ export function DataLayout() {
         );
         if (cancelled) return;
         setAssetPreviewByKey((current) => ({ ...current, [assetKey]: preview }));
-        if (
-          preview.preview_state === 'pending'
-          && attempt < PENDING_REPOSITORY_ASSET_PREVIEW_MAX_ATTEMPTS - 1
-        ) {
-          attempt += 1;
-          retryTimer = setTimeout(() => {
-            void loadPreview();
-          }, PENDING_REPOSITORY_ASSET_PREVIEW_RETRY_MS);
-        }
       } catch (error: unknown) {
         if (cancelled) return;
         const unavailablePreview: RepositoryAssetPreview = {
@@ -391,11 +379,12 @@ export function DataLayout() {
     void loadPreview();
     return () => {
       cancelled = true;
-      if (retryTimer !== undefined) {
-        clearTimeout(retryTimer);
-      }
     };
-  }, [selectedRepositoryAsset?.asset_key, selectedRepositoryAsset?.asset_type]);
+  }, [previewRefreshNonce, selectedRepositoryAsset?.asset_key, selectedRepositoryAsset?.asset_type]);
+
+  const refreshSelectedAssetPreview = useCallback(() => {
+    setPreviewRefreshNonce((current) => current + 1);
+  }, []);
 
   const handleDataTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: DataTab) => {
     const currentIndex = DATA_TABS.indexOf(tab);
@@ -519,6 +508,7 @@ export function DataLayout() {
               selectedWorkspaceDocument={selectedWorkspaceDocument}
               requestDocumentAction={requestDocumentAction}
               selectedAssetPreview={selectedAssetPreview}
+              onRefreshSelectedAssetPreview={refreshSelectedAssetPreview}
               connectorEvents={connectorEvents}
               writebackStatus={writebackStatus}
               writebackResult={writebackResult}
