@@ -1326,4 +1326,103 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("답장 전송에 실패했습니다.");
   });
+
+  it("shows the three withheld-media next actions from persisted quarantine records", async () => {
+    const email: TestEmail = {
+      id: 31,
+      message_id: "<quarantine-ui@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Inline media withheld",
+      date: "2026-08-17T10:00:00Z",
+      body: "Message body without withheld bytes",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/31")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/31/media-quarantine")) {
+        return Promise.resolve(jsonResponse({
+          quarantine_records: [
+            { admission_error_code: "tracking_pixel" },
+            { admission_error_code: "unsupported_media" },
+            { admission_error_code: "unresolved_cid_reference" },
+          ],
+        }));
+      }
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={31} />);
+    });
+    await flushAsyncWork();
+    await waitForCondition(() =>
+      Boolean(container?.textContent?.includes("This inline image was withheld as a tracking pixel."))
+    );
+
+    expect(container?.textContent).toContain(
+      "This inline image was withheld as a tracking pixel. It was not sent to a model."
+    );
+    expect(container?.textContent).toContain(
+      "This inline part is unsupported and was withheld. It was not sent to a model."
+    );
+    expect(container?.textContent).toContain(
+      "This cid: image could not be resolved from the same message and was withheld. It was not sent to a model."
+    );
+    expect(container?.querySelector("img")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/emails/31/media-quarantine",
+      expect.objectContaining({ credentials: "same-origin" }),
+    );
+  });
+
+  it("fails closed to an empty withheld-media list without inventing copy or image bytes", async () => {
+    const email: TestEmail = {
+      id: 32,
+      message_id: "<quarantine-empty@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "No withheld media",
+      date: "2026-08-17T10:00:00Z",
+      body: "Clean message body",
+    };
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/32")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/emails/32/media-quarantine")) {
+        return Promise.resolve(jsonResponse({ quarantine_records: [] }));
+      }
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={32} />);
+    });
+    await flushAsyncWork();
+    await waitForCondition(() => Boolean(container?.textContent?.includes("Clean message body")));
+
+    expect(container?.textContent).toContain("Clean message body");
+    expect(container?.textContent).not.toContain("It was not sent to a model.");
+    expect(container?.textContent).not.toContain("tracking pixel");
+    expect(container?.textContent).not.toContain("unsupported");
+    expect(container?.textContent).not.toContain("cid:");
+    expect(container?.querySelector("img")).toBeNull();
+  });
 });

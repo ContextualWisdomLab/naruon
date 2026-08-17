@@ -21,6 +21,10 @@ import {
 import { toMailBodyText, toMailDisplayText } from "@/lib/mail-text";
 import { toConfidencePercent } from "@/lib/confidence";
 import {
+  readEmailMediaQuarantineRecords,
+  type EmailMediaQuarantineRecord,
+} from "@/lib/email-media-quarantine";
+import {
   bucketTextLength,
   createProductEventId,
   recordProductEvent,
@@ -114,6 +118,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [detailError, setDetailError] = useState<string | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [quarantineRecords, setQuarantineRecords] = useState<EmailMediaQuarantineRecord[]>([]);
 
   const [draft, setDraft] = useState<string>('');
   const [translation, setTranslation] = useState<string | null>(null);
@@ -204,6 +209,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setSourceDrawerOpen(false);
       activeDraftReplyIdRef.current = null;
       contextSynthesisEventKeyRef.current = null;
+      setQuarantineRecords([]);
 
       try {
         const emailJson = await apiClient.get<EmailData>(`/api/emails/${emailId}`);
@@ -211,6 +217,15 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         if (!isMounted) return;
         setEmail(emailJson);
         setLoading(false); // Stop loading immediately so the user can read the email
+
+        apiClient.get<unknown>(`/api/emails/${emailId}/media-quarantine`)
+          .then((payload) => {
+            if (!isMounted) return;
+            setQuarantineRecords(readEmailMediaQuarantineRecords(payload));
+          })
+          .catch(() => {
+            if (isMounted) setQuarantineRecords([]);
+          });
 
         // Fetch thread in the background
         fetchThread(emailJson).catch((err) => {
@@ -740,6 +755,29 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
               ) : null
             ) : null}
           </DecisionPointCard>
+
+          {quarantineRecords.length > 0 ? (
+            <DecisionPointCard
+              title="보류된 인라인 이미지"
+              provenance="서버에 기록된 검역"
+            >
+              <ul className="list-none space-y-2 text-sm">
+                {quarantineRecords.map((record, index) => (
+                  <li
+                    key={`${record.admission_error_code}:${record.content_id_value ?? index}`}
+                    className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3"
+                  >
+                    <p>{record.customer_next_action}</p>
+                    {record.content_id_value ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Content-ID: {record.content_id_value}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </DecisionPointCard>
+          ) : null}
 
           <Separator />
 
