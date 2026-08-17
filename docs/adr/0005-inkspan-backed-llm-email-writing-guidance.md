@@ -1,4 +1,4 @@
-# ADR 0004: Inkspan-backed, LLM-native email writing guidance
+# ADR-0005: Inkspan-backed, LLM-native email writing guidance
 
 Status: Proposed
 
