@@ -348,6 +348,12 @@ in this repo.
   embedding generation is unavailable. Tests must cover the local
   `embeddinggemma` path so Data workspace imports do not silently bypass the
   selected embedding model.
+- Email inline-media admission must resolve `cid:` only against the same
+  message's `multipart/related` parts. Unresolved CID and remote `http(s)`
+  image references fail closed and must not be sent to OCR/VLM or treated as
+  document evidence. Classify 1×1 / tracker-header pixels as `tracking_pixel`
+  from local header and dimension evidence only; do not fetch remote pixels
+  and do not invent a new egress policy in this slice.
 - Home/Today dashboard reply-wait surfaces must read signed
   `/api/emails/pending-replies` data instead of inferring pending replies from
   generic inbox fixtures or static copy. Tests and E2E mocks must verify the
