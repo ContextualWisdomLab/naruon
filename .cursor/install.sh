@@ -31,8 +31,12 @@ if [ ! -x ".venv/bin/python" ]; then
 fi
 # shellcheck disable=SC1091
 . .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+# Hash-pinned install (mirrors .github/workflows/app-ci.yml) so dependency
+# resolution is reproducible and Scorecard's Pinned-Dependencies check passes.
+# requirements-hashes.txt is the authoritative fully-pinned lock; the base venv
+# ships a recent pip, so no unpinned "pip install --upgrade pip" is needed.
+python -m pip install --disable-pip-version-check --require-hashes \
+  -r requirements-hashes.txt
 
 echo "==> [install] frontend dependencies (pnpm@11.5.3)"
 cd "$REPO_ROOT/frontend"

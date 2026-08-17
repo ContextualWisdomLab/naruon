@@ -20,11 +20,20 @@ echo "==> [start] ensuring PostgreSQL 16 cluster is online"
 if ! pg_lsclusters -h 2>/dev/null | awk '{print $4}' | grep -q online; then
   sudo pg_ctlcluster 16 main start || true
 fi
-# Wait for the server to accept connections before touching it.
+# Fail closed: the rest of startup (role/DB reconciliation, migrations) requires
+# a reachable server, so abort if it never accepts connections.
+postgres_ready=0
 for _ in $(seq 1 30); do
-  if sudo -u postgres pg_isready -q; then break; fi
+  if sudo -u postgres pg_isready -q; then
+    postgres_ready=1
+    break
+  fi
   sleep 1
 done
+if [ "$postgres_ready" -ne 1 ]; then
+  echo "==> [start] ERROR: PostgreSQL did not become ready within 30s" >&2
+  exit 1
+fi
 
 echo "==> [start] generating local dev .env on first boot (secrets are per-VM)"
 if [ ! -f "$ENV_FILE" ]; then
@@ -57,11 +66,14 @@ env_path.write_text(
 os.chmod(env_path, 0o600)
 print(f"wrote {env_path}")
 PYGEN
-fi
 
-echo "==> [start] reconciling database role, database, and pgvector extension"
-DB_PASSWORD="$(
-  "$PY" - "$ENV_FILE" <<'PYPW'
+  # First boot only: align the local postgres role password with the freshly
+  # generated DATABASE_URL. The value is read from the env file and handed to
+  # psql over stdin (never on the argv, so it can't leak via `ps`), and quoted
+  # with :'...' so it is treated strictly as a literal. On later boots the role
+  # password already persists in the cluster, so this is skipped.
+  DB_PASSWORD="$(
+    "$PY" - "$ENV_FILE" <<'PYPW'
 import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -71,10 +83,16 @@ for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
         print(unquote(urlsplit(line.split("=", 1)[1]).password or ""))
         break
 PYPW
-)"
-# Keep the local postgres role password in sync with the generated DATABASE_URL.
-sudo -u postgres psql -v ON_ERROR_STOP=1 \
-  -c "ALTER USER postgres WITH PASSWORD '${DB_PASSWORD}';" >/dev/null
+  )"
+  : "${DB_PASSWORD:?failed to read generated DATABASE_URL password}"
+  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL >/dev/null
+\set db_password '${DB_PASSWORD}'
+ALTER USER postgres WITH PASSWORD :'db_password';
+SQL
+  unset DB_PASSWORD
+fi
+
+echo "==> [start] reconciling database and pgvector extension"
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='ai_email'" | grep -q 1; then
   sudo -u postgres createdb ai_email
 fi
