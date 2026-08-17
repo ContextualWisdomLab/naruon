@@ -1,4 +1,7 @@
 ## [Unreleased]
+
+### Changed
+- `frontend`: 프로젝트 레이아웃(`ProjectsLayout`)의 데스크톱 및 모바일 프로젝트 리스트 렌더링을 `useMemo`로 캐싱하여, 뷰 모드 변경 등 관련 없는 상태 변화 시 불필요한 O(N) 리렌더링이 발생하지 않도록 성능 최적화를 적용했습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
