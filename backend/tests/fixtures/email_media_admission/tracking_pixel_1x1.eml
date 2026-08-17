@@ -1,0 +1,21 @@
+MIME-Version: 1.0
+From: sender@naruon.test
+To: member@naruon.test
+Subject: Slice 3 admission fixture
+Date: Mon, 17 Aug 2026 12:00:00 +0000
+Content-Type: multipart/related; boundary="rel-bound"; type="text/html"
+
+--rel-bound
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+<html><body><p>Newsletter</p><img src="cid:open-pixel@naruon.test" width="1" height="1"></body></html>
+--rel-bound
+Content-Type: image/gif
+Content-ID: <open-pixel@naruon.test>
+Content-Location: https://click.list-manage.com/track/open.php?u=fixture
+Content-Disposition: inline
+Content-Transfer-Encoding: base64
+
+R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==
+--rel-bound--
