@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
-from db.models import Email
+from db.models import Email, EmailMediaQuarantineRecord
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -45,6 +45,7 @@ import logging
 from api.auth import AuthContext, get_auth_context
 from api.search import thread_group_key as sql_thread_group_key
 from services.tenant_config_scope import get_scoped_tenant_config
+from services.email_media_quarantine_read import list_email_media_quarantine_records
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,16 @@ class EmailDetailResponse(BaseModel):
     references: str | None = None
     requires_reply: bool = False
     schedule_conflict: bool = False
+
+
+class EmailMediaQuarantineRecordResponse(BaseModel):
+    admission_error_code: str
+    customer_next_action: str
+    content_id_value: str | None = None
+
+
+class EmailMediaQuarantineListResponse(BaseModel):
+    quarantine_records: list[EmailMediaQuarantineRecordResponse]
 
 
 class UniqueThreadCandidateRequest(BaseModel):
@@ -634,6 +645,46 @@ async def import_email_files(
         provenance="server-authoritative",
         provider_write_executed=False,
         audit_event="email.file_import.completed",
+    )
+
+
+@router.get(
+    "/{email_id}/media-quarantine",
+    response_model=EmailMediaQuarantineListResponse,
+)
+async def get_email_media_quarantine(
+    email_id: int,
+    db: AsyncSession = Depends(get_db),
+    auth_context: AuthContext = Depends(get_auth_context),
+) -> EmailMediaQuarantineListResponse:
+    """List already-persisted withheld inline-media next actions for one message."""
+    result = await db.execute(
+        select(Email).where(
+            Email.id == email_id,
+            *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
+        )
+    )
+    email = result.scalar_one_or_none()
+    if not email:
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "email_not_found", "detail": "Email not found"},
+        )
+    quarantine_result = await db.execute(
+        select(EmailMediaQuarantineRecord)
+        .where(EmailMediaQuarantineRecord.message_record_id == email.id)
+        .order_by(EmailMediaQuarantineRecord.created_at.asc())
+    )
+    records = list_email_media_quarantine_records(quarantine_result.scalars().all())
+    return EmailMediaQuarantineListResponse(
+        quarantine_records=[
+            EmailMediaQuarantineRecordResponse(
+                admission_error_code=record.admission_error_code,
+                customer_next_action=record.customer_next_action,
+                content_id_value=record.content_id_value,
+            )
+            for record in records
+        ]
     )
 
 

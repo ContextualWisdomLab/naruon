@@ -11,7 +11,10 @@ it calls `admit_email_inline_media()` first and continues only
 unresolved CID references are quarantined and must not be sent to a model.
 Those three drop codes are persisted as purpose-bound
 `email_media_quarantine_records` so a later parse can still tell the
-customer what was withheld and why. Remote `http(s)` images remain no-fetch
+customer what was withheld and why. Mail message detail reads those
+already-persisted rows from `GET /api/emails/{email_id}/media-quarantine`
+and shows the next action; it does not classify again or render withheld
+bytes. Remote `http(s)` images remain no-fetch
 unless a separately authorized egress policy already exists; this slice
 does not add one. See `docs/doctoring/email-inline-media-admission.md`.
 
