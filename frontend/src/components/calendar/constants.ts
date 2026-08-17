@@ -1,80 +1,9 @@
 import type {
   CalendarCandidateEvent,
-  CalendarConflictPair,
   CalendarDefinition,
   CalendarMonthEvent,
   CalendarWeekEvent,
 } from './types';
-
-const PROPOSED_CONFIRMED_1000Z_ICS = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Naruon//Calendar Conflict Fixtures//EN
-BEGIN:VEVENT
-UID:proposal-confirmed-1000z
-DTSTAMP:20260817T000000Z
-DTSTART:20260817T100000Z
-DTEND:20260817T110000Z
-SUMMARY:Confirmed proposal
-STATUS:CONFIRMED
-END:VEVENT
-END:VCALENDAR
-`;
-
-const PROPOSED_TENTATIVE_1000Z_ICS = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Naruon//Calendar Conflict Fixtures//EN
-BEGIN:VEVENT
-UID:proposal-tentative-1000z
-DTSTAMP:20260817T000000Z
-DTSTART:20260817T100000Z
-DTEND:20260817T110000Z
-SUMMARY:Tentative proposal
-STATUS:TENTATIVE
-END:VEVENT
-END:VCALENDAR
-`;
-
-const EXISTING_CANCELLED_1000Z_ICS = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Naruon//Calendar Conflict Fixtures//EN
-BEGIN:VEVENT
-UID:existing-cancelled-1000z
-DTSTAMP:20260817T000000Z
-DTSTART:20260817T100000Z
-DTEND:20260817T110000Z
-SUMMARY:Cancelled prior booking
-STATUS:CANCELLED
-END:VEVENT
-END:VCALENDAR
-`;
-
-const EXISTING_TENTATIVE_1030Z_ICS = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Naruon//Calendar Conflict Fixtures//EN
-BEGIN:VEVENT
-UID:existing-tentative-1030z
-DTSTAMP:20260817T000000Z
-DTSTART:20260817T103000Z
-DTEND:20260817T113000Z
-SUMMARY:Tentative hold
-STATUS:TENTATIVE
-END:VEVENT
-END:VCALENDAR
-`;
-
-const EXISTING_CONFIRMED_1000Z_ICS = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Naruon//Calendar Conflict Fixtures//EN
-BEGIN:VEVENT
-UID:existing-confirmed-1000z
-DTSTAMP:20260817T000000Z
-DTSTART:20260817T100000Z
-DTEND:20260817T110000Z
-SUMMARY:Confirmed prior booking
-STATUS:CONFIRMED
-END:VEVENT
-END:VCALENDAR
-`;
 
 export const calendarDefinitions: CalendarDefinition[] = [
   { id: 'personal', name: '김나루 (나)', colorClass: 'bg-primary' },
@@ -130,25 +59,4 @@ export const calendarCandidateEvents: CalendarCandidateEvent[] = [
   { id: 'candidate-partner', calendarId: 'personal', title: '파트너 미팅 일정 확정', source: '김나루 (나)', mode: '새 일정 반영 의도' },
   { id: 'candidate-launch', calendarId: 'pm-team', title: '출시 회의 시간 변경', source: 'Naruon PM 팀', mode: '충돌 검사 후 변경 의도' },
   { id: 'candidate-company', calendarId: 'company', title: '개인 메일에서 발견된 회사 일정', source: '회사 공용', mode: '원본 재지정 검토' },
-];
-
-export const calendarConflictPairs: CalendarConflictPair[] = [
-  {
-    pair_id: 'cancelled-allows',
-    pair_label: '확정 제안 vs 취소된 기존 일정',
-    proposed_ics: PROPOSED_CONFIRMED_1000Z_ICS,
-    existing_ics: EXISTING_CANCELLED_1000Z_ICS,
-  },
-  {
-    pair_id: 'tentative-review',
-    pair_label: '확정 제안 vs 잠정 기존 일정',
-    proposed_ics: PROPOSED_CONFIRMED_1000Z_ICS,
-    existing_ics: EXISTING_TENTATIVE_1030Z_ICS,
-  },
-  {
-    pair_id: 'confirmed-blocks',
-    pair_label: '잠정 제안 vs 확정 기존 일정',
-    proposed_ics: PROPOSED_TENTATIVE_1000Z_ICS,
-    existing_ics: EXISTING_CONFIRMED_1000Z_ICS,
-  },
 ];

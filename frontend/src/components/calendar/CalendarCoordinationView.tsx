@@ -1,97 +1,67 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { getCalendarSourceLabel, getCapabilityLabel, getEtagLabel, getProtocolLabel } from './helpers';
+import type { CalendarWritebackSource } from './types';
 
-import { apiClient } from '@/lib/api-client';
+type CalendarCoordinationViewProps = {
+  writebackSources: CalendarWritebackSource[];
+  selectedSourceId: string | null;
+  setSelectedSourceId: (sourceId: string) => void;
+  sourceLoadStatus: 'loading' | 'ready' | 'error';
+};
 
-import { calendarConflictPairs } from './constants';
-import { getApiErrorStatus, getConflictDecisionLabel, getConflictNextActionLabel } from './helpers';
-import type { CalendarConflictDecisionCode, CalendarConflictResponse } from './types';
-
-type PairDecisionState =
-  | { status: 'loading' }
-  | { status: 'auth' }
-  | { status: 'error' }
-  | { status: 'ready'; decisionCode: CalendarConflictDecisionCode };
-
-export function CalendarCoordinationView() {
-  const [pairDecisions, setPairDecisions] = useState<Record<string, PairDecisionState>>(() => (
-    Object.fromEntries(calendarConflictPairs.map((pair) => [pair.pair_id, { status: 'loading' }]))
-  ));
-
-  useEffect(() => {
-    let isMounted = true;
-
-    void Promise.all(
-      calendarConflictPairs.map(async (pair) => {
-        try {
-          const result = await apiClient.post<CalendarConflictResponse>(
-            '/api/calendar/conflicts/evaluate',
-            {
-              proposed_ics: pair.proposed_ics,
-              existing_ics: pair.existing_ics,
-            },
-          );
-          if (!isMounted) return;
-          setPairDecisions((current) => ({
-            ...current,
-            [pair.pair_id]: { status: 'ready', decisionCode: result.decision_code },
-          }));
-        } catch (error: unknown) {
-          if (!isMounted) return;
-          const status = getApiErrorStatus(error);
-          setPairDecisions((current) => ({
-            ...current,
-            [pair.pair_id]: { status: status === 401 || status === 403 ? 'auth' : 'error' },
-          }));
-        }
-      }),
-    );
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+export function CalendarCoordinationView({
+  writebackSources,
+  selectedSourceId,
+  setSelectedSourceId,
+  sourceLoadStatus,
+}: CalendarCoordinationViewProps) {
+  const selectedSource = writebackSources.find((source) => source.source_id === selectedSourceId) ?? null;
 
   return (
     <section aria-label="회의 조율" className="flex h-full flex-col gap-4">
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <h3 className="text-lg font-bold mb-4">회의 조율</h3>
         <p className="text-sm text-muted-foreground mb-4">
-          고객 CalDAV에서 가져온 알려진 VEVENT 쌍을 상태 가중으로 비교합니다.
-          취소된 일정은 시간을 차지하지 않고, 잠정/확정 겹침은 다음 행동을 보여 줍니다.
+          서명된 고객 일정 원본을 선택합니다. 고정 ICS 예시나 미리 정해 둔 충돌 결과는
+          조율 증거가 아닙니다. 원본 VEVENT 읽기는 커넥터 조회가 준비될 때까지 대기합니다.
         </p>
-        <div className="grid gap-3 max-w-2xl" role="list">
-          {calendarConflictPairs.map((pair, index) => {
-            const decision = pairDecisions[pair.pair_id] ?? { status: 'loading' };
+        <div className="grid gap-3 max-w-2xl md:grid-cols-2">
+          {writebackSources.map((source, index) => {
+            const sourceLabel = getCalendarSourceLabel(index);
+            const sourceSelected = selectedSource?.source_id === source.source_id;
             return (
-              <article
-                key={pair.pair_id}
-                role="listitem"
-                aria-label={pair.pair_label}
-                className="rounded-xl border border-border bg-background p-4"
+              <button
+                key={source.source_id}
+                type="button"
+                aria-label={`${sourceLabel} 조율 원본 선택`}
+                aria-pressed={sourceSelected}
+                onClick={() => setSelectedSourceId(source.source_id)}
+                className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                  sourceSelected
+                    ? 'border-primary bg-primary/10 shadow-sm'
+                    : 'border-border bg-background hover:border-primary/40'
+                }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-primary">{`${index + 1}안`}</p>
-                    <h4 className="mt-1 text-sm font-bold">{pair.pair_label}</h4>
-                  </div>
-                  {decision.status === 'ready' && (
-                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-xs font-black text-primary">
-                      {getConflictDecisionLabel(decision.decisionCode)}
-                    </span>
-                  )}
-                </div>
-                <p role="status" aria-live="polite" className="mt-3 text-sm font-semibold">
-                  {decision.status === 'loading' && '상태 가중 일정 충돌을 확인하는 중입니다.'}
-                  {decision.status === 'auth' && '서명 세션이 필요합니다. 공개 헤더로는 일정 충돌을 확인할 수 없습니다.'}
-                  {decision.status === 'error' && '일정 충돌을 확인할 수 없습니다. 서명 세션으로 다시 확인하세요.'}
-                  {decision.status === 'ready' && getConflictNextActionLabel(decision.decisionCode)}
+                <p className="text-xs font-bold text-primary">{sourceLabel}</p>
+                <p className="mt-1 text-sm font-bold">{getProtocolLabel(source.protocol)}</p>
+                <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                  {source.capabilities.map(getCapabilityLabel).join(' · ')}
                 </p>
-              </article>
+                <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                  {getEtagLabel(source.etag)}
+                </p>
+              </button>
             );
           })}
         </div>
+        <p role="status" aria-live="polite" className="mt-4 text-sm font-semibold">
+          {sourceLoadStatus === 'loading' && '서명된 일정 원본을 확인하는 중입니다.'}
+          {sourceLoadStatus === 'error' && '서명 세션으로 일정 원본을 확인할 수 없습니다. 공개 헤더로는 조율할 수 없습니다.'}
+          {sourceLoadStatus === 'ready' && writebackSources.length === 0 && '서명된 고객 일정 원본이 없어 조율 결과를 보여 주지 않습니다.'}
+          {sourceLoadStatus === 'ready' && selectedSource !== null && '선택한 일정 원본의 서명된 증거만 조율에 사용합니다.'}
+          {sourceLoadStatus === 'ready' && writebackSources.length > 0 && selectedSource === null && '조율에 사용할 서명된 일정 원본을 선택하세요.'}
+        </p>
       </div>
     </section>
   );

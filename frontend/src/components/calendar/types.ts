@@ -47,13 +47,6 @@ export type CalendarConflictResponse = {
   policy_version: string;
 };
 
-export type CalendarConflictPair = {
-  pair_id: string;
-  pair_label: string;
-  proposed_ics: string;
-  existing_ics: string;
-};
-
 export type CalendarDefinition = {
   id: string;
   name: string;
