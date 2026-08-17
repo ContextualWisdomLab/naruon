@@ -10,6 +10,7 @@ on:
       - backend/tests/test_email_writing_judge.py
       - backend/tests/test_email_writing_judge_terminal_coverage.py
       - backend/tests/fixtures/email_writing/judge_outputs.json
+      - backend/requirements-hashes.txt
       - .github/workflows/email-writing-judge-tdd.yml
   workflow_dispatch:
 
