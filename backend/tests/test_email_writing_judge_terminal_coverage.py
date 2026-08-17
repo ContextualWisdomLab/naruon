@@ -95,7 +95,7 @@ def test_runner_mapping_response_is_normalized_and_empty_rows_fail() -> None:
     assert captured.value.code == "judge_matrix_empty"
 
 
-def test_invalid_runner_payload_and_score_model_guards() -> None:
+def test_invalid_runner_payload_is_rejected() -> None:
     runner = _JudgeRunner(object())
     with pytest.raises(EmailWritingJudgeError) as captured:
         EmailWritingIndependentJudge(runner).evaluate(
@@ -106,57 +106,29 @@ def test_invalid_runner_payload_and_score_model_guards() -> None:
         )
     assert captured.value.code == "judge_payload_invalid"
 
+
+@pytest.mark.parametrize(
+    ("criterion_scores", "category_count"),
+    [
+        ({}, 4),
+        ({"issue_support": True}, 4),
+        ({"issue_support": "0.5"}, 4),
+        ({"issue_support": 1.5}, 4),
+        ({"issue_support": float("nan")}, 4),
+        ({"issue_support": float("inf")}, 4),
+        ({"issue_support": 0.5}, 1),
+    ],
+)
+def test_score_model_guards_reject_invalid_tokens(
+    criterion_scores: dict[str, object],
+    category_count: int,
+) -> None:
     with pytest.raises(ValidationError):
         _JudgeOutputModel.model_validate(
             {
                 "criterion_categories": {"issue_support": 1},
-                "criterion_scores": {},
-                "category_count": 4,
-                "accepted": False,
-            }
-        )
-    with pytest.raises(ValidationError):
-        _JudgeOutputModel.model_validate(
-            {
-                "criterion_categories": {"issue_support": 1},
-                "criterion_scores": {"issue_support": True},
-                "category_count": 4,
-                "accepted": False,
-            }
-        )
-    with pytest.raises(ValidationError):
-        _JudgeOutputModel.model_validate(
-            {
-                "criterion_categories": {"issue_support": 1},
-                "criterion_scores": {"issue_support": 1.5},
-                "category_count": 4,
-                "accepted": False,
-            }
-        )
-    with pytest.raises(ValidationError):
-        _JudgeOutputModel.model_validate(
-            {
-                "criterion_categories": {"issue_support": 1},
-                "criterion_scores": {"issue_support": float("nan")},
-                "category_count": 4,
-                "accepted": False,
-            }
-        )
-    with pytest.raises(ValidationError):
-        _JudgeOutputModel.model_validate(
-            {
-                "criterion_categories": {"issue_support": 1},
-                "criterion_scores": {"issue_support": float("inf")},
-                "category_count": 4,
-                "accepted": False,
-            }
-        )
-    with pytest.raises(ValidationError):
-        _JudgeOutputModel.model_validate(
-            {
-                "criterion_categories": {"issue_support": 1},
-                "criterion_scores": {"issue_support": 0.5},
-                "category_count": 1,
+                "criterion_scores": criterion_scores,
+                "category_count": category_count,
                 "accepted": False,
             }
         )
@@ -175,7 +147,7 @@ def test_score_and_category_type_guards_reject_bool_and_text_tokens() -> None:
     assert _require_integral_category(2) == 2
 
 
-def test_out_of_range_category_and_export_uses_loaded_validator() -> None:
+def test_out_of_range_category_is_rejected() -> None:
     payload = {
         "criterion_categories": {
             criterion_id: 0
@@ -197,6 +169,8 @@ def test_out_of_range_category_and_export_uses_loaded_validator() -> None:
         )
     assert captured.value.code == "judge_payload_invalid"
 
+
+def test_export_uses_injected_loaded_validator() -> None:
     class _Module:
         ContextualOrchestratorJudge = object()
         JudgeCriterion = object()

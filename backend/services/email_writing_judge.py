@@ -10,6 +10,7 @@ raw prompts, model outputs, source bodies, or draft plaintext.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
 import importlib
@@ -53,6 +54,16 @@ EMAIL_WRITING_JUDGE_EVALUATION_ANCHORS: Final = (
     "fully_supported_with_accurate_evidence",
 )
 EMAIL_WRITING_JUDGE_RUBRIC_VERSION: Final = "email_writing_judge_rubric_v1"
+EMAIL_WRITING_JUDGE_RUNNER_DEADLINE_SECONDS: Final = 30.0
+_JUDGE_CANDIDATE_PAYLOAD_FIELD_IDS: Final = (
+    "selector",
+    "category_code",
+    "priority",
+    "title",
+    "explanation",
+    "suggested_replacement",
+    "candidate_evidence_ids",
+)
 _RELEASED_JUDGE_SYMBOLS: Final = (
     "ContextualOrchestratorJudge",
     "JudgeCriterion",
@@ -281,6 +292,53 @@ def _has_replacement(diagnostic: EmailWritingJudgeCandidateView) -> bool:
     return replacement is not None and replacement != ""
 
 
+def _project_judge_candidate_payload(
+    diagnostic: EmailWritingJudgeCandidateView,
+) -> dict[str, object]:
+    """Copy Judge-evaluable candidate fields and drop self-assessment scores."""
+    raw_payload = dict(diagnostic.model_dump())
+    return {
+        field_id: raw_payload[field_id]
+        for field_id in _JUDGE_CANDIDATE_PAYLOAD_FIELD_IDS
+        if field_id in raw_payload
+    }
+
+
+def _invoke_judge_runner(
+    runner: EmailWritingJudgeRunner,
+    *,
+    deadline_seconds: float,
+    task: str,
+    answer: str,
+    criteria: object,
+    reference_answer: str,
+    category_count: int,
+) -> object:
+    """Call one runner with a bounded deadline and payload-redacted failures."""
+    executor = ThreadPoolExecutor(
+        max_workers=1,
+        thread_name_prefix="email_writing_judge_call",
+    )
+    try:
+        future = executor.submit(
+            runner.judge,
+            task=task,
+            answer=answer,
+            criteria=criteria,
+            reference_answer=reference_answer,
+            category_count=category_count,
+        )
+        return future.result(timeout=deadline_seconds)
+    except EmailWritingJudgeError:
+        raise
+    except TimeoutError:
+        raise EmailWritingJudgeError("judge_runner_failed") from None
+    except Exception:
+        raise EmailWritingJudgeError("judge_runner_failed") from None
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def _validate_evaluation_anchors(
     category_count: int,
     category_anchors: tuple[str, ...],
@@ -306,7 +364,7 @@ def build_email_writing_judge_task(
     _validate_evaluation_anchors(category_count, category_anchors)
     has_replacement = _has_replacement(diagnostic)
     required_ids = required_judge_criterion_ids(has_replacement=has_replacement)
-    candidate_payload = dict(diagnostic.model_dump())
+    candidate_payload = _project_judge_candidate_payload(diagnostic)
     reference_payload = dict(bundle.to_prompt_payload())
     rubric_payload = {
         "rubric_version": EMAIL_WRITING_JUDGE_RUBRIC_VERSION,
@@ -435,9 +493,15 @@ def _normalize_runner_source(response: object) -> str | bytes:
 class EmailWritingIndependentJudge:
     """Evaluate one candidate through an injected or released Judge runner."""
 
-    def __init__(self, runner: EmailWritingJudgeRunner | None = None) -> None:
+    def __init__(
+        self,
+        runner: EmailWritingJudgeRunner | None = None,
+        *,
+        runner_deadline_seconds: float = EMAIL_WRITING_JUDGE_RUNNER_DEADLINE_SECONDS,
+    ) -> None:
         """Create a Judge port that fails closed without a released adapter."""
         self._runner = runner
+        self._runner_deadline_seconds = runner_deadline_seconds
 
     def evaluate(
         self,
@@ -473,7 +537,9 @@ class EmailWritingIndependentJudge:
             }
             for criterion_id in task.required_criterion_ids
         ]
-        response = self._runner.judge(
+        response = _invoke_judge_runner(
+            self._runner,
+            deadline_seconds=self._runner_deadline_seconds,
             task=task.task_text,
             answer=task.answer_text,
             criteria=criteria,
@@ -493,11 +559,19 @@ def judge_results_to_response_rows(
     """Project validated Judge evaluations into integer category response rows."""
     if len(evaluations) < 1:
         raise EmailWritingJudgeError("judge_matrix_empty")
+    expected_ids = frozenset(evaluations[0].criterion_categories)
+    column_ids = tuple(
+        criterion_id
+        for criterion_id in EMAIL_WRITING_JUDGE_CRITERION_IDS
+        if criterion_id in expected_ids
+    )
+    if frozenset(column_ids) != expected_ids:
+        raise EmailWritingJudgeError("judge_matrix_criteria_mismatch")
+    for evaluation in evaluations:
+        if frozenset(evaluation.criterion_categories) != expected_ids:
+            raise EmailWritingJudgeError("judge_matrix_criteria_mismatch")
     return tuple(
-        tuple(
-            evaluation.criterion_categories[criterion_id]
-            for criterion_id in sorted(evaluation.criterion_categories)
-        )
+        tuple(evaluation.criterion_categories[criterion_id] for criterion_id in column_ids)
         for evaluation in evaluations
     )
 

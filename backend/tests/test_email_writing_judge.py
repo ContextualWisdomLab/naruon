@@ -8,6 +8,7 @@ import json
 import logging
 import math
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ from services.email_writing_judge import (
     EMAIL_WRITING_JUDGE_EVALUATION_CATEGORY_COUNT,
     EmailWritingIndependentJudge,
     EmailWritingJudgeError,
+    EmailWritingJudgeEvaluation,
+    EmailWritingJudgeTask,
     build_email_writing_judge_task,
     export_judge_response_matrix,
     judge_results_to_response_rows,
@@ -64,6 +67,7 @@ class _JudgeCandidate:
         self.suggested_replacement = replacement
         self.candidate_confidence = 0.91
         self.category_code = "pragmatics"
+        self.priority = "important"
         self.title = "반문을 확인 질문으로 바꾸세요"
         self.explanation = (
             "현재 표현은 답변 내용의 확인보다 상대 설명을 부정하는 반문으로 읽힐 수 있습니다."
@@ -75,6 +79,7 @@ class _JudgeCandidate:
     def model_dump(self) -> dict[str, object]:
         return {
             "category_code": self.category_code,
+            "priority": self.priority,
             "title": self.title,
             "explanation": self.explanation,
             "suggested_replacement": self.suggested_replacement,
@@ -135,9 +140,20 @@ class _JudgeRunner:
         return self.response
 
 
+def _task_request_payload(task: EmailWritingJudgeTask) -> dict[str, Any]:
+    start_mark = "BEGIN_UNTRUSTED_EMAIL_WRITING_JUDGE_JSON\n"
+    end_mark = "\nEND_UNTRUSTED_EMAIL_WRITING_JUDGE_JSON"
+    start_at = task.task_text.index(start_mark) + len(start_mark)
+    end_at = task.task_text.index(end_mark)
+    return json.loads(task.task_text[start_at:end_at])
+
+
 def test_released_judge_package_is_unavailable_and_fails_closed() -> None:
+    def _missing_package(_name: str) -> object:
+        raise ImportError("fast_mlsirm")
+
     with pytest.raises(EmailWritingJudgeError) as captured:
-        load_released_judge_symbols()
+        load_released_judge_symbols(module_importer=_missing_package)
     assert captured.value.code == "judge_package_unavailable"
     assert "ContextualOrchestratorJudge" not in dir(
         __import__("services.email_writing_judge", fromlist=["*"])
@@ -225,6 +241,24 @@ def test_no_replacement_task_does_not_fabricate_replacement_correctness() -> Non
     )
     assert task.candidate_kind == "no_replacement_diagnostic"
     assert "replacement_correctness" not in task.required_criterion_ids
+
+
+def test_judge_task_projects_evaluable_fields_and_drops_candidate_confidence() -> None:
+    task = build_email_writing_judge_task(
+        _diagnostic(),
+        _bundle(),
+        category_count=EMAIL_WRITING_JUDGE_EVALUATION_CATEGORY_COUNT,
+        category_anchors=EMAIL_WRITING_JUDGE_EVALUATION_ANCHORS,
+    )
+    request_payload = _task_request_payload(task)
+    answer_payload = json.loads(task.answer_text)
+
+    assert request_payload["candidate"]["priority"] == "important"
+    assert "candidate_confidence" not in request_payload["candidate"]
+    assert "candidate_confidence" not in answer_payload
+    assert answer_payload["priority"] == "important"
+    assert "0.91" not in task.answer_text
+    assert "0.91" not in task.task_text
 
 
 def test_valid_judge_json_parses_hashes_and_withholds_user_facing_admission() -> None:
@@ -375,18 +409,110 @@ def test_missing_released_runner_fails_closed_instead_of_inventing_a_judge() -> 
     assert captured.value.code == "judge_package_unavailable"
 
 
-def test_response_rows_are_integral_and_export_fails_closed_without_released_validator() -> None:
-    first = parse_email_writing_judge_output(
+def test_runner_failures_are_redacted_to_a_stable_code() -> None:
+    hostile = "PRIVATE-MAIL-BODY-DO-NOT-LEAK"
+
+    class _ExplodingRunner:
+        def judge(self, **_kwargs: object) -> object:
+            raise RuntimeError(f"{hostile} from provider")
+
+    with pytest.raises(EmailWritingJudgeError) as captured:
+        EmailWritingIndependentJudge(_ExplodingRunner()).evaluate(
+            _diagnostic(),
+            _bundle(),
+            candidate_model_profile_id="candidate-profile",
+            judge_model_profile_id="judge-profile",
+        )
+    assert captured.value.code == "judge_runner_failed"
+    assert hostile not in str(captured.value)
+    assert hostile not in repr(captured.value)
+
+
+def test_runner_deadline_fails_closed_without_exposing_payload() -> None:
+    class _SlowRunner:
+        def judge(self, **_kwargs: object) -> object:
+            time.sleep(0.2)
+            return _judge_json()
+
+    with pytest.raises(EmailWritingJudgeError) as captured:
+        EmailWritingIndependentJudge(
+            _SlowRunner(),
+            runner_deadline_seconds=0.01,
+        ).evaluate(
+            _diagnostic(),
+            _bundle(),
+            candidate_model_profile_id="candidate-profile",
+            judge_model_profile_id="judge-profile",
+        )
+    assert captured.value.code == "judge_runner_failed"
+
+
+def test_coded_runner_errors_are_preserved() -> None:
+    class _CodedRunner:
+        def judge(self, **_kwargs: object) -> object:
+            raise EmailWritingJudgeError("judge_payload_invalid")
+
+    with pytest.raises(EmailWritingJudgeError) as captured:
+        EmailWritingIndependentJudge(_CodedRunner()).evaluate(
+            _diagnostic(),
+            _bundle(),
+            candidate_model_profile_id="candidate-profile",
+            judge_model_profile_id="judge-profile",
+        )
+    assert captured.value.code == "judge_payload_invalid"
+
+
+def test_response_rows_use_canonical_criterion_order() -> None:
+    parsed = parse_email_writing_judge_output(
         _judge_json(),
         required_criterion_ids=required_judge_criterion_ids(has_replacement=True),
         category_count=4,
     )
-    second = parse_email_writing_judge_output(
+    rows = judge_results_to_response_rows((parsed, parsed))
+    assert rows[0] == tuple(
+        parsed.criterion_categories[criterion_id]
+        for criterion_id in EMAIL_WRITING_JUDGE_CRITERION_IDS
+    )
+    assert all(isinstance(value, int) for row in rows for value in row)
+
+
+def test_response_rows_reject_mixed_or_unknown_criterion_sets() -> None:
+    replacement = parse_email_writing_judge_output(
+        _judge_json(),
+        required_criterion_ids=required_judge_criterion_ids(has_replacement=True),
+        category_count=4,
+    )
+    no_replacement = parse_email_writing_judge_output(
         _judge_json(_fixtures()["valid_no_replacement_judge"]),
         required_criterion_ids=required_judge_criterion_ids(has_replacement=False),
         category_count=4,
     )
-    rows = judge_results_to_response_rows((first, second))
+    with pytest.raises(EmailWritingJudgeError) as mixed:
+        judge_results_to_response_rows((replacement, no_replacement))
+    assert mixed.value.code == "judge_matrix_criteria_mismatch"
+
+    unknown = EmailWritingJudgeEvaluation(
+        criterion_categories={"unknown_item": 1, **dict(replacement.criterion_categories)},
+        criterion_scores=dict(replacement.criterion_scores),
+        category_count=4,
+        advisory_accepted=False,
+        user_facing_admission="withheld",
+        send_decision="not_applicable",
+        candidate_confidence_used=False,
+        payload_hash=replacement.payload_hash,
+    )
+    with pytest.raises(EmailWritingJudgeError) as extra:
+        judge_results_to_response_rows((unknown,))
+    assert extra.value.code == "judge_matrix_criteria_mismatch"
+
+
+def test_response_rows_are_integral_and_export_fails_closed_without_released_validator() -> None:
+    parsed = parse_email_writing_judge_output(
+        _judge_json(),
+        required_criterion_ids=required_judge_criterion_ids(has_replacement=True),
+        category_count=4,
+    )
+    rows = judge_results_to_response_rows((parsed, parsed))
     assert len(rows) == 2
     assert all(isinstance(value, int) for row in rows for value in row)
 
@@ -448,10 +574,10 @@ async def test_worker_lane_saturates_and_preserves_cancellation() -> None:
         )
 
     second = asyncio.create_task(port.run_judge(second_evaluate))
-    await asyncio.sleep(0.02)
+    await asyncio.wait({second}, timeout=0.05)
     assert not second_started.is_set()
+    assert not second.done()
     first.cancel()
-    await asyncio.sleep(0.02)
     assert not first.done()
     release.set()
     with pytest.raises(asyncio.CancelledError):
