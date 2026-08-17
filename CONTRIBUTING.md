@@ -68,6 +68,8 @@ Do not infer browser behavior only from unit tests or source inspection. Add a n
 - Use a descriptive title such as `fix: preserve thread provenance during import`.
 - Keep one logical product or infrastructure change per PR.
 - State the customer or operator outcome, changed boundary, exact focused verification commands and results, and known limitations.
+- When a fix exposes a recurring bug pattern or delivery anti-pattern, record the prevention rule in `AGENTS.md` and update every affected test, mock, fixture, and document in the same PR so the defect cannot survive in a parallel contract.
+- Substantive feature and process PRs must follow the [`AGENTS.md` research-grounding policy](AGENTS.md#research-grounding-attach-paper-pdfs): include relevant academic literature with complete citations, commit paper PDFs only when redistribution is permitted, and otherwise provide source links and concise evidence summaries.
 - Do not mix unrelated dependency churn, workflow repair, feature work, or sibling-repository implementation in one PR.
 - When a sibling integration is needed, change Naruon's adapter or contract here and use a separate PR in the owning sibling repository. Do not copy sibling source into Naruon.
 
