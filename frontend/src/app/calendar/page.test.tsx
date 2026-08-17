@@ -474,4 +474,85 @@ describe("CalendarPage", () => {
     await flushAsyncWork();
     expect(container.textContent).toContain("ETag/If-Match 충돌");
   });
+
+  it("surfaces status-weighted ICS pair decisions on the coordination view", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/calendar/writeback-sources") {
+        return jsonResponse(calendarSourceList);
+      }
+      expect(String(input)).toBe("/api/calendar/conflicts/evaluate");
+      expect(init?.method).toBe("POST");
+      expect(init?.credentials).toBe("same-origin");
+      expect(init?.headers).toEqual(expect.objectContaining({
+        "Content-Type": "application/json",
+      }));
+      expect(init?.headers).not.toHaveProperty("Authorization");
+      const requestHeaders = init?.headers as Record<string, string>;
+      const normalizedHeaderNames = new Set(Object.keys(requestHeaders).map((headerName) => headerName.toLowerCase()));
+      for (const publicHeader of [
+        "x-user-id",
+        "x-organization-id",
+        "x-group-id",
+        "x-group-ids",
+        "x-user-role",
+        "x-dev-auth-token",
+      ]) {
+        expect(normalizedHeaderNames.has(publicHeader)).toBe(false);
+      }
+      const payload = JSON.parse(String(init?.body)) as {
+        proposed_ics?: string;
+        existing_ics?: string;
+      };
+      expect(payload.proposed_ics).toContain("BEGIN:VEVENT");
+      expect(payload.existing_ics).toContain("BEGIN:VEVENT");
+      if (payload.existing_ics?.includes("STATUS:CANCELLED")) {
+        return jsonResponse({
+          decision_code: "available",
+          reason_code: "no_overlapping_commitment",
+          conflicts: [],
+          recommended_action: "Proceed with scheduling.",
+          policy_version: "status-weighted-v1",
+        });
+      }
+      if (payload.existing_ics?.includes("STATUS:TENTATIVE")) {
+        return jsonResponse({
+          decision_code: "review_required",
+          reason_code: "lower_priority_conflict_requires_explicit_resolution",
+          conflicts: [],
+          recommended_action: "Review the lower-priority conflict.",
+          policy_version: "status-weighted-v1",
+        });
+      }
+      return jsonResponse({
+        decision_code: "blocked",
+        reason_code: "equal_or_higher_priority_conflict",
+        conflicts: [],
+        recommended_action: "Choose another time.",
+        policy_version: "status-weighted-v1",
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<CalendarPage />);
+    });
+    await flushAsyncWork();
+
+    const coordinationTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab) => tab.textContent === "회의 조율");
+    await act(async () => {
+      coordinationTab?.click();
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/calendar/conflicts/evaluate")).toBe(true);
+    expect(container.textContent).toContain("이 시간은 비어 있습니다. 일정을 계속 진행하세요.");
+    expect(container.textContent).toContain("잠정 일정이 겹칩니다. 잠정 일정을 조정하거나 유지할지 확인한 뒤 진행하세요.");
+    expect(container.textContent).toContain("확정된 일정이 겹칩니다. 다른 시간을 고르거나 기존 확정 일정을 먼저 조정하세요.");
+    expect(container.textContent).not.toContain("모든 참석자 참석 가능");
+  });
 });
