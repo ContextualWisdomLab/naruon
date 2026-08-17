@@ -24,7 +24,7 @@ is withdrawn.
 2. `STATUS:CANCELLED` is valid evidence and does not occupy `[DTSTART, DTEND)`.
    A cancelled existing event therefore allows a new booking; a cancelled
    proposal does not claim the interval.
-3. CalDAV-native evidence is accepted as iCalendar text. The evaluator parses
+3. iCalendar/ICS evidence is accepted as text. The evaluator parses
    `VEVENT` `UID`, timezone-aware `DTSTART`, `DTEND` or `DURATION`, and
    `STATUS`. Missing `STATUS` defaults to `CONFIRMED`. Date-only and floating
    date-times fail closed.
@@ -56,8 +56,9 @@ a substitute for VEVENT evidence.
 
 - `POST /api/calendar/conflicts/evaluate` accepts either structured commitments
   or `proposed_ics` / `existing_ics`.
-- Calendar coordination renders known VEVENT pairs and the resulting next
-  action. Writeback remains a separate ETag/If-Match intent path.
+- Calendar coordination selects a signed writeback source. Known VEVENT pairs
+  remain test fixtures, not production coordination evidence. Writeback remains
+  a separate ETag/If-Match intent path.
 - Tests must keep known `.ics` pairs as the source of conflict-versus-allow
   evidence.
 
@@ -65,6 +66,13 @@ a substitute for VEVENT evidence.
 
 Daboo, C. (Ed.). (2009). *iCalendar transport-independent interoperability
 protocol (iTIP)* (RFC 5546). RFC Editor. https://doi.org/10.17487/RFC5546
+
+Allen, J. F. (1983). Maintaining knowledge about temporal intervals.
+*Communications of the ACM, 26*(11), 832–843.
+https://doi.org/10.1145/182.358434
+Allen’s interval algebra names the qualitative relations between time
+intervals, including overlap, which is the comparison this policy applies to
+half-open calendar commitments. The ACM publication is not redistributed here.
 
 Desruisseaux, B. (Ed.). (2009). *Internet calendaring and scheduling core
 object specification (iCalendar)* (RFC 5545). RFC Editor.

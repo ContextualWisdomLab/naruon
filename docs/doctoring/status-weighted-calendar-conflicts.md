@@ -4,7 +4,7 @@
 
 Naruon evaluates a proposed calendar commitment against a bounded set of existing commitments and returns one of three deterministic outcomes: `available`, `blocked`, or `review_required`. The decision is advisory evidence only. It does not mutate, cancel, reschedule, accept, or decline any provider event.
 
-The public endpoint is `POST /api/calendar/conflicts/evaluate`. It is mounted behind Naruon's existing private API authentication dependency. Inputs are either structured commitments (`commitment_id`, timezone-aware `start_at`/`end_at`, status) or CalDAV-native `proposed_ics` / `existing_ics` VEVENT documents. Occupying statuses are `confirmed`, `tentative`, and `desired`. RFC 5545 `STATUS:CANCELLED` is accepted and does not occupy the interval. Existing evidence is capped at 500 commitments per request. The Calendar coordination view evaluates known `.ics` pairs through the signed-session `/api/*` proxy and shows the next action.
+The public endpoint is `POST /api/calendar/conflicts/evaluate`. It is mounted behind Naruon's existing private API authentication dependency. Inputs are either structured commitments (`commitment_id`, timezone-aware `start_at`/`end_at`, status) or iCalendar/ICS `proposed_ics` / `existing_ics` VEVENT documents. Occupying statuses are `confirmed`, `tentative`, and `desired`. RFC 5545 `STATUS:CANCELLED` is accepted and does not occupy the interval. Existing evidence is capped at 500 commitments per request. The Calendar coordination view selects a signed, source-backed writeback source for the authenticated user/workspace and does not present canned ICS pairs as production coordination evidence. Known `.ics` pairs remain test fixtures only.
 
 ## Standards traceability
 
@@ -26,7 +26,7 @@ This policy deliberately prevents a convenience feature from silently breaking a
 
 The decision path is deterministic and uses no LLM judgment. It accepts only scheduling evidence needed for the decision; it does not require email bodies, participant names, provider credentials, or calendar descriptions. The endpoint rejects naive timestamps, invalid/non-positive intervals, unsupported statuses, oversized evidence batches, extra request fields, and a missing proposed source through the transport/service validation layers. A missing proposal returns `calendar_proposed_source_missing` as HTTP 422; the handler does not use `assert`, so optimized bytecode cannot strip the guard. Customer-facing results include a concrete next action rather than a generic warning.
 
-No database objects or migrations are introduced. No provider is contacted. Rollback consists of removing the endpoint registration and policy module; existing calendar data is unaffected because the slice is read-only with respect to provider and database state.
+No database objects or migrations are introduced. No provider is contacted. Rollback must disable or remove the frontend integration first (`frontend/src/components/calendar/types.ts`, `constants.ts`, `helpers.ts`, and `CalendarCoordinationView` wiring in `CalendarLayout`), then remove the backend route registration, ICS parser, and policy module. Existing calendar data is unaffected because the slice is read-only for provider and database state.
 
 ## Verification evidence required before merge
 

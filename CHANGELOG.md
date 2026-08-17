@@ -9,10 +9,11 @@
   `blocked`와 다음 행동을 반환합니다. `STATUS:CANCELLED`는 유효한 증거라
   시간을 차지하지 않으므로, 취소된 기존 일정과 겹치는 확정 제안은 진행할 수
   있습니다. 잠정 겹침은 검토를, 확정 겹침은 이중 예약을 차단합니다.
-  Calendar 회의 조율 화면이 알려진 `.ics` 쌍을 서명 세션으로 평가하고 다음
-  행동을 보여 줍니다. 제안 출처가 없으면 `assert` 대신
-  `calendar_proposed_source_missing`으로 422를 반환합니다. 공급자 CalDAV
-  쓰기는 하지 않습니다.
+  Calendar 회의 조율 화면은 서명된 writeback 원본만 선택하고, 알려진 `.ics`
+  쌍은 테스트 고정값으로만 유지합니다. 요청 검증 실패는
+  `calendar_proposed_source_missing` 또는 `calendar_request_invalid` 봉투를
+  반환합니다. 반복 VEVENT와 과도한 ICS 바이트는 fail-closed 합니다. 공급자
+  CalDAV 쓰기는 하지 않습니다.
 - 검증: `python -m pytest backend/tests/test_calendar_conflict_policy.py backend/tests/test_calendar_conflict_ics.py backend/tests/test_calendar_conflict_api.py -q`,
   `corepack pnpm@11.5.3 --dir frontend exec vitest run src/app/calendar/page.test.tsx`.
 ### 주제 측정 경계 (Topic Measurement)
