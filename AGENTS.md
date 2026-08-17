@@ -446,6 +446,13 @@ in this repo.
   topic components, or label evidence by a bare document, model, topic, rank,
   label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
+- Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
+  `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
+  desynchronizes first-wins label maps from the selected node or edge when
+  ids collide. Keep a rendered selection test that repeats an id and asserts
+  the first instance is the one opened. Do not treat a source-substring scan
+  as the only selection-path contract; fire the vis-network `selectNode` /
+  `selectEdge` callbacks with mixed numeric and string ids.
 - When reviews find missing browser security headers or tabnabbing hardening,
   update both backend header tests and frontend link tests. Global backend
   responses must include `Referrer-Policy`, and `target="_blank"` links must
