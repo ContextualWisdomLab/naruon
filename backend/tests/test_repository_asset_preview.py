@@ -72,6 +72,7 @@ class PreviewMockSession:
         self.documents = list(documents or [])
         self.attachment_rows = list(attachment_rows or [])
         self.get_calls: list[tuple[object, object]] = []
+        self.executed_queries: list[object] = []
 
     async def get(self, model, identity):
         self.get_calls.append((model, identity))
@@ -82,6 +83,7 @@ class PreviewMockSession:
         return None
 
     async def execute(self, query):
+        self.executed_queries.append(query)
         rendered_query = str(query).lower()
         if "workspace_documents" in rendered_query:
             compiled = query.compile()
@@ -404,6 +406,55 @@ def test_preview_route_returns_recognized_hwpx_for_scoped_attachment() -> None:
     assert data["error_code"] is None
     assert data["next_action"] == NEXT_ACTION_READ_RECOGNIZED_TEXT
     assert data["provider_write_executed"] is False
+
+
+def test_preview_route_loads_only_the_matched_attachment_payload() -> None:
+    """First-pass preview lookup stays lightweight and loads only the matched row."""
+
+    import api.data as data_api
+
+    email = _email(message_id="<hwpx-ready@example.com>")
+    matched = _hwpx_orm_attachment(
+        parse_status="hwpx_xml_package_parsed",
+        content="Quarterly decision record\n\nApprove the next action.",
+        attachment_id=17,
+    )
+    sibling = _hwpx_orm_attachment(
+        parse_status="hwpx_xml_package_parsed",
+        content="S" * 8192,
+        attachment_id=18,
+    )
+    sibling.filename = "other-notes.hwpx"
+    asset_key = data_api._opaque_asset_key(email, matched)
+    mock_db = PreviewMockSession(attachment_rows=[(sibling, email), (matched, email)])
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.get(f"/api/data/repository-assets/{asset_key}/preview")
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 200, response.text
+    assert mock_db.get_calls == [(Attachment, matched.id)]
+    candidate_queries = [
+        query
+        for query in mock_db.executed_queries
+        if "content_segments" not in str(query).lower()
+        and "workspace_documents" not in str(query).lower()
+    ]
+    assert candidate_queries
+    candidate_columns = {
+        str(column.get("name"))
+        for column in candidate_queries[0].column_descriptions
+    }
+    assert "content" not in candidate_columns
+    assert "filename" in candidate_columns
+    assert "id" in candidate_columns
+    assert response.json()["paragraph_texts"] == [
+        "Quarterly decision record",
+        "Approve the next action.",
+    ]
 
 
 @pytest.mark.parametrize(
