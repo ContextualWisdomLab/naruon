@@ -764,6 +764,8 @@ URL_CODEC_MAX_INPUT_BYTES = 262144
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
+    if not isinstance(text, str):
+        raise ValueError("URL codec text must be a string")
     if len(text.encode("utf-8")) > URL_CODEC_MAX_INPUT_BYTES:
         raise ValueError(
             f"URL codec input must not exceed {URL_CODEC_MAX_INPUT_BYTES} bytes"
@@ -773,6 +775,8 @@ async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params.get("text", "")
+    if not isinstance(text, str):
+        raise ValueError("URL codec text must be a string")
     if len(text.encode("utf-8")) > URL_CODEC_MAX_INPUT_BYTES:
         raise ValueError(
             f"URL codec input must not exceed {URL_CODEC_MAX_INPUT_BYTES} bytes"

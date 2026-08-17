@@ -30,9 +30,7 @@ async def test_url_encoder_percent_encodes_component_delimiters_once() -> None:
 
     result = await url_encoder_handler({"text": "경로/next?x=1%"})
 
-    assert result == {
-        "encoded_text": "%EA%B2%BD%EB%A1%9C%2Fnext%3Fx%3D1%25"
-    }
+    assert result == {"encoded_text": "%EA%B2%BD%EB%A1%9C%2Fnext%3Fx%3D1%25"}
 
 
 @pytest.mark.asyncio
