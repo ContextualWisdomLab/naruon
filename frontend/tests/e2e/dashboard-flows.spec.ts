@@ -25,6 +25,21 @@ test('connects inbox selection to summary, execution, reply, calendar, and graph
   await expect(page.getByText('개발 모드에서 답장을 시뮬레이션했습니다. 실제 메일은 전송되지 않았습니다.')).toBeVisible();
 });
 
+test('opens recognized HWPX paragraph text from the selected mail attachment', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'Desktop mail attachment preview is covered by the desktop shell project.');
+  await mockDashboardApi(page);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: '메일함 바로가기' }).first().click();
+  await page.getByRole('button', { name: /김지현 PM/ }).click();
+
+  await expect(page.getByRole('region', { name: '메일 첨부 파일' })).toBeVisible();
+  await page.getByRole('button', { name: 'decision.hwpx 인식된 본문 열기' }).click();
+  await expect(page.getByText('Quarterly decision record')).toBeVisible();
+  await expect(page.getByText('Approve the next action.')).toBeVisible();
+  await expect(page.getByText('본문이 없습니다')).toHaveCount(0);
+});
+
 test('submits branded inbox search against the search API', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'Desktop search box is covered by the desktop shell project.');
   await mockDashboardApi(page);

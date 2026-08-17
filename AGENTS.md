@@ -446,6 +446,12 @@ in this repo.
   topic components, or label evidence by a bare document, model, topic, rank,
   label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
+- Mail attachment surfaces must list the current email's files with opaque
+  `asset_key` values and open the signed
+  `/api/data/repository-assets/{asset_key}/preview` contract. Do not expose
+  sequential attachment ids, render missing preview text as empty document
+  content, or send buyers only to the Data repository list as a substitute for
+  opening the HWPX file on the selected mail.
 - Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
   `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
   desynchronizes first-wins label maps from the selected node or edge when
