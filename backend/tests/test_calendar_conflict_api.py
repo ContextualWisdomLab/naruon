@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from api.auth import get_auth_context
+from api.calendar_conflicts import (
+    CalendarConflictRequest,
+    evaluate_calendar_conflict_request,
+)
 from main import app
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
@@ -168,3 +174,22 @@ def test_calendar_conflict_decision_evaluates_known_ics_confirmed_pair() -> None
         "existing-confirmed-1000z"
     ]
     assert "Choose another time" in body["recommended_action"]
+
+
+def test_calendar_conflict_evaluator_fails_closed_when_proposed_source_missing() -> None:
+    """A missing proposal must return 422 even if the request validator is bypassed."""
+    request = CalendarConflictRequest.model_construct(
+        proposed=None,
+        existing=[],
+        proposed_ics=None,
+        existing_ics=None,
+    )
+
+    response = evaluate_calendar_conflict_request(request)
+
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 422
+    assert json.loads(response.body) == {
+        "error_code": "calendar_proposed_source_missing",
+        "detail": "Provide exactly one of proposed or proposed_ics",
+    }

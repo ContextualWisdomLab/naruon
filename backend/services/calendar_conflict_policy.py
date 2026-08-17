@@ -29,6 +29,7 @@ PolicyValidationCode = Literal[
     "calendar_ics_datetime_required",
     "calendar_ics_single_vevent_required",
     "calendar_existing_batch_exceeded",
+    "calendar_proposed_source_missing",
 ]
 
 _STATUS_PRIORITY: dict[str, int] = {

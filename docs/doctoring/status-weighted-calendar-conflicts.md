@@ -24,7 +24,7 @@ This policy deliberately prevents a convenience feature from silently breaking a
 
 ## Security, privacy, and operability
 
-The decision path is deterministic and uses no LLM judgment. It accepts only scheduling evidence needed for the decision; it does not require email bodies, participant names, provider credentials, or calendar descriptions. The endpoint rejects naive timestamps, invalid/non-positive intervals, unsupported statuses, oversized evidence batches, and extra request fields through the transport/service validation layers. Customer-facing results include a concrete next action rather than a generic warning.
+The decision path is deterministic and uses no LLM judgment. It accepts only scheduling evidence needed for the decision; it does not require email bodies, participant names, provider credentials, or calendar descriptions. The endpoint rejects naive timestamps, invalid/non-positive intervals, unsupported statuses, oversized evidence batches, extra request fields, and a missing proposed source through the transport/service validation layers. A missing proposal returns `calendar_proposed_source_missing` as HTTP 422; the handler does not use `assert`, so optimized bytecode cannot strip the guard. Customer-facing results include a concrete next action rather than a generic warning.
 
 No database objects or migrations are introduced. No provider is contacted. Rollback consists of removing the endpoint registration and policy module; existing calendar data is unaffected because the slice is read-only with respect to provider and database state.
 

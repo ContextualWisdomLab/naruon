@@ -126,11 +126,16 @@ def evaluate_calendar_conflict_request(
 ) -> CalendarConflictResponse | JSONResponse:
     """Evaluate double-booking risk without mutating any provider calendar."""
     try:
+        proposed_payload = request.proposed
         if request.proposed_ics is not None:
             proposed = parse_proposed_calendar_commitment_from_ics(request.proposed_ics)
+        elif proposed_payload is not None:
+            proposed = _to_commitment(proposed_payload)
         else:
-            assert request.proposed is not None
-            proposed = _to_commitment(request.proposed)
+            raise CalendarPolicyValidationError(
+                "calendar_proposed_source_missing",
+                "Provide exactly one of proposed or proposed_ics",
+            )
         existing = [_to_commitment(item) for item in request.existing]
         if request.existing_ics is not None:
             existing.extend(parse_existing_calendar_commitments_from_ics(request.existing_ics))
