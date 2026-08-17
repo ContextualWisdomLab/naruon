@@ -22,10 +22,13 @@ _ICS_STATUS_MAP: dict[str, CommitmentStatus] = {
     "CANCELLED": "cancelled",
 }
 _MAX_EXISTING_ICS_COMMITMENTS = 500
+_MAX_CONVERTED_VEVENTS = _MAX_EXISTING_ICS_COMMITMENTS + 1
+_MAX_ICS_DOCUMENT_BYTES = 262_144
+_RECURRENCE_PROPERTY_NAMES = ("RRULE", "RDATE", "EXDATE")
 
 
 def parse_calendar_commitments_from_ics(ics_text: str) -> tuple[CalendarCommitment, ...]:
-    """Extract VEVENT commitments from one CalDAV-native iCalendar document.
+    """Extract VEVENT commitments from one iCalendar/ICS document.
 
     RFC 5545 VEVENT ``STATUS`` defaults to ``CONFIRMED`` when omitted. Date-only
     and floating date-times are rejected because their absolute instant is
@@ -76,6 +79,11 @@ def evaluate_calendar_conflicts_from_ics(
 
 def _parse_calendar(ics_text: str) -> Calendar:
     """Parse iCalendar text without leaking parser internals."""
+    if len(ics_text.encode("utf-8")) > _MAX_ICS_DOCUMENT_BYTES:
+        raise CalendarPolicyValidationError(
+            "calendar_ics_byte_limit_exceeded",
+            "iCalendar evidence exceeds the bounded document size",
+        )
     try:
         calendar = Calendar.from_ical(ics_text)
     except (ValueError, TypeError, KeyError) as exc:
@@ -92,15 +100,27 @@ def _parse_calendar(ics_text: str) -> Calendar:
 
 
 def _commitments_from_calendar(calendar: Calendar) -> tuple[CalendarCommitment, ...]:
-    """Convert every VEVENT in a parsed calendar into policy commitments."""
-    return tuple(
-        _commitment_from_vevent(component)
-        for component in calendar.walk("VEVENT")
-    )
+    """Convert VEVENTs until the bounded batch plus one overflow item."""
+    commitments: list[CalendarCommitment] = []
+    for component in calendar.walk("VEVENT"):
+        if len(commitments) >= _MAX_CONVERTED_VEVENTS:
+            break
+        commitments.append(_commitment_from_vevent(component))
+    return tuple(commitments)
+
+
+def _reject_recurrence_properties(component: Any) -> None:
+    """Fail closed when RRULE, RDATE, or EXDATE would hide later instances."""
+    if any(property_name in component for property_name in _RECURRENCE_PROPERTY_NAMES):
+        raise CalendarPolicyValidationError(
+            "calendar_ics_recurrence_unsupported",
+            "iCalendar evidence must not include RRULE, RDATE, or EXDATE",
+        )
 
 
 def _commitment_from_vevent(component: Any) -> CalendarCommitment:
     """Convert one VEVENT into a timezone-aware policy commitment."""
+    _reject_recurrence_properties(component)
     commitment_id = _text_property(component, "UID")
     if commitment_id is None or not commitment_id.strip():
         raise CalendarPolicyValidationError(

@@ -5,8 +5,12 @@ from __future__ import annotations
 from typing import Literal, Self
 
 from fastapi import APIRouter
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from starlette.requests import Request
+from starlette.responses import Response
 
 from services.calendar_conflict_ics import (
     parse_existing_calendar_commitments_from_ics,
@@ -20,11 +24,35 @@ from services.calendar_conflict_policy import (
     evaluate_calendar_conflicts,
 )
 
-router = APIRouter(prefix="/api/calendar/conflicts", tags=["calendar"])
 MAX_EXISTING_COMMITMENTS = 500
 MAX_PROPOSED_ICS_CHARS = 65_536
 MAX_EXISTING_ICS_CHARS = 262_144
 POLICY_VALIDATION_HTTP_STATUS = 422
+REQUEST_INVALID_ERROR_CODE = "calendar_request_invalid"
+PROPOSED_SOURCE_REQUIRED_DETAIL = "Provide exactly one of proposed or proposed_ics"
+
+
+class CalendarConflictAPIRoute(APIRoute):
+    """Keep request-model failures on the stable calendar conflict error envelope."""
+
+    def get_route_handler(self):
+        """Wrap the FastAPI handler so validation uses CalendarConflictErrorResponse."""
+        original_route_handler = super().get_route_handler()
+
+        async def calendar_conflict_route_handler(request: Request) -> Response:
+            try:
+                return await original_route_handler(request)
+            except RequestValidationError as exc:
+                return _request_validation_error_response(exc)
+
+        return calendar_conflict_route_handler
+
+
+router = APIRouter(
+    prefix="/api/calendar/conflicts",
+    tags=["calendar"],
+    route_class=CalendarConflictAPIRoute,
+)
 
 
 class CalendarCommitmentPayload(BaseModel):
@@ -57,7 +85,7 @@ class CalendarConflictRequest(BaseModel):
         has_proposed = self.proposed is not None
         has_proposed_ics = self.proposed_ics is not None
         if has_proposed == has_proposed_ics:
-            raise ValueError("Provide exactly one of proposed or proposed_ics")
+            raise ValueError(PROPOSED_SOURCE_REQUIRED_DETAIL)
         return self
 
 
@@ -85,6 +113,25 @@ class CalendarConflictErrorResponse(BaseModel):
 
     error_code: str
     detail: str
+
+
+def _request_validation_error_response(exc: RequestValidationError) -> JSONResponse:
+    """Map FastAPI request validation onto the existing error_code envelope."""
+    messages = [str(error.get("msg", "")) for error in exc.errors()]
+    if any(PROPOSED_SOURCE_REQUIRED_DETAIL in message for message in messages):
+        error = CalendarConflictErrorResponse(
+            error_code="calendar_proposed_source_missing",
+            detail=PROPOSED_SOURCE_REQUIRED_DETAIL,
+        )
+    else:
+        error = CalendarConflictErrorResponse(
+            error_code=REQUEST_INVALID_ERROR_CODE,
+            detail="Calendar conflict request fields are malformed",
+        )
+    return JSONResponse(
+        status_code=POLICY_VALIDATION_HTTP_STATUS,
+        content=error.model_dump(),
+    )
 
 
 def _to_commitment(payload: CalendarCommitmentPayload) -> CalendarCommitment:
@@ -134,7 +181,7 @@ def evaluate_calendar_conflict_request(
         else:
             raise CalendarPolicyValidationError(
                 "calendar_proposed_source_missing",
-                "Provide exactly one of proposed or proposed_ics",
+                PROPOSED_SOURCE_REQUIRED_DETAIL,
             )
         existing = [_to_commitment(item) for item in request.existing]
         if request.existing_ics is not None:

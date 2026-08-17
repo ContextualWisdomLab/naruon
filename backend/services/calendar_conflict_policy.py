@@ -28,6 +28,8 @@ PolicyValidationCode = Literal[
     "calendar_ics_interval_required",
     "calendar_ics_datetime_required",
     "calendar_ics_single_vevent_required",
+    "calendar_ics_byte_limit_exceeded",
+    "calendar_ics_recurrence_unsupported",
     "calendar_existing_batch_exceeded",
     "calendar_proposed_source_missing",
 ]

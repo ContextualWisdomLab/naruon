@@ -78,6 +78,37 @@ def test_calendar_conflict_decision_rejects_naive_timestamps() -> None:
     response = client.post("/api/calendar/conflicts/evaluate", json=payload)
 
     assert response.status_code == 422
+    assert response.json()["error_code"] == "calendar_request_invalid"
+    assert "detail" in response.json()
+
+
+def test_calendar_conflict_decision_rejects_both_proposed_sources_with_stable_code() -> None:
+    """Exactly-one proposed-source validation must use the application error envelope."""
+    payload = _request_payload()
+    payload["proposed_ics"] = (
+        "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n"
+        "UID:duplicate-source\nDTSTART:20260817T100000Z\n"
+        "DTEND:20260817T110000Z\nEND:VEVENT\nEND:VCALENDAR\n"
+    )
+
+    response = client.post("/api/calendar/conflicts/evaluate", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error_code": "calendar_proposed_source_missing",
+        "detail": "Provide exactly one of proposed or proposed_ics",
+    }
+
+
+def test_calendar_conflict_decision_rejects_missing_proposed_sources_with_stable_code() -> None:
+    """Neither proposed nor proposed_ics must use the same one-source error envelope."""
+    response = client.post("/api/calendar/conflicts/evaluate", json={"existing": []})
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error_code": "calendar_proposed_source_missing",
+        "detail": "Provide exactly one of proposed or proposed_ics",
+    }
 
 
 def test_calendar_conflict_decision_rejects_invalid_interval_with_stable_code() -> None:
@@ -129,7 +160,7 @@ def test_calendar_conflict_decision_bounds_existing_evidence_batch() -> None:
 
 
 def test_calendar_conflict_decision_evaluates_known_ics_cancelled_pair() -> None:
-    """CalDAV-native STATUS:CANCELLED overlap must allow the confirmed proposal."""
+    """iCalendar/ICS STATUS:CANCELLED overlap must allow the confirmed proposal."""
     fixture_dir = Path(__file__).parent / "fixtures" / "calendar"
     response = client.post(
         "/api/calendar/conflicts/evaluate",
@@ -152,7 +183,7 @@ def test_calendar_conflict_decision_evaluates_known_ics_cancelled_pair() -> None
 
 
 def test_calendar_conflict_decision_evaluates_known_ics_confirmed_pair() -> None:
-    """CalDAV-native STATUS:CONFIRMED overlap must block silent double-booking."""
+    """iCalendar/ICS STATUS:CONFIRMED overlap must block silent double-booking."""
     fixture_dir = Path(__file__).parent / "fixtures" / "calendar"
     response = client.post(
         "/api/calendar/conflicts/evaluate",
