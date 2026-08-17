@@ -1901,7 +1901,6 @@ describe("DataPage", () => {
   });
 
   it("refreshes a pending preview until recognized paragraph text is available", async () => {
-    vi.useFakeTimers();
     const baseFetch = mockWebdavFetch();
     let pendingPreviewCalls = 0;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1934,6 +1933,8 @@ describe("DataPage", () => {
       candidate.textContent?.includes("blank-notes.md"),
     );
     expect(pendingAsset).toBeDefined();
+
+    vi.useFakeTimers();
     await act(async () => {
       pendingAsset?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
