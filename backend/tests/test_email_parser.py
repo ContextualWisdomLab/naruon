@@ -6,6 +6,7 @@ from email.message import Message
 from unittest.mock import MagicMock, patch
 
 import pytest
+from services.email_media_resolution import EmailInlineMediaResolution
 from services.email_parser import (
     EmailParseError,
     _attachment_part_content,
@@ -15,6 +16,7 @@ from services.email_parser import (
     _process_singlepart_body,
     _sanitize_address_display_text,
     _sanitize_nul,
+    _should_drop_image_attachment,
     parse_eml,
     parse_eml_bytes,
 )
@@ -208,7 +210,29 @@ def test_process_multipart_body_ignores_non_string_part_content():
     msg = MagicMock()
     msg.walk.return_value = [plain_part, html_part]
 
-    assert _process_multipart_body(msg) == ("", "", [])
+    empty_resolution = EmailInlineMediaResolution(
+        document_images=(),
+        quarantined_media=(),
+        remote_fetch_policy="disabled",
+    )
+    assert _process_multipart_body(msg, empty_resolution) == ("", "", [])
+
+
+def test_should_drop_image_attachment_ignores_non_images_and_empty_payloads():
+    empty_resolution = EmailInlineMediaResolution(
+        document_images=(),
+        quarantined_media=(),
+        remote_fetch_policy="disabled",
+    )
+    text_part = MagicMock()
+    text_part.get_content_maintype.return_value = "text"
+    assert _should_drop_image_attachment(text_part, empty_resolution) is False
+
+    image_part = MagicMock()
+    image_part.get_content_maintype.return_value = "image"
+    image_part.get_payload.return_value = None
+    image_part.get.return_value = None
+    assert _should_drop_image_attachment(image_part, empty_resolution) is True
 
 
 def test_process_singlepart_body_ignores_non_string_content():
