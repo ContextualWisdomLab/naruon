@@ -23,7 +23,12 @@ from db.models import (
     ContentNodeRecord,
     ContentSegmentRecord,
     Email,
+    EmailMediaQuarantineRecord,
     KnowledgeGraphEdgeRecord,
+)
+from services.email_media_quarantine import (
+    EmailMediaQuarantinePersistError,
+    persist_parsed_email_media_quarantine,
 )
 from services.archive import extract_backup_async
 from services.batch_embedding_service import try_batch_import_embeddings
@@ -862,7 +867,31 @@ async def _import_single_eml(
 
     session.add(email_obj)
     try:
+        await session.flush()
+        existing_quarantine = await session.execute(
+            select(EmailMediaQuarantineRecord).where(
+                EmailMediaQuarantineRecord.message_record_id == email_obj.id
+            )
+        )
+        persist_parsed_email_media_quarantine(
+            session=session,
+            message_record_id=email_obj.id,
+            parsed_email=parsed,
+            existing_records=existing_quarantine.scalars().all(),
+            record_factory=EmailMediaQuarantineRecord,
+        )
         await session.commit()
+    except EmailMediaQuarantinePersistError:
+        await session.rollback()
+        logger.warning(
+            "Email import item failed: reason_code=media_quarantine_persist_failed filename=%s",
+            display_filename,
+        )
+        return EmailImportItemResult(
+            filename=display_filename,
+            status="failed",
+            reason_code="media_quarantine_persist_failed",
+        )
     except Exception:
         await session.rollback()
         logger.warning(

@@ -7,6 +7,7 @@ from email.utils import getaddresses
 from email.utils import parsedate_to_datetime
 from typing import NotRequired, TypedDict
 from .attachment_parser import parse_email_attachment
+from .email_media_quarantine import EmailMediaQuarantineStore
 from .email_media_resolution import (
     EmailInlineMediaResolution,
     image_bytes_are_document_evidence,
@@ -225,8 +226,18 @@ def _extract_thread_id(msg: Message, message_id: str) -> str | None:
     return message_id
 
 
-def _message_to_email_data(msg: Message, *, raw_message: bytes) -> EmailData:
-    media_resolution = resolve_email_inline_media(raw_message)
+def _message_to_email_data(
+    msg: Message,
+    *,
+    raw_message: bytes,
+    message_record_id: int | None = None,
+    quarantine_store: EmailMediaQuarantineStore | None = None,
+) -> EmailData:
+    media_resolution = resolve_email_inline_media(
+        raw_message,
+        message_record_id=message_record_id,
+        quarantine_store=quarantine_store,
+    )
     body, body_content_type, attachments = _extract_body_and_attachments(
         msg,
         media_resolution,
@@ -263,11 +274,17 @@ def _message_to_email_data(msg: Message, *, raw_message: bytes) -> EmailData:
     }
 
 
-def parse_eml(file_path: str | Path) -> EmailData:
+def parse_eml(
+    file_path: str | Path,
+    *,
+    message_record_id: int | None = None,
+    quarantine_store: EmailMediaQuarantineStore | None = None,
+) -> EmailData:
     """Parses an EML file and extracts email metadata and body.
 
     Raises:
         EmailParseError: If there is an issue reading the file.
+        EmailMediaQuarantinePersistError: If persist was requested and failed.
     """
     try:
         with open(file_path, "rb") as f:
@@ -276,14 +293,29 @@ def parse_eml(file_path: str | Path) -> EmailData:
         raise EmailParseError(f"Failed to read file {file_path}: {e}") from e
 
     msg = message_from_bytes(raw_message, policy=policy.default)
-    return _message_to_email_data(msg, raw_message=raw_message)
+    return _message_to_email_data(
+        msg,
+        raw_message=raw_message,
+        message_record_id=message_record_id,
+        quarantine_store=quarantine_store,
+    )
 
 
-def parse_eml_bytes(content: bytes) -> EmailData:
+def parse_eml_bytes(
+    content: bytes,
+    *,
+    message_record_id: int | None = None,
+    quarantine_store: EmailMediaQuarantineStore | None = None,
+) -> EmailData:
     """Parses EML bytes fetched from a provider."""
     try:
         msg = message_from_bytes(content, policy=policy.default)
     except Exception as e:
         raise EmailParseError("Failed to parse provider email bytes") from e
 
-    return _message_to_email_data(msg, raw_message=content)
+    return _message_to_email_data(
+        msg,
+        raw_message=content,
+        message_record_id=message_record_id,
+        quarantine_store=quarantine_store,
+    )

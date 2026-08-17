@@ -9,9 +9,11 @@ parts. `services.email_media_resolution` is the local continuation gate:
 it calls `admit_email_inline_media()` first and continues only
 `document_image` admissions. Tracking pixels, unsupported media, and
 unresolved CID references are quarantined and must not be sent to a model.
-Remote `http(s)` images remain no-fetch unless a separately authorized
-egress policy already exists; this slice does not add one. See
-`docs/doctoring/email-inline-media-admission.md`.
+Those three drop codes are persisted as purpose-bound
+`email_media_quarantine_records` so a later parse can still tell the
+customer what was withheld and why. Remote `http(s)` images remain no-fetch
+unless a separately authorized egress policy already exists; this slice
+does not add one. See `docs/doctoring/email-inline-media-admission.md`.
 
 ## Flow Diagram
 

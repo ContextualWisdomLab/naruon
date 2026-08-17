@@ -821,6 +821,11 @@ class Email(Base):
     ticket_tasks: Mapped[list["TicketTask"]] = relationship(
         back_populates="related_email", cascade="all, delete-orphan"
     )
+    media_quarantine_records: Mapped[list["EmailMediaQuarantineRecord"]] = (
+        relationship(
+            back_populates="email_record", cascade="all, delete-orphan"
+        )
+    )
 
 
 class TicketTask(Base):
@@ -859,6 +864,46 @@ class TicketTask(Base):
     )
 
     related_email: Mapped["Email | None"] = relationship(back_populates="ticket_tasks")
+
+
+class EmailMediaQuarantineRecord(Base):
+    __tablename__ = "email_media_quarantine_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_record_id",
+            "source_part_index",
+            "source_bytes_sha256",
+            name="uq_email_media_quarantine_identity",
+        ),
+        Index(
+            "ix_email_media_quarantine_message_time",
+            "message_record_id",
+            "created_at",
+        ),
+    )
+
+    quarantine_record_id: Mapped[int] = mapped_column(primary_key=True)
+    message_record_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id"), nullable=False, index=True
+    )
+    source_part_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_id_value: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_bytes_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    admission_error_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_boundary_label: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email_record: Mapped["Email"] = relationship(
+        back_populates="media_quarantine_records"
+    )
 
 
 Index(

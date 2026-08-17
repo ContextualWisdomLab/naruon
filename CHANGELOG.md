@@ -1,4 +1,5 @@
 ## [Unreleased]
+- Slice 3 persist: `parse_eml` / `parse_eml_bytes` / `resolve_email_inline_media` record `tracking_pixel`, `unsupported_media`, and `unresolved_cid_reference` drops in `email_media_quarantine_records` so a later parse can tell the customer the image was withheld and not sent to a model. Re-parse is an idempotent upsert. `document_image` is never stored as a quarantine.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)

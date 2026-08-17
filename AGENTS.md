@@ -357,7 +357,18 @@ in this repo.
   parse/resolution paths must call `admit_email_inline_media()` through
   `resolve_email_inline_media()` and continue only `document_image`
   results; do not send `tracking_pixel`, `unsupported_media`, or
-  `unresolved_cid_reference` outcomes to a model.
+  `unresolved_cid_reference` outcomes to a model. Persist those three
+  drop codes only, from the already-produced admission/resolution
+  outcomes, into `email_media_quarantine_records`. Never persist
+  `document_image` as a quarantine. Store message identity, part index,
+  Content-ID, SHA-256 of the exact decoded source bytes, the closed
+  error_code, known/unknown evidence boundary, and created_at. Do not
+  store decoded image bytes, the full email body, or remote URLs. Re-parse
+  of the same message must upsert without duplicate rows. If persist
+  fails, fail closed; do not silently continue a tracker as
+  `document_image`. Customer copy is the next action, for example
+  "This inline image was withheld as a tracking pixel. It was not sent
+  to a model."
 - Home/Today dashboard reply-wait surfaces must read signed
   `/api/emails/pending-replies` data instead of inferring pending replies from
   generic inbox fixtures or static copy. Tests and E2E mocks must verify the

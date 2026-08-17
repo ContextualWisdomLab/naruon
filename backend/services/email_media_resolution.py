@@ -4,8 +4,10 @@ This module is the #1350 Slice 3 wiring boundary. It calls
 ``admit_email_inline_media()`` first and drops or quarantines every
 non-``document_image`` outcome so later OCR, VLM, or NewsDOM work cannot
 treat a tracking pixel, unsupported part, or unresolved CID as document
-evidence. It does not fetch remote images, persist new tables, run a model,
-or copy the #1376 ``EmailMediaArtifact`` pixel contract.
+evidence. When a persist store and message identity are provided, dropped
+parts are recorded through ``services.email_media_quarantine``. It does not
+fetch remote images, run a model, or copy the #1376 ``EmailMediaArtifact``
+pixel contract.
 """
 
 from __future__ import annotations
@@ -23,6 +25,10 @@ from services.email_media_admission import (
     InlineImageAdmission,
     _normalize_content_id,
     admit_email_inline_media,
+)
+from services.email_media_quarantine import (
+    EmailMediaQuarantineStore,
+    persist_resolution_if_requested,
 )
 
 TRACKING_PIXEL_ERROR_CODE = TRACKING_PIXEL_CLASSIFICATION
@@ -63,20 +69,34 @@ class EmailInlineMediaResolution:
     remote_fetch_policy: str
 
 
-def resolve_email_inline_media(raw_message: bytes) -> EmailInlineMediaResolution:
+def resolve_email_inline_media(
+    raw_message: bytes,
+    *,
+    message_record_id: int | None = None,
+    quarantine_store: EmailMediaQuarantineStore | None = None,
+) -> EmailInlineMediaResolution:
     """Admit local inline media, then continue only ``document_image`` results.
 
     Args:
         raw_message: Complete RFC 5322 message bytes, including MIME headers.
+        message_record_id: ``email_records`` primary key when persist is requested.
+        quarantine_store: Optional persist store for dropped parts.
 
     Returns:
         Continued document images plus quarantined non-document outcomes.
 
     Raises:
         TypeError: If ``raw_message`` is not ``bytes``.
+        EmailMediaQuarantinePersistError: If persist was requested and failed.
     """
     admission_result = admit_email_inline_media(raw_message)
-    return _resolution_from_admission(admission_result)
+    resolution = _resolution_from_admission(admission_result)
+    persist_resolution_if_requested(
+        media_resolution=resolution,
+        message_record_id=message_record_id,
+        quarantine_store=quarantine_store,
+    )
+    return resolution
 
 
 def normalize_image_content_id(value: object) -> str | None:

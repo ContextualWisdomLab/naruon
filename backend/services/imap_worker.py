@@ -7,10 +7,11 @@ from dataclasses import dataclass
 import aioimaplib
 from sqlalchemy import select
 
-from db.models import Email, TenantConfig
+from db.models import Email, EmailMediaQuarantineRecord, TenantConfig
 from db.session import AsyncSessionLocal
 from services.email_client import validate_imap_destination
 from services.email_dedupe_service import strong_email_fingerprint
+from services.email_media_quarantine import persist_parsed_email_media_quarantine
 from services.email_parser import EmailData, parse_eml_bytes
 from services.exceptions import EmailParseError
 from services.knowledge_extractor import (
@@ -93,8 +94,25 @@ async def process_fetched_email(
     )
 
     session.add(new_email)
-    if is_self_sent_email(new_email, owner_addresses):
+    needs_flush = is_self_sent_email(new_email, owner_addresses) or bool(
+        email_data.get("inline_media_resolution")
+    )
+    if needs_flush:
         await session.flush()
+    if email_data.get("inline_media_resolution") is not None:
+        existing_quarantine = await session.execute(
+            select(EmailMediaQuarantineRecord).where(
+                EmailMediaQuarantineRecord.message_record_id == new_email.id
+            )
+        )
+        persist_parsed_email_media_quarantine(
+            session=session,
+            message_record_id=new_email.id,
+            parsed_email=email_data,
+            existing_records=existing_quarantine.scalars().all(),
+            record_factory=EmailMediaQuarantineRecord,
+        )
+    if is_self_sent_email(new_email, owner_addresses):
         await extract_knowledge_from_self_sent(session, new_email, owner_addresses)
     return new_email
 
