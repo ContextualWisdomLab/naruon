@@ -209,14 +209,14 @@ def test_python_314_backend_image_uses_binary_wheel_dependencies() -> None:
 def test_backend_runtime_toolchain_uses_image_scan_clean_security_pins() -> None:
     requirements = read_repo_text("backend/requirements.txt")
 
-    assert "sqlalchemy==2.0.51" in requirements
+    assert "sqlalchemy==2.0.52" in requirements
     assert "asyncpg==0.31.0" in requirements
     assert "tiktoken==0.13.0" in requirements
     assert "protobuf==7.35.1" in requirements
-    assert "setuptools==83.0.0" in requirements
-    assert "wheel==0.47.0" in requirements
-    assert "opentelemetry-api==1.43.0" in requirements
-    assert "opentelemetry-instrumentation-fastapi==0.64b0" in requirements
+    assert "setuptools==84.0.0" in requirements
+    assert "wheel==0.48.0" in requirements
+    assert "opentelemetry-api==1.44.0" in requirements
+    assert "opentelemetry-instrumentation-fastapi==0.65b0" in requirements
 
 
 def test_strix_ci_requirements_use_security_quality_clean_pins() -> None:
