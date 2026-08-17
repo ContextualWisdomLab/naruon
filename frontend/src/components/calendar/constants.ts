@@ -1,32 +1,4 @@
-import type {
-  CalendarCandidateEvent,
-  CalendarCoordinationProposal,
-  CalendarDefinition,
-  CalendarMonthEvent,
-  CalendarWeekEvent,
-} from './types';
-
-/** Shared display month for the calendar chrome and 회의 조율 proposals. */
-export const calendarDisplayMonth = "2026-05";
-
-export const calendarCoordinationProposals: CalendarCoordinationProposal[] = [
-  {
-    id: "proposal-thu-1400",
-    rankLabel: "1안",
-    startsAt: "2026-05-21T14:00:00+09:00",
-    endsAt: "2026-05-21T15:00:00+09:00",
-    availability: "모든 참석자 참석 가능",
-    emphasized: true,
-  },
-  {
-    id: "proposal-fri-1000",
-    rankLabel: "2안",
-    startsAt: "2026-05-22T10:00:00+09:00",
-    endsAt: "2026-05-22T11:00:00+09:00",
-    availability: "1명(김개발) 불참 예상",
-    emphasized: false,
-  },
-];
+import type { CalendarCandidateEvent, CalendarDefinition, CalendarMonthEvent, CalendarWeekEvent } from './types';
 
 export const calendarDefinitions: CalendarDefinition[] = [
   { id: 'personal', name: '김나루 (나)', colorClass: 'bg-primary' },

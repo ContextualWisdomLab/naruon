@@ -1,9 +1,5 @@
 import { calendarDefinitions } from "./constants";
-import {
-  CalendarConflictDecisionCode,
-  CalendarWritebackSource,
-  CalendarWritebackIntentResponse,
-} from "./types";
+import { CalendarWritebackSource, CalendarWritebackIntentResponse } from "./types";
 
 export function buildInitialCalendarVisibility() {
   return Object.fromEntries(calendarDefinitions.map((calendar) => [calendar.id, true]));
@@ -68,83 +64,6 @@ export function getProviderRetryLabel(result: CalendarWritebackIntentResponse) {
   if (result.retry_item_uid || result.status === 'queued') return '재시도 대기';
   if (result.provider_write_executed) return '재시도 없음';
   return '실행 요청 없음';
-}
-
-const SEOUL_WEEKDAY: Record<string, string> = {
-  Sun: "일",
-  Mon: "월",
-  Tue: "화",
-  Wed: "수",
-  Thu: "목",
-  Fri: "금",
-  Sat: "토",
-};
-
-function seoulDateParts(iso: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Seoul",
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(iso));
-  const values: Record<string, string> = {};
-  for (const part of parts) {
-    if (part.type !== "literal") {
-      values[part.type] = part.value;
-    }
-  }
-  return values;
-}
-
-/** Format a 회의 조율 slot from the same Seoul ISO instants used as proposal data. */
-export function formatCoordinationProposalLabel(startsAt: string, endsAt: string) {
-  const start = seoulDateParts(startsAt);
-  const end = seoulDateParts(endsAt);
-  const weekday = SEOUL_WEEKDAY[start.weekday] ?? start.weekday;
-  const startHour = start.hour.padStart(2, "0");
-  const startMinute = start.minute.padStart(2, "0");
-  const endHour = end.hour.padStart(2, "0");
-  const endMinute = end.minute.padStart(2, "0");
-  return `${start.month}월 ${start.day}일 (${weekday}) ${startHour}:${startMinute} - ${endHour}:${endMinute}`;
-}
-
-/** Format the calendar chrome month from the shared YYYY-MM display month. */
-export function formatCalendarDisplayMonth(month: string) {
-  const [year, monthNumber] = month.split("-");
-  return `${year}년 ${Number(monthNumber)}월`;
-}
-
-export function getConflictDecisionLabel(decisionCode: CalendarConflictDecisionCode): string {
-  switch (decisionCode) {
-    case 'available':
-      return '진행 가능';
-    case 'blocked':
-      return '이중 예약 차단';
-    case 'review_required':
-      return '검토 필요';
-    default: {
-      const exhaustiveCheck: never = decisionCode;
-      return exhaustiveCheck;
-    }
-  }
-}
-
-export function getConflictNextActionLabel(decisionCode: CalendarConflictDecisionCode): string {
-  switch (decisionCode) {
-    case 'available':
-      return '이 시간은 비어 있습니다. 일정을 계속 진행하세요.';
-    case 'blocked':
-      return '확정된 일정이 겹칩니다. 다른 시간을 고르거나 기존 확정 일정을 먼저 조정하세요.';
-    case 'review_required':
-      return '잠정 일정이 겹칩니다. 잠정 일정을 조정하거나 유지할지 확인한 뒤 진행하세요.';
-    default: {
-      const exhaustiveCheck: never = decisionCode;
-      return exhaustiveCheck;
-    }
-  }
 }
 
 export function getApiErrorStatus(error: unknown) {
