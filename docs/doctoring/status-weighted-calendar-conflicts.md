@@ -4,7 +4,7 @@
 
 Naruon evaluates a proposed calendar commitment against a bounded set of existing commitments and returns one of three deterministic outcomes: `available`, `blocked`, or `review_required`. The decision is advisory evidence only. It does not mutate, cancel, reschedule, accept, or decline any provider event.
 
-The public endpoint is `POST /api/calendar/conflicts/evaluate`. It is mounted behind Naruon's existing private API authentication dependency. Inputs use timezone-aware timestamps, an opaque commitment identifier, and one of the product statuses `confirmed`, `tentative`, or `desired`. Existing evidence is capped at 500 commitments per request.
+The public endpoint is `POST /api/calendar/conflicts/evaluate`. It is mounted behind Naruon's existing private API authentication dependency. Inputs are either structured commitments (`commitment_id`, timezone-aware `start_at`/`end_at`, status) or CalDAV-native `proposed_ics` / `existing_ics` VEVENT documents. Occupying statuses are `confirmed`, `tentative`, and `desired`. RFC 5545 `STATUS:CANCELLED` is accepted and does not occupy the interval. Existing evidence is capped at 500 commitments per request. The Calendar coordination view evaluates known `.ics` pairs through the signed-session `/api/*` proxy and shows the next action.
 
 ## Standards traceability
 
@@ -14,9 +14,9 @@ RFC 5546 defines iTIP scheduling methods such as `REQUEST` and `REPLY`, includin
 
 ## Decision policy
 
-- No overlapping commitment: `available`; the customer can proceed.
-- Any equal- or higher-priority overlap: `blocked`; the customer must choose another time or explicitly resolve that conflict first.
-- Only lower-priority overlaps: `review_required`; Naruon surfaces the lower-priority conflicts and requires explicit review instead of silently displacing them.
+- No occupying overlap, including overlap with only `STATUS:CANCELLED` events: `available`; the customer can proceed.
+- Any equal- or higher-priority occupying overlap: `blocked`; the customer must choose another time or explicitly resolve that conflict first.
+- Only lower-priority occupying overlaps: `review_required`; Naruon surfaces the lower-priority conflicts and requires explicit review instead of silently displacing them.
 - An existing commitment with the same opaque identifier as the proposal is treated as the current representation of that event, not as a self-conflict.
 - Conflict evidence is sorted by UTC start instant and then opaque identifier so provider response ordering cannot change the decision payload.
 
@@ -30,7 +30,7 @@ No database objects or migrations are introduced. No provider is contacted. Roll
 
 ## Verification evidence required before merge
 
-The exact unchanged PR head must prove realistic overlap, adjacency, timezone-offset equivalence, deterministic ordering, self-update, invalid interval, unsupported status, API validation, authentication, and bounded-batch behavior. Repository-required CI, security, coverage, supply-chain, package, and independent current-head review gates remain authoritative; predecessor or queued evidence is non-passing.
+The exact unchanged PR head must prove known `.ics` pairs (cancelled allows, tentative review, confirmed blocks, adjacent allow), realistic overlap, adjacency, timezone-offset equivalence, deterministic ordering, self-update, invalid interval, unsupported status, API validation, authentication, and bounded-batch behavior. Repository-required CI, security, coverage, supply-chain, package, and independent current-head review gates remain authoritative; predecessor or queued evidence is non-passing. The policy decision is recorded in [ADR-0004](../adr/0004-status-weighted-calendar-conflicts.md).
 
 ## References (APA 7th)
 
