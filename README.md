@@ -238,7 +238,7 @@ Operational references:
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
 
-Repository delivery and security automation is supplied by the ContextualWisdomLab central required workflows. This repository does not carry repo-local copies of those governed review, security, or merge workflows. Developer, automation, review, and collaboration procedures are maintained under `CONTRIBUTING.md` and `docs/development/`, separate from this customer and operator guide.
+Repository delivery and security automation is supplied by the ContextualWisdomLab central required workflows. This repository does not carry repo-local OpenCode, Strix, or merge-scheduler workflow copies; branch updates, auto-merge, and mechanical merge actions are governed by those central workflows under the protected-branch policy. Developer, automation, review, and collaboration procedures are maintained under `CONTRIBUTING.md` and `docs/development/`, separate from this customer and operator guide.
 
 ## License
 
