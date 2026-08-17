@@ -128,7 +128,7 @@ The default Compose profile starts PostgreSQL, Ollama, the backend, and the fron
 ```bash
 ./scripts/naruon_compose.sh ps
 curl -fsS http://127.0.0.1:8000/
-python3 -m webbrowser http://127.0.0.1:3000
+python3 -m webbrowser http://localhost:3000
 ```
 
 The API root should return an `ok` status. The fixture import creates a small synthetic conversation so the Mail and threading path can be checked without real customer data.
@@ -238,7 +238,7 @@ Operational references:
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
 
-Developer, automation, review, and collaboration procedures are maintained under `CONTRIBUTING.md` and `docs/development/`, separate from this customer and operator guide.
+Repository delivery and security automation is supplied by the ContextualWisdomLab central required workflows. Developer, automation, review, and collaboration procedures are maintained under `CONTRIBUTING.md` and `docs/development/`, separate from this customer and operator guide.
 
 ## License
 
