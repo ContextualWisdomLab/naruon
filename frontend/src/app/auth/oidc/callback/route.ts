@@ -131,7 +131,12 @@ function trustedOidcTokenEndpoint(config: {
   const safePath = endpoint.pathname
     .split("/")
     .map((segment) => {
-      const decoded = decodeURIComponent(segment);
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(segment);
+      } catch {
+        throw new Error("OIDC token endpoint path is invalid");
+      }
       if (
         decoded === "." ||
         decoded === ".." ||

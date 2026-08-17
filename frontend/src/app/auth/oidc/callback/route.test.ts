@@ -394,4 +394,20 @@ describe("/auth/oidc/callback route", () => {
     expect(postOidcTokenRequestMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("returns configuration error if the endpoint has invalid URI encoding", async () => {
+    vi.stubEnv("NEXT_PUBLIC_OIDC_ISSUER_URL", "https://auth.example.com");
+    vi.stubEnv("NEXT_PUBLIC_OIDC_CLIENT_ID", "test-client");
+    vi.stubEnv("NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT", "https://auth.example.com/auth");
+    vi.stubEnv("NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT", "https://auth.example.com/token/%2");
+
+    const req = new NextRequest("http://localhost:3000/auth/callback", {
+      method: "POST",
+      headers: { cookie: `naruon_oidc_pkce=eyJzdGF0ZSI6InRlc3Qtc3RhdGUiLCJ2ZXJpZmllciI6InRlc3QtdmVyaWZpZXIiLCJyZXR1cm5fdG8iOiIvIn0` },
+      body: JSON.stringify({ search: "?code=test-code&state=test-state" }),
+    });
+    const response = await POST(req);
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error_code: "oidc_token_exchange_failed" });
+  });
 });

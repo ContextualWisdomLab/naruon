@@ -133,3 +133,8 @@
 **Vulnerability:** The `in_reply_to` and `references` fields on the `SendEmailRequest` model lacked explicit validation, opening up an opportunity for header injection by appending `\r\n`.
 **Learning:** While the email service internally checks some headers, relying on the API boundary's Pydantic model ensures bad input is stopped early and consistently. Pydantic regex patterns aren't sufficient on their own for all string contexts due to encoding/decoding inconsistencies.
 **Prevention:** Always use `@field_validator` with explicit `mode="before"` string matching to reject `chr(10)` and `chr(13)` across all user-controlled email header fields. Use `isinstance(value, str)` before string operations to prevent runtime errors if input is missing or malformed.
+
+## 2026-08-15 - Unhandled URIError DoS in decodeURIComponent
+**Vulnerability:** The application invoked `decodeURIComponent` directly on unvalidated URL segments within the `trustedOidcTokenEndpoint` function. If a malformed percent-encoded string (e.g., `/%2`) was provided by an attacker, the function would throw an unhandled `URIError`, causing the application to crash or drop the request unexpectedly, leading to a Denial of Service (DoS).
+**Learning:** `decodeURIComponent` in JavaScript/Node.js throws a runtime exception if it encounters invalid percent-encoded sequences. Functions processing arbitrary user-provided URLs or paths must account for these edge cases to remain robust.
+**Prevention:** Always wrap `decodeURIComponent` calls in a `try...catch` block when handling untrusted input, and return a controlled, structured error (e.g., `throw new Error("Invalid path")`) instead of allowing raw `URIError` exceptions to propagate.
