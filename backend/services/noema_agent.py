@@ -474,6 +474,13 @@ def _load_pydantic_ai() -> Any | None:
     }
 
 
+async def _aclose_http_client(http_client: Any) -> None:
+    closer = getattr(http_client, "aclose", None)
+    if closer is None:
+        return
+    await closer()
+
+
 async def build_noema_agent(
     gateway: OrchestratorGateway,
 ) -> tuple["Agent | None", Callable[[], Awaitable[None]]]:
@@ -482,6 +489,8 @@ async def build_noema_agent(
     Returns ``(agent, closer)``. ``agent`` is ``None`` when pydantic-ai is not
     installed; ``closer`` always closes any opened HTTP client. The model name
     is always :data:`ORCHESTRATOR_MODEL_ALIAS` — never a sequential list.
+    A rejected or missing gateway URL raises ``ValueError`` with
+    ``orchestrator_gateway_unavailable`` and never constructs ``AsyncOpenAI``.
     """
 
     async def _noop_closer() -> None:
@@ -491,9 +500,17 @@ async def build_noema_agent(
     if modules is None:
         return None, _noop_closer
 
-    validated_base_url, http_client = await build_llm_provider_http_client(
-        gateway.base_url
-    )
+    try:
+        validated_base_url, http_client = await build_llm_provider_http_client(
+            gateway.base_url
+        )
+    except ValueError as exc:
+        raise ValueError("orchestrator_gateway_unavailable") from exc
+
+    if not validated_base_url:
+        await _aclose_http_client(http_client)
+        raise ValueError("orchestrator_gateway_unavailable")
+
     openai_client = AsyncOpenAI(
         api_key=gateway.inference_token,
         base_url=validated_base_url,
@@ -586,7 +603,16 @@ async def run_noema_agent(
             error_code="orchestrator_gateway_unavailable",
         )
 
-    agent, closer = await build_noema_agent(gateway)
+    try:
+        agent, closer = await build_noema_agent(gateway)
+    except ValueError:
+        return NoemaAgentResult(
+            status="unavailable",
+            notice="The contextual-orchestrator gateway is not configured.",
+            provider_name=ORCHESTRATOR_MODEL_ALIAS,
+            model_alias=gateway.model_alias,
+            error_code="orchestrator_gateway_unavailable",
+        )
     if agent is None:
         return NoemaAgentResult(
             status="unavailable",
