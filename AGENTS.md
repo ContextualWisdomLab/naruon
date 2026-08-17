@@ -368,7 +368,12 @@ in this repo.
   fails, fail closed; do not silently continue a tracker as
   `document_image`. Customer copy is the next action, for example
   "This inline image was withheld as a tracking pixel. It was not sent
-  to a model."
+  to a model." Mail message detail must read those already-persisted
+  rows through an authenticated owner-scoped list and show the next
+  action for `tracking_pixel`, `unsupported_media`, and
+  `unresolved_cid_reference`. Do not invent a second classifier, do not
+  render withheld image bytes, and fail closed to an empty list when no
+  persisted rows exist.
 - Home/Today dashboard reply-wait surfaces must read signed
   `/api/emails/pending-replies` data instead of inferring pending replies from
   generic inbox fixtures or static copy. Tests and E2E mocks must verify the

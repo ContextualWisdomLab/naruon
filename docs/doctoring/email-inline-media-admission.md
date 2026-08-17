@@ -77,6 +77,34 @@ Customer next action examples:
 - "This inline image was withheld as unsupported media. It was not sent to a model."
 - "This inline image was withheld as an unresolved CID reference. It was not sent to a model."
 
+## Buyer-visible mail UI
+
+Persisted rows are not buyer-visible until the mail message-detail surface
+reads them. `GET /api/emails/{email_id}/media-quarantine` is an
+authenticated, owner-scoped list of already-persisted
+`email_media_quarantine_records` for the current message. It does not
+classify media, fetch remote `http(s)` URLs, return withheld image bytes,
+or copy the #1376 `EmailMediaArtifact` pixel contract. Missing or
+cross-tenant messages fail closed with a stable `{error_code, detail}`
+envelope. An empty persist set returns `{quarantine_records: []}`.
+
+`EmailDetail` fetches that list through the same-origin `/api/*` cookie
+session and renders the next action on the existing mail detail surface.
+The buyer-visible copy is:
+
+- tracking_pixel: "This inline image was withheld as a tracking pixel. It was not sent to a model."
+- unsupported_media: "This inline part is unsupported and was withheld. It was not sent to a model."
+- unresolved_cid_reference: "This cid: image could not be resolved from the same message and was withheld. It was not sent to a model."
+
+Unknown codes, including `document_image`, are omitted. The UI does not
+render withheld image bytes.
+
+This notice exists because viewing a message commonly loads third-party
+pixels that leak recipient identity (Englehardt et al., 2018). Telling
+the customer that a local beacon was withheld, and was not sent to a
+model, is the purpose-bound next action. Unresolved `cid:` copy follows
+RFC 2392: a Content-ID URL is only meaningful inside the same message.
+
 ## Standards-to-code trace
 
 | Requirement | Primary basis | Naruon behavior |
@@ -109,8 +137,10 @@ and two identical base64 PNG parts that share one SHA-256. Boundary tests
 cover unsupported media, remote no-fetch, ambiguous Content-ID, and helper
 fail-closed paths. The wiring tests prove a named 1×1 CID tracker and an
 unresolved CID do not continue as document evidence on `parse_eml_bytes`,
-while a resolving CID chart does. Owned admission, resolution, and quarantine-persist module
-statement and branch coverage is 100% on the focused harness.
+while a resolving CID chart does. Owned admission, resolution,
+quarantine-persist, and quarantine-read module statement and branch
+coverage is 100% on the focused harness. Mail `EmailDetail` tests cover
+the three buyer next-action strings and the fail-closed empty list.
 
 ## References
 
