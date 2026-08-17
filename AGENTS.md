@@ -593,6 +593,14 @@ in this repo.
   vector counts, unsupported embedding model names, static quality totals, or
   provider-write success claims; Data mocks and E2E fixtures must preserve the
   bearer-session call and omit public identity headers.
+- Repository-asset preview is read-only and scoped. Unknown keys and
+  cross-workspace access both return 404 `repository_asset_not_found` so
+  existence cannot leak. Recognized HWPX text comes from stored ordered
+  paragraphs; pending or failed recognition must keep the current asset detail
+  and show an explicit next action. Do not treat missing preview text as empty
+  content, and do not fetch preview indiscriminately in E2E helpers — mock
+  known assets such as `roadmap.md` and `blank-notes.md`, then fail unmatched
+  preview routes closed.
 - Project workspace lists, milestones, task links, and decision logs must be
   source-backed by signed `/api/webdav/folders` and `/api/tasks` data or
   explicitly labeled pending. Do not reintroduce static project names, inert

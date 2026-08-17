@@ -1590,9 +1590,76 @@ function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 500) {
   };
 }
 
+const knownRepositoryAssetPreviews: Record<string, {
+  asset_key: string;
+  asset_type: "email_attachment" | "workspace_document";
+  preview_state: "recognized" | "pending" | "failed" | "unavailable";
+  parser_family: string | null;
+  paragraph_texts: string[];
+  preview_text: string | null;
+  next_action: "read_recognized_text" | "wait_for_recognition" | "choose_another_file";
+  error_code: string | null;
+  provider_write_executed: boolean;
+}> = {
+  doc_repository_ready: {
+    asset_key: "doc_repository_ready",
+    asset_type: "workspace_document",
+    preview_state: "recognized",
+    parser_family: null,
+    paragraph_texts: ["# Q2 roadmap", "Ship the buyer-visible Data room."],
+    preview_text: "# Q2 roadmap\n\nShip the buyer-visible Data room.",
+    next_action: "read_recognized_text",
+    error_code: null,
+    provider_write_executed: false,
+  },
+  asset_repository_ready: {
+    asset_key: "asset_repository_ready",
+    asset_type: "email_attachment",
+    preview_state: "recognized",
+    parser_family: "pdf",
+    paragraph_texts: ["Extracted roadmap PDF text"],
+    preview_text: "Extracted roadmap PDF text",
+    next_action: "read_recognized_text",
+    error_code: null,
+    provider_write_executed: false,
+  },
+  asset_repository_pending: {
+    asset_key: "asset_repository_pending",
+    asset_type: "email_attachment",
+    preview_state: "pending",
+    parser_family: null,
+    paragraph_texts: [],
+    preview_text: null,
+    next_action: "wait_for_recognition",
+    error_code: "recognition_pending",
+    provider_write_executed: false,
+  },
+};
+
+function knownRepositoryAssetPreviewResponse(path: string) {
+  const match = path.match(/^\/api\/data\/repository-assets\/([^/]+)\/preview$/);
+  if (!match) return null;
+  const preview = knownRepositoryAssetPreviews[match[1]];
+  if (!preview) {
+    return jsonResponse(
+      {
+        detail: {
+          error_code: "repository_asset_not_found",
+          message: "Repository asset was not found in the signed workspace scope.",
+        },
+      },
+      false,
+      404,
+    );
+  }
+  return jsonResponse(preview);
+}
+
 function mockWebdavFetch() {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    const previewResponse = knownRepositoryAssetPreviewResponse(path);
+    if (previewResponse) return previewResponse;
     if (path === "/api/data/quality-surface") {
       void init;
       return jsonResponse(dataQualitySurface);
@@ -2431,6 +2498,8 @@ describe("DataPage", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
+      const previewResponse = knownRepositoryAssetPreviewResponse(path);
+      if (previewResponse) return previewResponse;
       if (path === "/api/data/quality-surface") return jsonResponse(dataQualitySurface);
       if (path === "/api/data/quality-surface/evidence-snapshot") {
         return jsonResponse({ detail: "snapshot unavailable" }, false, 500);
@@ -2581,6 +2650,8 @@ describe("DataPage", () => {
   it("sanitizes WebDAV source labels that contain opaque source ids", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
+      const previewResponse = knownRepositoryAssetPreviewResponse(path);
+      if (previewResponse) return previewResponse;
       if (path === "/api/data/quality-surface") return jsonResponse(dataQualitySurface);
       if (path === "/api/webdav/accounts") {
         void init;
@@ -2637,6 +2708,8 @@ describe("DataPage", () => {
   it("lets the user choose a specific WebDAV source and distinguishes If-Match conflicts", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
+      const previewResponse = knownRepositoryAssetPreviewResponse(path);
+      if (previewResponse) return previewResponse;
       if (path === "/api/webdav/accounts") {
         return jsonResponse([
           {
@@ -2693,6 +2766,8 @@ describe("DataPage", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
+      const previewResponse = knownRepositoryAssetPreviewResponse(path);
+      if (previewResponse) return previewResponse;
       if (path === "/api/webdav/accounts") {
         throw new Error("account source fetch failed");
       }

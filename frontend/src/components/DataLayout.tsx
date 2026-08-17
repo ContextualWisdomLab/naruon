@@ -23,6 +23,8 @@ import {
   DataQualitySurfaceResponse,
   EmailFileImportResponse,
   DataDocumentActionResponse,
+  RepositoryAssetPreview,
+  RepositoryAssetPreviewNextAction,
   duplicateImportCandidates
 } from './data-layout/types';
 import {
@@ -71,6 +73,7 @@ export function DataLayout() {
   const [dataQualitySurface, setDataQualitySurface] = useState<DataQualitySurfaceResponse | null>(null);
   const [dataEvidenceSnapshot, setDataEvidenceSnapshot] = useState<DataEvidenceSnapshotResponse | null>(null);
   const [selectedRepositoryAssetKey, setSelectedRepositoryAssetKey] = useState<string | null>(null);
+  const [assetPreviewByKey, setAssetPreviewByKey] = useState<Record<string, RepositoryAssetPreview>>({});
 
   const webdavAccountMap = useMemo<WebdavAccountLookup>(
     () => new Map(webdavAccounts.map((account, index) => [
@@ -331,6 +334,52 @@ export function DataLayout() {
   const selectedWorkspaceDocument = selectedRepositoryAsset?.asset_type === 'workspace_document'
     ? selectedRepositoryAsset
     : null;
+  const selectedAssetPreview = selectedRepositoryAsset
+    ? assetPreviewByKey[selectedRepositoryAsset.asset_key] ?? null
+    : null;
+
+  useEffect(() => {
+    const assetKey = selectedRepositoryAsset?.asset_key;
+    const assetType = selectedRepositoryAsset?.asset_type;
+    if (!assetKey || !assetType) {
+      return undefined;
+    }
+    let cancelled = false;
+    const loadPreview = async () => {
+      try {
+        const preview = await apiClient.get<RepositoryAssetPreview>(
+          `/api/data/repository-assets/${encodeURIComponent(assetKey)}/preview`,
+        );
+        if (cancelled) return;
+        setAssetPreviewByKey((current) => ({ ...current, [assetKey]: preview }));
+      } catch (error: unknown) {
+        if (cancelled) return;
+        const unavailablePreview: RepositoryAssetPreview = {
+          asset_key: assetKey,
+          asset_type: assetType,
+          preview_state: 'unavailable',
+          parser_family: null,
+          paragraph_texts: [],
+          preview_text: null,
+          next_action: 'choose_another_file' satisfies RepositoryAssetPreviewNextAction,
+          error_code: 'repository_asset_not_found',
+          provider_write_executed: false,
+        };
+        setAssetPreviewByKey((current) => {
+          const existing = current[assetKey];
+          if (existing?.preview_state === 'recognized') {
+            return current;
+          }
+          return { ...current, [assetKey]: unavailablePreview };
+        });
+        void getApiErrorStatus(error);
+      }
+    };
+    void loadPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRepositoryAsset?.asset_key, selectedRepositoryAsset?.asset_type]);
 
   const handleDataTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: DataTab) => {
     const currentIndex = DATA_TABS.indexOf(tab);
@@ -453,6 +502,7 @@ export function DataLayout() {
               repositoryAssets={repositoryAssets}
               selectedWorkspaceDocument={selectedWorkspaceDocument}
               requestDocumentAction={requestDocumentAction}
+              selectedAssetPreview={selectedAssetPreview}
               connectorEvents={connectorEvents}
               writebackStatus={writebackStatus}
               writebackResult={writebackResult}

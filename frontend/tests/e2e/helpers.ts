@@ -1307,6 +1307,55 @@ export async function mockDashboardApi(page: Page, onApiRequest?: (path: string,
       return;
     }
 
+    if (
+      /^\/api\/data\/repository-assets\/[^/]+\/preview$/.test(path)
+      && request.method() === 'GET'
+    ) {
+      const assetKey = path.split('/')[4] ?? '';
+      if (assetKey === 'doc_repository_ready') {
+        await fulfillJson(route, {
+          asset_key: 'doc_repository_ready',
+          asset_type: 'workspace_document',
+          preview_state: 'recognized',
+          parser_family: null,
+          paragraph_texts: ['# Q2 roadmap', 'Ship the buyer-visible Data room.'],
+          preview_text: '# Q2 roadmap\n\nShip the buyer-visible Data room.',
+          next_action: 'read_recognized_text',
+          error_code: null,
+          provider_write_executed: false,
+        });
+        return;
+      }
+      if (assetKey === 'asset_repository_ready') {
+        await fulfillJson(route, {
+          asset_key: 'asset_repository_ready',
+          asset_type: 'email_attachment',
+          preview_state: 'recognized',
+          parser_family: 'pdf',
+          paragraph_texts: ['Extracted roadmap PDF text'],
+          preview_text: 'Extracted roadmap PDF text',
+          next_action: 'read_recognized_text',
+          error_code: null,
+          provider_write_executed: false,
+        });
+        return;
+      }
+      if (assetKey === 'asset_repository_pending') {
+        await fulfillJson(route, {
+          asset_key: 'asset_repository_pending',
+          asset_type: 'email_attachment',
+          preview_state: 'pending',
+          parser_family: null,
+          paragraph_texts: [],
+          preview_text: null,
+          next_action: 'wait_for_recognition',
+          error_code: 'recognition_pending',
+          provider_write_executed: false,
+        });
+        return;
+      }
+    }
+
     if (path === '/api/ontology/relationships' && request.method() === 'GET') {
       await fulfillJson(route, [
         {

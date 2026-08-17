@@ -491,6 +491,24 @@ export type DataDocumentActionResponse = {
   message: string;
 };
 
+export type RepositoryAssetPreviewState = 'recognized' | 'pending' | 'failed' | 'unavailable';
+export type RepositoryAssetPreviewNextAction =
+  | 'read_recognized_text'
+  | 'wait_for_recognition'
+  | 'choose_another_file';
+
+export type RepositoryAssetPreview = {
+  asset_key: string;
+  asset_type: 'email_attachment' | 'workspace_document';
+  preview_state: RepositoryAssetPreviewState;
+  parser_family: string | null;
+  paragraph_texts: string[];
+  preview_text: string | null;
+  next_action: RepositoryAssetPreviewNextAction;
+  error_code: string | null;
+  provider_write_executed: boolean;
+};
+
 export const duplicateImportCandidates = [
   {
     candidate_key: 'zip-q2-root',

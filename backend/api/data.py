@@ -35,6 +35,12 @@ from services.newsdom_pdf_recognition import (
     PDF_DOM_RECOGNITION_PENDING_STATUS,
 )
 from services.ontology_service import ontology_service
+from services.repository_asset_preview import (
+    ERROR_REPOSITORY_ASSET_NOT_FOUND,
+    RepositoryAssetPreview,
+    build_attachment_preview,
+    build_document_preview,
+)
 from services.webdav_service import webdav_service
 
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -373,6 +379,22 @@ class DataDocumentActionResponse(BaseModel):
     provenance: Literal["server-authoritative"]
     audit_event: str
     message: str
+
+
+class DataRepositoryAssetPreviewResponse(BaseModel):
+    """Read-only preview of recognized or blocked repository-asset text."""
+
+    asset_key: str
+    asset_type: Literal["email_attachment", "workspace_document"]
+    preview_state: Literal["recognized", "pending", "failed", "unavailable"]
+    parser_family: str | None
+    paragraph_texts: list[str]
+    preview_text: str | None
+    next_action: str
+    error_code: str | None
+    provider_write_executed: bool
+    provenance: Literal["server-authoritative"]
+    audit_event: Literal["data.repository_asset.preview.viewed"]
 
 
 class DataDocumentWebdavMaterializationResponse(BaseModel):
@@ -2501,6 +2523,87 @@ async def _get_workspace_document(
     return document
 
 
+async def _find_workspace_document(
+    db: AsyncSession,
+    auth_context: AuthContext,
+    document_id: str,
+) -> Document | None:
+    """Return a workspace-scoped document, or None without leaking other workspaces."""
+
+    result = await db.execute(
+        select(Document).where(
+            Document.document_id == document_id,
+            Document.workspace_id == auth_context.workspace_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+def _email_matches_preview_scope(email: Email, auth_context: AuthContext) -> bool:
+    """Re-check owner/org scope in Python so mock or stale rows cannot leak."""
+
+    if _can_read_org_scope(auth_context):
+        return email.organization_id == auth_context.organization_id
+    if email.user_id != auth_context.user_id:
+        return False
+    if auth_context.organization_id is None:
+        return email.organization_id is None
+    return email.organization_id == auth_context.organization_id
+
+
+def _preview_not_found() -> HTTPException:
+    """Return the same 404 for unknown and cross-workspace preview lookups."""
+
+    return HTTPException(
+        status_code=404,
+        detail={
+            "error_code": ERROR_REPOSITORY_ASSET_NOT_FOUND,
+            "message": (
+                "Repository asset was not found in the signed workspace scope."
+            ),
+        },
+    )
+
+
+async def _load_attachment_preview_segments(
+    db: AsyncSession,
+    attachment: Attachment,
+) -> None:
+    """Load ordered content-graph paragraphs when the attachment has a persisted id."""
+
+    attachment_id = getattr(attachment, "id", None)
+    if attachment_id is None:
+        return
+    segment_result = await db.execute(
+        select(ContentSegmentRecord)
+        .where(ContentSegmentRecord.attachment_id == attachment_id)
+        .order_by(ContentSegmentRecord.ordinal_index.asc())
+    )
+    loaded_segments = list(segment_result.scalars().all())
+    if loaded_segments:
+        attachment.content_segments = loaded_segments
+
+
+def _preview_response(
+    preview: RepositoryAssetPreview,
+) -> DataRepositoryAssetPreviewResponse:
+    """Wrap a service preview in the signed read-only API envelope."""
+
+    return DataRepositoryAssetPreviewResponse(
+        asset_key=preview.asset_key,
+        asset_type=preview.asset_type,
+        preview_state=preview.preview_state,
+        parser_family=preview.parser_family,
+        paragraph_texts=list(preview.paragraph_texts),
+        preview_text=preview.preview_text,
+        next_action=preview.next_action,
+        error_code=preview.error_code,
+        provider_write_executed=False,
+        provenance="server-authoritative",
+        audit_event="data.repository_asset.preview.viewed",
+    )
+
+
 def _status_from_ratio(total_count: int, ready_count: int) -> SurfaceStatus:
     if total_count <= 0:
         return "pending"
@@ -3907,6 +4010,35 @@ async def _get_connector_events(
     if connector_statement is None:
         return []
     return await _scoped_rows(db, connector_statement)
+
+
+@router.get(
+    "/repository-assets/{asset_key}/preview",
+    response_model=DataRepositoryAssetPreviewResponse,
+)
+async def get_repository_asset_preview(
+    asset_key: str,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataRepositoryAssetPreviewResponse:
+    """Return recognized paragraph text for one scoped repository asset."""
+
+    document = await _find_workspace_document(db, auth_context, asset_key)
+    if document is not None:
+        return _preview_response(build_document_preview(asset_key, document))
+
+    email_scope = _email_scope_filter(auth_context)
+    attachment_result = await db.execute(
+        select(Attachment, Email).join(Email).where(*email_scope)
+    )
+    for attachment, email in attachment_result.all():
+        if _opaque_asset_key(email, attachment) != asset_key:
+            continue
+        if not _email_matches_preview_scope(email, auth_context):
+            break
+        await _load_attachment_preview_segments(db, attachment)
+        return _preview_response(build_attachment_preview(asset_key, attachment))
+    raise _preview_not_found()
 
 
 @router.get("/quality-surface", response_model=DataQualitySurfaceResponse)
