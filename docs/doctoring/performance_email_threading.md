@@ -14,7 +14,7 @@ Callers must use `is_descending=True` only when they possess the complete descen
 
 ## Performance claim boundary
 
-The optimization removes one O(N) reverse allocation and an O(N log N) in-memory sort from the list API's per-thread reply scan. The reply scan itself remains O(N). This does **not** claim that the whole HTTP request, SQL window query, or database execution is O(N), nor that PostgreSQL will always avoid a physical sort. PostgreSQL may satisfy an `ORDER BY` from a suitable B-tree index, and `EXPLAIN`/production query telemetry remain the authority for whether the deployed plan actually does so.
+The optimization avoids the `sorted(...)` list allocation and O(N log N) in-memory sort from the list API's per-thread reply scan. The reply scan itself remains O(N). This does **not** claim that the whole HTTP request, SQL window query, or database execution is O(N), nor that PostgreSQL will always avoid a physical sort. PostgreSQL may satisfy an `ORDER BY` from a suitable B-tree index, and `EXPLAIN`/production query telemetry remain the authority for whether the deployed plan actually does so.
 
 ## Verification and operator next action
 
@@ -29,10 +29,10 @@ Rollback is source-compatible: remove the trusted descending call-site flag and 
 
 ## References (APA 7th)
 
-PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: 7.5. Sorting rows (ORDER BY).* https://www.postgresql.org/docs/current/queries-order.html
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: 7.5. Sorting rows (ORDER BY).* https://www.postgresql.org/docs/18/queries-order.html
 
-PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: 7.6. LIMIT and OFFSET.* https://www.postgresql.org/docs/current/queries-limit.html
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: 7.6. LIMIT and OFFSET.* https://www.postgresql.org/docs/18/queries-limit.html
 
-PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: 11.4. Indexes and ORDER BY.* https://www.postgresql.org/docs/current/indexes-ordering.html
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: 11.4. Indexes and ORDER BY.* https://www.postgresql.org/docs/18/indexes-ordering.html
 
-PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: 14.1. Using EXPLAIN.* https://www.postgresql.org/docs/current/using-explain.html
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: 14.1. Using EXPLAIN.* https://www.postgresql.org/docs/18/using-explain.html
