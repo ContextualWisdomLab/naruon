@@ -213,7 +213,6 @@ export default function NetworkGraph() {
       const selectNode = (nodeId: number | string) => {
         setRelationshipOptionId('');
         setNodeOptionId(String(nodeId));
-        // ⚡ Bolt: Replace O(N) findNodeLabel array lookup with O(1) nodeMap lookup
         setSelectedGraphDetail(`선택된 노드: ${nodeMap.get(String(nodeId)) ?? String(nodeId)}`);
         setGraphActionStatus('그래프에서 노드를 선택했습니다.');
       };
@@ -304,7 +303,6 @@ export default function NetworkGraph() {
     if (!isGraphId(node.id)) return;
     setRelationshipOptionId('');
     setNodeOptionId(String(node.id));
-    // ⚡ Bolt: Use direct property access instead of O(N) findNodeLabel array lookup
     setSelectedGraphDetail(`선택된 노드: ${String(node.label ?? node.id)}`);
     setGraphActionStatus(status);
     networkRef.current?.selectNodes?.([node.id]);
