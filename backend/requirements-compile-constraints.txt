@@ -1,0 +1,6 @@
+# Keep `uv pip compile` of backend/requirements-hashes.txt installable on
+# Python 3.14 with `pip install --require-hashes` and warning-clean under
+# PYTHONWARNINGS=error. Do not float these pins without a matching test update.
+pydantic-core==2.46.4
+ruff==0.15.21
+langsmith==0.10.2

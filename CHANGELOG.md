@@ -1,4 +1,5 @@
 ## [Unreleased]
+- backend hash lock을 pip `--require-hashes`가 Python 3.14에서 설치 가능하게 다시 고정합니다: `pydantic==2.13.4`의 정확한 `pydantic-core==2.46.4`, `openai==3.0.0`이 요구하는 `httpx2`, 그리고 `PYTHONWARNINGS=error`를 깨는 `langsmith>=0.10.18` pytest plugin 대신 검증된 `langsmith==0.10.2`. lint 규칙이 바뀌는 `ruff==0.16.3` 범프는 `0.15.21`에 유지합니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 ### 주제 측정 경계 (Topic Measurement)
 

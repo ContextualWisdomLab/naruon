@@ -100,9 +100,16 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
     assert backend_pins["protobuf"] == "7.35.1"
     assert "cryptography==50.0.0" in backend_records
     assert "protobuf==7.35.1" in backend_records
+    assert "pydantic==2.13.4" in backend_records
+    assert "pydantic-core==2.46.4" in backend_records
     assert all(
         re.fullmatch(r"[0-9a-f]{64}", digest)
-        for pin in ("cryptography==50.0.0", "protobuf==7.35.1")
+        for pin in (
+            "cryptography==50.0.0",
+            "protobuf==7.35.1",
+            "pydantic==2.13.4",
+            "pydantic-core==2.46.4",
+        )
         for digest in backend_records[pin]
     )
 
@@ -144,3 +151,24 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         "undici@8.9.0",
     ):
         assert exact_lock_entry in package_records
+
+
+def test_hashed_pydantic_core_matches_pydantic_exact_runtime_pin() -> None:
+    """Keep the hash lock installable by pip --require-hashes on Python 3.14.
+
+    ``pydantic==2.13.4`` declares an exact ``pydantic-core==2.46.4`` dependency.
+    A lock that floats ``pydantic-core`` to ``2.48.0`` is accepted by some
+    resolvers but fails ``pip install --require-hashes`` with a hard conflict.
+    ``openai==3.0.0`` also requires hashed ``httpx2``, and ``langsmith>=0.10.18``
+    registers a pytest plugin that raises ``asyncio.iscoroutinefunction``
+    DeprecationWarning under ``PYTHONWARNINGS=error`` on Python 3.14.
+    """
+    backend_records = hashed_requirement_records(
+        read_repo_text("backend/requirements-hashes.txt")
+    )
+    assert "pydantic==2.13.4" in backend_records
+    assert "pydantic-core==2.46.4" in backend_records
+    assert "pydantic-core==2.48.0" not in backend_records
+    assert "httpx2==2.10.0" in backend_records
+    assert "langsmith==0.10.2" in backend_records
+    assert "ruff==0.15.21" in backend_records
