@@ -153,7 +153,7 @@ describe("TasksPage", () => {
     expect(container.textContent).toContain("보낸 메일 회신 추적");
     expect(container.textContent).not.toContain("문서 원본 검토");
 
-    const clearSearchButton = container.querySelector<HTMLButtonElement>('button[aria-label="맥락 검색어 지우기"]');
+    const clearSearchButton = container.querySelector<HTMLButtonElement>('button[aria-label="검색어 지우기"]');
     expect(clearSearchButton).not.toBeNull();
     await act(async () => {
       clearSearchButton?.click();
