@@ -452,19 +452,21 @@ def strip_html_markup(value: str) -> str:
 
     decoded = _decode_entities(value)
     masked, placeholders = _mask_angle_emails(decoded)
-    # HTMLParser can expose the tail of the malformed ``<!-->`` opener as
-    # literal data. Normalize that opener into an ignored comment boundary
-    # without deleting legitimate ``-->`` text elsewhere in user content.
-    masked = masked.replace("<!-->", "<!--")
     parser = _PlainTextHTMLParser()
     parser.feed(masked)
     parser.close()
     text = parser.get_text()
 
+
     cleaned_lines = []
     for line in text.splitlines():
-        cleaned_lines.append(_strip_tag_like_segments(line))
+        cleaned_line = _strip_tag_like_segments(line)
+        if cleaned_line == "-->" or cleaned_line.endswith("-->"):
+            # Clean up residual artifacts from malformed comments parsed differently in py3.14
+            cleaned_line = cleaned_line[:-3].strip()
+        cleaned_lines.append(cleaned_line)
     text = "\n".join(cleaned_lines).strip()
+
 
     for token, original in placeholders.items():
         text = text.replace(token, original)
