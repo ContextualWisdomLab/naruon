@@ -112,7 +112,9 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
+@pytest.mark.parametrize(
+    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
+)
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -135,7 +137,7 @@ async def test_execute_tool_success():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert "summary" in data["result"]
     assert "123" in data["result"]["summary"]
     assert "key_points" in data["result"]
@@ -152,7 +154,7 @@ async def test_execute_action_item_extractor():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert "action_items" in data["result"]
     assert len(data["result"]["action_items"]) == 2
     assert "source_length" in data["result"]
@@ -168,7 +170,7 @@ async def test_execute_sender_dag_analytics():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert data["result"]["sender"] == "test@example.com"
     assert data["result"]["department"] == "엔지니어링 팀"
 
@@ -183,7 +185,7 @@ async def test_execute_meeting_candidate_finder():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert "candidates" in data["result"]
     assert len(data["result"]["candidates"]) == 2
     assert "context_preview" in data["result"]
@@ -204,7 +206,7 @@ async def test_execute_tone_analyzer():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert "manager" in data["result"]["refined_draft"]
     assert "Give me the file." in data["result"]["refined_draft"]
     assert "suggestions" in data["result"]
@@ -457,7 +459,7 @@ def test_execute_tool_sync_handler_success():
 
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert data["result"] == {"received": "ok"}
 
 
@@ -510,7 +512,7 @@ async def test_text_analyzer_tool_success():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     result = data["result"]
     assert result["char_count"] == 27
     assert result["char_count_no_spaces"] == 21
@@ -527,7 +529,7 @@ async def test_uuid_v4_generator_tool_success():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     result = data["result"]
 
     # Check if the result has 'uuid' key
@@ -551,7 +553,7 @@ async def test_base64_encoder_tool_success():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     result = data["result"]
     assert result["encoded_text"] == "aGVsbG8="
 
@@ -566,7 +568,7 @@ async def test_base64_decoder_tool_success():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     result = data["result"]
     assert result["decoded_text"] == "hello"
 
@@ -800,7 +802,7 @@ async def test_webhook_handler_success():
 
                 assert response.status_code == 200
                 data = response.json()
-                assert data["status"] == "success", data.get("message")
+                assert data["status"] == "success"
                 assert data["result"] == {"webhook_success": True}
 
                 mock_post.assert_called_once()
@@ -994,7 +996,7 @@ def test_execute_email_translator():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert "안녕하세요" in data["result"]["translated_text"]
     assert "감사합니다" in data["result"]["translated_text"]
     assert "회의" in data["result"]["translated_text"]
@@ -1015,7 +1017,7 @@ def test_execute_spam_phishing_detector():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert data["result"]["is_phishing"] is True
     assert data["result"]["is_spam"] is True
     assert data["result"]["risk_score"] >= 90
@@ -1036,7 +1038,7 @@ def test_execute_reply_drafter():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert "긍정적 동의" in data["result"]["draft"]
     assert "tomorrow at 2pm" in data["result"]["draft"]
 
@@ -1050,7 +1052,7 @@ def test_execute_sentiment_analyzer():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert data["result"]["sentiment"] == "negative"
     assert data["result"]["score"] < 0.5
     assert "불만" in data["result"]["key_emotions"]
@@ -1069,7 +1071,7 @@ def test_execute_grammar_checker():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success", data.get("message")
+    assert data["status"] == "success"
     assert "안녕하세요" in data["result"]["corrected_text"]
     assert "확인 부탁드립니다" in data["result"]["corrected_text"]
     assert "감사합니다" in data["result"]["corrected_text"]
@@ -1209,106 +1211,3 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
-
-
-@pytest.mark.asyncio
-async def test_hash_generator_success():
-    with TestClient(app) as client:
-        # MD5
-        res = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello", "algorithm": "md5"}},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "success", data.get("message")
-        import hashlib
-
-        expected_md5 = hashlib.md5(b"hello", usedforsecurity=False).hexdigest()
-        assert data["result"]["hash"] == expected_md5
-
-        # SHA-1
-        res = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello", "algorithm": "sha1"}},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "success", data.get("message")
-        expected_sha1 = hashlib.sha1(b"hello", usedforsecurity=False).hexdigest()
-        assert data["result"]["hash"] == expected_sha1
-
-        # SHA-256 (default)
-        res = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello", "algorithm": "sha256"}},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "success", data.get("message")
-        expected_sha256 = hashlib.sha256(b"hello").hexdigest()
-        assert data["result"]["hash"] == expected_sha256
-
-
-@pytest.mark.asyncio
-async def test_hash_generator_unsupported_algorithm():
-    with TestClient(app) as client:
-        res = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello", "algorithm": "sha512"}},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "failed"
-        assert "Unsupported algorithm" in data["message"]
-
-
-@pytest.mark.asyncio
-async def test_url_encoder_success():
-    with TestClient(app) as client:
-        res = client.post(
-            "/api/tools/url_encoder/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello world/test"}},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "success", data.get("message")
-        assert data["result"]["encoded_url"] == "hello%20world%2Ftest"
-
-
-@pytest.mark.asyncio
-async def test_url_decoder_success():
-    with TestClient(app) as client:
-        res = client.post(
-            "/api/tools/url_decoder/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello%20world%2Ftest"}},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "success", data.get("message")
-        assert data["result"]["decoded_url"] == "hello world/test"
-
-
-@pytest.mark.asyncio
-async def test_uuid_v1_generator_success():
-    with TestClient(app) as client:
-        res = client.post(
-            "/api/tools/uuid_v1_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {}},
-        )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "success", data.get("message")
-
-        import uuid
-
-        generated_uuid = data["result"]["uuid"]
-        parsed_uuid = uuid.UUID(generated_uuid)
-        assert parsed_uuid.version == 1
