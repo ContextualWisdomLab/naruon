@@ -63,7 +63,7 @@ Storybook. (2026). *Storybook Design Token*. https://storybook.js.org/addons/sto
 
 Storybook. (2026). *Vitest addon*. https://storybook.js.org/docs/writing-tests/integrations/vitest-addon/
 
-World Wide Web Consortium. (2023, October 5). *Web Content Accessibility Guidelines (WCAG) 2.2*. https://www.w3.org/TR/WCAG22/
+World Wide Web Consortium. (2024, December 12). *Web Content Accessibility Guidelines (WCAG) 2.2*. https://www.w3.org/TR/2024/REC-WCAG22-20241212/
 
 ## Shipped-state boundary
 
