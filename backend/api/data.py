@@ -2463,18 +2463,24 @@ def _merge_document_webdav_dispatch_result(
     return result
 
 
-def _opaque_asset_key(email: Email, attachment: Attachment) -> str:
+def _opaque_asset_key_for_filename(email: Email, filename: str) -> str:
+    """Build the opaque attachment key from scoped email fields and a filename."""
+
     digest = hashlib.sha256(
         "|".join(
             [
                 email.user_id,
                 email.organization_id,
                 email.message_id,
-                attachment.filename,
+                filename,
             ]
         ).encode("utf-8")
     ).hexdigest()
     return f"asset_{digest[:24]}"
+
+
+def _opaque_asset_key(email: Email, attachment: Attachment) -> str:
+    return _opaque_asset_key_for_filename(email, attachment.filename)
 
 
 def _opaque_thread_key(email: Email) -> str:
@@ -2586,20 +2592,18 @@ def _preview_not_found() -> HTTPException:
 async def _load_attachment_preview_segments(
     db: AsyncSession,
     attachment: Attachment,
-) -> None:
-    """Load ordered content-graph paragraphs when the attachment has a persisted id."""
+) -> list[ContentSegmentRecord]:
+    """Load ordered content-graph paragraphs without replacing the relationship."""
 
     attachment_id = getattr(attachment, "id", None)
     if attachment_id is None:
-        return
+        return []
     segment_result = await db.execute(
         select(ContentSegmentRecord)
         .where(ContentSegmentRecord.attachment_id == attachment_id)
         .order_by(ContentSegmentRecord.ordinal_index.asc())
     )
-    loaded_segments = list(segment_result.scalars().all())
-    if loaded_segments:
-        attachment.content_segments = loaded_segments
+    return list(segment_result.scalars().all())
 
 
 def _preview_response(
@@ -4065,16 +4069,30 @@ async def get_repository_asset_preview(
         return _preview_response(build_document_preview(asset_key, document))
 
     email_scope = _email_scope_filter(auth_context)
-    attachment_result = await db.execute(
-        select(Attachment, Email).join(Email).where(*email_scope)
+    candidate_result = await db.execute(
+        select(Attachment.id, Attachment.filename, Email)
+        .join(Email)
+        .where(*email_scope)
+        .execution_options(yield_per=500)
     )
-    for attachment, email in attachment_result.all():
-        if _opaque_asset_key(email, attachment) != asset_key:
+    for attachment_id, filename, email in candidate_result:
+        if _opaque_asset_key_for_filename(email, filename) != asset_key:
             continue
         if not _email_matches_preview_scope(email, auth_context):
             break
-        await _load_attachment_preview_segments(db, attachment)
-        return _preview_response(build_attachment_preview(asset_key, attachment))
+        if attachment_id is None:
+            break
+        attachment = await db.get(Attachment, attachment_id)
+        if attachment is None:
+            break
+        loaded_segments = await _load_attachment_preview_segments(db, attachment)
+        return _preview_response(
+            build_attachment_preview(
+                asset_key,
+                attachment,
+                content_segments=loaded_segments,
+            )
+        )
     raise _preview_not_found()
 
 

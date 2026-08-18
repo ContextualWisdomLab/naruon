@@ -7,6 +7,7 @@ state so missing text cannot be mistaken for empty content.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -93,10 +94,13 @@ def _paragraphs_from_text(value: str | None) -> tuple[str, ...]:
     )
 
 
-def _paragraphs_from_segments(attachment: object) -> tuple[str, ...]:
+def _paragraphs_from_segments(source: object) -> tuple[str, ...]:
     """Return content-graph paragraphs in ordinal order when they exist."""
 
-    segments = list(getattr(attachment, "content_segments", None) or [])
+    if isinstance(source, (list, tuple)):
+        segments = list(source)
+    else:
+        segments = list(getattr(source, "content_segments", None) or [])
     if not segments:
         return ()
     ordered = sorted(
@@ -168,6 +172,7 @@ def _with_edit_handoff(preview: RepositoryAssetPreview) -> RepositoryAssetPrevie
 def build_attachment_preview(
     asset_key: str,
     attachment: object,
+    content_segments: Sequence[object] | None = None,
 ) -> RepositoryAssetPreview:
     """Map one email attachment onto a buyer-visible read-only preview."""
 
@@ -206,7 +211,9 @@ def build_attachment_preview(
             )
         )
 
-    paragraph_texts = _paragraphs_from_segments(attachment)
+    paragraph_texts = _paragraphs_from_segments(
+        content_segments if content_segments is not None else attachment
+    )
     if not paragraph_texts and parse_status in {HWPX_PARSED_STATUS, "parsed"}:
         paragraph_texts = _paragraphs_from_text(
             str(getattr(attachment, "content", "") or "")
