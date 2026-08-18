@@ -9,7 +9,3 @@
 ## 2026-06-08 - WorkspaceHome unused import investigation
 **Learning:** Investigating unused import reports should first verify the current file because the codebase may already have evolved. The repo lint entrypoint is `eslint`, and the focused check for this investigation was `npx eslint src/components/WorkspaceHome.tsx`.
 **Action:** Use the focused `npx eslint src/components/WorkspaceHome.tsx` check when confirming WorkspaceHome import health, and reserve broader `eslint` runs for full frontend lint validation.
-
-## 2026-06-09 - Explain disabled button states with tooltips
-**Learning:** Users often feel frustrated when buttons are disabled without explanation. Adding a simple `title` attribute to disabled buttons provides immediate, accessible context (e.g., "위치 정보가 없는 일정입니다") without needing complex popover components, improving the user's understanding of why an action is unavailable.
-**Action:** Whenever a button can be disabled based on state, add a `title` attribute explaining the condition to help the user resolve the blocking state.
