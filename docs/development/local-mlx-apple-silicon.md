@@ -4,8 +4,14 @@ The default `docker-compose.yml` keeps the Linux Ollama container. Use this
 page only when you want a temporary override that points the backend at a host
 MLX or other OpenAI-compatible server. Do not commit the override files.
 
+Copy the existing project `.env` first so `POSTGRES_PASSWORD`,
+`AUTH_SESSION_HMAC_SECRET`, and `ENCRYPTION_KEY` stay operator-injected. Then
+append only the MLX model-path overrides. Do not invent defaults for those
+runtime secrets.
+
 ```bash
-cat > .env.mlx <<'EOF'
+cp .env .env.mlx
+cat >> .env.mlx <<'EOF'
 OPENAI_API_KEY=mlx
 ALLOWED_LLM_BASE_URL_HOSTS=localhost,127.0.0.1,host.docker.internal
 ALLOW_LOCAL_LLM_PROVIDERS=true
@@ -59,7 +65,7 @@ directory you can read; do not commit real mailbox exports. Pass
 `--print-session-token` only on a trusted machine.
 
 ```bash
-AUTH_SESSION_HMAC_SECRET="$(grep -E '^AUTH_SESSION_HMAC_SECRET=' .env | cut -d= -f2-)"
+AUTH_SESSION_HMAC_SECRET="$(grep -E '^AUTH_SESSION_HMAC_SECRET=' .env.mlx | cut -d= -f2-)"
 python3 backend/scripts/private_mail_http_smoke.py \
   --mail-dir "$MAIL_DIR" \
   --base-url http://127.0.0.1:3000 \

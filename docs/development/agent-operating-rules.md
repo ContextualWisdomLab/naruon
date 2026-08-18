@@ -7,8 +7,8 @@ evidence and required-check behavior live in
 
 ## Writer boundary
 
-- Do not merge. Open or update a pull request; the metadata-only landing path
-  merges after current-head gates pass.
+- Do not merge. Open or update a pull request; the separate landing path
+  performs any allowed merge action after current-head gates pass.
 - Do not treat PR review comments as the fix. Change source, tests, or docs.
 - Respect other agents' concurrent work. Do not overwrite or dismiss unfamiliar
   changes.
@@ -27,7 +27,7 @@ evidence and required-check behavior live in
 - Pending or queued required checks, pending CodeRabbit evidence, and a missing
   structured OpenCode fallback approval are wait states, not hard failures.
 - PR Governance stays metadata-only: no PR-head checkout, no admin merge, no
-  review dismissal, and no security-check suppression.
+  auto-merge, review dismissal, or security-check suppression.
 
 ## Phase 10 development rules
 

@@ -1,6 +1,24 @@
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _compose_build_contexts(compose_text: str) -> list[str]:
+    data = yaml.safe_load(compose_text) or {}
+    contexts: list[str] = []
+    for service in (data.get("services") or {}).values():
+        build = (service or {}).get("build")
+        if isinstance(build, str):
+            contexts.append(build)
+        elif isinstance(build, dict) and build.get("context") is not None:
+            contexts.append(str(build["context"]))
+    return contexts
+
+
+def _is_sibling_checkout_context(value: str) -> bool:
+    return value.startswith("../") or "${PG_LLM_BATCH_CHECKOUT" in value
 
 
 def test_dockerignore_excludes_nested_environment_files_but_keeps_examples():
@@ -337,7 +355,13 @@ def test_default_compose_stack_does_not_require_sibling_checkouts():
     overlay = (REPO_ROOT / "docker-compose.pg-llm-batch.yml").read_text()
 
     assert not (REPO_ROOT / ".gitmodules").exists()
-    assert "context: ../" not in compose
-    assert "context: ${PG_LLM_BATCH_CHECKOUT" not in compose
+    assert not any(
+        _is_sibling_checkout_context(context)
+        for context in _compose_build_contexts(compose)
+    )
     assert "NOT part of the default naruon stack" in overlay
     assert "default `docker compose up` does not need that checkout" in overlay
+    assert any(
+        _is_sibling_checkout_context(context)
+        for context in _compose_build_contexts(overlay)
+    )

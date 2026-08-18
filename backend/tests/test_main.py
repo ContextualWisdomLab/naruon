@@ -20,11 +20,13 @@ def test_openapi_publishes_stable_sibling_call_routes():
     # UserWarning as a hard failure.
     assert app.openapi_url == "/openapi.json"
     assert app.docs_url == "/docs"
-    paths: set[str] = set()
+    methods_by_path: dict[str, set[str]] = {}
     for route in app.routes:
         path = getattr(route, "path", None)
         if path is not None:
-            paths.add(path)
+            methods_by_path.setdefault(path, set()).update(
+                getattr(route, "methods", None) or set()
+            )
             continue
         included = getattr(route, "original_router", None)
         if included is None:
@@ -32,11 +34,13 @@ def test_openapi_publishes_stable_sibling_call_routes():
         for child in included.routes:
             child_path = getattr(child, "path", None)
             if child_path is not None:
-                paths.add(child_path)
-    assert "/" in paths
-    assert "/api/emails" in paths
-    assert "/api/search" in paths
-    assert "/api/tasks" in paths
+                methods_by_path.setdefault(child_path, set()).update(
+                    getattr(child, "methods", None) or set()
+                )
+    assert "GET" in methods_by_path["/"]
+    assert "GET" in methods_by_path["/api/emails"]
+    assert "POST" in methods_by_path["/api/search"]
+    assert "GET" in methods_by_path["/api/tasks"]
 
 
 def test_root_response_has_security_headers():
