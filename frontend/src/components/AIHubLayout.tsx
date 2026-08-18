@@ -687,7 +687,7 @@ export function AIHubLayout() {
               tabIndex={activeTab === tab.id ? 0 : -1}
               className={cn(
                 buttonVariants({ variant: activeTab === tab.id ? 'default' : 'outline', size: 'default' }),
-                'font-bold',
+                'font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                 activeTab !== tab.id && 'text-muted-foreground hover:text-foreground',
               )}
             >
