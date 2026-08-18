@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,83 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    if algorithm == "md5":
+        h = hashlib.md5(text.encode("utf-8"), usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha1":
+        h = hashlib.sha1(text.encode("utf-8"), usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha256":
+        h = hashlib.sha256(text.encode("utf-8"))
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+    return {"hash": h.hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트를 MD5, SHA-1, SHA-256 해시로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"encoded_url": urllib.parse.quote(text, safe="")}
+
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="텍스트를 URL 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"decoded_url": urllib.parse.unquote(text)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩된 문자열을 디코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_decoder_handler,
+)
+
+
+async def uuid_v1_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    return {"uuid": str(uuid.uuid1())}  # nosemgrep
+
+
+registry.register(
+    ToolInfo(
+        code="uuid_v1_generator",
+        name="UUID V1 생성기 (UUID v1 Generator)",
+        description="범용 고유 식별자(UUID) 버전 1을 시간 기반으로 생성합니다.",
+        category="유틸리티",
+        parameters={},
+    ),
+    uuid_v1_generator_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])

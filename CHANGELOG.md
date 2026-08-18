@@ -1,4 +1,9 @@
 ## [Unreleased]
+### 유틸리티 도구 확장
+- `hash_generator`: 텍스트를 MD5, SHA-1, SHA-256 알고리즘을 사용해 해시로 변환합니다.
+- `url_encoder` 및 `url_decoder`: 텍스트를 URL 인코딩 및 디코딩합니다 (모든 특수문자 포함).
+- `uuid_v1_generator`: 시간 기반의 범용 고유 식별자(UUID v1)를 생성합니다.
+
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
