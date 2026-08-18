@@ -29,6 +29,11 @@ export function RepositoryAssetPreviewPanel({
       };
   const recognized = isRecognizedRepositoryAssetPreview(preview);
   const editHandoff = preview?.edit_handoff ?? null;
+  const showInkspanHandoff = Boolean(
+    editHandoff
+    && isRecognizedRepositoryAssetPreview(preview)
+    && preview.parser_family === 'hwpx',
+  );
   const handoffFileName = toSafeReactText(fileName || '선택한 파일');
 
   return (
@@ -50,7 +55,7 @@ export function RepositoryAssetPreviewPanel({
           {copy.next_action_label}
         </p>
       )}
-      {editHandoff ? (
+      {showInkspanHandoff && editHandoff ? (
         <div className="mt-4 space-y-2">
           <button
             type="button"

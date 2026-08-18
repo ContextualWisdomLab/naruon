@@ -138,6 +138,53 @@ describe("RepositoryAssetPreviewPanel", () => {
     );
   });
 
+  it("hides the Inkspan control on a pending HWPX preview even if a handoff is present", () => {
+    renderPanel({
+      currentDetailText: "content extraction pending, canonical thread pending",
+      fileName: "pending.hwpx",
+      preview: {
+        ...pendingPreview(),
+        edit_handoff: {
+          ...unavailableHwpxHandoff(),
+          source_asset_key: "asset_hwpx_pending",
+        },
+      },
+    });
+
+    const panel = container?.querySelector('[aria-label="선택한 자산 본문 미리보기"]');
+    expect(panel?.querySelector('[aria-label="pending.hwpx Inkspan에서 편집"]')).toBeNull();
+    expect(container?.textContent).not.toContain("Inkspan에서 편집");
+    expect(panel?.textContent).toContain("인식이 끝날 때까지 기다리거나 다른 파일을 선택하세요");
+  });
+
+  it("hides the Inkspan control on a recognized non-HWPX preview even if a handoff is present", () => {
+    renderPanel({
+      currentDetailText: "content and thread evidence ready",
+      fileName: "roadmap.pdf",
+      preview: {
+        asset_key: "asset_pdf_recognized",
+        asset_type: "email_attachment",
+        preview_state: "recognized",
+        parser_family: "pdf",
+        paragraph_texts: ["Extracted roadmap PDF text"],
+        preview_text: "Extracted roadmap PDF text",
+        next_action: "read_recognized_text",
+        error_code: null,
+        provider_write_executed: false,
+        edit_handoff: {
+          ...unavailableHwpxHandoff(),
+          source_asset_key: "asset_pdf_recognized",
+          parser_family: "pdf",
+        },
+      },
+    });
+
+    const panel = container?.querySelector('[aria-label="선택한 자산 본문 미리보기"]');
+    expect(panel?.textContent).toContain("Extracted roadmap PDF text");
+    expect(panel?.querySelector('[aria-label="roadmap.pdf Inkspan에서 편집"]')).toBeNull();
+    expect(container?.textContent).not.toContain("Inkspan에서 편집");
+  });
+
   it("tells the buyer to wait when HWPX recognition is still pending", () => {
     renderPanel({
       currentDetailText: "content extraction pending, canonical thread pending",

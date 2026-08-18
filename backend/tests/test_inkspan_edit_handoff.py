@@ -97,6 +97,34 @@ def test_recognized_hwpx_handoff_fails_closed_without_hangul_capability() -> Non
     assert "Quarterly decision record" not in repr(handoff)
 
 
+def test_malformed_adapter_family_metadata_fails_closed_without_server_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-iterable accepted_source_families must not 500 a recognized preview."""
+
+    monkeypatch.setattr(
+        "services.inkspan_edit_handoff.registered_inkspan_editor_capability",
+        lambda: SimpleNamespace(
+            capability_name=EDITOR_CAPABILITY_HANGUL_DOCUMENT_ENGINE,
+            accepted_source_families=1,
+            mutation_contract_name=None,
+        ),
+    )
+
+    handoff = build_inkspan_edit_handoff(_recognized_hwpx_preview())
+
+    assert handoff is not None
+    assert handoff.handoff_state == HANDOFF_STATE_UNAVAILABLE
+    assert handoff.mutation_allowed is False
+    assert handoff.provider_write_executed is False
+    assert handoff.converts_source_to_plain_text is False
+    assert handoff.overwrites_original is False
+    assert handoff.editable_document_payload is None
+    assert handoff.source_asset_key == "asset_mail_hwpx_recognized"
+    assert handoff.error_code == ERROR_INKSPAN_HANGUL_CAPABILITY_UNAVAILABLE
+    assert handoff.next_action == NEXT_ACTION_KEEP_READING_RECOGNIZED_TEXT
+
+
 def test_markdown_only_inkspan_adapter_is_rejected_as_silent_conversion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -237,8 +237,8 @@ therefore fails closed and tells the buyer to keep reading the recognized
 text or choose another file. No write API is introduced.
 
 This capability probe does not change KS X 6101/OWPML recognition or the
-#1353/#1373/#1404/#1406 preview contract (Korean Agency for Technology and
-Standards, 2024; Hancom Tech, 2025b, 2025c).
+preview contract owned by PRs #1353, #1373, #1404, and #1406 (Korean Agency
+for Technology and Standards, 2024; Hancom Tech, 2025b, 2025c).
 
 ## Out of scope
 

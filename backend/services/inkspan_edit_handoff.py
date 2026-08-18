@@ -72,10 +72,14 @@ def _adapter_field(adapter: object | None, field_name: str) -> object | None:
 
 
 def _accepted_source_families(adapter: object | None) -> tuple[str, ...]:
-    """Return the source families an adapter can open without conversion."""
+    """Return the source families an adapter can open without conversion.
+
+    Malformed non-collection metadata is treated as absent so a recognized
+    preview can fail closed instead of raising.
+    """
 
     families = _adapter_field(adapter, "accepted_source_families")
-    if not families:
+    if not isinstance(families, (list, tuple, set, frozenset)):
         return ()
     return tuple(str(family) for family in families)
 
