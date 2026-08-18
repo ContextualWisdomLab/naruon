@@ -89,6 +89,7 @@ export function MailAttachmentPreview({ attachments }: MailAttachmentPreviewProp
         <RepositoryAssetPreviewPanel
           currentDetailText={selectedAttachment.file_name}
           preview={selectedPreview}
+          onRefreshPreview={() => void openAttachment(selectedAttachment)}
         />
       ) : null}
     </section>
