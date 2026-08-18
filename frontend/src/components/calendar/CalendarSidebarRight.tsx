@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import { Clock, Video, Users, CalendarDays, Paperclip, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { CalendarDetailEvent } from './types';
@@ -6,7 +7,15 @@ type Props = {
   selectedDetailEvent: CalendarDetailEvent | null;
 };
 
+function blockUnavailableAction(event: MouseEvent<HTMLButtonElement>) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
+  const locationUnavailable = !selectedDetailEvent?.location;
+  const selectionRequired = !selectedDetailEvent;
+
   return (
     <aside className="w-[340px] shrink-0 flex-col overflow-y-auto border-l border-border bg-card p-5 hidden xl:flex">
       <div className="flex items-center justify-between">
@@ -37,19 +46,27 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
             <p className="text-xs text-muted-foreground">{selectedDetailEvent?.duration ?? '일정 없음'}</p>
           </div>
         </div>
-        <div className="flex gap-3 items-center">
-          <Video className="size-5 text-muted-foreground shrink-0" />
-          <p className="text-sm font-semibold">{selectedDetailEvent?.location ?? '장소 없음'}</p>
-          <div className="ml-auto" title={!selectedDetailEvent?.location ? "위치 정보가 없는 일정입니다" : undefined} tabIndex={!selectedDetailEvent?.location ? 0 : -1}>
+        <div className="flex gap-3 items-start">
+          <Video className="size-5 text-muted-foreground shrink-0 mt-1" />
+          <p className="text-sm font-semibold mt-1">{selectedDetailEvent?.location ?? '장소 없음'}</p>
+          <div className="ml-auto flex max-w-44 flex-col items-end gap-1">
             <Button
               type="button"
               variant="link"
               size="xs"
-              disabled={!selectedDetailEvent?.location}
+              aria-disabled={!selectedDetailEvent?.location}
+              aria-describedby={!selectedDetailEvent?.location ? "calendar-location-unavailable" : undefined}
               aria-label={`${selectedDetailEvent?.location ?? '장소'} 위치 보기`}
+              className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:no-underline"
+              onClick={locationUnavailable ? blockUnavailableAction : undefined}
             >
               위치 보기
             </Button>
+            {locationUnavailable ? (
+              <p id="calendar-location-unavailable" className="text-right text-xs leading-4 text-muted-foreground">
+                일정에 위치를 추가하면 위치를 열 수 있습니다.
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex gap-3 items-start">
@@ -89,36 +106,43 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
         </div>
       </div>
 
-      <div className="mt-8 flex gap-3">
-        <div className="flex-1" title={!selectedDetailEvent ? "일정을 먼저 선택해주세요" : undefined} tabIndex={!selectedDetailEvent ? 0 : -1}>
+      <div className="mt-8">
+        {selectionRequired ? (
+          <p id="calendar-selection-required" className="mb-2 text-xs leading-4 text-muted-foreground">
+            왼쪽 캘린더에서 일정을 선택하면 삭제·복사·수정할 수 있습니다.
+          </p>
+        ) : null}
+        <div className="flex gap-3">
           <Button
             type="button"
             variant="outline"
-            className="w-full"
-            disabled={!selectedDetailEvent}
+            className="flex-1 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            aria-disabled={!selectedDetailEvent}
+            aria-describedby={!selectedDetailEvent ? "calendar-selection-required" : undefined}
             aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 삭제` : '일정 삭제'}
+            onClick={selectionRequired ? blockUnavailableAction : undefined}
           >
             삭제
           </Button>
-        </div>
-        <div className="flex-1" title={!selectedDetailEvent ? "일정을 먼저 선택해주세요" : undefined} tabIndex={!selectedDetailEvent ? 0 : -1}>
           <Button
             type="button"
             variant="outline"
-            className="w-full"
-            disabled={!selectedDetailEvent}
+            className="flex-1 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            aria-disabled={!selectedDetailEvent}
+            aria-describedby={!selectedDetailEvent ? "calendar-selection-required" : undefined}
             aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 복사` : '일정 복사'}
+            onClick={selectionRequired ? blockUnavailableAction : undefined}
           >
             복사
           </Button>
-        </div>
-        <div className="flex-1" title={!selectedDetailEvent ? "일정을 먼저 선택해주세요" : undefined} tabIndex={!selectedDetailEvent ? 0 : -1}>
           <Button
             type="button"
             variant="default"
-            className="w-full"
-            disabled={!selectedDetailEvent}
+            className="flex-1 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            aria-disabled={!selectedDetailEvent}
+            aria-describedby={!selectedDetailEvent ? "calendar-selection-required" : undefined}
             aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 수정` : '일정 수정'}
+            onClick={selectionRequired ? blockUnavailableAction : undefined}
           >
             수정
           </Button>
