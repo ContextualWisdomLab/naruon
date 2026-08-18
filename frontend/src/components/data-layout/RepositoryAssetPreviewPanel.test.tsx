@@ -106,6 +106,8 @@ describe("RepositoryAssetPreviewPanel", () => {
     expect(panel?.textContent).not.toContain("UEsDBAo");
     expect(panel?.querySelector("[data-preview-paragraphs]")).toBeNull();
     expect(container?.textContent).toContain("content extraction pending, canonical thread pending");
+    const refresh = panel?.querySelector('[aria-label="인식 결과 다시 확인"]');
+    expect(refresh).not.toBeNull();
   });
 
   it("tells the buyer to choose another file when HWPX recognition failed", () => {

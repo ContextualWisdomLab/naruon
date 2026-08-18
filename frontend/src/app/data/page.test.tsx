@@ -23,6 +23,7 @@ vi.mock("lucide-react", () => ({
   Loader2: () => <svg aria-hidden="true" />,
 }));
 
+import type { RepositoryAssetPreview } from "@/components/data-layout/types";
 import DataPage from "./page";
 
 const acquisitionRemediationActions = [
@@ -1590,17 +1591,7 @@ function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 500) {
   };
 }
 
-const knownRepositoryAssetPreviews: Record<string, {
-  asset_key: string;
-  asset_type: "email_attachment" | "workspace_document";
-  preview_state: "recognized" | "pending" | "failed" | "unavailable";
-  parser_family: string | null;
-  paragraph_texts: string[];
-  preview_text: string | null;
-  next_action: "read_recognized_text" | "wait_for_recognition" | "choose_another_file";
-  error_code: string | null;
-  provider_write_executed: boolean;
-}> = {
+const knownRepositoryAssetPreviews: Record<string, RepositoryAssetPreview> = {
   doc_repository_ready: {
     asset_key: "doc_repository_ready",
     asset_type: "workspace_document",
@@ -1852,6 +1843,7 @@ describe("DataPage", () => {
     localStorage.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("renders document repository ingestion embeddings quality and WebDAV writeback details", async () => {
@@ -1905,6 +1897,61 @@ describe("DataPage", () => {
     expect(updatedAssetDetail?.textContent).toContain("본문 추출 대기");
     expect(updatedAssetDetail?.textContent).toContain("content extraction pending, canonical thread pending");
     expect(updatedAssetDetail?.textContent).not.toContain("thread_missing");
+  });
+
+  it("refreshes a pending preview until recognized paragraph text is available", async () => {
+    const baseFetch = mockWebdavFetch();
+    let pendingPreviewCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/data/repository-assets/asset_repository_pending/preview") {
+        pendingPreviewCalls += 1;
+        if (pendingPreviewCalls === 1) {
+          return jsonResponse(knownRepositoryAssetPreviews.asset_repository_pending);
+        }
+        return jsonResponse({
+          ...knownRepositoryAssetPreviews.asset_repository_pending,
+          preview_state: "recognized",
+          paragraph_texts: ["Recognized notes paragraph"],
+          preview_text: "Recognized notes paragraph",
+          next_action: "read_recognized_text",
+          error_code: null,
+        } satisfies RepositoryAssetPreview);
+      }
+      return baseFetch(input, init);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+
+    const pendingAsset = Array.from(container.querySelectorAll('[role="button"][aria-pressed]')).find((candidate) =>
+      candidate.textContent?.includes("blank-notes.md"),
+    );
+    expect(pendingAsset).toBeDefined();
+
+    await act(async () => {
+      pendingAsset?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const pendingPanel = container.querySelector('[aria-label="선택한 자산 본문 미리보기"]');
+    expect(pendingPanel?.textContent).toContain("인식이 끝날 때까지 기다리거나 다른 파일을 선택하세요");
+    expect(pendingPanel?.querySelector("[data-preview-paragraphs]")).toBeNull();
+    const refresh = pendingPanel?.querySelector('[aria-label="인식 결과 다시 확인"]');
+    expect(refresh).not.toBeNull();
+    expect(pendingPreviewCalls).toBe(1);
+
+    await act(async () => {
+      refresh?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const recognizedPanel = container.querySelector('[aria-label="선택한 자산 본문 미리보기"]');
+    expect(recognizedPanel?.textContent).toContain("Recognized notes paragraph");
+    expect(recognizedPanel?.querySelector("[data-preview-paragraphs]")).not.toBeNull();
+    expect(pendingPreviewCalls).toBe(2);
   });
 
   it("uploads workspace documents and posts document action intents through signed APIs", async () => {

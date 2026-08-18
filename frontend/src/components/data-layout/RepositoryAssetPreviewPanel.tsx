@@ -9,12 +9,14 @@ import {
 type RepositoryAssetPreviewPanelProps = {
   currentDetailText: string;
   preview: RepositoryAssetPreview | null;
+  onRefreshPreview?: () => void;
 };
 
 /** Render recognized HWPX text, or an explicit next action when text is missing. */
 export function RepositoryAssetPreviewPanel({
   currentDetailText,
   preview,
+  onRefreshPreview,
 }: RepositoryAssetPreviewPanelProps) {
   const copy = preview
     ? getRepositoryAssetPreviewCopy(preview)
@@ -43,6 +45,16 @@ export function RepositoryAssetPreviewPanel({
           {copy.next_action_label}
         </p>
       )}
+      {preview?.preview_state === 'pending' ? (
+        <button
+          type="button"
+          aria-label="인식 결과 다시 확인"
+          onClick={onRefreshPreview}
+          className="mt-3 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-black text-foreground"
+        >
+          다시 확인
+        </button>
+      ) : null}
       <p className="mt-3 break-words text-xs font-semibold text-muted-foreground">
         {toSafeReactText(currentDetailText)}
       </p>

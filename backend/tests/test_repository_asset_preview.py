@@ -56,6 +56,9 @@ class MockResult:
     def all(self):
         return self.obj if isinstance(self.obj, list) else []
 
+    def __iter__(self):
+        return iter(self.all())
+
     def scalar_one_or_none(self):
         if isinstance(self.obj, list):
             return self.obj[0] if self.obj else None
@@ -68,8 +71,19 @@ class PreviewMockSession:
     def __init__(self, *, documents=None, attachment_rows=None):
         self.documents = list(documents or [])
         self.attachment_rows = list(attachment_rows or [])
+        self.get_calls: list[tuple[object, object]] = []
+        self.executed_queries: list[object] = []
+
+    async def get(self, model, identity):
+        self.get_calls.append((model, identity))
+        if model is Attachment:
+            for attachment, _email in self.attachment_rows:
+                if getattr(attachment, "id", None) == identity:
+                    return attachment
+        return None
 
     async def execute(self, query):
+        self.executed_queries.append(query)
         rendered_query = str(query).lower()
         if "workspace_documents" in rendered_query:
             compiled = query.compile()
@@ -97,7 +111,14 @@ class PreviewMockSession:
                 and (workspace_id is None or document.workspace_id == workspace_id)
             ]
             return MockResult(rows[0] if rows else None)
-        return MockResult(self.attachment_rows)
+        if "content_segments" in rendered_query:
+            return MockResult([])
+        return MockResult(
+            [
+                (getattr(attachment, "id", None), attachment.filename, email)
+                for attachment, email in self.attachment_rows
+            ]
+        )
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -193,10 +214,11 @@ def _hwpx_orm_attachment(
     parse_status: str,
     content: str,
     parse_error_code: str | None = None,
+    attachment_id: int = 17,
 ) -> Attachment:
     """Build one mapped HWPX attachment for signed preview-route tests."""
 
-    return Attachment(
+    attachment = Attachment(
         filename="decision.hwpx",
         content=content,
         content_type="application/hwp+zip",
@@ -205,6 +227,8 @@ def _hwpx_orm_attachment(
         parse_status=parse_status,
         parse_error_code=parse_error_code,
     )
+    attachment.id = attachment_id
+    return attachment
 
 
 def _with_signed_auth(mock_db, token: str):
@@ -296,6 +320,33 @@ def test_failed_hwpx_preview_asks_buyer_to_choose_another_file() -> None:
     assert preview.error_code == ERROR_HWPX_RECOGNITION_FAILED
 
 
+def test_recognized_hwpx_preview_uses_explicit_segments_without_relationship() -> None:
+    """Preview text comes from passed segments, not a replaced relationship."""
+
+    attachment = _hwpx_attachment(
+        parse_status="hwpx_xml_package_parsed",
+        content="ignored retained package bytes",
+        segments=[],
+    )
+    segments = [
+        SimpleNamespace(ordinal_index=1, safe_text_content="Approve the next action."),
+        SimpleNamespace(ordinal_index=0, safe_text_content="Quarterly decision record"),
+    ]
+
+    preview = build_attachment_preview(
+        "asset_recognized_hwpx",
+        attachment,
+        content_segments=segments,
+    )
+
+    assert attachment.content_segments == []
+    assert preview.preview_state == "recognized"
+    assert preview.paragraph_texts == (
+        "Quarterly decision record",
+        "Approve the next action.",
+    )
+
+
 def test_workspace_document_preview_returns_stored_text() -> None:
     """Known markdown assets such as roadmap.md remain readable through preview."""
 
@@ -344,6 +395,7 @@ def test_preview_route_returns_recognized_hwpx_for_scoped_attachment() -> None:
         _restore_overrides(previous_secret, original_overrides)
 
     assert response.status_code == 200, response.text
+    assert mock_db.get_calls == [(Attachment, attachment.id)]
     data = response.json()
     assert data["asset_key"] == asset_key
     assert data["preview_state"] == "recognized"
@@ -354,6 +406,55 @@ def test_preview_route_returns_recognized_hwpx_for_scoped_attachment() -> None:
     assert data["error_code"] is None
     assert data["next_action"] == NEXT_ACTION_READ_RECOGNIZED_TEXT
     assert data["provider_write_executed"] is False
+
+
+def test_preview_route_loads_only_the_matched_attachment_payload() -> None:
+    """First-pass preview lookup stays lightweight and loads only the matched row."""
+
+    import api.data as data_api
+
+    email = _email(message_id="<hwpx-ready@example.com>")
+    matched = _hwpx_orm_attachment(
+        parse_status="hwpx_xml_package_parsed",
+        content="Quarterly decision record\n\nApprove the next action.",
+        attachment_id=17,
+    )
+    sibling = _hwpx_orm_attachment(
+        parse_status="hwpx_xml_package_parsed",
+        content="S" * 8192,
+        attachment_id=18,
+    )
+    sibling.filename = "other-notes.hwpx"
+    asset_key = data_api._opaque_asset_key(email, matched)
+    mock_db = PreviewMockSession(attachment_rows=[(sibling, email), (matched, email)])
+    token = _signed_session_token(_valid_session_payload())
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.get(f"/api/data/repository-assets/{asset_key}/preview")
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 200, response.text
+    assert mock_db.get_calls == [(Attachment, matched.id)]
+    candidate_queries = [
+        query
+        for query in mock_db.executed_queries
+        if "content_segments" not in str(query).lower()
+        and "workspace_documents" not in str(query).lower()
+    ]
+    assert candidate_queries
+    candidate_columns = {
+        str(column.get("name"))
+        for column in candidate_queries[0].column_descriptions
+    }
+    assert "content" not in candidate_columns
+    assert "filename" in candidate_columns
+    assert "id" in candidate_columns
+    assert response.json()["paragraph_texts"] == [
+        "Quarterly decision record",
+        "Approve the next action.",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -539,50 +640,50 @@ async def test_repository_asset_preview_postgres_smoke_scopes_hwpx_text() -> Non
         await engine.dispose()
         raise
 
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def override_real_db():
-        async with session_factory() as session:
-            yield session
-
-    import api.data as data_api
-
-    owner_email = _email(
-        message_id=message_id,
-        user_id=user_id,
-        organization_id=organization_id,
-    )
-    owner_attachment = _hwpx_orm_attachment(
-        parse_status="hwpx_xml_package_parsed",
-        content="Quarterly decision record\n\nApprove the next action.",
-    )
-    rival_email = _email(
-        message_id=rival_message_id,
-        user_id=rival_user_id,
-        organization_id=rival_organization_id,
-    )
-    rival_attachment = _hwpx_orm_attachment(
-        parse_status="hwpx_xml_package_parsed",
-        content="Secret rival paragraph",
-    )
-    rival_attachment.filename = "secret.hwpx"
-    owner_key = data_api._opaque_asset_key(owner_email, owner_attachment)
-    rival_key = data_api._opaque_asset_key(rival_email, rival_attachment)
-
     previous_secret = settings.AUTH_SESSION_HMAC_SECRET
     original_overrides = dict(app.dependency_overrides)
-    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
-    token = _signed_session_token(
-        _valid_session_payload(
-            sub=user_id,
-            org=organization_id,
-            workspace=workspace_id,
-        )
-    )
-    app.dependency_overrides[get_db] = override_real_db
-    app.dependency_overrides.pop(get_auth_context, None)
-    app.dependency_overrides.pop(get_current_user, None)
     try:
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+        async def override_real_db():
+            async with session_factory() as session:
+                yield session
+
+        import api.data as data_api
+
+        owner_email = _email(
+            message_id=message_id,
+            user_id=user_id,
+            organization_id=organization_id,
+        )
+        owner_attachment = _hwpx_orm_attachment(
+            parse_status="hwpx_xml_package_parsed",
+            content="Quarterly decision record\n\nApprove the next action.",
+        )
+        rival_email = _email(
+            message_id=rival_message_id,
+            user_id=rival_user_id,
+            organization_id=rival_organization_id,
+        )
+        rival_attachment = _hwpx_orm_attachment(
+            parse_status="hwpx_xml_package_parsed",
+            content="Secret rival paragraph",
+        )
+        rival_attachment.filename = "secret.hwpx"
+        owner_key = data_api._opaque_asset_key(owner_email, owner_attachment)
+        rival_key = data_api._opaque_asset_key(rival_email, rival_attachment)
+
+        settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+        token = _signed_session_token(
+            _valid_session_payload(
+                sub=user_id,
+                org=organization_id,
+                workspace=workspace_id,
+            )
+        )
+        app.dependency_overrides[get_db] = override_real_db
+        app.dependency_overrides.pop(get_auth_context, None)
+        app.dependency_overrides.pop(get_current_user, None)
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,

@@ -74,6 +74,7 @@ export function DataLayout() {
   const [dataEvidenceSnapshot, setDataEvidenceSnapshot] = useState<DataEvidenceSnapshotResponse | null>(null);
   const [selectedRepositoryAssetKey, setSelectedRepositoryAssetKey] = useState<string | null>(null);
   const [assetPreviewByKey, setAssetPreviewByKey] = useState<Record<string, RepositoryAssetPreview>>({});
+  const [previewRefreshNonce, setPreviewRefreshNonce] = useState(0);
 
   const webdavAccountMap = useMemo<WebdavAccountLookup>(
     () => new Map(webdavAccounts.map((account, index) => [
@@ -379,7 +380,11 @@ export function DataLayout() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRepositoryAsset?.asset_key, selectedRepositoryAsset?.asset_type]);
+  }, [previewRefreshNonce, selectedRepositoryAsset?.asset_key, selectedRepositoryAsset?.asset_type]);
+
+  const refreshSelectedAssetPreview = useCallback(() => {
+    setPreviewRefreshNonce((current) => current + 1);
+  }, []);
 
   const handleDataTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: DataTab) => {
     const currentIndex = DATA_TABS.indexOf(tab);
@@ -503,6 +508,7 @@ export function DataLayout() {
               selectedWorkspaceDocument={selectedWorkspaceDocument}
               requestDocumentAction={requestDocumentAction}
               selectedAssetPreview={selectedAssetPreview}
+              onRefreshSelectedAssetPreview={refreshSelectedAssetPreview}
               connectorEvents={connectorEvents}
               writebackStatus={writebackStatus}
               writebackResult={writebackResult}
