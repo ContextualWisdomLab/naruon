@@ -783,8 +783,6 @@ async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
         )
 
     # Manually check for malformed percent encoding
-    import re
-
     if re.search(r"%(?![0-9a-fA-F]{2})", text):
         raise ValueError("Malformed percent-encoding")
 
