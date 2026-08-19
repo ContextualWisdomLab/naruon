@@ -1,4 +1,5 @@
 ## [Unreleased]
+- 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 실제 메일 표본 5건(70청크)이 게이트웨이에서 1,536차원 비영 벡터로 처리되는 경로를 검증했습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)

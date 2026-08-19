@@ -547,6 +547,39 @@ async def test_generate_import_embeddings_logs_non_secret_provider_fallback(capl
 
 
 @pytest.mark.asyncio
+async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
+    provider = EmailImportEmbeddingProvider(
+        api_key="provider-key",
+        base_url="https://provider.example/v1",
+        embedding_model="text-embedding-3-large",
+    )
+    captured_texts: list[str] = []
+
+    async def fake_generate(texts, *, embedding_provider, batch_context=None):
+        captured_texts.extend(texts)
+        return [[float(index)] * EMBEDDING_DIMENSION for index in range(1, len(texts) + 1)]
+
+    parsed = {
+        "body": "body paragraph " * 500,
+        "attachments": [{"content": "short attachment"}],
+    }
+    with patch(
+        "services.email_import_service._generate_import_embeddings",
+        side_effect=fake_generate,
+    ):
+        _, embeddings = await email_import_module._extract_and_generate_embeddings(
+            parsed,
+            provider,
+        )
+
+    body_chunk_count = len(captured_texts) - 1
+    assert body_chunk_count > 1
+    assert len(embeddings) == 2
+    assert embeddings[0][0] == sum(range(1, body_chunk_count + 1)) / body_chunk_count
+    assert embeddings[1][0] == float(len(captured_texts))
+
+
+@pytest.mark.asyncio
 async def test_generate_import_embeddings_recovers_valid_items_after_batch_failure():
     provider = EmailImportEmbeddingProvider(
         api_key="secret-provider-token",

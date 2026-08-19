@@ -32,6 +32,7 @@ from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
+    chunk_text,
     fit_embedding_vector,
     generate_embeddings,
 )
@@ -288,16 +289,45 @@ async def _extract_and_generate_embeddings(
     batch_context: "EmailImportBatchContext | None" = None,
 ) -> tuple[list[dict], list[list[float]]]:
     attachment_payloads = list(parsed.get("attachments", []))
-    embedding_texts = [str(parsed.get("body") or "")]
-    embedding_texts.extend(
+    source_texts = [str(parsed.get("body") or "")]
+    source_texts.extend(
         str(attachment.get("content") or "") for attachment in attachment_payloads
     )
-    fitted_embeddings = await _generate_import_embeddings(
+    embedding_texts, chunk_counts = _chunk_import_texts(source_texts)
+    chunk_embeddings = await _generate_import_embeddings(
         embedding_texts,
         embedding_provider=embedding_provider,
         batch_context=batch_context,
     )
+    fitted_embeddings: list[list[float]] = []
+    offset = 0
+    for chunk_count in chunk_counts:
+        fitted_embeddings.append(
+            _mean_embedding(chunk_embeddings[offset : offset + chunk_count])
+        )
+        offset += chunk_count
     return attachment_payloads, fitted_embeddings
+
+
+def _chunk_import_texts(texts: list[str]) -> tuple[list[str], list[int]]:
+    """Split each email/attachment into semantic-sized embedding inputs."""
+    chunks: list[str] = []
+    chunk_counts: list[int] = []
+    for text in texts:
+        source_chunks = chunk_text(text) or [text]
+        chunks.extend(source_chunks)
+        chunk_counts.append(len(source_chunks))
+    return chunks, chunk_counts
+
+
+def _mean_embedding(embeddings: list[list[float]]) -> list[float]:
+    """Average chunk vectors into the existing one-vector record contract."""
+    if not embeddings:
+        return _zero_embedding()
+    return [
+        sum(vector[index] for vector in embeddings) / len(embeddings)
+        for index in range(len(embeddings[0]))
+    ]
 
 
 def _build_email_object(
