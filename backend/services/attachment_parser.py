@@ -608,10 +608,25 @@ _NESTED_EMAIL_CONTENT_TYPES = frozenset({"message/rfc822"})
 _AUDIO_CONTENT_TYPES = frozenset({"audio/mpeg", "audio/mp3"})
 _LEGACY_OFFICE_CONTENT_TYPES = frozenset({"application/msword"})
 MAX_ATTACHMENT_ARCHIVE_MEMBERS = 1_000
+MAX_OFFICE_XML_NODES = 1_000_000
+MAX_OFFICE_XML_TEXT_PARTS = 100_000
 _ZIP_ENCRYPTED_FLAG_MASK = 0x41
 _JPEG_SOF_MARKERS = frozenset(
     {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
 )
+
+
+class _OfficeXmlParseLimitExceeded(ValueError):
+    """Signal an Office XML safety budget before building an in-memory tree."""
+
+
+@dataclass
+class _OfficeXmlBudget:
+    """Track aggregate XML work across selected Office package members."""
+
+    nodes: int = 0
+    text_parts: int = 0
+    text_chars: int = 0
 
 
 def _parse_image_metadata(payload: bytes) -> str | None:
@@ -726,7 +741,7 @@ def _parse_office_text(
             text_parts: list[str] = []
             declared_size = 0
             bytes_read = 0
-            extracted_chars = 0
+            xml_budget = _OfficeXmlBudget()
             for info in selected_infos:
                 declared_size += info.file_size
                 if declared_size > MAX_OFFICE_XML_PARSE_BYTES:
@@ -737,10 +752,7 @@ def _parse_office_text(
                 bytes_read += len(xml_payload)
                 if len(xml_payload) > remaining_bytes:
                     return None, "parse_size_limit_exceeded"
-                parts = _xml_text_parts(xml_payload, content_type)
-                extracted_chars += sum(len(part) for part in parts)
-                if extracted_chars > MAX_ATTACHMENT_PARSE_TEXT_CHARS:
-                    return None, "parse_size_limit_exceeded"
+                parts = _xml_text_parts(xml_payload, content_type, xml_budget)
                 text_parts.extend(parts)
             format_name = _office_format_name(content_type)
             text = " ".join(part for part in text_parts if part)
@@ -748,6 +760,8 @@ def _parse_office_text(
                 text = text[:MAX_ATTACHMENT_PARSE_TEXT_CHARS]
             summary = f"Office metadata: format={format_name}; members={len(infos)}"
             return f"{summary}; text={text}" if text else summary, None
+    except _OfficeXmlParseLimitExceeded:
+        return None, "parse_size_limit_exceeded"
     except (BadZipFile, OSError, ValueError, ElementTree.ParseError):
         return None, "office_text_parse_failed"
 
@@ -777,20 +791,40 @@ def _is_office_text_part(filename: str, content_type: str) -> bool:
     return False
 
 
-def _xml_text_parts(payload: bytes, content_type: str) -> list[str]:
-    if b"<!DOCTYPE" in payload[:4096] or b"<!ENTITY" in payload[:4096]:
+def _xml_text_parts(
+    payload: bytes, content_type: str, budget: _OfficeXmlBudget
+) -> list[str]:
+    if b"<!DOCTYPE" in payload or b"<!ENTITY" in payload:
         raise ValueError("XML declarations are not supported")
-    root = ElementTree.fromstring(payload)
     if "spreadsheetml.sheet" in content_type:
         tags = {"t", "v"}
     else:
         tags = {"t"}
-    return [
-        " ".join("".join(element.itertext()).split())
-        for element in root.iter()
-        if element.tag.rsplit("}", 1)[-1] in tags
-        and " ".join("".join(element.itertext()).split())
-    ]
+    parts: list[str] = []
+    for _, element in ElementTree.iterparse(BytesIO(payload), events=("end",)):
+        budget.nodes += 1
+        if budget.nodes > MAX_OFFICE_XML_NODES:
+            raise _OfficeXmlParseLimitExceeded("Office XML node budget exceeded")
+        if not isinstance(element.tag, str):
+            element.clear()
+            continue
+        local_tag = element.tag.rsplit("}", 1)[-1]
+        if local_tag in tags:
+            part = " ".join("".join(element.itertext()).split())
+            if part:
+                budget.text_parts += 1
+                budget.text_chars += len(part)
+                if budget.text_parts > MAX_OFFICE_XML_TEXT_PARTS:
+                    raise _OfficeXmlParseLimitExceeded(
+                        "Office XML text-part budget exceeded"
+                    )
+                if budget.text_chars > MAX_ATTACHMENT_PARSE_TEXT_CHARS:
+                    raise _OfficeXmlParseLimitExceeded(
+                        "Office XML text budget exceeded"
+                    )
+                parts.append(part)
+        element.clear()
+    return parts
 
 
 def _office_format_name(content_type: str) -> str:

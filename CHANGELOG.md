@@ -15,7 +15,8 @@
   HWPX XML parts and indexes ZIP member manifests without extraction. Office
   packages larger than 20 MiB remain eligible when their selected XML fits the
   128 MiB parser budget; embedded media is not read. Encrypted ZIP entries fail
-  closed with deterministic evidence. Malformed, safety-budget-exceeding, or
+  closed with deterministic evidence. XML is streamed with aggregate node and
+  text-part ceilings. Malformed, safety-budget-exceeding, or
   unsupported content fails closed without retaining raw bytes; the
   no-execution boundary is fixed in ADR-0010 and
   `docs/doctoring/bounded-office-archive-text-parsing.md`.

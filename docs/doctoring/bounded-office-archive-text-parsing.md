@@ -14,7 +14,10 @@ was uploaded to an external service.
 members for DOCX, XLSX, PPTX, and HWPX and emits searchable plain text. A
 package larger than 20 MiB is still eligible when its selected XML fits the
 128 MiB parser budget; embedded media is not read. It does not execute macros,
-resolve external relationships, evaluate formulas, or render layouts.
+resolve external relationships, evaluate formulas, or render layouts. XML is
+streamed with `iterparse` under aggregate limits of 1,000,000 elements and
+100,000 extracted text parts, preventing a small XML member with excessive
+node count from building an unbounded in-memory tree.
 
 `services.attachment_parser.archive_manifest` emits bounded ZIP member names
 and declared sizes without extracting any member. Invalid input and archives

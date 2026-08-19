@@ -319,6 +319,41 @@ def test_office_text_applies_one_aggregate_xml_budget(monkeypatch):
     assert result.content == ""
 
 
+def test_office_text_streams_many_xml_nodes_with_a_bounded_budget(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_NODES", 4)
+    xml = "<w:document xmlns:w='urn:w'>" + "".join(
+        f"<w:t>{index}</w:t>" for index in range(8)
+    ) + "</w:document>"
+
+    result = parse_email_attachment(
+        filename="many-nodes.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(("word/document.xml", xml)),
+    )
+
+    assert result.parse_status == "parse_size_limit_exceeded"
+    assert result.parse_error_code == "parse_size_limit_exceeded"
+    assert result.content == ""
+
+
+def test_office_text_bounds_extracted_xml_text_parts(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_NODES", 100)
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_TEXT_PARTS", 2)
+    xml = "<w:document xmlns:w='urn:w'>" + "".join(
+        f"<w:t>{index}</w:t>" for index in range(4)
+    ) + "</w:document>"
+
+    result = parse_email_attachment(
+        filename="many-text-parts.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(("word/document.xml", xml)),
+    )
+
+    assert result.parse_status == "parse_size_limit_exceeded"
+    assert result.parse_error_code == "parse_size_limit_exceeded"
+    assert result.content == ""
+
+
 def test_large_office_package_parses_selected_xml_without_a_package_size_cap():
     payload = BytesIO()
     with ZipFile(payload, "w") as archive:
