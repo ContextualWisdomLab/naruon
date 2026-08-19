@@ -637,6 +637,29 @@ def test_json_formatter_tool_invalid():
     assert "유효하지 않은 JSON 문자열입니다" in data["message"]
 
 
+@pytest.mark.parametrize(
+    "json_string",
+    [
+        '{"value": NaN}',
+        '{"value": Infinity}',
+        '{"value": -Infinity}',
+        '{"value": 1e400}',
+    ],
+)
+def test_json_formatter_tool_rejects_non_finite_numbers(json_string):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": json_string}},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
+
+
 def test_uuid_v4_generator_tool_success():
     with TestClient(app) as client:
         response = client.post(

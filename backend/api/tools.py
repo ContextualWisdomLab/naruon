@@ -789,11 +789,15 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Any:
 async def json_formatter_handler(params: Dict[str, Any]) -> Any:
     """JSON 포매터 핸들러."""
     json_string = params.get("json_string", "")
+
+    def reject_non_finite(value: str) -> None:
+        raise ValueError(f"Non-finite JSON number: {value}")
+
     try:
-        parsed = json.loads(json_string)
-        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        parsed = json.loads(json_string, parse_constant=reject_non_finite)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False, allow_nan=False)
         return {"formatted_json": formatted, "is_valid": True}
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, ValueError) as e:
         raise ValueError(f"유효하지 않은 JSON 문자열입니다: {str(e)}")
 
 
