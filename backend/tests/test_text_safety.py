@@ -22,6 +22,10 @@ def test_strip_html_markup_never_returns_raw_tag_like_payloads(payload, expected
     assert strip_html_markup(payload) == expected
 
 
+def test_strip_html_markup_preserves_legitimate_comment_terminator_text():
+    assert strip_html_markup("Keep --&gt; as text") == "Keep --> as text"
+
+
 @pytest.mark.parametrize(
     "safe_text",
     [
@@ -33,10 +37,6 @@ def test_strip_html_markup_never_returns_raw_tag_like_payloads(payload, expected
 )
 def test_strip_html_markup_preserves_safe_angle_bracket_display_text(safe_text):
     assert strip_html_markup(safe_text) == safe_text
-
-
-def test_strip_html_markup_preserves_literal_comment_close_text():
-    assert strip_html_markup("<p>literal --&gt; content</p>") == "literal --> content"
 
 
 def test_strip_html_markup_plain_text_fast_path_skips_parser(monkeypatch):

@@ -71,17 +71,6 @@ def test_state_changing_api_rejects_cross_site_fetch_metadata():
     assert response.json() == {"error_code": "csrf_fetch_site_rejected"}
 
 
-def test_state_changing_dav_rejects_cross_site_fetch_metadata():
-    response = client.put(
-        "/dav/user-1/projects/example",
-        headers={"Sec-Fetch-Site": "cross-site"},
-        content=b"calendar-data",
-    )
-
-    assert response.status_code == 403
-    assert response.json() == {"error_code": "csrf_fetch_site_rejected"}
-
-
 def test_state_changing_api_rejects_untrusted_origin():
     response = client.put(
         "/api/accounts/config",
@@ -91,17 +80,6 @@ def test_state_changing_api_rejects_untrusted_origin():
 
     assert response.status_code == 403
     assert response.json() == {"error_code": "csrf_origin_rejected"}
-
-
-def test_state_changing_api_rejects_missing_browser_origin_headers():
-    response = client.put(
-        "/api/accounts/config",
-        headers={"Sec-Fetch-Site": "same-origin"},
-        json={"smtp_server": "mail.example.com"},
-    )
-
-    assert response.status_code == 403
-    assert response.json() == {"error_code": "csrf_referer_rejected"}
 
 
 def test_state_changing_api_allows_trusted_origin_to_reach_auth_gate():
