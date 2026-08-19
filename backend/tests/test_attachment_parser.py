@@ -61,7 +61,7 @@ def test_markdown_attachment_is_parseable_markdown():
     assert result.parse_status == "parsed"
 
 
-def test_parser_manifest_lists_supported_and_unsupported_format_families():
+def test_parser_manifest_lists_supported_format_families():
     manifest = get_attachment_parser_manifest()
     parser_keys = {descriptor.parser_key for descriptor in manifest}
 
@@ -81,6 +81,7 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
         "archive_manifest",
         "audio_metadata",
         "legacy_office_metadata",
+        "binary_metadata",
         "unsupported_binary",
     } <= parser_keys
     markdown_descriptor = next(
@@ -99,6 +100,14 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
     assert "text/calendar" in calendar_descriptor.content_types
     assert "application/ics" in calendar_descriptor.content_types
     assert ".ics" in calendar_descriptor.extensions
+    binary_descriptor = next(
+        descriptor for descriptor in manifest if descriptor.parser_key == "binary_metadata"
+    )
+    assert binary_descriptor.content_types == (
+        "application/octet-stream",
+        "application/x-binary",
+        "binary/octet-stream",
+    )
 
 
 def _zip_fixture(*members: tuple[str, str]) -> bytes:
@@ -701,18 +710,51 @@ def test_oversized_text_attachment_is_metadata_only_without_raw_content(monkeypa
     assert result.parse_error_code == "parse_size_limit_exceeded"
 
 
-def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
+@pytest.mark.parametrize(
+    "content_type",
+    ["application/octet-stream", "binary/octet-stream", "application/x-binary"],
+)
+def test_generic_binary_attachment_indexes_metadata_without_raw_bytes(content_type):
     result = parse_email_attachment(
         filename="unknown.bin",
-        content_type="application/octet-stream",
+        content_type=content_type,
         raw_content=b"PK\x03\x04 raw bytes",
     )
 
     assert result.filename == "unknown.bin"
-    assert result.content_type == "application/octet-stream"
-    assert result.content == ""
-    assert result.parse_content == ""
-    assert result.parse_content_type == "application/octet-stream"
+    assert result.content_type == content_type
+    assert result.content == (
+        f"Binary attachment metadata: media_type={content_type}; bytes=14"
+    )
+    assert result.parse_content == result.content
+    assert result.parse_content_type == "text/plain"
+    assert result.parser_key == "binary_metadata"
+    assert result.parse_status == "parsed"
+    assert result.parse_error_code is None
+
+
+def test_large_generic_binary_attachment_has_no_one_megabyte_parse_limit():
+    result = parse_email_attachment(
+        filename="large.bin",
+        content_type="application/octet-stream",
+        raw_content=b"x" * (20 * 1024 * 1024 + 1),
+    )
+
+    assert result.parse_status == "parsed"
+    assert result.parser_key == "binary_metadata"
+    assert result.parse_content == (
+        "Binary attachment metadata: media_type=application/octet-stream; "
+        "bytes=20971521"
+    )
+
+
+def test_non_generic_unknown_attachment_remains_explicitly_unsupported():
+    result = parse_email_attachment(
+        filename="unknown.bin",
+        content_type="application/x-unknown",
+        raw_content=b"opaque bytes",
+    )
+
     assert result.parser_key == "unsupported_binary"
     assert result.parse_status == "unsupported_content_type"
     assert result.parse_error_code == "unsupported_content_type"
@@ -820,6 +862,11 @@ def test_attachment_parser_small_type_and_coercion_helpers_fail_closed():
     assert _sniff_generic_image_content_type(b"GIF89a") == "image/gif"
     assert _sniff_generic_image_content_type(b"BM") == "image/bmp"
     assert _parser_key_for("application/x-unknown", "parsed") == "unsupported_binary"
+    assert _parser_key_for("application/octet-stream", "parsed") == "binary_metadata"
+    assert (
+        _parser_key_for("application/x-unknown", "unsupported_content_type")
+        == "unsupported_binary"
+    )
     assert _safe_filename("") == "attachment"
     assert _safe_filename(".") == "attachment"
     assert _coerce_deferred_payload_bytes(message) == message.as_bytes()

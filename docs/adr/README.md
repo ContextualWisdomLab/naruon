@@ -15,7 +15,8 @@ govern implementation.
 | [ADR-0004](0004-status-weighted-calendar-conflicts.md) | Evaluate CalDAV VEVENT overlaps by occupying status; cancelled does not occupy | Accepted | `ACCEPTED-NARUON-POLICY`; advisory evaluate API only |
 | [ADR-0009](0009-image-attachment-metadata-parser.md) | Parse common image headers into safe searchable metadata; defer OCR/vision to a local sidecar | Accepted | `ACCEPTED-NARUON-POLICY`; no external image upload |
 | [ADR-0010](0010-bounded-office-archive-text-parsing.md) | Parse bounded Office XML text and ZIP manifests without execution or extraction | Accepted | `ACCEPTED-NARUON-POLICY`; no external upload or archive execution |
-| [ADR-0011](0011-safe-nested-media-legacy-metadata.md) | Parse bounded nested-email, MP3, and legacy DOC container metadata; keep unknown binaries unsupported | Accepted | `ACCEPTED-NARUON-POLICY`; no recursion, decoding, or external upload |
+| [ADR-0011](0011-safe-nested-media-legacy-metadata.md) | Parse bounded nested-email, MP3, and legacy DOC container metadata; keep unidentified formats unparsed | Accepted | `ACCEPTED-NARUON-POLICY`; no recursion, decoding, or external upload |
+| [ADR-0012](0012-generic-binary-metadata.md) | Index MIME and byte-count metadata for generic binary attachments without format guessing | Accepted | `ACCEPTED-NARUON-POLICY`; no raw-byte indexing or external upload |
 
 The complete topic-intelligence requirements, architecture, contract, UML,
 conceptual ERD, security, test, and operability graph is indexed at

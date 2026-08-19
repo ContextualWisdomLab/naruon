@@ -154,9 +154,16 @@ _PARSER_MANIFEST = (
         parse_status="parsed",
     ),
     AttachmentParserDescriptor(
+        parser_key="binary_metadata",
+        display_name="Generic binary metadata",
+        content_types=tuple(sorted(_GENERIC_CONTENT_TYPES - {""})),
+        extensions=(),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
         parser_key="unsupported_binary",
         display_name="Unsupported binary attachments",
-        content_types=("application/octet-stream",),
+        content_types=(),
         extensions=(),
         parse_status="unsupported_content_type",
     ),
@@ -265,6 +272,22 @@ def parse_email_attachment(
             parse_content_type=parse_content_type,
             parser_key=deferred_descriptor.parser_key,
             parse_status=deferred_descriptor.parse_status,
+            parse_error_code=None,
+        )
+
+    if parse_content_type in _GENERIC_CONTENT_TYPES:
+        binary_metadata = _parse_generic_binary_metadata(
+            raw_content,
+            normalized_content_type,
+        )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=binary_metadata,
+            content_type=normalized_content_type,
+            parse_content=binary_metadata,
+            parse_content_type="text/plain",
+            parser_key="binary_metadata",
+            parse_status="parsed",
             parse_error_code=None,
         )
 
@@ -525,6 +548,12 @@ def _sniff_generic_image_content_type(raw_content: Any) -> str:
     if prefix.startswith(b"BM"):
         return "image/bmp"
     return "application/octet-stream"
+
+
+def _parse_generic_binary_metadata(raw_content: Any, content_type: str) -> str:
+    """Return safe type and size metadata without guessing or retaining bytes."""
+    payload = _coerce_deferred_payload_bytes(raw_content)
+    return f"Binary attachment metadata: media_type={content_type}; bytes={len(payload)}"
 
 
 def _parser_key_for(parse_content_type: str, parse_status: str) -> str:

@@ -5,9 +5,9 @@
 The private local audit of the 2026-07-31 Inbox backup initially left 24
 unsupported attachments: 20 nested `.eml`, one `message/rfc822`, one legacy
 `.doc`, one MP3, and one extensionless generic binary. After the bounded
-metadata parsers, one extensionless generic binary remains explicitly
-unsupported. The audit used aggregate counts only and did not upload message or
-attachment content.
+metadata parsers, the extensionless generic binary is represented by safe MIME
+and byte-count metadata; its underlying format remains unparsed. The audit
+used aggregate counts only and did not upload message or attachment content.
 
 ## Implemented boundary
 
@@ -22,18 +22,22 @@ metadata result is retained.
 `legacy_office_metadata` parser validates only the OLE/Compound File signature
 for `.doc`. None of these paths decodes or executes untrusted content.
 
-The extensionless generic binary remains explicit `unsupported_content_type`.
+`parser_key="binary_metadata"` handles generic MIME attachments with only
+`media_type` and `bytes` metadata. It does not guess a format, decode bytes,
+or retain raw payload content. A non-generic unidentified MIME remains
+explicit `unsupported_content_type`.
 
 ## Verification
 
 - `backend/tests/test_attachment_parser.py` covers nested `.eml`, MP3 ID3,
-  malformed MP3, legacy DOC OLE signatures, malformed DOC, and the generic
-  unsupported boundary.
+  malformed MP3, legacy DOC OLE signatures, malformed DOC, and generic binary
+  metadata including a payload over 20 MiB.
 - Valid metadata returns `parse_status=parsed` and `parse_content_type=text/plain`;
   malformed input returns a named failure without raw bytes. PDF size and
   sidecar availability remain in the separate deferred recognition workflow.
 - ADR-0011 fixes the non-recursive, non-decoding, and no-external-upload
-  boundary.
+  boundary for nested/media/legacy metadata; ADR-0012 fixes the generic
+  binary metadata-only boundary.
 
 ## References (APA 7th)
 

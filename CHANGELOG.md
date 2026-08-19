@@ -6,11 +6,13 @@
   prefix; neither is an attachment-size limit.
 - Generic MIME attachments with unambiguous PNG, JPEG, GIF, or BMP signatures
   now use the image metadata parser instead of remaining unsupported binaries.
+- Generic binary MIME attachments now use `binary_metadata` to index only their
+  declared MIME type and byte count, including payloads over 20 MiB; no 1 MiB
+  attachment limit, format guessing, or raw-byte indexing is introduced.
 - Attachment ingestion now indexes bounded metadata for nested `.eml`/
   `message/rfc822`, Layer III MP3, and legacy `.doc` containers. It does not
   recurse, decode, execute, or retain malformed binary payloads; unknown
-  extensionless binaries remain explicit `unsupported_content_type` under
-  ADR-0011.
+  non-generic formats remain explicit `unsupported_content_type` under ADR-0011.
 - Email attachment ingestion now parses bounded text from DOCX, XLSX, PPTX, and
   HWPX XML parts and indexes ZIP member manifests without extraction. Office
   packages larger than 20 MiB remain eligible when their selected XML fits the

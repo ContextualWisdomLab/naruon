@@ -14,7 +14,8 @@ the structured Office, ZIP, image, calendar, and vCard coverage: 20 `.eml`, one
 `message/rfc822`, one legacy `.doc`, one MP3, and one extensionless generic
 binary. The first four have bounded container evidence that can improve search
 without pretending to implement a full parser. The last item has no reliable
-format evidence and must remain unsupported.
+format evidence, so its format remains unparsed; its safe metadata-only
+treatment is fixed separately by ADR-0012.
 
 ## Decision
 
@@ -35,9 +36,11 @@ format evidence and must remain unsupported.
    closed without retaining raw bytes on malformed input. PDF size and
    sidecar availability are handled by the separate deferred recognition
    workflow, not by these metadata parser states.
-5. Extensionless or otherwise unidentified binary attachments remain
-   `unsupported_content_type`. A future parser for them requires reliable
-   signature evidence and a new ADR or explicit amendment.
+5. Extensionless or otherwise unidentified binary attachments have no
+   type-specific parser. Generic MIME attachments may receive only the
+   MIME-and-byte-count metadata defined by ADR-0012; format-specific parsing
+   still requires reliable signature evidence and a new ADR or explicit
+   amendment.
 
 ## Alternatives rejected
 
@@ -56,15 +59,16 @@ provenance decision.
 ### Guess the format of extensionless binary data
 
 Rejected because a guessed type can expose arbitrary bytes as trusted content;
-the parser remains explicitly unsupported instead.
+the generic metadata parser records no format claim and retains no raw bytes.
 
 ## Consequences
 
 - Forwarded mail, common MP3 attachments, and legacy DOC containers become
   searchable by bounded metadata.
 - The content graph receives no raw binary and no recursive nested-email graph.
-- Unsupported, malformed, or oversized payloads remain visible as explicit
-  parser states for future operator-authorized replay.
+- Unidentified non-generic, malformed, or oversized payloads remain visible as
+  explicit parser states for future operator-authorized replay. Generic binary
+  payloads are searchable only through the safe metadata in ADR-0012.
 
 ## References (APA 7th)
 
