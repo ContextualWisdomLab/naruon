@@ -19,8 +19,11 @@ format evidence and must remain unsupported.
 ## Decision
 
 1. Naruon registers `nested_email` for `.eml` and `message/rfc822`. It parses
-   one bounded message and emits only sanitized subject, sender, and attachment
-   count. It does not recursively import or execute the nested message.
+   one bounded message (64 MiB maximum and four attached-message levels) and
+   emits only sanitized subject, sender, and attachment count. `message.walk()`
+   traverses existing MIME descendants for attachment counting, including
+   attached `message/rfc822` descendants; it does not recursively import or
+   execute nested messages.
 2. Naruon registers `audio_metadata` for MP3. It validates a bounded ID3v2
    header or an MPEG frame sync whose layer bits identify Layer III
    (`payload[1] & 0x06 == 0x02`) and emits format, byte count, and ID3

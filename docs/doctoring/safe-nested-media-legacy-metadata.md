@@ -13,7 +13,11 @@ attachment content.
 
 `parser_key="nested_email"` (implementation:
 `_parse_nested_email_metadata`) records sanitized headers and an attachment
-count for one bounded nested message; it does not recurse.
+count for one bounded nested message. `message.walk()` traverses the already
+parsed MIME descendants for attachment counting, including descendants of an
+attached `message/rfc822`; the parser does not recursively import or execute
+nested messages. Byte and nested-message depth budgets fail closed before the
+metadata result is retained.
 `audio_metadata` validates only bounded MP3 ID3/frame signatures. The
 `legacy_office_metadata` parser validates only the OLE/Compound File signature
 for `.doc`. None of these paths decodes or executes untrusted content.

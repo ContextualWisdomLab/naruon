@@ -958,7 +958,10 @@ async def test_import_email_files_accepts_source_over_20_mib(
         emails_api, "resolve_runtime_llm_provider", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(emails_api, "import_email_uploads", capture_import)
-    source = b"From: a@example.com\n\n" + b"x" * (20 * 1024 * 1024 + 1)
+    synthetic_limit = 64
+    prefix = b"From: a@example.com\n\n"
+    source = prefix + b"x" * (synthetic_limit + 1 - len(prefix))
+    monkeypatch.setattr(emails_api, "MAX_IMPORT_UPLOAD_BYTES", len(source))
     try:
         response = await client.post(
             "/api/emails/import-files",
@@ -973,7 +976,7 @@ async def test_import_email_files_accepts_source_over_20_mib(
 
     assert response.status_code == 200
     assert len(captured_uploads) == 1
-    assert len(captured_uploads[0].content) == len(source)
+    assert captured_uploads[0].content == source
 
 
 @pytest.mark.asyncio

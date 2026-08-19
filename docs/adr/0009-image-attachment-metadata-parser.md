@@ -28,10 +28,11 @@ the content graph.
 4. Invalid image payloads fail closed as `image_metadata_parse_failed`; raw
    bytes are not retained in that path. Large image payloads are not rejected
    solely for size because the parser inspects only bounded headers and does
-   not decode pixels. `IMAGE_METADATA_SCAN_PREFIX_BYTES` is only a 1 MiB
-   prefix used to detect animation markers; it is not an attachment-size
-   limit. The signed email import transport accepts source files up to 64 MiB
-   as a request resource guard, independently of parser classification.
+   not decode pixels. JPEG header scanning is bounded to 4 MiB, while
+   `IMAGE_METADATA_SCAN_PREFIX_BYTES` is only a 1 MiB prefix used to detect
+   animation markers; neither is an attachment-size limit. The signed email
+   import transport accepts source files up to 64 MiB as a request resource
+   guard, independently of parser classification.
 5. OCR, captioning, and object detection remain a separate deferred capability.
    They may be added only behind an explicitly configured local vision sidecar
    with source provenance, bounded payloads, and a non-success state while the
@@ -71,11 +72,24 @@ International Telecommunication Union. (1992). *Information technology—Digital
 compression and coding of continuous-tone still images—Requirements and
 guidelines (Recommendation ITU-T T.81).* https://www.itu.int/rec/T-REC-T.81
 
+This recommendation defines JPEG marker segments and SOF dimensions, which
+supports the parser's bounded header-only width/height extraction.
+
 Microsoft. (2022). *Bitmap storage.* Microsoft Learn.
 https://learn.microsoft.com/en-us/windows/win32/gdi/bitmap-storage
+
+This reference defines DIB header layouts and dimensions, supporting the
+parser's signature-plus-header BMP metadata boundary.
 
 World Wide Web Consortium. (2025). *Portable Network Graphics (PNG)
 specification (Third Edition).* https://www.w3.org/TR/png-3/
 
+The PNG specification defines the signature and IHDR dimensions used for
+header-only PNG metadata; the parser does not decode pixel data.
+
 CompuServe Incorporated. (1990). *Graphics Interchange Format version 89a.*
 https://giflib.sourceforge.net/gifstandard/GIF89a.html
+
+GIF89a defines the signature and logical screen descriptor used for GIF
+dimensions; the parser reports only bounded metadata and a marker-based
+animation hint.

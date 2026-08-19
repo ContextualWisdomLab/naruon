@@ -29,9 +29,10 @@ or archive runtime would expand the execution and data-retention boundary.
    package exceed 20 MiB. Office text extraction applies a 128 MiB aggregate
    budget to selected-part declared sizes and bytes read, plus a 64-million
    character extracted-text ceiling; it returns `parse_size_limit_exceeded`
-   only when selected XML itself exceeds that safety budget. Non-directory ZIP
-   entries with traditional or strong-encryption flag bits (`0x01` or `0x40`)
-   return the deterministic `encrypted_archive_entry` error. Valid output is
+   when the selected XML safety budget or the 1,000-member archive limit is
+   exceeded. Non-directory ZIP entries with traditional or strong-encryption
+   flag bits (`0x01` or `0x40`) return the deterministic
+   `encrypted_archive_entry` error. Valid output is
    `parse_status=parsed` and `parse_content_type=text/plain`, so the existing
    embedding and content-graph path indexes it. PDF retention is governed by
    the separate deferred NewsDOM workflow; this Office/ZIP ADR does not impose

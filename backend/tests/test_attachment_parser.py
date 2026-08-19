@@ -117,6 +117,25 @@ def _jpeg_fixture(width: int = 640, height: int = 480) -> bytes:
     return b"\xff\xd8\xff\xc0" + struct.pack(">H", len(sof_payload) + 2) + sof_payload
 
 
+def _nested_email_fixture(depth: int) -> bytes:
+    payload = b"Subject: leaf\nContent-Type: text/plain\n\nbody\n"
+    for index in range(depth):
+        boundary = f"nested-{index}".encode()
+        payload = (
+            b"Content-Type: multipart/mixed; boundary="
+            + boundary
+            + b"\n\n--"
+            + boundary
+            + b"\nContent-Type: message/rfc822\n"
+            + b'Content-Disposition: attachment; filename="inner.eml"\n\n'
+            + payload
+            + b"\n--"
+            + boundary
+            + b"--\n"
+        )
+    return payload
+
+
 @pytest.mark.parametrize(
     ("filename", "content_type", "raw_content", "format_name"),
     [
@@ -187,6 +206,25 @@ def test_large_image_attachment_is_not_rejected_by_metadata_scan_ceiling():
     assert result.parse_status == "parsed"
     assert "format=png" in result.content
     assert "width=320px" in result.content
+
+
+def test_jpeg_header_scan_is_bounded(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.JPEG_METADATA_HEADER_SCAN_BYTES", 32
+    )
+    delayed_sof = (
+        b"\xff\xd8\xff\xe0" + struct.pack(">H", 30) + b"x" * 28 + _jpeg_fixture()
+    )
+
+    result = parse_email_attachment(
+        filename="delayed.jpg",
+        content_type="image/jpeg",
+        raw_content=delayed_sof,
+    )
+
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "image_metadata_parse_failed"
+    assert result.parse_error_code == "image_metadata_parse_failed"
 
 
 @pytest.mark.parametrize(
@@ -391,6 +429,49 @@ def test_nested_email_attachment_indexes_safe_headers_only():
     assert result.parse_content_type == "text/plain"
     assert "subject=Project plan" in result.content
     assert "sender=sender@example.com" in result.content
+
+
+def test_nested_email_attachment_accepts_exact_byte_budget_and_rejects_next_byte(
+    monkeypatch,
+):
+    payload = b"Subject: bounded\nContent-Type: text/plain\n\nbody"
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_NESTED_EMAIL_PARSE_BYTES", len(payload)
+    )
+
+    allowed = parse_email_attachment(
+        filename="bounded.eml",
+        content_type="message/rfc822",
+        raw_content=payload,
+    )
+    rejected = parse_email_attachment(
+        filename="oversized.eml",
+        content_type="message/rfc822",
+        raw_content=payload + b"x",
+    )
+
+    assert allowed.parse_status == "parsed"
+    assert rejected.parse_status == "parse_size_limit_exceeded"
+    assert rejected.parse_error_code == "parse_size_limit_exceeded"
+
+
+def test_nested_email_attachment_rejects_excessive_mime_depth(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_NESTED_EMAIL_NESTING_DEPTH", 1)
+
+    allowed = parse_email_attachment(
+        filename="one-level.eml",
+        content_type="message/rfc822",
+        raw_content=_nested_email_fixture(1),
+    )
+    rejected = parse_email_attachment(
+        filename="deep.eml",
+        content_type="message/rfc822",
+        raw_content=_nested_email_fixture(2),
+    )
+
+    assert allowed.parse_status == "parsed"
+    assert rejected.parse_status == "parse_size_limit_exceeded"
+    assert rejected.parse_error_code == "parse_size_limit_exceeded"
 
 
 def test_mp3_attachment_indexes_bounded_container_metadata():

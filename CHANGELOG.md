@@ -1,8 +1,9 @@
 ## [Unreleased]
 - Signed email file import now accepts source files up to 64 MiB, covering
-  observed EML sources and attachments over 20 MiB. The image parser's
+  observed EML sources and attachments over 20 MiB. The image parser's JPEG
+  header scan is bounded to 4 MiB, while its
   `IMAGE_METADATA_SCAN_PREFIX_BYTES` 1 MiB bound is only an animation-marker
-  prefix, not an attachment-size limit.
+  prefix; neither is an attachment-size limit.
 - Generic MIME attachments with unambiguous PNG, JPEG, GIF, or BMP signatures
   now use the image metadata parser instead of remaining unsupported binaries.
 - Attachment ingestion now indexes bounded metadata for nested `.eml`/

@@ -25,6 +25,9 @@ _GENERIC_CONTENT_TYPES = {
 MAX_ATTACHMENT_PARSE_TEXT_CHARS = 64 * 1024 * 1024
 MAX_OFFICE_XML_PARSE_BYTES = 128 * 1024 * 1024
 IMAGE_METADATA_SCAN_PREFIX_BYTES = 1 * 1024 * 1024
+JPEG_METADATA_HEADER_SCAN_BYTES = 4 * 1024 * 1024
+MAX_NESTED_EMAIL_PARSE_BYTES = 64 * 1024 * 1024
+MAX_NESTED_EMAIL_NESTING_DEPTH = 4
 
 
 @dataclass(frozen=True)
@@ -351,9 +354,15 @@ def parse_email_attachment(
 
     if parse_content_type in _NESTED_EMAIL_CONTENT_TYPES:
         nested_email_payload = _coerce_deferred_payload_bytes(raw_content)
-        nested_email_text, parse_error_code = _parse_nested_email_metadata(
-            nested_email_payload
-        )
+        if len(nested_email_payload) > MAX_NESTED_EMAIL_PARSE_BYTES:
+            nested_email_text, parse_error_code = (
+                None,
+                "parse_size_limit_exceeded",
+            )
+        else:
+            nested_email_text, parse_error_code = _parse_nested_email_metadata(
+                nested_email_payload
+            )
         if nested_email_text is None:
             return AttachmentParseResult(
                 filename=safe_filename,
@@ -612,7 +621,7 @@ def _parse_image_metadata(payload: bytes) -> str | None:
         format_name = "png"
         animated = b"acTL" in payload[:IMAGE_METADATA_SCAN_PREFIX_BYTES]
     elif payload.startswith(b"\xff\xd8"):
-        dimensions = _jpeg_dimensions(payload)
+        dimensions = _jpeg_dimensions(payload[:JPEG_METADATA_HEADER_SCAN_BYTES])
         format_name = "jpeg"
         animated = False
     elif payload[:6] in {b"GIF87a", b"GIF89a"}:
@@ -821,8 +830,12 @@ def _parse_archive_manifest(payload: bytes) -> tuple[str | None, str | None]:
 
 
 def _parse_nested_email_metadata(payload: bytes) -> tuple[str | None, str | None]:
+    if len(payload) > MAX_NESTED_EMAIL_PARSE_BYTES:
+        return None, "parse_size_limit_exceeded"
     try:
         message = message_from_bytes(payload, policy=policy.default)
+        if _max_nested_email_depth(message) > MAX_NESTED_EMAIL_NESTING_DEPTH:
+            return None, "parse_size_limit_exceeded"
         subject = " ".join(_display_text(str(message.get("Subject", ""))).split())[:240]
         sender = " ".join(_display_text(str(message.get("From", ""))).split())[:240]
         attachment_count = sum(
@@ -834,8 +847,35 @@ def _parse_nested_email_metadata(payload: bytes) -> tuple[str | None, str | None
         if sender:
             summary += f"; sender={sender}"
         return summary, None
-    except (TypeError, ValueError):
+    except (RecursionError, TypeError, ValueError):
         return None, "nested_email_parse_failed"
+
+
+def _max_nested_email_depth(message: Message) -> int:
+    """Return the deepest attached ``message/rfc822`` descendant level."""
+    maximum_depth = 0
+    pending: list[tuple[Message, int]] = [(message, 0)]
+    while pending:
+        current, current_depth = pending.pop()
+        if not current.is_multipart():
+            continue
+        for part in current.iter_parts():
+            payload = part.get_payload()
+            if isinstance(payload, list):
+                children = tuple(
+                    child for child in payload if isinstance(child, Message)
+                )
+            elif isinstance(payload, Message):
+                children = (payload,)
+            else:
+                children = ()
+            child_depth = current_depth + int(
+                part.get_content_type() == "message/rfc822"
+            )
+            for child in children:
+                maximum_depth = max(maximum_depth, child_depth)
+                pending.append((child, child_depth))
+    return maximum_depth
 
 
 def _parse_audio_metadata(payload: bytes) -> tuple[str | None, str | None]:
