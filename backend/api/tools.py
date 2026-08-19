@@ -26,6 +26,9 @@ router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
+URL_CODEC_MAX_INPUT_BYTES = 262_144
+JSON_FORMATTER_MAX_INPUT_BYTES = 1_048_576
+_PERCENT_ESCAPE_PATTERN = re.compile(r"%[0-9A-Fa-f]{2}")
 
 
 def _tool_code_fingerprint(code: str) -> str:
@@ -756,64 +759,66 @@ registry.register(
 
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Any:
-    """URL 인코딩 핸들러."""
-    text = params.get("text")
-    if not isinstance(text, str):
-        raise ValueError("URL codec text must be a string")
-    if len(text.encode("utf-8")) > 262144:
-        raise ValueError("URL codec input must not exceed 262144 bytes")
-
+    """Encode one UTF-8 text component with a bounded input contract."""
+    text = params["text"]
+    _validate_url_codec_text(text)
     return {"encoded_text": urllib.parse.quote(text, safe="")}
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Any:
-    """URL 디코딩 핸들러."""
-    text = params.get("text")
+    """Decode one UTF-8 percent-encoded text component exactly once."""
+    text = params["text"]
+    _validate_url_codec_text(text)
+    if any(
+        character == "%"
+        and not _PERCENT_ESCAPE_PATTERN.fullmatch(text[index : index + 3])
+        for index, character in enumerate(text)
+        if character == "%"
+    ):
+        raise ValueError("Malformed percent-encoding")
+    try:
+        return {"decoded_text": urllib.parse.unquote_to_bytes(text).decode("utf-8")}
+    except UnicodeDecodeError as exc:
+        raise ValueError("Invalid UTF-8 percent-encoding") from exc
+
+
+def _validate_url_codec_text(text: object) -> None:
+    """Reject type-confused or oversized URL codec input before parsing."""
     if not isinstance(text, str):
         raise ValueError("URL codec text must be a string")
-    if len(text.encode("utf-8")) > 262144:
-        raise ValueError("URL codec input must not exceed 262144 bytes")
-
-    # Strict percent checking
-    import re
-
-    if re.search(r"%(?![0-9a-fA-F]{2})", text):
-        raise ValueError("Malformed percent-encoding")
-
-    decoded = urllib.parse.unquote_to_bytes(text)
-    try:
-        decoded_str = decoded.decode("utf-8")
-    except UnicodeDecodeError:
-        raise ValueError("Invalid UTF-8 percent-encoding")
-
-    return {"decoded_text": decoded_str}
+    if len(text.encode("utf-8")) > URL_CODEC_MAX_INPUT_BYTES:
+        raise ValueError(
+            f"URL codec input must not exceed {URL_CODEC_MAX_INPUT_BYTES} UTF-8 bytes"
+        )
 
 
 async def json_formatter_handler(params: Dict[str, Any]) -> Any:
-    """JSON 포매터 핸들러."""
-    json_string = params.get("json_string")
+    """Format strict JSON without duplicate members or non-finite numbers."""
+    json_string = params["json_string"]
     if not isinstance(json_string, str):
         raise ValueError("JSON formatter input must be a string")
-
-    if len(json_string.encode("utf-8")) > 1048576:
-        raise ValueError("JSON formatter input must not exceed 1048576 bytes")
+    if len(json_string.encode("utf-8")) > JSON_FORMATTER_MAX_INPUT_BYTES:
+        raise ValueError(
+            "JSON formatter input must not exceed "
+            f"{JSON_FORMATTER_MAX_INPUT_BYTES} UTF-8 bytes"
+        )
 
     def _raise_value_error(msg: str):
         raise ValueError(msg)
 
-    def _reject_duplicates(ordered_pairs):
-        seen = set()
-        for k, v in ordered_pairs:
-            if k in seen:
-                raise ValueError("Duplicate JSON object member")
-            seen.add(k)
-        return dict(ordered_pairs)
+    def _reject_duplicate_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"Duplicate JSON object member: {key}")
+            result[key] = value
+        return result
 
     try:
         parsed = json.loads(
             json_string,
-            object_pairs_hook=_reject_duplicates,
             parse_constant=lambda x: _raise_value_error(f"Invalid constant: {x}"),
+            object_pairs_hook=_reject_duplicate_members,
         )
         formatted = json.dumps(parsed, indent=2, ensure_ascii=False, allow_nan=False)
         return {"formatted_json": formatted, "is_valid": True}
@@ -846,7 +851,6 @@ registry.register(
     ),
     url_decoder_handler,
 )
-
 
 registry.register(
     ToolInfo(
