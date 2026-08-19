@@ -42,7 +42,10 @@ The path-free semantic catalog candidate batch is the handoff to
 semantic-data-portal. The durable table has an explicit DBML projection at
 `docs/architecture/erd/disksage-file-lineage.dbml`; pg-erd-cloud can convert it
 to the same snapshot shape as a live database without granting it mutation
-authority. The Alembic model remains the runtime source of truth.
+authority. The projection was validated against pg-erd-cloud's DBML converter;
+default and simple index preservation is tracked in
+[pg-erd-cloud#931](https://github.com/ContextualWisdomLab/pg-erd-cloud/pull/931).
+The Alembic model remains the runtime source of truth.
 
 ## Consequences
 
