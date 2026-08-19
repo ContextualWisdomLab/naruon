@@ -150,6 +150,73 @@ async def test_webdav_adapter_requires_if_match_before_network_request():
 
 
 @pytest.mark.asyncio
+async def test_caldav_adapter_allows_create_without_if_match():
+    fake_client = FakeDavClient(FakeDavResponse(201))
+    adapters = LocalDavAdapters(
+        [
+            LocalDavSourceConfig(
+                source_id="caldav_src_1",
+                protocol="caldav",
+                base_url="https://caldav.example.com",
+                writeback_enabled=True,
+            )
+        ],
+        http_client_factory=lambda: fake_client,
+    )
+
+    result = await adapters.write_caldav(
+        {
+            "source_id": "caldav_src_1",
+            "target_path": "/Naruon/Calendar/create.ics",
+            "content": "BEGIN:VCALENDAR\nEND:VCALENDAR\n",
+            "requires_if_match": False,
+        }
+    )
+
+    assert result == {
+        "status": "success",
+        "provider_write_executed": True,
+        "provider_status": 201,
+    }
+    assert fake_client.requests[0]["headers"] == {
+        "Content-Type": "text/calendar; charset=utf-8",
+    }
+
+
+@pytest.mark.asyncio
+async def test_caldav_adapter_rejects_non_boolean_if_match_requirement():
+    fake_client = FakeDavClient(FakeDavResponse(201))
+    adapters = LocalDavAdapters(
+        [
+            LocalDavSourceConfig(
+                source_id="caldav_src_1",
+                protocol="caldav",
+                base_url="https://caldav.example.com",
+                writeback_enabled=True,
+            )
+        ],
+        http_client_factory=lambda: fake_client,
+    )
+
+    result = await adapters.write_caldav(
+        {
+            "source_id": "caldav_src_1",
+            "target_path": "/Naruon/Calendar/create.ics",
+            "content": "BEGIN:VCALENDAR\nEND:VCALENDAR\n",
+            "requires_if_match": "false",
+        }
+    )
+
+    assert result == {
+        "status": "error",
+        "error": "invalid_payload",
+        "error_code": "invalid_payload",
+        "provider_write_executed": False,
+    }
+    assert fake_client.requests == []
+
+
+@pytest.mark.asyncio
 async def test_webdav_adapter_reports_provider_conflict_without_write_success():
     fake_client = FakeDavClient(FakeDavResponse(412))
     adapters = LocalDavAdapters(

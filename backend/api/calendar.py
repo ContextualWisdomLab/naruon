@@ -272,6 +272,7 @@ def _calendar_runner_command(
         "account": target_source.source_id,
         "source_id": target_source.source_id,
         "target_path": _calendar_writeback_target_path(writeback_uid),
+        "requires_if_match": intent.requires_if_match,
         "if_match": intent.if_match,
         "content_type": "text/calendar; charset=utf-8",
         "content": content,

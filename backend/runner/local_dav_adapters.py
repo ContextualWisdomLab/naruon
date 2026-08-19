@@ -74,8 +74,11 @@ class LocalDavAdapters:
         if not source.writeback_enabled:
             return dispatch_error("source_writeback_disabled")
 
+        requires_if_match = payload.get("requires_if_match", True)
+        if not isinstance(requires_if_match, bool):
+            return dispatch_error("invalid_payload")
         if_match = self._payload_text(payload, "if_match")
-        if if_match is None:
+        if requires_if_match and if_match is None:
             return dispatch_error("missing_if_match")
 
         target_path = self._safe_target_path(payload.get("target_path"))
@@ -94,7 +97,9 @@ class LocalDavAdapters:
         content_type = (
             self._payload_text(payload, "content_type") or default_content_type
         )
-        headers = {"Content-Type": content_type, "If-Match": if_match}
+        headers = {"Content-Type": content_type}
+        if if_match is not None:
+            headers["If-Match"] = if_match
         auth = (
             (source.username, source.password or "")
             if source.username is not None

@@ -68,11 +68,13 @@ path and Markdown content server-side, validates the selected opaque WebDAV
 only when the user explicitly sets `execute_provider=true`.
 The Python connector now has local CalDAV/WebDAV PUT adapters that enforce
 configured opaque source ids, source writeback enablement, safe target paths, and
-`If-Match` before provider execution. The Calendar writeback intent endpoint and
-the WebDAV materialization endpoint can dispatch signed commands to an active
-outbound runner when the caller explicitly sets `execute_provider=true`; Calendar
-dispatch additionally fails closed before runner dispatch unless the selected
-source has If-Match evidence. Runner command dispatch, response success, timeout,
+`If-Match` for update operations before provider execution. Create operations may
+omit `If-Match`; update operations still fail closed without current ETag evidence.
+The Calendar writeback intent endpoint and the WebDAV materialization endpoint can
+dispatch signed commands to an active outbound runner when the caller explicitly
+sets `execute_provider=true`; Calendar update dispatch additionally fails closed
+before runner dispatch unless the selected source has If-Match evidence. Runner
+command dispatch, response success, timeout,
 connection failure, and adapter failure outcomes persist scoped
 `ConnectorSignalEvent` rows without storing provider credentials or command
 payloads. Transient writeback dispatch failures (`runner_not_connected`,

@@ -1,4 +1,11 @@
 ## [Unreleased]
+
+### 캘린더 provider writeback
+
+- CalDAV create writeback은 새 리소스 생성에 필요한 ETag가 없을 때도 실제
+  runner adapter까지 전달되며, update writeback은 기존처럼 ETag/If-Match를
+  요구합니다.
+
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)

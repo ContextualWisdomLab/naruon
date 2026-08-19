@@ -477,6 +477,7 @@ def test_calendar_writeback_create_provider_dispatches_without_if_match(
     dispatch_mock.assert_awaited_once()
     _organization_id, _workspace_id, command = dispatch_mock.await_args.args
     assert command["action"] == "write_caldav"
+    assert command["requires_if_match"] is False
     assert command["if_match"] is None
 
 
