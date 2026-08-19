@@ -291,7 +291,12 @@ async def _extract_and_generate_embeddings(
     attachment_payloads = list(parsed.get("attachments", []))
     source_texts = [str(parsed.get("body") or "")]
     source_texts.extend(
-        str(attachment.get("content") or "") for attachment in attachment_payloads
+        str(
+            attachment.get("parse_content")
+            if attachment.get("parse_content") is not None
+            else attachment.get("content") or ""
+        )
+        for attachment in attachment_payloads
     )
     embedding_texts, chunk_counts = _chunk_import_texts(source_texts)
     chunk_embeddings = await _generate_import_embeddings(

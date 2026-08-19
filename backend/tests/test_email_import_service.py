@@ -582,6 +582,37 @@ async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
 
 
 @pytest.mark.asyncio
+async def test_extract_embeddings_does_not_chunk_pending_attachment_payload():
+    captured_texts: list[str] = []
+
+    async def fake_generate(texts, *, embedding_provider, batch_context=None):
+        captured_texts.extend(texts)
+        return []
+
+    parsed = {
+        "body": "",
+        "attachments": [
+            {
+                "content": "cHJpdmF0ZS1wZGYtYnl0ZXM=",
+                "parse_content": "",
+                "parse_status": "pdf_dom_recognition_pending",
+            }
+        ],
+    }
+    with patch(
+        "services.email_import_service._generate_import_embeddings",
+        side_effect=fake_generate,
+    ):
+        _, embeddings = await email_import_module._extract_and_generate_embeddings(
+            parsed,
+            embedding_provider=None,
+        )
+
+    assert captured_texts == []
+    assert embeddings == [[0.0] * EMBEDDING_DIMENSION, [0.0] * EMBEDDING_DIMENSION]
+
+
+@pytest.mark.asyncio
 async def test_extract_embeddings_skips_provider_for_empty_sources():
     provider = EmailImportEmbeddingProvider(
         api_key="provider-key",
