@@ -1,4 +1,12 @@
 ## [Unreleased]
+### 신규 도구 추가 (New Utilities)
+
+- URL 및 데이터 처리를 위한 4종의 신규 도구가 Tool Registry에 추가되었습니다.
+  - `url_encoder`: 일반 텍스트를 URL 인코딩 형식으로 변환합니다 (`safe=""` 처리 포함).
+  - `url_decoder`: URL 인코딩된 문자열을 원본 텍스트로 복원합니다.
+  - `hash_generator`: 입력된 텍스트의 해시값(MD5, SHA-1, SHA-256)을 생성합니다. (보안 목적이 아닌 유틸리티 용도로 사용)
+  - `json_formatter`: JSON 문자열의 유효성을 검사하고 보기 좋게 들여쓰기 된 형식으로 포맷팅합니다.
+
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)

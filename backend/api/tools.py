@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -753,9 +755,95 @@ registry.register(
 )
 
 
+async def url_encoder_handler(params: Dict[str, Any]) -> Any:
+    """URL 인코딩 핸들러."""
+    text = params.get("text", "")
+    return {"encoded_url": urllib.parse.quote(text, safe="")}
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Any:
+    """URL 디코딩 핸들러."""
+    encoded_text = params.get("encoded_text", "")
+    decoded_url = urllib.parse.unquote(encoded_text)
+    return {"decoded_url": decoded_url}
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Any:
+    """해시 생성 핸들러 (MD5, SHA-1, SHA-256)."""
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+    encoded_text = text.encode("utf-8")
+
+    if algorithm == "md5":
+        h = hashlib.md5(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha1":
+        h = hashlib.sha1(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha256":
+        h = hashlib.sha256(encoded_text)
+    else:
+        raise ValueError(f"지원하지 않는 해시 알고리즘입니다: {algorithm}")
+
+    return {"hash": h.hexdigest(), "algorithm": algorithm}
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Any:
+    """JSON 포매터 핸들러."""
+    json_string = params.get("json_string", "")
+    try:
+        parsed = json.loads(json_string)
+        formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+        return {"formatted_json": formatted, "is_valid": True}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"유효하지 않은 JSON 문자열입니다: {str(e)}")
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="일반 텍스트를 URL 인코딩 문자열로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩된 문자열을 일반 텍스트로 디코딩합니다.",
+        category="유틸리티",
+        parameters={"encoded_text": "string"},
+    ),
+    url_decoder_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트의 해시(MD5, SHA-1, SHA-256)를 생성합니다.",
+        category="보안",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 읽기 좋게 포맷팅하고 유효성을 검사합니다.",
+        category="유틸리티",
+        parameters={"json_string": "string"},
+    ),
+    json_formatter_handler,
+)
 
 registry.register(
     ToolInfo(
@@ -767,7 +855,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
