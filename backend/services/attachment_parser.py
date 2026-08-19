@@ -24,7 +24,7 @@ _GENERIC_CONTENT_TYPES = {
 # a large Office package may contain media that is irrelevant to text parsing.
 MAX_ATTACHMENT_PARSE_TEXT_CHARS = 64 * 1024 * 1024
 MAX_OFFICE_XML_PARSE_BYTES = 128 * 1024 * 1024
-MAX_IMAGE_METADATA_SCAN_BYTES = 1 * 1024 * 1024
+IMAGE_METADATA_SCAN_PREFIX_BYTES = 1 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -610,7 +610,7 @@ def _parse_image_metadata(payload: bytes) -> str | None:
     if payload.startswith(b"\x89PNG"):
         dimensions = _png_dimensions(payload)
         format_name = "png"
-        animated = b"acTL" in payload[:MAX_IMAGE_METADATA_SCAN_BYTES]
+        animated = b"acTL" in payload[:IMAGE_METADATA_SCAN_PREFIX_BYTES]
     elif payload.startswith(b"\xff\xd8"):
         dimensions = _jpeg_dimensions(payload)
         format_name = "jpeg"
@@ -618,7 +618,7 @@ def _parse_image_metadata(payload: bytes) -> str | None:
     elif payload[:6] in {b"GIF87a", b"GIF89a"}:
         dimensions = _gif_dimensions(payload)
         format_name = "gif"
-        animated = b"NETSCAPE2.0" in payload[:MAX_IMAGE_METADATA_SCAN_BYTES]
+        animated = b"NETSCAPE2.0" in payload[:IMAGE_METADATA_SCAN_PREFIX_BYTES]
     elif payload.startswith(b"BM"):
         dimensions = _bmp_dimensions(payload)
         format_name = "bmp"

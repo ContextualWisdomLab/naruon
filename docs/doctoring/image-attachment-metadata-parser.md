@@ -18,7 +18,8 @@ attachments, and emits only `format`, `width`, `height`, and
 `animated` metadata as searchable plain text. It does not decode pixels, retain
 raw bytes, or perform OCR/object detection. Invalid payloads remain visible as
 explicit failure states; large images remain eligible because only a bounded
-header prefix is inspected. The 1 MiB prefix is an animation-marker scan, not a
+header prefix is inspected. `IMAGE_METADATA_SCAN_PREFIX_BYTES` is a 1 MiB
+animation-marker scan, not a
 file-size limit. Signed email import accepts source files up to 64 MiB for
 transport resource protection; parser classification has no 1 MiB or 20 MiB
 raw attachment ceiling.

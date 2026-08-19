@@ -28,10 +28,10 @@ the content graph.
 4. Invalid image payloads fail closed as `image_metadata_parse_failed`; raw
    bytes are not retained in that path. Large image payloads are not rejected
    solely for size because the parser inspects only bounded headers and does
-   not decode pixels. The 1 MiB image scan constant is only a prefix used to
-   detect animation markers; it is not an attachment-size limit. The signed
-   email import transport accepts source files up to 64 MiB as a request
-   resource guard, independently of parser classification.
+   not decode pixels. `IMAGE_METADATA_SCAN_PREFIX_BYTES` is only a 1 MiB
+   prefix used to detect animation markers; it is not an attachment-size
+   limit. The signed email import transport accepts source files up to 64 MiB
+   as a request resource guard, independently of parser classification.
 5. OCR, captioning, and object detection remain a separate deferred capability.
    They may be added only behind an explicitly configured local vision sidecar
    with source provenance, bounded payloads, and a non-success state while the
