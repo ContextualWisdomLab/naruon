@@ -379,7 +379,7 @@ async def create_writeback_intent(
     )
     if not request.execute_provider:
         return intent
-    if intent.if_match is None:
+    if requires_if_match and intent.if_match is None:
         raise HTTPException(
             status_code=409,
             detail="If-Match is required before provider write execution",

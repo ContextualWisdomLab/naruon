@@ -430,7 +430,57 @@ def test_calendar_writeback_execute_provider_returns_retry_item_for_transient_fa
     assert data["retry_item_uid"] == "provider_retry_calendar_1"
 
 
-def test_calendar_writeback_execute_provider_requires_if_match_before_dispatch(
+def test_calendar_writeback_create_provider_dispatches_without_if_match(
+    writeback_source_override,
+    monkeypatch,
+):
+    dispatch_mock = AsyncMock(
+        return_value={
+            "status": "success",
+            "request_id": "runner_req_calendar_create",
+            "provider_write_executed": True,
+            "provider_status": 201,
+        }
+    )
+    monkeypatch.setattr(calendar_api.runner_manager, "dispatch_command", dispatch_mock)
+    writeback_source_override(
+        [
+            WritebackSource(
+                source_id="calendar-primary",
+                provider="fastmail",
+                protocol="caldav",
+                owner_id="testuser",
+                organization_id="org-acme",
+                capabilities=["read", "write", "etag"],
+                writeback_enabled=True,
+                etag=None,
+            )
+        ]
+    )
+
+    response = workspace_client.post(
+        "/api/calendar/writeback-intent",
+        json={
+            "action": "create",
+            "summary": "Launch review",
+            "target_source_id": "calendar-primary",
+            "execute_provider": True,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["requires_if_match"] is False
+    assert data["if_match"] is None
+    assert data["status"] == "success"
+    assert data["provider_write_executed"] is True
+    dispatch_mock.assert_awaited_once()
+    _organization_id, _workspace_id, command = dispatch_mock.await_args.args
+    assert command["action"] == "write_caldav"
+    assert command["if_match"] is None
+
+
+def test_calendar_writeback_update_provider_requires_etag_before_dispatch(
     writeback_source_override,
     monkeypatch,
 ):
@@ -446,7 +496,7 @@ def test_calendar_writeback_execute_provider_requires_if_match_before_dispatch(
                 organization_id="org-acme",
                 capabilities=["read", "write", "etag"],
                 writeback_enabled=True,
-                etag="abc123",
+                etag=None,
             )
         ]
     )
@@ -454,7 +504,7 @@ def test_calendar_writeback_execute_provider_requires_if_match_before_dispatch(
     response = workspace_client.post(
         "/api/calendar/writeback-intent",
         json={
-            "action": "create",
+            "action": "update",
             "summary": "Launch review",
             "target_source_id": "calendar-primary",
             "execute_provider": True,
@@ -463,7 +513,7 @@ def test_calendar_writeback_execute_provider_requires_if_match_before_dispatch(
 
     assert response.status_code == 409
     assert response.json() == {
-        "detail": "If-Match is required before provider write execution"
+        "detail": "ETag is required for writeback updates"
     }
     dispatch_mock.assert_not_called()
 
