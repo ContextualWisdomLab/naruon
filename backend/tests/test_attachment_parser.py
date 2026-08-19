@@ -918,6 +918,16 @@ def test_office_and_archive_safety_edges_are_explicit(monkeypatch):
     )
     assert doctype_result.parse_status == "office_text_parse_failed"
 
+    utf16_doctype_result = parse_email_attachment(
+        filename="utf16-doctype.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(
+            ("word/document.xml", "<!DOCTYPE x><w:t>x</w:t>".encode("utf-16"))
+        ),
+    )
+    assert utf16_doctype_result.parse_status == "office_text_parse_failed"
+    assert utf16_doctype_result.parse_error_code == "office_text_parse_failed"
+
     monkeypatch.setattr("services.attachment_parser.MAX_ATTACHMENT_PARSE_TEXT_CHARS", 10)
     joined_result = parse_email_attachment(
         filename="joined.docx",

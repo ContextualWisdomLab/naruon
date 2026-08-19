@@ -9,6 +9,9 @@
 - Generic binary MIME attachments now use `binary_metadata` to index only their
   declared MIME type and byte count, including payloads over 20 MiB; no 1 MiB
   attachment limit, format guessing, or raw-byte indexing is introduced.
+- Office XML DTD/entity declarations, including UTF-16 encoded declarations,
+  are rejected through the defused XML boundary and normalized to a named
+  parser failure.
 - Attachment ingestion now indexes bounded metadata for nested `.eml`/
   `message/rfc822`, Layer III MP3, and legacy `.doc` containers. It does not
   recurse, decode, execute, or retain malformed binary payloads; unknown

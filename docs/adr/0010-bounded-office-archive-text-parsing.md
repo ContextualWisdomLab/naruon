@@ -34,9 +34,11 @@ or archive runtime would expand the execution and data-retention boundary.
    enforces aggregate limits of 1,000,000 elements and 100,000 extracted text
    parts before retaining them in a Python tree/list; it returns
    `parse_size_limit_exceeded` when any selected XML safety budget or the
-   1,000-member archive limit is exceeded. Non-directory ZIP entries with traditional or strong-encryption
-   flag bits (`0x01` or `0x40`) return the deterministic
-   `encrypted_archive_entry` error. Valid output is
+   1,000-member archive limit is exceeded. Non-directory ZIP entries with
+   traditional or strong-encryption flag bits (`0x01` or `0x40`) return the
+   deterministic `encrypted_archive_entry` error. DTD/entity declarations are
+   forbidden by the defused XML iterator, including encoded declarations such
+   as UTF-16, and are normalized to `office_text_parse_failed`. Valid output is
    `parse_status=parsed` and `parse_content_type=text/plain`, so the existing
    embedding and content-graph path indexes it. PDF retention is governed by
    the separate deferred NewsDOM workflow; this Office/ZIP ADR does not impose

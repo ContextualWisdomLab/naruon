@@ -12,6 +12,7 @@ from typing import Any
 from zipfile import BadZipFile, ZipFile
 
 from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
 
 from .text_safety import strip_html_markup
 
@@ -792,6 +793,8 @@ def _parse_office_text(
             return f"{summary}; text={text}" if text else summary, None
     except _OfficeXmlParseLimitExceeded:
         return None, "parse_size_limit_exceeded"
+    except DefusedXmlException:
+        return None, "office_text_parse_failed"
     except (BadZipFile, OSError, ValueError, ElementTree.ParseError):
         return None, "office_text_parse_failed"
 
@@ -831,7 +834,9 @@ def _xml_text_parts(
     else:
         tags = {"t"}
     parts: list[str] = []
-    for _, element in ElementTree.iterparse(BytesIO(payload), events=("end",)):
+    for _, element in ElementTree.iterparse(
+        BytesIO(payload), events=("end",), forbid_dtd=True
+    ):
         budget.nodes += 1
         if budget.nodes > MAX_OFFICE_XML_NODES:
             raise _OfficeXmlParseLimitExceeded("Office XML node budget exceeded")
