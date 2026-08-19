@@ -582,6 +582,27 @@ async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
 
 
 @pytest.mark.asyncio
+async def test_extract_embeddings_skips_provider_for_empty_sources():
+    provider = EmailImportEmbeddingProvider(
+        api_key="provider-key",
+        base_url="https://provider.example/v1",
+        embedding_model="text-embedding-3-large",
+    )
+
+    with patch(
+        "services.email_import_service.generate_embeddings",
+        new_callable=AsyncMock,
+    ) as mock_generate_embeddings:
+        _, embeddings = await email_import_module._extract_and_generate_embeddings(
+            {"body": "", "attachments": []},
+            provider,
+        )
+
+    mock_generate_embeddings.assert_not_awaited()
+    assert embeddings == [[0.0] * EMBEDDING_DIMENSION]
+
+
+@pytest.mark.asyncio
 async def test_generate_import_embeddings_recovers_valid_items_after_batch_failure():
     provider = EmailImportEmbeddingProvider(
         api_key="secret-provider-token",

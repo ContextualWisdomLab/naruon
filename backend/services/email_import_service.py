@@ -935,6 +935,8 @@ async def _generate_import_embeddings(
     embedding_provider: EmailImportEmbeddingProvider | None,
     batch_context: "EmailImportBatchContext | None" = None,
 ) -> list[list[float]]:
+    if not texts:
+        return []
     if embedding_provider is None:
         return [_zero_embedding() for _ in texts]
     if batch_context is not None and texts:
