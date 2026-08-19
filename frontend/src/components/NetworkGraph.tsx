@@ -404,14 +404,20 @@ export default function NetworkGraph() {
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleSelectFirstRelationship}
-            disabled={!firstEdge}
-            className="rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+          <span
+            tabIndex={!firstEdge ? 0 : undefined}
+            title={!firstEdge ? "표시할 관계 데이터가 없습니다." : undefined}
+            className={!firstEdge ? "cursor-not-allowed" : undefined}
           >
-            첫 관계 보기
-          </button>
+            <button
+              type="button"
+              onClick={handleSelectFirstRelationship}
+              disabled={!firstEdge}
+              className="rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
+            >
+              첫 관계 보기
+            </button>
+          </span>
           <button
             type="button"
             onClick={handleZoomGraph}
