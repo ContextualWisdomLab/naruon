@@ -219,6 +219,7 @@ describe("ToolsPage", () => {
     expect(buttons).toHaveLength(1);
     expect(container.textContent).toContain("첫 번째 도구");
     expect(container.textContent).not.toContain("두 번째 도구");
+    expect(container.querySelector('[aria-label="도구 레지스트리 종합"]')?.textContent).toMatch(/등록 도구\s*1/);
 
     act(() => {
       buttons[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
