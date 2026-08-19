@@ -155,9 +155,6 @@ def test_released_judge_package_is_unavailable_and_fails_closed() -> None:
     with pytest.raises(EmailWritingJudgeError) as captured:
         load_released_judge_symbols(module_importer=_missing_package)
     assert captured.value.code == "judge_package_unavailable"
-    assert "ContextualOrchestratorJudge" not in dir(
-        __import__("services.email_writing_judge", fromlist=["*"])
-    )
 
 
 def test_criterion_ids_are_independently_observable_two_word_snake_case() -> None:

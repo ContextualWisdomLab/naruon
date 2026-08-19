@@ -135,10 +135,16 @@ def test_score_model_guards_reject_invalid_tokens(
 
 
 def test_score_and_category_type_guards_reject_bool_and_text_tokens() -> None:
-    with pytest.raises(ValueError, match="judge_score_type"):
-        _JudgeOutputModel.validate_scores({"issue_support": True})
-    with pytest.raises(ValueError, match="judge_score_type"):
-        _JudgeOutputModel.validate_scores({"issue_support": "0.5"})
+    for score in (True, "0.5"):
+        with pytest.raises(ValidationError, match="judge_score_type"):
+            _JudgeOutputModel.model_validate(
+                {
+                    "criterion_categories": {"issue_support": 1},
+                    "criterion_scores": {"issue_support": score},
+                    "category_count": 4,
+                    "accepted": False,
+                }
+            )
     with pytest.raises(EmailWritingJudgeError) as captured:
         _require_integral_category(True)
     assert captured.value.code == "judge_payload_invalid"

@@ -199,11 +199,11 @@ class _JudgeOutputModel(BaseModel):
     category_count: StrictInt
     accepted: StrictBool
 
-    @field_validator("criterion_scores")
+    @field_validator("criterion_scores", mode="before")
     @classmethod
-    def validate_scores(cls, value: dict[str, float]) -> dict[str, float]:
+    def validate_scores(cls, value: object) -> object:
         """Require finite unit-interval scores without repairing tokens."""
-        if not value:
+        if not isinstance(value, dict) or not value:
             raise ValueError("judge_scores_empty")
         for score in value.values():
             if type(score) is bool or type(score) not in {int, float}:
