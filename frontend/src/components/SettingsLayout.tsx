@@ -858,7 +858,7 @@ export function SettingsLayout() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${activeTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
               >
-                <tab.icon className="size-4" /> {tab.id}
+                <tab.icon className="size-4" aria-hidden="true" /> {tab.id}
               </button>
             ))}
           </div>
