@@ -241,10 +241,3 @@ Operational references:
 ## License
 
 See [LICENSE](LICENSE).
-
-<!--
-Repository governance compatibility contract:
-ContextualWisdomLab central required workflows.
-This repository does not carry repo-local OpenCode, Strix, or merge-scheduler workflow copies.
-branch updates, auto-merge, and mechanical merge actions are governed outside this customer/operator guide.
--->
