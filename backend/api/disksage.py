@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from api.auth import AuthContext, get_auth_context
-from db.models import DiskSageFileLineageRecord
+from db.models import (
+    DiskSageFileLineageRecord,
+    DiskSageOrganizationLineageRecord,
+)
 from db.session import get_db
 from services.disksage_file_lineage import (
     FileLineageEnvelope,
@@ -15,6 +18,12 @@ from services.disksage_file_lineage import (
     canonical_envelope_json,
     canonical_envelope_sha256,
     ontology_predicates,
+)
+from services.disksage_organization_lineage import (
+    OrganizationLineageBatch,
+    OrganizationLineageSummary,
+    canonical_batch_json,
+    canonical_batch_sha256,
 )
 from core.runtime_secrets import EncryptionKeyMissingError
 
@@ -55,6 +64,32 @@ def _lineage_scope(auth_context: AuthContext) -> tuple[object, ...]:
         DiskSageFileLineageRecord.user_id == auth_context.user_id,
         organization_filter,
         DiskSageFileLineageRecord.workspace_id == auth_context.workspace_id,
+    )
+
+
+def _organization_lineage_scope(auth_context: AuthContext) -> tuple[object, ...]:
+    organization_filter = (
+        DiskSageOrganizationLineageRecord.organization_id == auth_context.organization_id
+        if auth_context.organization_id is not None
+        else DiskSageOrganizationLineageRecord.organization_id.is_(None)
+    )
+    return (
+        DiskSageOrganizationLineageRecord.user_id == auth_context.user_id,
+        organization_filter,
+        DiskSageOrganizationLineageRecord.workspace_id == auth_context.workspace_id,
+    )
+
+
+def _organization_summary(
+    record: DiskSageOrganizationLineageRecord,
+) -> OrganizationLineageSummary:
+    return OrganizationLineageSummary(
+        organization_lineage_record_uid=record.organization_lineage_record_uid,
+        batch_fingerprint_sha256=record.batch_fingerprint_sha256,
+        schema_version=record.schema_version,
+        item_count=record.item_count,
+        ontology_classes=list(record.ontology_classes or []),
+        created_at=record.created_at.isoformat(),
     )
 
 
@@ -153,3 +188,97 @@ async def list_file_lineage(
         .limit(limit)
     )
     return [_summary(record) for record in result.scalars().all()]
+
+
+@router.post(
+    "/organization-lineage",
+    response_model=OrganizationLineageSummary,
+    status_code=201,
+)
+async def ingest_organization_lineage(
+    envelope: OrganizationLineageBatch,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> OrganizationLineageSummary:
+    """Persist a path-free ontology organization plan without authorizing moves."""
+
+    envelope_sha256 = canonical_batch_sha256(envelope)
+    batch_fingerprint = envelope.batch_fingerprint_sha256
+    existing_result = await db.execute(
+        select(DiskSageOrganizationLineageRecord).where(
+            *_organization_lineage_scope(auth_context),
+            DiskSageOrganizationLineageRecord.batch_fingerprint_sha256
+            == batch_fingerprint,
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing is not None:
+        if existing.envelope_sha256 != envelope_sha256:
+            raise HTTPException(
+                status_code=409,
+                detail="organization lineage fingerprint is already bound to different evidence",
+            )
+        return _organization_summary(existing)
+
+    try:
+        record = DiskSageOrganizationLineageRecord(
+            organization_lineage_record_uid=f"disksage_org_lineage_{uuid.uuid4().hex}",
+            user_id=auth_context.user_id,
+            organization_id=auth_context.organization_id,
+            workspace_id=auth_context.workspace_id,
+            batch_fingerprint_sha256=batch_fingerprint,
+            envelope_sha256=envelope_sha256,
+            schema_version=envelope.version,
+            item_count=len(envelope.items),
+            ontology_classes=sorted({item.ontology_class for item in envelope.items}),
+            envelope_json_encrypted=canonical_batch_json(envelope),
+            created_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        db.add(record)
+        await db.commit()
+        await db.refresh(record)
+    except IntegrityError:
+        await db.rollback()
+        replayed_result = await db.execute(
+            select(DiskSageOrganizationLineageRecord).where(
+                *_organization_lineage_scope(auth_context),
+                DiskSageOrganizationLineageRecord.batch_fingerprint_sha256
+                == batch_fingerprint,
+            )
+        )
+        replayed = replayed_result.scalar_one_or_none()
+        if replayed is None:
+            raise
+        if replayed.envelope_sha256 != envelope_sha256:
+            raise HTTPException(
+                status_code=409,
+                detail="organization lineage fingerprint is already bound to different evidence",
+            ) from None
+        return _organization_summary(replayed)
+    except EncryptionKeyMissingError as error:
+        await db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="Server encryption key is not configured. Contact your workspace administrator.",
+        ) from error
+    return _organization_summary(record)
+
+
+@router.get(
+    "/organization-lineage",
+    response_model=list[OrganizationLineageSummary],
+)
+async def list_organization_lineage(
+    limit: int = Query(default=50, ge=1, le=100),
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> list[OrganizationLineageSummary]:
+    """List redacted organization lineage summaries; paths remain encrypted."""
+
+    result = await db.execute(
+        select(DiskSageOrganizationLineageRecord)
+        .where(*_organization_lineage_scope(auth_context))
+        .order_by(DiskSageOrganizationLineageRecord.created_at.desc())
+        .limit(limit)
+    )
+    return [_organization_summary(record) for record in result.scalars().all()]

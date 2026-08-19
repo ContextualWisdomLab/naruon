@@ -1163,6 +1163,52 @@ class DiskSageFileLineageRecord(Base):
     )
 
 
+class DiskSageOrganizationLineageRecord(Base):
+    """Encrypted, path-free local organization lineage scoped to a workspace."""
+
+    __tablename__ = "disksage_organization_lineage_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "workspace_id",
+            "batch_fingerprint_sha256",
+            name="uq_disksage_org_lineage_workspace_fingerprint",
+        ),
+        Index(
+            "ix_disksage_org_lineage_scope_time",
+            "user_id",
+            "workspace_id",
+            "created_at",
+        ),
+    )
+
+    organization_lineage_record_uid: Mapped[str] = mapped_column(
+        String(96), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    batch_fingerprint_sha256: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    envelope_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    ontology_classes: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    envelope_json_encrypted: Mapped[str] = mapped_column(
+        EncryptedString, nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
 class ProjectGraphObjectRecord(Base):
     __tablename__ = "project_graph_objects"
     __table_args__ = (

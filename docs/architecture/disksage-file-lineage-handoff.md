@@ -47,6 +47,15 @@ default and simple index preservation is tracked in
 [pg-erd-cloud#931](https://github.com/ContextualWisdomLab/pg-erd-cloud/pull/931).
 The Alembic model remains the runtime source of truth.
 
+Local ontology organization uses a separate path-free contract:
+`disksage.organization-lineage-batch` version 1 through
+`POST /api/disksage/organization-lineage`. It records only immutable lineage
+fingerprints, file size/mtime, metadata-first production time, ontology class,
+the `targetFolder` relation, and the planned `move` action. Absolute paths,
+names, content, provider credentials, and OAuth tokens are never part of this
+payload. The endpoint stores the batch encrypted and returns only a scoped
+summary; it is an audit/catalog handoff and never executes a move.
+
 ## Consequences
 
 - Naruon can index provenance and ontology predicates without authorizing source

@@ -29,3 +29,24 @@ Table public.disksage_file_lineage_records {
     (workspace_id, ontology_class)
   }
 }
+
+// Path-free local organization handoff. The encrypted payload contains no
+// queryable source/destination paths or file names.
+Table public.disksage_organization_lineage_records {
+  organization_lineage_record_uid varchar(96) [pk]
+  user_id varchar [not null]
+  organization_id varchar
+  workspace_id varchar [not null]
+  batch_fingerprint_sha256 varchar(64) [not null]
+  envelope_sha256 varchar(64) [not null]
+  schema_version integer [not null]
+  item_count integer [not null]
+  ontology_classes json [not null]
+  envelope_json_encrypted text [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, workspace_id, batch_fingerprint_sha256) [unique]
+    (user_id, workspace_id, created_at)
+  }
+}
