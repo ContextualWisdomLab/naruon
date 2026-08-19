@@ -1,11 +1,8 @@
 ## [Unreleased]
-### 신규 도구 추가 (New Utilities)
+### URL Codec 및 엄격한 JSON Formatter 도구 (Utility Tools)
 
-- URL 및 데이터 처리를 위한 3종의 신규 도구가 Tool Registry에 추가되었습니다.
-  - `url_encoder`: 일반 텍스트를 URL 인코딩 형식으로 변환합니다 (`safe=""` 처리 포함).
-  - `url_decoder`: URL 인코딩된 문자열을 원본 텍스트로 복원합니다. malformed percent escape와 비 UTF-8 입력은 거부합니다.
-  - `json_formatter`: JSON 문자열의 유효성을 검사하고 보기 좋게 들여쓰기 된 형식으로 포맷팅합니다.
-  - 범용 checksum은 canonical `content_checksum_generator` 도구가 담당하므로 이 PR에서 중복 `hash_generator`를 등록하지 않습니다.
+- `url_encoder` 및 `url_decoder` 도구를 추가하여 URL 인코딩 및 디코딩을 지원합니다. 모든 변환은 엄격하게 문자열 타입만을 허용하며, 크기 제한(262,144바이트 UTF-8) 및 단일 계층 디코딩을 강제합니다.
+- `json_formatter` 도구를 개선하여 더 엄격한 RFC 8259-style을 적용했습니다. 문자열 타입 입력만을 허용하고, 파싱 전 1MB 크기 제한을 적용하며, 중복된 객체 속성이나 비표준 상수(NaN, Infinity 등)를 거부합니다.
 
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
