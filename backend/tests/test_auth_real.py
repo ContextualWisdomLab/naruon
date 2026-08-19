@@ -1187,10 +1187,17 @@ async def test_oidc_rejects_key_id_that_does_not_match_verified_key(monkeypatch)
         key = "trusted_public_key"
 
     monkeypatch.setattr("api.auth.jwks_client", object())
-    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (MockKey(),))
+    class DecoyKey:
+        key_id = "decoy-key"
+        key = "decoy_public_key"
+
+    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (MockKey(), DecoyKey()))
+
+    decode_called = False
 
     def mock_jwt_decode(token, key, **kwargs):
-        assert key == "trusted_public_key"
+        nonlocal decode_called
+        decode_called = True
         return {
             "iss": "https://login.example.test/realms/naruon",
             "aud": "naruon-api",
@@ -1217,6 +1224,7 @@ async def test_oidc_rejects_key_id_that_does_not_match_verified_key(monkeypatch)
         settings.AUTH_SESSION_HMAC_SECRET = previous_secret
 
     assert exc.value.status_code == 401
+    assert decode_called is False
 
 
 @pytest.mark.asyncio

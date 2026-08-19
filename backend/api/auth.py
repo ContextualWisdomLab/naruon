@@ -243,28 +243,31 @@ def _decode_cached_oidc_session_payload(token: str) -> dict[str, Any]:
         raise _authentication_error()
     header = _oidc_unverified_header(token)
     key_id = header["kid"].strip()
+    matching_keys = [
+        signing_key
+        for signing_key in _cached_oidc_signing_keys
+        if getattr(signing_key, "key_id", None) == key_id
+    ]
+    if len(matching_keys) != 1:
+        raise _authentication_error()
 
-    for signing_key in _cached_oidc_signing_keys:
-        try:
-            payload = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["RS256"],
-                audience=settings.OIDC_CLIENT_ID,
-                issuer=settings.OIDC_ISSUER_URL,
-                options={
-                    "require": JWT_DECODE_REQUIRED_CLAIMS,
-                    "verify_signature": True,
-                },
-            )
-        except jwt.PyJWTError:
-            continue
-        if getattr(signing_key, "key_id", None) != key_id:
-            raise _authentication_error()
-        if not isinstance(payload, dict):
-            raise _authentication_error()
-        return payload
-    raise _authentication_error()
+    try:
+        payload = jwt.decode(
+            token,
+            matching_keys[0].key,
+            algorithms=["RS256"],
+            audience=settings.OIDC_CLIENT_ID,
+            issuer=settings.OIDC_ISSUER_URL,
+            options={
+                "require": JWT_DECODE_REQUIRED_CLAIMS,
+                "verify_signature": True,
+            },
+        )
+    except jwt.PyJWTError:
+        raise _authentication_error() from None
+    if not isinstance(payload, dict):
+        raise _authentication_error()
+    return payload
 
 
 def _reject_unsupported_critical_headers(header: dict[str, Any]) -> None:
