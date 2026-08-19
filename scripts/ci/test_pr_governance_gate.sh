@@ -909,6 +909,7 @@ assert_workflow_separates_controller_from_required_check() {
   assert_in_file "github.event_name == 'pull_request_review'" "$workflow"
   assert_in_file '^    name: PR governance metadata controller$' "$workflow"
   assert_not_in_file '^    name: metadata-only gate evaluation$' "$workflow"
+  assert_in_file '^      - OpenCode Review$' "$workflow"
 }
 
 assert_current_head_check_lookup_uses_maximum_page_size() {
