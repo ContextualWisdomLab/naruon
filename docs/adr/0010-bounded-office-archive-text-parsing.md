@@ -23,8 +23,10 @@ or archive runtime would expand the execution and data-retention boundary.
 2. Naruon registers an `archive_manifest` parser for ZIP attachments. It reads
    member names and declared uncompressed sizes only; it never extracts or
    executes archive members.
-3. Both parsers use the Python standard library, enforce a 1,000-member limit,
-   and reject malformed XML/ZIP data without retaining raw bytes. A large
+3. The archive boundary uses Python's standard-library ZIP support and the
+   repository's existing `defusedxml` dependency for XML parsing. Both parsers
+   enforce a 1,000-member limit and reject malformed XML/ZIP data without
+   retaining raw bytes. A large
    Office package is not rejected merely because embedded media makes the
    package exceed 20 MiB. Office text extraction applies a 128 MiB aggregate
    budget to selected-part declared sizes and bytes read, plus a 64-million

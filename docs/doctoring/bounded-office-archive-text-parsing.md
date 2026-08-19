@@ -17,7 +17,9 @@ package larger than 20 MiB is still eligible when its selected XML fits the
 resolve external relationships, evaluate formulas, or render layouts. XML is
 streamed with `iterparse` under aggregate limits of 1,000,000 elements and
 100,000 extracted text parts, preventing a small XML member with excessive
-node count from building an unbounded in-memory tree.
+node count from building an unbounded in-memory tree. The XML reader is the
+repository's existing `defusedxml.ElementTree` implementation so untrusted
+Office XML is not parsed through the unsafe standard-library XML surface.
 
 `services.attachment_parser.archive_manifest` emits bounded ZIP member names
 and declared sizes without extracting any member. Invalid input and archives
