@@ -85,10 +85,6 @@ function isGraphId(value: unknown): value is number | string {
   return typeof value === 'number' || typeof value === 'string';
 }
 
-function graphIdEquals(left: unknown, right: unknown) {
-  return isGraphId(left) && isGraphId(right) && String(left) === String(right);
-}
-
 function stableEdgeId(edge: Edge, index: number) {
   if (isGraphId(edge.id)) return edge.id;
   return `relationship-${index}-${String(edge.from)}-${String(edge.to)}`;
@@ -127,8 +123,10 @@ function titleText(value: unknown) {
   return value == null ? '' : String(value).trim();
 }
 
-function findNodeLabel(nodes: Node[], id: number | string) {
-  const node = nodes.find((candidate) => graphIdEquals(candidate.id, id));
+// ⚡ Bolt: Replace O(N) array lookup with O(1) map
+// 🎯 Why: Using `nodes.find` in `findNodeLabel` causes O(N) linear time lookups during mapping and formatting, which blocks the main thread.
+function findNodeLabel(nodeInstanceMap: Map<string, Node>, id: number | string) {
+  const node = nodeInstanceMap.get(String(id));
   return String(node?.label ?? id);
 }
 
@@ -157,14 +155,14 @@ function firstGraphEntryById<T>(
   return map;
 }
 
-function describeEdge(edge: Edge, nodes: Node[], nodeMap?: Map<string | number, string>) {
+function describeEdge(edge: Edge, nodeInstanceMap: Map<string, Node>, nodeMap?: Map<string | number, string>) {
   let fromLabel, toLabel;
   if (nodeMap) {
     fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
     toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
   } else {
-    fromLabel = findNodeLabel(nodes, edge.from);
-    toLabel = findNodeLabel(nodes, edge.to);
+    fromLabel = findNodeLabel(nodeInstanceMap, edge.from);
+    toLabel = findNodeLabel(nodeInstanceMap, edge.to);
   }
   const title = titleText(edge.title);
   return title ? `${fromLabel} -> ${toLabel} (${title})` : `${fromLabel} -> ${toLabel}`;
@@ -233,7 +231,7 @@ export default function NetworkGraph() {
         if (!edge) return;
         setRelationshipOptionId(String(edge.id));
         setNodeOptionId('');
-        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes, nodeMap)}`);
+        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodeInstanceMap, nodeMap)}`);
         setGraphActionStatus('그래프에서 관계를 선택했습니다.');
       };
 
@@ -289,7 +287,7 @@ export default function NetworkGraph() {
         network.destroy();
       };
     }
-  }, [nodes, edges, nodeMap, edgeMap]);
+  }, [nodes, edges, nodeMap, edgeMap, nodeInstanceMap]);
 
   const nodeLabels = useMemo(() => {
     return nodes
@@ -303,9 +301,9 @@ export default function NetworkGraph() {
     return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
       edge,
       id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodes, nodeMap)}`,
+      label: `관계 ${index + 1}: ${describeEdge(edge, nodeInstanceMap, nodeMap)}`,
     }));
-  }, [edgeMap, nodes, nodeMap]);
+  }, [edgeMap, nodeInstanceMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
     return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
@@ -318,7 +316,7 @@ export default function NetworkGraph() {
   const selectRelationship = (edge: Edge, status: string) => {
     setRelationshipOptionId(String(edge.id));
     setNodeOptionId('');
-    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes, nodeMap)}`);
+    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodeInstanceMap, nodeMap)}`);
     setGraphActionStatus(status);
     if (isGraphId(edge.id)) {
       networkRef.current?.selectEdges?.([edge.id]);
