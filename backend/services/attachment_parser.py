@@ -227,6 +227,8 @@ def parse_email_attachment(
         safe_filename,
         normalized_content_type,
     )
+    if parse_content_type in _GENERIC_CONTENT_TYPES:
+        parse_content_type = _sniff_generic_image_content_type(raw_content)
 
     deferred_descriptor = _DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE.get(parse_content_type)
     if deferred_descriptor is not None:
@@ -491,6 +493,28 @@ def _parse_content_type_for(filename: str, content_type: str) -> str:
         return content_type
     extension = Path(filename).suffix.lower()
     return _EXTENSION_CONTENT_TYPES.get(extension, content_type)
+
+
+def _sniff_generic_image_content_type(raw_content: Any) -> str:
+    """Resolve only unambiguous image signatures from a generic MIME type."""
+    if isinstance(raw_content, bytes):
+        prefix = raw_content[:8]
+    elif isinstance(raw_content, str):
+        prefix = raw_content[:8].encode("utf-8", errors="surrogatepass")
+    elif isinstance(raw_content, Message):
+        prefix = raw_content.as_bytes()[:8]
+    else:
+        prefix = str(raw_content or "")[:8].encode("utf-8", errors="surrogatepass")
+
+    if prefix.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if prefix.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if prefix[:6] in {b"GIF87a", b"GIF89a"}:
+        return "image/gif"
+    if prefix.startswith(b"BM"):
+        return "image/bmp"
+    return "application/octet-stream"
 
 
 def _parser_key_for(parse_content_type: str, parse_status: str) -> str:

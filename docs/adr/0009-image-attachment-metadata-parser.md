@@ -16,7 +16,8 @@ the content graph.
 
 ## Decision
 
-1. Naruon registers an `image_metadata` parser for PNG, JPEG, GIF, and BMP.
+1. Naruon registers an `image_metadata` parser for PNG, JPEG, GIF, and BMP,
+   including when a generic MIME type has an unambiguous image signature.
 2. The parser reads only bounded, format-specific headers and emits safe text
    containing the detected format, width, height, and animation flag. It does
    not decode pixels, retain raw image bytes, read EXIF text, or call a remote

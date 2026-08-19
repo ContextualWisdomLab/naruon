@@ -163,6 +163,20 @@ def test_generic_image_mime_uses_filename_extension_for_metadata_parser():
     assert "height=34px" in result.content
 
 
+def test_extensionless_generic_gif_uses_unambiguous_image_signature():
+    result = parse_email_attachment(
+        filename=None,
+        content_type="application/octet-stream",
+        raw_content=b"GIF89a" + struct.pack("<HH", 1, 1) + b"\x00" * 26,
+    )
+
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "parsed"
+    assert "format=gif" in result.content
+    assert "width=1px" in result.content
+    assert "height=1px" in result.content
+
+
 def test_large_image_attachment_is_not_rejected_by_metadata_scan_ceiling():
     result = parse_email_attachment(
         filename="large.png",

@@ -13,7 +13,8 @@ content to an external service.
 ## Implemented boundary
 
 `services.attachment_parser.image_metadata` reads bounded image headers with
-the Python standard library and emits only `format`, `width`, `height`, and
+the Python standard library, including unambiguous signatures from generic MIME
+attachments, and emits only `format`, `width`, `height`, and
 `animated` metadata as searchable plain text. It does not decode pixels, retain
 raw bytes, or perform OCR/object detection. Invalid payloads remain visible as
 explicit failure states; large images remain eligible because only a bounded
