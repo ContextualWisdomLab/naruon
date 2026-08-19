@@ -480,6 +480,8 @@ describe("SettingsLayout", () => {
       await Promise.resolve();
     });
     expect(oidcMocks.startOidcLogin).toHaveBeenCalledWith({ returnTo: "/settings" });
+    expect(loginButton?.getAttribute("aria-busy")).toBe("false");
+    expect(loginButton?.textContent).toBe("OIDC 로그인");
 
     await act(async () => {
       logoutButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -489,6 +491,8 @@ describe("SettingsLayout", () => {
     expect(oidcMocks.clearOidcSession).toHaveBeenCalledWith({
       postLogoutRedirectUri: "http://localhost:3000",
     });
+    expect(logoutButton?.getAttribute("aria-busy")).toBe("false");
+    expect(logoutButton?.textContent).toBe("로그아웃");
   });
 
   it("loads and saves source-backed mail account settings without public identity headers or secret replay", async () => {

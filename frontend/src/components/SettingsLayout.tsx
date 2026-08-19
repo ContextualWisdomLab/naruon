@@ -598,6 +598,7 @@ export function SettingsLayout() {
       await startOidcLogin({ returnTo: window.location.pathname });
     } catch (error) {
       setOidcActionError(error instanceof Error ? error.message : 'OIDC login failed');
+    } finally {
       setOidcLoginLoading(false);
     }
   };
@@ -610,6 +611,7 @@ export function SettingsLayout() {
       setOidcSessionClaims(EMPTY_SESSION_CLAIMS);
     } catch (error) {
       setOidcActionError(error instanceof Error ? error.message : 'OIDC logout failed');
+    } finally {
       setOidcLogoutLoading(false);
     }
   };
