@@ -130,7 +130,7 @@ function titleText(value: unknown) {
 function findNodeLabel(nodes: Node[], id: number | string, nodeMap?: Map<string | number, string>) {
   if (nodeMap) {
     const cached = nodeMap.get(String(id));
-    if (cached) return cached;
+    if (cached !== undefined) return cached;
   }
   const node = nodes.find((candidate) => graphIdEquals(candidate.id, id));
   return String(node?.label ?? id);

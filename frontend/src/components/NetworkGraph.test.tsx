@@ -203,6 +203,35 @@ describe("NetworkGraph", () => {
     expect(mountedContainer.textContent).not.toContain("nodes and");
   });
 
+  it("uses an empty cached node label without scanning the node list", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({
+          nodes: [{ id: "empty-label", label: "" }],
+          edges: [],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderGraph();
+    await flushAsyncWork();
+
+    const selectNodeCall = onMock.mock.calls.find(([event]) => event === "selectNode");
+    const selectNode = selectNodeCall?.[1] as
+      | ((event: { nodes: Array<string | number> }) => void)
+      | undefined;
+    expect(selectNode).toBeDefined();
+
+    const findSpy = vi.spyOn(Array.prototype, "find");
+    await act(async () => {
+      selectNode?.({ nodes: ["empty-label"] });
+    });
+
+    expect(findSpy).not.toHaveBeenCalled();
+    expect(getMountedContainer().textContent).toContain("선택된 노드: ");
+  });
+
   it("exposes accessible relationship detail and zoom controls for the graph", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
