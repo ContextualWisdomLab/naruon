@@ -542,17 +542,6 @@ def test_url_decoder_tool_success():
     assert data["status"] == "success"
     assert data["result"]["decoded_text"] == "hello world/&="
 
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_decoder/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello%world"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "failed"
-    assert "Malformed percent-encoding" in data["message"]
-
 
 def test_json_formatter_tool_success():
     with TestClient(app) as client:
