@@ -125,6 +125,18 @@ export default function ToolsPage() {
     setRefreshNonce((value) => value + 1);
   };
 
+  const summaryCards = useMemo(() => {
+    const activeCount = tools.filter((tool) => tool.is_active !== false).length;
+    const categoryCount = new Set(tools.map((tool) => tool.category)).size;
+    const parameterizedCount = tools.filter((tool) => Object.keys(tool.parameters ?? {}).length > 0).length;
+    return [
+      { label: "등록 도구", value: tools.length.toLocaleString(), detail: "워크스페이스 실행 대상", icon: Wrench },
+      { label: "활성 도구", value: activeCount.toLocaleString(), detail: "즉시 실행 가능", icon: Power },
+      { label: "카테고리", value: categoryCount.toLocaleString(), detail: "운영 분류 기준", icon: SlidersHorizontal },
+      { label: "파라미터 계약", value: parameterizedCount.toLocaleString(), detail: "입력 스키마 보유", icon: CheckCircle2 },
+    ];
+  }, [tools]);
+
   const toolsMap = useMemo(() => {
     const map = new Map<string, ToolInfo>();
     for (const tool of tools) {
@@ -134,19 +146,6 @@ export default function ToolsPage() {
     }
     return map;
   }, [tools]);
-
-  const summaryCards = useMemo(() => {
-    const uniqueTools = Array.from(toolsMap.values());
-    const activeCount = uniqueTools.filter((tool) => tool.is_active !== false).length;
-    const categoryCount = new Set(uniqueTools.map((tool) => tool.category)).size;
-    const parameterizedCount = uniqueTools.filter((tool) => Object.keys(tool.parameters ?? {}).length > 0).length;
-    return [
-      { label: "등록 도구", value: uniqueTools.length.toLocaleString(), detail: "워크스페이스 실행 대상", icon: Wrench },
-      { label: "활성 도구", value: activeCount.toLocaleString(), detail: "즉시 실행 가능", icon: Power },
-      { label: "카테고리", value: categoryCount.toLocaleString(), detail: "운영 분류 기준", icon: SlidersHorizontal },
-      { label: "파라미터 계약", value: parameterizedCount.toLocaleString(), detail: "입력 스키마 보유", icon: CheckCircle2 },
-    ];
-  }, [toolsMap]);
 
   const handleExecute = async (code: string) => {
     setExecuting(prev => ({ ...prev, [code]: true }));
@@ -245,7 +244,7 @@ export default function ToolsPage() {
           </Card>
         ) : (
           <section aria-label="도구 실행 카드" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from(toolsMap.values()).map((tool) => (
+            {tools.map((tool) => (
               <Card key={tool.code} className={cn(tool.is_active === false && "opacity-70")}>
                 <CardHeader>
                   <div className="flex min-w-0 items-start justify-between gap-3">

@@ -175,6 +175,58 @@ describe("ToolsPage", () => {
     expect(container.textContent).toContain("Success message");
   });
 
+  it("executes duplicate tool codes with the first rendered definition", async () => {
+    let executeBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        if (url.includes("/api/tools") && !url.includes("execute")) {
+          return jsonResponse([
+            {
+              code: "duplicate_tool",
+              name: "첫 번째 도구",
+              description: "첫 정의",
+              category: "카테고리",
+              parameters: { thread_id: "string" },
+            },
+            {
+              code: "duplicate_tool",
+              name: "두 번째 도구",
+              description: "후속 정의",
+              category: "카테고리",
+              parameters: { limit: "number" },
+            },
+          ]);
+        }
+        if (url.includes("/api/tools/duplicate_tool/execute")) {
+          executeBody = JSON.parse(String(init?.body));
+          return jsonResponse({ status: "success", result: "ok" });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<ToolsPage />);
+    });
+    await flushAsyncWork();
+
+    const buttons = container.querySelectorAll('button[data-tool-execute="duplicate_tool"]');
+    expect(buttons).toHaveLength(2);
+    expect(container.textContent).toContain("첫 번째 도구");
+
+    act(() => {
+      buttons[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    expect(executeBody).toEqual({ parameters: { thread_id: "test_value" } });
+  });
+
   it("shows error when tool execution fails", async () => {
     vi.stubGlobal(
       "fetch",
