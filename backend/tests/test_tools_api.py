@@ -1244,6 +1244,59 @@ async def test_tool_sha256_generator():
     )
 
 
+@pytest.mark.parametrize(
+    ("code", "normal_parameters", "nullable_parameters", "result_key", "normal_result", "empty_result"),
+    [
+        (
+            "url_encoder",
+            {"text": "a/b", "safe": "/"},
+            {"text": None, "safe": None},
+            "encoded",
+            "a/b",
+            "",
+        ),
+        (
+            "url_decoder",
+            {"text": "hello%20world"},
+            {"text": None},
+            "decoded",
+            "hello world",
+            "",
+        ),
+        (
+            "sha256_generator",
+            {"text": "hello world"},
+            {"text": None},
+            "hash",
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+    ],
+)
+def test_registered_utility_tools_accept_omitted_and_nullable_parameters(
+    code: str,
+    normal_parameters: dict[str, object],
+    nullable_parameters: dict[str, object],
+    result_key: str,
+    normal_result: str,
+    empty_result: str,
+) -> None:
+    with TestClient(app) as client:
+        responses = [
+            client.post(
+                f"/api/tools/{code}/execute",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                json={"parameters": parameters},
+            )
+            for parameters in ({}, normal_parameters, nullable_parameters)
+        ]
+
+    assert [response.status_code for response in responses] == [200, 200, 200]
+    assert responses[0].json()["result"][result_key] == empty_result
+    assert responses[1].json()["result"][result_key] == normal_result
+    assert responses[2].json()["result"][result_key] == empty_result
+
+
 @pytest.mark.asyncio
 async def test_tool_url_encoder_null():
     from api.tools import url_encoder_handler

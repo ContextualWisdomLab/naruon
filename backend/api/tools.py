@@ -175,9 +175,18 @@ class ToolRegistry:
 
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
+            options = descriptor if isinstance(descriptor, dict) else {}
+            required = bool(options.get("required", True))
+            nullable = bool(options.get("nullable", False))
             if key not in params:
-                raise ValueError("Missing required tool parameter")
+                if required:
+                    raise ValueError("Missing required tool parameter")
+                validated[key] = options.get("default")
+                continue
             value = params[key]
+            if value is None and nullable:
+                validated[key] = None
+                continue
             expected_type = _parameter_type_name(descriptor)
             if not _parameter_matches_type(value, expected_type):
                 raise ValueError("Invalid tool parameter type")
@@ -784,8 +793,8 @@ registry.register(
         description="입력된 텍스트를 URL 인코딩(퍼센트 인코딩)합니다.",
         category="유틸리티",
         parameters={
-            "text": "string",
-            "safe": "string (옵션, 인코딩에서 제외할 문자열, 기본값: '')",
+            "text": {"type": "string", "required": False, "nullable": True, "default": ""},
+            "safe": {"type": "string", "required": False, "nullable": True, "default": ""},
         },
     ),
     url_encoder_handler,
@@ -803,7 +812,9 @@ registry.register(
         name="URL 디코더 (URL Decoder)",
         description="URL 인코딩(퍼센트 인코딩)된 텍스트를 디코딩합니다.",
         category="유틸리티",
-        parameters={"text": "string"},
+        parameters={
+            "text": {"type": "string", "required": False, "nullable": True, "default": ""}
+        },
     ),
     url_decoder_handler,
 )
@@ -820,7 +831,9 @@ registry.register(
         name="SHA-256 해시 생성기 (SHA-256 Hash Generator)",
         description="입력된 텍스트의 SHA-256 해시값을 생성합니다.",
         category="유틸리티",
-        parameters={"text": "string"},
+        parameters={
+            "text": {"type": "string", "required": False, "nullable": True, "default": ""}
+        },
     ),
     sha256_generator_handler,
 )
