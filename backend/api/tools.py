@@ -790,11 +790,14 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Any:
     """JSON 포매터 핸들러."""
     json_string = params.get("json_string", "")
 
-    def reject_non_finite(value: str) -> None:
-        raise ValueError(f"Non-finite JSON number: {value}")
+    def _raise_value_error(msg: str):
+        raise ValueError(msg)
 
     try:
-        parsed = json.loads(json_string, parse_constant=reject_non_finite)
+        parsed = json.loads(
+            json_string,
+            parse_constant=lambda x: _raise_value_error(f"Invalid constant: {x}"),
+        )
         formatted = json.dumps(parsed, indent=2, ensure_ascii=False, allow_nan=False)
         return {"formatted_json": formatted, "is_valid": True}
     except (json.JSONDecodeError, ValueError) as e:

@@ -637,23 +637,52 @@ def test_json_formatter_tool_invalid():
     assert "유효하지 않은 JSON 문자열입니다" in data["message"]
 
 
-@pytest.mark.parametrize(
-    "json_string",
-    [
-        '{"value": NaN}',
-        '{"value": Infinity}',
-        '{"value": -Infinity}',
-        '{"value": 1e400}',
-    ],
-)
-def test_json_formatter_tool_rejects_non_finite_numbers(json_string):
+def test_json_formatter_tool_invalid_nan():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/json_formatter/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"json_string": json_string}},
+            json={"parameters": {"json_string": '{"key": NaN}'}},
         )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
 
+
+def test_json_formatter_tool_invalid_inf():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": Infinity}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
+
+
+def test_json_formatter_tool_invalid_neg_inf():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": -Infinity}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
+
+
+def test_json_formatter_tool_invalid_overflow():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": 1e400}'}},
+        )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
