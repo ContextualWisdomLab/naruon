@@ -27,7 +27,7 @@
 **Interfaces:**
 - Produces: `AttachmentParserDescriptor`
 - Produces: `get_attachment_parser_manifest() -> list[AttachmentParserDescriptor]`
-- Produces: `MAX_ATTACHMENT_PARSE_SOURCE_CHARS`
+- Produces: `MAX_ATTACHMENT_PARSE_TEXT_CHARS`
 - Preserves: `parse_email_attachment(filename, content_type, raw_content) -> AttachmentParseResult`
 
 - [x] **Step 1: Write failing parser registry tests**
@@ -35,7 +35,7 @@
 Add tests asserting:
 - the registry lists `plain_text`, `html`, `markdown`, and `unsupported_binary`
 - extension fallback maps `application/octet-stream` + `.md` to `text/markdown`
-- a raw text attachment larger than `MAX_ATTACHMENT_PARSE_SOURCE_CHARS` returns `parse_status == "parse_size_limit_exceeded"` and no raw content
+- a raw text attachment larger than `MAX_ATTACHMENT_PARSE_TEXT_CHARS` returns `parse_status == "parse_size_limit_exceeded"` and no raw content
 
 - [x] **Step 2: Run parser tests to verify failure**
 
