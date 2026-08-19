@@ -159,6 +159,7 @@ async def _handle_project_propfind(
 @router.api_route(
     "/{path:path}",
     methods=["PROPFIND", "REPORT", "MKCOL", "GET", "PUT", "DELETE", "OPTIONS"],
+    include_in_schema=False,
 )
 async def dav_handler(
     request: Request,
