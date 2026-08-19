@@ -958,9 +958,11 @@ async def test_import_email_files_accepts_source_over_20_mib(
         emails_api, "resolve_runtime_llm_provider", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(emails_api, "import_email_uploads", capture_import)
+    assert emails_api.MAX_IMPORT_UPLOAD_BYTES > 20 * 1024 * 1024
     synthetic_limit = 64
     prefix = b"From: a@example.com\n\n"
     source = prefix + b"x" * (synthetic_limit + 1 - len(prefix))
+    assert len(source) == synthetic_limit + 1
     monkeypatch.setattr(emails_api, "MAX_IMPORT_UPLOAD_BYTES", len(source))
     try:
         response = await client.post(
