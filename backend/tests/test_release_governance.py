@@ -375,7 +375,7 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
 
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
-        "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
+        "step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1"
     )
     # Governance/security workflows (codeql, dependency-review, scorecard,
     # trivy) are centralized in the org-level ContextualWisdomLab/.github
