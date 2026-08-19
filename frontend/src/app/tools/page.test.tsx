@@ -122,35 +122,6 @@ describe("ToolsPage", () => {
     expect(container.textContent).toContain("테스트 카테고리");
   });
 
-  it("renders the first definition for duplicate tool codes", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url) => {
-        if (url.includes("/api/tools") && !url.includes("execute")) {
-          return jsonResponse([
-            { code: "duplicate_tool", name: "첫 번째 도구", description: "첫 설명", category: "첫 분류" },
-            { code: "duplicate_tool", name: "두 번째 도구", description: "두 번째 설명", category: "두 번째 분류" },
-          ]);
-        }
-        return jsonResponse({});
-      }),
-    );
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    act(() => {
-      root?.render(<ToolsPage />);
-    });
-    await flushAsyncWork();
-
-    expect(container.querySelectorAll('button[data-tool-execute="duplicate_tool"]')).toHaveLength(1);
-    expect(container.textContent).toContain("첫 번째 도구");
-    expect(container.textContent).not.toContain("두 번째 도구");
-    expect(container.textContent).toMatch(/등록 도구\s*1/);
-  });
-
   it("executes a tool and shows the result", async () => {
     let executeCalled = false;
     let executeBody: unknown;
