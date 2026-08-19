@@ -457,6 +457,53 @@ async def test_build_agent_targets_orchestrator_alias_only(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure_mode", ["rejected", "missing"])
+async def test_run_agent_fails_closed_for_invalid_gateway_client(
+    monkeypatch, failure_mode
+):
+    class _FakeClient:
+        def __init__(self):
+            self.closed = False
+
+        async def aclose(self):
+            self.closed = True
+
+    client = _FakeClient()
+
+    async def _gateway_from_kv(*args, **kwargs):
+        return _gateway()
+
+    async def _invalid_http_client(base_url):
+        if failure_mode == "rejected":
+            raise ValueError("rejected")
+        return None, client
+
+    monkeypatch.setattr(noema_agent, "resolve_orchestrator_gateway", _gateway_from_kv)
+    monkeypatch.setattr(noema_agent, "_load_pydantic_ai", lambda: {})
+    monkeypatch.setattr(
+        noema_agent, "build_llm_provider_http_client", _invalid_http_client
+    )
+    monkeypatch.setattr(
+        noema_agent,
+        "AsyncOpenAI",
+        lambda **kwargs: pytest.fail("rejected gateway must not build AsyncOpenAI"),
+    )
+
+    result = await run_noema_agent(
+        _QueueSession([]),
+        user_id="user-1",
+        organization_id="org-1",
+        workspace_id="workspace-org-1",
+        prompt="hello",
+    )
+
+    assert result.status == "unavailable"
+    assert result.error_code == "orchestrator_gateway_unavailable"
+    assert result.model_alias == ORCHESTRATOR_MODEL_ALIAS
+    assert client.closed is (failure_mode == "missing")
+
+
+@pytest.mark.asyncio
 async def test_build_agent_returns_none_without_runtime(monkeypatch):
     monkeypatch.setattr(noema_agent, "_load_pydantic_ai", lambda: None)
     agent, closer = await build_noema_agent(_gateway())
