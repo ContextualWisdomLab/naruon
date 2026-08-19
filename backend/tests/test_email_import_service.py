@@ -78,7 +78,6 @@ async def test_extract_embeddings_does_not_embed_pending_attachment_payload():
         "attachments": [
             {
                 "content": "cHJpdmF0ZS1wZGYtYnl0ZXM=",
-                "parse_content": "",
                 "parse_status": "pdf_dom_recognition_pending",
             }
         ],
