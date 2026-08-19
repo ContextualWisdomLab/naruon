@@ -137,7 +137,15 @@ export default function ToolsPage() {
     ];
   }, [tools]);
 
-  const toolsMap = useMemo(() => new Map(tools.map(tool => [tool.code, tool])), [tools]);
+  const toolsMap = useMemo(() => {
+    const map = new Map<string, ToolInfo>();
+    for (const tool of tools) {
+      if (!map.has(tool.code)) {
+        map.set(tool.code, tool);
+      }
+    }
+    return map;
+  }, [tools]);
 
   const handleExecute = async (code: string) => {
     setExecuting(prev => ({ ...prev, [code]: true }));
