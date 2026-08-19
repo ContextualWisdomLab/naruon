@@ -166,6 +166,58 @@ def test_build_email_object_attaches_content_graph_records():
     }
 
 
+def test_build_email_object_indexes_image_metadata_as_attachment_text():
+    image_metadata = (
+        "Image metadata: format=png; width=320px; height=200px; animated=no"
+    )
+    parsed = {
+        "message_id": "<image-metadata@example.com>",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": "owner@example.com",
+        "subject": "Image metadata",
+        "in_reply_to": None,
+        "references": None,
+        "body": "See attached",
+        "body_content_type": "text/plain",
+        "body_parse_content": "See attached",
+        "attachments": [
+            {
+                "filename": "preview.png",
+                "content": image_metadata,
+                "content_type": "image/png",
+                "parse_content": image_metadata,
+                "parse_content_type": "text/plain",
+                "parser_key": "image_metadata",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            }
+        ],
+    }
+
+    email_obj, attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<image-metadata@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-image-metadata",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=list(parsed["attachments"]),
+        fitted_embeddings=[
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+        ],
+    )
+
+    assert attachment_count == 1
+    assert email_obj.attachments[0].parser_key == "image_metadata"
+    assert [
+        segment.safe_text_content
+        for segment in email_obj.attachments[0].content_segments
+    ] == [image_metadata]
+
+
 def test_build_email_object_attaches_knowledge_graph_edges():
     parsed = {
         "message_id": "<graph@example.com>",
@@ -401,9 +453,12 @@ def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
         "status.xml": ["Launch"],
         "invite.ics": ["SUMMARY: Launch"],
     }
-    assert {
-        attachment.parser_key for attachment in email_obj.attachments
-    } == {"json", "csv", "xml", "calendar"}
+    assert {attachment.parser_key for attachment in email_obj.attachments} == {
+        "json",
+        "csv",
+        "xml",
+        "calendar",
+    }
 
 
 @pytest.mark.asyncio

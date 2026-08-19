@@ -4,6 +4,7 @@ import base64
 import binascii
 from dataclasses import dataclass
 from pathlib import Path
+import struct
 from typing import Any
 
 from .text_safety import strip_html_markup
@@ -85,6 +86,13 @@ _PARSER_MANIFEST = (
         content_types=("application/pdf",),
         extensions=(".pdf",),
         parse_status="pdf_dom_recognition_pending",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="image_metadata",
+        display_name="Image metadata attachments",
+        content_types=("image/png", "image/jpeg", "image/gif", "image/bmp"),
+        extensions=(".png", ".jpg", ".jpeg", ".gif", ".bmp"),
+        parse_status="parsed",
     ),
     AttachmentParserDescriptor(
         parser_key="unsupported_binary",
@@ -194,6 +202,43 @@ def parse_email_attachment(
             parse_content_type=parse_content_type,
             parser_key=deferred_descriptor.parser_key,
             parse_status=deferred_descriptor.parse_status,
+            parse_error_code=None,
+        )
+
+    if parse_content_type in _IMAGE_CONTENT_TYPES:
+        image_payload = _coerce_deferred_payload_bytes(raw_content)
+        if len(image_payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
+            return AttachmentParseResult(
+                filename=safe_filename,
+                content="",
+                content_type=normalized_content_type,
+                parse_content="",
+                parse_content_type=parse_content_type,
+                parser_key="image_metadata",
+                parse_status="parse_size_limit_exceeded",
+                parse_error_code="parse_size_limit_exceeded",
+            )
+
+        metadata = _parse_image_metadata(image_payload)
+        if metadata is None:
+            return AttachmentParseResult(
+                filename=safe_filename,
+                content="",
+                content_type=normalized_content_type,
+                parse_content="",
+                parse_content_type=parse_content_type,
+                parser_key="image_metadata",
+                parse_status="image_metadata_parse_failed",
+                parse_error_code="image_metadata_parse_failed",
+            )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=metadata,
+            content_type=normalized_content_type,
+            parse_content=metadata,
+            parse_content_type="text/plain",
+            parser_key="image_metadata",
+            parse_status="parsed",
             parse_error_code=None,
         )
 
@@ -320,6 +365,105 @@ def _coerce_text(raw_content: Any) -> str:
 def _display_text(raw_content: str) -> str:
     """Strip markup and collapse whitespace for safe attachment display."""
     return " ".join(strip_html_markup(raw_content).split())
+
+
+_IMAGE_CONTENT_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/bmp"})
+_JPEG_SOF_MARKERS = frozenset(
+    {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
+)
+
+
+def _parse_image_metadata(payload: bytes) -> str | None:
+    """Read bounded image headers into searchable text without decoding pixels."""
+    if payload.startswith(b"\x89PNG"):
+        dimensions = _png_dimensions(payload)
+        format_name = "png"
+        animated = b"acTL" in payload[:MAX_ATTACHMENT_PARSE_SOURCE_BYTES]
+    elif payload.startswith(b"\xff\xd8"):
+        dimensions = _jpeg_dimensions(payload)
+        format_name = "jpeg"
+        animated = False
+    elif payload[:6] in {b"GIF87a", b"GIF89a"}:
+        dimensions = _gif_dimensions(payload)
+        format_name = "gif"
+        animated = b"NETSCAPE2.0" in payload[:MAX_ATTACHMENT_PARSE_SOURCE_BYTES]
+    elif payload.startswith(b"BM"):
+        dimensions = _bmp_dimensions(payload)
+        format_name = "bmp"
+        animated = False
+    else:
+        return None
+
+    if dimensions is None:
+        return None
+    width, height = dimensions
+    return (
+        "Image metadata: "
+        f"format={format_name}; width={width}px; height={height}px; "
+        f"animated={'yes' if animated else 'no'}"
+    )
+
+
+def _png_dimensions(payload: bytes) -> tuple[int, int] | None:
+    if len(payload) < 24 or payload[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    if payload[12:16] != b"IHDR" or int.from_bytes(payload[8:12], "big") < 13:
+        return None
+    width, height = struct.unpack(">II", payload[16:24])
+    return (width, height) if width and height else None
+
+
+def _jpeg_dimensions(payload: bytes) -> tuple[int, int] | None:
+    if len(payload) < 4 or payload[:2] != b"\xff\xd8":
+        return None
+    position = 2
+    while position + 1 < len(payload):
+        if payload[position] != 0xFF:
+            return None
+        while position < len(payload) and payload[position] == 0xFF:
+            position += 1
+        if position >= len(payload):
+            return None
+        marker = payload[position]
+        position += 1
+        if marker == 0x00:
+            continue
+        if marker == 0xDA:
+            return None
+        if marker == 0x01 or 0xD0 <= marker <= 0xD9:
+            continue
+        if position + 2 > len(payload):
+            return None
+        segment_length = int.from_bytes(payload[position : position + 2], "big")
+        if segment_length < 2 or position + segment_length > len(payload):
+            return None
+        if marker in _JPEG_SOF_MARKERS and segment_length >= 7:
+            height = int.from_bytes(payload[position + 3 : position + 5], "big")
+            width = int.from_bytes(payload[position + 5 : position + 7], "big")
+            return (width, height) if width and height else None
+        position += segment_length
+    return None
+
+
+def _gif_dimensions(payload: bytes) -> tuple[int, int] | None:
+    if len(payload) < 10 or payload[:6] not in {b"GIF87a", b"GIF89a"}:
+        return None
+    width, height = struct.unpack("<HH", payload[6:10])
+    return (width, height) if width and height else None
+
+
+def _bmp_dimensions(payload: bytes) -> tuple[int, int] | None:
+    if len(payload) < 26 or payload[:2] != b"BM":
+        return None
+    dib_size = int.from_bytes(payload[14:18], "little")
+    if dib_size == 12:
+        width, height = struct.unpack("<HH", payload[18:22])
+    elif dib_size >= 40:
+        width = abs(struct.unpack("<i", payload[18:22])[0])
+        height = abs(struct.unpack("<i", payload[22:26])[0])
+    else:
+        return None
+    return (width, height) if width and height else None
 
 
 def _sanitize_nul(text: str) -> str:

@@ -1,4 +1,5 @@
 import base64
+import struct
 
 import pytest
 
@@ -55,6 +56,7 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
         "xml",
         "calendar",
         "pdf",
+        "image_metadata",
         "unsupported_binary",
     } <= parser_keys
     markdown_descriptor = next(
@@ -72,6 +74,94 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
     )
     assert "text/calendar" in calendar_descriptor.content_types
     assert ".ics" in calendar_descriptor.extensions
+
+
+def _png_fixture(width: int = 320, height: int = 200) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", 13)
+        + b"IHDR"
+        + struct.pack(">II", width, height)
+        + b"\x08\x06\x00\x00\x00"
+    )
+
+
+def _jpeg_fixture(width: int = 640, height: int = 480) -> bytes:
+    sof_payload = b"\x08" + struct.pack(">HH", height, width) + b"\x00" * 10
+    return b"\xff\xd8\xff\xc0" + struct.pack(">H", len(sof_payload) + 2) + sof_payload
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "raw_content", "format_name"),
+    [
+        ("preview.png", "image/png", _png_fixture(), "png"),
+        ("preview.jpg", "image/jpeg", _jpeg_fixture(), "jpeg"),
+        ("preview.gif", "image/gif", b"GIF89a" + struct.pack("<HH", 80, 60), "gif"),
+        (
+            "preview.bmp",
+            "image/bmp",
+            b"BM" + bytes(12) + struct.pack("<Iii", 40, 100, 75),
+            "bmp",
+        ),
+    ],
+)
+def test_image_attachment_metadata_is_searchable_without_pixel_decoding(
+    filename, content_type, raw_content, format_name
+):
+    result = parse_email_attachment(
+        filename=filename,
+        content_type=content_type,
+        raw_content=raw_content,
+    )
+
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "parsed"
+    assert result.parse_content_type == "text/plain"
+    assert result.parse_content == result.content
+    assert f"format={format_name}" in result.content
+    assert "width=" in result.content
+    assert "height=" in result.content
+    assert "animated=no" in result.content
+
+
+def test_generic_image_mime_uses_filename_extension_for_metadata_parser():
+    result = parse_email_attachment(
+        filename="preview.png",
+        content_type="application/octet-stream",
+        raw_content=_png_fixture(12, 34),
+    )
+
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "parsed"
+    assert "width=12px" in result.content
+    assert "height=34px" in result.content
+
+
+def test_image_signature_wins_when_mail_mime_type_is_wrong():
+    result = parse_email_attachment(
+        filename="preview.jpg",
+        content_type="image/jpeg",
+        raw_content=_png_fixture(12, 34),
+    )
+
+    assert result.parse_status == "parsed"
+    assert "format=png" in result.content
+    assert "width=12px" in result.content
+    assert "height=34px" in result.content
+
+
+def test_invalid_image_metadata_fails_closed_without_retaining_binary_content():
+    result = parse_email_attachment(
+        filename="broken.png",
+        content_type="image/png",
+        raw_content=b"not an image",
+    )
+
+    assert result.content == ""
+    assert result.parse_content == ""
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "image_metadata_parse_failed"
+    assert result.parse_error_code == "image_metadata_parse_failed"
 
 
 def test_generic_binary_content_type_can_fall_back_to_markdown_extension():

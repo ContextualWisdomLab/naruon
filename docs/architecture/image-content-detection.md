@@ -39,6 +39,17 @@ sequenceDiagram
 5. **Classification:** The model returns labels (e.g., categories, text OCR) and safety scores.
 6. **Action:** Based on the results, the content is either indexed for search, flagged for review, or rejected.
 
+## Current Naruon implementation boundary
+
+Email ingestion now runs the bounded `image_metadata` parser for PNG, JPEG,
+GIF, and BMP attachments. It reads only format headers and adds the detected
+format, dimensions, and animation flag to the existing attachment content
+graph and embedding path. It does not decode pixels or send image bytes to a
+hosted model. OCR, captioning, and object detection remain deferred until a
+configured local vision sidecar can provide source-backed results.
+
+The decision and failure states are fixed in [ADR-0009](../adr/0009-image-attachment-metadata-parser.md).
+
 ## Failure Modes and Recovery
 
 * **POST /api/images validation:** Reject unsupported MIME types, unsafe URLs, and oversized payloads before storage or model work, then return a deterministic 400 response.

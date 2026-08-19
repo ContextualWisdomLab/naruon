@@ -1,4 +1,10 @@
 ## [Unreleased]
+- Email attachment ingestion now parses PNG, JPEG, GIF, and BMP headers into
+  searchable format/dimension/animation metadata through the `image_metadata`
+  parser. Invalid and oversized payloads fail closed without retaining raw
+  bytes; OCR and object detection remain explicitly deferred to a local vision
+  sidecar. The boundary and local confidential-data evidence are recorded in
+  ADR-0009 and `docs/doctoring/image-attachment-metadata-parser.md`.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
