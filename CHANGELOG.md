@@ -1,12 +1,15 @@
 ## [Unreleased]
 - Attachment ingestion now indexes bounded metadata for nested `.eml`/
-  `message/rfc822`, MP3, and legacy `.doc` containers. It does not recurse,
-  decode, execute, or retain malformed binary payloads; unknown extensionless
-  binaries remain explicit `unsupported_content_type` under ADR-0011.
+  `message/rfc822`, Layer III MP3, and legacy `.doc` containers. It does not
+  recurse, decode, execute, or retain malformed binary payloads; unknown
+  extensionless binaries remain explicit `unsupported_content_type` under
+  ADR-0011.
 - Email attachment ingestion now parses bounded text from DOCX, XLSX, PPTX, and
-  HWPX XML parts and indexes ZIP member manifests without extraction. Malformed,
-  oversized, or unsupported content fails closed without retaining raw bytes;
-  the no-execution boundary is fixed in ADR-0010 and
+  HWPX XML parts and indexes ZIP member manifests without extraction. Selected
+  Office XML parts share a 1,000,000-character aggregate budget, and encrypted
+  ZIP entries fail closed with deterministic evidence. Malformed, oversized,
+  or unsupported content fails closed without retaining raw bytes; the
+  no-execution boundary is fixed in ADR-0010 and
   `docs/doctoring/bounded-office-archive-text-parsing.md`.
 - Email attachment ingestion now parses PNG, JPEG, GIF, and BMP headers into
   searchable format/dimension/animation metadata through the `image_metadata`
