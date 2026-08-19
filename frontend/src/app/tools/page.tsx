@@ -125,8 +125,6 @@ export default function ToolsPage() {
     setRefreshNonce((value) => value + 1);
   };
 
-
-
   const toolsMap = useMemo(() => {
     const map = new Map<string, ToolInfo>();
     for (const tool of tools) {
