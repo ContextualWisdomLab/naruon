@@ -24,7 +24,6 @@ _GENERIC_CONTENT_TYPES = {
 # a large Office package may contain media that is irrelevant to text parsing.
 MAX_ATTACHMENT_PARSE_TEXT_CHARS = 64 * 1024 * 1024
 MAX_OFFICE_XML_PARSE_BYTES = 128 * 1024 * 1024
-MAX_DEFERRED_PDF_SOURCE_BYTES = 20 * 1024 * 1024
 MAX_IMAGE_METADATA_SCAN_BYTES = 1 * 1024 * 1024
 
 
@@ -239,17 +238,6 @@ def parse_email_attachment(
         # ``content`` with the recognized text on success. Without this the
         # source bytes were discarded and recognition was impossible.
         deferred_payload = _coerce_deferred_payload_bytes(raw_content)
-        if len(deferred_payload) > MAX_DEFERRED_PDF_SOURCE_BYTES:
-            return AttachmentParseResult(
-                filename=safe_filename,
-                content="",
-                content_type=normalized_content_type,
-                parse_content="",
-                parse_content_type=parse_content_type,
-                parser_key=deferred_descriptor.parser_key,
-                parse_status="parse_size_limit_exceeded",
-                parse_error_code="parse_size_limit_exceeded",
-            )
         if parse_content_type == "application/pdf" and not deferred_payload.startswith(
             b"%PDF-"
         ):
@@ -552,8 +540,6 @@ def decode_deferred_attachment_payload(content: str | None) -> bytes:
         payload = base64.b64decode((content or "").encode("ascii"), validate=True)
     except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
         raise ValueError("Pending attachment payload is not valid base64") from exc
-    if len(payload) > MAX_DEFERRED_PDF_SOURCE_BYTES:
-        raise ValueError("Pending attachment PDF exceeds the deferred parse size limit")
     if not payload.startswith(b"%PDF-"):
         raise ValueError("Pending attachment payload is not a PDF")
     return payload

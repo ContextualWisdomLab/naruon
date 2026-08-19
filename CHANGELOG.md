@@ -12,6 +12,10 @@
   unsupported content fails closed without retaining raw bytes; the
   no-execution boundary is fixed in ADR-0010 and
   `docs/doctoring/bounded-office-archive-text-parsing.md`.
+- Deferred PDF attachments are no longer discarded solely because they exceed
+  20 MiB. Valid PDF bytes remain pending for NewsDOM recognition; a sidecar
+  rejection is recorded as recognition failure rather than as a parser size
+  classification.
 - Email attachment ingestion now parses PNG, JPEG, GIF, and BMP headers into
   searchable format/dimension/animation metadata through the `image_metadata`
   parser. Invalid payloads fail closed without retaining raw bytes; OCR and

@@ -33,9 +33,10 @@ or archive runtime would expand the execution and data-retention boundary.
    entries with traditional or strong-encryption flag bits (`0x01` or `0x40`)
    return the deterministic `encrypted_archive_entry` error. Valid output is
    `parse_status=parsed` and `parse_content_type=text/plain`, so the existing
-   embedding and content-graph path indexes it. The separate 20 MiB source
-   ceiling applies only to PDFs retained for the NewsDOM sidecar, whose upload
-   contract is independent of Office/ZIP parsing.
+   embedding and content-graph path indexes it. PDF retention is governed by
+   the separate deferred NewsDOM workflow; this Office/ZIP ADR does not impose
+   a PDF byte ceiling or reinterpret a sidecar rejection as an attachment
+   parser type failure.
 4. OOXML macro parts, relationships, arbitrary embedded objects, external
    links, encrypted packages, and unsupported XML parts are not interpreted.
    OCR, layout reconstruction, spreadsheet formula evaluation, and full office

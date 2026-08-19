@@ -7,7 +7,6 @@ from zipfile import ZIP_STORED
 import pytest
 
 from services.attachment_parser import (
-    MAX_DEFERRED_PDF_SOURCE_BYTES,
     decode_deferred_attachment_payload,
     get_attachment_parser_manifest,
     parse_email_attachment,
@@ -605,16 +604,16 @@ def test_invalid_pdf_payload_is_rejected_before_deferred_recognition():
     assert result.parse_error_code == "invalid_pdf_payload"
 
 
-def test_oversized_pdf_payload_is_not_retained():
+def test_large_pdf_payload_remains_pending_for_deferred_recognition():
     result = parse_email_attachment(
         filename="huge.pdf",
         content_type="application/pdf",
-        raw_content=b"%PDF-" + b"A" * MAX_DEFERRED_PDF_SOURCE_BYTES,
+        raw_content=b"%PDF-" + b"A" * (20 * 1024 * 1024),
     )
 
-    assert result.content == ""
-    assert result.parse_status == "parse_size_limit_exceeded"
-    assert result.parse_error_code == "parse_size_limit_exceeded"
+    assert result.parse_status == "pdf_dom_recognition_pending"
+    assert result.parse_error_code is None
+    assert decode_deferred_attachment_payload(result.content).startswith(b"%PDF-")
 
 
 @pytest.mark.parametrize(
@@ -644,12 +643,7 @@ def test_string_pdf_input_round_trips_as_deferred_bytes():
     )
 
 
-def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch):
+def test_deferred_pdf_decoder_rejects_non_pdf_payloads():
     non_pdf = base64.b64encode(b"not a PDF").decode("ascii")
     with pytest.raises(ValueError, match="not a PDF"):
         decode_deferred_attachment_payload(non_pdf)
-
-    monkeypatch.setattr("services.attachment_parser.MAX_DEFERRED_PDF_SOURCE_BYTES", 5)
-    oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
-    with pytest.raises(ValueError, match="size limit"):
-        decode_deferred_attachment_payload(oversized)
