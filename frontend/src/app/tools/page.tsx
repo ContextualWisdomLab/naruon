@@ -244,7 +244,7 @@ export default function ToolsPage() {
           </Card>
         ) : (
           <section aria-label="도구 실행 카드" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {tools.map((tool) => (
+            {Array.from(toolsMap.values()).map((tool) => (
               <Card key={tool.code} className={cn(tool.is_active === false && "opacity-70")}>
                 <CardHeader>
                   <div className="flex min-w-0 items-start justify-between gap-3">
