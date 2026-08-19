@@ -561,7 +561,7 @@ async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
 
     parsed = {
         "body": "body paragraph " * 500,
-        "attachments": [{"content": "short attachment"}],
+        "attachments": [{"content": "short attachment"}, {"content": ""}],
     }
     with patch(
         "services.email_import_service._generate_import_embeddings",
@@ -574,9 +574,11 @@ async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
 
     body_chunk_count = len(captured_texts) - 1
     assert body_chunk_count > 1
-    assert len(embeddings) == 2
+    assert len(embeddings) == 3
+    assert "" not in captured_texts
     assert embeddings[0][0] == sum(range(1, body_chunk_count + 1)) / body_chunk_count
     assert embeddings[1][0] == float(len(captured_texts))
+    assert embeddings[2] == [0.0] * EMBEDDING_DIMENSION
 
 
 @pytest.mark.asyncio

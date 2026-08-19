@@ -314,7 +314,7 @@ def _chunk_import_texts(texts: list[str]) -> tuple[list[str], list[int]]:
     chunks: list[str] = []
     chunk_counts: list[int] = []
     for text in texts:
-        source_chunks = chunk_text(text) or [text]
+        source_chunks = chunk_text(text)
         chunks.extend(source_chunks)
         chunk_counts.append(len(source_chunks))
     return chunks, chunk_counts
