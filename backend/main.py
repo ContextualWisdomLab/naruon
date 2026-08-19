@@ -11,6 +11,7 @@ from api.content_checksum_tool import register_content_checksum_tool
 from api.search import router as search_router
 from api.llm import router as llm_router
 from api.calendar import router as calendar_router
+from api.calendar_conflicts import router as calendar_conflicts_router
 from api.network import router as network_router
 from api.emails import router as emails_router
 from api.runner_config import router as runner_config_router
@@ -226,6 +227,7 @@ app.add_middleware(
 app.include_router(search_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(llm_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(calendar_router, dependencies=PRIVATE_API_DEPENDENCIES)
+app.include_router(calendar_conflicts_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(network_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(emails_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(runner_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
