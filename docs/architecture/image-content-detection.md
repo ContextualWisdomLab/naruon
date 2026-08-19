@@ -50,6 +50,22 @@ configured local vision sidecar can provide source-backed results.
 
 The decision and failure states are fixed in [ADR-0009](../adr/0009-image-attachment-metadata-parser.md).
 
+## Current structured attachment boundary
+
+Email ingestion also runs the bounded `office_text` and `archive_manifest`
+parsers for DOCX, XLSX, PPTX, HWPX, and ZIP attachments. Office parsing reads
+selected XML members for searchable text; ZIP parsing reads member names and
+declared sizes without extraction. Both paths use payload/member limits and
+fail closed on malformed input. Macros, external relationships, formula
+evaluation, rendering, OCR, and archive execution remain out of scope under
+[ADR-0010](../adr/0010-bounded-office-archive-text-parsing.md).
+
+Nested `.eml`/`message/rfc822`, MP3, and legacy `.doc` attachments have a
+separate bounded metadata boundary under
+[ADR-0011](../adr/0011-safe-nested-media-legacy-metadata.md): one-level email
+headers, MP3 signature metadata, and OLE container metadata only. Extensionless
+generic binaries remain unsupported.
+
 ## Failure Modes and Recovery
 
 * **POST /api/images validation:** Reject unsupported MIME types, unsafe URLs, and oversized payloads before storage or model work, then return a deterministic 400 response.

@@ -1,0 +1,42 @@
+# Safe nested, media, and legacy attachment metadata doctoring record
+
+## Evidence
+
+The private local audit of the 2026-07-31 Inbox backup initially left 24
+unsupported attachments: 20 nested `.eml`, one `message/rfc822`, one legacy
+`.doc`, one MP3, and one extensionless generic binary. After the bounded
+metadata parsers, one extensionless generic binary remains explicitly
+unsupported. The audit used aggregate counts only and did not upload message or
+attachment content.
+
+## Implemented boundary
+
+`services.attachment_parser.nested_email` records sanitized headers and an
+attachment count for one bounded nested message; it does not recurse.
+`audio_metadata` validates only bounded MP3 ID3/frame signatures. The
+`legacy_office_metadata` parser validates only the OLE/Compound File signature
+for `.doc`. None of these paths decodes or executes untrusted content.
+
+The extensionless generic binary remains explicit `unsupported_content_type`.
+
+## Verification
+
+- `backend/tests/test_attachment_parser.py` covers nested `.eml`, MP3 ID3,
+  malformed MP3, legacy DOC OLE signatures, malformed DOC, and the generic
+  unsupported boundary.
+- Valid metadata returns `parse_status=parsed` and `parse_content_type=text/plain`;
+  malformed or oversized input returns a named failure without raw bytes.
+- ADR-0011 fixes the non-recursive, non-decoding, and no-external-upload
+  boundary.
+
+## References (APA 7th)
+
+Internet Engineering Task Force. (2008). *Internet message format (RFC 5322).*
+https://www.rfc-editor.org/rfc/rfc5322
+
+Nilsson, M. (2000). *ID3 tag version 2.4.0—Main structure.* ID3.org.
+https://id3.org/id3v2.4.0-structure
+
+Microsoft. (2023). *[MS-CFB]: Compound File Binary File Format.* Microsoft
+Open Specifications.
+https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b

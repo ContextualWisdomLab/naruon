@@ -1,5 +1,7 @@
 import base64
+from io import BytesIO
 import struct
+from zipfile import ZipFile
 
 import pytest
 
@@ -55,8 +57,14 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
         "csv",
         "xml",
         "calendar",
+        "vcard",
+        "nested_email",
         "pdf",
         "image_metadata",
+        "office_text",
+        "archive_manifest",
+        "audio_metadata",
+        "legacy_office_metadata",
         "unsupported_binary",
     } <= parser_keys
     markdown_descriptor = next(
@@ -73,7 +81,16 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
         descriptor for descriptor in manifest if descriptor.parser_key == "calendar"
     )
     assert "text/calendar" in calendar_descriptor.content_types
+    assert "application/ics" in calendar_descriptor.content_types
     assert ".ics" in calendar_descriptor.extensions
+
+
+def _zip_fixture(*members: tuple[str, str]) -> bytes:
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        for filename, content in members:
+            archive.writestr(filename, content)
+    return payload.getvalue()
 
 
 def _png_fixture(width: int = 320, height: int = 200) -> bytes:
@@ -135,6 +152,196 @@ def test_generic_image_mime_uses_filename_extension_for_metadata_parser():
     assert result.parse_status == "parsed"
     assert "width=12px" in result.content
     assert "height=34px" in result.content
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "member", "text", "format_name"),
+    [
+        (
+            "plan.docx",
+            "application/octet-stream",
+            (
+                "word/document.xml",
+                "<w:document xmlns:w='urn:w'><w:t>Plan</w:t></w:document>",
+            ),
+            "Plan",
+            "docx",
+        ),
+        (
+            "budget.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ("xl/sharedStrings.xml", "<sst xmlns='urn:x'><si><t>Budget</t></si></sst>"),
+            "Budget",
+            "xlsx",
+        ),
+        (
+            "briefing.pptx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            (
+                "ppt/slides/slide1.xml",
+                "<p:sld xmlns:p='urn:p' xmlns:a='urn:a'><a:t>Briefing</a:t></p:sld>",
+            ),
+            "Briefing",
+            "pptx",
+        ),
+        (
+            "report.hwpx",
+            "application/haansoftdocx",
+            (
+                "Contents/section0.xml",
+                "<hp:sec xmlns:hp='urn:hp'><hp:t>Report</hp:t></hp:sec>",
+            ),
+            "Report",
+            "hwpx",
+        ),
+    ],
+)
+def test_office_attachment_text_is_indexed_from_bounded_xml_parts(
+    filename, content_type, member, text, format_name
+):
+    result = parse_email_attachment(
+        filename=filename,
+        content_type=content_type,
+        raw_content=_zip_fixture(member),
+    )
+
+    assert result.parser_key == "office_text"
+    assert result.parse_status == "parsed"
+    assert result.parse_content_type == "text/plain"
+    assert f"format={format_name}" in result.content
+    assert f"text={text}" in result.content
+
+
+def test_generic_office_mime_uses_filename_extension_for_text_parser():
+    result = parse_email_attachment(
+        filename="plan.docx",
+        content_type="application/octet-stream",
+        raw_content=_zip_fixture(
+            (
+                "word/document.xml",
+                "<w:document xmlns:w='urn:w'><w:t>Plan</w:t></w:document>",
+            )
+        ),
+    )
+
+    assert result.content_type == "application/octet-stream"
+    assert result.parse_content_type == "text/plain"
+    assert result.parse_status == "parsed"
+    assert "text=Plan" in result.content
+
+
+def test_invalid_office_attachment_fails_closed_without_binary_content():
+    result = parse_email_attachment(
+        filename="broken.docx",
+        content_type="application/octet-stream",
+        raw_content=b"not a zip archive",
+    )
+
+    assert result.content == ""
+    assert result.parse_content == ""
+    assert result.parser_key == "office_text"
+    assert result.parse_status == "office_text_parse_failed"
+    assert result.parse_error_code == "office_text_parse_failed"
+
+
+def test_zip_attachment_indexes_manifest_without_extracting_members():
+    result = parse_email_attachment(
+        filename="bundle.zip",
+        content_type="application/x-zip-compressed",
+        raw_content=_zip_fixture(
+            ("docs/plan.txt", "Plan"), ("data/status.csv", "Ready")
+        ),
+    )
+
+    assert result.parser_key == "archive_manifest"
+    assert result.parse_status == "parsed"
+    assert result.parse_content_type == "text/plain"
+    assert "entries=2" in result.content
+    assert "docs/plan.txt" in result.content
+    assert "data/status.csv" in result.content
+
+
+def test_invalid_zip_attachment_fails_closed_without_binary_content():
+    result = parse_email_attachment(
+        filename="broken.zip",
+        content_type="application/zip",
+        raw_content=b"not a zip archive",
+    )
+
+    assert result.content == ""
+    assert result.parse_content == ""
+    assert result.parser_key == "archive_manifest"
+    assert result.parse_status == "archive_manifest_parse_failed"
+    assert result.parse_error_code == "archive_manifest_parse_failed"
+
+
+def test_nested_email_attachment_indexes_safe_headers_only():
+    result = parse_email_attachment(
+        filename="forwarded.eml",
+        content_type="application/octet-stream",
+        raw_content=(
+            b"From: sender@example.com\nSubject: Project plan\n"
+            b"Content-Type: text/plain\n\nbody"
+        ),
+    )
+
+    assert result.parser_key == "nested_email"
+    assert result.parse_status == "parsed"
+    assert result.parse_content_type == "text/plain"
+    assert "subject=Project plan" in result.content
+    assert "sender=sender@example.com" in result.content
+
+
+def test_mp3_attachment_indexes_bounded_container_metadata():
+    result = parse_email_attachment(
+        filename="briefing.mp3",
+        content_type="audio/mp3",
+        raw_content=b"ID3\x04\x00\x00\x00\x00\x00\x03abc",
+    )
+
+    assert result.parser_key == "audio_metadata"
+    assert result.parse_status == "parsed"
+    assert "format=mp3" in result.content
+    assert "id3=yes" in result.content
+
+
+def test_invalid_mp3_attachment_fails_closed_without_binary_content():
+    result = parse_email_attachment(
+        filename="broken.mp3",
+        content_type="audio/mpeg",
+        raw_content=b"not an mp3",
+    )
+
+    assert result.content == ""
+    assert result.parser_key == "audio_metadata"
+    assert result.parse_status == "audio_metadata_parse_failed"
+    assert result.parse_error_code == "audio_metadata_parse_failed"
+
+
+def test_legacy_doc_attachment_indexes_ole_container_metadata():
+    result = parse_email_attachment(
+        filename="legacy.doc",
+        content_type="application/msword",
+        raw_content=b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 8,
+    )
+
+    assert result.parser_key == "legacy_office_metadata"
+    assert result.parse_status == "parsed"
+    assert "format=doc" in result.content
+    assert "container=ole" in result.content
+
+
+def test_invalid_legacy_doc_attachment_fails_closed_without_binary_content():
+    result = parse_email_attachment(
+        filename="broken.doc",
+        content_type="application/msword",
+        raw_content=b"not an OLE document",
+    )
+
+    assert result.content == ""
+    assert result.parser_key == "legacy_office_metadata"
+    assert result.parse_status == "legacy_office_metadata_parse_failed"
+    assert result.parse_error_code == "legacy_office_metadata_parse_failed"
 
 
 def test_image_signature_wins_when_mail_mime_type_is_wrong():
@@ -202,6 +409,18 @@ def test_structured_non_pdf_attachment_media_types_are_parseable():
             "BEGIN:VCALENDAR\nSUMMARY:Launch\nEND:VCALENDAR",
             "calendar",
         ),
+        (
+            "invite.ics",
+            "application/ics",
+            "BEGIN:VCALENDAR\nSUMMARY:Launch\nEND:VCALENDAR",
+            "calendar",
+        ),
+        (
+            "contact.vcf",
+            "text/x-vcard",
+            "BEGIN:VCARD\nFN:Launch Owner\nEND:VCARD",
+            "vcard",
+        ),
     ]
 
     for filename, content_type, raw_content, parser_key in cases:
@@ -235,16 +454,16 @@ def test_oversized_text_attachment_is_metadata_only_without_raw_content():
 
 def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
     result = parse_email_attachment(
-        filename="archive.zip",
-        content_type="application/zip",
+        filename="unknown.bin",
+        content_type="application/octet-stream",
         raw_content=b"PK\x03\x04 raw bytes",
     )
 
-    assert result.filename == "archive.zip"
-    assert result.content_type == "application/zip"
+    assert result.filename == "unknown.bin"
+    assert result.content_type == "application/octet-stream"
     assert result.content == ""
     assert result.parse_content == ""
-    assert result.parse_content_type == "application/zip"
+    assert result.parse_content_type == "application/octet-stream"
     assert result.parser_key == "unsupported_binary"
     assert result.parse_status == "unsupported_content_type"
     assert result.parse_error_code == "unsupported_content_type"

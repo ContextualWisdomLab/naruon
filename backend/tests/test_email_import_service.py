@@ -218,6 +218,56 @@ def test_build_email_object_indexes_image_metadata_as_attachment_text():
     ] == [image_metadata]
 
 
+def test_build_email_object_indexes_office_text_as_attachment_text():
+    office_text = "Office metadata: format=docx; members=3; text=Quarterly Plan"
+    parsed = {
+        "message_id": "<office-text@example.com>",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": "owner@example.com",
+        "subject": "Office text",
+        "in_reply_to": None,
+        "references": None,
+        "body": "See attached",
+        "body_content_type": "text/plain",
+        "body_parse_content": "See attached",
+        "attachments": [
+            {
+                "filename": "plan.docx",
+                "content": office_text,
+                "content_type": "application/octet-stream",
+                "parse_content": office_text,
+                "parse_content_type": "text/plain",
+                "parser_key": "office_text",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            }
+        ],
+    }
+
+    email_obj, attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<office-text@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-office-text",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=list(parsed["attachments"]),
+        fitted_embeddings=[
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+        ],
+    )
+
+    assert attachment_count == 1
+    assert email_obj.attachments[0].parser_key == "office_text"
+    assert [
+        segment.safe_text_content
+        for segment in email_obj.attachments[0].content_segments
+    ] == [office_text]
+
+
 def test_build_email_object_attaches_knowledge_graph_edges():
     parsed = {
         "message_id": "<graph@example.com>",
