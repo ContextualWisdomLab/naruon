@@ -11,7 +11,7 @@ Naruon container images must be reproducible from reviewable, immutable base-ima
 - Published multi-platform images preserve annotations at both the manifest and index levels.
 - Pull-request validation resolves the pinned Ollama manifest and fails closed when either `linux/amd64` or `linux/arm64` is absent.
 - Dependency and image security pins remain governed by executable repository tests; a dependency upgrade must update its hash-locked artifact and the corresponding regression contract together.
-- Backend `cryptography==50.0.0` and `protobuf==7.35.1`, Strix `cryptography==50.0.0` and `protobuf==6.33.6`, frontend source pins `postcss==8.5.24` and `jsdom==^30.0.1`, generated-lock resolutions `postcss==8.5.24` and `jsdom==30.0.1`, and the `brace-expansion==5.0.9` and `undici==8.9.0` overrides are parsed and checked structurally.
+- Backend `cryptography==50.0.0` and `protobuf==7.35.1`, Strix `cryptography==50.0.0` and `protobuf==6.33.6`, frontend source pins `postcss==8.5.26` and `jsdom==^30.0.1`, generated-lock resolutions `postcss==8.5.26` and `jsdom==30.0.1`, and the `brace-expansion==5.0.9`, `js-yaml==4.3.1`, and `undici==8.9.0` overrides are parsed and checked structurally.
 
 ## Change procedure
 
