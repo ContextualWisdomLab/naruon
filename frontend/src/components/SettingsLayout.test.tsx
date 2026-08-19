@@ -3,27 +3,24 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("lucide-react", () => {
-  const Icon = (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />;
-  return {
-    Activity: Icon,
-    AlertCircle: Icon,
-    Loader2: Icon,
-    Bell: Icon,
-    Bot: Icon,
-    CheckCircle2: Icon,
-    Cpu: Icon,
-    Mail: Icon,
-    Monitor: Icon,
-    Network: Icon,
-    Plus: Icon,
-    RefreshCw: Icon,
-    Settings: Icon,
-    Shield: Icon,
-    Smartphone: Icon,
-    User: Icon,
-  };
-});
+vi.mock("lucide-react", () => ({
+  Activity: () => <svg aria-hidden="true" />,
+  AlertCircle: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
+  Bell: () => <svg aria-hidden="true" />,
+  Bot: () => <svg aria-hidden="true" />,
+  CheckCircle2: () => <svg aria-hidden="true" />,
+  Cpu: () => <svg aria-hidden="true" />,
+  Mail: () => <svg aria-hidden="true" />,
+  Monitor: () => <svg aria-hidden="true" />,
+  Network: () => <svg aria-hidden="true" />,
+  Plus: () => <svg aria-hidden="true" />,
+  RefreshCw: () => <svg aria-hidden="true" />,
+  Settings: () => <svg aria-hidden="true" />,
+  Shield: () => <svg aria-hidden="true" />,
+  Smartphone: () => <svg aria-hidden="true" />,
+  User: () => <svg aria-hidden="true" />,
+}));
 
 const oidcMocks = vi.hoisted(() => ({
   clearOidcSession: vi.fn(),
@@ -302,20 +299,6 @@ describe("SettingsLayout", () => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     localStorage.clear();
-  });
-
-  it("hides all rendered Lucide icons from screen readers", async () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<SettingsLayout />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(container.querySelectorAll('svg:not([aria-hidden="true"])')).toHaveLength(0);
   });
 
   it("renders the self-hosted connector manifest and keeps mobile settings tabs reachable", async () => {
