@@ -10,13 +10,15 @@ was uploaded to an external service.
 
 ## Implemented boundary
 
-`services.attachment_parser.office_text` opens only bounded ZIP/XML members for
-DOCX, XLSX, PPTX, and HWPX and emits searchable plain text. It does not execute
-macros, resolve external relationships, evaluate formulas, or render layouts.
+`services.attachment_parser.office_text` opens only selected, bounded ZIP/XML
+members for DOCX, XLSX, PPTX, and HWPX and emits searchable plain text. A
+package larger than 20 MiB is still eligible when its selected XML fits the
+128 MiB parser budget; embedded media is not read. It does not execute macros,
+resolve external relationships, evaluate formulas, or render layouts.
 
 `services.attachment_parser.archive_manifest` emits bounded ZIP member names
-and declared sizes without extracting any member. Invalid and oversized input
-fails closed without retaining raw bytes.
+and declared sizes without extracting any member. Invalid input and archives
+with more than 1,000 members fail closed without retaining raw bytes.
 
 ## Verification
 

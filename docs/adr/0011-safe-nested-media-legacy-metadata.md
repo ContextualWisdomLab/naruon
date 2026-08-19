@@ -28,9 +28,9 @@ format evidence and must remain unsupported.
 3. Naruon registers `legacy_office_metadata` for legacy `.doc`. It validates
    the Microsoft Compound File/OLE signature and emits container metadata only;
    it does not extract document text or execute macros.
-4. These parsers enforce the existing payload limit, return searchable
-   `text/plain` metadata when valid, and fail closed without retaining raw bytes
-   on malformed or oversized input.
+4. These parsers do not impose the PDF sidecar's 20 MiB payload ceiling on
+   metadata-only attachments. They return searchable `text/plain` metadata
+   when valid and fail closed without retaining raw bytes on malformed input.
 5. Extensionless or otherwise unidentified binary attachments remain
    `unsupported_content_type`. A future parser for them requires reliable
    signature evidence and a new ADR or explicit amendment.

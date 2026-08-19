@@ -26,7 +26,8 @@ The extensionless generic binary remains explicit `unsupported_content_type`.
   malformed MP3, legacy DOC OLE signatures, malformed DOC, and the generic
   unsupported boundary.
 - Valid metadata returns `parse_status=parsed` and `parse_content_type=text/plain`;
-  malformed or oversized input returns a named failure without raw bytes.
+  malformed input returns a named failure without raw bytes. These metadata
+  parsers do not inherit the 20 MiB PDF sidecar ceiling.
 - ADR-0011 fixes the non-recursive, non-decoding, and no-external-upload
   boundary.
 

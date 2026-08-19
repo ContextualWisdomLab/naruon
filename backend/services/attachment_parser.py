@@ -20,8 +20,12 @@ _GENERIC_CONTENT_TYPES = {
     "binary/octet-stream",
     "application/x-binary",
 }
-MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
-MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
+# These are parser safety ceilings, not mailbox/upload limits.  In particular,
+# a large Office package may contain media that is irrelevant to text parsing.
+MAX_ATTACHMENT_PARSE_TEXT_CHARS = 64 * 1024 * 1024
+MAX_OFFICE_XML_PARSE_BYTES = 128 * 1024 * 1024
+MAX_DEFERRED_PDF_SOURCE_BYTES = 20 * 1024 * 1024
+MAX_IMAGE_METADATA_SCAN_BYTES = 1 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -235,7 +239,7 @@ def parse_email_attachment(
         # ``content`` with the recognized text on success. Without this the
         # source bytes were discarded and recognition was impossible.
         deferred_payload = _coerce_deferred_payload_bytes(raw_content)
-        if len(deferred_payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
+        if len(deferred_payload) > MAX_DEFERRED_PDF_SOURCE_BYTES:
             return AttachmentParseResult(
                 filename=safe_filename,
                 content="",
@@ -272,18 +276,6 @@ def parse_email_attachment(
 
     if parse_content_type in _IMAGE_CONTENT_TYPES:
         image_payload = _coerce_deferred_payload_bytes(raw_content)
-        if len(image_payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-            return AttachmentParseResult(
-                filename=safe_filename,
-                content="",
-                content_type=normalized_content_type,
-                parse_content="",
-                parse_content_type=parse_content_type,
-                parser_key="image_metadata",
-                parse_status="parse_size_limit_exceeded",
-                parse_error_code="parse_size_limit_exceeded",
-            )
-
         metadata = _parse_image_metadata(image_payload)
         if metadata is None:
             return AttachmentParseResult(
@@ -474,7 +466,7 @@ def parse_email_attachment(
 
     parser_key = _parser_key_for(parse_content_type, "parsed")
     parse_content = _coerce_text(raw_content).strip()
-    if len(parse_content) > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
+    if len(parse_content) > MAX_ATTACHMENT_PARSE_TEXT_CHARS:
         return AttachmentParseResult(
             filename=safe_filename,
             content="",
@@ -560,8 +552,8 @@ def decode_deferred_attachment_payload(content: str | None) -> bytes:
         payload = base64.b64decode((content or "").encode("ascii"), validate=True)
     except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
         raise ValueError("Pending attachment payload is not valid base64") from exc
-    if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-        raise ValueError("Pending attachment PDF exceeds the parse size limit")
+    if len(payload) > MAX_DEFERRED_PDF_SOURCE_BYTES:
+        raise ValueError("Pending attachment PDF exceeds the deferred parse size limit")
     if not payload.startswith(b"%PDF-"):
         raise ValueError("Pending attachment payload is not a PDF")
     return payload
@@ -608,7 +600,7 @@ def _parse_image_metadata(payload: bytes) -> str | None:
     if payload.startswith(b"\x89PNG"):
         dimensions = _png_dimensions(payload)
         format_name = "png"
-        animated = b"acTL" in payload[:MAX_ATTACHMENT_PARSE_SOURCE_BYTES]
+        animated = b"acTL" in payload[:MAX_IMAGE_METADATA_SCAN_BYTES]
     elif payload.startswith(b"\xff\xd8"):
         dimensions = _jpeg_dimensions(payload)
         format_name = "jpeg"
@@ -616,7 +608,7 @@ def _parse_image_metadata(payload: bytes) -> str | None:
     elif payload[:6] in {b"GIF87a", b"GIF89a"}:
         dimensions = _gif_dimensions(payload)
         format_name = "gif"
-        animated = b"NETSCAPE2.0" in payload[:MAX_ATTACHMENT_PARSE_SOURCE_BYTES]
+        animated = b"NETSCAPE2.0" in payload[:MAX_IMAGE_METADATA_SCAN_BYTES]
     elif payload.startswith(b"BM"):
         dimensions = _bmp_dimensions(payload)
         format_name = "bmp"
@@ -700,8 +692,6 @@ def _parse_office_text(
     payload: bytes, content_type: str
 ) -> tuple[str | None, str | None]:
     """Extract bounded text from OOXML/HWPX XML parts without executing macros."""
-    if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-        return None, "parse_size_limit_exceeded"
     try:
         with ZipFile(BytesIO(payload)) as archive:
             infos = [info for info in archive.infolist() if not info.is_dir()]
@@ -720,9 +710,9 @@ def _parse_office_text(
             extracted_chars = 0
             for info in selected_infos:
                 declared_size += info.file_size
-                if declared_size > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
+                if declared_size > MAX_OFFICE_XML_PARSE_BYTES:
                     return None, "parse_size_limit_exceeded"
-                remaining_bytes = MAX_ATTACHMENT_PARSE_SOURCE_CHARS - bytes_read
+                remaining_bytes = MAX_OFFICE_XML_PARSE_BYTES - bytes_read
                 with archive.open(info) as source:
                     xml_payload = source.read(remaining_bytes + 1)
                 bytes_read += len(xml_payload)
@@ -730,13 +720,13 @@ def _parse_office_text(
                     return None, "parse_size_limit_exceeded"
                 parts = _xml_text_parts(xml_payload, content_type)
                 extracted_chars += sum(len(part) for part in parts)
-                if extracted_chars > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
+                if extracted_chars > MAX_ATTACHMENT_PARSE_TEXT_CHARS:
                     return None, "parse_size_limit_exceeded"
                 text_parts.extend(parts)
             format_name = _office_format_name(content_type)
             text = " ".join(part for part in text_parts if part)
-            if len(text) > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
-                text = text[:MAX_ATTACHMENT_PARSE_SOURCE_CHARS]
+            if len(text) > MAX_ATTACHMENT_PARSE_TEXT_CHARS:
+                text = text[:MAX_ATTACHMENT_PARSE_TEXT_CHARS]
             summary = f"Office metadata: format={format_name}; members={len(infos)}"
             return f"{summary}; text={text}" if text else summary, None
     except (BadZipFile, OSError, ValueError, ElementTree.ParseError):
@@ -796,8 +786,6 @@ def _office_format_name(content_type: str) -> str:
 
 def _parse_archive_manifest(payload: bytes) -> tuple[str | None, str | None]:
     """Index ZIP member names and sizes without extracting untrusted content."""
-    if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-        return None, "parse_size_limit_exceeded"
     try:
         with ZipFile(BytesIO(payload)) as archive:
             infos = [info for info in archive.infolist() if not info.is_dir()]
@@ -823,8 +811,6 @@ def _parse_archive_manifest(payload: bytes) -> tuple[str | None, str | None]:
 
 
 def _parse_nested_email_metadata(payload: bytes) -> tuple[str | None, str | None]:
-    if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-        return None, "parse_size_limit_exceeded"
     try:
         message = message_from_bytes(payload, policy=policy.default)
         subject = " ".join(_display_text(str(message.get("Subject", ""))).split())[:240]
@@ -843,8 +829,6 @@ def _parse_nested_email_metadata(payload: bytes) -> tuple[str | None, str | None
 
 
 def _parse_audio_metadata(payload: bytes) -> tuple[str | None, str | None]:
-    if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-        return None, "parse_size_limit_exceeded"
     has_id3 = payload.startswith(b"ID3")
     if has_id3:
         if len(payload) < 10 or any(byte & 0x80 for byte in payload[6:10]):
@@ -868,8 +852,6 @@ def _parse_audio_metadata(payload: bytes) -> tuple[str | None, str | None]:
 
 
 def _parse_legacy_office_metadata(payload: bytes) -> tuple[str | None, str | None]:
-    if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-        return None, "parse_size_limit_exceeded"
     if not payload.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
         return None, "legacy_office_metadata_parse_failed"
     return (

@@ -2,12 +2,12 @@ import base64
 from io import BytesIO
 import struct
 from zipfile import ZipFile
+from zipfile import ZIP_STORED
 
 import pytest
 
 from services.attachment_parser import (
-    MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
-    MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
+    MAX_DEFERRED_PDF_SOURCE_BYTES,
     decode_deferred_attachment_payload,
     get_attachment_parser_manifest,
     parse_email_attachment,
@@ -241,9 +241,7 @@ def test_generic_office_mime_uses_filename_extension_for_text_parser():
 
 
 def test_office_text_applies_one_aggregate_xml_budget(monkeypatch):
-    monkeypatch.setattr(
-        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_CHARS", 20
-    )
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_PARSE_BYTES", 20)
     result = parse_email_attachment(
         filename="combined.docx",
         content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -256,6 +254,29 @@ def test_office_text_applies_one_aggregate_xml_budget(monkeypatch):
     assert result.parse_status == "parse_size_limit_exceeded"
     assert result.parse_error_code == "parse_size_limit_exceeded"
     assert result.content == ""
+
+
+def test_large_office_package_parses_selected_xml_without_a_package_size_cap():
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            "<w:document xmlns:w='urn:w'><w:t>Plan</w:t></w:document>",
+        )
+        archive.writestr(
+            "word/media/large.bin",
+            b"x" * (20 * 1024 * 1024 + 1),
+            compress_type=ZIP_STORED,
+        )
+
+    result = parse_email_attachment(
+        filename="large.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=payload.getvalue(),
+    )
+
+    assert result.parse_status == "parsed"
+    assert "text=Plan" in result.content
 
 
 @pytest.mark.parametrize("flags", [0x01, 0x40])
@@ -504,11 +525,14 @@ def test_structured_non_pdf_attachment_media_types_are_parseable():
         assert result.parse_content == raw_content
 
 
-def test_oversized_text_attachment_is_metadata_only_without_raw_content():
+def test_oversized_text_attachment_is_metadata_only_without_raw_content(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_TEXT_CHARS", 20
+    )
     result = parse_email_attachment(
         filename="huge.txt",
         content_type="text/plain",
-        raw_content="A" * (MAX_ATTACHMENT_PARSE_SOURCE_CHARS + 1),
+        raw_content="A" * 21,
     )
 
     assert result.content == ""
@@ -585,7 +609,7 @@ def test_oversized_pdf_payload_is_not_retained():
     result = parse_email_attachment(
         filename="huge.pdf",
         content_type="application/pdf",
-        raw_content=b"%PDF-" + b"A" * MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
+        raw_content=b"%PDF-" + b"A" * MAX_DEFERRED_PDF_SOURCE_BYTES,
     )
 
     assert result.content == ""
@@ -625,9 +649,7 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
     with pytest.raises(ValueError, match="not a PDF"):
         decode_deferred_attachment_payload(non_pdf)
 
-    monkeypatch.setattr(
-        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 5
-    )
+    monkeypatch.setattr("services.attachment_parser.MAX_DEFERRED_PDF_SOURCE_BYTES", 5)
     oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
     with pytest.raises(ValueError, match="size limit"):
         decode_deferred_attachment_payload(oversized)

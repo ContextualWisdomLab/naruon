@@ -5,17 +5,18 @@
   extensionless binaries remain explicit `unsupported_content_type` under
   ADR-0011.
 - Email attachment ingestion now parses bounded text from DOCX, XLSX, PPTX, and
-  HWPX XML parts and indexes ZIP member manifests without extraction. Selected
-  Office XML parts share a 1,000,000-character aggregate budget, and encrypted
-  ZIP entries fail closed with deterministic evidence. Malformed, oversized,
-  or unsupported content fails closed without retaining raw bytes; the
+  HWPX XML parts and indexes ZIP member manifests without extraction. Office
+  packages larger than 20 MiB remain eligible when their selected XML fits the
+  128 MiB parser budget; embedded media is not read. Encrypted ZIP entries fail
+  closed with deterministic evidence. Malformed, safety-budget-exceeding, or
+  unsupported content fails closed without retaining raw bytes; the
   no-execution boundary is fixed in ADR-0010 and
   `docs/doctoring/bounded-office-archive-text-parsing.md`.
 - Email attachment ingestion now parses PNG, JPEG, GIF, and BMP headers into
   searchable format/dimension/animation metadata through the `image_metadata`
-  parser. Invalid and oversized payloads fail closed without retaining raw
-  bytes; OCR and object detection remain explicitly deferred to a local vision
-  sidecar. The boundary and local confidential-data evidence are recorded in
+  parser. Invalid payloads fail closed without retaining raw bytes; OCR and
+  object detection remain explicitly deferred to a local vision sidecar. The
+  boundary and local confidential-data evidence are recorded in
   ADR-0009 and `docs/doctoring/image-attachment-metadata-parser.md`.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 

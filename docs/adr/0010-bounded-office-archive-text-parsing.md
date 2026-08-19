@@ -23,16 +23,19 @@ or archive runtime would expand the execution and data-retention boundary.
 2. Naruon registers an `archive_manifest` parser for ZIP attachments. It reads
    member names and declared uncompressed sizes only; it never extracts or
    executes archive members.
-3. Both parsers use the Python standard library, enforce the existing payload
-   limit and a 1,000-member limit, and reject malformed XML/ZIP data without
-   retaining raw bytes. Office extraction applies one 1,000,000-character
-   aggregate budget to selected-part declared sizes, bytes read, and extracted
-   text, and returns `parse_size_limit_exceeded` before reading a member that
-   would exceed the remaining budget. Non-directory ZIP entries with
-   traditional or strong-encryption flag bits (`0x01` or `0x40`) return the
-   deterministic `encrypted_archive_entry` error. Valid output is
+3. Both parsers use the Python standard library, enforce a 1,000-member limit,
+   and reject malformed XML/ZIP data without retaining raw bytes. A large
+   Office package is not rejected merely because embedded media makes the
+   package exceed 20 MiB. Office text extraction applies a 128 MiB aggregate
+   budget to selected-part declared sizes and bytes read, plus a 64-million
+   character extracted-text ceiling; it returns `parse_size_limit_exceeded`
+   only when selected XML itself exceeds that safety budget. Non-directory ZIP
+   entries with traditional or strong-encryption flag bits (`0x01` or `0x40`)
+   return the deterministic `encrypted_archive_entry` error. Valid output is
    `parse_status=parsed` and `parse_content_type=text/plain`, so the existing
-   embedding and content-graph path indexes it.
+   embedding and content-graph path indexes it. The separate 20 MiB source
+   ceiling applies only to PDFs retained for the NewsDOM sidecar, whose upload
+   contract is independent of Office/ZIP parsing.
 4. OOXML macro parts, relationships, arbitrary embedded objects, external
    links, encrypted packages, and unsupported XML parts are not interpreted.
    OCR, layout reconstruction, spreadsheet formula evaluation, and full office
@@ -64,8 +67,10 @@ document.
 
 - Common Office attachments contribute searchable text and ZIP attachments
   contribute searchable member manifests through the existing graph path.
-- Malformed, oversized, encrypted, or otherwise unselected content remains
-  explicit as a parser failure or a bounded metadata-only result.
+- Malformed, encrypted, or otherwise unselected content remains explicit as a
+  parser failure or a bounded metadata-only result. Extremely large selected
+  XML remains an explicit safety failure rather than silently truncating the
+  searchable source.
 - Existing unsupported rows are not silently rewritten; a future replay job
   must be separately authorized if operators want to backfill them.
 

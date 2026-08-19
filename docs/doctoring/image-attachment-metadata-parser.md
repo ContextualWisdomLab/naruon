@@ -15,8 +15,9 @@ content to an external service.
 `services.attachment_parser.image_metadata` reads bounded image headers with
 the Python standard library and emits only `format`, `width`, `height`, and
 `animated` metadata as searchable plain text. It does not decode pixels, retain
-raw bytes, or perform OCR/object detection. Invalid and oversized payloads
-remain visible as explicit failure states.
+raw bytes, or perform OCR/object detection. Invalid payloads remain visible as
+explicit failure states; large images remain eligible because only a bounded
+header prefix is inspected.
 
 ## Verification
 

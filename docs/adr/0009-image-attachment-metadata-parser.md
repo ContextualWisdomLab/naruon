@@ -24,9 +24,10 @@ the content graph.
 3. Valid image metadata is stored as `parse_status=parsed` with
    `parse_content_type=text/plain`, so the existing embedding and content-graph
    paths can index the metadata without a new table or migration.
-4. Invalid or oversized image payloads fail closed as
-   `image_metadata_parse_failed` or `parse_size_limit_exceeded`; raw bytes are
-   not retained in those paths.
+4. Invalid image payloads fail closed as `image_metadata_parse_failed`; raw
+   bytes are not retained in that path. Large image payloads are not rejected
+   solely for size because the parser inspects only bounded headers and does
+   not decode pixels.
 5. OCR, captioning, and object detection remain a separate deferred capability.
    They may be added only behind an explicitly configured local vision sidecar
    with source provenance, bounded payloads, and a non-success state while the
