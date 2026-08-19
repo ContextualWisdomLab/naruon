@@ -25,9 +25,14 @@ or archive runtime would expand the execution and data-retention boundary.
    executes archive members.
 3. Both parsers use the Python standard library, enforce the existing payload
    limit and a 1,000-member limit, and reject malformed XML/ZIP data without
-   retaining raw bytes. Valid output is `parse_status=parsed` and
-   `parse_content_type=text/plain`, so the existing embedding and
-   content-graph path indexes it.
+   retaining raw bytes. Office extraction applies one 1,000,000-character
+   aggregate budget to selected-part declared sizes, bytes read, and extracted
+   text, and returns `parse_size_limit_exceeded` before reading a member that
+   would exceed the remaining budget. Non-directory ZIP entries with
+   traditional or strong-encryption flag bits (`0x01` or `0x40`) return the
+   deterministic `encrypted_archive_entry` error. Valid output is
+   `parse_status=parsed` and `parse_content_type=text/plain`, so the existing
+   embedding and content-graph path indexes it.
 4. OOXML macro parts, relationships, arbitrary embedded objects, external
    links, encrypted packages, and unsupported XML parts are not interpreted.
    OCR, layout reconstruction, spreadsheet formula evaluation, and full office
@@ -71,3 +76,13 @@ https://ecma-international.org/publications-and-standards/standards/ecma-376/
 
 PKWARE. (n.d.). *.ZIP application note (APPNOTE).*
 https://support.pkware.com/pkzip/appnote
+
+Müller, J., Ising, F., Mainka, C., Mladenov, V., Schinzel, S., & Schwenk, J.
+(2020). Office document security and privacy. *Proceedings of the 10th USENIX
+Workshop on Offensive Technologies (WOOT '20).* https://www.usenix.org/conference/woot20/presentation/muller
+
+This study treats OOXML and ODF as ZIP/XML containers and documents denial of
+service, encryption, active-content, and data-disclosure risks in legitimate
+office features. It supports this ADR's narrow selected-part parser, aggregate
+decompression budget, encrypted-entry rejection, and non-execution boundary;
+it does not justify a malware-detection claim for Naruon's metadata parser.

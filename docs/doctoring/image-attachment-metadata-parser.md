@@ -2,11 +2,13 @@
 
 ## Evidence
 
-The private local audit of the 2026-07-31 Inbox backup parsed 2,539 EML
-messages without parser exceptions. It found 2,056 attachments, including
-1,438 PNG, 162 JPEG, 5 GIF, and 1 BMP attachments classified as unsupported.
-The audit read the local archive only; no message or attachment content was
-uploaded to an external service.
+The 2026-07-31 pre-parser audit of the private local Inbox-backup snapshot
+parsed 2,539 EML messages without parser exceptions. It found 2,056
+attachments, including 1,438 PNG, 162 JPEG, 5 GIF, and 1 BMP attachments
+classified as unsupported. A 2026-08-19 follow-up re-read the same immutable
+local snapshot, so the population counts are intentionally identical while the
+parser classifications changed. Neither audit uploaded message or attachment
+content to an external service.
 
 ## Implemented boundary
 

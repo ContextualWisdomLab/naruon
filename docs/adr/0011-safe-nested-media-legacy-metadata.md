@@ -22,8 +22,9 @@ format evidence and must remain unsupported.
    one bounded message and emits only sanitized subject, sender, and attachment
    count. It does not recursively import or execute the nested message.
 2. Naruon registers `audio_metadata` for MP3. It validates a bounded ID3v2
-   header or MPEG frame sync and emits format, byte count, and ID3 presence. It
-   does not decode audio or persist tag frames in this slice.
+   header or an MPEG frame sync whose layer bits identify Layer III
+   (`payload[1] & 0x06 == 0x02`) and emits format, byte count, and ID3
+   presence. It does not decode audio or persist tag frames in this slice.
 3. Naruon registers `legacy_office_metadata` for legacy `.doc`. It validates
    the Microsoft Compound File/OLE signature and emits container metadata only;
    it does not extract document text or execute macros.
@@ -66,9 +67,21 @@ the parser remains explicitly unsupported instead.
 Internet Engineering Task Force. (2008). *Internet message format (RFC 5322).*
 https://www.rfc-editor.org/rfc/rfc5322
 
+RFC 5322 defines the Internet message header/body syntax that bounds this
+parser's one-message header inspection and keeps nested mail from becoming a
+recursive import operation.
+
 Nilsson, M. (2000). *ID3 tag version 2.4.0—Main structure.* ID3.org.
 https://id3.org/id3v2.4.0-structure
+
+The ID3 specification defines the bounded tag header and synchsafe size used
+for the metadata-only MP3 check; it does not authorize decoding audio frames
+or retaining tag text here.
 
 Microsoft. (2023). *[MS-CFB]: Compound File Binary File Format.* Microsoft
 Open Specifications.
 https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b
+
+MS-CFB defines the compound-file signature and container structure used for
+the legacy `.doc` recognition boundary; this parser records only that
+container evidence and does not traverse streams or execute macros.

@@ -11,8 +11,9 @@ attachment content.
 
 ## Implemented boundary
 
-`services.attachment_parser.nested_email` records sanitized headers and an
-attachment count for one bounded nested message; it does not recurse.
+`parser_key="nested_email"` (implementation:
+`_parse_nested_email_metadata`) records sanitized headers and an attachment
+count for one bounded nested message; it does not recurse.
 `audio_metadata` validates only bounded MP3 ID3/frame signatures. The
 `legacy_office_metadata` parser validates only the OLE/Compound File signature
 for `.doc`. None of these paths decodes or executes untrusted content.
@@ -34,9 +35,18 @@ The extensionless generic binary remains explicit `unsupported_content_type`.
 Internet Engineering Task Force. (2008). *Internet message format (RFC 5322).*
 https://www.rfc-editor.org/rfc/rfc5322
 
+RFC 5322 defines the bounded header/body syntax used for one nested-message
+inspection without recursive import.
+
 Nilsson, M. (2000). *ID3 tag version 2.4.0—Main structure.* ID3.org.
 https://id3.org/id3v2.4.0-structure
+
+The ID3 specification supports the bounded ID3v2 header and synchsafe-size
+check; this record does not decode audio or persist tag frames.
 
 Microsoft. (2023). *[MS-CFB]: Compound File Binary File Format.* Microsoft
 Open Specifications.
 https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b
+
+MS-CFB supports signature-only legacy `.doc` recognition; no compound-file
+streams or macros are traversed.

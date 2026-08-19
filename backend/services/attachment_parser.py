@@ -597,6 +597,7 @@ _NESTED_EMAIL_CONTENT_TYPES = frozenset({"message/rfc822"})
 _AUDIO_CONTENT_TYPES = frozenset({"audio/mpeg", "audio/mp3"})
 _LEGACY_OFFICE_CONTENT_TYPES = frozenset({"application/msword"})
 MAX_ATTACHMENT_ARCHIVE_MEMBERS = 1_000
+_ZIP_ENCRYPTED_FLAG_MASK = 0x41
 _JPEG_SOF_MARKERS = frozenset(
     {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
 )
@@ -706,20 +707,32 @@ def _parse_office_text(
             infos = [info for info in archive.infolist() if not info.is_dir()]
             if len(infos) > MAX_ATTACHMENT_ARCHIVE_MEMBERS:
                 return None, "parse_size_limit_exceeded"
+            if any(info.flag_bits & _ZIP_ENCRYPTED_FLAG_MASK for info in infos):
+                return None, "encrypted_archive_entry"
             selected_infos = [
                 info
                 for info in infos
                 if _is_office_text_part(info.filename, content_type)
             ]
             text_parts: list[str] = []
+            declared_size = 0
+            bytes_read = 0
+            extracted_chars = 0
             for info in selected_infos:
-                if info.file_size > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
+                declared_size += info.file_size
+                if declared_size > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
                     return None, "parse_size_limit_exceeded"
+                remaining_bytes = MAX_ATTACHMENT_PARSE_SOURCE_CHARS - bytes_read
                 with archive.open(info) as source:
-                    xml_payload = source.read(MAX_ATTACHMENT_PARSE_SOURCE_CHARS + 1)
-                if len(xml_payload) > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
+                    xml_payload = source.read(remaining_bytes + 1)
+                bytes_read += len(xml_payload)
+                if len(xml_payload) > remaining_bytes:
                     return None, "parse_size_limit_exceeded"
-                text_parts.extend(_xml_text_parts(xml_payload, content_type))
+                parts = _xml_text_parts(xml_payload, content_type)
+                extracted_chars += sum(len(part) for part in parts)
+                if extracted_chars > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
+                    return None, "parse_size_limit_exceeded"
+                text_parts.extend(parts)
             format_name = _office_format_name(content_type)
             text = " ".join(part for part in text_parts if part)
             if len(text) > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
@@ -790,6 +803,8 @@ def _parse_archive_manifest(payload: bytes) -> tuple[str | None, str | None]:
             infos = [info for info in archive.infolist() if not info.is_dir()]
             if len(infos) > MAX_ATTACHMENT_ARCHIVE_MEMBERS:
                 return None, "parse_size_limit_exceeded"
+            if any(info.flag_bits & _ZIP_ENCRYPTED_FLAG_MASK for info in infos):
+                return None, "encrypted_archive_entry"
             total_size = sum(info.file_size for info in infos)
             member_names = []
             for info in infos[:100]:
@@ -843,7 +858,7 @@ def _parse_audio_metadata(payload: bytes) -> tuple[str | None, str | None]:
         len(payload) >= 2
         and payload[0] == 0xFF
         and payload[1] & 0xE0 == 0xE0
-        and payload[1] & 0x06
+        and payload[1] & 0x06 == 0x02
     ):
         return None, "audio_metadata_parse_failed"
     return (

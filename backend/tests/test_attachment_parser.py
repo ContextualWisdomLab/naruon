@@ -93,6 +93,16 @@ def _zip_fixture(*members: tuple[str, str]) -> bytes:
     return payload.getvalue()
 
 
+def _zip_fixture_with_entry_flags(flags: int) -> bytes:
+    payload = bytearray(_zip_fixture(("word/document.xml", "<w:t>Plan</w:t>")))
+    local_header = payload.find(b"PK\x03\x04")
+    central_header = payload.find(b"PK\x01\x02")
+    assert local_header >= 0 and central_header >= 0
+    payload[local_header + 6 : local_header + 8] = flags.to_bytes(2, "little")
+    payload[central_header + 8 : central_header + 10] = flags.to_bytes(2, "little")
+    return bytes(payload)
+
+
 def _png_fixture(width: int = 320, height: int = 200) -> bytes:
     return (
         b"\x89PNG\r\n\x1a\n"
@@ -230,6 +240,51 @@ def test_generic_office_mime_uses_filename_extension_for_text_parser():
     assert "text=Plan" in result.content
 
 
+def test_office_text_applies_one_aggregate_xml_budget(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_CHARS", 20
+    )
+    result = parse_email_attachment(
+        filename="combined.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(
+            ("word/document.xml", "<t>first</t>"),
+            ("word/header.xml", "<t>second</t>"),
+        ),
+    )
+
+    assert result.parse_status == "parse_size_limit_exceeded"
+    assert result.parse_error_code == "parse_size_limit_exceeded"
+    assert result.content == ""
+
+
+@pytest.mark.parametrize("flags", [0x01, 0x40])
+@pytest.mark.parametrize(
+    ("filename", "content_type", "parser_key"),
+    [
+        (
+            "encrypted.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "office_text",
+        ),
+        ("encrypted.zip", "application/zip", "archive_manifest"),
+    ],
+)
+def test_encrypted_zip_entries_fail_closed_for_office_and_archive(
+    flags, filename, content_type, parser_key
+):
+    result = parse_email_attachment(
+        filename=filename,
+        content_type=content_type,
+        raw_content=_zip_fixture_with_entry_flags(flags),
+    )
+
+    assert result.parser_key == parser_key
+    assert result.parse_status.endswith("_parse_failed")
+    assert result.parse_error_code == "encrypted_archive_entry"
+    assert result.content == ""
+
+
 def test_invalid_office_attachment_fails_closed_without_binary_content():
     result = parse_email_attachment(
         filename="broken.docx",
@@ -314,6 +369,18 @@ def test_invalid_mp3_attachment_fails_closed_without_binary_content():
 
     assert result.content == ""
     assert result.parser_key == "audio_metadata"
+    assert result.parse_status == "audio_metadata_parse_failed"
+    assert result.parse_error_code == "audio_metadata_parse_failed"
+
+
+@pytest.mark.parametrize("layer_bits", [0x00, 0x04, 0x06])
+def test_mp3_frame_metadata_rejects_non_layer_iii_headers(layer_bits):
+    result = parse_email_attachment(
+        filename="not-layer-iii.mp3",
+        content_type="audio/mpeg",
+        raw_content=bytes((0xFF, 0xE0 | layer_bits)),
+    )
+
     assert result.parse_status == "audio_metadata_parse_failed"
     assert result.parse_error_code == "audio_metadata_parse_failed"
 
