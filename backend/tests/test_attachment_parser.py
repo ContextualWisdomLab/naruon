@@ -163,6 +163,18 @@ def test_generic_image_mime_uses_filename_extension_for_metadata_parser():
     assert "height=34px" in result.content
 
 
+def test_large_image_attachment_is_not_rejected_by_metadata_scan_ceiling():
+    result = parse_email_attachment(
+        filename="large.png",
+        content_type="image/png",
+        raw_content=_png_fixture() + b"x" * (20 * 1024 * 1024 + 1),
+    )
+
+    assert result.parse_status == "parsed"
+    assert "format=png" in result.content
+    assert "width=320px" in result.content
+
+
 @pytest.mark.parametrize(
     ("filename", "content_type", "member", "text", "format_name"),
     [

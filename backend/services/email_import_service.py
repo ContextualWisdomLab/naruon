@@ -52,7 +52,10 @@ from services.threading_service import (
 
 EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 MAX_IMPORT_UPLOADS = 10
-MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
+# Transport safety ceiling only; attachment parsers do not use this as a raw
+# payload limit.  This covers the largest observed local EML while bounding
+# the bytes held by the import request before it is moved to a temp directory.
+MAX_IMPORT_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 8

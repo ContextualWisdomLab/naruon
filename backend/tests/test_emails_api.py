@@ -23,6 +23,7 @@ import datetime
 from unittest.mock import AsyncMock, patch
 from services.embedding import STORAGE_EMBEDDING_DIMENSION
 from services.email_service import generate_email_fingerprint
+from services.email_import_service import EmailImportResult
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
 TEST_SESSION_HMAC_SECRET = os.environ["AUTH_SESSION_HMAC_SECRET"]
@@ -935,6 +936,44 @@ async def test_import_email_files_persists_signed_scoped_eml_upload(
     assert added_email.body == "Body text"
     assert added_email.fingerprint
     assert len(added_email.embedding) == STORAGE_EMBEDDING_DIMENSION
+
+
+@pytest.mark.asyncio
+async def test_import_email_files_accepts_source_over_20_mib(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from db.session import get_db
+
+    session = ImportRecordingSession([])
+    captured_uploads = []
+
+    async def capture_import(*args, **kwargs):
+        captured_uploads.extend(kwargs["uploads"])
+        return EmailImportResult()
+
+    previous_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: session
+    monkeypatch.setattr(
+        emails_api, "resolve_runtime_llm_provider", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(emails_api, "import_email_uploads", capture_import)
+    source = b"From: a@example.com\n\n" + b"x" * (20 * 1024 * 1024 + 1)
+    try:
+        response = await client.post(
+            "/api/emails/import-files",
+            files=[("files", ("large.eml", source, "message/rfc822"))],
+            headers={"X-Organization-Id": "org-acme"},
+        )
+    finally:
+        if previous_db_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_db_override
+
+    assert response.status_code == 200
+    assert len(captured_uploads) == 1
+    assert len(captured_uploads[0].content) == len(source)
 
 
 @pytest.mark.asyncio
@@ -2126,6 +2165,7 @@ def test_email_owner_filters():
         str(filters2[1].compile(compile_kwargs={"literal_binds": True}))
         == "email_records.organization_id IS NULL"
     )
+
 
 def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
     """
