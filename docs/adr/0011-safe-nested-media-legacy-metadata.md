@@ -37,10 +37,10 @@ treatment is fixed separately by ADR-0012.
    sidecar availability are handled by the separate deferred recognition
    workflow, not by these metadata parser states.
 5. Extensionless or otherwise unidentified binary attachments have no
-   type-specific parser. Generic MIME attachments may receive only the
-   MIME-and-byte-count metadata defined by ADR-0012; format-specific parsing
-   still requires reliable signature evidence and a new ADR or explicit
-   amendment.
+   type-specific parser. Generic MIME attachments without a recognized format
+   signature may receive only the MIME-and-byte-count metadata defined by
+   ADR-0012; format-specific parsing still requires reliable signature evidence
+   and a new ADR or explicit amendment.
 
 ## Alternatives rejected
 

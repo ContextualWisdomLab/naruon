@@ -23,9 +23,9 @@ metadata result is retained.
 for `.doc`. None of these paths decodes or executes untrusted content.
 
 `parser_key="binary_metadata"` handles generic MIME attachments with only
-`media_type` and `bytes` metadata. It does not guess a format, decode bytes,
-or retain raw payload content. A non-generic unidentified MIME remains
-explicit `unsupported_content_type`.
+`media_type` and `bytes` metadata when no recognized format signature exists. It
+does not guess a format, decode bytes, or retain raw payload content. A
+non-generic unidentified MIME remains explicit `unsupported_content_type`.
 
 ## Verification
 

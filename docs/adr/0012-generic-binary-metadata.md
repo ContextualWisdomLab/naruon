@@ -20,14 +20,16 @@ parsers retain their own bounded format-specific contracts.
 
 Naruon registers `binary_metadata` for generic binary MIME types and returns
 only a `text/plain` summary containing the normalized MIME type and exact byte
-count. The parser accepts payloads larger than 20 MiB and does not use the
-image animation scan window or any other 1 MiB ceiling. It does not guess a
-format from weak evidence, decode bytes, hash bytes, upload bytes, or retain
-the payload in the parse result.
+count. The parser accepts payloads larger than 20 MiB within the signed email
+import's 64 MiB transport ceiling and does not use the image animation scan
+window or any other 1 MiB ceiling. It does not guess a format from weak
+evidence, decode bytes, hash bytes, upload bytes, or retain the payload in the
+parse result.
 
-Generic MIME values are metadata-parseable, not format-parseable. A future
-format-specific parser requires reliable signature evidence, focused tests,
-and a new ADR or explicit amendment.
+A generic MIME value alone is not format evidence. Generic MIME values without
+a recognized format signature are metadata-parseable, not format-parseable. A
+future format-specific parser requires reliable signature evidence, focused
+tests, and a new ADR or explicit amendment.
 
 ## Alternatives rejected
 

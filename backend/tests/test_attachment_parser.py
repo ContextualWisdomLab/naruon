@@ -922,7 +922,10 @@ def test_office_and_archive_safety_edges_are_explicit(monkeypatch):
         filename="utf16-doctype.docx",
         content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         raw_content=_zip_fixture(
-            ("word/document.xml", "<!DOCTYPE x><w:t>x</w:t>".encode("utf-16"))
+            (
+                "word/document.xml",
+                "<!DOCTYPE t><t xmlns='urn:test'>x</t>".encode("utf-16"),
+            )
         ),
     )
     assert utf16_doctype_result.parse_status == "office_text_parse_failed"
