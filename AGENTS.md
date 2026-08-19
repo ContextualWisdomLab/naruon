@@ -452,6 +452,13 @@ in this repo.
   topic components, or label evidence by a bare document, model, topic, rank,
   label, or display value.
 - When reviews find public/private identifier leaks, stale API fixture shapes, or recurring bug patterns, update tests, frontend mocks, E2E mocks, README examples, architecture docs, and explicitly record the anti-pattern in `AGENTS.md` so the same bug pattern does not reappear in copied examples.
+- Memoized id-to-record Maps must be first-wins (`if (!map.has(key)) map.set(...)`).
+  `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
+  desynchronizes first-wins label maps from the selected node or edge when
+  ids collide. Keep a rendered selection test that repeats an id and asserts
+  the first instance is the one opened. Do not treat a source-substring scan
+  as the only selection-path contract; fire the vis-network `selectNode` /
+  `selectEdge` callbacks with mixed numeric and string ids.
 - When reviews find missing browser security headers or tabnabbing hardening,
   update both backend header tests and frontend link tests. Global backend
   responses must include `Referrer-Policy`, and `target="_blank"` links must
@@ -516,6 +523,10 @@ in this repo.
 - Calendar writeback UI must fail closed while the signed source registry is
   loading or errored; do not emit intent POSTs without a confirmed opaque
   `target_source_id`, and keep tests covering the loading/error boundary.
+- Calendar coordination must not present canned ICS documents or fixed
+  conflict outcomes as production evidence. Use selectable sources from the
+  signed `/api/calendar/writeback-sources` registry, or omit the evaluate call
+  until source-backed VEVENT evidence exists. Known `.ics` pairs stay in tests.
 - Calendar and WebDAV workspaces must expose the current opaque writeback source
   as a deliberate user selection with capability and ETag/If-Match state.
   Automatic first-source fallback may initialize the control, but intent POSTs
