@@ -11,6 +11,7 @@ from services.exceptions import EmailParseError, EmbeddingGenerationError
 from services.email_import_service import (
     EMBEDDING_DIMENSION,
     EmailImportEmbeddingProvider,
+    _extract_and_generate_embeddings,
     _generate_import_embeddings,
 )
 
@@ -68,6 +69,34 @@ def test_canonical_email_import_upload_filename(input_name, expected):
         email_import_module.canonical_email_import_upload_filename(input_name)
         == expected
     )
+
+
+@pytest.mark.asyncio
+async def test_extract_embeddings_does_not_embed_pending_attachment_payload():
+    parsed = {
+        "body": "Email body",
+        "attachments": [
+            {
+                "content": "cHJpdmF0ZS1wZGYtYnl0ZXM=",
+                "parse_content": "",
+                "parse_status": "pdf_dom_recognition_pending",
+            }
+        ],
+    }
+
+    with patch(
+        "services.email_import_service._generate_import_embeddings",
+        new_callable=AsyncMock,
+        return_value=[[], []],
+    ) as mock_generate:
+        attachment_payloads, embeddings = await _extract_and_generate_embeddings(
+            parsed,
+            embedding_provider=None,
+        )
+
+    assert attachment_payloads == parsed["attachments"]
+    assert embeddings == [[], []]
+    assert mock_generate.await_args.args[0] == ["Email body", ""]
 
 
 @pytest.mark.parametrize(
