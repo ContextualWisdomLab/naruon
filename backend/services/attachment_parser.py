@@ -10,7 +10,8 @@ from pathlib import Path
 import struct
 from typing import Any
 from zipfile import BadZipFile, ZipFile
-import xml.etree.ElementTree as ElementTree
+
+from defusedxml import ElementTree
 
 from .text_safety import strip_html_markup
 
