@@ -527,7 +527,7 @@ def test_url_encoder_tool_success():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["result"]["encoded_url"] == "hello%20world%2F%26%3D"
+    assert data["result"]["encoded_text"] == "hello%20world%2F%26%3D"
 
 
 def test_url_decoder_tool_success():
@@ -535,76 +535,23 @@ def test_url_decoder_tool_success():
         response = client.post(
             "/api/tools/url_decoder/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"encoded_text": "hello%20world%2F%26%3D"}},
+            json={"parameters": {"text": "hello%20world%2F%26%3D"}},
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["result"]["decoded_url"] == "hello world/&="
+    assert data["result"]["decoded_text"] == "hello world/&="
 
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/url_decoder/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"encoded_text": "hello%world"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-
-
-def test_hash_generator_tool_success():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello", "algorithm": "md5"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["algorithm"] == "md5"
-    assert data["result"]["hash"] == "5d41402abc4b2a76b9719d911017c592"
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello", "algorithm": "sha1"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["algorithm"] == "sha1"
-    assert data["result"]["hash"] == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello", "algorithm": "sha256"}},
-        )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["algorithm"] == "sha256"
-    assert (
-        data["result"]["hash"]
-        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-    )
-
-
-def test_hash_generator_invalid_algorithm():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/hash_generator/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "hello", "algorithm": "unknown"}},
+            json={"parameters": {"text": "hello%world"}},
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
-    assert "지원하지 않는 해시 알고리즘입니다" in data["message"]
+    assert "Malformed percent-encoding" in data["message"]
 
 
 def test_json_formatter_tool_success():

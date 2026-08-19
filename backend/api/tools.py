@@ -26,6 +26,9 @@ router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
+URL_CODEC_MAX_INPUT_BYTES = 262_144
+JSON_FORMATTER_MAX_INPUT_BYTES = 1_048_576
+_PERCENT_ESCAPE_PATTERN = re.compile(r"%[0-9A-Fa-f]{2}")
 
 
 def _tool_code_fingerprint(code: str) -> str:
@@ -756,47 +759,66 @@ registry.register(
 
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Any:
-    """URL 인코딩 핸들러."""
-    text = params.get("text", "")
-    return {"encoded_url": urllib.parse.quote(text, safe="")}
+    """Encode one UTF-8 text component with a bounded input contract."""
+    text = params["text"]
+    _validate_url_codec_text(text)
+    return {"encoded_text": urllib.parse.quote(text, safe="")}
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Any:
-    """URL 디코딩 핸들러."""
-    encoded_text = params.get("encoded_text", "")
-    decoded_url = urllib.parse.unquote(encoded_text)
-    return {"decoded_url": decoded_url}
+    """Decode one UTF-8 percent-encoded text component exactly once."""
+    text = params["text"]
+    _validate_url_codec_text(text)
+    if any(
+        character == "%"
+        and not _PERCENT_ESCAPE_PATTERN.fullmatch(text[index : index + 3])
+        for index, character in enumerate(text)
+        if character == "%"
+    ):
+        raise ValueError("Malformed percent-encoding")
+    try:
+        return {"decoded_text": urllib.parse.unquote_to_bytes(text).decode("utf-8")}
+    except UnicodeDecodeError as exc:
+        raise ValueError("Invalid UTF-8 percent-encoding") from exc
 
 
-async def hash_generator_handler(params: Dict[str, Any]) -> Any:
-    """해시 생성 핸들러 (MD5, SHA-1, SHA-256)."""
-    text = params.get("text", "")
-    algorithm = params.get("algorithm", "sha256").lower()
-    encoded_text = text.encode("utf-8")
-
-    if algorithm == "md5":
-        h = hashlib.md5(encoded_text, usedforsecurity=False)  # nosemgrep
-    elif algorithm == "sha1":
-        h = hashlib.sha1(encoded_text, usedforsecurity=False)  # nosemgrep
-    elif algorithm == "sha256":
-        h = hashlib.sha256(encoded_text)
-    else:
-        raise ValueError(f"지원하지 않는 해시 알고리즘입니다: {algorithm}")
-
-    return {"hash": h.hexdigest(), "algorithm": algorithm}
+def _validate_url_codec_text(text: object) -> None:
+    """Reject type-confused or oversized URL codec input before parsing."""
+    if not isinstance(text, str):
+        raise ValueError("URL codec text must be a string")
+    if len(text.encode("utf-8")) > URL_CODEC_MAX_INPUT_BYTES:
+        raise ValueError(
+            f"URL codec input must not exceed {URL_CODEC_MAX_INPUT_BYTES} UTF-8 bytes"
+        )
 
 
 async def json_formatter_handler(params: Dict[str, Any]) -> Any:
-    """JSON 포매터 핸들러."""
-    json_string = params.get("json_string", "")
+    """Format strict JSON without duplicate members or non-finite numbers."""
+    json_string = params["json_string"]
+    if not isinstance(json_string, str):
+        raise ValueError("JSON formatter input must be a string")
+    if len(json_string.encode("utf-8")) > JSON_FORMATTER_MAX_INPUT_BYTES:
+        raise ValueError(
+            "JSON formatter input must not exceed "
+            f"{JSON_FORMATTER_MAX_INPUT_BYTES} UTF-8 bytes"
+        )
 
     def _raise_value_error(msg: str):
         raise ValueError(msg)
+
+    def _reject_duplicate_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"Duplicate JSON object member: {key}")
+            result[key] = value
+        return result
 
     try:
         parsed = json.loads(
             json_string,
             parse_constant=lambda x: _raise_value_error(f"Invalid constant: {x}"),
+            object_pairs_hook=_reject_duplicate_members,
         )
         formatted = json.dumps(parsed, indent=2, ensure_ascii=False, allow_nan=False)
         return {"formatted_json": formatted, "is_valid": True}
@@ -825,20 +847,9 @@ registry.register(
         name="URL 디코더 (URL Decoder)",
         description="URL 인코딩된 문자열을 일반 텍스트로 디코딩합니다.",
         category="유틸리티",
-        parameters={"encoded_text": "string"},
+        parameters={"text": "string"},
     ),
     url_decoder_handler,
-)
-
-registry.register(
-    ToolInfo(
-        code="hash_generator",
-        name="해시 생성기 (Hash Generator)",
-        description="텍스트의 해시(MD5, SHA-1, SHA-256)를 생성합니다.",
-        category="보안",
-        parameters={"text": "string", "algorithm": "string"},
-    ),
-    hash_generator_handler,
 )
 
 registry.register(
