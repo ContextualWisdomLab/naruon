@@ -9,7 +9,7 @@ This record supports Naruon's decision to use contextual LLM judgment for email 
 
 ## Current CWL implementation evidence
 
-`ContextualWisdomLab/fast-mlsirm` pull request #733 introduced a provider-neutral `ContextualOrchestratorJudge`, strict criterion-level JSON, explicit polytomous categories, runtime-derived acceptance, `LLMJudgeResult.to_irt_row()`, multi-item response-matrix validation, and a deliberate no-keyword/no-positional-repair boundary. All judge model calls are injected through contextual-orchestrator rather than bound to one provider.
+The verified source is [`ContextualWisdomLab/fast-mlsirm` at tag `v0.6.0`](https://github.com/ContextualWisdomLab/fast-mlsirm/tree/v0.6.0), whose tag resolves to commit `1bde00930502296ecc35963c2bdcb834ca15f87d1`. The related merged change is [PR #733](https://github.com/ContextualWisdomLab/fast-mlsirm/pull/733), merge commit `914127ba227d3e02d0564aeeb4f27d76137610f9`; the tag archive SHA-256 is `73415e3cd8d233df7c561ac4eb98c122ebf40e0ac7312d9775266d8830beca4e`. The verified public surface includes the provider-neutral `ContextualOrchestratorJudge`, strict criterion-level JSON, explicit polytomous categories, runtime-derived acceptance, `LLMJudgeResult.to_irt_row()`, multi-item response-matrix validation, and a deliberate no-keyword/no-positional-repair boundary. All judge model calls are injected through contextual-orchestrator rather than bound to one provider.
 
 This is useful infrastructure, not proof that an email-writing rubric is valid. Naruon must still define the construct, criteria, category anchors, evaluation cases, language profiles, human reference process, calibration policy, and consequences of false positive or false negative guidance.
 
@@ -132,6 +132,26 @@ Report, at minimum:
 - latency, token, cost, and orchestration-depth distributions.
 
 No overall “email danger” or “tone risk” score substitutes for the criterion results.
+
+### Pre-registered publication protocol
+
+Before calibration or threshold selection, the evaluation runner writes a
+canonical `email_writing_policy_protocol_v1` document and records its SHA-256.
+The split is fixed by contrast family, not by individual rows: 60% calibration,
+20% development, and a 20% human-labeled locked holdout. The holdout is read
+only until the final publish/no-publish decision and its case-manifest SHA-256 is
+stored beside the protocol hash. The initial publication gates are fixed in the
+protocol: holdout macro-F1 at least 0.80, every mandatory preservation criterion
+at least 0.90, unsupported-claim rate at most 0.02, expected calibration error
+at most 0.05, and no prespecified language/role/context slice with macro-F1
+below 0.70 when that slice has the preregistered minimum sample size.
+
+The policy artifact must contain `protocol_id`, `protocol_hash`,
+`calibration_split_hash`, `development_split_hash`, `locked_holdout_hash`, the
+literal thresholds, and `publish_decision` (`publish` or `withhold`). Changing
+any split, threshold, or holdout requires a new protocol version and a new
+calibration run; post-hoc threshold tuning against the locked holdout is not a
+publication decision.
 
 ## Multi-agent and compute allocation
 

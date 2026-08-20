@@ -163,9 +163,26 @@ Naruon will use Inkspan's diagnostic surface rather than a hover-only overlay. U
 
 The existing draft endpoint may remain for one-shot generation during migration, but the reply composer will move from the plain textarea to the first released Inkspan version that contains the accepted writing-diagnostic contract. Naruon must consume an immutable released package with its lockfile and package-verification evidence; it will not depend on an unreleased mutable branch in production.
 
-The first implementation is additive and does not require a database migration if review sessions remain ephemeral. Any later persistent tables must use two-or-more-word `snake_case` names such as `email_review_session`, `writing_diagnostic_record`, `diagnostic_feedback_event`, and `judge_policy_artifact`.
+The first release persists privacy-minimized review evidence. Migration
+`20260812_0001_add_email_writing_review_evidence.py` adds
+`email_review_session`, `writing_diagnostic_record`, and
+`diagnostic_feedback_event`; these objects contain opaque identifiers, hashes,
+scope, policy provenance, bounded timing/cost buckets, selectors, statuses, and
+explicit feedback only. Raw email, draft, replacement, explanation, prompt,
+model output, and provider credentials are excluded. Evidence expires after 30
+days by default, and an owner-scoped deletion job removes expired sessions and
+their dependent records without scanning or rewriting canonical email content.
 
-Rollback disables the review endpoint and diagnostic props while retaining the Inkspan editor and existing mail-send path. No canonical email content migration is required.
+The migration must prove PostgreSQL upgrade/downgrade and the repository's
+SQLite contract. Downgrade is allowed only after semantic review is disabled and
+dependent evidence is deleted; it drops only the three feature-owned tables and
+never alters canonical email tables or mail content. A failed evidence
+transaction rolls back the review session and diagnostics together, so the API
+never returns unrecorded evidence.
+
+Rollback disables the review endpoint and diagnostic props while retaining the
+Inkspan editor and existing mail-send path. No canonical email content
+migration is required.
 
 ## Verification and acceptance evidence
 
@@ -179,6 +196,9 @@ Implementation cannot be accepted without:
 - gold human span/category/replacement data with inter-rater evidence;
 - span precision/recall, category macro-F1, accepted-suggestion precision, intent/fact/request-strength preservation, Brier score, calibration error, and unsupported-claim rate;
 - fast-mlsirm criterion response-matrix validation, category-count ablation, item/rater behavior, DIF, and drift studies where sample size supports them;
+- a pre-registered evaluation protocol with fixed splits, publication thresholds,
+  and a locked human-labeled holdout; the protocol and holdout hashes must be
+  recorded in the published policy artifact before calibration begins;
 - independent-model or role ablations for candidate reviewer, judge, and adjudicator;
 - prompt-injection, malformed JSON, duplicate keys, oversized payload, stale revision, overlap, and provider failure tests;
 - no-keyword-fallback source and contract tests;
