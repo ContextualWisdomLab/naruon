@@ -850,6 +850,11 @@ def test_deferred_pdf_decoder_rejects_non_pdf_payloads():
         decode_deferred_attachment_payload(non_pdf)
 
 
+def test_deferred_pdf_decoder_rejects_invalid_base64():
+    with pytest.raises(ValueError, match="not valid base64"):
+        decode_deferred_attachment_payload("not-base64!")
+
+
 def test_attachment_parser_small_type_and_coercion_helpers_fail_closed():
     message = EmailMessage()
     message.set_content("PNG")
