@@ -11,7 +11,17 @@ COMMENT_MARKER='<!-- pr-governance:metadata-gate -->'
 CHECK_NAME='metadata-only gate evaluation'
 REVIEW_BOT_LOGIN_PATTERN='coderabbit|github-code-quality'
 
-PR_NUMBER="${DIRECT_PR_NUMBER:-${TARGET_PR_NUMBER:-${WORKFLOW_RUN_PR_NUMBER:-${CHECK_RUN_PR_NUMBER:-}}}}"
+PR_NUMBER=''
+for candidate_pr_number in \
+  "${DIRECT_PR_NUMBER-}" \
+  "${TARGET_PR_NUMBER-}" \
+  "${WORKFLOW_RUN_PR_NUMBER-}" \
+  "${CHECK_RUN_PR_NUMBER-}"; do
+  if [ -n "$candidate_pr_number" ]; then
+    PR_NUMBER="$candidate_pr_number"
+    break
+  fi
+done
 if [ -z "$PR_NUMBER" ]; then
   printf 'No pull request number is available for event %s; nothing to evaluate.\n' "${EVENT_NAME:-unknown}"
   exit 0
@@ -20,6 +30,11 @@ if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
   # Do not echo the value: a crafted PR number could smuggle workflow commands
   # into the run log.
   printf 'Pull request number is not a positive integer; refusing to evaluate.\n'
+  exit 1
+fi
+
+if ! [[ "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  printf 'GitHub repository must use the owner/name format; refusing to evaluate.\n'
   exit 1
 fi
 
