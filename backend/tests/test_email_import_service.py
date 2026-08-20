@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import services.email_import_service as email_import_module
 from services.exceptions import EmailParseError, EmbeddingGenerationError
+from services.batch_embedding_service import BatchEmbeddingPartial
 from services.email_import_service import (
+    EmailImportBatchContext,
     EMBEDDING_DIMENSION,
     EmailImportEmbeddingProvider,
     _generate_import_embeddings,
@@ -405,9 +407,12 @@ def test_build_email_object_attaches_structured_non_pdf_content_graph_records():
         "status.xml": ["Launch"],
         "invite.ics": ["SUMMARY: Launch"],
     }
-    assert {
-        attachment.parser_key for attachment in email_obj.attachments
-    } == {"json", "csv", "xml", "calendar"}
+    assert {attachment.parser_key for attachment in email_obj.attachments} == {
+        "json",
+        "csv",
+        "xml",
+        "calendar",
+    }
 
 
 @pytest.mark.asyncio
@@ -558,13 +563,20 @@ async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
         embedding_model="text-embedding-3-large",
     )
     captured_texts: list[str] = []
+    next_embedding = 1
 
     async def fake_generate(texts, *, embedding_provider, batch_context=None):
+        nonlocal next_embedding
         captured_texts.extend(texts)
-        return [[float(index)] * EMBEDDING_DIMENSION for index in range(1, len(texts) + 1)]
+        embeddings = [
+            [float(index)] * EMBEDDING_DIMENSION
+            for index in range(next_embedding, next_embedding + len(texts))
+        ]
+        next_embedding += len(texts)
+        return embeddings
 
     parsed = {
-        "body": "body paragraph " * 500,
+        "body": "body paragraph " * 3000,
         "attachments": [{"content": "short attachment"}, {"content": ""}],
     }
     with patch(
@@ -583,6 +595,43 @@ async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
     assert embeddings[0][0] == sum(range(1, body_chunk_count + 1)) / body_chunk_count
     assert embeddings[1][0] == float(len(captured_texts))
     assert embeddings[2] == [0.0] * EMBEDDING_DIMENSION
+
+
+@pytest.mark.asyncio
+async def test_partial_batch_falls_back_only_for_unfinished_sources():
+    provider = EmailImportEmbeddingProvider(
+        api_key="provider-key",
+        base_url="https://provider.example/v1",
+        embedding_model="text-embedding-test",
+    )
+    partial = BatchEmbeddingPartial(
+        completed_vectors=[[0.25] * EMBEDDING_DIMENSION],
+        pending_texts=["pending source"],
+    )
+
+    with (
+        patch(
+            "services.email_import_service.try_batch_import_embeddings",
+            new_callable=AsyncMock,
+            return_value=partial,
+        ) as mock_batch,
+        patch(
+            "services.email_import_service.generate_embeddings",
+            new_callable=AsyncMock,
+            return_value=[[0.75] * EMBEDDING_DIMENSION],
+        ) as mock_generate,
+    ):
+        embeddings = await _generate_import_embeddings(
+            ["completed source", "pending source"],
+            embedding_provider=provider,
+            batch_context=EmailImportBatchContext(
+                session=None, user_id="user-1", organization_id="org-acme"
+            ),
+        )
+
+    mock_batch.assert_awaited_once()
+    assert mock_generate.await_args.args[0] == ["pending source"]
+    assert embeddings == [[0.25] * EMBEDDING_DIMENSION, [0.75] * EMBEDDING_DIMENSION]
 
 
 @pytest.mark.asyncio

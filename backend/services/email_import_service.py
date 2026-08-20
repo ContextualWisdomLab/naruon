@@ -26,7 +26,10 @@ from db.models import (
     KnowledgeGraphEdgeRecord,
 )
 from services.archive import extract_backup_async
-from services.batch_embedding_service import try_batch_import_embeddings
+from services.batch_embedding_service import (
+    BatchEmbeddingPartial,
+    try_batch_import_embeddings,
+)
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
@@ -60,6 +63,7 @@ MAX_IMPORT_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 8
+MAX_EMBEDDING_CHUNKS_PER_WINDOW = 32
 SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
 logger = logging.getLogger(__name__)
@@ -312,41 +316,33 @@ async def _extract_and_generate_embeddings(
         )
         for attachment in attachment_payloads
     )
-    embedding_texts, chunk_counts = _chunk_import_texts(source_texts)
-    chunk_embeddings = await _generate_import_embeddings(
-        embedding_texts,
-        embedding_provider=embedding_provider,
-        batch_context=batch_context,
-    )
     fitted_embeddings: list[list[float]] = []
-    offset = 0
-    for chunk_count in chunk_counts:
+    for source_text in source_texts:
+        source_chunks = chunk_text(source_text)
+        if not source_chunks:
+            fitted_embeddings.append(_zero_embedding())
+            continue
+
+        vector_sum: list[float] | None = None
+        vector_count = 0
+        for start in range(0, len(source_chunks), MAX_EMBEDDING_CHUNKS_PER_WINDOW):
+            chunk_embeddings = await _generate_import_embeddings(
+                source_chunks[start : start + MAX_EMBEDDING_CHUNKS_PER_WINDOW],
+                embedding_provider=embedding_provider,
+                batch_context=batch_context,
+            )
+            for embedding in chunk_embeddings:
+                if vector_sum is None:
+                    vector_sum = [0.0] * len(embedding)
+                for index, value in enumerate(embedding):
+                    vector_sum[index] += value
+                vector_count += 1
         fitted_embeddings.append(
-            _mean_embedding(chunk_embeddings[offset : offset + chunk_count])
+            [value / vector_count for value in vector_sum]
+            if vector_sum and vector_count
+            else _zero_embedding()
         )
-        offset += chunk_count
     return attachment_payloads, fitted_embeddings
-
-
-def _chunk_import_texts(texts: list[str]) -> tuple[list[str], list[int]]:
-    """Split each email/attachment into semantic-sized embedding inputs."""
-    chunks: list[str] = []
-    chunk_counts: list[int] = []
-    for text in texts:
-        source_chunks = chunk_text(text)
-        chunks.extend(source_chunks)
-        chunk_counts.append(len(source_chunks))
-    return chunks, chunk_counts
-
-
-def _mean_embedding(embeddings: list[list[float]]) -> list[float]:
-    """Average chunk vectors into the existing one-vector record contract."""
-    if not embeddings:
-        return _zero_embedding()
-    return [
-        sum(vector[index] for vector in embeddings) / len(embeddings)
-        for index in range(len(embeddings[0]))
-    ]
 
 
 def _build_email_object(
@@ -443,7 +439,11 @@ def _fallback_attachment_parser_key(
         return "calendar"
     if parse_content_type == "text/html":
         return "html"
-    if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
+    if parse_content_type in {
+        "text/markdown",
+        "text/x-markdown",
+        "application/markdown",
+    }:
         return "markdown"
     if parse_content_type == "text/plain":
         return "plain_text"
@@ -635,9 +635,9 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             item.segment_path,
         ),
     ):
-        segments_by_source[
-            (segment.source_kind, segment.source_record_uid)
-        ].append(segment)
+        segments_by_source[(segment.source_kind, segment.source_record_uid)].append(
+            segment
+        )
         add_edge(
             edge_kind="node_has_segment",
             edge_path=f"{segment.content_node.node_path}/has/{segment.segment_path}",
@@ -652,8 +652,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="segment_next",
                 edge_path=(
-                    f"{source_segment.segment_path}/next/"
-                    f"{target_segment.segment_path}"
+                    f"{source_segment.segment_path}/next/{target_segment.segment_path}"
                 ),
                 source_kind=source_segment.source_kind,
                 source_record_uid=source_segment.source_record_uid,
@@ -677,8 +676,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="heading_contains_segment",
                 edge_path=(
-                    f"{heading_segment.segment_path}/contains/"
-                    f"{segment.segment_path}"
+                    f"{heading_segment.segment_path}/contains/{segment.segment_path}"
                 ),
                 source_kind=segment.source_kind,
                 source_record_uid=segment.source_record_uid,
@@ -972,6 +970,13 @@ async def _generate_import_embeddings(
             dimension=EMBEDDING_DIMENSION,
         )
         if batched is not None:
+            if isinstance(batched, BatchEmbeddingPartial):
+                remainder = await _generate_import_embeddings(
+                    batched.pending_texts,
+                    embedding_provider=embedding_provider,
+                    batch_context=None,
+                )
+                return [*batched.completed_vectors, *remainder]
             return batched
     try:
         provider_embeddings = await generate_embeddings(
