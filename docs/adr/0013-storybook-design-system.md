@@ -1,7 +1,7 @@
 # ADR-0013: Isolate the shared UI contract in Storybook
 
 - Status: Accepted
-- Date: 2026-08-21
+- Date: 2026-08-20 (UTC)
 - Owners: Naruon frontend maintainers
 - Figma file ID: `68b5XB58w8nwT2LYOOnikK`
 
@@ -48,7 +48,7 @@ pnpm run typecheck
 
 ## References (APA 7th)
 
-Storybook. (n.d.). *Component Story Format (CSF)*. Retrieved August 21, 2026,
+Storybook. (n.d.). *Component Story Format (CSF)*. Retrieved August 20, 2026,
 from https://storybook.js.org/docs/api/csf
 
 World Wide Web Consortium. (2023). *Web Content Accessibility Guidelines
