@@ -78,7 +78,10 @@ def _phone_candidates(text: str) -> list[tuple[int, int, str]]:
             candidates.append((match.start(), match.end(), candidate))
             search_start = match.end()
             continue
+        restart_after_boundary: int | None = None
         for boundary in _ADJACENT_PHONE_BOUNDARY.finditer(candidate):
+            if restart_after_boundary is None:
+                restart_after_boundary = match.start() + boundary.end()
             first_phone = candidate[: boundary.start()]
             if _valid_phone(first_phone):
                 first_end = match.start() + boundary.start()
@@ -86,7 +89,7 @@ def _phone_candidates(text: str) -> list[tuple[int, int, str]]:
                 search_start = match.start() + boundary.end()
                 break
         else:
-            search_start = match.end()
+            search_start = restart_after_boundary or match.end()
     return candidates
 
 

@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
+_ERROR_CODE_PATTERN = re.compile(r"[a-z][a-z0-9_]{2,63}")
 
 
 def _tool_code_fingerprint(code: str) -> str:
@@ -71,6 +72,27 @@ def _safe_tool_failure_message(exc: Exception) -> str:
             break
     message = "".join(escaped)[:MAX_TOOL_FAILURE_MESSAGE_CHARS]
     return message or "Tool execution failed"
+
+
+def _validated_error_code(exc: Exception) -> str | None:
+    """Return only a bounded machine-code string from a tool exception."""
+    candidate = getattr(exc, "error_code", None)
+    if not isinstance(candidate, str) or _ERROR_CODE_PATTERN.fullmatch(candidate) is None:
+        return None
+    return candidate
+
+
+def _url_evidence_validation_error_code(
+    code: str, parameters: dict[str, Any]
+) -> str | None:
+    """Map URL evidence request-shape failures to stable public codes."""
+    if code != "url_evidence_extractor":
+        return None
+    if "text" not in parameters:
+        return "url_evidence_text_required"
+    if not isinstance(parameters["text"], str):
+        return "url_evidence_invalid_text"
+    return None
 
 
 class ToolInfo(BaseModel):
@@ -905,5 +927,8 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
             status="failed",
             result=None,
             message=_safe_tool_failure_message(e),
-            error_code=getattr(e, "error_code", None),
+            error_code=(
+                _validated_error_code(e)
+                or _url_evidence_validation_error_code(code, request.parameters)
+            ),
         )

@@ -3,11 +3,13 @@
 import pytest
 
 import main
-from api.tools import registry
+from api.tools import ExecuteRequest, execute_tool, registry
 from api.url_evidence_tool import (
     MAX_URL_EVIDENCE_BYTES,
+    MAX_URL_EVIDENCE_MATCH_BYTES,
     URLEvidenceError,
     register_url_evidence_tool,
+    url_evidence_handler,
 )
 
 
@@ -90,6 +92,37 @@ async def test_url_evidence_fails_closed_at_input_and_match_bounds() -> None:
     with pytest.raises(URLEvidenceError) as match_error:
         await registry.invoke_tool("url_evidence_extractor", {"text": text})
     assert match_error.value.error_code == "url_evidence_match_limit_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_url_evidence_checks_raw_candidate_before_trimming() -> None:
+    """A punctuation-trimmed URL still obeys the raw per-match byte ceiling."""
+    prefix = "https://example.com/"
+    raw_candidate = prefix + ("a" * (MAX_URL_EVIDENCE_MATCH_BYTES - len(prefix))) + "."
+
+    with pytest.raises(URLEvidenceError) as error:
+        await registry.invoke_tool("url_evidence_extractor", {"text": raw_candidate})
+
+    assert len(raw_candidate.encode("utf-8")) == MAX_URL_EVIDENCE_MATCH_BYTES + 1
+    assert error.value.error_code == "url_evidence_match_too_large"
+
+
+@pytest.mark.asyncio
+async def test_url_evidence_request_shape_errors_have_stable_codes() -> None:
+    """Direct and HTTP-style calls expose deterministic missing/type failures."""
+    with pytest.raises(URLEvidenceError) as missing_error:
+        url_evidence_handler({})
+    assert missing_error.value.error_code == "url_evidence_text_required"
+
+    missing_response = await execute_tool(
+        "url_evidence_extractor", ExecuteRequest(parameters={})
+    )
+    assert missing_response.error_code == "url_evidence_text_required"
+
+    invalid_response = await execute_tool(
+        "url_evidence_extractor", ExecuteRequest(parameters={"text": 123})
+    )
+    assert invalid_response.error_code == "url_evidence_invalid_text"
 
 
 @pytest.mark.asyncio

@@ -55,6 +55,19 @@ async def test_contact_redactor_redacts_adjacent_phone_numbers(
 
 
 @pytest.mark.asyncio
+async def test_contact_redactor_finds_phone_after_date_prefix() -> None:
+    """An invalid date prefix must not hide a supported phone after whitespace."""
+    result = await registry.invoke_tool(
+        "contact_data_redactor",
+        {"text": "2026-08-21 010-1234-5678"},
+    )
+
+    assert result["match_counts"] == {"email": 0, "phone": 1}
+    assert "2026-08-21" in result["redacted_text"]
+    assert "010-1234-5678" not in result["redacted_text"]
+
+
+@pytest.mark.asyncio
 async def test_contact_redactor_reuses_placeholder_for_repeated_contact() -> None:
     """Repeated contact values preserve entity distinction without exposing values."""
     result = await registry.invoke_tool(

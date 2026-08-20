@@ -131,19 +131,30 @@ def _evidence_record(candidate: str, source_start: int) -> dict[str, Any]:
 
 def url_evidence_handler(params: dict[str, Any]) -> dict[str, Any]:
     """Extract deterministic URL evidence and never perform a network request."""
+    if "text" not in params:
+        raise URLEvidenceError(
+            "Text is required for URL evidence extraction",
+            error_code="url_evidence_text_required",
+        )
     text = params["text"]
+    if not isinstance(text, str):
+        raise URLEvidenceError(
+            "Text must be a string",
+            error_code="url_evidence_invalid_text",
+        )
     _bounded_text(text)
     matches: list[dict[str, Any]] = []
 
     for candidate_match in _CANDIDATE_PATTERN.finditer(text):
-        candidate = _trim_candidate(candidate_match.group(0))
-        if not candidate:
-            continue
-        if len(candidate.encode("utf-8")) > MAX_URL_EVIDENCE_MATCH_BYTES:
+        raw_candidate = candidate_match.group(0)
+        if len(raw_candidate.encode("utf-8")) > MAX_URL_EVIDENCE_MATCH_BYTES:
             raise URLEvidenceError(
                 "A URL candidate exceeds the per-match limit",
                 error_code="url_evidence_match_too_large",
             )
+        candidate = _trim_candidate(raw_candidate)
+        if not candidate:
+            continue
         matches.append(_evidence_record(candidate, candidate_match.start()))
         if len(matches) > MAX_URL_EVIDENCE_MATCHES:
             raise URLEvidenceError(
