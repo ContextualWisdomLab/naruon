@@ -491,6 +491,56 @@ describe("SettingsLayout", () => {
     });
   });
 
+  it("blocks repeated OIDC login while the redirect request is pending", async () => {
+    let resolveLogin!: () => void;
+    const pendingLogin = new Promise<void>((resolve) => {
+      resolveLogin = resolve;
+    });
+    oidcMocks.startOidcLogin.mockReturnValue(pendingLogin);
+    window.history.pushState({}, "", "/settings");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const developerTab = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "개발자",
+    );
+    await act(async () => {
+      developerTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const loginButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "OIDC 로그인",
+    ) as HTMLButtonElement | undefined;
+    expect(loginButton).toBeTruthy();
+
+    await act(async () => {
+      loginButton?.click();
+      await Promise.resolve();
+    });
+    expect(oidcMocks.startOidcLogin).toHaveBeenCalledTimes(1);
+    expect(loginButton?.disabled).toBe(true);
+    expect(loginButton?.getAttribute("aria-busy")).toBe("true");
+    expect(loginButton?.textContent).toContain("로그인 중");
+
+    loginButton?.click();
+    expect(oidcMocks.startOidcLogin).toHaveBeenCalledTimes(1);
+
+    resolveLogin();
+    await act(async () => {
+      await pendingLogin;
+      await Promise.resolve();
+    });
+    expect(loginButton?.disabled).toBe(false);
+    expect(loginButton?.textContent).toBe("OIDC 로그인");
+  });
+
   it("loads and saves source-backed mail account settings without public identity headers or secret replay", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
