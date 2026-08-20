@@ -12,12 +12,15 @@ RFC 2047 encoded-word decoding of non-ASCII display names.
 Each fix is anchored to a specific clause of the relevant standard:
 
 - **Header unfolding** — RFC 5322 §2.2.3. When a folded header is rejoined,
-  interior whitespace/tabs can survive. `normalize_message_id` collapses that
-  interior whitespace so the folded and unfolded forms of one Message-ID map to
-  a single de-dup/threading key.
+  the explicit CRLF fold and its following WSP are removed by
+  `normalize_message_id`; unrelated interior whitespace is not collapsed.
+  only an explicit CRLF fold and its following WSP are removed. Remaining
+  interior whitespace is rejected as ambiguous instead of collapsed, so an
+  attacker cannot make two distinct Message-IDs map to one lookup key.
 - **Message-ID** — RFC 5322 §3.6.4 (`msg-id = "<" id-left "@" id-right ">"`).
   A well-formed Message-ID carries no interior whitespace, so collapsing it is a
-  no-op for conforming input and only repairs unfolded input.
+  ambiguous interior whitespace is rejected rather than normalized into a
+  potentially colliding identifier.
 - **In-Reply-To / References** — RFC 5322 §3.6.4 defines both as `1*msg-id`
   (one or more angle-bracketed ids, each optionally wrapped in CFWS, §3.2.2).
   `assign_thread_id` therefore parses In-Reply-To with the same multi-id
