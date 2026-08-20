@@ -322,10 +322,11 @@ def test_hwpx_attachment_is_deferred_for_structured_xml_package():
     ) == raw
 
 
-def test_hwpx_extension_with_generic_content_type_is_deferred_pending():
+@pytest.mark.parametrize("filename", ["proposal.hwpx", "proposal.owpml"])
+def test_hwpx_extension_with_generic_content_type_is_deferred_pending(filename):
     raw = _minimal_hwpx_bytes()
     result = parse_email_attachment(
-        filename="proposal.hwpx",
+        filename=filename,
         content_type="application/octet-stream",
         raw_content=raw,
     )
@@ -334,6 +335,11 @@ def test_hwpx_extension_with_generic_content_type_is_deferred_pending():
     assert result.parse_content_type == "application/hwp+zip"
     assert result.parser_key == "hwpx"
     assert result.parse_status == "hwpx_xml_package_pending"
+
+
+def test_deferred_decoder_rejects_unsupported_content_type_before_decoding():
+    with pytest.raises(ValueError, match="not a deferred parser type"):
+        decode_deferred_attachment_payload("not base64!", "application/octet-stream")
 
 
 def test_invalid_hwpx_payload_is_rejected_before_xml_package_recognition():

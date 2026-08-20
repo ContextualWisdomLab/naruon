@@ -352,6 +352,10 @@ def decode_deferred_attachment_payload(
     worker can record an error status instead of crashing.
     """
     parse_content_type = _normalize_content_type(expected_content_type)
+    if parse_content_type not in _DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE:
+        raise ValueError(
+            "Pending attachment content type is not a deferred parser type"
+        )
     try:
         payload = base64.b64decode((content or "").encode("ascii"), validate=True)
     except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
