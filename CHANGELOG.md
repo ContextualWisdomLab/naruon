@@ -1,6 +1,7 @@
 ## [Unreleased]
 - backend hash lock을 pip `--require-hashes`가 Python 3.14에서 설치 가능하게 다시 고정합니다: `pydantic==2.13.4`의 정확한 `pydantic-core==2.46.4`, `openai==3.0.0`이 요구하는 `httpx2`, 그리고 `PYTHONWARNINGS=error`를 깨는 `langsmith>=0.10.18` pytest plugin 대신 검증된 `langsmith==0.10.2`. lint 규칙이 바뀌는 `ruff==0.16.3` 범프는 `0.15.21`에 유지합니다.
 - ci-python Strix 잠금은 `strix-agent==1.5.3`/`google-cloud-aiplatform==1.164.0`이 `cryptography==50.0.0` 및 `protobuf<7`과 충돌하므로 검증된 `strix-agent==1.0.4`/`google-cloud-aiplatform==1.160.0`/`protobuf==6.33.6`으로 되돌립니다.
+- 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
