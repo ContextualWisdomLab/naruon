@@ -178,6 +178,23 @@ def test_uv_generation_source_version_mismatch_is_rejected(tmp_path: Path) -> No
     assert _violation_codes(receipt) == {"generation-version-mismatch"}
 
 
+def test_uv_generation_source_inline_comment_still_binds_version(
+    tmp_path: Path,
+) -> None:
+    """A valid source pin with an inline comment remains part of the contract."""
+    _write(tmp_path / "requirements.txt", "example==2.0  # updated source pin\n")
+    lock_path = _write(
+        tmp_path / "requirements-hashes.txt",
+        "# uv pip compile --generate-hashes --output-file requirements-hashes.txt requirements.txt\n"
+        + _simple_lock(version="1.0"),
+    )
+
+    receipt = python_lock_provenance.validate_lock_file(lock_path, tmp_path)
+
+    assert receipt["status"] == "failed"
+    assert _violation_codes(receipt) == {"generation-version-mismatch"}
+
+
 def test_uv_generation_accepts_requirements_in_source(tmp_path: Path) -> None:
     """The conventional requirements.in source form is valid uv provenance."""
     _write(tmp_path / "requirements.in", "example==1.0\n")
