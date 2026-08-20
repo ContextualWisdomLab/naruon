@@ -128,6 +128,11 @@ jobs:
           rm -f ~/package-lock.json
           cd frontend && pnpm run build
 
+      - name: Build Storybook UI inventory
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+        run: cd frontend && pnpm run build-storybook
+
       - name: Install Playwright Chromium
         run: cd frontend && pnpm exec playwright install --with-deps chromium
 
