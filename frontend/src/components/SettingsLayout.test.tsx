@@ -315,7 +315,28 @@ describe("SettingsLayout", () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelectorAll('svg:not([aria-hidden="true"])')).toHaveLength(0);
+    const settingsTabNames = [
+      "워크스페이스",
+      "멤버",
+      "AI 모델",
+      "연결 계정",
+      "알림",
+      "자동화",
+      "결제",
+      "개발자",
+    ];
+    for (const tabName of settingsTabNames) {
+      const tabButton = Array.from(container.querySelectorAll("aside button")).find(
+        (button) => button.textContent?.trim() === tabName,
+      );
+      if (!tabButton) throw new Error(`Missing settings tab: ${tabName}`);
+      await act(async () => {
+        tabButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(container.querySelectorAll('svg:not([aria-hidden="true"])')).toHaveLength(0);
+    }
   });
 
   it("renders the self-hosted connector manifest and keeps mobile settings tabs reachable", async () => {
