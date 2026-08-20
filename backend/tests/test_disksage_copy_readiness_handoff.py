@@ -111,7 +111,7 @@ def test_main_delegates_to_absolute_verifier_without_shell_env_or_input_read(
     assert not (tmp_path / "must-not-exist").exists()
 
 
-@pytest.mark.parametrize("schema_version", [4, 5])
+@pytest.mark.parametrize("schema_version", [4, 5, 6, 7])
 def test_main_accepts_current_disksage_schema_versions(tmp_path, capsys, schema_version):
     payload = _success_payload()
     payload["schema_version"] = schema_version
