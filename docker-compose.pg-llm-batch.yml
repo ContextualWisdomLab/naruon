@@ -23,7 +23,7 @@
 # Then seed per-tenant batch config in naruon's Fernet DB (tenant_configs) —
 # never via os.getenv:
 #   batch_embedding_enabled = true
-#   batch_local_dsn         = postgresql://pgllm:pgllm@pg-llm-batch-postgres:5432/pgllm
+#   batch_local_dsn         = postgresql://${PG_LLM_BATCH_POSTGRES_USER}:${PG_LLM_BATCH_POSTGRES_PASSWORD}@pg-llm-batch-postgres:5432/${PG_LLM_BATCH_POSTGRES_DB}
 #   (batch_orchestrator_base_url / batch_orchestrator_token stay set for the
 #    primary orchestrator path; batch_local_dsn only feeds the offline fallback.)
 
@@ -37,17 +37,25 @@ services:
         PG_MAJOR: "16"
         ENABLE_TIKTOKEN: "1"
     environment:
-      POSTGRES_USER: pgllm
-      POSTGRES_PASSWORD: pgllm
-      POSTGRES_DB: pgllm
+      POSTGRES_USER: ${PG_LLM_BATCH_POSTGRES_USER:?Set PG_LLM_BATCH_POSTGRES_USER for the optional batch overlay}
+      POSTGRES_PASSWORD: ${PG_LLM_BATCH_POSTGRES_PASSWORD:?Set PG_LLM_BATCH_POSTGRES_PASSWORD for the optional batch overlay}
+      POSTGRES_DB: ${PG_LLM_BATCH_POSTGRES_DB:-pgllm}
     ports:
-      - "5442:5432"
+      - "127.0.0.1:5442:5432"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/postgresql
     healthcheck:
       test:
         - CMD-SHELL
         - >-
-          pg_isready -U pgllm -d pgllm &&
-          psql -U pgllm -d pgllm -tAc
+          PGPASSWORD="$${POSTGRES_PASSWORD}" pg_isready -h 127.0.0.1
+          -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" &&
+          PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h 127.0.0.1
+          -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tAc
           "SELECT bool_and(is_ready) FROM pg_llm_batch_health_check()
            WHERE component IN ('database','pg_tiktoken','com_config')" | grep -q t
       interval: 15s
