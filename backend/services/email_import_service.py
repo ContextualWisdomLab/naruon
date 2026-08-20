@@ -971,11 +971,19 @@ async def _generate_import_embeddings(
         )
         if batched is not None:
             if isinstance(batched, BatchEmbeddingPartial):
-                remainder = await _generate_import_embeddings(
-                    batched.pending_texts,
-                    embedding_provider=embedding_provider,
-                    batch_context=None,
-                )
+                remainder: list[list[float]] = []
+                for start in range(
+                    0, len(batched.pending_texts), MAX_EMBEDDING_CHUNKS_PER_WINDOW
+                ):
+                    remainder.extend(
+                        await _generate_import_embeddings(
+                            batched.pending_texts[
+                                start : start + MAX_EMBEDDING_CHUNKS_PER_WINDOW
+                            ],
+                            embedding_provider=embedding_provider,
+                            batch_context=None,
+                        )
+                    )
                 return [*batched.completed_vectors, *remainder]
             return batched
     try:
