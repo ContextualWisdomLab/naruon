@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { ComponentProps } from 'react';
 import { describe, expect, it } from 'vitest';
 
 import { DocumentRepositoryTab } from './DocumentRepositoryTab';
+import type { ActiveDocumentAction } from './types';
 
 const workspaceDocument = {
   asset_key: 'workspace-document-1',
@@ -17,60 +19,60 @@ const workspaceDocument = {
   provider_write_executed: false,
 };
 
-function renderRepository(activeDocumentAction: string | null) {
+function renderRepository(activeDocumentAction: ActiveDocumentAction | null) {
+  const props: ComponentProps<typeof DocumentRepositoryTab> = {
+    writebackStatus: 'idle',
+    writebackResult: null,
+    requestWebdavWritebackIntent: () => undefined,
+    isWritebackLoading: false,
+    canRequestWebdavWriteback: true,
+    selectedWebdavAccount: {
+      source_id: 'webdav-1',
+      display_label: '업무 문서',
+      writeback_enabled: true,
+    },
+    isWebdavSourceLoading: false,
+    setSelectedWebdavSourceId: () => undefined,
+    uniqueThreadStatus: 'idle',
+    uniqueThreadResult: null,
+    requestUniqueThreadIntent: () => undefined,
+    isUniqueThreadLoading: false,
+    connectorEvents: [],
+    dataSurfaceStatus: 'ready',
+    dataQualitySurface: null,
+    embeddingStage: null,
+    emailRepository: null,
+    attachmentRepository: null,
+    handleEmailImportFileChange: () => undefined,
+    requestEmailFileImport: () => undefined,
+    isEmailImportLoading: false,
+    emailImportFiles: [],
+    emailImportStatus: 'idle',
+    emailImportResult: null,
+    handleDocumentFileChange: () => undefined,
+    requestDocumentUpload: () => undefined,
+    isDocumentActionLoading: true,
+    activeDocumentAction,
+    documentUploadFiles: [],
+    documentActionStatus: 'loading',
+    documentActionResult: null,
+    webdavAccountStatus: 'ready',
+    webdavAccounts: [{
+      source_id: 'webdav-1',
+      display_label: '업무 문서',
+      writeback_enabled: true,
+    }],
+    webdavAccountMap: new Map(),
+    projectFolders: [],
+    selectedRepositoryAssetKey: workspaceDocument.asset_key,
+    setSelectedRepositoryAssetKey: () => undefined,
+    repositoryAssets: [workspaceDocument],
+    selectedWorkspaceDocument: workspaceDocument,
+    requestDocumentAction: () => undefined,
+  };
+
   return renderToStaticMarkup(
-    <DocumentRepositoryTab
-      {...({
-        writebackStatus: 'idle',
-        writebackResult: null,
-        requestWebdavWritebackIntent: () => undefined,
-        isWritebackLoading: false,
-        canRequestWebdavWriteback: true,
-        selectedWebdavAccount: {
-          source_id: 'webdav-1',
-          display_label: '업무 문서',
-          writeback_enabled: true,
-        },
-        isWebdavSourceLoading: false,
-        setSelectedWebdavSourceId: () => undefined,
-        uniqueThreadStatus: 'idle',
-        uniqueThreadResult: null,
-        requestUniqueThreadIntent: () => undefined,
-        isUniqueThreadLoading: false,
-        connectorEvents: [],
-        dataSurfaceStatus: 'ready',
-        dataQualitySurface: null,
-        embeddingStage: null,
-        emailRepository: null,
-        attachmentRepository: null,
-        handleEmailImportFileChange: () => undefined,
-        requestEmailFileImport: () => undefined,
-        isEmailImportLoading: false,
-        emailImportFiles: [],
-        emailImportStatus: 'idle',
-        emailImportResult: null,
-        handleDocumentFileChange: () => undefined,
-        requestDocumentUpload: () => undefined,
-        isDocumentActionLoading: true,
-        activeDocumentAction,
-        documentUploadFiles: [],
-        documentActionStatus: 'loading',
-        documentActionResult: null,
-        webdavAccountStatus: 'ready',
-        webdavAccounts: [{
-          source_id: 'webdav-1',
-          display_label: '업무 문서',
-          writeback_enabled: true,
-        }],
-        webdavAccountMap: new Map(),
-        projectFolders: [],
-        selectedRepositoryAssetKey: workspaceDocument.asset_key,
-        setSelectedRepositoryAssetKey: () => undefined,
-        repositoryAssets: [workspaceDocument],
-        selectedWorkspaceDocument: workspaceDocument,
-        requestDocumentAction: () => undefined,
-      } as never)}
-    />,
+    <DocumentRepositoryTab {...props} />,
   );
 }
 
