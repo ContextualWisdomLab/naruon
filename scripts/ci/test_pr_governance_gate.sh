@@ -836,8 +836,8 @@ assert_stale_changes_requested_does_not_block_current_evidence() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_not_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/gh.log"
-  assert_in_file 'status=completed -f conclusion=success' "$temp_dir/gh.log"
+  assert_not_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/output.txt"
+  assert_in_file 'head_sha=0123456789abcdef0123456789abcdef01234567 -f status=completed -f conclusion=success' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
