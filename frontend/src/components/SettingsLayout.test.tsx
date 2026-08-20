@@ -716,6 +716,28 @@ describe("SettingsLayout", () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelectorAll("svg:not([aria-hidden=\"true\"])")).toHaveLength(0);
+    const settingsSurfaces = [
+      ["워크스페이스", "워크스페이스 설정"],
+      ["멤버", "멤버와 역할"],
+      ["AI 모델", "AI 모델 설정"],
+      ["연결 계정", "메일 및 캘린더 커넥터"],
+      ["알림", "알림 정책"],
+      ["자동화", "자동화 규칙"],
+      ["결제", "결제와 사용량"],
+      ["개발자", "개발자 및 시스템 (Observability)"],
+    ] as const;
+
+    for (const [tabName, heading] of settingsSurfaces) {
+      const button = Array.from(container.querySelectorAll("button")).find(
+        (candidate) => candidate.textContent === tabName,
+      );
+      expect(button).toBeTruthy();
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await Promise.resolve();
+      });
+      expect(container.textContent).toContain(heading);
+      expect(container.querySelectorAll("svg:not([aria-hidden=\"true\"])")).toHaveLength(0);
+    }
   });
 });
