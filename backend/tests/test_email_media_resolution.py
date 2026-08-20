@@ -101,6 +101,15 @@ def test_remote_images_are_recorded_without_fetching() -> None:
     assert occurrence.normalized_reference == "https://tracker.example/pixel.png?u=1"
 
 
+def test_data_src_is_not_treated_as_a_src_attribute() -> None:
+    """Lazy-loading data-src attributes must not become image evidence."""
+    result = media.resolve_email_media(
+        _html_only_message('<img data-src="https://tracker.example/pixel.png">')
+    )
+
+    assert result.occurrences == ()
+
+
 def test_data_image_is_bounded_and_resolved_locally() -> None:
     encoded = base64.b64encode(_gif(4, 5)).decode()
     html_body = f"<img src='data:image/gif;base64,{encoded}'>"

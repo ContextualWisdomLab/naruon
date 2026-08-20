@@ -33,7 +33,7 @@ _SUPPORTED_IMAGE_TYPES = frozenset(
 )
 _IMAGE_TYPE_ALIASES = {"image/jpg": "image/jpeg"}
 _SRC_ATTRIBUTE_RE = re.compile(
-    r"(?is)\bsrc\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s\"'=<>`]+))"
+    r"(?is)(?<![\w-])src\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s\"'=<>`]+))"
 )
 _CONTROL_CHARACTER_RE = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -650,16 +650,20 @@ def _infer_image_content_type(payload: bytes) -> str | None:
 
 
 def _image_dimensions(content_type: str, payload: bytes) -> tuple[int, int] | None:
-    if content_type == "image/png" and len(payload) >= 24:
-        return (
-            int.from_bytes(payload[16:20], "big"),
-            int.from_bytes(payload[20:24], "big"),
-        )
+    if content_type == "image/png":
+        if (
+            len(payload) < 24
+            or payload[8:12] != b"\x00\x00\x00\r"
+            or payload[12:16] != b"IHDR"
+        ):
+            return None
+        width = int.from_bytes(payload[16:20], "big")
+        height = int.from_bytes(payload[20:24], "big")
+        return (width, height) if width > 0 and height > 0 else None
     if content_type == "image/gif" and len(payload) >= 10:
-        return (
-            int.from_bytes(payload[6:8], "little"),
-            int.from_bytes(payload[8:10], "little"),
-        )
+        width = int.from_bytes(payload[6:8], "little")
+        height = int.from_bytes(payload[8:10], "little")
+        return (width, height) if width > 0 and height > 0 else None
     return None
 
 

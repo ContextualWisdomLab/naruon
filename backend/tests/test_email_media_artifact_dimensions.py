@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 
+import pytest
+
 from services import email_media_resolution as media
 
 
@@ -62,6 +64,41 @@ def test_normalized_gif_exposes_intrinsic_pixel_dimensions() -> None:
     assert artifact.llm_safe is True
     assert artifact.pixel_width == 48
     assert artifact.pixel_height == 16
+
+
+def test_png_with_non_ihdr_first_chunk_keeps_dimensions_unknown() -> None:
+    """A PNG signature alone cannot authorize reading dimensions from another chunk."""
+    non_ihdr = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIDAT"
+        + (320).to_bytes(4, "big")
+        + (180).to_bytes(4, "big")
+    )
+    result = media.resolve_email_media(_html_data_message("image/png", non_ihdr))
+
+    artifact = result.artifacts[0]
+    assert artifact.pixel_width is None
+    assert artifact.pixel_height is None
+
+
+@pytest.mark.parametrize(
+    ("content_type", "payload"),
+    [
+        ("image/png", _png(width=0, height=1)),
+        ("image/png", _png(width=1, height=0)),
+        ("image/gif", _gif(width=0, height=1)),
+        ("image/gif", _gif(width=1, height=0)),
+    ],
+)
+def test_non_positive_image_dimensions_are_not_persisted(
+    content_type: str, payload: bytes
+) -> None:
+    """Zero-sized image headers remain explicit unknown dimensions."""
+    result = media.resolve_email_media(_html_data_message(content_type, payload))
+
+    artifact = result.artifacts[0]
+    assert artifact.pixel_width is None
+    assert artifact.pixel_height is None
 
 
 def test_supported_format_without_bounded_dimension_parser_stays_explicit() -> None:
