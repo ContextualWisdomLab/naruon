@@ -24,6 +24,10 @@ from unittest.mock import AsyncMock, patch
 from services.embedding import STORAGE_EMBEDDING_DIMENSION
 from services.email_import_service import _owner_import_quota_lock_key
 from services.email_service import generate_email_fingerprint
+from services.email_send_rate_limiter import (
+    EmailSendRateLimitDecision,
+    EmailSendRateLimitUnavailable,
+)
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
 TEST_SESSION_HMAC_SECRET = os.environ["AUTH_SESSION_HMAC_SECRET"]
@@ -1789,6 +1793,11 @@ def test_send_email_endpoint(mock_send_email, monkeypatch):
         "api.emails.validate_smtp_destination", fake_validate_smtp_destination
     )
 
+    async def allow_rate_limit(*args, **kwargs):
+        return EmailSendRateLimitDecision(allowed=True, reason="allowed")
+
+    monkeypatch.setattr(emails_api, "enforce_send_email_rate_limit", allow_rate_limit)
+
     client = TestClient(app, headers={"X-User-Id": "testuser"})
 
     response = client.post(
@@ -1871,9 +1880,18 @@ def test_send_email_endpoint_rate_limits_per_user(mock_send_email, monkeypatch):
     monkeypatch.setattr(
         "api.emails.validate_smtp_destination", fake_validate_smtp_destination
     )
-    monkeypatch.setattr(emails_api, "_SEND_EMAIL_RATE_LIMIT_MAX_ATTEMPTS", 1)
-    monkeypatch.setattr(emails_api.time, "monotonic", lambda: 100.0)
-    emails_api._email_send_attempts_by_scope.clear()
+
+    calls = 0
+
+    async def fake_rate_limit(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return EmailSendRateLimitDecision(
+            allowed=calls == 1,
+            reason="allowed" if calls == 1 else "quota_exhausted",
+        )
+
+    monkeypatch.setattr(emails_api, "enforce_send_email_rate_limit", fake_rate_limit)
 
     try:
         client = TestClient(app, headers={"X-User-Id": "testuser"})
@@ -1886,11 +1904,40 @@ def test_send_email_endpoint_rate_limits_per_user(mock_send_email, monkeypatch):
         assert client.post("/api/emails/send", json=payload).status_code == 200
         response = client.post("/api/emails/send", json=payload)
     finally:
-        emails_api._email_send_attempts_by_scope.clear()
+        app.dependency_overrides.clear()
 
     assert response.status_code == 429
     assert response.json() == {"detail": "Email send rate limit exceeded"}
     mock_send_email.assert_called_once()
+
+
+@patch("api.emails.send_email", return_value={"status": "sent", "simulated": False})
+def test_send_email_endpoint_fails_closed_when_rate_limiter_is_unavailable(
+    mock_send_email, monkeypatch
+):
+    from fastapi.testclient import TestClient
+    from main import app
+
+    monkeypatch.setattr(
+        "api.emails.validate_smtp_destination",
+        lambda *args, **kwargs: (args[0], args[1]),
+    )
+
+    async def unavailable_rate_limit(*args, **kwargs):
+        raise EmailSendRateLimitUnavailable
+
+    monkeypatch.setattr(
+        emails_api, "enforce_send_email_rate_limit", unavailable_rate_limit
+    )
+
+    response = TestClient(app, headers={"X-User-Id": "testuser"}).post(
+        "/api/emails/send",
+        json={"to": "test@example.com", "subject": "Test", "body": "Body"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Email send rate limiter unavailable"}
+    mock_send_email.assert_not_called()
 
 
 @patch("api.emails.send_email", return_value={"status": "simulated", "simulated": True})
@@ -1907,6 +1954,10 @@ def test_send_email_endpoint_ignores_user_id_query_and_uses_authenticated_user_c
     monkeypatch.setattr(
         "api.emails.validate_smtp_destination", fake_validate_smtp_destination
     )
+    async def allow_rate_limit(*args, **kwargs):
+        return EmailSendRateLimitDecision(allowed=True, reason="allowed")
+
+    monkeypatch.setattr(emails_api, "enforce_send_email_rate_limit", allow_rate_limit)
     session = ScalarQueryCapturingSession([sample_email])
 
     async def tenant_db():
@@ -2013,6 +2064,10 @@ def test_send_email_endpoint_rejects_failed_send_status(mock_send_email, monkeyp
     monkeypatch.setattr(
         "api.emails.validate_smtp_destination", fake_validate_smtp_destination
     )
+    async def allow_rate_limit(*args, **kwargs):
+        return EmailSendRateLimitDecision(allowed=True, reason="allowed")
+
+    monkeypatch.setattr(emails_api, "enforce_send_email_rate_limit", allow_rate_limit)
 
     client = TestClient(app, headers={"X-User-Id": "testuser"})
 

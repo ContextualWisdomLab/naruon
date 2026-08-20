@@ -829,6 +829,33 @@ class Email(Base):
     )
 
 
+class EmailSendRateBucket(Base):
+    __tablename__ = "email_send_rate_buckets"
+
+    bucket_scope_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_started_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_email_send_rate_buckets_expires_at", "expires_at"),
+    )
+
+
 class TicketTask(Base):
     __tablename__ = "ticket_tasks"
 
