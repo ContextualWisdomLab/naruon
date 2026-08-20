@@ -70,6 +70,9 @@ The Python connector now has local CalDAV/WebDAV PUT adapters that enforce
 configured opaque source ids, source writeback enablement, safe target paths, and
 `If-Match` for update operations before provider execution. Create operations may
 omit `If-Match`; update operations still fail closed without current ETag evidence.
+The adapters connect through the already validated global IP while preserving the
+provider hostname in `Host` and TLS SNI, so a second DNS resolution cannot redirect
+credentialed writeback to a different address; redirects remain disabled.
 The Calendar writeback intent endpoint and the WebDAV materialization endpoint can
 dispatch signed commands to an active outbound runner when the caller explicitly
 sets `execute_provider=true`; Calendar update dispatch additionally fails closed
