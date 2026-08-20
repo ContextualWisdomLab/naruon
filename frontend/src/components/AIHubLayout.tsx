@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { toSafeReactText } from '@/lib/safe-text';
 
 type SurfaceStatus = 'loading' | 'ready' | 'error';
 type TabId = 'prompts' | 'workflows' | 'agents' | 'evaluation' | 'runs';
@@ -208,8 +209,8 @@ function SummaryGrid({ cards }: { cards: SummaryCard[] }) {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-black text-foreground">{card.value_text}</p>
-            <p className="mt-1 text-xs font-semibold text-muted-foreground">{card.detail_text}</p>
+            <p className="text-3xl font-black text-foreground">{toSafeReactText(card.value_text)}</p>
+            <p className="mt-1 text-xs font-semibold text-muted-foreground">{toSafeReactText(card.detail_text)}</p>
           </CardContent>
         </Card>
       ))}
@@ -228,8 +229,8 @@ function PromptPanel({ prompts }: { prompts: PromptCard[] }) {
           <CardHeader>
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
-                <CardTitle className="truncate font-black">{prompt.prompt_title}</CardTitle>
-                <CardDescription className="mt-2 leading-6">{prompt.description_text ?? '프롬프트 설명이 등록되지 않았습니다.'}</CardDescription>
+                <CardTitle className="truncate font-black">{toSafeReactText(prompt.prompt_title)}</CardTitle>
+                <CardDescription className="mt-2 leading-6">{toSafeReactText(prompt.description_text, '프롬프트 설명이 등록되지 않았습니다.')}</CardDescription>
               </div>
               <StatusBadge stateCode={prompt.shared_scope ? 'ready' : 'configured'} />
             </div>
@@ -238,7 +239,7 @@ function PromptPanel({ prompts }: { prompts: PromptCard[] }) {
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="font-bold text-muted-foreground">소유자</dt>
-                <dd className="mt-1 font-semibold">{prompt.owner_label}</dd>
+                <dd className="mt-1 font-semibold">{toSafeReactText(prompt.owner_label)}</dd>
               </div>
               <div>
                 <dt className="font-bold text-muted-foreground">업데이트</dt>
@@ -266,13 +267,13 @@ function WorkflowPanel({ workflows, onOpenRuns }: { workflows: WorkflowCard[]; o
         <Card key={workflow.workflow_key}>
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
-              <CardTitle className="font-black">{workflow.workflow_title}</CardTitle>
+              <CardTitle className="font-black">{toSafeReactText(workflow.workflow_title)}</CardTitle>
               <StatusBadge stateCode={workflow.state_code} />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-sm font-bold text-primary">{workflow.trigger_source}</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">{workflow.evidence_text}</p>
+            <p className="text-sm font-bold text-primary">{toSafeReactText(workflow.trigger_source)}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{toSafeReactText(workflow.evidence_text)}</p>
           </CardContent>
           <CardFooter className="justify-end">
             <Button
@@ -301,7 +302,7 @@ function AgentsPanel({ agents }: { agents: AgentCard[] }) {
         <Card key={agent.agent_key}>
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
-              <CardTitle className="font-black">{agent.agent_title}</CardTitle>
+              <CardTitle className="font-black">{toSafeReactText(agent.agent_title)}</CardTitle>
               <StatusBadge stateCode={agent.state_code} />
             </div>
           </CardHeader>
@@ -309,14 +310,14 @@ function AgentsPanel({ agents }: { agents: AgentCard[] }) {
             <dl className="space-y-3 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-bold text-muted-foreground">모델</dt>
-                <dd className="font-semibold">{agent.model_label}</dd>
+                <dd className="font-semibold">{toSafeReactText(agent.model_label)}</dd>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-bold text-muted-foreground">연결 상태</dt>
                 <dd className="font-semibold">{agent.configured ? '연결됨' : '연결 필요'}</dd>
               </div>
             </dl>
-            <p className="mt-4 text-xs leading-5 text-muted-foreground">{agent.governance_text}</p>
+            <p className="mt-4 text-xs leading-5 text-muted-foreground">{toSafeReactText(agent.governance_text)}</p>
           </CardContent>
           <CardFooter className="justify-end">
             <ActionLink href="/settings">모델 설정 열기</ActionLink>
@@ -345,7 +346,7 @@ function EvaluationPanel({ metrics, onOpenRuns }: { metrics: EvaluationMetric[];
             <div className="h-2 overflow-hidden rounded-full bg-secondary">
               <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(0, Math.min(metric.score_value, 100))}%` }} />
             </div>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">{metric.trend_text}</p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">{toSafeReactText(metric.trend_text)}</p>
           </CardContent>
           <CardFooter className="justify-end">
             <Button
@@ -380,12 +381,12 @@ function RunHistoryPanel({ events }: { events: RunEvent[] }) {
           <article key={event.event_key} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_9rem_8rem] md:items-center">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-black">{event.event_title}</h2>
+                <h2 className="font-black">{toSafeReactText(event.event_title)}</h2>
                 <StatusBadge stateCode={event.state_code} />
               </div>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">{event.detail_text ?? '상세 증거 없음'}</p>
             </div>
-            <p className="text-sm font-semibold text-primary">{event.evidence_source}</p>
+            <p className="text-sm font-semibold text-primary">{toSafeReactText(event.evidence_source)}</p>
             <p className="text-sm font-semibold text-muted-foreground">{formatDateTime(event.observed_at)}</p>
           </article>
         ))}
@@ -461,8 +462,8 @@ function ContextCheckpoint({ prompts }: { prompts: PromptCard[] }) {
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <CardTitle className="font-black">{prompt.prompt_title}</CardTitle>
-                <CardDescription className="mt-2 leading-6">{prompt.description_text ?? '프롬프트 설명이 등록되지 않았습니다.'}</CardDescription>
+                <CardTitle className="font-black">{toSafeReactText(prompt.prompt_title)}</CardTitle>
+                <CardDescription className="mt-2 leading-6">{toSafeReactText(prompt.description_text, '프롬프트 설명이 등록되지 않았습니다.')}</CardDescription>
               </div>
               <StatusBadge stateCode={prompt.shared_scope ? 'ready' : 'configured'} />
             </div>
@@ -471,7 +472,7 @@ function ContextCheckpoint({ prompts }: { prompts: PromptCard[] }) {
             <dl className="flex flex-wrap gap-3 text-xs font-bold text-muted-foreground">
               <div>
                 <dt className="sr-only">소유자</dt>
-                <dd>{prompt.owner_label}</dd>
+                <dd>{toSafeReactText(prompt.owner_label)}</dd>
               </div>
               <div>
                 <dt className="sr-only">업데이트</dt>
@@ -505,7 +506,7 @@ function DecisionCheckpoint({ metrics, agents }: { metrics: EvaluationMetric[]; 
               <div className="h-2 overflow-hidden rounded-full bg-secondary">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(0, Math.min(metric.score_value, 100))}%` }} />
               </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">{metric.trend_text}</p>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">{toSafeReactText(metric.trend_text)}</p>
             </CardContent>
           </Card>
         ))}
@@ -522,8 +523,8 @@ function DecisionCheckpoint({ metrics, agents }: { metrics: EvaluationMetric[]; 
               {agents.slice(0, 3).map((agent) => (
                 <li key={agent.agent_key} className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-black">{agent.agent_title}</p>
-                    <p className="text-xs font-semibold text-muted-foreground">{agent.model_label}</p>
+                    <p className="truncate text-sm font-black">{toSafeReactText(agent.agent_title)}</p>
+                    <p className="text-xs font-semibold text-muted-foreground">{toSafeReactText(agent.model_label)}</p>
                   </div>
                   <StatusBadge stateCode={agent.state_code} />
                 </li>
@@ -547,13 +548,13 @@ function ActionsCheckpoint({ workflows, events }: { workflows: WorkflowCard[]; e
             <Card key={workflow.workflow_key} size="sm" className="bg-background">
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <CardTitle className="text-sm font-black">{workflow.workflow_title}</CardTitle>
+                  <CardTitle className="text-sm font-black">{toSafeReactText(workflow.workflow_title)}</CardTitle>
                   <StatusBadge stateCode={workflow.state_code} />
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-sm font-bold text-primary">{workflow.trigger_source}</p>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{workflow.evidence_text}</p>
+                <p className="text-sm font-bold text-primary">{toSafeReactText(workflow.trigger_source)}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{toSafeReactText(workflow.evidence_text)}</p>
               </CardContent>
             </Card>
           ))
@@ -570,8 +571,8 @@ function ActionsCheckpoint({ workflows, events }: { workflows: WorkflowCard[]; e
             <ul className="space-y-3">
               {events.slice(0, 3).map((event) => (
                 <li key={event.event_key} className="text-sm">
-                  <p className="font-black">{event.event_title}</p>
-                  <p className="mt-1 font-semibold text-primary">{event.evidence_source}</p>
+                  <p className="font-black">{toSafeReactText(event.event_title)}</p>
+                  <p className="mt-1 font-semibold text-primary">{toSafeReactText(event.evidence_source)}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(event.observed_at)}</p>
                 </li>
               ))}
