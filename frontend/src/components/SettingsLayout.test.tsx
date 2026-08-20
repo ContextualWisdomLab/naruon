@@ -335,6 +335,7 @@ describe("SettingsLayout", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
+      expect(tabButton.className).toContain("bg-primary");
       expect(container.querySelectorAll('svg:not([aria-hidden="true"])')).toHaveLength(0);
     }
   });
