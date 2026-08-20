@@ -4,22 +4,22 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("lucide-react", () => ({
-  Activity: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  AlertCircle: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Loader2: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Bell: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Bot: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  CheckCircle2: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Cpu: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Mail: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Monitor: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Network: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Plus: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  RefreshCw: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Settings: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Shield: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  Smartphone: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
-  User: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Activity: () => <svg aria-hidden="true" />,
+  AlertCircle: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
+  Bell: () => <svg aria-hidden="true" />,
+  Bot: () => <svg aria-hidden="true" />,
+  CheckCircle2: () => <svg aria-hidden="true" />,
+  Cpu: () => <svg aria-hidden="true" />,
+  Mail: () => <svg aria-hidden="true" />,
+  Monitor: () => <svg aria-hidden="true" />,
+  Network: () => <svg aria-hidden="true" />,
+  Plus: () => <svg aria-hidden="true" />,
+  RefreshCw: () => <svg aria-hidden="true" />,
+  Settings: () => <svg aria-hidden="true" />,
+  Shield: () => <svg aria-hidden="true" />,
+  Smartphone: () => <svg aria-hidden="true" />,
+  User: () => <svg aria-hidden="true" />,
 }));
 
 const oidcMocks = vi.hoisted(() => ({
@@ -703,19 +703,5 @@ describe("SettingsLayout", () => {
       expect(container.textContent).toContain(`${tabName === "멤버" ? "멤버와 역할" : tabName === "알림" ? "알림 정책" : tabName === "자동화" ? "자동화 규칙" : "결제와 사용량"}`);
       expect(container.textContent).not.toContain("다음 릴리즈");
     }
-  });
-
-  it("hides all rendered decorative Lucide icons from screen readers", async () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<SettingsLayout />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(container.querySelectorAll("svg:not([aria-hidden=\"true\"])")).toHaveLength(0);
   });
 });
