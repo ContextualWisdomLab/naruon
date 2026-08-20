@@ -311,8 +311,8 @@ async def test_orchestrator_bounds_requests_and_preserves_input_order(monkeypatc
 
 def test_orchestrator_partitions_by_utf8_bytes_without_splitting_inputs():
     input_bytes = batch_module._ORCHESTRATOR_MAX_INPUT_BYTES
-    first = "가" * (input_bytes // 6)
-    second = "나" * (input_bytes // 6)
+    first = "가" * (input_bytes // 12)
+    second = "나" * (input_bytes // 12)
 
     assert batch_module._partition_orchestrator_inputs([]) == []
     partitions = batch_module._partition_orchestrator_inputs([first, second])

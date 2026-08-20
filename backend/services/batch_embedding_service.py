@@ -257,7 +257,7 @@ def _serialized_orchestrator_payload_bytes(
         "metadata": metadata,
     }
     return len(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
     )
 
 
