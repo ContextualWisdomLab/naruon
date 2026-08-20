@@ -123,19 +123,16 @@ describe("NetworkGraph", () => {
     await flushAsyncWork();
 
     const mountedContainer = getMountedContainer();
-    const wrapper = mountedContainer.querySelector('span[tabindex="0"]');
     const button = mountedContainer.querySelector('button');
-    const descriptionId = wrapper?.getAttribute("aria-describedby");
+    const descriptionId = button?.getAttribute("aria-describedby");
 
-    expect(wrapper).toBeInstanceOf(HTMLSpanElement);
-    expect(wrapper?.className).toContain("cursor-not-allowed");
     expect(descriptionId).toBeTruthy();
     expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(
       "표시할 관계 데이터가 없습니다.",
     );
     expect(button).toBeInstanceOf(HTMLButtonElement);
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button?.className).toContain("disabled:pointer-events-none");
+    expect(button?.className).toContain("disabled:cursor-not-allowed");
   });
 
   it("announces graph loading failures as a polite alert", async () => {
