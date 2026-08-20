@@ -1103,7 +1103,10 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "no current blocking failures remain" in gate_script
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
-    assert "CHANGES_REQUESTED" in gate_script
+    # A stale aggregate review decision must not block current-head evidence;
+    # substantive current review evidence remains covered by the gate patterns.
+    assert "Review decision is CHANGES_REQUESTED" not in gate_script
+    assert "changes requested" in gate_script.lower()
     assert "gh pr merge" not in gate_script
     assert "--match-head-commit" not in gate_script
     assert "actions/checkout" not in combined
