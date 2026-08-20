@@ -155,11 +155,10 @@ export default function ToolsPage() {
       const params = tool ? buildDefaultParameters(tool) : {};
       const response = await apiClient.post<ExecuteResponse>(`/api/tools/${code}/execute`, { parameters: params });
       setResults(prev => ({ ...prev, [code]: response }));
-    } catch (error: unknown) {
-      const err = error as { message?: string };
+    } catch {
       setResults(prev => ({
         ...prev,
-        [code]: { status: "failed", result: null, message: err.message || "실행 중 오류가 발생했습니다." }
+        [code]: { status: "failed", result: null, message: "실행 중 오류가 발생했습니다." }
       }));
     } finally {
       setExecuting(prev => ({ ...prev, [code]: false }));

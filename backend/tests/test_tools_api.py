@@ -346,7 +346,7 @@ async def test_execute_tool_inactive():
     finally:
         registry.unregister("inactive_tool")
 
-    assert response.status_code == 400
+    assert response.status_code == 403
     assert response.json() == {"detail": "Tool is not active"}
 
 
