@@ -122,6 +122,60 @@ describe("ToolsPage", () => {
     expect(container.textContent).toContain("테스트 카테고리");
   });
 
+  it("keeps first-wins tool summaries consistent with rendered tools", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url.includes("/api/tools") && !url.includes("execute")) {
+          return jsonResponse([
+            {
+              code: "duplicate_tool",
+              name: "첫 번째 도구",
+              description: "첫 번째 설명",
+              category: "첫 번째 분류",
+              parameters: { subject: "string" },
+            },
+            {
+              code: "duplicate_tool",
+              name: "무시되는 중복 도구",
+              description: "두 번째 설명",
+              category: "두 번째 분류",
+              is_active: false,
+              parameters: { ignored: "number" },
+            },
+            {
+              code: "unique_tool",
+              name: "고유 도구",
+              description: "고유 설명",
+              category: "고유 분류",
+            },
+          ]);
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<ToolsPage />);
+    });
+    await flushAsyncWork();
+
+    const summary = container.querySelector('section[aria-label="도구 레지스트리 종합"]');
+    expect(summary).not.toBeNull();
+    expect(Array.from(summary?.querySelectorAll("p.text-3xl") ?? []).map((node) => node.textContent)).toEqual([
+      "2",
+      "2",
+      "2",
+      "1",
+    ]);
+    expect(container.textContent).toContain("첫 번째 도구");
+    expect(container.textContent).not.toContain("무시되는 중복 도구");
+  });
+
   it("executes a tool and shows the result", async () => {
     let executeCalled = false;
     let executeBody: unknown;
