@@ -146,12 +146,18 @@ at least 0.90, unsupported-claim rate at most 0.02, expected calibration error
 at most 0.05, and no prespecified language/role/context slice with macro-F1
 below 0.70 when that slice has the preregistered minimum sample size.
 
+The preregistered `minimum_slice_sample_size` is 30 labeled cases per slice. A
+slice below that count is reported as underpowered rather than selectively
+excluded after seeing its result.
+
 The policy artifact must contain `protocol_id`, `protocol_hash`,
 `calibration_split_hash`, `development_split_hash`, `locked_holdout_hash`, the
 literal thresholds, and `publish_decision` (`publish` or `withhold`). Changing
 any split, threshold, or holdout requires a new protocol version and a new
-calibration run; post-hoc threshold tuning against the locked holdout is not a
-publication decision.
+calibration run. Thresholds must be frozen before the locked-holdout labels are
+accessed. A run that tunes thresholds against the locked holdout is invalid for
+publication and requires a new locked holdout; it is not a publication
+decision.
 
 ## Multi-agent and compute allocation
 

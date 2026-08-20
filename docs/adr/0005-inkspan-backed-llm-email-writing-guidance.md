@@ -177,12 +177,15 @@ The migration must prove PostgreSQL upgrade/downgrade and the repository's
 SQLite contract. Downgrade is allowed only after semantic review is disabled and
 dependent evidence is deleted; it drops only the three feature-owned tables and
 never alters canonical email tables or mail content. A failed evidence
-transaction rolls back the review session and diagnostics together, so the API
-never returns unrecorded evidence.
+transaction rolls back the review session and diagnostics together, returns a
+typed failure or abstention, and never returns unrecorded evidence. That
+transaction failure does not itself disable the feature or downgrade its schema.
 
-Rollback disables the review endpoint and diagnostic props while retaining the
-Inkspan editor and existing mail-send path. No canonical email content
-migration is required.
+Feature rollback is a separate, explicitly authorized operation: it disables
+the review endpoint and diagnostic props, deletes dependent feature evidence,
+and applies the documented downgrade only after those conditions are proven,
+while retaining the Inkspan editor and existing mail-send path. No canonical
+email content migration is required.
 
 ## Verification and acceptance evidence
 
