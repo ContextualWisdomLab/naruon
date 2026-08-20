@@ -651,4 +651,3 @@ async def run_noema_agent(
         )
     finally:
         await closer()
-
