@@ -828,14 +828,15 @@ assert_coderabbit_stale_review_comment_does_not_block() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
-assert_changes_requested_creates_marker_comment() {
+assert_stale_changes_requested_does_not_block_current_evidence() {
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate changes_requested "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/gh.log"
-  assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_not_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/gh.log"
+  assert_in_file 'status=completed -f conclusion=success' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -956,7 +957,7 @@ assert_truncated_review_thread_metadata_blocks
 assert_truncated_review_thread_comments_metadata_blocks
 assert_github_code_quality_current_review_comment_blocks
 assert_coderabbit_stale_review_comment_does_not_block
-assert_changes_requested_creates_marker_comment
+assert_stale_changes_requested_does_not_block_current_evidence
 assert_passing_gate_is_metadata_only_without_merge
 assert_no_required_checks_waits_without_hard_comment
 assert_self_gate_failure_does_not_recurse

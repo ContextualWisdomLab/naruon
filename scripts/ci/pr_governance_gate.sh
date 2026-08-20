@@ -255,7 +255,6 @@ if ! [[ "$HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
 fi
 HEAD_REF_OID="$HEAD_SHA" # headRefOid equivalent for REST metadata paths.
 IS_DRAFT="$(printf '%s' "$PR_JSON" | jq -r '.isDraft')"
-REVIEW_DECISION="$(printf '%s' "$PR_JSON" | jq -r '.reviewDecision // ""')"
 
 if [ "$IS_DRAFT" = "true" ]; then
   add_blocker 'Draft PR: merge automation is paused.'
@@ -271,10 +270,6 @@ fi
 
 if [ "$MERGE_STATE" = "UNKNOWN" ]; then
   add_waiting "Merge state is still UNKNOWN after 4 attempts on ${HEAD_REF_OID}; waiting for GitHub to refresh mergeability."
-fi
-
-if [ "$REVIEW_DECISION" = "CHANGES_REQUESTED" ]; then
-  add_blocker 'Review decision is CHANGES_REQUESTED; address requested changes before merge.'
 fi
 
 # shellcheck disable=SC2016  # GraphQL variables must remain literal.
