@@ -170,6 +170,7 @@ def test_screenshot_utility_allows_only_local_static_routes():
 
 def test_compose_externalizes_postgres_credentials():
     compose = (REPO_ROOT / "docker-compose.yml").read_text()
+    batch_overlay = (REPO_ROOT / "docker-compose.pg-llm-batch.yml").read_text()
     compose_without_runtime_preflights = (
         compose.replace(
             '$${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before running Docker Compose}',
@@ -206,6 +207,13 @@ def test_compose_externalizes_postgres_credentials():
     assert "- ENCRYPTION_KEY" not in compose
     assert "${ENCRYPTION_KEY:?" not in compose_without_runtime_preflights
     assert '$${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env before running Docker Compose}' in compose
+    assert "POSTGRES_USER: pgllm" not in batch_overlay
+    assert "POSTGRES_PASSWORD: pgllm" not in batch_overlay
+    assert "postgresql://pgllm:pgllm@" not in batch_overlay
+    assert "PG_LLM_BATCH_POSTGRES_USER:?" in batch_overlay
+    assert "PG_LLM_BATCH_POSTGRES_PASSWORD:?" in batch_overlay
+    assert "POSTGRES_PASSWORD: ${PG_LLM_BATCH_POSTGRES_PASSWORD:?" in batch_overlay
+    assert 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"' in batch_overlay
 
 
 def test_compose_allows_only_the_local_ollama_provider_host():
