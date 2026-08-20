@@ -1,4 +1,8 @@
 ## [Unreleased]
+- 수동 PDF DOM 인식 업로드도 이메일 첨부 및 NewsDOM sidecar와 같은 64MiB
+  bounded transport 계약을 사용합니다. 한도를 넘으면 PDF를 저장하거나
+  sidecar에 전달하지 않고 `413`을 반환하므로 고객은 파일을 분할하거나
+  대용량 저장소 경로를 사용할 수 있습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)

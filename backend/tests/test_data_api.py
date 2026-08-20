@@ -2898,6 +2898,10 @@ def test_data_pdf_dom_upload_persists_signed_organization_scope(mock_db):
     assert stored_document.document_status == "pdf_dom_recognition_pending"
 
 
+def test_data_pdf_dom_upload_budget_matches_newsdom_transport_contract():
+    assert data_api._MAX_PDF_DOM_UPLOAD_BYTES == 64 * 1024 * 1024
+
+
 def test_data_pdf_dom_upload_rejects_invalid_signature_and_size(mock_db, monkeypatch):
     token = _signed_session_token(_valid_session_payload())
     client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
