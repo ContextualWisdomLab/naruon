@@ -1104,6 +1104,7 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
     assert "CHANGES_REQUESTED" in gate_script
+    assert "Aggregate review decision is CHANGES_REQUESTED" in gate_script
     assert "gh pr merge" not in gate_script
     assert "--match-head-commit" not in gate_script
     assert "actions/checkout" not in combined

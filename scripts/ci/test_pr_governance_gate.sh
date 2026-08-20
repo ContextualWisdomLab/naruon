@@ -834,7 +834,7 @@ assert_changes_requested_creates_marker_comment() {
   run_gate changes_requested "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/gh.log"
+  assert_in_file 'Aggregate review decision is CHANGES_REQUESTED' "$temp_dir/output.txt"
   assert_in_file '<!-- pr-governance:metadata-gate -->' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }

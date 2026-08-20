@@ -274,7 +274,7 @@ if [ "$MERGE_STATE" = "UNKNOWN" ]; then
 fi
 
 if [ "$REVIEW_DECISION" = "CHANGES_REQUESTED" ]; then
-  add_blocker 'Review decision is CHANGES_REQUESTED; address requested changes before merge.'
+  add_waiting 'Aggregate review decision is CHANGES_REQUESTED; waiting for current-head review evidence.'
 fi
 
 # shellcheck disable=SC2016  # GraphQL variables must remain literal.
