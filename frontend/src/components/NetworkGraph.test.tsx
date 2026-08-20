@@ -124,12 +124,13 @@ describe("NetworkGraph", () => {
 
     const mountedContainer = getMountedContainer();
     const wrapper = mountedContainer.querySelector('span[tabindex="0"]');
-    const button = mountedContainer.querySelector('button');
+    const button = mountedContainer.querySelector('button[disabled]');
     const descriptionId = wrapper?.getAttribute("aria-describedby");
 
     expect(wrapper).toBeInstanceOf(HTMLSpanElement);
     expect(wrapper?.className).toContain("cursor-not-allowed");
     expect(wrapper?.getAttribute("title")).toBe("표시할 관계 데이터가 없습니다.");
+    expect(wrapper?.className).toContain("focus-visible:ring-2");
     expect(descriptionId).toBeTruthy();
     expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(
       "표시할 관계 데이터가 없습니다.",
