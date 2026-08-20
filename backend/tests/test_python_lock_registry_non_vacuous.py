@@ -91,11 +91,11 @@ def test_script_main_guard_runs_registry_validation(
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(
-        urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(request.full_url),
-    )
+    class _Opener:
+        def open(self, request: urllib.request.Request, timeout: float) -> _Response:
+            return _Response(request.full_url)
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *handlers: _Opener())
     monkeypatch.setattr(
         sys,
         "argv",

@@ -142,9 +142,9 @@ def test_fetch_pypi_release_enforces_bounds_and_json_shape(monkeypatch: pytest.M
     """The real transport validates configuration, media type, size, and JSON shape."""
     payload = json.dumps(_metadata(_sha())).encode()
     monkeypatch.setattr(
-        registry_provenance.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(payload),
+        registry_provenance,
+        "_open_pypi_request",
+        lambda request, *, timeout_seconds: _Response(payload),
     )
     assert registry_provenance.fetch_pypi_release("example", "1.0")["info"] == {
         "name": "example",
@@ -156,17 +156,17 @@ def test_fetch_pypi_release_enforces_bounds_and_json_shape(monkeypatch: pytest.M
             registry_provenance.fetch_pypi_release("example", "1.0", **kwargs)
 
     monkeypatch.setattr(
-        registry_provenance.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(payload, "text/plain"),
+        registry_provenance,
+        "_open_pypi_request",
+        lambda request, *, timeout_seconds: _Response(payload, "text/plain"),
     )
     with pytest.raises(ValueError, match="must be JSON"):
         registry_provenance.fetch_pypi_release("example", "1.0")
 
     monkeypatch.setattr(
-        registry_provenance.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(b"{}x"),
+        registry_provenance,
+        "_open_pypi_request",
+        lambda request, *, timeout_seconds: _Response(b"{}x"),
     )
     with pytest.raises(ValueError, match="byte limit"):
         registry_provenance.fetch_pypi_release(
@@ -174,9 +174,9 @@ def test_fetch_pypi_release_enforces_bounds_and_json_shape(monkeypatch: pytest.M
         )
 
     monkeypatch.setattr(
-        registry_provenance.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(b"[]"),
+        registry_provenance,
+        "_open_pypi_request",
+        lambda request, *, timeout_seconds: _Response(b"[]"),
     )
     with pytest.raises(ValueError, match="JSON object"):
         registry_provenance.fetch_pypi_release("example", "1.0")

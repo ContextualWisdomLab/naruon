@@ -14,6 +14,7 @@ import argparse
 import json
 import re
 import urllib.parse
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
@@ -30,6 +31,29 @@ _EXACT_PIN_RE = re.compile(
 _HASH_LINE_RE = re.compile(r"^--hash=sha256:(?P<digest>[0-9a-fA-F]{64})\s*\\?$")
 
 ReleaseFetcher = Callable[[str, str], Mapping[str, object]]
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevent urllib from contacting an unvalidated redirect target."""
+
+    def redirect_request(self, *args: object, **kwargs: object) -> None:
+        """Reject every redirect so the caller can fail before a second request."""
+        return None
+
+
+def _open_pypi_request(
+    request: urllib.request.Request,
+    *,
+    timeout_seconds: float,
+) -> object:
+    """Open one PyPI request without following redirects."""
+    opener = urllib.request.build_opener(_NoRedirectHandler())
+    try:
+        return opener.open(request, timeout=timeout_seconds)
+    except urllib.error.HTTPError as exc:
+        if 300 <= exc.code < 400:
+            raise ValueError("PyPI metadata redirects are not allowed") from exc
+        raise
 
 
 def _normalized_name(name: str) -> str:
@@ -183,7 +207,7 @@ def fetch_pypi_release(
         },
         method="GET",
     )
-    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+    with _open_pypi_request(request, timeout_seconds=timeout_seconds) as response:
         final_url_getter = getattr(response, "geturl", None)
         final_url = final_url_getter() if callable(final_url_getter) else release_url
         if final_url != release_url:

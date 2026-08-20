@@ -52,9 +52,9 @@ def test_fetch_rejects_redirect_to_non_pypi_origin(
 ) -> None:
     """An HTTPS redirect must not move trusted metadata reads off pypi.org."""
     monkeypatch.setattr(
-        registry_provenance.urllib.request,
-        "urlopen",
-        lambda request, timeout: _RedirectedResponse(
+        registry_provenance,
+        "_open_pypi_request",
+        lambda request, *, timeout_seconds: _RedirectedResponse(
             "https://metadata.attacker.invalid/pypi/example/1.0/json"
         ),
     )
@@ -69,11 +69,26 @@ def test_fetch_accepts_final_exact_pypi_release_url(
     """A response that remains on the exact requested PyPI URL is accepted."""
     expected_url = registry_provenance.build_pypi_release_url("example", "1.0")
     monkeypatch.setattr(
-        registry_provenance.urllib.request,
-        "urlopen",
-        lambda request, timeout: _RedirectedResponse(expected_url),
+        registry_provenance,
+        "_open_pypi_request",
+        lambda request, *, timeout_seconds: _RedirectedResponse(expected_url),
     )
 
     metadata = registry_provenance.fetch_pypi_release("example", "1.0")
 
     assert metadata["info"] == {"name": "example", "version": "1.0"}
+
+
+def test_redirect_handler_returns_no_follow_request() -> None:
+    """The transport handler refuses to construct a request for a redirect target."""
+    request = registry_provenance._NoRedirectHandler().redirect_request(
+        registry_provenance.urllib.request.Request(
+            "https://pypi.org/pypi/example/1.0/json"
+        ),
+        302,
+        "Found",
+        {"Location": "https://metadata.attacker.invalid/"},
+        "https://pypi.org/pypi/example/1.0/json",
+    )
+
+    assert request is None
