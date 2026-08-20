@@ -39,6 +39,16 @@ function recognizedPreview(): RepositoryAssetPreview {
   };
 }
 
+function recognizedHwpxWithMismatchedHandoff(): RepositoryAssetPreview {
+  return {
+    ...recognizedPreview(),
+    edit_handoff: {
+      ...unavailableHwpxHandoff(),
+      parser_family: "pdf",
+    },
+  };
+}
+
 function pendingPreview(): RepositoryAssetPreview {
   return {
     asset_key: "asset_hwpx_pending",
@@ -210,6 +220,18 @@ describe("RepositoryAssetPreviewPanel", () => {
     expect(panel?.textContent).toContain("이 파일의 본문을 읽을 수 없습니다. 다른 파일을 선택하세요");
     expect(panel?.querySelector("[data-preview-paragraphs]")).toBeNull();
     expect(container?.textContent).toContain("content extraction pending");
+  });
+
+  it("hides a stale handoff whose parser family does not match the preview", () => {
+    renderPanel({
+      currentDetailText: "recognized HWPX text",
+      preview: recognizedHwpxWithMismatchedHandoff(),
+    });
+
+    const panel = container?.querySelector('[aria-label="선택한 자산 본문 미리보기"]');
+    expect(panel?.querySelector('[aria-label="asset_hwpx_recognized Inkspan에서 편집"]'))
+      .toBeNull();
+    expect(container?.textContent).not.toContain("Inkspan에서 편집");
   });
 
   it("fails closed on unmatched preview 404 without replacing current content", () => {

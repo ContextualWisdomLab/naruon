@@ -32,7 +32,8 @@ export function RepositoryAssetPreviewPanel({
   const showInkspanHandoff = Boolean(
     editHandoff
     && isRecognizedRepositoryAssetPreview(preview)
-    && preview.parser_family === 'hwpx',
+    && preview.parser_family === 'hwpx'
+    && editHandoff.parser_family === 'hwpx',
   );
   const handoffFileName = toSafeReactText(fileName || '선택한 파일');
 
