@@ -22,7 +22,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.llm_provider_urls import validate_llm_provider_base_url
+from services.llm_provider_urls import validate_llm_provider_base_url_async
 from services.tenant_config_scope import get_scoped_tenant_config
 
 ORCHESTRATOR_MODEL_ALIAS = "contextual-orchestrator"
@@ -120,7 +120,7 @@ async def resolve_orchestrator_gateway(
         return None
 
     try:
-        allowlisted = validate_llm_provider_base_url(shaped)
+        allowlisted = await validate_llm_provider_base_url_async(shaped)
     except ValueError:
         return None
     if not allowlisted:

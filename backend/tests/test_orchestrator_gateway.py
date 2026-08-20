@@ -117,9 +117,12 @@ def test_gateway_modules_do_not_read_env_or_hold_provider_keys():
 async def test_resolve_gateway_from_fernet_kv_not_env(monkeypatch):
     for name in UPSTREAM_PROVIDER_SECRET_NAMES:
         monkeypatch.setenv(name, f"env-leak-{name}")
+    async def allowlisted(value):
+        return value
+
     monkeypatch.setattr(
-        "services.orchestrator_gateway.validate_llm_provider_base_url",
-        lambda value: value,
+        "services.orchestrator_gateway.validate_llm_provider_base_url_async",
+        allowlisted,
     )
 
     engine = create_engine("sqlite:///:memory:")
@@ -171,9 +174,12 @@ async def test_resolve_gateway_unavailable_when_kv_missing():
 
 @pytest.mark.asyncio
 async def test_resolve_gateway_rejects_invalid_url(monkeypatch):
+    async def allowlisted(value):
+        return value
+
     monkeypatch.setattr(
-        "services.orchestrator_gateway.validate_llm_provider_base_url",
-        lambda value: value,
+        "services.orchestrator_gateway.validate_llm_provider_base_url_async",
+        allowlisted,
     )
     config = TenantConfig(
         user_id="user-1",
