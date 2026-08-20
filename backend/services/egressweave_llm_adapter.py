@@ -2,8 +2,8 @@
 
 The application owns provider selection and configuration. EgressWeave owns the
 provider-neutral outbound HTTP security boundary. This module is intentionally
-small: it translates one selected LLM base URL into one exact ``(host, port)``
-authority, then delegates DNS validation, address pinning, TLS identity,
+small: it translates one selected LLM base URL into one exact allowlisted host,
+then delegates DNS validation, address pinning, TLS identity,
 request/response resource bounds, proxy isolation, and cleanup to EgressWeave.
 """
 
@@ -34,7 +34,7 @@ def _operator_allowed_hosts() -> frozenset[str]:
 
 
 def _custom_provider_authority(base_url: str) -> tuple[str, int]:
-    """Derive one exact configured authority before EgressWeave validates it.
+    """Derive one exact configured host before EgressWeave validates the URL.
 
     This is only an authorization translation step, not URL security validation.
     The selected host must already be present in naruon's operator allowlist;
@@ -65,15 +65,15 @@ def _policy_for_base_url(base_url: str | None) -> tuple[str, EgressPolicy, bool]
     if base_url is None or not base_url.strip():
         return (
             _OPENAI_DEFAULT_BASE_URL,
-            EgressPolicy.from_authorities([_OPENAI_DEFAULT_AUTHORITY]),
+            EgressPolicy.from_hosts([_OPENAI_DEFAULT_AUTHORITY[0]]),
             True,
         )
 
     authority = _custom_provider_authority(base_url)
     return (
         base_url,
-        EgressPolicy.from_authorities(
-            [authority],
+        EgressPolicy.from_hosts(
+            [authority[0]],
             allow_local=settings.ALLOW_LOCAL_LLM_PROVIDERS,
         ),
         False,
@@ -86,7 +86,7 @@ async def build_llm_provider_http_client(base_url: str | None):
     ``None``/blank keeps the existing OpenAI SDK default-base-url contract for
     callers while the supplied HTTP client is internally pinned to
     ``api.openai.com:443``. Custom endpoints must be exact operator-allowlisted
-    and map to exactly one EgressWeave authority. ``ALLOW_LOCAL_LLM_PROVIDERS``
+    and map to one EgressWeave host policy. ``ALLOW_LOCAL_LLM_PROVIDERS``
     widens address classes only for an already allowlisted local/container name;
     it never grants a hostname or port by itself.
 

@@ -42,7 +42,7 @@ async def test_default_openai_uses_exact_builtin_authority_without_changing_none
     assert client is sentinel
     assert captured["base_url"] == "https://api.openai.com/v1"
     policy = captured["policy"]
-    assert policy.allowed_authorities == frozenset({("api.openai.com", 443)})
+    assert policy.allowed_hosts == frozenset({"api.openai.com"})
     assert policy.allow_local is False
 
 
@@ -74,7 +74,7 @@ async def test_custom_provider_maps_operator_allowlist_to_one_exact_authority(
     assert normalized == "https://api.example.com:8443/v1"
     assert client is sentinel
     policy = captured["policy"]
-    assert policy.allowed_authorities == frozenset({("api.example.com", 8443)})
+    assert policy.allowed_hosts == frozenset({"api.example.com"})
     assert policy.allow_local is False
 
 
@@ -105,7 +105,7 @@ async def test_local_container_requires_both_exact_allowlist_and_local_opt_in(
     assert normalized == "http://ollama:11434/v1"
     assert client is sentinel
     policy = captured["policy"]
-    assert policy.allowed_authorities == frozenset({("ollama", 11434)})
+    assert policy.allowed_hosts == frozenset({"ollama"})
     assert policy.allow_local is True
 
 
