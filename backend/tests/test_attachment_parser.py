@@ -986,6 +986,31 @@ def test_office_and_archive_safety_edges_are_explicit(monkeypatch):
     assert text_budget_result.parse_error_code == "parse_size_limit_exceeded"
 
 
+@pytest.mark.parametrize("parser_error", [NotImplementedError, RuntimeError])
+def test_office_parser_converts_zip_reader_errors_to_named_failure(
+    monkeypatch, parser_error
+):
+    payload = _zip_fixture(("word/document.xml", "<w:t>text</w:t>"))
+
+    def raise_parser_error(_archive, _member):
+        raise parser_error("unsupported ZIP reader operation")
+
+    monkeypatch.setattr(
+        "services.attachment_parser.ZipFile.open", raise_parser_error
+    )
+    result = parse_email_attachment(
+        filename="unsupported-compression.docx",
+        content_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        raw_content=payload,
+    )
+
+    assert result.content == ""
+    assert result.parse_status == "office_text_parse_failed"
+    assert result.parse_error_code == "office_text_parse_failed"
+
+
 def test_nested_email_and_audio_metadata_failure_edges(monkeypatch):
     monkeypatch.setattr("services.attachment_parser.MAX_NESTED_EMAIL_PARSE_BYTES", 1)
     assert _parse_nested_email_metadata(b"too large")[1] == "parse_size_limit_exceeded"

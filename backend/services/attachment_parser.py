@@ -795,7 +795,14 @@ def _parse_office_text(
         return None, "parse_size_limit_exceeded"
     except DefusedXmlException:
         return None, "office_text_parse_failed"
-    except (BadZipFile, OSError, ValueError, ElementTree.ParseError):
+    except (
+        BadZipFile,
+        NotImplementedError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        ElementTree.ParseError,
+    ):
         return None, "office_text_parse_failed"
 
 
