@@ -407,9 +407,7 @@ export default function NetworkGraph() {
           <span
             tabIndex={!firstEdge ? 0 : undefined}
             title={!firstEdge ? "표시할 관계 데이터가 없습니다." : undefined}
-            className={!firstEdge
-              ? "cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-              : undefined}
+            className={!firstEdge ? "cursor-not-allowed rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" : undefined}
           >
             <button
               type="button"
