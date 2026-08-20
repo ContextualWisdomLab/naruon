@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2024-08-19 - Replaced O(N) Array Lookups with O(1) Maps in Tools Execution
+
+**Learning:** During tool execution in the frontend, looking up a tool by code from an array with `.find()` inside the execution handler could lead to repeated O(N) scans. While the number of tools may be small, applying this pattern broadly can cause O(M * N) bottlenecks when executing multiple items.
+**Action:** When a component needs to look up items from an array by ID frequently, pre-compute an `O(N)` `Map` before the lookup (or memoize it with `useMemo`) and use `map.get()` for `O(1)` lookups instead of inline array `.find()` calls.
