@@ -568,12 +568,12 @@ export function ProjectsLayout() {
     <div className="flex h-full min-h-0 min-w-0 overflow-x-hidden bg-background text-foreground">
       <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto border-r border-border bg-card lg:flex">
         <div className="border-b border-border p-4">
-          <a href="/data" className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90">
+          <a href="/data" className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <FolderOpen className="size-4" /> 새 프로젝트
           </a>
           <div className="relative mt-4">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <a href="/search" aria-label="프로젝트 관련 문서와 메일 연결" className="flex h-9 w-full items-center rounded-md border border-border bg-background pl-9 pr-4 text-sm font-semibold text-muted-foreground hover:bg-secondary">
+            <a href="/search" aria-label="프로젝트 관련 문서와 메일 연결" className="flex h-9 w-full items-center rounded-md border border-border bg-background pl-9 pr-4 text-sm font-semibold text-muted-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
               관련 문서/메일 연결
             </a>
           </div>
@@ -644,7 +644,7 @@ export function ProjectsLayout() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <a href="/tasks" className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-semibold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">작업 보드</a>
-              <a href="/data" className="rounded-md bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90">원본 연결</a>
+              <a href="/data" className="rounded-md bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">원본 연결</a>
             </div>
           </div>
         </header>
@@ -682,7 +682,7 @@ export function ProjectsLayout() {
                         onClick={handleConfirmCandidate}
                         disabled={confirmSubmitting || candidateConfirmed}
                         aria-busy={confirmSubmitting}
-                        className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+                        className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
                         {candidateConfirmed ? '프로젝트 후보 확정됨' : confirmSubmitting ? '확정 저장 중' : '프로젝트 후보 확정'}
                       </button>
@@ -969,7 +969,7 @@ export function ProjectsLayout() {
                               type="button"
                               onClick={handleMarkEvidenceReviewed}
                               disabled={correctionSubmitting || evidenceLoading}
-                              className="mt-3 min-h-9 w-full rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+                              className="mt-3 min-h-9 w-full rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                             >
                               {correctionSubmitting ? '검토 저장 중' : '문단 근거 검토 저장'}
                             </button>
@@ -1011,7 +1011,7 @@ export function ProjectsLayout() {
               <section aria-label="프로젝트 마일스톤" className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
                 <div className="flex items-center justify-between border-b border-border p-5">
                   <h2 className="font-bold text-lg">마일스톤</h2>
-                  <a href="/tasks" className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">마일스톤 추가</a>
+                  <a href="/tasks" className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">마일스톤 추가</a>
                 </div>
                 <div className="grid gap-4 p-5 md:grid-cols-4">
                   {[
@@ -1034,7 +1034,7 @@ export function ProjectsLayout() {
               <section aria-label="프로젝트 의사결정 로그" className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
                 <div className="flex items-center justify-between border-b border-border bg-primary/5 p-5">
                   <h2 className="font-bold text-lg text-primary">의사결정 로그</h2>
-                  <button type="button" aria-label="프로젝트 의사결정 추가" onClick={() => setViewMode('의사결정 로그')} className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">의사결정 추가</button>
+                  <button type="button" aria-label="프로젝트 의사결정 추가" onClick={() => setViewMode('의사결정 로그')} className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">의사결정 추가</button>
                 </div>
                 <div className="divide-y divide-border">
                   <article className="p-5">
@@ -1060,7 +1060,7 @@ export function ProjectsLayout() {
                   <article className="p-5">
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="flex items-center gap-2 font-bold text-base"><Search className="size-4 text-primary" /> 관련 문서/메일 연결</h3>
-                      <a href="/search" className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-bold hover:bg-secondary">맥락 검색</a>
+                      <a href="/search" className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">맥락 검색</a>
                     </div>
                     <p className="mt-2 rounded-lg border border-border bg-background p-3 text-sm leading-6 text-foreground">
                       프로젝트 판단 근거는 맥락 검색에서 메일, 스레드, 문서 근거를 확인한 뒤 연결합니다.
@@ -1086,8 +1086,8 @@ export function ProjectsLayout() {
                       </p>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <a href="/tasks" className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">작업 보드 열기</a>
-                      <a href="/search" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-bold hover:bg-secondary">관련 근거 찾기</a>
+                      <a href="/tasks" className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">작업 보드 열기</a>
+                      <a href="/search" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">관련 근거 찾기</a>
                     </div>
                   </div>
                 </div>
@@ -1099,11 +1099,11 @@ export function ProjectsLayout() {
             <section aria-label="프로젝트 액션" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <h2 className="mb-4 font-bold text-base">프로젝트 액션</h2>
               <div className="grid gap-2 text-sm">
-                <a href="/data" className="flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 font-bold text-primary-foreground hover:bg-primary/90"><FolderOpen className="size-4" /> 새 프로젝트</a>
-                <button type="button" aria-label="프로젝트 상세 열기" onClick={() => setViewMode('프로젝트 상세')} className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 font-bold hover:bg-secondary"><CheckCircle2 className="size-4 text-primary" /> 프로젝트 열기</button>
-                <a href="/tasks" className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 font-bold hover:bg-secondary"><ListChecks className="size-4 text-primary" /> 마일스톤 추가</a>
-                <button type="button" aria-label="프로젝트 의사결정 추가" onClick={() => setViewMode('의사결정 로그')} className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 font-bold hover:bg-secondary"><CheckCircle2 className="size-4 text-primary" /> 의사결정 추가</button>
-                <a href="/search" className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 font-bold hover:bg-secondary"><Search className="size-4 text-primary" /> 관련 문서/메일 연결</a>
+                <a href="/data" className="flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><FolderOpen className="size-4" /> 새 프로젝트</a>
+                <button type="button" aria-label="프로젝트 상세 열기" onClick={() => setViewMode('프로젝트 상세')} className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><CheckCircle2 className="size-4 text-primary" /> 프로젝트 열기</button>
+                <a href="/tasks" className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><ListChecks className="size-4 text-primary" /> 마일스톤 추가</a>
+                <button type="button" aria-label="프로젝트 의사결정 추가" onClick={() => setViewMode('의사결정 로그')} className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><CheckCircle2 className="size-4 text-primary" /> 의사결정 추가</button>
+                <a href="/search" className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Search className="size-4 text-primary" /> 관련 문서/메일 연결</a>
               </div>
             </section>
 
