@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - Replaced O(N) Array Lookups with O(1) Maps in React Graph Component loops
+
+**Learning:** When generating node information in `describeEdge` loops (e.g., parsing graph edges in `NetworkGraph.tsx`), doing a `.find()` scan on the complete node array `O(N)` for every edge formatting lookup incurs a potentially costly nested O(N*M) calculation bottleneck.
+**Action:** The component was already calculating an O(1) `nodeMap` with a `useMemo` block mapping IDs to labels. Always remove fallback `.find()` array search branches and directly use pre-calculated `Map` parameters if available when repetitively resolving values inside loops for graph formatting or UI rendering.
