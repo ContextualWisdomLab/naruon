@@ -27,13 +27,13 @@ naruon is a consumer. It does not reimplement the orchestrator catalog, Fugu /
 Conductor / TRINITY selection, or list-price bookkeeping for free-but-priced
 models. Those stay in ContextualWisdomLab/contextual-orchestrator.
 
-Noema sends one OpenAI-compatible chat request to:
+Noema sends OpenAI-compatible chat requests through one configured gateway:
 
 * a dedicated gateway inference token from the Fernet tenant KV
   (`tenant_configs.noema_orchestrator_token`)
 * an HTTPS base URL that ends in `/v1`
   (`tenant_configs.noema_orchestrator_base_url`)
-* the single model alias `contextual-orchestrator`
+* the model alias `contextual-orchestrator` for each gateway request
 
 There is no sequential model list and no fail-over to the next agent or
 provider inside naruon. Missing or rejected gateway config fails closed with

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import AuthContext, get_auth_context
+from core.runtime_secrets import EncryptionConfigurationError
 from db.models import AuditLog, SecurityAuditEvent, TenantConfig
 from db.session import get_db
 from services.llm_provider_urls import validate_llm_provider_base_url_async
@@ -160,9 +161,7 @@ async def update_noema_gateway(
     )
     try:
         await db.commit()
-    except Exception as exc:
-        if "ENCRYPTION_KEY is required" not in str(exc):
-            raise
+    except EncryptionConfigurationError as exc:
         raise HTTPException(
             status_code=503,
             detail="Server encryption key is not configured. Contact your workspace administrator.",

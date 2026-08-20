@@ -2,6 +2,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from api.auth import AuthContext, get_auth_context
+from core.runtime_secrets import EncryptionConfigurationError
 from db.models import AuditLog, SecurityAuditEvent, TenantConfig
 from db.session import get_db
 from main import app
@@ -238,7 +239,9 @@ async def test_noema_gateway_handles_missing_encryption_key(
         "api.noema_config.validate_llm_provider_base_url_async",
         _allow_gateway_url,
     )
-    override_dependencies.commit_error = RuntimeError("ENCRYPTION_KEY is required")
+    override_dependencies.commit_error = EncryptionConfigurationError(
+        "ENCRYPTION_KEY is required"
+    )
     async with await _client() as client:
         response = await client.put(
             "/api/noema-gateway",
@@ -250,6 +253,26 @@ async def test_noema_gateway_handles_missing_encryption_key(
 
     assert response.status_code == 503
     assert "Server encryption key is not configured" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_noema_gateway_does_not_match_encryption_error_text(
+    override_dependencies, monkeypatch
+):
+    monkeypatch.setattr(
+        "api.noema_config.validate_llm_provider_base_url_async",
+        _allow_gateway_url,
+    )
+    override_dependencies.commit_error = RuntimeError("ENCRYPTION_KEY is required downstream")
+    with pytest.raises(RuntimeError, match="ENCRYPTION_KEY is required downstream"):
+        async with await _client() as client:
+            await client.put(
+                "/api/noema-gateway",
+                json={
+                    "base_url": "https://orchestrator.example/v1",
+                    "token": "gateway-secret",
+                },
+            )
 
 
 @pytest.mark.asyncio
