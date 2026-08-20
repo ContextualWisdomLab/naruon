@@ -43,6 +43,12 @@ This slice does **not** copy draft email-writing clients that still require a
 tenant `model_profile_id`. Keep the existing tools, owner-scope, and opt-in
 writeback surface.
 
+The setup contract is [`ADR-0005`](../adr/0005-signed-noema-gateway-settings.md):
+`GET` and `PUT /api/noema-gateway` use the signed session's current owner scope,
+validate the HTTPS allowlist, persist the token through Fernet, and return only
+readiness metadata. Mailbox self-service fields and cross-user administration
+are intentionally outside this route.
+
 Upstream org secrets (`NVIDIA_NIM_API_KEY`, `NVIDIA_NIM_API_KEY_SUB`,
 `BYTEZ_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`) belong in the
 orchestrator KV. naruon must not read them at request time. GitHub Models and

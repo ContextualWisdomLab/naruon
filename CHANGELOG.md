@@ -1,4 +1,8 @@
 ## [Unreleased]
+- **Noema gateway setup:** added signed-session `GET`/`PUT /api/noema-gateway`
+  settings with HTTPS `/v1` allowlist validation, Fernet-backed token storage,
+  masked readiness responses, and generic audit records. The route keeps the
+  existing per-user organization scope and does not expose gateway tokens.
 - **Noema LLM routing through contextual-orchestrator.**
   `run_noema_agent` no longer calls `resolve_runtime_llm_provider` or a
   tenant `gpt-4o` chat model. Completions go to the orchestrator gateway

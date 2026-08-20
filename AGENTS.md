@@ -88,6 +88,12 @@ in this repo.
   reimplement the orchestrator catalog in this repo. Keep the existing
   owner-scoped tools and opt-in writeback surface.
 
+- Noema gateway setup uses the signed `GET`/`PUT /api/noema-gateway` route.
+  It is scoped to the authenticated `(user_id, organization_id)` pair, stores
+  the token through `EncryptedString`, returns only `has_token` readiness, and
+  records generic audit events. Do not add target-user or mailbox credential
+  fields to this route without a separate membership/delegation ADR.
+
 ### This repo's role in the ecosystem
 
 - **This repo (naruon) is the ECOSYSTEM HUB:** email/PIM that DOM-decomposes
