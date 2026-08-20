@@ -14,7 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.models import Base
 
@@ -92,4 +92,8 @@ class ObjectStorageCleanupRecord(Base):
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
+    )
+    object_storage_provider = relationship(
+        "ObjectStorageProvider",
+        back_populates="cleanup_records",
     )

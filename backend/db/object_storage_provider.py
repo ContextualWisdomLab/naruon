@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 
 from sqlalchemy import Boolean, DateTime, Index, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.models import Base, EncryptedString
 
@@ -80,6 +80,10 @@ class ObjectStorageProvider(Base):
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
         onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
+    )
+    cleanup_records = relationship(
+        "ObjectStorageCleanupRecord",
+        back_populates="object_storage_provider",
     )
 
 

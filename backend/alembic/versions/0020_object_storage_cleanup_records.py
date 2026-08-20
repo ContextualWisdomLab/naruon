@@ -1,6 +1,6 @@
 """Add durable object-storage orphan cleanup records.
 
-Revision ID: 0020_object_storage_cleanup_records
+Revision ID: 0020_object_storage_cleanup
 Revises: 0019_object_storage_providers
 Create Date: 2026-08-16 19:00:00.000000
 """
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0020_object_storage_cleanup_records"
+revision = "0020_object_storage_cleanup"
 down_revision = "0019_object_storage_providers"
 branch_labels = None
 depends_on = None
