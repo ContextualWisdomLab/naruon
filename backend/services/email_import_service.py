@@ -53,7 +53,10 @@ from services.threading_service import (
 
 EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 MAX_IMPORT_UPLOADS = 10
-MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
+# Transport safety ceiling only; parser and embedding chunking must accept
+# sources larger than 20 MiB without confusing the request guard for a parser
+# limit.
+MAX_IMPORT_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 8

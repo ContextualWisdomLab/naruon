@@ -15,6 +15,10 @@ from services.email_import_service import (
 )
 
 
+def test_import_transport_ceiling_accepts_sources_over_20_mib():
+    assert email_import_module.MAX_IMPORT_UPLOAD_BYTES > 20 * 1024 * 1024
+
+
 @pytest.mark.parametrize(
     "input_name,expected",
     [
