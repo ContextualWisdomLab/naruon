@@ -216,8 +216,9 @@ describe("ToolsPage", () => {
     await flushAsyncWork();
 
     const buttons = container.querySelectorAll('button[data-tool-execute="duplicate_tool"]');
-    expect(buttons).toHaveLength(2);
+    expect(buttons).toHaveLength(1);
     expect(container.textContent).toContain("첫 번째 도구");
+    expect(container.textContent).not.toContain("두 번째 도구");
 
     act(() => {
       buttons[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
