@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -102,7 +102,7 @@ function normalizeLlmData(payload: unknown): LlmData {
   };
 }
 
-export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
+export function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
   const [email, setEmail] = useState<EmailData | null>(null);
   const [threadEmails, setThreadEmails] = useState<EmailData[]>([]);
   const [llmData, setLlmData] = useState<LlmData | null>(null);
@@ -751,6 +751,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                   {conversationMessages.length}개 메시지
                 </Badge>
               </div>
+              <Button size="sm" variant="outline" className="h-7 text-xs bg-white text-muted-foreground hover:text-foreground">
+                다른 스레드 병합
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground">오래된 메시지부터 최신 메시지 순서로 보여줍니다. 답장은 선택된 메시지를 기준으로 작성됩니다.</p>
             {threadLoading && <p role="status" aria-live="polite" className="text-sm text-muted-foreground">대화 흐름을 불러오는 중입니다...</p>}
@@ -767,6 +770,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     <span className="font-medium text-sm">{toMailDisplayText(msg.sender, '보낸 사람')}</span>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">{formatEmailDate(msg.date)}</span>
+                      {msg.id !== conversationMessages[0]?.id && (
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-red-600 hover:bg-red-50">
+                          스레드 분리
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {msg.id === email.id && <Badge variant="outline" className="mb-2 border-primary/30 text-[10px] text-primary">선택된 메시지</Badge>}
@@ -875,4 +883,4 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       />
     </div>
   );
-});
+}
