@@ -416,7 +416,10 @@ def _reject_signed_session_admin_payload(payload: dict[str, Any]) -> None:
         raise _authentication_error()
     # Admin roles require explicit server-side assignment, not externally
     # supplied HMAC or enterprise OIDC session claims.
-    if role_claim in ADMIN_ROLES:
+    normalized_role = role_claim.strip()
+    # Reject surrounding whitespace before the later claim normalization can
+    # turn a non-admin-looking value into an administrative role.
+    if normalized_role != role_claim or normalized_role in ADMIN_ROLES:
         raise _authentication_error()
 
 
