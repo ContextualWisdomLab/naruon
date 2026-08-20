@@ -24,8 +24,6 @@ It connects to systems an organization already controls, keeps bounded workspace
 
 Naruon labels simulated, deferred, pending, and completed actions differently. A generated intent or local payload check is not presented as proof that a customer-owned provider accepted a write.
 
-Review and merge automation is supplied by the ContextualWisdomLab central required workflows. This repository does not carry repo-local OpenCode, Strix, or merge-scheduler workflow copies; branch updates, auto-merge, and mechanical merge actions run through the central workflow as the target repository's `github-actions[bot]`.
-
 ## Product boundary
 
 ### Naruon owns
