@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from services.email_media_admission import admit_email_inline_media
 
@@ -69,7 +70,7 @@ def test_tracking_pixel_is_not_document_evidence() -> None:
     assert tracking_pixel.pixel_height == 1
     assert tracking_pixel.declared_content_type == "image/gif"
     assert tracking_pixel.content_location is not None
-    assert "list-manage.com" in tracking_pixel.content_location
+    assert urlsplit(tracking_pixel.content_location).hostname == "click.list-manage.com"
     assert tracking_pixel.error_code is None
     assert all(
         image.media_classification != "document_image"
