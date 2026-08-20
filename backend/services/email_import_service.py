@@ -318,7 +318,6 @@ async def _extract_and_generate_embeddings(
         )
         for attachment in attachment_payloads
     )
-    )
     fitted_embeddings: list[list[float]] = []
     for source_text in source_texts:
         source_chunks = chunk_text(source_text)
