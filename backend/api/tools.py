@@ -869,7 +869,7 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
     if not tool:
         raise HTTPException(status_code=404, detail="Tool not found")
     if not tool.is_active:
-        raise HTTPException(status_code=403, detail="Tool is not active")
+        raise HTTPException(status_code=400, detail="Tool is not active")
 
     try:
         result = await registry.invoke_tool(code, request.parameters)
