@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("lucide-react", () => {
-  const icon = (props: React.SVGProps<SVGSVGElement>) => <svg aria-hidden="true" {...props} />;
+  const icon = (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />;
   return {
     Activity: icon,
     AlertCircle: icon,
@@ -705,6 +705,43 @@ describe("SettingsLayout", () => {
       });
       expect(container.textContent).toContain(`${tabName === "멤버" ? "멤버와 역할" : tabName === "알림" ? "알림 정책" : tabName === "자동화" ? "자동화 규칙" : "결제와 사용량"}`);
       expect(container.textContent).not.toContain("다음 릴리즈");
+    }
+  });
+
+  it("activates every settings tab and hides every decorative icon", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const tabs = [
+      ["워크스페이스", "워크스페이스 설정"],
+      ["멤버", "멤버와 역할"],
+      ["AI 모델", "AI 모델 설정"],
+      ["연결 계정", "메일 및 캘린더 커넥터"],
+      ["알림", "알림 정책"],
+      ["자동화", "자동화 규칙"],
+      ["결제", "결제와 사용량"],
+      ["개발자", "개발자 및 시스템 (Observability)"],
+    ] as const;
+
+    for (const [tabName, heading] of tabs) {
+      const tab = Array.from(container.querySelectorAll("button")).find((candidate) => candidate.textContent === tabName);
+      expect(tab).toBeTruthy();
+      await act(async () => {
+        tab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await Promise.resolve();
+      });
+      expect(container.textContent).toContain(heading);
+    }
+
+    for (const icon of container.querySelectorAll("svg")) {
+      expect(icon.getAttribute("aria-hidden")).toBe("true");
     }
   });
 });
