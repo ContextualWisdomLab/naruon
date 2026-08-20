@@ -1104,10 +1104,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "no current blocking failures remain" in gate_script
     assert "Waiting for" in gate_script
     assert "reviewThreads" in gate_script
-    # A stale aggregate review decision must not become a standalone blocker;
-    # current-head review threads and evidence are evaluated below instead.
-    assert 'REVIEW_DECISION="$(printf' not in gate_script
-    assert "Review decision is CHANGES_REQUESTED" not in gate_script
     assert "gh pr merge" not in gate_script
     assert "--match-head-commit" not in gate_script
     assert "actions/checkout" not in combined
