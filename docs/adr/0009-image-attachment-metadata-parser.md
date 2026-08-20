@@ -47,12 +47,12 @@ migration or parser implementation is added:
 
 ```mermaid
 erDiagram
-    EMAIL_RECORDS ||--o{ IMAGE_SOURCES : owns
-    EMAIL_ATTACHMENTS |o--o{ IMAGE_SOURCES : represents
-    IMAGE_SOURCES ||--o{ IMAGE_ANALYSIS_RUNS : receives
-    IMAGE_ANALYSIS_MODELS ||--o{ IMAGE_ANALYSIS_RUNS : executes
-    IMAGE_ANALYSIS_RUNS ||--o{ IMAGE_ANNOTATIONS : emits
-    IMAGE_ANALYSIS_RUNS ||--o{ IMAGE_EMBEDDING_RECORDS : emits
+    email_records ||--o{ image_sources : owns
+    email_attachments |o--o{ image_sources : represents
+    image_sources ||--o{ image_analysis_runs : receives
+    image_analysis_models ||--o{ image_analysis_runs : executes
+    image_analysis_runs ||--o{ image_annotations : emits
+    image_analysis_runs ||--o{ image_embedding_records : emits
 ```
 
 - `image_sources` stores only immutable source identity and location:
