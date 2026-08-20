@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("lucide-react", () => {
-  const icon = (props: React.SVGProps<SVGSVGElement>) => <svg aria-hidden="true" {...props} />;
+  const icon = (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />;
   return {
     Activity: icon,
     AlertCircle: icon,
