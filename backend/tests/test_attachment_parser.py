@@ -755,17 +755,22 @@ def test_generic_binary_attachment_indexes_metadata_without_raw_bytes(content_ty
     assert result.parse_error_code is None
 
 
-def test_large_generic_binary_attachment_has_no_one_megabyte_parse_limit():
+@pytest.mark.parametrize(
+    "content_type", ["application/octet-stream", "application/x-unknown"]
+)
+def test_large_unrecognized_binary_attachment_has_no_one_megabyte_parse_limit(
+    content_type,
+):
     result = parse_email_attachment(
         filename="large.bin",
-        content_type="application/octet-stream",
+        content_type=content_type,
         raw_content=b"x" * (20 * 1024 * 1024 + 1),
     )
 
     assert result.parse_status == "parsed"
     assert result.parser_key == "binary_metadata"
     assert result.parse_content == (
-        "Binary attachment metadata: media_type=application/octet-stream; "
+        f"Binary attachment metadata: media_type={content_type}; "
         "bytes=20971521"
     )
 
