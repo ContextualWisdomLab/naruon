@@ -26,7 +26,10 @@ from db.models import (
     KnowledgeGraphEdgeRecord,
 )
 from services.archive import extract_backup_async
-from services.batch_embedding_service import try_batch_import_embeddings
+from services.batch_embedding_service import (
+    BatchEmbeddingPartial,
+    try_batch_import_embeddings,
+)
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import (
     canonical_email_source_content,
@@ -36,6 +39,7 @@ from services.email_dedupe_service import (
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
     STORAGE_EMBEDDING_DIMENSION,
+    chunk_text,
     fit_embedding_vector,
     generate_embeddings,
 )
@@ -55,10 +59,14 @@ from services.threading_service import (
 
 EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 MAX_IMPORT_UPLOADS = 10
-MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
+# Transport safety ceiling only; parser and embedding chunking must accept
+# sources larger than 20 MiB without confusing the request guard for a parser
+# limit.
+MAX_IMPORT_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 8
+MAX_EMBEDDING_CHUNKS_PER_WINDOW = 32
 SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
 logger = logging.getLogger(__name__)
@@ -305,15 +313,52 @@ async def _extract_and_generate_embeddings(
     batch_context: "EmailImportBatchContext | None" = None,
 ) -> tuple[list[dict], list[list[float]]]:
     attachment_payloads = list(parsed.get("attachments", []))
-    embedding_texts = [str(parsed.get("body") or "")]
-    embedding_texts.extend(
-        str(attachment.get("content") or "") for attachment in attachment_payloads
+    body_parse_content = parsed.get("body_parse_content")
+    source_texts = [
+        str(
+            body_parse_content
+            if body_parse_content is not None
+            else parsed.get("body") or ""
+        )
+    ]
+    source_texts.extend(
+        str(
+            ""
+            if (attachment.get("parse_status") or "parsed") != "parsed"
+            else (
+                attachment.get("parse_content")
+                if attachment.get("parse_content") is not None
+                else attachment.get("content") or ""
+            )
+        )
+        for attachment in attachment_payloads
     )
-    fitted_embeddings = await _generate_import_embeddings(
-        embedding_texts,
-        embedding_provider=embedding_provider,
-        batch_context=batch_context,
-    )
+    fitted_embeddings: list[list[float]] = []
+    for source_text in source_texts:
+        source_chunks = chunk_text(source_text)
+        if not source_chunks:
+            fitted_embeddings.append(_zero_embedding())
+            continue
+
+        vector_sum: list[float] | None = None
+        vector_count = 0
+        for start in range(0, len(source_chunks), MAX_EMBEDDING_CHUNKS_PER_WINDOW):
+            chunk_embeddings = await _generate_import_embeddings(
+                source_chunks[start : start + MAX_EMBEDDING_CHUNKS_PER_WINDOW],
+                embedding_provider=embedding_provider,
+                batch_context=batch_context,
+            )
+            for embedding in chunk_embeddings:
+                if vector_sum is None:
+                    vector_sum = [0.0] * len(embedding)
+                for index, value in enumerate(embedding):
+                    vector_sum[index] += value
+                vector_count += 1
+        fitted_embeddings.append(
+            [value / vector_count for value in vector_sum]
+            if vector_sum and vector_count
+            else _zero_embedding()
+        )
     return attachment_payloads, fitted_embeddings
 
 
@@ -925,6 +970,8 @@ async def _generate_import_embeddings(
     embedding_provider: EmailImportEmbeddingProvider | None,
     batch_context: "EmailImportBatchContext | None" = None,
 ) -> list[list[float]]:
+    if not texts:
+        return []
     if embedding_provider is None:
         return [_zero_embedding() for _ in texts]
     if batch_context is not None and texts:
@@ -941,6 +988,21 @@ async def _generate_import_embeddings(
             dimension=EMBEDDING_DIMENSION,
         )
         if batched is not None:
+            if isinstance(batched, BatchEmbeddingPartial):
+                remainder: list[list[float]] = []
+                for start in range(
+                    0, len(batched.pending_texts), MAX_EMBEDDING_CHUNKS_PER_WINDOW
+                ):
+                    remainder.extend(
+                        await _generate_import_embeddings(
+                            batched.pending_texts[
+                                start : start + MAX_EMBEDDING_CHUNKS_PER_WINDOW
+                            ],
+                            embedding_provider=embedding_provider,
+                            batch_context=None,
+                        )
+                    )
+                return [*batched.completed_vectors, *remainder]
             return batched
     try:
         provider_embeddings = await generate_embeddings(
