@@ -5,9 +5,12 @@ This document outlines the architecture and flow for processing and detecting im
 **Admission gate (current Slice 3 contract):** before any OCR, VLM, or
 NewsDOM step, `services.email_media_admission` classifies local MIME images
 and resolves `cid:` only against the same message's `multipart/related`
-parts. Tracking pixels and unresolved CID references are not document
-evidence. Remote `http(s)` images remain no-fetch unless a separately
-authorized egress policy already exists; this slice does not add one. See
+parts. `services.email_media_resolution` is the local continuation gate:
+it calls `admit_email_inline_media()` first and continues only
+`document_image` admissions. Tracking pixels, unsupported media, and
+unresolved CID references are quarantined and must not be sent to a model.
+Remote `http(s)` images remain no-fetch unless a separately authorized
+egress policy already exists; this slice does not add one. See
 `docs/doctoring/email-inline-media-admission.md`.
 
 ## Flow Diagram
