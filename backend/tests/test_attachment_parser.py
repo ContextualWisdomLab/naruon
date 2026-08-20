@@ -11,6 +11,7 @@ from services.attachment_parser import (
     get_attachment_parser_manifest,
     parse_email_attachment,
 )
+from services import attachment_parser as parser
 
 
 def _minimal_hwpx_bytes() -> bytes:
@@ -400,3 +401,59 @@ def test_deferred_hwp_decoder_rejects_non_hwp_payload():
     not_hwp = base64.b64encode(b"plain bytes").decode("ascii")
     with pytest.raises(ValueError, match="not a HWP binary"):
         decode_deferred_attachment_payload(not_hwp, "application/x-hwp")
+
+
+def test_parser_handles_unknown_parser_key_and_invalid_display_filename():
+    assert parser._parser_key_for("application/x-unknown", "parsed") == (
+        "unsupported_binary"
+    )
+
+    result = parse_email_attachment(
+        filename="\x00",
+        content_type="application/zip",
+        raw_content=b"opaque",
+    )
+
+    assert result.filename == "attachment"
+
+
+def test_deferred_decoder_rejects_invalid_base64():
+    with pytest.raises(ValueError, match="not valid base64"):
+        decode_deferred_attachment_payload("not base64!")
+
+
+@pytest.mark.parametrize("raw_content", [None, b"binary text", 12345])
+def test_text_parser_coerces_empty_bytes_and_other_values(raw_content):
+    result = parse_email_attachment(
+        filename="notes.txt",
+        content_type="text/plain",
+        raw_content=raw_content,
+    )
+
+    assert result.parse_status == "parsed"
+    expected_content = (
+        ""
+        if raw_content is None
+        else raw_content.decode("utf-8")
+        if isinstance(raw_content, bytes)
+        else str(raw_content)
+    )
+    assert result.parse_content == expected_content
+
+
+def test_hwpx_recognition_fails_closed_when_zip_reader_errors(monkeypatch):
+    payload = _minimal_hwpx_bytes()
+
+    def raise_os_error(*args, **kwargs):
+        raise OSError("zip reader unavailable")
+
+    monkeypatch.setattr(parser.zipfile, "ZipFile", raise_os_error)
+
+    result = parse_email_attachment(
+        filename="broken.hwpx",
+        content_type="application/hwp+zip",
+        raw_content=payload,
+    )
+
+    assert result.parse_status == "invalid_hwpx_payload"
+    assert result.parse_error_code == "invalid_hwpx_payload"
