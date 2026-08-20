@@ -228,6 +228,7 @@ jobs:
             sleep $((attempt * 3))
           done
           python3 - "$trusted_archive" "$trusted_workspace" <<'PY'
+          import copy
           import os
           import sys
           import tarfile
@@ -237,9 +238,14 @@ jobs:
           workspace = Path(workspace_path).resolve()
           with tarfile.open(archive_path, "r:gz") as archive:
               members = archive.getmembers()
+              safe_members = []
               unsafe = []
               for member in members:
                   member_path = PurePosixPath(member.name)
+                  if len(member_path.parts) == 1:
+                      if not member.isdir():
+                          unsafe.append(member.name)
+                      continue
                   target = (workspace / Path(*member_path.parts[1:])).resolve()
                   if (
                       not member.name
@@ -251,9 +257,15 @@ jobs:
                       or os.path.commonpath((workspace, target)) != str(workspace)
                   ):
                       unsafe.append(member.name)
+                      continue
+                  safe_member = copy.copy(member)
+                  safe_member.name = PurePosixPath(
+                      *member_path.parts[1:]
+                  ).as_posix()
+                  safe_members.append(safe_member)
               if unsafe:
                   raise SystemExit(f"unsafe trusted governance archive member: {unsafe[0]!r}")
-              archive.extractall(workspace, members=members)
+              archive.extractall(workspace, members=safe_members)
           PY
           test -d "$trusted_workspace/scripts"
           governance_script="$trusted_workspace/scripts/ci/pr_governance_gate.sh"
