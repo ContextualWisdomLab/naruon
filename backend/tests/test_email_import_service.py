@@ -586,6 +586,32 @@ async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
 
 
 @pytest.mark.asyncio
+async def test_extract_embeddings_prefers_parsed_body_content():
+    captured_texts: list[str] = []
+
+    async def fake_generate(texts, *, embedding_provider, batch_context=None):
+        captured_texts.extend(texts)
+        return [[0.25] * EMBEDDING_DIMENSION for _ in texts]
+
+    parsed = {
+        "body": "raw html source",
+        "body_parse_content": "safe parsed body",
+        "attachments": [],
+    }
+    with patch(
+        "services.email_import_service._generate_import_embeddings",
+        side_effect=fake_generate,
+    ):
+        _, embeddings = await email_import_module._extract_and_generate_embeddings(
+            parsed,
+            embedding_provider=None,
+        )
+
+    assert captured_texts == ["safe parsed body"]
+    assert embeddings == [[0.25] * EMBEDDING_DIMENSION]
+
+
+@pytest.mark.asyncio
 async def test_extract_embeddings_does_not_chunk_pending_attachment_payload():
     captured_texts: list[str] = []
 

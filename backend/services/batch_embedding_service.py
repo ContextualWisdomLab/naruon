@@ -61,6 +61,11 @@ _ORCHESTRATOR_TIMEOUT_SECONDS = 30.0
 # Poll budget while the orchestrator drains the batch through pg-llm-batch.
 _ORCHESTRATOR_POLL_INTERVAL_SECONDS = 1.0
 _ORCHESTRATOR_MAX_POLLS = 30
+# Keep each JSON request below the orchestrator's body budget with envelope
+# headroom. Import chunks are normally <= 1,000 characters, but the byte check
+# also protects direct callers that provide longer or multibyte inputs.
+_ORCHESTRATOR_MAX_INPUTS_PER_REQUEST = 32
+_ORCHESTRATOR_MAX_INPUT_BYTES = 48 * 1024
 _SUCCESS_STATUSES = frozenset({"completed", "succeeded"})
 
 # Cache the (im)port result so repeated imports don't re-probe sys.path.
@@ -198,7 +203,7 @@ async def try_batch_import_embeddings(
     model = settings.model or embedding_provider.embedding_model
 
     if settings.has_orchestrator:
-        result = await _run_orchestrator_batch(
+        result = await _run_orchestrator_batches(
             session,
             texts,
             settings=settings,
@@ -227,6 +232,66 @@ async def try_batch_import_embeddings(
 
 
 # --- Primary path: contextual-orchestrator batch API ------------------------
+
+
+def _partition_orchestrator_inputs(texts: list[str]) -> list[list[str]] | None:
+    """Partition inputs by count and UTF-8 bytes without splitting an input."""
+    partitions: list[list[str]] = []
+    current: list[str] = []
+    current_bytes = 0
+    for text in texts:
+        text_bytes = len(text.encode("utf-8"))
+        if text_bytes > _ORCHESTRATOR_MAX_INPUT_BYTES:
+            return None
+        if current and (
+            len(current) >= _ORCHESTRATOR_MAX_INPUTS_PER_REQUEST
+            or current_bytes + text_bytes > _ORCHESTRATOR_MAX_INPUT_BYTES
+        ):
+            partitions.append(current)
+            current = []
+            current_bytes = 0
+        current.append(text)
+        current_bytes += text_bytes
+    if current:
+        partitions.append(current)
+    return partitions
+
+
+async def _run_orchestrator_batches(
+    session: AsyncSession,
+    texts: list[str],
+    *,
+    settings: BatchEmbeddingSettings,
+    model: str,
+    user_id: str,
+    organization_id: str | None,
+    dimension: int,
+) -> list[list[float]] | None:
+    """Submit bounded requests and concatenate vectors in original order."""
+    partitions = _partition_orchestrator_inputs(texts)
+    if partitions is None:
+        logger.warning(
+            "Orchestrator batch input exceeded one-request byte budget; falling back: "
+            "text_count=%s",
+            len(texts),
+        )
+        return None
+
+    vectors: list[list[float]] = []
+    for partition in partitions:
+        partition_vectors = await _run_orchestrator_batch(
+            session,
+            partition,
+            settings=settings,
+            model=model,
+            user_id=user_id,
+            organization_id=organization_id,
+            dimension=dimension,
+        )
+        if partition_vectors is None:
+            return None
+        vectors.extend(partition_vectors)
+    return vectors
 
 
 async def _run_orchestrator_batch(

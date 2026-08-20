@@ -292,7 +292,14 @@ async def _extract_and_generate_embeddings(
     batch_context: "EmailImportBatchContext | None" = None,
 ) -> tuple[list[dict], list[list[float]]]:
     attachment_payloads = list(parsed.get("attachments", []))
-    source_texts = [str(parsed.get("body") or "")]
+    body_parse_content = parsed.get("body_parse_content")
+    source_texts = [
+        str(
+            body_parse_content
+            if body_parse_content is not None
+            else parsed.get("body") or ""
+        )
+    ]
     source_texts.extend(
         str(
             ""
