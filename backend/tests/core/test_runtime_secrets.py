@@ -44,6 +44,7 @@ def test_build_encryption_keyring_with_previous_keys():
 def test_build_encryption_keyring_duplicate_key_id():
     active_key = Fernet.generate_key().decode("utf-8")
     prev_key = Fernet.generate_key().decode("utf-8")
+    duplicate_prev_key = Fernet.generate_key().decode("utf-8")
 
     # Trying to use DEFAULT_ENCRYPTION_KEY_ID ('primary') in previous_keys
     previous_keys_str = f"{DEFAULT_ENCRYPTION_KEY_ID}={prev_key}"
@@ -53,6 +54,14 @@ def test_build_encryption_keyring_duplicate_key_id():
     ):
         build_encryption_keyring(
             active_key_value=active_key, previous_keys_value=previous_keys_str
+        )
+
+    with pytest.raises(
+        RuntimeError, match="ENCRYPTION_PREVIOUS_KEYS must not repeat key identifiers"
+    ):
+        build_encryption_keyring(
+            active_key_value=active_key,
+            previous_keys_value=f"old1={prev_key},old1={duplicate_prev_key}",
         )
 
 

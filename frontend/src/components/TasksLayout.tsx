@@ -328,7 +328,7 @@ export function TasksLayout() {
                 key={task.id}
                 type="button"
                 onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}
-                className="w-full rounded-lg border border-border bg-background p-3 text-left shadow-sm transition-all hover:border-primary/50 hover:shadow-md"
+                className="w-full rounded-lg border border-border bg-background p-3 text-left shadow-sm transition-all hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <div className="flex flex-wrap gap-1 mb-2">
                   <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">{getTaskSourceLabel(task.source_type)}</span>
@@ -366,6 +366,19 @@ export function TasksLayout() {
       ))}
     </div>
   ), [currentColumns, tasksByStatus, taskSearch, priorityFilter, setSelectedTaskId, setViewMode]);
+
+  const myTasksList = useMemo(() => filteredTicketTasks.map((task) => (
+    <button key={task.id} type="button" className="flex w-full items-center justify-between p-4 rounded-xl border border-border bg-card text-left shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}>
+      <div className="flex items-center gap-4">
+        <div className={`size-3 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'}`} />
+        <div>
+          <h3 className="font-bold text-sm">{safeTaskTitle(task.title)}</h3>
+          <p className="text-xs text-muted-foreground mt-1">근거: {getTaskEvidenceLabel(task)} | 원본: {getTaskSourceLabel(task.source_type)}</p>
+        </div>
+      </div>
+      <span className={`px-2 py-1 rounded-full text-xs font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-secondary text-secondary-foreground'}`}>{taskStatusLabels[task.status]}</span>
+    </button>
+  )), [filteredTicketTasks, setSelectedTaskId, setViewMode]);
 
   const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: TaskViewMode) => {
     const currentIndex = TASK_VIEW_MODES.indexOf(mode);
@@ -684,18 +697,7 @@ export function TasksLayout() {
         {viewMode === '내 작업' && (
           <div className="space-y-4 max-w-4xl mx-auto">
             <h2 className="font-bold text-lg mb-4">내 작업</h2>
-            {filteredTicketTasks.length > 0 ? filteredTicketTasks.map(task => (
-              <button key={task.id} type="button" className="flex w-full items-center justify-between p-4 rounded-xl border border-border bg-card text-left shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" onClick={() => { setSelectedTaskId(task.id); setViewMode('작업 상세'); }}>
-                <div className="flex items-center gap-4">
-                  <div className={`size-3 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-                  <div>
-                    <h3 className="font-bold text-sm">{safeTaskTitle(task.title)}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">근거: {getTaskEvidenceLabel(task)} | 원본: {getTaskSourceLabel(task.source_type)}</p>
-                  </div>
-                </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-secondary text-secondary-foreground'}`}>{taskStatusLabels[task.status]}</span>
-              </button>
-            )) : (
+            {filteredTicketTasks.length > 0 ? myTasksList : (
               <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground">서명 세션에 연결된 내 작업이 없습니다.</p>
             )}
           </div>

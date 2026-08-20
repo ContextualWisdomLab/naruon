@@ -105,8 +105,8 @@ def test_container_images_use_pinned_node_runtimes() -> None:
 
     assert_dockerfile_stage_from(root_dockerfile, "node:26-slim", "frontend-builder")
     assert "FROM node:26-slim@sha256:" in frontend_dockerfile
-    assert "docker.io/library/node:26-slim" in frontend_dockerfile
-    assert "docker.io/library/node:26-slim" in docker_publish_workflow
+    assert "docker.io/library/node:26-slim@sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09" in frontend_dockerfile
+    assert 'base_digest="sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09"' in docker_publish_workflow
     assert "Node 26 toolchain" in render_deployment
     assert "node:24" not in root_dockerfile
     assert "node:24" not in frontend_dockerfile
@@ -126,8 +126,8 @@ def test_backend_images_use_python_314_runtime() -> None:
     render_deployment = read_repo_text("docs/operations/render-deployment.md")
 
     assert_dockerfile_stage_from(root_dockerfile, "python:3.14-slim", "backend-runtime")
-    assert "docker.io/library/python:3.14-slim" in root_dockerfile
-    assert "docker.io/library/python:3.14-slim" in docker_publish_workflow
+    assert "docker.io/library/python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1" in root_dockerfile
+    assert 'base_digest="sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1"' in docker_publish_workflow
     assert 'python-version: ["3.14"]' in app_ci_workflow
     assert 'python-version: "3.14"' in bandit_workflow
     assert "Python 3.14 toolchain" in render_deployment
