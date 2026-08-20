@@ -5,6 +5,7 @@ import pytest
 import main
 from api.tools import registry
 from api.url_evidence_tool import (
+    MAX_URL_EVIDENCE_BYTES,
     URLEvidenceError,
     register_url_evidence_tool,
 )
@@ -65,13 +66,25 @@ async def test_url_evidence_marks_userinfo_and_invalid_percent_encoding() -> Non
 async def test_url_evidence_fails_closed_at_input_and_match_bounds() -> None:
     """Large inputs and excessive match counts cannot become unbounded work."""
     with pytest.raises(URLEvidenceError) as input_error:
-        await registry.invoke_tool("url_evidence_extractor", {"text": "x" * 1_048_577})
+        await registry.invoke_tool(
+            "url_evidence_extractor",
+            {"text": "x" * (MAX_URL_EVIDENCE_BYTES + 1)},
+        )
     assert input_error.value.error_code == "url_evidence_input_too_large"
 
     text = " ".join("https://example.com" for _ in range(129))
     with pytest.raises(URLEvidenceError) as match_error:
         await registry.invoke_tool("url_evidence_extractor", {"text": text})
     assert match_error.value.error_code == "url_evidence_match_limit_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_url_evidence_accepts_twenty_megabyte_working_text() -> None:
+    """Large attachment-sized text remains inspectable without network access."""
+    text = "x" * (20 * 1024 * 1024)
+    result = await registry.invoke_tool("url_evidence_extractor", {"text": text})
+    assert result["match_count"] == 0
+    assert result["unique_normalized_values"] == []
 
 
 def test_url_evidence_registration_is_idempotent() -> None:

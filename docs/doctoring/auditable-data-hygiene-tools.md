@@ -22,8 +22,9 @@ version. Repeated values reuse a placeholder within one invocation.
 - Contact scope is ASCII email syntax and conservative Korean/E.164-compatible
   telephone syntax. Internationalized email local-parts, addresses, identity
   numbers, payment data, names, and arbitrary PII are not covered.
-- Inputs are capped at 1 MiB. URL candidates are capped at 2,048 UTF-8 bytes and
-  128 matches per invocation.
+- Inputs are capped at 64 MiB, matching the signed import working ceiling rather
+  than limiting attachment-sized text to 1 MiB. URL candidates are capped at
+  2,048 UTF-8 bytes and 128 matches per invocation.
 - Warnings are part of the output contract. A redacted result is not a claim of
   anonymization, irreversible de-identification, or regulatory compliance.
 

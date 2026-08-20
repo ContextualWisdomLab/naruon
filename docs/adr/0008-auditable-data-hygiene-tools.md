@@ -18,9 +18,11 @@ Naruon exposes two deterministic tools through the existing signed tool API:
    Korean/E.164-compatible telephone forms. It returns replacement spans and
    detector-version evidence without returning matched source values.
 
-Both tools have a one MiB UTF-8 input bound. URL extraction also bounds candidate
-size and match count. The redactor warns that unsupported PII classes remain and
-that the output is not anonymization or irreversible de-identification.
+Both tools accept up to 64 MiB of UTF-8 working text, matching the signed import
+working ceiling rather than imposing a separate 1 MiB attachment-sized limit.
+URL extraction still bounds candidate size and match count. The redactor warns
+that unsupported PII classes remain and that the output is not anonymization or
+irreversible de-identification.
 
 ## Consequences
 

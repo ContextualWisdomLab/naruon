@@ -9,7 +9,9 @@ from urllib.parse import SplitResult, urlsplit
 
 from api.tools import ToolInfo, registry
 
-MAX_URL_EVIDENCE_BYTES = 1_048_576
+# Match the signed import working ceiling; candidate and match-count bounds
+# still prevent unbounded URL evidence work inside a large document.
+MAX_URL_EVIDENCE_BYTES = 64 * 1024 * 1024
 MAX_URL_EVIDENCE_MATCHES = 128
 MAX_URL_EVIDENCE_MATCH_BYTES = 2_048
 URL_EVIDENCE_DETECTOR_VERSION = "url_evidence_v1"
@@ -40,7 +42,7 @@ def _bounded_text(text: str) -> None:
         ) from exc
     if byte_length > MAX_URL_EVIDENCE_BYTES:
         raise URLEvidenceError(
-            "URL evidence input exceeds the one MiB limit",
+            "URL evidence input exceeds the 64 MiB working ceiling",
             error_code="url_evidence_input_too_large",
         )
 

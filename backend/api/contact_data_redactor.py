@@ -7,7 +7,9 @@ from typing import Any
 
 from api.tools import ToolInfo, registry
 
-MAX_CONTACT_REDACTION_BYTES = 1_048_576
+# Match the signed import working ceiling so large email/document text is not
+# rejected by this optional working-copy tool at an unrelated 1 MiB boundary.
+MAX_CONTACT_REDACTION_BYTES = 64 * 1024 * 1024
 CONTACT_REDACTION_DETECTOR_VERSION = "contact_data_v1"
 
 _EMAIL_PATTERN = re.compile(
@@ -43,7 +45,7 @@ def _bounded_text(text: str) -> None:
         ) from exc
     if byte_length > MAX_CONTACT_REDACTION_BYTES:
         raise ContactRedactionError(
-            "Contact redaction input exceeds the one MiB limit",
+            "Contact redaction input exceeds the 64 MiB working ceiling",
             error_code="contact_redaction_input_too_large",
         )
 

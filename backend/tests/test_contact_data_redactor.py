@@ -5,6 +5,7 @@ import pytest
 import main
 from api.contact_data_redactor import (
     ContactRedactionError,
+    MAX_CONTACT_REDACTION_BYTES,
     register_contact_data_redactor,
 )
 from api.tools import ExecuteRequest, execute_tool, registry
@@ -67,8 +68,20 @@ async def test_contact_redactor_does_not_claim_to_remove_unsupported_pii() -> No
 async def test_contact_redactor_fails_closed_at_input_bound() -> None:
     """Oversized input is rejected before detector work begins."""
     with pytest.raises(ContactRedactionError) as error:
-        await registry.invoke_tool("contact_data_redactor", {"text": "x" * 1_048_577})
+        await registry.invoke_tool(
+            "contact_data_redactor",
+            {"text": "x" * (MAX_CONTACT_REDACTION_BYTES + 1)},
+        )
     assert error.value.error_code == "contact_redaction_input_too_large"
+
+
+@pytest.mark.asyncio
+async def test_contact_redactor_accepts_twenty_megabyte_working_text() -> None:
+    """Large attachment-sized text remains usable by the optional tool."""
+    text = "x" * (20 * 1024 * 1024)
+    result = await registry.invoke_tool("contact_data_redactor", {"text": text})
+    assert result["redacted_text"] == text
+    assert result["match_counts"] == {"email": 0, "phone": 0}
 
 
 @pytest.mark.asyncio
@@ -76,7 +89,7 @@ async def test_tool_api_preserves_deterministic_redaction_error_code() -> None:
     """The shared execution envelope exposes the handler's stable failure code."""
     response = await execute_tool(
         "contact_data_redactor",
-        ExecuteRequest(parameters={"text": "x" * 1_048_577}),
+        ExecuteRequest(parameters={"text": "x" * (MAX_CONTACT_REDACTION_BYTES + 1)}),
     )
 
     assert response.status == "failed"

@@ -10,7 +10,8 @@
 - `contact_data_redactor`는 ASCII 이메일과 한국/E.164 호환 전화번호만
   결정적 placeholder로 치환하고 원문·치환 span 및 detector version을
   반환합니다. 지원하지 않는 PII는 제거되었다고 주장하지 않습니다.
-- 두 도구 모두 입력 1 MiB와 URL 후보/길이를 제한하며, 실패에는 안정적인
+- 두 도구 모두 signed import working ceiling과 같은 입력 64 MiB까지 처리하며,
+  URL 후보/개수 상한으로 대형 문서에서도 작업량을 통제합니다. 실패에는 안정적인
   `error_code`를 반환합니다. 실행은 기존 서명 세션 도구 API를 그대로 사용합니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
