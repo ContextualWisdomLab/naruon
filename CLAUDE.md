@@ -98,6 +98,17 @@ The other compose files are purpose-specific evaluation/evidence stacks:
 defaults anywhere; Compose/Kubernetes/operators must inject them, and startup
 fails closed when they are missing.
 
+### Cloud Agent environment (`.cursor/`)
+
+Repo-managed Cloud Agent bootstrap lives in `.cursor/environment.json`.
+`install.sh` installs PostgreSQL 16/pgvector and hashed Python deps;
+`start.sh` brings Postgres online, mints a per-VM `~/.env`, and runs
+`scripts/migrate_db.py`. Role-secret sync goes through
+`backend/scripts/reconcile_local_postgres_role.py` (dollar-quoted stdin, never
+`psql -c` interpolation). After boot, open http://127.0.0.1:3000 and sign in
+with a minted HMAC session — see
+`docs/development/cloud-agent-environment.md`.
+
 ## Architecture
 
 Naruon is an AI email workspace: a web client/control plane over

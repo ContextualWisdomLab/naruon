@@ -14,6 +14,19 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # ``emails`` was the pre-reconciliation email table. ``email_records`` is now
+    # the single source of truth and already declares ``is_read`` via the model
+    # metadata created in 0001, so this legacy column add only applies to older
+    # databases that still carry the retired ``emails`` table. Guard on the table
+    # existing (matching the has_table/has_column pattern used by later
+    # revisions) so ``alembic upgrade head`` succeeds on fresh databases.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if not inspector.has_table("emails"):
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("emails")}
+    if "is_read" in existing_columns:
+        return
     op.add_column(
         "emails",
         sa.Column(
@@ -26,4 +39,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("emails", "is_read")
+    # No-op: this revision only reconciles a retired ``emails`` table. Dropping
+    # ``is_read`` when the column is present would also remove a pre-existing
+    # column this revision did not create.
+    return
