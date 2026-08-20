@@ -17,6 +17,7 @@ from services.attachment_parser import (
     _jpeg_dimensions,
     _max_nested_email_depth,
     _parse_audio_metadata,
+    _parse_archive_manifest,
     _parse_nested_email_metadata,
     _parse_office_text,
     _parser_key_for,
@@ -380,6 +381,15 @@ def test_office_text_bounds_extracted_xml_text_parts(monkeypatch):
     assert result.content == ""
 
 
+def test_office_xml_ignores_empty_text_parts():
+    xml = "<w:document xmlns:w='urn:w'><w:t /></w:document>"
+    assert _xml_text_parts(
+        xml.encode(),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        _OfficeXmlBudget(),
+    ) == []
+
+
 def test_large_office_package_parses_selected_xml_without_a_package_size_cap():
     payload = BytesIO()
     with ZipFile(payload, "w") as archive:
@@ -546,6 +556,18 @@ def test_mp3_attachment_indexes_bounded_container_metadata():
     assert result.parse_status == "parsed"
     assert "format=mp3" in result.content
     assert "id3=yes" in result.content
+
+
+def test_mp3_frame_without_id3_indexes_metadata():
+    result = parse_email_attachment(
+        filename="frame-only.mp3",
+        content_type="audio/mpeg",
+        raw_content=b"\xff\xfa",
+    )
+
+    assert result.parser_key == "audio_metadata"
+    assert result.parse_status == "parsed"
+    assert "id3=no" in result.content
 
 
 def test_invalid_mp3_attachment_fails_closed_without_binary_content():
@@ -972,6 +994,17 @@ def test_nested_email_and_audio_metadata_failure_edges(monkeypatch):
     assert _parse_audio_metadata(b"ID3")[1] == "audio_metadata_parse_failed"
     assert _parse_audio_metadata(b"ID3\x04\x00\x00\x80\x00\x00\x00")[1] == "audio_metadata_parse_failed"
     assert _parse_audio_metadata(b"ID3\x04\x00\x00\x00\x00\x00\x10")[1] == "audio_metadata_parse_failed"
+
+
+def test_archive_manifest_omits_blank_member_display_names():
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        archive.writestr(" ", b"opaque")
+
+    summary, error = _parse_archive_manifest(payload.getvalue())
+
+    assert error is None
+    assert summary == "Archive manifest: format=zip; entries=1; total_uncompressed_bytes=6"
 
 
 def test_nested_email_depth_handles_message_and_non_message_payloads():
