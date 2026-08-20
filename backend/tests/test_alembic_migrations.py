@@ -626,6 +626,37 @@ def test_read_state_follow_up_merge_reconciles_current_graph():
     assert "op.create_table(" not in revision_text
 
 
+def test_read_state_follow_up_merge_executes_without_schema_operations(monkeypatch):
+    revision_path = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "0019_merge_email_read_state_ownership.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "merge_email_read_state_ownership", revision_path
+    )
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+
+    calls = []
+
+    class _OperationRecorder:
+        def __getattr__(self, operation_name):
+            def record(*args, **kwargs):
+                calls.append((operation_name, args, kwargs))
+
+            return record
+
+    monkeypatch.setattr(revision, "op", _OperationRecorder(), raising=False)
+
+    revision.upgrade()
+    revision.downgrade()
+
+    assert calls == []
+
+
 def test_merge_revision_reconciles_newsdom_provider_branch():
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0015_merge_newsdom_email_heads.py"

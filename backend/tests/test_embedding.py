@@ -255,9 +255,27 @@ async def test_generate_embeddings_prefers_embedding_base_url_when_no_explicit_u
             )
             mock_settings.OPENAI_BASE_URL = "http://host.docker.internal:8080/v1"
             mock_settings.OPENAI_EMBEDDING_MODEL = "embeddinggemma"
-            await generate_embeddings(["test"], "local-provider")
+            with pytest.raises(ValueError, match="unexpected vector count"):
+                await generate_embeddings(["test"], "local-provider")
 
     mock_build_client.assert_awaited_once_with("http://host.docker.internal:8082/v1")
+
+
+@pytest.mark.asyncio
+async def test_generate_embeddings_closes_http_client_when_openai_constructor_fails():
+    mock_http_client = AsyncMock()
+    with patch(
+        "services.embedding.build_llm_provider_http_client",
+        new_callable=AsyncMock,
+        return_value=(None, mock_http_client),
+    ), patch(
+        "services.embedding.AsyncOpenAI",
+        side_effect=RuntimeError("client construction failed"),
+    ):
+        with pytest.raises(RuntimeError, match="client construction failed"):
+            await generate_embeddings(["test"], "provider-key")
+
+    mock_http_client.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio

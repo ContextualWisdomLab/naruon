@@ -287,11 +287,15 @@ async def generate_embeddings(
         await http_client.aclose()
         raise
 
-    client = AsyncOpenAI(
-        api_key=openai_api_key,
-        base_url=validated_base_url,
-        http_client=http_client,
-    )
+    try:
+        client = AsyncOpenAI(
+            api_key=openai_api_key,
+            base_url=validated_base_url,
+            http_client=http_client,
+        )
+    except Exception:
+        await http_client.aclose()
+        raise
 
     try:
         response = await provider_circuit_breaker.call(
@@ -309,11 +313,13 @@ async def generate_embeddings(
                 operation_name="embedding generation",
             ),
         )
-        return pool_embedding_chunks(
-            [data.embedding for data in response.data],
-            input_ranges,
-            token_weights,
-        )
+        provider_embeddings = [data.embedding for data in response.data]
+        if len(provider_embeddings) != len(request_texts):
+            raise ValueError(
+                "embedding provider returned an unexpected vector count: "
+                f"expected {len(request_texts)}, received {len(provider_embeddings)}"
+            )
+        return pool_embedding_chunks(provider_embeddings, input_ranges, token_weights)
     except openai.OpenAIError as e:
         raise EmbeddingGenerationError(f"Failed to generate embeddings: {str(e)}")
     finally:
