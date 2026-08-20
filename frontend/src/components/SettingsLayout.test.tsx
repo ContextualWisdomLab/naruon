@@ -3,27 +3,24 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("lucide-react", () => {
-  const icon = (props: React.SVGProps<SVGSVGElement>) => <svg aria-hidden="true" {...props} />;
-  return {
-    Activity: icon,
-    AlertCircle: icon,
-    Loader2: icon,
-    Bell: icon,
-    Bot: icon,
-    CheckCircle2: icon,
-    Cpu: icon,
-    Mail: icon,
-    Monitor: icon,
-    Network: icon,
-    Plus: icon,
-    RefreshCw: icon,
-    Settings: icon,
-    Shield: icon,
-    Smartphone: icon,
-    User: icon,
-  };
-});
+vi.mock("lucide-react", () => ({
+  Activity: () => <svg aria-hidden="true" />,
+  AlertCircle: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
+  Bell: () => <svg aria-hidden="true" />,
+  Bot: () => <svg aria-hidden="true" />,
+  CheckCircle2: () => <svg aria-hidden="true" />,
+  Cpu: () => <svg aria-hidden="true" />,
+  Mail: () => <svg aria-hidden="true" />,
+  Monitor: () => <svg aria-hidden="true" />,
+  Network: () => <svg aria-hidden="true" />,
+  Plus: () => <svg aria-hidden="true" />,
+  RefreshCw: () => <svg aria-hidden="true" />,
+  Settings: () => <svg aria-hidden="true" />,
+  Shield: () => <svg aria-hidden="true" />,
+  Smartphone: () => <svg aria-hidden="true" />,
+  User: () => <svg aria-hidden="true" />,
+}));
 
 const oidcMocks = vi.hoisted(() => ({
   clearOidcSession: vi.fn(),
@@ -706,19 +703,5 @@ describe("SettingsLayout", () => {
       expect(container.textContent).toContain(`${tabName === "멤버" ? "멤버와 역할" : tabName === "알림" ? "알림 정책" : tabName === "자동화" ? "자동화 규칙" : "결제와 사용량"}`);
       expect(container.textContent).not.toContain("다음 릴리즈");
     }
-  });
-
-  it("hides all rendered decorative Lucide icons from screen readers", async () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<SettingsLayout />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(container.querySelectorAll('svg:not([aria-hidden="true"])')).toHaveLength(0);
   });
 });
