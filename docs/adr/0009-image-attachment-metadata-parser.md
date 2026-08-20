@@ -38,6 +38,50 @@ the content graph.
    with source provenance, bounded payloads, and a non-success state while the
    sidecar is unavailable.
 
+## Deferred inline-image evidence contract
+
+The next image capability must also cover HTML body fragments such as
+`data:image/png;base64,...`; an image embedded in the body is not necessarily a
+MIME attachment. Its logical relational contract is fixed here before a
+migration or parser implementation is added:
+
+```mermaid
+erDiagram
+    EMAIL_RECORDS ||--o{ IMAGE_SOURCES : owns
+    EMAIL_ATTACHMENTS |o--o{ IMAGE_SOURCES : represents
+    IMAGE_SOURCES ||--o{ IMAGE_ANALYSIS_RUNS : receives
+    IMAGE_ANALYSIS_MODELS ||--o{ IMAGE_ANALYSIS_RUNS : executes
+    IMAGE_ANALYSIS_RUNS ||--o{ IMAGE_ANNOTATIONS : emits
+    IMAGE_ANALYSIS_RUNS ||--o{ IMAGE_EMBEDDING_RECORDS : emits
+```
+
+- `image_sources` stores only immutable source identity and location:
+  `image_source_uid`, scoped email/attachment references, `source_kind`,
+  `source_locator_type`, `source_locator_value`, `source_ordinal`, normalized
+  media type, byte count, digest, and bounded dimensions. An HTML data URI uses
+  an `html_dom_path` locator; a MIME part uses a `mime_part_path` locator. The
+  locator is the bridge back to the image's original position.
+- `image_analysis_models` is the normalized model registry: model reference,
+  provider boundary, model version, modality, and local-only policy. Runs do
+  not duplicate model identity fields.
+- `image_analysis_runs` records one OCR, object-label, caption, safety-label,
+  or image-embedding attempt, including status, input digest, timestamps, and a
+  safe error code. Unavailable, pending, and failed runs are never presented as
+  successful evidence.
+- `image_annotations` stores one atomic OCR span, object label, caption, or
+  safety label per row, with confidence and optional normalized bounding-box
+  coordinates. `image_embedding_records` stores one embedding per image/model
+  run and its dimension. Neither table stores a second copy of source ownership
+  or location.
+
+This separation is third-normal-form by construction: source location belongs
+to the source, model identity belongs to the model registry, execution facts
+belong to a run, and observations belong to the run. Raw base64 is not a search
+field; it remains behind the existing scoped source-retention policy, while
+the digest and locator make derived evidence auditable. The implementation must
+reject malformed data URIs, bound decoded bytes before any vision call, and
+keep the same signed organization/workspace scope as email attachments.
+
 ## Alternatives rejected
 
 ### Send image bytes to a hosted vision API during import
@@ -70,26 +114,41 @@ search and the content graph despite enough safe evidence for useful metadata.
 
 International Telecommunication Union. (1992). *Information technology—Digital
 compression and coding of continuous-tone still images—Requirements and
-guidelines (Recommendation ITU-T T.81).* https://www.itu.int/rec/T-REC-T.81
+guidelines (Recommendation ITU-T T.81).* <https://www.itu.int/rec/T-REC-T.81>
 
 This recommendation defines JPEG marker segments and SOF dimensions, which
 supports the parser's bounded header-only width/height extraction.
 
 Microsoft. (2022). *Bitmap storage.* Microsoft Learn.
-https://learn.microsoft.com/en-us/windows/win32/gdi/bitmap-storage
+<https://learn.microsoft.com/en-us/windows/win32/gdi/bitmap-storage>
 
 This reference defines DIB header layouts and dimensions, supporting the
 parser's signature-plus-header BMP metadata boundary.
 
 World Wide Web Consortium. (2025). *Portable Network Graphics (PNG)
-specification (Third Edition).* https://www.w3.org/TR/png-3/
+specification (Third Edition).* <https://www.w3.org/TR/png-3/>
 
 The PNG specification defines the signature and IHDR dimensions used for
 header-only PNG metadata; the parser does not decode pixel data.
 
 CompuServe Incorporated. (1990). *Graphics Interchange Format version 89a.*
-https://giflib.sourceforge.net/gifstandard/GIF89a.html
+<https://giflib.sourceforge.net/gifstandard/GIF89a.html>
 
 GIF89a defines the signature and logical screen descriptor used for GIF
 dimensions; the parser reports only bounded metadata and a marker-based
 animation hint.
+
+WHATWG. (n.d.). *Data URLs*. In *HTML Living Standard*. Retrieved August 21,
+2026, from
+<https://html.spec.whatwg.org/multipage/urls-and-fetching.html#data-urls>
+
+Huang, Y., Lv, T., Cui, L., Lu, Y., & Wei, F. (2022). LayoutLMv3:
+Pre-training for document AI with unified text and image masking. *Proceedings
+of the 30th ACM International Conference on Multimedia*, 4321–4330.
+<https://doi.org/10.1145/3503161.3548110>
+
+The HTML standard is the authority for recognizing data URLs and their media
+payload boundary. Huang et al. (2022) supports preserving aligned text/image
+layout evidence rather than flattening an embedded image into unrelated body
+text; it does not authorize sending confidential mailbox bytes to a hosted
+model.

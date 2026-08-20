@@ -39,6 +39,39 @@ sequenceDiagram
 3. **Future sidecar boundary:** A separately configured local vision sidecar may later receive a bounded, source-authorized payload. It must report unavailable, pending, or failure states instead of claiming detection success.
 4. **Future classification:** OCR, captioning, object detection, and safety labels require their own source-backed contract, tests, and ADR amendment.
 
+## Inline `data:image` relational contract
+
+HTML body images are a separate source kind from MIME attachments. A future
+bounded parser must identify each `data:image/<format>;base64,...` token in DOM
+order, validate the media signature after decoding, and retain its original
+`html_dom_path` plus ordinal. The source bytes remain scoped and bounded; the
+search layer indexes only derived metadata and explicitly versioned evidence.
+
+The normalized tables are `image_sources`, `image_analysis_models`,
+`image_analysis_runs`, `image_annotations`, and `image_embedding_records`.
+`image_sources` owns the scoped email/attachment reference, source locator,
+ordinal, media type, byte count, digest, and dimensions. A body image uses
+`source_locator_type=html_dom_path`; an attached image uses
+`source_locator_type=mime_part_path`. A run references one model registry row
+and one source, while annotations and embeddings reference only the run. This
+keeps ownership and original position available without copying it into every
+OCR span, object label, caption, safety label, or embedding row.
+
+```mermaid
+flowchart LR
+    body[HTML body] --> uri[data:image base64 token]
+    uri --> validate[bounded decode and signature validation]
+    validate --> source[image_sources with DOM locator]
+    source --> run[image_analysis_runs]
+    run --> annotations[OCR/object/caption/safety rows]
+    run --> embedding[image_embedding_records]
+```
+
+No hosted vision call is implied. The local sidecar must receive a bounded,
+scope-authorized payload and report `pending`, `unavailable`, or `failed` until
+it has source-backed output. This contract is the next implementation slice;
+the current parser remains header-only and attachment-scoped.
+
 ## Current Naruon implementation boundary
 
 Email ingestion now runs the bounded `image_metadata` parser for PNG, JPEG,
@@ -100,3 +133,19 @@ Current CI tests the implemented header parser with synthetic PNG, JPEG, GIF,
 and BMP payloads, malformed inputs, generic-MIME signature fallback, and large
 payload regressions. Vision-sidecar behavior is not claimed until that
 component and its source-backed test corpus exist.
+
+The inline-image slice must additionally test DOM-order preservation, malformed
+and over-budget base64 rejection, source digest stability, cross-workspace
+authorization, and that OCR/object labels retain the source locator while raw
+base64 is excluded from searchable evidence.
+
+## References (APA 7th)
+
+WHATWG. (n.d.). *Data URLs*. In *HTML Living Standard*. Retrieved August 21,
+2026, from
+<https://html.spec.whatwg.org/multipage/urls-and-fetching.html#data-urls>
+
+Huang, Y., Lv, T., Cui, L., Lu, Y., & Wei, F. (2022). LayoutLMv3:
+Pre-training for document AI with unified text and image masking. *Proceedings
+of the 30th ACM International Conference on Multimedia*, 4321–4330.
+<https://doi.org/10.1145/3503161.3548110>
