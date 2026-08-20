@@ -189,4 +189,3 @@ async def update_noema_gateway(
             status_code=503,
             detail="Server encryption key is not configured. Contact your workspace administrator.",
         ) from exc
-    return _response(config)
