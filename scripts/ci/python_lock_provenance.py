@@ -443,6 +443,8 @@ def discover_hash_locks(repository_root: Path) -> list[Path]:
         if resolved_path is None:
             candidates.append(path)
             continue
+        if not resolved_path.is_file():
+            continue
         try:
             text = resolved_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:

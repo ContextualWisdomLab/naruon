@@ -316,6 +316,19 @@ def test_repository_receipt_is_deterministic_and_path_relative(tmp_path: Path) -
     ]
 
 
+def test_discovery_skips_non_file_requirements_candidates(tmp_path: Path) -> None:
+    """A directory or broken link named like a lock cannot crash discovery."""
+    (tmp_path / "requirements-directory.txt").mkdir()
+    (tmp_path / "requirements-broken.txt").symlink_to(
+        tmp_path / "missing-target.txt"
+    )
+
+    receipt = python_lock_provenance.validate_repository(tmp_path)
+
+    assert receipt["status"] == "passed"
+    assert receipt["lock_files"] == []
+
+
 def test_outside_repository_lock_fails_without_reading_payload(tmp_path: Path) -> None:
     """Direct validation rejects an out-of-root lock without serializing its data."""
     root = tmp_path / "root"
