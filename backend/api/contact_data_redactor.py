@@ -22,6 +22,7 @@ _EMAIL_PATTERN = re.compile(
 _PHONE_CANDIDATE_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])\+?[0-9][0-9()\s.-]{6,24}[0-9](?![A-Za-z0-9_])"
 )
+_ADJACENT_PHONE_BOUNDARY = re.compile(r"(?<=\d)\s+(?=\+?\d)")
 _DATE_PATTERN = re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}")
 
 
@@ -67,6 +68,28 @@ def _valid_phone(candidate: str) -> bool:
     return True
 
 
+def _phone_candidates(text: str) -> list[tuple[int, int, str]]:
+    """Return valid phones, recovering adjacent whitespace-separated numbers."""
+    candidates: list[tuple[int, int, str]] = []
+    search_start = 0
+    while match := _PHONE_CANDIDATE_PATTERN.search(text, search_start):
+        candidate = match.group(0)
+        if _valid_phone(candidate):
+            candidates.append((match.start(), match.end(), candidate))
+            search_start = match.end()
+            continue
+        for boundary in _ADJACENT_PHONE_BOUNDARY.finditer(candidate):
+            first_phone = candidate[: boundary.start()]
+            if _valid_phone(first_phone):
+                first_end = match.start() + boundary.start()
+                candidates.append((match.start(), first_end, first_phone))
+                search_start = match.start() + boundary.end()
+                break
+        else:
+            search_start = match.end()
+    return candidates
+
+
 def _contact_candidates(text: str) -> list[tuple[str, int, int, str]]:
     """Return non-overlapping email and phone candidates in source order."""
     candidates: list[tuple[str, int, int, str]] = [
@@ -74,9 +97,8 @@ def _contact_candidates(text: str) -> list[tuple[str, int, int, str]]:
         for match in _EMAIL_PATTERN.finditer(text)
     ]
     candidates.extend(
-        ("phone", match.start(), match.end(), match.group(0))
-        for match in _PHONE_CANDIDATE_PATTERN.finditer(text)
-        if _valid_phone(match.group(0))
+        ("phone", start, end, value)
+        for start, end, value in _phone_candidates(text)
     )
     candidates.sort(
         key=lambda candidate: (

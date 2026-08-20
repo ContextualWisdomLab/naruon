@@ -39,6 +39,22 @@ async def test_contact_redactor_returns_safe_placeholders_and_span_evidence() ->
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("separator", [" ", "\n"])
+async def test_contact_redactor_redacts_adjacent_phone_numbers(
+    separator: str,
+) -> None:
+    """Phone lists separated only by whitespace redact every supported number."""
+    result = await registry.invoke_tool(
+        "contact_data_redactor",
+        {"text": f"010-1234-5678{separator}010-8765-4321"},
+    )
+
+    assert result["match_counts"] == {"email": 0, "phone": 2}
+    assert "010-1234-5678" not in result["redacted_text"]
+    assert "010-8765-4321" not in result["redacted_text"]
+
+
+@pytest.mark.asyncio
 async def test_contact_redactor_reuses_placeholder_for_repeated_contact() -> None:
     """Repeated contact values preserve entity distinction without exposing values."""
     result = await registry.invoke_tool(
