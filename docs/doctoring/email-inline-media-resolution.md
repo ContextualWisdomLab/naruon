@@ -6,6 +6,12 @@ This note traces the deterministic resolver implemented in `backend/services/ema
 
 The resolver does not alter provider messages, fetch remote URLs, persist image payloads, or claim that a visual artifact is semantically relevant. Its `llm_safe` flag means only that the payload is within the configured byte bound, uses one of the admitted image media types, and its deterministic file signature agrees with the declared type. A downstream image decoder/model adapter must still perform its own decode and model-specific validation before inference.
 
+## Module and composition contract
+
+Consumers may use `resolve_email_media(raw_message)` as a standalone, side-effect-free module: it returns immutable artifacts and occurrence provenance, and callers decide whether and where those results are persisted. The resolver is therefore safe to reuse in another service or import as a submodule without granting it mailbox, network, or database authority.
+
+The following inline-media slices compose on top of this boundary: admission and tracking classification, `document_image` wiring, quarantine persistence, and buyer-facing next actions. Until those slices are shipped, this resolver's output is evidence only; it must not be presented as OCR, object detection, semantic image search, or a completed attachment import.
+
 ## Standards-to-code trace
 
 | Requirement | Primary basis | Naruon behavior |
