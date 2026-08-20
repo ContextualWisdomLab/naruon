@@ -959,7 +959,7 @@ async def test_import_email_files_accepts_source_over_20_mib(
     )
     monkeypatch.setattr(emails_api, "import_email_uploads", capture_import)
     assert emails_api.MAX_IMPORT_UPLOAD_BYTES > 20 * 1024 * 1024
-    synthetic_limit = 64
+    synthetic_limit = 20 * 1024 * 1024
     prefix = b"From: a@example.com\n\n"
     source = prefix + b"x" * (synthetic_limit + 1 - len(prefix))
     assert len(source) == synthetic_limit + 1
