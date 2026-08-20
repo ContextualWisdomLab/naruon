@@ -775,10 +775,21 @@ async def url_decoder_handler(params: Dict[str, Any]) -> Any:
         raise ValueError("URL codec input must not exceed 262144 bytes")
 
     # Strict percent checking
-    import re
 
-    if re.search(r"%(?![0-9a-fA-F]{2})", text):
-        raise ValueError("Malformed percent-encoding")
+    i = 0
+    text_len = len(text)
+    while i < text_len:
+        if text[i] == "%":
+            if i + 2 >= text_len:
+                raise ValueError("Malformed percent-encoding")
+            if not (
+                text[i + 1] in "0123456789abcdefABCDEF"
+                and text[i + 2] in "0123456789abcdefABCDEF"
+            ):
+                raise ValueError("Malformed percent-encoding")
+            i += 3
+        else:
+            i += 1
 
     decoded = urllib.parse.unquote_to_bytes(text)
     try:
