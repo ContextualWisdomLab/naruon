@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -519,8 +517,115 @@ async def test_text_analyzer_tool_success():
     assert result["word_count"] == 6
 
 
-@pytest.mark.asyncio
-async def test_uuid_v4_generator_tool_success():
+def test_url_encoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world/&="}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["encoded_text"] == "hello%20world%2F%26%3D"
+
+
+def test_url_decoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello%20world%2F%26%3D"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["decoded_text"] == "hello world/&="
+
+
+def test_json_formatter_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": "value", "arr": [1, 2, 3]}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["is_valid"] is True
+    assert (
+        '{\n  "key": "value",\n  "arr": [\n    1,\n    2,\n    3\n  ]\n}'
+        == data["result"]["formatted_json"]
+    )
+
+
+def test_json_formatter_tool_invalid():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": "value", "arr": [1, 2, 3]'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
+
+
+def test_json_formatter_tool_invalid_nan():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": NaN}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
+
+
+def test_json_formatter_tool_invalid_inf():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": Infinity}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
+
+
+def test_json_formatter_tool_invalid_neg_inf():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": -Infinity}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
+
+
+def test_json_formatter_tool_invalid_overflow():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key": 1e400}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "유효하지 않은 JSON 문자열입니다" in data["message"]
+
+
+def test_uuid_v4_generator_tool_success():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/uuid_v4_generator/execute",

@@ -1,4 +1,9 @@
 ## [Unreleased]
+### URL Codec 및 엄격한 JSON Formatter 도구 (Utility Tools)
+
+- `url_encoder` 및 `url_decoder` 도구를 추가하여 URL 인코딩 및 디코딩을 지원합니다. 모든 변환은 엄격하게 문자열 타입만을 허용하며, 크기 제한(262,144바이트 UTF-8) 및 단일 계층 디코딩을 강제합니다.
+- `json_formatter` 도구를 개선하여 더 엄격한 RFC 8259-style을 적용했습니다. 문자열 타입 입력만을 허용하고, 파싱 전 1MB 크기 제한을 적용하며, 중복된 객체 속성이나 비표준 상수(NaN, Infinity 등)를 거부합니다.
+
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
