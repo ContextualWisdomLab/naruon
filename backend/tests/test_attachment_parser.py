@@ -242,16 +242,23 @@ def test_invalid_pdf_payload_is_rejected_before_deferred_recognition():
     assert result.parse_error_code == "invalid_pdf_payload"
 
 
-def test_oversized_pdf_payload_is_not_retained():
+def test_oversized_pdf_payload_is_not_retained(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 8
+    )
     result = parse_email_attachment(
         filename="huge.pdf",
         content_type="application/pdf",
-        raw_content=b"%PDF-" + b"A" * MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
+        raw_content=b"%PDF-" + b"A" * 8,
     )
 
     assert result.content == ""
     assert result.parse_status == "parse_size_limit_exceeded"
     assert result.parse_error_code == "parse_size_limit_exceeded"
+
+
+def test_deferred_attachment_source_limit_exceeds_twenty_megabytes():
+    assert MAX_ATTACHMENT_PARSE_SOURCE_BYTES > 20 * 1024 * 1024
 
 
 @pytest.mark.parametrize(

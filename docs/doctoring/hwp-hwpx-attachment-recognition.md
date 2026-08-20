@@ -45,7 +45,7 @@ sandboxed workers perform heavier extraction.
 
 | Boundary | Current import limit | Purpose |
 | --- | ---: | --- |
-| Complete deferred source | 20 MiB | Prevent oversized payload retention. |
+| Complete deferred source | 64 MiB | Align deferred retention with the email import transport while bounding memory and database payload growth. |
 | ZIP entry count | 4,096 | Bound member-object and traversal work. |
 | Central-directory bytes | 4 MiB | Bound metadata parsing before member materialization. |
 | Aggregate decoded member-name bytes | 1 MiB | Prevent path/name metadata amplification. |
@@ -121,3 +121,6 @@ https://tech.hancom.com/hwpxformat/
 
 PKWARE, Inc. (2024). *APPNOTE.TXT: .ZIP file format specification*.
 https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
+
+Fielding, R., Nottingham, M., & Reschke, J. (Eds.). (2022). *HTTP semantics*
+(RFC 9110). RFC Editor. https://doi.org/10.17487/RFC9110
