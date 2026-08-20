@@ -3,6 +3,7 @@
   settings with HTTPS `/v1` allowlist validation, Fernet-backed token storage,
   masked readiness responses, and generic audit records. The route keeps the
   existing per-user organization scope and does not expose gateway tokens.
+  Doctoring records the OWASP ASVS 5.0.0 and NIST SP 800-63B-4 evidence mapping.
 - **Noema LLM routing through contextual-orchestrator.**
   `run_noema_agent` no longer calls `resolve_runtime_llm_provider` or a
   tenant `gpt-4o` chat model. Completions go to the orchestrator gateway

@@ -45,3 +45,6 @@ delegation contract.
 `backend/tests/test_noema_config_api.py` covers readiness responses, token
 non-disclosure, audit records, URL rejection, empty updates, and extra-field
 rejection. The focused Noema suite must pass with warnings treated as errors.
+
+The control mapping and APA 7th references are maintained in
+[`docs/doctoring/noema-gateway-settings.md`](../doctoring/noema-gateway-settings.md).
