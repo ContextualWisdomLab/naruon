@@ -822,7 +822,7 @@ export function SettingsLayout() {
     <div className="flex h-full min-w-0 min-h-0 bg-background text-foreground flex-col overflow-x-hidden">
       <header className="flex h-20 shrink-0 items-center border-b border-border bg-card px-4 md:px-8 overflow-hidden">
         <h1 className="text-xl md:text-2xl font-bold flex shrink-0 items-center gap-3">
-          <Settings className="size-6 text-primary" />
+          <Settings className="size-6 text-primary" aria-hidden="true" />
           <span className="sm:hidden">설정</span>
           <span className="hidden sm:inline">설정</span>
         </h1>
@@ -858,7 +858,7 @@ export function SettingsLayout() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${activeTab === tab.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
               >
-                <tab.icon className="size-4" /> {tab.id}
+                <tab.icon className="size-4" aria-hidden="true" /> {tab.id}
               </button>
             ))}
           </div>
@@ -978,7 +978,7 @@ export function SettingsLayout() {
                               </dl>
                             </div>
                             <div className="flex shrink-0 items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-bold text-muted-foreground">
-                              <CheckCircle2 className="size-3.5 text-primary" />
+                              <CheckCircle2 className="size-3.5 text-primary" aria-hidden="true" />
                               {provider.fingerprint ? `Key ${provider.fingerprint}` : '로컬 credential 없음'}
                             </div>
                           </div>
@@ -1002,7 +1002,7 @@ export function SettingsLayout() {
                     className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"
                   >
                     <div className="flex items-center gap-3 border-b border-border pb-4">
-                      <div className="rounded-xl bg-blue-100 p-2.5"><Bot className="size-5 text-blue-700" /></div>
+                      <div className="rounded-xl bg-blue-100 p-2.5"><Bot className="size-5 text-blue-700" aria-hidden="true" /></div>
                       <div>
                         <h3 className="font-bold text-lg">상용 API 모델 등록</h3>
                         <p className="text-xs text-muted-foreground">OpenAI, Anthropic 등의 API 연동</p>
@@ -1059,7 +1059,7 @@ export function SettingsLayout() {
                     className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"
                   >
                     <div className="flex items-center gap-3 border-b border-border pb-4">
-                      <div className="rounded-xl bg-emerald-100 p-2.5"><Cpu className="size-5 text-emerald-700" /></div>
+                      <div className="rounded-xl bg-emerald-100 p-2.5"><Cpu className="size-5 text-emerald-700" aria-hidden="true" /></div>
                       <div>
                         <h3 className="font-bold text-lg">로컬 모델 등록</h3>
                         <p className="text-xs text-muted-foreground">Ollama, vLLM 등의 자체 호스팅 모델 연동</p>
@@ -1198,7 +1198,7 @@ export function SettingsLayout() {
                       <article key={protocol.label} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                       <div className="flex items-start gap-3">
                         <div className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary">
-                          <Mail className="size-5 text-primary" />
+                          <Mail className="size-5 text-primary" aria-hidden="true" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
@@ -1659,7 +1659,7 @@ export function SettingsLayout() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                   <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
-                    <Monitor className="size-8 text-orange-500 mb-2" />
+                    <Monitor className="size-8 text-orange-500 mb-2" aria-hidden="true" />
                     <h3 className="font-bold text-lg">Grafana 대시보드</h3>
                     <p className="text-sm text-muted-foreground">OpenTelemetry 기반의 APM, 트래픽 메트릭 및 시스템 자원 모니터링을 확인합니다.</p>
                   </a>
@@ -1669,7 +1669,7 @@ export function SettingsLayout() {
                     <p className="text-sm text-muted-foreground">OIDC 프로바이더, SSO 인증, 역할 기반 접근 제어(RBAC)를 구성합니다.</p>
                   </a>
                   <a href="http://localhost:3100" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
-                    <AlertCircle className="size-8 text-slate-500 mb-2" />
+                    <AlertCircle className="size-8 text-slate-500 mb-2" aria-hidden="true" />
                     <h3 className="font-bold text-lg">Loki 로그 서버</h3>
                     <p className="text-sm text-muted-foreground">분산 아키텍처 환경의 컨테이너 로그 및 어플리케이션 에러 로그를 검색합니다.</p>
                   </a>
