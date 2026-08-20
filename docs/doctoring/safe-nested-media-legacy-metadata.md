@@ -59,3 +59,14 @@ https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b
 
 MS-CFB supports signature-only legacy `.doc` recognition; no compound-file
 streams or macros are traversed.
+
+Späth, C., Mainka, C., Mladenov, V., & Schwenk, J. (2016). *SoK: XML parser
+vulnerabilities.* In *10th USENIX Workshop on Offensive Technologies (WOOT
+16).* USENIX Association.
+https://www.usenix.org/conference/woot16/workshop-program/presentation/spath
+
+This peer-reviewed workshop study evaluated XML parser attack variants across
+30 parsers and documents denial-of-service and external-entity risks. It is
+the academic basis for the repository's DTD rejection, bounded XML work, and
+no-external-upload boundary. The linked PDF is not copied here because USENIX
+states that copyright remains with the individual authors.

@@ -59,3 +59,15 @@ Internet Engineering Task Force. (2013). *Media type specifications and
 
 RFC 6838 supports treating the declared media type as a registered metadata
 value while keeping format-specific processing as a separate contract.
+
+Späth, C., Mainka, C., Mladenov, V., & Schwenk, J. (2016). *SoK: XML parser
+vulnerabilities.* In *10th USENIX Workshop on Offensive Technologies (WOOT
+16).* USENIX Association.
+https://www.usenix.org/conference/woot16/workshop-program/presentation/spath
+
+The study's systematic analysis of unsafe XML parser features and denial of
+service vectors supports this ADR's fail-closed boundary: generic binaries
+receive only normalized MIME and byte-count metadata, while any future
+format-specific parser must establish reliable evidence and use bounded,
+hardened parsing. The paper PDF is linked by USENIX but is not redistributed
+here because USENIX states that copyright remains with the individual authors.

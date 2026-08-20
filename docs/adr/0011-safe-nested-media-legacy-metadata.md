@@ -93,3 +93,15 @@ https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b
 MS-CFB defines the compound-file signature and container structure used for
 the legacy `.doc` recognition boundary; this parser records only that
 container evidence and does not traverse streams or execute macros.
+
+Späth, C., Mainka, C., Mladenov, V., & Schwenk, J. (2016). *SoK: XML parser
+vulnerabilities.* In *10th USENIX Workshop on Offensive Technologies (WOOT
+16).* USENIX Association.
+https://www.usenix.org/conference/woot16/workshop-program/presentation/spath
+
+Späth et al. systematically evaluated XML parser attack variants across 30
+parsers and identified denial-of-service, external-entity, and related risks
+from unsafe parser features. This supports disabling DTD processing and
+combining parser hardening with bounded input and work budgets here. The
+paper PDF is linked by USENIX but is not redistributed in this repository;
+USENIX states that copyright remains with the individual authors.
