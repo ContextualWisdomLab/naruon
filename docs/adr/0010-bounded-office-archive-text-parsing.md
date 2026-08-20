@@ -59,11 +59,13 @@ or archive runtime would expand the execution and data-retention boundary.
 Rejected because customer mailbox backups are confidential and import must not
 execute untrusted attachment content or create an implicit external transfer.
 
-### Add a new office/archive dependency for this first useful slice
+### Add a full Office/archive parsing dependency for this first useful slice
 
 Rejected because the safe searchable subset is available through the standard
-library, while a full parser would add native code, larger supply-chain
-surface, and a broader behavior contract before it is required.
+library and the existing `defusedxml` dependency is only the narrow XML-
+hardening boundary. A full Office/archive parser would add native code, a
+larger supply-chain surface, and a broader behavior contract before it is
+required.
 
 ### Keep all OOXML and ZIP attachments as unsupported binary
 
