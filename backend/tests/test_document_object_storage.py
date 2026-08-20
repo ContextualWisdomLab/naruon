@@ -9,6 +9,7 @@ import pytest
 
 from db.document_object_record import DocumentObjectRecord
 from db.models import Document
+from db.object_storage_provider import ObjectStorageProvider
 import services.document_object_storage as storage_module
 from services.s3_object_storage import S3StoredObject
 
@@ -56,13 +57,18 @@ class FakeS3Backend:
 class ScalarSession:
     """Minimal async session returning a preselected object record."""
 
-    def __init__(self, record: DocumentObjectRecord | None) -> None:
+    def __init__(
+        self,
+        record: DocumentObjectRecord | None,
+        provider: ObjectStorageProvider | None = None,
+    ) -> None:
         self.record = record
+        self.provider = provider
         self.scalar_calls = 0
 
     async def scalar(self, _statement):
         self.scalar_calls += 1
-        return self.record
+        return self.record if self.scalar_calls == 1 else self.provider
 
 
 def _s3_object() -> S3StoredObject:
@@ -79,6 +85,7 @@ def _s3_record() -> DocumentObjectRecord:
     stored = _s3_object()
     return DocumentObjectRecord(
         document_id="doc-1",
+        object_storage_provider_id=7,
         storage_backend="s3",
         bucket_name=stored.bucket_name,
         object_key=stored.object_key,
@@ -86,6 +93,27 @@ def _s3_record() -> DocumentObjectRecord:
         content_length=stored.content_length,
         checksum_sha256=stored.checksum_sha256,
         storage_state="active",
+    )
+
+
+def _s3_provider() -> ObjectStorageProvider:
+    return ObjectStorageProvider(
+        object_storage_provider_id=7,
+        user_id="user-1",
+        organization_id="organization-1",
+        provider_name="primary-s3",
+        provider_type="s3",
+        bucket_name="naruon-documents",
+        region_name="us-east-1",
+        endpoint_url=None,
+        addressing_style="virtual",
+        access_key_id="access-key",
+        secret_access_key="secret-key",
+        session_token=None,
+        server_side_encryption="AES256",
+        kms_key_id=None,
+        expected_bucket_owner=None,
+        is_active=True,
     )
 
 
@@ -231,12 +259,12 @@ async def test_loader_prefers_legacy_inline_payload_without_querying_object_reco
 @pytest.mark.asyncio
 async def test_loader_reads_s3_record_and_closes_backend(monkeypatch) -> None:
     backend = FakeS3Backend()
-    session = ScalarSession(_s3_record())
+    session = ScalarSession(_s3_record(), _s3_provider())
 
-    async def build_backend():
+    async def build_backend(_runtime_config):
         return backend
 
-    monkeypatch.setattr(storage_module, "_build_s3_backend_from_settings", build_backend)
+    monkeypatch.setattr(storage_module, "_build_s3_backend", build_backend)
     loaded = await storage_module.load_pending_pdf_document_bytes(
         session,
         _document(content=None),
@@ -245,7 +273,7 @@ async def test_loader_reads_s3_record_and_closes_backend(monkeypatch) -> None:
     assert loaded == PDF_BYTES
     assert backend.get_calls[0].object_key.endswith("source.pdf")
     assert backend.closed is True
-    assert session.scalar_calls == 1
+    assert session.scalar_calls == 2
 
 
 @pytest.mark.asyncio
@@ -277,13 +305,13 @@ async def test_loader_rejects_wrong_document_and_corrupt_download(monkeypatch) -
 
     backend = FakeS3Backend(returned_payload=b"not-a-pdf")
 
-    async def build_backend():
+    async def build_backend(_runtime_config):
         return backend
 
-    monkeypatch.setattr(storage_module, "_build_s3_backend_from_settings", build_backend)
+    monkeypatch.setattr(storage_module, "_build_s3_backend", build_backend)
     with pytest.raises(storage_module.DocumentObjectStorageError, match="PDF"):
         await storage_module.load_pending_pdf_document_bytes(
-            ScalarSession(_s3_record()),
+            ScalarSession(_s3_record(), _s3_provider()),
             _document(content=None),
         )
     assert backend.closed is True

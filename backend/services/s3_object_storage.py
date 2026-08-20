@@ -18,11 +18,27 @@ import httpx
 
 from services import s3_object_storage_core as _core
 from services.s3_object_storage_core import (
+    AwsCredentials,
+    S3ClientConfiguration,
+    S3ObjectIntegrityError,
     S3ObjectStorageError,
     S3ObjectStorageRequestError,
     S3StoredObject,
+    build_document_object_key,
     sign_s3_request,
 )
+
+__all__ = [
+    "AwsCredentials",
+    "S3ClientConfiguration",
+    "S3ObjectIntegrityError",
+    "S3ObjectStorageBackend",
+    "S3ObjectStorageError",
+    "S3ObjectStorageRequestError",
+    "S3StoredObject",
+    "build_document_object_key",
+    "sign_s3_request",
+]
 
 
 class _S3ObjectAlreadyExistsError(S3ObjectStorageRequestError):
