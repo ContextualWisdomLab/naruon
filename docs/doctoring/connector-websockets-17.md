@@ -2,11 +2,14 @@
 
 ## Decision
 
-The standalone connector and the Naruon-integrated connector use the same exact
-`websockets==17.0.1` dependency and hash-locked artifact set. The lock records
-the source distribution and the CPython 3.14 manylinux x86_64 wheel required by
-the supported CI and deployment path. Application behavior, credentials, API
-contracts, database objects, and reviewer identities are unchanged.
+The standalone connector is upgraded to the exact
+`websockets==17.0.1` dependency and hash-locked artifact set. Naruon's
+integrated runner remains on its separately pinned `websockets==16.1` contract;
+upgrading that runtime is intentionally out of scope for this connector-only
+change. The connector lock records the source distribution and the CPython 3.14
+manylinux x86_64 wheel required by the supported CI and deployment path.
+Application behavior, credentials, API contracts, database objects, and reviewer
+identities are unchanged.
 
 The major-version update remains acceptable only while connector compilation,
 hash-locked installation, and the real request-header compatibility path pass on
@@ -21,14 +24,15 @@ evidence is reused for this maintainer-owned replacement.
   `additional_headers` interface where custom request headers are required.
 - Repository CI, security, dependency review, static analysis, and container
   checks pass on the exact head.
-- The connector continues to operate independently and when imported as a Naruon
-  module.
+- The standalone connector continues to operate independently. The integrated
+  runner remains validated by its own `16.1` dependency and lock contract.
 
 ## Rollback
 
-Rollback restores the `16.1` requirement and its prior artifact hash in both
-connector requirement files. Rollback does not alter connector credentials,
-network destinations, or reviewer automation.
+Rollback restores the `16.1` requirement and its prior artifact hash in the
+standalone connector requirement files. It does not alter the separately pinned
+integrated runner, connector credentials, network destinations, or reviewer
+automation.
 
 ## References
 
