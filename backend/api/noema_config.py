@@ -101,10 +101,18 @@ async def get_noema_gateway(
     auth_context: AuthContext = Depends(get_auth_context),
 ) -> NoemaGatewayResponse:
     """Return the signed-session user's scoped gateway readiness state."""
-    config = await get_scoped_tenant_config(
-        db, auth_context.user_id, auth_context.organization_id
-    )
-    return _response(config)
+    try:
+        config = await get_scoped_tenant_config(
+            db, auth_context.user_id, auth_context.organization_id
+        )
+        return _response(config)
+    except Exception as exc:
+        if not _is_encryption_configuration_error(exc):
+            raise
+        raise HTTPException(
+            status_code=503,
+            detail="Server encryption key is not configured. Contact your workspace administrator.",
+        ) from exc
 
 
 @router.put("", response_model=NoemaGatewayResponse)
@@ -118,59 +126,62 @@ async def update_noema_gateway(
     if not updates:
         raise HTTPException(status_code=422, detail="No gateway settings supplied")
 
-    config = await get_scoped_tenant_config(
-        db, auth_context.user_id, auth_context.organization_id
-    )
-    if config is None:
-        config = new_scoped_tenant_config(
-            user_id=auth_context.user_id,
-            organization_id=auth_context.organization_id,
-        )
-        db.add(config)
-
-    if "token" in updates:
-        token = _clean_token(updates["token"])
-        if token is not None:
-            config.noema_orchestrator_token = token
-        elif not config.noema_orchestrator_token:
-            raise HTTPException(status_code=422, detail="Noema gateway token is required")
-
-    if "base_url" in updates:
-        config.noema_orchestrator_base_url = await _validated_base_url(
-            updates["base_url"] or ""
-        )
-
-    if not config.noema_orchestrator_base_url or not config.noema_orchestrator_token:
-        raise HTTPException(
-            status_code=422,
-            detail="Noema gateway base URL and token are required",
-        )
-
-    resource_uid = _resource_uid(auth_context)
-    db.add(
-        AuditLog(
-            user_id=auth_context.user_id,
-            action="update",
-            resource_type="noema_gateway",
-            resource_id=resource_uid,
-            details="Updated Noema gateway settings",
-        )
-    )
-    db.add(
-        SecurityAuditEvent(
-            actor_user_id=auth_context.user_id,
-            actor_role=auth_context.role,
-            organization_id=auth_context.organization_id,
-            workspace_id=auth_context.workspace_id,
-            event_action="update",
-            resource_type="noema_gateway",
-            resource_uid=resource_uid,
-            evidence_source="api.noema_config",
-            detail_text="Updated Noema gateway settings",
-        )
-    )
     try:
+        config = await get_scoped_tenant_config(
+            db, auth_context.user_id, auth_context.organization_id
+        )
+        if config is None:
+            config = new_scoped_tenant_config(
+                user_id=auth_context.user_id,
+                organization_id=auth_context.organization_id,
+            )
+            db.add(config)
+
+        if "token" in updates:
+            token = _clean_token(updates["token"])
+            if token is not None:
+                config.noema_orchestrator_token = token
+            elif not config.noema_orchestrator_token:
+                raise HTTPException(
+                    status_code=422, detail="Noema gateway token is required"
+                )
+
+        if "base_url" in updates:
+            config.noema_orchestrator_base_url = await _validated_base_url(
+                updates["base_url"] or ""
+            )
+
+        if not config.noema_orchestrator_base_url or not config.noema_orchestrator_token:
+            raise HTTPException(
+                status_code=422,
+                detail="Noema gateway base URL and token are required",
+            )
+
+        resource_uid = _resource_uid(auth_context)
+        db.add(
+            AuditLog(
+                user_id=auth_context.user_id,
+                action="update",
+                resource_type="noema_gateway",
+                resource_id=resource_uid,
+                details="Updated Noema gateway settings",
+            )
+        )
+        db.add(
+            SecurityAuditEvent(
+                actor_user_id=auth_context.user_id,
+                actor_role=auth_context.role,
+                organization_id=auth_context.organization_id,
+                workspace_id=auth_context.workspace_id,
+                event_action="update",
+                resource_type="noema_gateway",
+                resource_uid=resource_uid,
+                evidence_source="api.noema_config",
+                detail_text="Updated Noema gateway settings",
+            )
+        )
         await db.commit()
+        return _response(config)
     except Exception as exc:
         if not _is_encryption_configuration_error(exc):
             raise

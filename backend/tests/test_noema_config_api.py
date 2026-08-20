@@ -153,6 +153,47 @@ async def test_noema_gateway_get_without_config_is_not_ready(override_dependenci
 
 
 @pytest.mark.asyncio
+async def test_noema_gateway_get_handles_encryption_configuration_failure(
+    override_dependencies, monkeypatch
+):
+    async def fail_to_read_config(*_args):
+        raise EncryptionConfigurationError("ENCRYPTION_KEY is required")
+
+    monkeypatch.setattr(
+        "api.noema_config.get_scoped_tenant_config", fail_to_read_config
+    )
+    async with await _client() as client:
+        response = await client.get("/api/noema-gateway")
+
+    assert response.status_code == 503
+    assert "Server encryption key is not configured" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_noema_gateway_update_handles_encryption_configuration_failure_while_reading(
+    override_dependencies, monkeypatch
+):
+    async def fail_to_read_config(*_args):
+        raise EncryptionConfigurationError("ENCRYPTION_KEY is required")
+
+    monkeypatch.setattr(
+        "api.noema_config.get_scoped_tenant_config", fail_to_read_config
+    )
+    async with await _client() as client:
+        response = await client.put(
+            "/api/noema-gateway",
+            json={
+                "base_url": "https://orchestrator.example/v1",
+                "token": "gateway-secret",
+            },
+        )
+
+    assert response.status_code == 503
+    assert "Server encryption key is not configured" in response.json()["detail"]
+    assert not override_dependencies.committed
+
+
+@pytest.mark.asyncio
 async def test_noema_gateway_rejects_unallowlisted_normalized_url(
     override_dependencies, monkeypatch
 ):
