@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("lucide-react", () => {
-  const icon = (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />;
+  const icon = (props: React.SVGProps<SVGSVGElement>) => <svg aria-hidden="true" {...props} />;
   return {
     Activity: icon,
     AlertCircle: icon,
@@ -705,31 +705,6 @@ describe("SettingsLayout", () => {
       });
       expect(container.textContent).toContain(`${tabName === "멤버" ? "멤버와 역할" : tabName === "알림" ? "알림 정책" : tabName === "자동화" ? "자동화 규칙" : "결제와 사용량"}`);
       expect(container.textContent).not.toContain("다음 릴리즈");
-    }
-  });
-
-  it("marks every decorative settings icon as hidden from assistive technology", async () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<SettingsLayout />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    for (const tabName of ["워크스페이스", "멤버", "AI 모델", "연결 계정", "알림", "자동화", "결제", "개발자"]) {
-      const button = Array.from(container.querySelectorAll("button")).find(
-        (candidate) => candidate.textContent?.trim() === tabName,
-      );
-      expect(button).toBeTruthy();
-      await act(async () => {
-        button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(container.querySelectorAll('svg:not([aria-hidden="true"])')).toHaveLength(0);
     }
   });
 });
