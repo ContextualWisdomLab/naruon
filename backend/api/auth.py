@@ -312,13 +312,16 @@ def _prune_session_auth_failure_buckets(now: float) -> None:
         _session_auth_failure_buckets.pop(key, None)
 
 
-def _ensure_session_auth_failure_bucket_capacity(key: str) -> None:
-    if (
-        key in _session_auth_failure_buckets
-        or len(_session_auth_failure_buckets) < SESSION_AUTH_RATE_LIMIT_MAX_BUCKETS
-    ):
-        return
-    _session_auth_failure_buckets.pop(next(iter(_session_auth_failure_buckets)), None)
+def _ensure_session_auth_failure_bucket_capacity(key: str) -> bool:
+    """Reserve capacity without evicting an active authentication bucket.
+
+    A stream of unique invalid tokens must not evict an older bucket and reset
+    its failure counter.  When the bounded in-process registry is full, the
+    new token is deliberately left untracked until an existing bucket expires.
+    """
+    if key in _session_auth_failure_buckets:
+        return True
+    return len(_session_auth_failure_buckets) < SESSION_AUTH_RATE_LIMIT_MAX_BUCKETS
 
 
 def _reject_if_session_auth_rate_limited(token: str) -> None:
@@ -337,7 +340,8 @@ def _record_session_auth_failure(token: str) -> None:
     now = time.monotonic()
     _prune_session_auth_failure_buckets(now)
     key = _session_auth_failure_key(token)
-    _ensure_session_auth_failure_bucket_capacity(key)
+    if not _ensure_session_auth_failure_bucket_capacity(key):
+        return
     failure_count, reset_at = _session_auth_failure_buckets.get(
         key,
         (0, now + SESSION_AUTH_RATE_LIMIT_WINDOW_SECONDS),

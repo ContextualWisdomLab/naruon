@@ -576,13 +576,22 @@ async def test_signed_bearer_session_failure_buckets_are_bounded(monkeypatch):
 
     settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
     monkeypatch.setattr(auth_module, "SESSION_AUTH_RATE_LIMIT_MAX_BUCKETS", 3)
+    protected_token = "invalid.jwt.protected"
 
-    for index in range(5):
+    for token in [protected_token, "invalid.jwt.token1", "invalid.jwt.token2"]:
+        with pytest.raises(HTTPException) as exc:
+            await get_auth_context(authorization=f"Bearer {token}")
+        assert exc.value.status_code == 401
+
+    for index in range(3, 5):
         with pytest.raises(HTTPException) as exc:
             await get_auth_context(authorization=f"Bearer invalid.jwt.token{index}")
         assert exc.value.status_code == 401
 
     assert len(_session_auth_failure_buckets) == 3
+    assert auth_module._session_auth_failure_key(protected_token) in (
+        _session_auth_failure_buckets
+    )
 
 
 @pytest.mark.asyncio
