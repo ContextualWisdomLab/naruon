@@ -18,6 +18,7 @@ set -euo pipefail
 # PR head changed during gate evaluation, skipping stale gate publication,
 # gh pr checks --required, no required checks reported,
 # no legacy required status contexts reported, add_waiting, check-runs,
+# check-runs?per_page=100,
 # Review skipped, BEHIND, app.slug, coderabbitai, COMMENT_MARKER,
 # no current blocking failures remain, Waiting for, reviewThreads, and
 # CHANGES_REQUESTED. Behavioral enforcement lives in pr_governance_gate_impl.sh.
