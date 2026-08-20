@@ -1,5 +1,6 @@
 ## [Unreleased]
 - Cloud Agent `.cursor/start.sh`는 `DATABASE_URL` 역할 비밀을 `psql -c`에 보간하지 않고 `scripts/reconcile_local_postgres_role.py`의 dollar-quoted stdin으로 맞춥니다. `install.sh`는 `requirements-hashes.txt`를 `--require-hashes`로 설치합니다. 신선한 DB에서 폐기된 `emails` 테이블을 가정하던 `0011_email_read_state`는 테이블이 없으면 no-op이고, `0019_email_record_read_state`가 `0018_email_send_rate_buckets` 다음에 정식 `email_records.is_read DEFAULT true`를 가드로 맞춥니다. 가져오기 quota advisory lock 키는 NUL 없는 SHA-256 hex입니다.
+- 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
 ### 캘린더 충돌 (Status-weighted conflicts)
