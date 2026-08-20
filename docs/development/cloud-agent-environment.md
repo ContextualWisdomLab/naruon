@@ -49,9 +49,10 @@ the container environment wholesale.
 `0001_initial_control_plane` runs `Base.metadata.create_all`, so
 `email_records.is_read` is present with `DEFAULT true` on a current model.
 `0011_email_read_state` only touches the retired `emails` table and is a no-op
-when that table is absent. `0018_email_record_read_state` adds or defaults
-`email_records.is_read` on older databases that already have `email_records`
-but lack the column or its server default.
+when that table is absent. `0019_email_record_read_state` follows the shared
+`0018_email_send_rate_buckets` migration and adds or defaults `email_records.is_read`
+on older databases that already have `email_records` but lack the column or its
+server default.
 
 ## Import quota lock
 

@@ -1,7 +1,7 @@
 """Guard email_records.is_read with NOT NULL DEFAULT true.
 
-Revision ID: 0018_email_record_read_state
-Revises: 0017_merge_newsdom_carddav_heads
+Revision ID: 0019_email_record_read_state
+Revises: 0018_email_send_rate_buckets
 
 ``0011_email_read_state`` only mutates the retired ``emails`` table. Fresh
 databases already receive ``email_records.is_read`` from ``0001``
@@ -16,8 +16,8 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0018_email_record_read_state"
-down_revision = "0017_merge_newsdom_carddav_heads"
+revision = "0019_email_record_read_state"
+down_revision = "0018_email_send_rate_buckets"
 branch_labels = None
 depends_on = None
 

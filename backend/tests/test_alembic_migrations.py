@@ -454,14 +454,14 @@ def test_email_read_state_revision_is_retired_emails_table_only() -> None:
 
 def test_email_record_read_state_revision_guards_canonical_table() -> None:
     revision_path = (
-        BACKEND_ROOT / "alembic" / "versions" / "0018_email_record_read_state.py"
+        BACKEND_ROOT / "alembic" / "versions" / "0019_email_record_read_state.py"
     )
     assert revision_path.exists()
     revision_text = revision_path.read_text()
 
-    assert 'revision = "0018_email_record_read_state"' in revision_text
-    assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
-    assert len("0018_email_record_read_state") <= 32
+    assert 'revision = "0019_email_record_read_state"' in revision_text
+    assert 'down_revision = "0018_email_send_rate_buckets"' in revision_text
+    assert len("0019_email_record_read_state") <= 32
     assert '_EMAIL_RECORDS_TABLE = "email_records"' in revision_text
     assert "has_table(_EMAIL_RECORDS_TABLE)" in revision_text
     assert "_READ_STATE_COLUMN" in revision_text
