@@ -3,27 +3,24 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("lucide-react", () => {
-  const icon = (props: React.SVGProps<SVGSVGElement>) => <svg aria-hidden="true" {...props} />;
-  return {
-    Activity: icon,
-    AlertCircle: icon,
-    Loader2: icon,
-    Bell: icon,
-    Bot: icon,
-    CheckCircle2: icon,
-    Cpu: icon,
-    Mail: icon,
-    Monitor: icon,
-    Network: icon,
-    Plus: icon,
-    RefreshCw: icon,
-    Settings: icon,
-    Shield: icon,
-    Smartphone: icon,
-    User: icon,
-  };
-});
+vi.mock("lucide-react", () => ({
+  Activity: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  AlertCircle: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Loader2: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Bell: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Bot: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  CheckCircle2: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Cpu: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Mail: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Monitor: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Network: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Plus: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  RefreshCw: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Settings: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Shield: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  Smartphone: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+  User: (props: React.SVGProps<SVGSVGElement>) => <svg {...props} />,
+}));
 
 const oidcMocks = vi.hoisted(() => ({
   clearOidcSession: vi.fn(),
@@ -706,5 +703,19 @@ describe("SettingsLayout", () => {
       expect(container.textContent).toContain(`${tabName === "멤버" ? "멤버와 역할" : tabName === "알림" ? "알림 정책" : tabName === "자동화" ? "자동화 규칙" : "결제와 사용량"}`);
       expect(container.textContent).not.toContain("다음 릴리즈");
     }
+  });
+
+  it("hides all rendered decorative Lucide icons from screen readers", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelectorAll("svg:not([aria-hidden=\"true\"])")).toHaveLength(0);
   });
 });
