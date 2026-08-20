@@ -47,6 +47,10 @@ SUCCESS_FIELDS = frozenset(
         "raw_metadata_values_included",
         "cloud_write_executed",
         "source_eviction_authorized",
+        "pre_copy_evidence_met",
+        "icloud_native_status_observed",
+        "icloud_native_sync_state",
+        "icloud_native_status_timed_out",
     }
 )
 FAILURE_FIELDS = frozenset({"ok", "error_code"})
@@ -65,6 +69,7 @@ READINESS_STATES = frozenset(
 # the signed envelope. Keep older records readable; add newer envelope versions deliberately.
 SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4, 5, 6, 7})
 ERROR_CODE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+NATIVE_STATUS_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9|_.-]{1,128}")
 
 
 class HandoffError(Exception):
@@ -328,6 +333,20 @@ def _is_lower_hex_64(value: object) -> bool:
     )
 
 
+def _is_optional_bool(value: object) -> bool:
+    """Return whether a verifier summary field is either null or a JSON boolean."""
+
+    return value is None or type(value) is bool
+
+
+def _is_optional_native_status_token(value: object) -> bool:
+    """Return whether an optional native status token is bounded and non-sensitive."""
+
+    return value is None or (
+        type(value) is str and NATIVE_STATUS_TOKEN_PATTERN.fullmatch(value) is not None
+    )
+
+
 def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     """Build a JSON object while rejecting every duplicate member name."""
 
@@ -367,6 +386,10 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
             and payload["candidate_bytes"] >= 0
             and _is_lower_hex_64(payload.get("readiness_fingerprint_sha256"))
             and all(payload.get(field) is False for field in FALSE_CLAIM_FIELDS)
+            and _is_optional_bool(payload.get("pre_copy_evidence_met"))
+            and _is_optional_bool(payload.get("icloud_native_status_observed"))
+            and _is_optional_native_status_token(payload.get("icloud_native_sync_state"))
+            and _is_optional_bool(payload.get("icloud_native_status_timed_out"))
         )
     elif result.returncode in (64, 65):
         error_code = payload.get("error_code")
