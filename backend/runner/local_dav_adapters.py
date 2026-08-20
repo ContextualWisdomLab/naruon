@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 import httpx
 
 from runner.utils.dispatch import dispatch_error
+from services.carddav_client import pinned_request_target
 
 
 _MAX_TARGET_PATH_LENGTH = 4096
@@ -91,13 +92,16 @@ class LocalDavAdapters:
 
         try:
             target_url = self._target_url(source.base_url, target_path)
-        except ValueError as exc:
-            return dispatch_error(str(exc))
+            pinned_url, pinned_headers, request_extensions = pinned_request_target(
+                target_url
+            )
+        except ValueError:
+            return dispatch_error("invalid_source_url")
 
         content_type = (
             self._payload_text(payload, "content_type") or default_content_type
         )
-        headers = {"Content-Type": content_type}
+        headers = {"Content-Type": content_type, **pinned_headers}
         if if_match is not None:
             headers["If-Match"] = if_match
         auth = (
@@ -109,10 +113,11 @@ class LocalDavAdapters:
         try:
             async with self._http_client_factory() as client:
                 response = await client.put(
-                    target_url,
+                    pinned_url,
                     content=content,
                     headers=headers,
                     auth=auth,
+                    extensions=request_extensions,
                 )
         except httpx.HTTPError:
             return dispatch_error("provider_request_failed")
