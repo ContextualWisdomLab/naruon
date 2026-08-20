@@ -90,7 +90,7 @@ def _evidence_record(candidate: str, source_start: int) -> dict[str, Any]:
     parsed: SplitResult | None = None
     host_value = ""
     normalized_value = candidate
-    contains_userinfo = "@" in candidate.split("/", 3)[2] if "/" in candidate else False
+    contains_userinfo = False
     validation_status = "valid"
 
     try:
@@ -107,6 +107,7 @@ def _evidence_record(candidate: str, source_start: int) -> dict[str, Any]:
         if parsed is not None:
             contains_userinfo = "@" in parsed.netloc
     else:
+        contains_userinfo = "@" in parsed.netloc
         if contains_userinfo:
             validation_status = "rejected_userinfo"
             warning_codes.append("userinfo_present")

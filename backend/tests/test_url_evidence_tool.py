@@ -63,6 +63,20 @@ async def test_url_evidence_marks_userinfo_and_invalid_percent_encoding() -> Non
 
 
 @pytest.mark.asyncio
+async def test_url_evidence_does_not_treat_query_at_as_userinfo() -> None:
+    """An at-sign in query data is not URL authority userinfo."""
+    result = await registry.invoke_tool(
+        "url_evidence_extractor",
+        {"text": "https://example.com?to=person@example.com#contact"},
+    )
+
+    match = result["matches"][0]
+    assert match["contains_userinfo"] is False
+    assert match["validation_status"] == "valid"
+    assert match["warning_codes"] == []
+
+
+@pytest.mark.asyncio
 async def test_url_evidence_fails_closed_at_input_and_match_bounds() -> None:
     """Large inputs and excessive match counts cannot become unbounded work."""
     with pytest.raises(URLEvidenceError) as input_error:
