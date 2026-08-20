@@ -309,6 +309,7 @@ run_gate() {
   PATH="$temp_dir/bin:$PATH" \
   GITHUB_REPOSITORY="owner/repo" \
   GH_TOKEN="fake" \
+  GITHUB_ACTIONS="" \
   EVENT_NAME="pull_request_target" \
   TARGET_PR_NUMBER="42" \
   DIRECT_PR_NUMBER="" \
