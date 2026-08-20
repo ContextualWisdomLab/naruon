@@ -132,6 +132,31 @@ function findNodeLabel(nodes: Node[], id: number | string) {
   return String(node?.label ?? id);
 }
 
+/**
+ * Index graph records by public id, keeping the first instance.
+ *
+ * `new Map(items.map((item) => [String(item.id), item]))` is last-wins and
+ * desynchronizes first-wins label maps from the selected node or edge when
+ * the API repeats an id. The previous `.find()` selection path was first-wins.
+ */
+function firstGraphEntryById<T>(
+  items: readonly T[],
+  readId: (item: T) => unknown,
+): Map<string, T> {
+  const map = new Map<string, T>();
+  for (const item of items) {
+    const rawId = readId(item);
+    if (!isGraphId(rawId)) {
+      continue;
+    }
+    const key = String(rawId);
+    if (!map.has(key)) {
+      map.set(key, item);
+    }
+  }
+  return map;
+}
+
 function describeEdge(edge: Edge, nodes: Node[], nodeMap?: Map<string | number, string>) {
   let fromLabel, toLabel;
   if (nodeMap) {
@@ -159,6 +184,8 @@ export default function NetworkGraph() {
   const [graphActionStatus, setGraphActionStatus] = useState('그래프 준비 완료');
   const [relationshipOptionId, setRelationshipOptionId] = useState('');
   const [nodeOptionId, setNodeOptionId] = useState('');
+  const edgeMap = useMemo(() => firstGraphEntryById(edges, (edge) => edge.id), [edges]);
+  const nodeInstanceMap = useMemo(() => firstGraphEntryById(nodes, (node) => node.id), [nodes]);
   const nodeMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const node of nodes) {
@@ -202,7 +229,7 @@ export default function NetworkGraph() {
       };
 
       const selectEdge = (edgeId: number | string) => {
-        const edge = edges.find((candidate) => graphIdEquals(candidate.id, edgeId));
+        const edge = edgeMap.get(String(edgeId));
         if (!edge) return;
         setRelationshipOptionId(String(edge.id));
         setNodeOptionId('');
@@ -213,7 +240,6 @@ export default function NetworkGraph() {
       const selectNode = (nodeId: number | string) => {
         setRelationshipOptionId('');
         setNodeOptionId(String(nodeId));
-        // ⚡ Bolt: Replace O(N) findNodeLabel array lookup with O(1) nodeMap lookup
         setSelectedGraphDetail(`선택된 노드: ${nodeMap.get(String(nodeId)) ?? String(nodeId)}`);
         setGraphActionStatus('그래프에서 노드를 선택했습니다.');
       };
@@ -263,7 +289,7 @@ export default function NetworkGraph() {
         network.destroy();
       };
     }
-  }, [nodes, edges, nodeMap]);
+  }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
     return nodes
@@ -274,20 +300,20 @@ export default function NetworkGraph() {
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    return edges.slice(0, 5).map((edge, index) => ({
+    return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
       edge,
       id: String(edge.id),
       label: `관계 ${index + 1}: ${describeEdge(edge, nodes, nodeMap)}`,
     }));
-  }, [edges, nodes, nodeMap]);
+  }, [edgeMap, nodes, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    return nodes.slice(0, 8).map((node) => ({
+    return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
       id: String(node.id),
       label: `노드: ${String(node.label ?? node.id)}`,
       node,
     }));
-  }, [nodes]);
+  }, [nodeInstanceMap]);
 
   const selectRelationship = (edge: Edge, status: string) => {
     setRelationshipOptionId(String(edge.id));
@@ -304,8 +330,7 @@ export default function NetworkGraph() {
     if (!isGraphId(node.id)) return;
     setRelationshipOptionId('');
     setNodeOptionId(String(node.id));
-    // ⚡ Bolt: Use direct property access instead of O(N) findNodeLabel array lookup
-    setSelectedGraphDetail(`선택된 노드: ${String(node.label ?? node.id)}`);
+    setSelectedGraphDetail(`선택된 노드: ${nodeMap.get(String(node.id)) ?? String(node.id)}`);
     setGraphActionStatus(status);
     networkRef.current?.selectNodes?.([node.id]);
     networkRef.current?.fit?.({ nodes: [node.id], animation: false });
@@ -317,13 +342,13 @@ export default function NetworkGraph() {
   };
 
   const handleRelationshipOptionChange = (value: string) => {
-    const edge = edges.find((candidate) => String(candidate.id) === value);
+    const edge = edgeMap.get(value);
     if (!edge) return;
     selectRelationship(edge, '선택한 관계를 열었습니다.');
   };
 
   const handleNodeOptionChange = (value: string) => {
-    const node = nodes.find((candidate) => String(candidate.id) === value);
+    const node = nodeInstanceMap.get(value);
     if (!node) return;
     selectGraphNode(node, '선택한 노드를 열었습니다.');
   };
