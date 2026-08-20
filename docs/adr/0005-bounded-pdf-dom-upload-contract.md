@@ -1,8 +1,8 @@
 # ADR-0005: Bounded PDF DOM upload contract
 
-**Status:** Accepted  
-**Date:** 2026-08-20  
-**Decision owner:** Naruon maintainers  
+**Status:** Accepted
+**Date:** 2026-08-20
+**Decision owner:** Naruon maintainers
 **Scope:** Signed `POST /api/data/documents/pdf-dom-recognition` uploads
 
 ## Context
