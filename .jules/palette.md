@@ -80,6 +80,7 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+
 ## 2024-08-19 - Decorative Icons Accessibility
 **Learning:** Purely decorative icons (like Lucide icons) that are used adjacent to descriptive text or within visually grouped blocks should be explicitly hidden from screen readers. Otherwise, screen readers may announce them redundantly, creating a cluttered auditory experience.
 **Action:** Always verify that decorative icons (e.g., `<Network>`, `<Shield>`) include `aria-hidden="true"` when they do not convey unique information beyond what is already provided in the accompanying text.
