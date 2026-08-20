@@ -12,8 +12,8 @@ ARG OCI_IMAGE_LICENSES="LicenseRef-Naruon-Proprietary"
 ARG OCI_IMAGE_REF_NAME=""
 ARG OCI_IMAGE_TITLE="naruon frontend"
 ARG OCI_IMAGE_DESCRIPTION="Naruon Next.js frontend runtime image"
-ARG OCI_IMAGE_BASE_DIGEST="sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09"
-ARG OCI_IMAGE_BASE_NAME="docker.io/library/node:26-slim@sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09"
+ARG OCI_IMAGE_BASE_DIGEST="sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1"
+ARG OCI_IMAGE_BASE_NAME="docker.io/library/node:26-slim@sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1"
 
 LABEL org.opencontainers.image.created="${OCI_IMAGE_CREATED}" \
       org.opencontainers.image.authors="${OCI_IMAGE_AUTHORS}" \
