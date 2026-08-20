@@ -129,9 +129,14 @@ jobs:
           cd frontend && pnpm run build
 
       - name: Install Playwright Chromium
-        run: cd frontend && pnpm exec playwright install --with-deps chromium
+        timeout-minutes: 10
+        # The hosted Ubuntu runner already provides the system libraries needed by
+        # Chromium. Installing them again with --with-deps can block on apt for
+        # hours and turn a real frontend result into a cancelled check.
+        run: cd frontend && pnpm exec playwright install chromium
 
       - name: Run full product smoke
+        timeout-minutes: 15
         env:
           NEXT_TELEMETRY_DISABLED: "1"
           NARUON_FULL_PRODUCT_BASE_URL: "http://127.0.0.1:3001"
