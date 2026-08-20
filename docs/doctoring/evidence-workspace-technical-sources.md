@@ -32,7 +32,13 @@ Naruon applies this distinction by using structured features and calibrated conf
 
 ## HWP and HWPX
 
-HWPX/OWPML is an XML-based open document format. Naruon treats HWPX as a structured package and extracts sections, paragraphs, tables, and embedded images before PDF fallback. HWP remains conversion-first and sandboxed because it is a binary format with higher parsing risk.
+HWPX/OWPML is an XML-based open document format. The shipped Naruon import
+boundary recognizes and bounds the package, then records a deferred status and
+retains the validated source bytes; it does not yet claim section, paragraph,
+table, or image extraction. A later worker may produce those artifacts before a
+PDF fallback, subject to separate sandbox and provenance evidence. HWP remains
+conversion-first and sandboxed because it is a binary format with higher parsing
+risk.
 
 ## Media and multimodal AI boundary
 

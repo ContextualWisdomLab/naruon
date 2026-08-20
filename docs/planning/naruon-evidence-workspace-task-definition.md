@@ -119,7 +119,10 @@ Only semantically relevant, supported, normalized artifacts may enter OCR or vis
 
 ### 4. HWP and HWPX documents
 
-HWPX is a first-class structured document target. Parse the XML package before falling back to PDF rendering.
+HWPX is a first-class structured document target. The current runtime performs
+bounded package recognition and queues deferred recognition; XML section parsing
+is a worker target, not an inline capability. The worker should parse the XML
+package before falling back to PDF rendering.
 
 HWP processing is conversion-first and sandboxed:
 
@@ -190,7 +193,9 @@ For example, `AI 답장 초안` calls evidence-bound draft generation; `일정 �
 - Duplicate email resolution distinguishes `same_message`, `related_message`, and `distinct_message`.
 - Thread resolution stores graph edges and confidence, not only a provider thread id.
 - Inline images are resolved through MIME/CID mapping before OCR or vision.
-- HWPX documents produce paragraph/table/image artifacts with source provenance.
+- The future HWPX worker produces paragraph/table/image artifacts with source
+  provenance; the current import boundary reports a truthful deferred status
+  until that worker is enabled.
 - HWP failures are explicit `partial`, `failed`, or `quarantined` states.
 - Every AI-generated judgment point has source evidence and confidence.
 - Every side-effecting UI action has confirmation, audit logging, and rollback guidance.

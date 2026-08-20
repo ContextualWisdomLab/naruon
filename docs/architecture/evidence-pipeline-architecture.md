@@ -31,8 +31,9 @@ Responsibilities:
 - `multipart/related` package reconstruction;
 - `cid:` reference resolution;
 - file magic and media type detection;
-- HWPX XML package parsing;
-- sandboxed HWP/PDF/Office conversion;
+- bounded HWPX XML-package admission and deferred-recognition status;
+- sandboxed HWP/PDF/Office conversion worker contracts (implementation is
+  capability-gated and must not be implied by parser admission);
 - remote image, macro, OLE, archive, and unknown-binary policy enforcement.
 
 ## Feature extraction layer
@@ -114,7 +115,7 @@ Artifact types:
 
 - `plain_text`;
 - `html_visible_text`;
-- `document_section_text`;
+- `document_section_text` (worker-produced only);
 - `table_json`;
 - `normalized_image`;
 - `pdf_page_image`;
