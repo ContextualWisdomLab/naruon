@@ -15,8 +15,8 @@ os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
-    ExecuteResponse,
     ExecuteRequest,
+    ExecuteResponse,
     ToolInfo,
     ToolRegistry,
     _parameter_type_name,
@@ -381,6 +381,54 @@ async def test_execute_tool_handler_error():
     assert data["result"] is None
     assert "Simulated error" in data["message"]
     assert "error_code" not in data
+
+
+def test_execute_response_model_dump_omits_absent_error_code_and_keeps_stable_code():
+    """The public envelope keeps its legacy shape unless a code is present."""
+    success_payload = ExecuteResponse(
+        status="success", result={"ok": True}, message="done"
+    ).model_dump()
+    failure_payload = ExecuteResponse(
+        status="failed",
+        result=None,
+        message="known failure",
+        error_code="stable_failure",
+    ).model_dump()
+
+    assert "error_code" not in success_payload
+    assert failure_payload["error_code"] == "stable_failure"
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_http_json_includes_stable_error_code():
+    """The actual HTTP response carries a handler's machine-readable code."""
+    class StableToolError(RuntimeError):
+        error_code = "stable_failure"
+
+    async def coded_error_handler(_params):
+        raise StableToolError("customer-safe failure")
+
+    try:
+        registry.register(
+            ToolInfo(
+                code="coded_error_tool",
+                name="Coded Error Tool",
+                description="This tool raises a coded error",
+                category="Test",
+            ),
+            coded_error_handler,
+        )
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/tools/coded_error_tool/execute",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                json={"parameters": {}},
+            )
+    finally:
+        registry.unregister("coded_error_tool")
+
+    assert response.status_code == 200
+    assert response.json()["error_code"] == "stable_failure"
 
 
 @pytest.mark.asyncio
