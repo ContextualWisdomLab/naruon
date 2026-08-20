@@ -3,8 +3,9 @@ from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
-from db.models import EncryptedString, TenantConfig, get_encryption_keyring, get_fernet
 from core.config import settings
+from core.runtime_secrets import EncryptionConfigurationError
+from db.models import EncryptedString, TenantConfig, get_encryption_keyring, get_fernet
 
 TEST_OPENAI_KEY = "test_key2"  # noqa: S105
 TEST_IMAP_PASSWORD = "imap-secret"  # noqa: S105
@@ -79,7 +80,7 @@ def test_tenant_config_allows_same_user_in_different_organizations(db_session):
 def test_get_fernet_requires_encryption_key_even_when_debug_enabled():
     settings.ENCRYPTION_KEY = None
 
-    with pytest.raises(RuntimeError, match="ENCRYPTION_KEY is required"):
+    with pytest.raises(EncryptionConfigurationError, match="ENCRYPTION_KEY is required"):
         get_fernet()
 
 
