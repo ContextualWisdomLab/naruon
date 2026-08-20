@@ -7,6 +7,9 @@ from unittest.mock import patch, AsyncMock
 from services.embedding import (
     EMBEDDING_INPUT_TOKEN_LIMIT,
     STORAGE_EMBEDDING_DIMENSION,
+    _ProviderTokenizerUnavailable,
+    _provider_json,
+    _split_embedding_inputs_with_provider_tokenizer,
     chunk_text,
     fit_embedding_vector,
     generate_embeddings,
@@ -221,6 +224,15 @@ async def test_generate_embeddings_falls_back_for_remote_unknown_model_without_n
 
     assert embeddings == [[0.1, 0.2, 0.3]]
     mock_http_client.post.assert_awaited_once()
+    assert mock_http_client.post.await_args.args[0] == "https://remote.example/tokenize"
+    assert mock_http_client.post.await_args.kwargs == {
+        "json": {
+            "content": "test",
+            "add_special": False,
+            "parse_special": False,
+        },
+        "headers": {"Authorization": "Bearer remote-key"},
+    }
     mock_client.embeddings.create.assert_awaited_once_with(
         model="remote-custom-model", input=["test"]
     )
@@ -274,6 +286,69 @@ async def test_generate_embeddings_closes_http_client_when_openai_constructor_fa
     ):
         with pytest.raises(RuntimeError, match="client construction failed"):
             await generate_embeddings(["test"], "provider-key")
+
+    mock_http_client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_provider_json_rejects_missing_native_tokenizer_endpoint():
+    mock_http_client = AsyncMock()
+    mock_http_client.post.return_value = _ProviderResponse({}, status_code=404)
+
+    with pytest.raises(_ProviderTokenizerUnavailable, match="does not expose"):
+        await _provider_json(mock_http_client, "https://local.example/tokenize", {})
+
+
+@pytest.mark.asyncio
+async def test_provider_tokenizer_rejects_invalid_token_payload():
+    mock_http_client = AsyncMock()
+    mock_http_client.post.return_value = _ProviderResponse({"tokens": [True]})
+
+    with pytest.raises(ValueError, match="invalid tokenizer tokens"):
+        await _split_embedding_inputs_with_provider_tokenizer(
+            ["test"],
+            "embeddinggemma",
+            "https://local.example/v1",
+            mock_http_client,
+            "provider-key",
+        )
+
+
+@pytest.mark.asyncio
+async def test_provider_tokenizer_rejects_source_mismatch():
+    mock_http_client = AsyncMock()
+    mock_http_client.post.side_effect = [
+        _ProviderResponse({"tokens": [1]}),
+        _ProviderResponse({"content": "different"}),
+    ]
+
+    with pytest.raises(ValueError, match="did not preserve source text exactly"):
+        await _split_embedding_inputs_with_provider_tokenizer(
+            ["test"],
+            "embeddinggemma",
+            "https://local.example/v1",
+            mock_http_client,
+            "provider-key",
+        )
+
+
+@pytest.mark.asyncio
+async def test_generate_embeddings_closes_http_client_when_tokenizer_fails():
+    mock_http_client = AsyncMock()
+    mock_http_client.post.side_effect = RuntimeError("tokenizer failed")
+
+    with patch(
+        "services.embedding.build_llm_provider_http_client",
+        new_callable=AsyncMock,
+        return_value=("https://local.example/v1", mock_http_client),
+    ):
+        with pytest.raises(RuntimeError, match="tokenizer failed"):
+            await generate_embeddings(
+                ["test"],
+                "provider-key",
+                base_url="https://local.example/v1",
+                model="provider-local-model",
+            )
 
     mock_http_client.aclose.assert_awaited_once()
 
