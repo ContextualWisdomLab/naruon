@@ -80,3 +80,6 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+## 2024-08-20 - Adding focus-visible to keyboard-navigable interactive elements
+**Learning:** Some custom interactive elements (like buttons or anchors styled via Tailwind without default focus rings) can be difficult for keyboard users to track. Relying purely on outline-none leaves keyboard navigation inaccessible.
+**Action:** Always append `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40` (or similar focus-visible tokens) to custom buttons and anchors to ensure screen reader and keyboard-only users can clearly identify focus without disturbing mouse users.
