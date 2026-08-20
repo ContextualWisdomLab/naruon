@@ -63,10 +63,12 @@ evaluation, rendering, OCR, and archive execution remain out of scope under
 Nested `.eml`/`message/rfc822`, MP3, and legacy `.doc` attachments have a
 separate bounded metadata boundary under
 [ADR-0011](../adr/0011-safe-nested-media-legacy-metadata.md): one-level email
-headers, MP3 signature metadata, and OLE container metadata only. Generic MIME
-binary attachments use the safe `binary_metadata` parser under
+headers, MP3 signature metadata, and OLE container metadata only. Generic and
+otherwise unrecognized binary MIME attachments use the safe `binary_metadata`
+parser under
 [ADR-0012](../adr/0012-generic-binary-metadata.md), which records only the
-declared media type and exact byte count, including payloads larger than 20 MiB.
+normalized media type and exact byte count for generic and otherwise
+unrecognized binary MIME values, including payloads larger than 20 MiB.
 The 1 MiB image prefix is an animation-marker scan window, not an attachment
 size limit.
 

@@ -6,10 +6,11 @@
   prefix; neither is an attachment-size limit.
 - Generic MIME attachments with unambiguous PNG, JPEG, GIF, or BMP signatures
   now use the image metadata parser instead of remaining unsupported binaries.
-- Generic binary MIME attachments now use `binary_metadata` to index only their
-  declared MIME type and byte count when no recognized format signature exists,
-  including payloads over 20 MiB; no 1 MiB attachment limit, format guessing,
-  or raw-byte indexing is introduced.
+- Generic and otherwise unrecognized binary MIME attachments now use
+  `binary_metadata` to index only their normalized MIME type and byte count
+  when no recognized format signature exists, including payloads over 20 MiB;
+  no 1 MiB attachment limit, format guessing, or raw-byte indexing is
+  introduced.
 - Office XML DTD/entity declarations, including UTF-16 encoded declarations,
   are rejected through the defused XML boundary and normalized to a named
   parser failure.
@@ -17,8 +18,8 @@
   `message/rfc822`, Layer III MP3, and legacy `.doc` containers. `message.walk()`
   traverses parsed MIME descendants for attachment counting, including attached
   `message/rfc822`; nested messages are not recursively imported or executed.
-  Malformed binary payloads are not retained; unknown non-generic formats remain
-  explicit `unsupported_content_type` under ADR-0011.
+  Malformed binary payloads are not retained; unknown formats without a
+  type-specific parser receive safe metadata under ADR-0011 and ADR-0012.
 - Email attachment ingestion now parses bounded text from DOCX, XLSX, PPTX, and
   HWPX XML parts and indexes ZIP member manifests without extraction. Office
   packages larger than 20 MiB remain eligible when their selected XML fits the

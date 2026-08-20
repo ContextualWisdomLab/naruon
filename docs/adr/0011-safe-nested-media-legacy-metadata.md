@@ -37,10 +37,10 @@ treatment is fixed separately by ADR-0012.
    sidecar availability are handled by the separate deferred recognition
    workflow, not by these metadata parser states.
 5. Extensionless or otherwise unidentified binary attachments have no
-   type-specific parser. Generic MIME attachments without a recognized format
-   signature may receive only the MIME-and-byte-count metadata defined by
-   ADR-0012; format-specific parsing still requires reliable signature evidence
-   and a new ADR or explicit amendment.
+   type-specific parser. Generic and otherwise unrecognized binary MIME values
+   receive only the normalized MIME-and-byte-count metadata defined by
+   ADR-0012; format-specific parsing still requires reliable signature
+   evidence and a new ADR or explicit amendment.
 
 ## Alternatives rejected
 
@@ -66,9 +66,10 @@ the generic metadata parser records no format claim and retains no raw bytes.
 - Forwarded mail, common MP3 attachments, and legacy DOC containers become
   searchable by bounded metadata.
 - The content graph receives no raw binary and no recursive nested-email graph.
-- Unidentified non-generic, malformed, or oversized payloads remain visible as
-  explicit parser states for future operator-authorized replay. Generic binary
-  payloads are searchable only through the safe metadata in ADR-0012.
+- Unidentified binary payloads are searchable through the safe metadata in
+  ADR-0012 without a format claim. Malformed or safety-budget-exceeding
+  payloads remain visible as explicit parser states for future
+  operator-authorized replay.
 
 ## References (APA 7th)
 

@@ -22,21 +22,22 @@ metadata result is retained.
 `legacy_office_metadata` parser validates only the OLE/Compound File signature
 for `.doc`. None of these paths decodes or executes untrusted content.
 
-`parser_key="binary_metadata"` handles generic MIME attachments with only
-`media_type` and `bytes` metadata when no recognized format signature exists. It
-does not guess a format, decode bytes, or retain raw payload content. A
-non-generic unidentified MIME remains explicit `unsupported_content_type`.
+`parser_key="binary_metadata"` handles generic and otherwise unrecognized
+binary MIME attachments with only `media_type` and `bytes` metadata when no
+recognized format signature exists. It does not guess a format, decode bytes,
+or retain raw payload content. Historical `unsupported_content_type` rows
+remain valid, while new unknown binary imports receive safe metadata.
 
 ## Verification
 
 - `backend/tests/test_attachment_parser.py` covers nested `.eml`, MP3 ID3,
-  malformed MP3, legacy DOC OLE signatures, malformed DOC, and generic binary
-  metadata including a payload over 20 MiB.
+  malformed MP3, legacy DOC OLE signatures, malformed DOC, and generic or
+  otherwise unrecognized binary metadata including a payload over 20 MiB.
 - Valid metadata returns `parse_status=parsed` and `parse_content_type=text/plain`;
   malformed input returns a named failure without raw bytes. PDF size and
   sidecar availability remain in the separate deferred recognition workflow.
 - ADR-0011 fixes the non-recursive, non-decoding, and no-external-upload
-  boundary for nested/media/legacy metadata; ADR-0012 fixes the generic
+  boundary for nested/media/legacy metadata; ADR-0012 fixes the unrecognized
   binary metadata-only boundary.
 
 ## References (APA 7th)

@@ -748,16 +748,21 @@ def test_large_generic_binary_attachment_has_no_one_megabyte_parse_limit():
     )
 
 
-def test_non_generic_unknown_attachment_remains_explicitly_unsupported():
+def test_non_generic_unknown_attachment_indexes_declared_metadata_without_guessing():
     result = parse_email_attachment(
         filename="unknown.bin",
         content_type="application/x-unknown",
         raw_content=b"opaque bytes",
     )
 
-    assert result.parser_key == "unsupported_binary"
-    assert result.parse_status == "unsupported_content_type"
-    assert result.parse_error_code == "unsupported_content_type"
+    assert result.content == (
+        "Binary attachment metadata: media_type=application/x-unknown; bytes=12"
+    )
+    assert result.parse_content == result.content
+    assert result.parse_content_type == "text/plain"
+    assert result.parser_key == "binary_metadata"
+    assert result.parse_status == "parsed"
+    assert result.parse_error_code is None
 
 
 def test_pdf_attachment_is_deferred_pending_newsdom_recognition():
@@ -866,7 +871,7 @@ def test_attachment_parser_small_type_and_coercion_helpers_fail_closed():
     assert _sniff_generic_image_content_type(b"\xff\xd8") == "image/jpeg"
     assert _sniff_generic_image_content_type(b"GIF89a") == "image/gif"
     assert _sniff_generic_image_content_type(b"BM") == "image/bmp"
-    assert _parser_key_for("application/x-unknown", "parsed") == "unsupported_binary"
+    assert _parser_key_for("application/x-unknown", "parsed") == "binary_metadata"
     assert _parser_key_for("application/octet-stream", "parsed") == "binary_metadata"
     assert (
         _parser_key_for("application/x-unknown", "unsupported_content_type")

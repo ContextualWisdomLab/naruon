@@ -9,35 +9,36 @@ upload.
 
 ## Context
 
-Some real attachments arrive with a generic MIME type such as
-`application/octet-stream` and no trustworthy extension or signature. Treating
-those files as text risks indexing arbitrary binary data, while rejecting them
-entirely makes the attachment invisible to search and makes the parser surface
-look like a size limit. The existing image, Office, archive, media, and PDF
-parsers retain their own bounded format-specific contracts.
+Some real attachments arrive with a generic or otherwise unrecognized MIME
+type and no trustworthy extension or signature. Treating those files as text
+risks indexing arbitrary binary data, while rejecting them entirely makes the
+attachment invisible to search and makes the parser surface look like a size
+limit. The existing image, Office, archive, media, and PDF parsers retain their
+own bounded format-specific contracts.
 
 ## Decision
 
-Naruon registers `binary_metadata` for generic binary MIME types and returns
-only a `text/plain` summary containing the normalized MIME type and exact byte
-count. The parser accepts payloads larger than 20 MiB within the signed email
-import's 64 MiB transport ceiling and does not use the image animation scan
-window or any other 1 MiB ceiling. It does not guess a format from weak
-evidence, decode bytes, hash bytes, upload bytes, or retain the payload in the
-parse result.
+Naruon registers `binary_metadata` for generic and otherwise unrecognized
+binary MIME types and returns only a `text/plain` summary containing the
+normalized MIME type and exact byte count. The parser accepts payloads larger
+than 20 MiB within the signed email import's 64 MiB transport ceiling and does
+not use the image animation scan window or any other 1 MiB ceiling. It does
+not guess a format from weak evidence, decode bytes, hash bytes, upload bytes,
+or retain the payload in the parse result.
 
-A generic MIME value alone is not format evidence. Generic MIME values without
-a recognized format signature are metadata-parseable, not format-parseable. A
-future format-specific parser requires reliable signature evidence, focused
-tests, and a new ADR or explicit amendment.
+A declared MIME value alone is not format evidence. Unrecognized MIME values
+without a recognized format signature are metadata-parseable, not
+format-parseable. A future format-specific parser requires reliable signature
+evidence, focused tests, and a new ADR or explicit amendment.
 
 ## Alternatives rejected
 
-### Keep all generic binaries unsupported
+### Keep all unrecognized binaries unsupported
 
 Rejected because it hides safe, useful provenance metadata and makes an
 operator-visible unsupported state indistinguishable from a parser-size
-failure.
+failure. The metadata path makes no format claim, including for non-generic
+MIME values.
 
 ### Guess a format or decode arbitrary bytes
 
@@ -50,7 +51,7 @@ format boundary; guessed decoding could expose arbitrary bytes as content.
 - A large generic attachment is not rejected by the former 1 MiB scan window.
 - The content graph receives no raw binary and makes no format claim.
 - Existing persisted `unsupported_binary` records remain valid historical
-  states; only new generic MIME imports use `binary_metadata`.
+  states; new unrecognized binary imports use `binary_metadata`.
 
 ## References (APA 7th)
 

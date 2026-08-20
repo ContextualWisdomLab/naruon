@@ -473,19 +473,19 @@ def parse_email_attachment(
         )
 
     if parse_content_type not in _SUPPORTED_CONTENT_TYPES:
-        parser_key = _parser_key_for(
-            parse_content_type,
-            "unsupported_content_type",
+        binary_metadata = _parse_generic_binary_metadata(
+            raw_content,
+            normalized_content_type,
         )
         return AttachmentParseResult(
             filename=safe_filename,
-            content="",
+            content=binary_metadata,
             content_type=normalized_content_type,
-            parse_content="",
-            parse_content_type=normalized_content_type,
-            parser_key=parser_key,
-            parse_status="unsupported_content_type",
-            parse_error_code="unsupported_content_type",
+            parse_content=binary_metadata,
+            parse_content_type="text/plain",
+            parser_key="binary_metadata",
+            parse_status="parsed",
+            parse_error_code=None,
         )
 
     parser_key = _parser_key_for(parse_content_type, "parsed")
@@ -564,7 +564,7 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
     for descriptor in _PARSER_MANIFEST:
         if parse_content_type in descriptor.content_types:
             return descriptor.parser_key
-    return "unsupported_binary"
+    return "binary_metadata" if parse_status == "parsed" else "unsupported_binary"
 
 
 def _safe_filename(filename: str | None) -> str:
