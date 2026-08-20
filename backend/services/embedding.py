@@ -237,6 +237,9 @@ def pool_embedding_chunks(
         )
     return pooled
 
+def _supports_native_dimensions(model: str) -> bool:
+    """Return whether the selected OpenAI embedding family accepts dimensions."""
+    return model.rsplit("/", 1)[-1].startswith("text-embedding-3-")
 
 
 async def generate_embeddings(
@@ -297,6 +300,11 @@ async def generate_embeddings(
                 lambda: client.embeddings.create(
                     model=selected_model,
                     input=request_texts,
+                    **(
+                        {"dimensions": STORAGE_EMBEDDING_DIMENSION}
+                        if _supports_native_dimensions(selected_model)
+                        else {}
+                    ),
                 ),
                 operation_name="embedding generation",
             ),

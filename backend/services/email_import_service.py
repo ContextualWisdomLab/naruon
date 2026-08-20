@@ -27,7 +27,10 @@ from db.models import (
     KnowledgeGraphEdgeRecord,
 )
 from services.archive import extract_backup_async
-from services.batch_embedding_service import try_batch_import_embeddings
+from services.batch_embedding_service import (
+    BatchEmbeddingPartial,
+    try_batch_import_embeddings,
+)
 from services.circuit_breaker import CircuitOpenError
 from services.content_graph import ParseResult, parse_content
 from services.email_dedupe_service import strong_email_fingerprint
@@ -55,10 +58,14 @@ from services.threading_service import (
 
 EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 MAX_IMPORT_UPLOADS = 10
-MAX_IMPORT_UPLOAD_BYTES = 20 * 1024 * 1024
+# Transport safety ceiling only; parser and embedding chunking must accept
+# sources larger than 20 MiB without confusing the request guard for a parser
+# limit.
+MAX_IMPORT_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
 MAX_UPLOAD_FILENAME_DECODE_ROUNDS = 8
+MAX_EMBEDDING_CHUNKS_PER_WINDOW = 32
 SUPPORTED_EMAIL_IMPORT_SUFFIXES = frozenset({".eml", ".mbox", ".zip"})
 EMAIL_IMPORT_QUOTA_LOCK_NAMESPACE = "naruon-email-import-quota"
 logger = logging.getLogger(__name__)
@@ -415,7 +422,12 @@ def _semantic_embedding_inputs(
     ]
     source_fallbacks = [
         str(parsed.get("body") or ""),
-        *(str(attachment.get("content") or "") for attachment in attachment_payloads),
+        *(
+            str(attachment.get("content") or "")
+            if (attachment.get("parse_status") or "parsed") == "parsed"
+            else ""
+            for attachment in attachment_payloads
+        ),
     ]
 
     embedding_texts: list[str] = []
@@ -430,7 +442,7 @@ def _semantic_embedding_inputs(
                 if segment.heading_path and segment.segment_kind != "heading":
                     text = f"{segment.heading_path}\n{text}"
                 semantic_texts.append(text)
-        if not semantic_texts:
+        if not semantic_texts and fallback_text:
             semantic_texts.append(fallback_text)
         start = len(embedding_texts)
         embedding_texts.extend(semantic_texts)
@@ -601,7 +613,11 @@ def _fallback_attachment_parser_key(
         return "calendar"
     if parse_content_type == "text/html":
         return "html"
-    if parse_content_type in {"text/markdown", "text/x-markdown", "application/markdown"}:
+    if parse_content_type in {
+        "text/markdown",
+        "text/x-markdown",
+        "application/markdown",
+    }:
         return "markdown"
     if parse_content_type == "text/plain":
         return "plain_text"
@@ -770,9 +786,9 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             item.segment_path,
         ),
     ):
-        segments_by_source[
-            (segment.source_kind, segment.source_record_uid)
-        ].append(segment)
+        segments_by_source[(segment.source_kind, segment.source_record_uid)].append(
+            segment
+        )
         add_edge(
             edge_kind="node_has_segment",
             edge_path=f"{segment.content_node.node_path}/has/{segment.segment_path}",
@@ -787,8 +803,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="segment_next",
                 edge_path=(
-                    f"{source_segment.segment_path}/next/"
-                    f"{target_segment.segment_path}"
+                    f"{source_segment.segment_path}/next/{target_segment.segment_path}"
                 ),
                 source_kind=source_segment.source_kind,
                 source_record_uid=source_segment.source_record_uid,
@@ -812,8 +827,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             add_edge(
                 edge_kind="heading_contains_segment",
                 edge_path=(
-                    f"{heading_segment.segment_path}/contains/"
-                    f"{segment.segment_path}"
+                    f"{heading_segment.segment_path}/contains/{segment.segment_path}"
                 ),
                 source_kind=segment.source_kind,
                 source_record_uid=segment.source_record_uid,
@@ -1100,6 +1114,8 @@ async def _generate_import_embeddings(
     embedding_provider: EmailImportEmbeddingProvider | None,
     batch_context: "EmailImportBatchContext | None" = None,
 ) -> list[list[float]]:
+    if not texts:
+        return []
     if embedding_provider is None:
         return [_zero_embedding() for _ in texts]
     batch_texts, batch_ranges, batch_token_weights = split_embedding_inputs(
@@ -1119,6 +1135,25 @@ async def _generate_import_embeddings(
             dimension=EMBEDDING_DIMENSION,
         )
         if batched is not None:
+            if isinstance(batched, BatchEmbeddingPartial):
+                remainder: list[list[float]] = []
+                for start in range(
+                    0, len(batched.pending_texts), MAX_EMBEDDING_CHUNKS_PER_WINDOW
+                ):
+                    remainder.extend(
+                        await _generate_import_embeddings(
+                            batched.pending_texts[
+                                start : start + MAX_EMBEDDING_CHUNKS_PER_WINDOW
+                            ],
+                            embedding_provider=embedding_provider,
+                            batch_context=None,
+                        )
+                    )
+                return _pool_source_embeddings(
+                    [*batched.completed_vectors, *remainder],
+                    batch_ranges,
+                    batch_token_weights,
+                )
             return _pool_source_embeddings(
                 batched,
                 batch_ranges,
