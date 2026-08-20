@@ -39,6 +39,16 @@ def _success_payload() -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize("schema_version", [4, 5])
+def test_main_accepts_current_disksage_schema_versions(tmp_path, capsys, schema_version):
+    payload = _success_payload()
+    payload["schema_version"] = schema_version
+    verifier = _json_verifier(tmp_path / "verifier", payload, 0)
+
+    assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+
+
 def _python_verifier(path: Path, source: str) -> Path:
     path.write_text(f"#!{sys.executable}\n{source}", encoding="utf-8")
     path.chmod(0o700)

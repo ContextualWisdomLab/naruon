@@ -18,6 +18,15 @@ def test_generate_oauth2_string():
     assert b"auth=Bearer dummy_token" in decoded
 
 
+@pytest.mark.parametrize(
+    ("user", "access_token"),
+    [("user\x01injected", "token"), ("user", "token\x01injected")],
+)
+def test_generate_oauth2_string_rejects_sasl_delimiters(user, access_token):
+    with pytest.raises(ValueError, match="SASL delimiters"):
+        generate_oauth2_string(user, access_token)
+
+
 def test_build_email_message_sets_reply_headers():
     params = EmailMessageParams(
         to_address="test@example.com",
