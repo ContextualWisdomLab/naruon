@@ -6,6 +6,7 @@ import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy.exc import StatementError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import AuthContext, get_auth_context
@@ -85,6 +86,15 @@ def _response(config: TenantConfig | None) -> NoemaGatewayResponse:
     )
 
 
+def _is_encryption_configuration_error(error: BaseException) -> bool:
+    """Recognize direct or SQLAlchemy-wrapped encryption configuration errors."""
+    if isinstance(error, EncryptionConfigurationError):
+        return True
+    return isinstance(error, StatementError) and isinstance(
+        error.orig, EncryptionConfigurationError
+    )
+
+
 @router.get("", response_model=NoemaGatewayResponse)
 async def get_noema_gateway(
     db: AsyncSession = Depends(get_db),
@@ -161,7 +171,9 @@ async def update_noema_gateway(
     )
     try:
         await db.commit()
-    except EncryptionConfigurationError as exc:
+    except Exception as exc:
+        if not _is_encryption_configuration_error(exc):
+            raise
         raise HTTPException(
             status_code=503,
             detail="Server encryption key is not configured. Contact your workspace administrator.",

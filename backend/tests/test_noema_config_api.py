@@ -1,5 +1,6 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import StatementError
 
 from api.auth import AuthContext, get_auth_context
 from core.runtime_secrets import EncryptionConfigurationError
@@ -253,6 +254,32 @@ async def test_noema_gateway_handles_missing_encryption_key(
 
     assert response.status_code == 503
     assert "Server encryption key is not configured" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_noema_gateway_handles_wrapped_encryption_configuration_error(
+    override_dependencies, monkeypatch
+):
+    monkeypatch.setattr(
+        "api.noema_config.validate_llm_provider_base_url_async",
+        _allow_gateway_url,
+    )
+    override_dependencies.commit_error = StatementError(
+        "commit failed",
+        None,
+        None,
+        EncryptionConfigurationError("ENCRYPTION_KEY is required"),
+    )
+    async with await _client() as client:
+        response = await client.put(
+            "/api/noema-gateway",
+            json={
+                "base_url": "https://orchestrator.example/v1",
+                "token": "gateway-secret",
+            },
+        )
+
+    assert response.status_code == 503
 
 
 @pytest.mark.asyncio
