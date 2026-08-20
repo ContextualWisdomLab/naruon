@@ -45,7 +45,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 _BUCKET_NAME = "naruon-integration"
-_ENDPOINT_URL = "https://s3.us-east-1.localhost.localstack.cloud:4566"
+# LocalStack's shared TLS certificate reliably covers the generic endpoint;
+# the region-qualified alias can fail when CI falls back to its bundled cert.
+_ENDPOINT_URL = "https://localhost.localstack.cloud:4566"
 _ACCESS_KEY = "integration-access-key"
 _SECRET_KEY = "integration-secret-key"
 _PROVIDER_ID: int | None = None

@@ -92,12 +92,14 @@ jobs:
           DISABLE_BACKGROUND_WORKERS: "1"
           NARUON_S3_INTEGRATION: "1"
           OBJECT_STORAGE_BACKEND: s3
-          OBJECT_STORAGE_S3_ALLOWED_HOSTS: s3.us-east-1.localhost.localstack.cloud
+          OBJECT_STORAGE_S3_ALLOWED_HOSTS: localhost.localstack.cloud
           OBJECT_STORAGE_REQUEST_TIMEOUT_SECONDS: "5"
           ALLOWED_CORS_ORIGINS: http://localhost:3000
           PYTHONWARNINGS: error
         run: |
-          export AUTH_SESSION_HMAC_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
-          export ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          AUTH_SESSION_HMAC_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          export AUTH_SESSION_HMAC_SECRET
+          ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          export ENCRYPTION_KEY
           cd backend
           python -m pytest -q tests/integration/test_s3_postgres_integration.py
