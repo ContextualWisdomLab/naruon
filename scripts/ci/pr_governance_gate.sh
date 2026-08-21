@@ -441,7 +441,10 @@ else
       | select(
           (((.body // "") | test("approval_notice_start"; "i"))
             and ((.body // "") | test("approval_notice_end"; "i"))
-            and ((.body // "") | test("headCommitId[^\\n]*" + $head_sha; "i")))
+            # CodeRabbit has emitted both one-line JSON and pretty-printed notices. Allow
+            # whitespace/newlines between the field and value, but still require the exact
+            # current head SHA so an unbound approval notice remains blocking.
+            and ((.body // "") | test("headCommitId[^0-9a-fA-F]*" + $head_sha; "i")))
           | not
         )
       | select(
