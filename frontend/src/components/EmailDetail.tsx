@@ -570,6 +570,29 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const safeEmailSender = toMailDisplayText(email.sender, '보낸 사람');
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
+  const safeCc = (email.cc ?? []).map((address) => toMailDisplayText(address, '참조 주소 없음'));
+  const safeBcc = (email.bcc ?? []).map((address) => toMailDisplayText(address, '숨은 참조 주소 없음'));
+  const safeAttachments = (email.attachments ?? []).map((file) => ({
+    ...file,
+    filename: toMailDisplayText(file.filename, '첨부파일'),
+  }));
+  const safeMeetingProposal = email.meeting_proposal
+    ? {
+        ...email.meeting_proposal,
+        status: email.meeting_proposal.status
+          ? toMailDisplayText(email.meeting_proposal.status)
+          : undefined,
+        time: email.meeting_proposal.time
+          ? toMailDisplayText(email.meeting_proposal.time)
+          : undefined,
+        location: email.meeting_proposal.location
+          ? toMailDisplayText(email.meeting_proposal.location)
+          : undefined,
+        attendees: (email.meeting_proposal.attendees ?? []).map((attendee) =>
+          toMailDisplayText(attendee, '참석자 정보 없음'),
+        ),
+      }
+    : null;
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
 
@@ -608,7 +631,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
 
   return (
     <div className="flex h-full flex-col bg-card">
-      <div className="flex items-start bg-gradient-to-br from-card via-card to-primary/5 p-6">
+      <div className="flex flex-col items-start bg-gradient-to-br from-card via-card to-primary/5 p-6">
         <div className="flex w-full items-start gap-4 text-sm">
           <Avatar className="h-11 w-11 border border-primary/10 bg-primary/10 text-primary shadow-sm">
             <AvatarFallback>{safeEmailSender ? safeEmailSender.charAt(0).toUpperCase() : 'U'}</AvatarFallback>
@@ -634,14 +657,14 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             <div className="line-clamp-1 text-xs text-muted-foreground">
               답장 주소: {safeReplyTo}
             </div>
-            {(email.cc && email.cc.length > 0) && (
+            {safeCc.length > 0 && (
               <div className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
-                참조: {email.cc.join(', ')}
+                참조: {safeCc.join(', ')}
               </div>
             )}
-            {(email.bcc && email.bcc.length > 0) && (
+            {safeBcc.length > 0 && (
               <div className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
-                숨은 참조: {email.bcc.join(', ')}
+                숨은 참조: {safeBcc.join(', ')}
               </div>
             )}
           </div>
@@ -659,11 +682,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         </div>
 
         {/* 첨부파일 Rail */}
-        {(email.attachments && email.attachments.length > 0) && (
+        {safeAttachments.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2 w-full">
-            {email.attachments.map((file, idx) => (
-              <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm hover:bg-muted/50 transition-colors cursor-pointer">
-                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+            {safeAttachments.map((file, idx) => (
+              <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm">
+                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <span className="font-medium truncate max-w-[150px]">{file.filename}</span>
                 {file.size && <span className="text-muted-foreground/70 text-[10px]">({Math.round(file.size / 1024)}KB)</span>}
               </div>
@@ -672,41 +695,40 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         )}
 
         {/* 미팅 제안 Panel */}
-        {email.meeting_proposal && (
+        {safeMeetingProposal && (
           <div className="mt-4 w-full rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 shadow-sm">
             <div className="flex items-center gap-2 font-semibold text-blue-700 mb-3">
-              <Calendar className="h-4 w-4" />
+              <Calendar className="h-4 w-4" aria-hidden="true" />
               <span>미팅 제안</span>
-              {email.meeting_proposal.status && (
+              {safeMeetingProposal.status && (
                 <Badge variant="outline" className="ml-auto bg-blue-500/10 text-blue-700 border-blue-500/20 text-[10px]">
-                  {email.meeting_proposal.status}
+                  {safeMeetingProposal.status}
                 </Badge>
               )}
             </div>
             <div className="grid gap-2 text-xs text-muted-foreground">
-              {email.meeting_proposal.time && (
+              {safeMeetingProposal.time && (
                 <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>{email.meeting_proposal.time}</span>
+                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{safeMeetingProposal.time}</span>
                 </div>
               )}
-              {email.meeting_proposal.location && (
+              {safeMeetingProposal.location && (
                 <div className="flex items-center gap-2">
-                  <MapPin className="h-3.5 w-3.5" />
-                  <span>{email.meeting_proposal.location}</span>
+                  <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{safeMeetingProposal.location}</span>
                 </div>
               )}
-              {(email.meeting_proposal.attendees && email.meeting_proposal.attendees.length > 0) && (
+              {safeMeetingProposal.attendees.length > 0 && (
                 <div className="flex items-start gap-2">
-                  <Users className="h-3.5 w-3.5 mt-0.5" />
-                  <span>{email.meeting_proposal.attendees.join(', ')}</span>
+                  <Users className="h-3.5 w-3.5 mt-0.5" aria-hidden="true" />
+                  <span>{safeMeetingProposal.attendees.join(', ')}</span>
                 </div>
               )}
             </div>
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg">수락 및 캘린더 등록</Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs border-blue-500/30 text-blue-700 hover:bg-blue-500/10 rounded-lg">시간 변경 제안</Button>
-            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              캘린더 등록은 아래 실행 항목에서 원본 계정을 확인한 뒤 진행하세요.
+            </p>
           </div>
         )}
       </div>
