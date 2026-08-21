@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contextualwisdomlab.org/schemas/naruon-calendar-projection-v1.schema.json",
+  "title": "Naruon Calendar Projection v1",
+  "description": "A bounded, policy-filtered event page observed by Naruon and consumed read-only by LineageWeave. This is not a CalDAV provider response.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "projection_revision", "events"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "projection_revision": {
+      "$ref": "#/$defs/opaque_reference"
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/calendar_occurrence"
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/cursor"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "opaque_reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!.*://)[^\\s\\u0000-\\u001F\\u007F]+$"
+    },
+    "cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!.*://)[^\\s\\u0000-\\u001F\\u007F]+$"
+    },
+    "rfc3339": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "calendar_occurrence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_reference",
+        "occurrence_reference",
+        "source_reference",
+        "provider_revision",
+        "display_text",
+        "starts_at",
+        "ends_at",
+        "all_day",
+        "time_zone",
+        "status_code",
+        "disclosure_code",
+        "truth_status_code",
+        "observed_at"
+      ],
+      "properties": {
+        "event_reference": {
+          "$ref": "#/$defs/opaque_reference"
+        },
+        "occurrence_reference": {
+          "$ref": "#/$defs/opaque_reference"
+        },
+        "source_reference": {
+          "$ref": "#/$defs/opaque_reference"
+        },
+        "provider_revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^(?!\\s)(?!.*\\s$)(?!.*://)[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "display_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "starts_at": {
+          "$ref": "#/$defs/rfc3339"
+        },
+        "ends_at": {
+          "$ref": "#/$defs/rfc3339"
+        },
+        "all_day": {
+          "type": "boolean"
+        },
+        "time_zone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\s\\u0000-\\u001F\\u007F]+$"
+        },
+        "status_code": {
+          "enum": ["confirmed", "tentative", "desired", "cancelled"]
+        },
+        "disclosure_code": {
+          "enum": ["busy_only", "summary_visible"]
+        },
+        "truth_status_code": {
+          "const": "observed"
+        },
+        "observed_at": {
+          "$ref": "#/$defs/rfc3339"
+        }
+      }
+    }
+  }
+}
