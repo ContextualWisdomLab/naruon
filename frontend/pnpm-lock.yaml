@@ -14,6 +14,7 @@ pnpmfileChecksum: sha256-RXPq3MmEdRb3xD3rhbER9kciz9nBr/i0J/uMUjql5t0=
 
 patchedDependencies:
   minimatch@3.1.5: 5f38b9c5382c1163b0389810f5e4e867519096f3c11a6df0a51d7cafbdfa93e2
+  vite-plugin-storybook-nextjs@3.3.2: 479b65220542ebbd7fd31e2ca52070cb03440750b156ce5c5efe927919ccf2f9
 
 importers:
 
@@ -2486,11 +2487,6 @@ packages:
     resolution: {integrity: sha512-BAg6QkE8W+TuQLrrw0Ugr7HegXduRuuj8/ti2kSOc+jz1dmx8/WNcjr6XGnq5YpDWxFwwaavqD0+jIUOKelTsw==}
     engines: {node: '>= 4'}
 
-  image-size@2.0.2:
-    resolution: {integrity: sha512-IRqXKlaXwgSMAMtpNzZa1ZAe8m+Sa1770Dhk8VkSsP9LS+iHD62Zd8FQKs8fbPiagBE7BzoFX23cxFnwshpV6w==}
-    engines: {node: '>=16.x'}
-    hasBin: true
-
   import-fresh@3.3.1:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
     engines: {node: '>=6'}
@@ -4730,7 +4726,7 @@ snapshots:
       storybook: 10.5.9(@types/react@19.2.17)(react@19.2.8)
       styled-jsx: 5.1.6(@babel/core@7.29.7)(react@19.2.8)
       vite: 8.1.4(@types/node@26.1.2)(esbuild@0.28.2)(jiti@2.7.0)
-      vite-plugin-storybook-nextjs: 3.3.2(next@16.2.12(@babel/core@7.29.7)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(storybook@10.5.9(@types/react@19.2.17)(react@19.2.8))(typescript@6.0.3)(vite@8.1.4(@types/node@26.1.2)(esbuild@0.28.2)(jiti@2.7.0))
+      vite-plugin-storybook-nextjs: 3.3.2(patch_hash=479b65220542ebbd7fd31e2ca52070cb03440750b156ce5c5efe927919ccf2f9)(next@16.2.12(@babel/core@7.29.7)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(storybook@10.5.9(@types/react@19.2.17)(react@19.2.8))(typescript@6.0.3)(vite@8.1.4(@types/node@26.1.2)(esbuild@0.28.2)(jiti@2.7.0))
     optionalDependencies:
       '@types/react': 19.2.17
       '@types/react-dom': 19.2.3(@types/react@19.2.17)
@@ -6039,8 +6035,6 @@ snapshots:
 
   ignore@7.0.6: {}
 
-  image-size@2.0.2: {}
-
   import-fresh@3.3.1:
     dependencies:
       parent-module: 1.0.1
@@ -7234,13 +7228,13 @@ snapshots:
       '@egjs/hammerjs': 2.0.17
       component-emitter: 2.0.0
 
-  vite-plugin-storybook-nextjs@3.3.2(next@16.2.12(@babel/core@7.29.7)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(storybook@10.5.9(@types/react@19.2.17)(react@19.2.8))(typescript@6.0.3)(vite@8.1.4(@types/node@26.1.2)(esbuild@0.28.2)(jiti@2.7.0)):
+  vite-plugin-storybook-nextjs@3.3.2(patch_hash=479b65220542ebbd7fd31e2ca52070cb03440750b156ce5c5efe927919ccf2f9)(next@16.2.12(@babel/core@7.29.7)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(storybook@10.5.9(@types/react@19.2.17)(react@19.2.8))(typescript@6.0.3)(vite@8.1.4(@types/node@26.1.2)(esbuild@0.28.2)(jiti@2.7.0)):
     dependencies:
       '@next/env': 16.3.0-preview.5
-      image-size: 2.0.2
       magic-string: 0.30.21
       module-alias: 2.3.4
       next: 16.2.12(@babel/core@7.29.7)(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      sharp: 0.35.0
       storybook: 10.5.9(@types/react@19.2.17)(react@19.2.8)
       ts-dedent: 2.3.0
       vite: 8.1.4(@types/node@26.1.2)(esbuild@0.28.2)(jiti@2.7.0)

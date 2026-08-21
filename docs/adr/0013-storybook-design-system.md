@@ -35,6 +35,10 @@ future replacement file ID in this ADR before changing token values.
 - The CSS token source stays in one production stylesheet, avoiding theme drift.
 - Interaction and security behavior remains covered by Vitest and browser tests;
   Storybook documents visual states and is not a substitute for those tests.
+- The current Storybook Next.js Vite plugin is patched to use the already-pinned
+  `sharp` metadata API instead of its vulnerable `image-size` dependency; remove
+  `frontend/patches/vite-plugin-storybook-nextjs@3.3.2.patch` only after an
+  upstream release removes the affected parser.
 
 ## Verification
 
