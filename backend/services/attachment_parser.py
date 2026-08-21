@@ -43,6 +43,16 @@ class AttachmentParserDescriptor:
     parse_status: str
 
 
+@dataclass(frozen=True, slots=True)
+class ImageMetadata:
+    """Describe bounded image-header facts without retaining image bytes."""
+
+    format_name: str
+    width: int
+    height: int
+    animated: bool
+
+
 _PARSER_MANIFEST = (
     AttachmentParserDescriptor(
         parser_key="plain_text",
@@ -626,6 +636,7 @@ def _display_text(raw_content: str) -> str:
 
 
 _IMAGE_CONTENT_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/bmp"})
+SUPPORTED_IMAGE_CONTENT_TYPES = frozenset(_IMAGE_CONTENT_TYPES)
 _OFFICE_CONTENT_TYPES = frozenset(
     {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -660,8 +671,8 @@ class _OfficeXmlBudget:
     text_chars: int = 0
 
 
-def _parse_image_metadata(payload: bytes) -> str | None:
-    """Read bounded image headers into searchable text without decoding pixels."""
+def inspect_image_metadata(payload: bytes) -> ImageMetadata | None:
+    """Read bounded image headers into structured facts without decoding pixels."""
     if payload.startswith(b"\x89PNG"):
         dimensions = _png_dimensions(payload)
         format_name = "png"
@@ -684,10 +695,24 @@ def _parse_image_metadata(payload: bytes) -> str | None:
     if dimensions is None:
         return None
     width, height = dimensions
+    return ImageMetadata(
+        format_name=format_name,
+        width=width,
+        height=height,
+        animated=animated,
+    )
+
+
+def _parse_image_metadata(payload: bytes) -> str | None:
+    """Render bounded image-header facts as searchable text."""
+    metadata = inspect_image_metadata(payload)
+    if metadata is None:
+        return None
     return (
         "Image metadata: "
-        f"format={format_name}; width={width}px; height={height}px; "
-        f"animated={'yes' if animated else 'no'}"
+        f"format={metadata.format_name}; width={metadata.width}px; "
+        f"height={metadata.height}px; "
+        f"animated={'yes' if metadata.animated else 'no'}"
     )
 
 

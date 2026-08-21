@@ -71,6 +71,35 @@ Content-Type: text/html; charset="utf-8"
         os.unlink(temp_path)
 
 
+def test_parse_eml_extracts_inline_base64_images_from_html_part():
+    image_payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR"
+        + b"\x00\x00\x00\x07\x00\x00\x00\x09\x08\x06\x00\x00\x00"
+    )
+    encoded_image = base64.b64encode(image_payload).decode("ascii")
+    eml_content = (
+        b"Message-ID: <inline-image@test.com>\r\n"
+        b"From: sender@test.com\r\n"
+        b"To: recipient@test.com\r\n"
+        b"Subject: Inline image\r\n"
+        b"Content-Type: text/html; charset=\"utf-8\"\r\n"
+        b"\r\n<html><body><p>Context</p><img src=\"data:image/png;base64,"
+        + encoded_image.encode("ascii")
+        + b"\"></body></html>"
+    )
+
+    parsed = parse_eml_bytes(eml_content)
+
+    assert len(parsed["inline_images"]) == 1
+    source = parsed["inline_images"][0]
+    assert source["source_locator_value"] == "/mime_part[1]/html[1]/body[1]/img[1]"
+    assert source["media_type"] == "image/png"
+    assert source["pixel_width"] == 7
+    assert source["pixel_height"] == 9
+    assert source["parse_status"] == "metadata_ready"
+
+
 def test_parse_eml_strips_active_html_from_display_fields():
     eml_content = b"""Message-ID: <xss@test.com>
 From: Attacker <attacker@example.com>

@@ -452,3 +452,26 @@ def test_merge_revision_reconciles_newsdom_document_and_carddav_heads():
     assert "op.create_table(" not in revision_text
     assert "op.add_column(" not in revision_text
     assert "op.drop_column(" not in revision_text
+
+
+def test_inline_image_sources_have_a_normalized_incremental_revision():
+    revision_path = BACKEND_ROOT / "alembic" / "versions" / "0018_inline_image_sources.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0018_inline_image_sources"' in revision_text
+    assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
+    for column_name in (
+        "image_source_uid",
+        "email_record_id",
+        "source_locator_value",
+        "content_digest",
+    ):
+        assert f'"{column_name}"' in revision_text
+    assert '"image_sources"' in revision_text
+    assert "ForeignKeyConstraint" in revision_text
+    assert "op.create_table(" in revision_text
+    assert "op.create_index(" in revision_text
+    assert "op.drop_index(" in revision_text
+    assert "op.drop_table(" in revision_text
+    assert "sa.text(" not in revision_text

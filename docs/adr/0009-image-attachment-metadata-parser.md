@@ -145,7 +145,7 @@ WHATWG. (n.d.). *Data URLs*. In *HTML Living Standard*. Retrieved August 21,
 Huang, Y., Lv, T., Cui, L., Lu, Y., & Wei, F. (2022). LayoutLMv3:
 Pre-training for document AI with unified text and image masking. *Proceedings
 of the 30th ACM International Conference on Multimedia*, 4321–4330.
-<https://doi.org/10.1145/3503161.3548110>
+<https://doi.org/10.1145/3503161.3548112>
 
 The HTML standard is the authority for recognizing data URLs and their media
 payload boundary. Huang et al. (2022) supports preserving aligned text/image

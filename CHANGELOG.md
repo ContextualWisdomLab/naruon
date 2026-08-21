@@ -1,4 +1,13 @@
 ## [Unreleased]
+- HTML email imports now preserve base64 `img[src]` images as separately
+  searchable, source-linked metadata. The new `image_sources` table records
+  only the MIME type, DOM locator, ordinal, digest, byte count, bounded image
+  dimensions, and explicit parse state; raw base64 and decoded pixels are not
+  persisted. The raw data URL is redacted before embedding, while bounded
+  metadata is included in the email embedding input and emitted as an
+  `inline_image` content-graph source. OCR, object detection, captions, and
+  image embeddings remain deferred to a configured local vision sidecar under
+  ADR-0019 and `docs/doctoring/inline-image-source-evidence.md`.
 - Signed email file import now accepts source files up to 64 MiB, covering
   observed EML sources and attachments over 20 MiB. The image parser's JPEG
   header scan is bounded to 4 MiB, while its
