@@ -6,6 +6,11 @@
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
+**Inventory observation:** the 93-row open-PR inventory below is a post-merge
+snapshot taken after PR #1442 merged at `2026-08-21T09:18:28Z`. The PR
+description and issue #1428 retain the earlier 83-PR observation as historical
+context; both counts are point-in-time evidence, not current merge state.
+
 This document defines the evidence-backed boundary between what Naruon currently
 ships on protected `develop`, what is present only in open pull requests, what is
 still a product-plan aspiration, and what a buyer must be able to complete before
@@ -72,7 +77,7 @@ it. Conversely, an old README statement that calls a protected implementation
 |---|---|
 | Protected branch | `develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b` |
 | Product/package version | `0.14.4` |
-| Open pull requests | **93** |
+| Open pull requests | **93** (post-#1442 snapshot at `2026-08-21T09:18:28Z`) |
 | Open issues before this baseline program | **59** |
 | New completion issue | #1428 |
 | Required backend runtime | Python 3.14 exact-head lane |
@@ -573,7 +578,7 @@ version 4rev2* (RFC 9051). RFC Editor. https://doi.org/10.17487/RFC9051
 OpenSSF. (2025). *Supply-chain Levels for Software Artifacts specification,
 version 1.2*. https://slsa.dev/spec/v1.2/
 
-OpenTelemetry Authors. (2025). *OpenTelemetry specification, version 1.60.0*.
+OpenTelemetry Authors. (2026). *OpenTelemetry specification, version 1.60.0*.
 https://opentelemetry.io/docs/specs/otel/
 
 Elkady, H. (2026). *Anti-Slop UI: A multi-layered heuristic approach to
@@ -708,7 +713,9 @@ the head observed before the documentation refresh; re-fetch it before merge.
 | 1206 | fix(security,api): opaque prompt IDs and CardDAV single-decode | f15542c06f71135081b8c4f99231b264ca878b69 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1195 | feat(email): deterministic dedupe provenance — gate strong fingerprints on genuine Date (naruon#1086) | c7aedc6a6a09bc91156e9c62e44f18cf8b4d3846 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 
-The inventory is intentionally identity-first: no review body, credential,
+The inventory is intentionally identity-first:
+
+It represents the post-#1442 93-row snapshot described above: no review body, credential,
 customer data, or copied provider payload is stored in this document. A parent
 merge or head movement invalidates the affected row and requires regeneration.
 
@@ -720,7 +727,7 @@ snapshot and are retained as RCA pointers, not as reusable merge evidence:
 | PR | Exact head | Check/run evidence | Observed cause or disposition |
 |---:|---|---|---|
 | #1347 | `3f6932026fbef281a373d792518058e4aaf5178f` | Strix run `32440010004`, job `96648648553` | provider/model infrastructure returned NVIDIA NIM 404 and no complete Strix report; rerun after the central fail-closed workflow repair, without weakening the gate |
-| #1442 | `94e10a6188a1b96ac162fa659ae4025bc00895bd` | metadata gate `96719432050` | current review-thread/CodeRabbit evidence was non-passing; keep normal review disposition and re-evaluate the exact head |
+| #1442 | `94e10a6188a1b96ac162fa659ae4025bc00895bd` | metadata gate `96719432050`; merged `2026-08-21T09:18:28Z` | historical pre-merge observation only; the post-merge 93-row inventory excludes this PR |
 | #1443 | `98a9daece9b4e28d5182485af4f105b3bd15f432` | metadata gate `96721371765` | one current review thread remained unresolved; do not merge or bypass until the current-head review state is resolved |
 
 Queued or pending Checks are not treated as source failures, and completed
