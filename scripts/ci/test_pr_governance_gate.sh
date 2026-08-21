@@ -140,7 +140,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown)
+    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown|coderabbit_approval_pending_comment)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -236,6 +236,15 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
     case "${GH_SCENARIO:-pass}" in
       coderabbit_blocking_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Pre-merge warning for 0123456789abcdef0123456789abcdef01234567"}]'
+        ;;
+      coderabbit_approval_pending_comment)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no blocking issues.\\n- [ ] {\\\"headCommitId\\\":\\\"0123456789abcdef0123456789abcdef01234567\\\"}\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_malformed_approval_pending_comment)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567"}]'
+        ;;
+      github_code_quality_approval_pending_comment)
+        printf '[{"id":777,"user":{"login":"github-code-quality[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567\\n- [ ] {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"}\\n<!-- approval_notice_end -->"}]'
         ;;
       coderabbit_stale_blocking_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Pre-merge warning for older head"}]'
@@ -708,6 +717,38 @@ assert_coderabbit_blocking_issue_comment_blocks() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_coderabbit_approval_pending_notice_does_not_block() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_approval_pending_comment "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_malformed_coderabbit_approval_pending_notice_blocks() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_malformed_approval_pending_comment "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_github_code_quality_approval_pending_notice_blocks() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate github_code_quality_approval_pending_comment "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
 assert_github_code_quality_blocking_issue_comment_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -944,6 +985,9 @@ assert_pr_checks_error_is_not_published_verbatim
 assert_invalid_pr_number_fails_closed_without_gh_calls
 assert_evaluation_error_publishes_gate_failure
 assert_coderabbit_blocking_issue_comment_blocks
+assert_coderabbit_approval_pending_notice_does_not_block
+assert_malformed_coderabbit_approval_pending_notice_blocks
+assert_github_code_quality_approval_pending_notice_blocks
 assert_github_code_quality_blocking_issue_comment_blocks
 assert_coderabbit_stale_issue_comment_does_not_block
 assert_coderabbit_review_limit_issue_comment_does_not_block
