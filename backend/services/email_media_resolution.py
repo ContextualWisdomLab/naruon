@@ -33,7 +33,8 @@ _SUPPORTED_IMAGE_TYPES = frozenset(
 )
 _IMAGE_TYPE_ALIASES = {"image/jpg": "image/jpeg"}
 _SRC_ATTRIBUTE_RE = re.compile(
-    r"(?is)(?<![\w-])src\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s\"'=<>`]+))"
+    r"(?<![\w-])src\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s\"'=<>`]+))",
+    flags=re.IGNORECASE | re.DOTALL,
 )
 _CONTROL_CHARACTER_RE = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -113,9 +114,7 @@ class _ImageSourceParser(HTMLParser):
         value_start = tag_start + match.start(value_group)
         self.references.append((raw_value, value_start, value_start + len(raw_value)))
 
-    def handle_startendtag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.handle_starttag(tag, attrs)
 
 
@@ -519,9 +518,7 @@ def _build_artifact(content_type: str, payload: bytes) -> EmailMediaArtifact:
             pixel_height=None,
         )
     dimensions = _image_dimensions(normalized_type, payload)
-    pixel_width, pixel_height = (
-        dimensions if dimensions is not None else (None, None)
-    )
+    pixel_width, pixel_height = dimensions if dimensions is not None else (None, None)
     visual_classification = (
         "tracking_candidate" if dimensions == (1, 1) else "unclassified"
     )
@@ -610,8 +607,10 @@ def _normalize_cid_url(reference: str) -> str | None:
         decoded = urllib.parse.unquote(encoded, errors="strict")
     except UnicodeDecodeError:
         return None
-    if not decoded or _CONTROL_CHARACTER_RE.search(decoded) or any(
-        character.isspace() for character in decoded
+    if (
+        not decoded
+        or _CONTROL_CHARACTER_RE.search(decoded)
+        or any(character.isspace() for character in decoded)
     ):
         return None
     return decoded

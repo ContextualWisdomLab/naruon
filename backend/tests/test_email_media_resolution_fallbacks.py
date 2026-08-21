@@ -38,11 +38,7 @@ class _BrokenTextPart:
 
 def _png() -> bytes:
     """Return a minimal signature-bearing PNG fixture."""
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        b"\x00\x00\x00\rIHDR"
-        b"\x00\x00\x00\x02\x00\x00\x00\x03payload"
-    )
+    return b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x02\x00\x00\x00\x03payload"
 
 
 def _multipart_alternative_with_two_html_references() -> bytes:
@@ -70,9 +66,7 @@ def _related_with_two_identical_images() -> bytes:
         + encoded
         + b"\r\n--rel\r\nContent-Type: image/png\r\n"
         b"Content-ID: <two@example.test>\r\n"
-        b"Content-Transfer-Encoding: base64\r\n\r\n"
-        + encoded
-        + b"\r\n--rel--\r\n"
+        b"Content-Transfer-Encoding: base64\r\n\r\n" + encoded + b"\r\n--rel--\r\n"
     )
 
 
@@ -90,10 +84,7 @@ def _related_with_conflicting_content_types(*, safe_first: bool) -> bytes:
         b"MIME-Version: 1.0\r\n",
         b"Content-Type: multipart/related; boundary=rel\r\n\r\n",
         b"--rel\r\nContent-Type: text/html; charset=utf-8\r\n\r\n",
-        (
-            b'<img src="cid:safe@example.test">'
-            b'<img src="cid:mismatch@example.test">\r\n'
-        ),
+        (b'<img src="cid:safe@example.test"><img src="cid:mismatch@example.test">\r\n'),
     ]
     for content_type, content_id in image_parts:
         message_parts.extend(
@@ -186,10 +177,7 @@ def test_content_dedupe_never_upgrades_a_mismatched_occurrence(
     }
     assert mime_occurrences["safe@example.test"].resolution_status == "resolved"
     assert mime_occurrences["safe@example.test"].reason_code == "llm_safe_image"
-    assert (
-        mime_occurrences["mismatch@example.test"].resolution_status
-        == "unsafe_media"
-    )
+    assert mime_occurrences["mismatch@example.test"].resolution_status == "unsafe_media"
     assert (
         mime_occurrences["mismatch@example.test"].reason_code
         == "image_content_type_mismatch"
@@ -201,10 +189,7 @@ def test_content_dedupe_never_upgrades_a_mismatched_occurrence(
         if occurrence.occurrence_kind == "html_cid"
     }
     assert cid_occurrences["safe@example.test"].resolution_status == "resolved"
-    assert (
-        cid_occurrences["mismatch@example.test"].resolution_status
-        == "unsafe_media"
-    )
+    assert cid_occurrences["mismatch@example.test"].resolution_status == "unsafe_media"
     assert (
         cid_occurrences["mismatch@example.test"].reason_code
         == "cid_target_not_llm_safe"

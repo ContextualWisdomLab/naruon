@@ -37,8 +37,7 @@ def _html_data_message(content_type: str, payload: bytes) -> bytes:
     return (
         b"MIME-Version: 1.0\r\n"
         b"Content-Type: text/html; charset=utf-8\r\n"
-        b"Content-Transfer-Encoding: 8bit\r\n\r\n"
-        + html.encode("utf-8")
+        b"Content-Transfer-Encoding: 8bit\r\n\r\n" + html.encode("utf-8")
     )
 
 

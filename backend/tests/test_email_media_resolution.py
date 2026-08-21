@@ -20,7 +20,12 @@ def _png(width: int = 2, height: int = 3) -> bytes:
 
 
 def _gif(width: int = 2, height: int = 3) -> bytes:
-    return b"GIF89a" + width.to_bytes(2, "little") + height.to_bytes(2, "little") + b"payload"
+    return (
+        b"GIF89a"
+        + width.to_bytes(2, "little")
+        + height.to_bytes(2, "little")
+        + b"payload"
+    )
 
 
 def _related_message(
@@ -55,8 +60,7 @@ def _html_only_message(html_body: str) -> bytes:
     return (
         b"MIME-Version: 1.0\r\n"
         b"Content-Type: text/html; charset=utf-8\r\n"
-        b"Content-Transfer-Encoding: 8bit\r\n\r\n"
-        + html_body.encode("utf-8")
+        b"Content-Transfer-Encoding: 8bit\r\n\r\n" + html_body.encode("utf-8")
     )
 
 
@@ -175,7 +179,9 @@ def test_unsupported_and_mismatched_mime_images_are_not_llm_safe() -> None:
 
 
 def test_cid_must_resolve_in_nearest_multipart_related_scope() -> None:
-    outside = media.resolve_email_media(_html_only_message('<img src="cid:x@example.test">'))
+    outside = media.resolve_email_media(
+        _html_only_message('<img src="cid:x@example.test">')
+    )
     occurrence = outside.occurrences[0]
     assert occurrence.reason_code == "cid_outside_multipart_related"
     assert occurrence.artifact_id is None
