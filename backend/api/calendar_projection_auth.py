@@ -201,8 +201,9 @@ async def get_calendar_projection_service_context(
     auth_module._reject_if_session_auth_rate_limited(token)
     try:
         context = decode_calendar_projection_service_token(token)
-    except HTTPException:
-        auth_module._record_session_auth_failure(token)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            auth_module._record_session_auth_failure(token)
         raise
     auth_module._clear_session_auth_failures(token)
     return context
