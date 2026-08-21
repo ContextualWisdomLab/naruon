@@ -141,6 +141,18 @@ def test_inline_image_failures_are_explicit_and_do_not_retain_bytes(html, error_
     assert source.byte_count is None
 
 
+def test_inline_image_oversized_media_type_is_bounded_before_persistence():
+    """A crafted data URL cannot exceed the image_sources media_type column."""
+    oversized_media_type = "image/" + "x" * 200
+    source = extract_inline_image_sources(
+        f"<img src='{_data_uri(b'not-used', oversized_media_type)}'>"
+    )[0]
+
+    assert len(source.media_type) <= 120
+    assert source.media_type == "application/octet-stream"
+    assert source.parse_error_code == "unsupported_image_media_type"
+
+
 def test_non_data_images_are_not_treated_as_inline_base64():
     assert extract_inline_image_sources(
         "<img src='https://example.test/image.png'><img alt='none'>"

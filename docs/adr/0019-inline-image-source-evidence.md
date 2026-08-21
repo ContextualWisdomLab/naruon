@@ -19,13 +19,16 @@ location and bounded evidence are preserved first.
    `data:image/*;base64,...` values on `img[src]`.
 2. Store only a normalized `image_sources` row: MIME type, source DOM path,
    ordinal, byte count, SHA-256 digest, bounded format/dimensions/animation
-   facts, and an explicit parse status. Raw base64 and decoded pixels are
-   never persisted or sent to a provider.
+   facts, and an explicit parse status. The persisted media type is capped at
+   the `image_sources.media_type` column width, while the full DOM path stays
+   only in the source-location column. Raw base64 and decoded pixels are never
+   persisted or sent to a provider.
 3. Add the bounded metadata to the email's selected embedding input after
    redacting the original data URL, and emit a separate `inline_image`
-   content-graph source. This makes image evidence retrievable without
-   uploading raw base64 or pretending that metadata is OCR, object detection,
-   or captioning.
+   content-graph source with a bounded ordinal label. The full DOM locator
+   remains source evidence rather than a database display label. This makes
+   image evidence retrievable without uploading raw base64 or pretending that
+   metadata is OCR, object detection, or captioning.
 4. Reject malformed, unsupported, non-base64, and over-budget data URLs with
    deterministic states. A malformed image cannot become a successful search
    result.

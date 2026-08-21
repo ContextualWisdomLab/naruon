@@ -8,7 +8,9 @@ ordinal, SHA-256 digest, byte count, and bounded PNG/JPEG/GIF/BMP header facts.
 The parser never stores the data URL or decoded bytes. The email import path
 adds the bounded evidence to the email embedding input and writes a separate
 `inline_image` content-graph source so search can find the image evidence
-without flattening it into unrelated body text. Before an embedding request,
+with a short ordinal display label; the full locator remains in the normalized
+source row. Oversized untrusted media-type tokens fall back to a bounded
+`application/octet-stream` marker before persistence. Before an embedding request,
 `redact_inline_image_payloads` removes the original data URL and leaves only
 the bounded searchable metadata.
 

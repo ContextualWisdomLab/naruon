@@ -206,6 +206,46 @@ def test_build_email_object_attaches_content_graph_records():
     }
 
 
+def test_build_email_object_keeps_inline_image_graph_label_bounded():
+    """The full DOM locator remains source evidence without becoming a DB label."""
+    locator = "/html[1]/" + ("table[1]/" * 80) + "img[1]"
+    parsed = {
+        "body": "See image",
+        "body_parse_content": "See image",
+        "body_content_type": "text/plain",
+        "attachments": [],
+        "inline_images": [
+            {
+                "source_locator_value": locator,
+                "source_ordinal": 1,
+                "media_type": "image/png",
+                "searchable_text": f"source_locator={locator}",
+                "parse_status": "metadata_ready",
+            }
+        ],
+    }
+
+    email_obj, _attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<inline-label@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-inline-label",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=[],
+        fitted_embeddings=[[0.0] * EMBEDDING_DIMENSION],
+    )
+
+    image_documents = [
+        node
+        for node in email_obj.content_nodes
+        if node.source_kind == "inline_image" and node.node_kind == "document"
+    ]
+    assert [node.display_label for node in image_documents] == ["Inline image 1"]
+    assert len(image_documents[0].display_label or "") <= 240
+
+
 def test_build_email_object_indexes_image_metadata_as_attachment_text():
     image_metadata = (
         "Image metadata: format=png; width=320px; height=200px; animated=no"

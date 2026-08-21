@@ -19,6 +19,7 @@ from .attachment_parser import (
 MAX_INLINE_IMAGE_BYTES = 64 * 1024 * 1024
 MAX_INLINE_IMAGE_COUNT = 1_000
 MAX_INLINE_IMAGE_ENCODED_CHARS = ((MAX_INLINE_IMAGE_BYTES + 2) // 3) * 4 + 4
+MAX_INLINE_IMAGE_MEDIA_TYPE_CHARS = 120
 _VOID_HTML_TAGS = frozenset(
     {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 )
@@ -197,7 +198,12 @@ def _parse_data_image_uri(
     """Decode one data URL strictly enough to avoid implicit byte retention."""
     prefix, separator, encoded_payload = value[5:].partition(",")
     media_tokens = [token.strip().lower() for token in prefix.split(";")]
-    media_type = media_tokens[0] or "application/octet-stream"
+    raw_media_type = media_tokens[0] or "application/octet-stream"
+    media_type = (
+        raw_media_type
+        if len(raw_media_type) <= MAX_INLINE_IMAGE_MEDIA_TYPE_CHARS
+        else "application/octet-stream"
+    )
     base_fields = {
         "source_locator_type": "html_dom_path",
         "source_locator_value": source_locator_value,

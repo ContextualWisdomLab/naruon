@@ -562,9 +562,7 @@ def _append_email_content_graph(
             source_record_uid=image_source_uid,
             content=str(image_payload.get("searchable_text") or ""),
             content_type="text/plain",
-            display_name=str(
-                image_payload.get("source_locator_value") or "Inline image"
-            ),
+            display_name=f"Inline image {image_payload.get('source_ordinal') or 0}",
         )
         _append_parse_result_records(
             email_obj=email_obj,

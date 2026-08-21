@@ -1,4 +1,5 @@
 ## [Unreleased]
+- Inline image imports now keep deep DOM locators in source evidence and use a bounded content-graph label; oversized untrusted media-type tokens are reduced to a safe fallback so PostgreSQL imports cannot fail on column length.
 - HTML email imports now preserve base64 `img[src]` images as separately
   searchable, source-linked metadata. The new `image_sources` table records
   only the MIME type, DOM locator, ordinal, digest, byte count, bounded image
