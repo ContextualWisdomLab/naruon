@@ -249,6 +249,12 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
       coderabbit_mixed_approval_pending_blocking_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId: old-head\\nBlocking issue: the current parser can cross tenant boundaries.\\nCurrent head is 0123456789abcdef0123456789abcdef01234567 in unrelated prose.\\n<!-- approval_notice_end -->"}]'
         ;;
+      coderabbit_current_failure_approval_notice)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId: 0123456789abcdef0123456789abcdef01234567\\nFailure: the current parser can cross tenant boundaries.\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_current_warning_approval_notice)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId: 0123456789abcdef0123456789abcdef01234567\\nWarning: the current parser can cross tenant boundaries.\\n<!-- approval_notice_end -->"}]'
+        ;;
       coderabbit_malformed_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567"}]'
         ;;
@@ -770,6 +776,18 @@ assert_mixed_coderabbit_approval_pending_notice_blocks() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_current_coderabbit_approval_notice_findings_block() {
+  local scenario temp_dir
+  for scenario in coderabbit_current_failure_approval_notice coderabbit_current_warning_approval_notice; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
+}
+
 assert_malformed_coderabbit_approval_pending_notice_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -1032,6 +1050,7 @@ assert_coderabbit_approval_pending_notice_does_not_block
 assert_multiline_coderabbit_approval_pending_notice_does_not_block
 assert_stale_coderabbit_head_with_unrelated_current_sha_blocks
 assert_mixed_coderabbit_approval_pending_notice_blocks
+assert_current_coderabbit_approval_notice_findings_block
 assert_malformed_coderabbit_approval_pending_notice_blocks
 assert_github_code_quality_approval_pending_notice_does_not_block
 assert_github_code_quality_blocking_issue_comment_blocks

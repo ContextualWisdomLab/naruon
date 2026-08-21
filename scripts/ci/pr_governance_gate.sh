@@ -344,7 +344,7 @@ CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
 # A current-head approval notice may contain the generic phrase "blocking
 # issues" as part of its promise to review later. Only explicit singular
 # findings, pre-merge warnings, or change requests make the notice substantive.
-CODERABBIT_APPROVAL_NOTICE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(warning|failure|failed|blocking)|blocking (issue|finding)([^[:alpha:]]|$)|changes requested|request changes|actionable comments?'
+CODERABBIT_APPROVAL_NOTICE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(warning|failure|failed|blocking)|(^|[^[:alpha:]])(failure|failed|warning)([[:space:]]*:|[^[:alpha:]])|blocking (issue|finding)([^[:alpha:]]|$)|changes requested|request changes|actionable comments?'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 COMMIT_STATUS_JSON='{"statuses":[]}'
 if ! COMMIT_STATUS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
