@@ -695,6 +695,37 @@ assert_invalid_pr_number_fails_closed_without_gh_calls() {
   fi
 }
 
+assert_invalid_repository_fails_closed_without_gh_calls() {
+  local temp_dir status
+  temp_dir="$(mktemp -d)"
+  mkdir -p "$temp_dir/bin"
+  make_fake_gh "$temp_dir/bin"
+  : > "$temp_dir/gh.log"
+  set +e
+  GH_LOG="$temp_dir/gh.log" \
+  GH_SCENARIO="pass" \
+  PATH="$temp_dir/bin:$PATH" \
+  GITHUB_REPOSITORY='owner/repo;echo injected' \
+  GH_TOKEN="fake" \
+  EVENT_NAME="workflow_dispatch" \
+  DIRECT_PR_NUMBER="42" \
+  TARGET_PR_NUMBER="" \
+  WORKFLOW_RUN_PR_NUMBER="" \
+    bash "$script" > "$temp_dir/output.txt" 2>&1
+  status=$?
+  set -e
+
+  if [ "$status" != "1" ]; then
+    printf 'expected exit 1 for invalid repository identity, got %s\n' "$status" >&2
+    return 1
+  fi
+  assert_in_file 'Repository identity is invalid; refusing to evaluate.' "$temp_dir/output.txt"
+  if [ -s "$temp_dir/gh.log" ]; then
+    printf 'expected no gh invocations for invalid repository identity\n' >&2
+    return 1
+  fi
+}
+
 assert_evaluation_error_publishes_gate_failure() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -1000,6 +1031,7 @@ assert_coderabbit_skip_with_blocking_language_blocks
 assert_unrecognized_required_check_state_blocks
 assert_pr_checks_error_is_not_published_verbatim
 assert_invalid_pr_number_fails_closed_without_gh_calls
+assert_invalid_repository_fails_closed_without_gh_calls
 assert_evaluation_error_publishes_gate_failure
 assert_coderabbit_blocking_issue_comment_blocks
 assert_coderabbit_approval_pending_notice_does_not_block
