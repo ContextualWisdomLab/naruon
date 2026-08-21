@@ -56,9 +56,9 @@ def test_hwp_admission_accepts_ole_plus_hwp_file_header_signature() -> None:
 
 def test_hwp_deferred_decoder_rechecks_hwp_file_header_signature() -> None:
     """Keep stored-payload decoding fail-closed after import-time admission."""
-    encoded = base64.b64encode(
-        _ole_payload(include_hwp_signature=False)
-    ).decode("ascii")
+    encoded = base64.b64encode(_ole_payload(include_hwp_signature=False)).decode(
+        "ascii"
+    )
 
     with pytest.raises(ValueError, match="not a HWP binary"):
         parser.decode_deferred_attachment_payload(
