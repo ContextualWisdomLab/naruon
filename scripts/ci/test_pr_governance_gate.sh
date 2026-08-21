@@ -211,7 +211,7 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/pulls/42/reviews* ]]; then
       printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `%s`"}]]' "$head_sha" "$head_sha"
       ;;
     missing_coderabbit_with_adversarial_approval_stale)
-      jq -cn --arg sha "$head_sha" '[[{"user":{"login":"human-reviewer"},"state":"CHANGES_REQUESTED","commit_id":"old-head"},{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":$sha,"body":("## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: \\u0060"+$sha+"\\u0060")}]]'
+      jq -cn --arg sha "$head_sha" '[[{"user":{"login":"human-reviewer"},"state":"CHANGES_REQUESTED","commit_id":"old-head"},{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":$sha,"body":("## Adversarial validation\n\n```json\n{\"status\":\"passed\",\"probes\":[{\"outcome\":\"falsified\"},{\"outcome\":\"falsified\"}]}\n```\n\nHead SHA: `"+$sha+"`")}]]'
       ;;
     missing_coderabbit_stale_approval)
       printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `old-head`"}]]' "$head_sha"
