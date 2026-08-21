@@ -6,6 +6,7 @@
 **Scope:** Email attachment ingestion and the content graph. This ADR does not
 authorize recursive import, audio decoding, legacy document extraction,
 external upload, or provider mutation.
+**Figma File ID:** N/A — backend attachment metadata parsing; no visual surface.
 
 ## Context
 

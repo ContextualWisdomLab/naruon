@@ -6,6 +6,7 @@
 **Scope:** Email attachment ingestion and the content graph. This ADR does not
 authorize external upload, macro execution, archive extraction, or provider
 mutation.
+**Figma File ID:** N/A — backend archive parsing; no visual surface.
 
 ## Context
 

@@ -4,7 +4,7 @@
 **Date:** 2026-08-21
 **Decision owner:** Naruon maintainers
 **Scope:** HTML email import, content-graph search, and source metadata
-**Figma file ID:** Not applicable; this slice changes backend ingestion only.
+**Figma File ID:** N/A — backend inline-image ingestion; no visual surface.
 
 ## Context
 

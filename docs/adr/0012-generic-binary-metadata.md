@@ -6,6 +6,7 @@
 **Scope:** Email attachment ingestion and the content graph. This ADR does not
 authorize format detection, binary decoding, raw-byte retention, or external
 upload.
+**Figma File ID:** N/A — backend generic-binary parsing; no visual surface.
 
 ## Context
 

@@ -5,6 +5,7 @@
 **Decision owner:** Naruon maintainers
 **Scope:** Email attachment ingestion and the content graph. This ADR does not
 authorize external image upload, OCR, object detection, or provider mutation.
+**Figma File ID:** N/A — backend attachment metadata parsing; no visual surface.
 
 ## Context
 
