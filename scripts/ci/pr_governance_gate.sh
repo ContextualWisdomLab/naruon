@@ -74,7 +74,8 @@ gh() {
       | length')"
     if [ "$unavailable_count" != "0" ]; then
       printf 'Ignoring successful CodeRabbit commit status: authoritative current-head review comment reports that semantic review did not start.\n' >&2
-      printf '%s' "$status_json" | jq '
+      local filtered_json
+      if ! filtered_json="$(printf '%s' "$status_json" | jq '
         .statuses = [
           .statuses[]
           | select(
@@ -82,7 +83,11 @@ gh() {
                and ((.state // "") | ascii_downcase) == "success")
               | not
             )
-        ]'
+        ]')"; then
+        printf 'Failed to filter commit statuses; refusing to report review evidence.\n' >&2
+        return 1
+      fi
+      printf '%s' "$filtered_json"
       return 0
     fi
     printf '%s' "$status_json"

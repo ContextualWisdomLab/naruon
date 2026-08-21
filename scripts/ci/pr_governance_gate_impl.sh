@@ -320,15 +320,16 @@ if ! REQUIRED_CHECKS="$(gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --
     add_blocker 'Required check metadata could not be read; see the workflow run log.'
   fi
 else
-  # Fail closed: only explicit successful states pass. Required checks that are
-  # skipped or neutral did not prove the protected condition and are blockers.
+  # Fail closed: only explicit pass states satisfy the protected condition.
+  # GitHub treats skipped and neutral required checks as passing when the
+  # workflow contract intentionally does not run them.
   while IFS= read -r item; do
     [ -n "$item" ] && add_blocker "$item"
   done < <(printf '%s' "$REQUIRED_CHECKS" | jq -r --arg check_name "$CHECK_NAME" '
     .[]
     | select(.name != $check_name)
     | (.state | ascii_upcase) as $state
-    | select(["SUCCESS", "PASS"] | index($state) | not)
+    | select(["SUCCESS", "PASS", "SKIPPED", "NEUTRAL"] | index($state) | not)
     | select(["PENDING", "QUEUED", "IN_PROGRESS", "REQUESTED", "WAITING", "EXPECTED"] | index($state) | not)
     | "Required check `\(.name | gsub("[`\\r\\n]"; " "))` is \($state) on the current head."
   ')

@@ -18,7 +18,9 @@ HEAD_SHA = "0123456789abcdef0123456789abcdef01234567"
 _FAKE_GH_CONFIG_NAME = "fake-gh-config.json"
 
 
-def _write_fake_gh_config(bin_dir: Path, config: dict[str, object] | None = None) -> None:
+def _write_fake_gh_config(
+    bin_dir: Path, config: dict[str, object] | None = None
+) -> None:
     """Write explicit fake-CLI controls without inheriting ambient process state."""
 
     (bin_dir / _FAKE_GH_CONFIG_NAME).write_text(
@@ -180,7 +182,9 @@ def _run_gate(
     )
 
 
-def test_rate_limited_coderabbit_status_requires_structured_fallback(tmp_path: Path) -> None:
+def test_rate_limited_coderabbit_status_requires_structured_fallback(
+    tmp_path: Path,
+) -> None:
     """A status-only success cannot certify a CodeRabbit review that never ran."""
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -297,7 +301,9 @@ def test_commit_status_lookup_failure_preserves_causal_blocker(tmp_path: Path) -
     assert "PR governance metadata gate errored" not in output
 
 
-def test_gate_harness_ignores_ambient_fake_cli_controls(tmp_path: Path, monkeypatch) -> None:
+def test_gate_harness_ignores_ambient_fake_cli_controls(
+    tmp_path: Path, monkeypatch
+) -> None:
     """Ambient process variables must not alter deterministic fake-CLI behavior."""
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -320,8 +326,8 @@ def test_gate_harness_ignores_ambient_fake_cli_controls(tmp_path: Path, monkeypa
     assert "PR governance metadata gate is ready" not in output
 
 
-def test_skipped_and_neutral_required_checks_block_merge_readiness(tmp_path: Path) -> None:
-    """Required checks that did not pass must never be treated as successful."""
+def test_skipped_and_neutral_required_checks_are_accepted(tmp_path: Path) -> None:
+    """GitHub's explicit skipped and neutral required states satisfy the gate."""
 
     repo_root = Path(__file__).resolve().parents[2]
 
@@ -338,6 +344,13 @@ def test_skipped_and_neutral_required_checks_block_merge_readiness(tmp_path: Pat
         output = result.stdout + result.stderr
 
         assert result.returncode == 0, output
-        assert f"Required check `Application CI` is {state} on the current head." in output
-        assert "PR governance blockers for 42" in output
+        assert (
+            f"Required check `Application CI` is {state} on the current head."
+            not in output
+        )
+        assert "PR governance blockers for 42" not in output
+        assert (
+            "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval"
+            in output
+        )
         assert "PR governance metadata gate is ready" not in output
