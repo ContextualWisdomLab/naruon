@@ -441,7 +441,7 @@ else
       | select(
           (((.body // "") | test("approval_notice_start"; "i"))
             and ((.body // "") | test("approval_notice_end"; "i"))
-            and ((.body // "") | test("headCommitId[\\s\\S]*:[\\s\\S]*" + $head_sha; "i")))
+            and ((.body // "") | test("(^|[^A-Za-z0-9_])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i")))
           | not
         )
       | select(
