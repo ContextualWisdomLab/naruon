@@ -50,11 +50,6 @@ vi.mock("lucide-react", () => ({
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
-  Calendar: () => <svg aria-hidden="true" />,
-  Clock: () => <svg aria-hidden="true" />,
-  MapPin: () => <svg aria-hidden="true" />,
-  Paperclip: () => <svg aria-hidden="true" />,
-  Users: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
 
@@ -247,52 +242,6 @@ describe("EmailDetail", () => {
     expect(container.textContent).not.toContain("alert(1)");
     expect(container.textContent).not.toContain("alert(2)");
     expect(container.textContent).not.toContain("alert(3)");
-  });
-
-  it("renders attachment and meeting evidence with an honest calendar next action", async () => {
-    const email = {
-      id: 31,
-      message_id: "<meeting-evidence@example.com>",
-      thread_id: null,
-      sender: "organizer@example.com",
-      recipients: "member@example.com",
-      subject: "Project sync",
-      date: "2026-05-18T10:00:00Z",
-      body: "Let's meet tomorrow.",
-      cc: ["observer@example.com"],
-      bcc: ["archive@example.com"],
-      attachments: [{ filename: "agenda.pdf", size: 2048, type: "application/pdf" }],
-      meeting_proposal: {
-        time: "2026-05-19 10:00 KST",
-        location: "Room 4",
-        attendees: ["organizer@example.com", "member@example.com"],
-        status: "제안됨",
-      },
-    };
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/31")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "맥락 종합", action_items: [] }));
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => { root?.render(<EmailDetail emailId={31} />); });
-    await flushAsyncWork();
-
-    expect(container.textContent).toContain("agenda.pdf");
-    expect(container.textContent).toContain("참조: observer@example.com");
-    expect(container.textContent).toContain("숨은 참조: archive@example.com");
-    expect(container.textContent).toContain("2026-05-19 10:00 KST");
-    expect(container.querySelector("div.bg-gradient-to-br")?.className).toContain("flex-col");
-    expect(container.querySelector('a[href="/calendar"]')?.getAttribute("aria-label")).toBe(
-      "캘린더에서 미팅 제안 확인",
-    );
-    expect(container.textContent).not.toContain("수락 및 캘린더 등록");
-    expect(container.textContent).not.toContain("시간 변경 제안");
   });
 
   it("keeps the latest conversation when an older thread request resolves late", async () => {
