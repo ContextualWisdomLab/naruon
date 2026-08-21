@@ -38,7 +38,7 @@ decision/action experience.
 The accurate current product classification is:
 
 > **Production-oriented pre-GA communication control plane with substantial
-> protected-branch capability, an unconverged 92-PR integration surface, and an
+> protected-branch capability, an unconverged 93-PR integration surface, and an
 > incomplete buyer-visible release/operations contract.**
 
 The first sellable boundary is **GA-1: Customer-owned Mail, Calendar, Contact,
@@ -72,7 +72,7 @@ it. Conversely, an old README statement that calls a protected implementation
 |---|---|
 | Protected branch | `develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b` |
 | Product/package version | `0.14.4` |
-| Open pull requests | **92** |
+| Open pull requests | **93** |
 | Open issues before this baseline program | **59** |
 | New completion issue | #1428 |
 | Required backend runtime | Python 3.14 exact-head lane |
@@ -80,13 +80,13 @@ it. Conversely, an old README statement that calls a protected implementation
 | Default data authority | customer-owned mail, CalDAV/CardDAV, and WebDAV providers |
 | Default merge posture | strict exact-head checks plus qualifying independent review |
 
-The **92-open-PR** count is the current inventory snapshot captured on
-2026-08-21 against the protected branch shown above, after PR #1442 merged. An
-earlier same-day snapshot recorded **93 open PRs** before that merge, and the
-initial completion issue #1428 recorded **83 open PRs** on 2026-08-20 against
-`develop@c9bfba2...`; both are historical baselines, not contradictions. Later
-live counts can change as PRs open, close, or merge, so every release decision
-must re-fetch the REST state.
+The **93-open-PR** count is the current inventory snapshot captured on
+2026-08-21 against the protected branch shown above, after PR #1448 opened. An
+earlier same-day snapshot recorded **92 open PRs** after PR #1442 merged, and
+the initial completion issue #1428 recorded **83 open PRs** on 2026-08-20
+against `develop@c9bfba2...`; these are historical baselines, not
+contradictions. Later live counts can change as PRs open, close, or merge, so
+every release decision must re-fetch the REST state.
 
 The protected branch requires exact-head backend, frontend, security, CodeQL,
 dependency review, Scorecard, OSV, Trivy, Strix, source/evidence coverage,
@@ -177,7 +177,7 @@ scientific payload.
 | README says durable retry/audit remains future work | protected operations document describes encrypted retry rows, retry worker, backoff, exhaustion, and aggregate visibility | buyers and contributors cannot tell what is shipped | merge a customer/operator README based on protected truth; keep unsupported behavior explicitly limited |
 | Release architecture says first candidate should be `v0.1.0` | `VERSION` and backend package are `0.14.4` | release procedure may publish or validate the wrong identity | replace historical hypothesis with current release-train policy and immutable release manifest |
 | Product plan marks typed Person/Event/Commitment/Plugin concepts as new/planned | current code search does not prove authoritative `graph_persons`, `graph_events`, `graph_commitments`, or `plugin_registrations` stores | UI/marketing can imply dense-KG/product-platform completion that does not exist | keep north-star language, implement typed domains through bounded PRs, and gate claims on protected code |
-| 92 open PRs contain many overlapping, stacked, micro, dependency, governance, and broad integration changes | current GitHub inventory | predecessor evidence, writer collision, stale branches, and integration starvation | establish a release train, classify every PR, close duplicates, merge parent-first, and use one writer per authority cluster |
+| 93 open PRs contain many overlapping, stacked, micro, dependency, governance, and broad integration changes | current GitHub inventory | predecessor evidence, writer collision, stale branches, and integration starvation | establish a release train, classify every PR, close duplicates, merge parent-first, and use one writer per authority cluster |
 | Required independent review exists but the current human reviewer path is unresolved | #1371 | green automation cannot produce a lawful protected merge | resolve reviewer governance without weakening rulesets or self-approval |
 | Connector is described through a self-hosted-runner analogy | protected code has protocol adapters and retry behavior but no complete released connector lifecycle | operators may deploy test infrastructure as production relay | deliver signed installable connector artifacts, enrollment/rotation, source health, fleet SLO, and runbooks |
 
@@ -186,7 +186,7 @@ scientific payload.
 ## 6. Current pull-request surface
 
 The current open PR count is too large to treat as one releasable integration
-unit. This baseline does not claim that every one of the 92 PRs has been
+unit. This baseline does not claim that every one of the 93 PRs has been
 line-by-line approved. It records the product-significant active lanes observed
 and defines the inventory that must be completed before GA.
 
@@ -246,7 +246,59 @@ The inventory must be regenerated after every parent merge or branch movement.
 It must not embed provider credentials, customer data, review-body secrets, or
 large copied PR bodies.
 
-### 6.3 Queue convergence rules
+### 6.3 UI/UX quality contract and Storybook event inventory
+
+The UI is a buyer-facing control surface, not a decorative shell. The current
+design-system implementation is carried by PR #1436 and ADR-0013; it uses the
+production stylesheet as the Storybook token source and records Figma file ID
+`68b5XB58w8nwT2LYOOnikK`. Until that PR is protected-branch code, its stories
+are current-PR evidence rather than shipped capability.
+
+The UI/UX Pro Max checklist and Anti-Slop UI heuristics are adopted as review
+inputs, not as normative standards or automatic approval. They help select one
+coherent design direction, expose generic UI defaults, and force explicit
+review of accessibility, touch targets, hierarchy, and state behavior. WCAG
+2.2 and the repository's security/accessibility gates remain authoritative.
+
+| Quality axis | Required definition and applied evidence | Audit gate before GA-1 |
+|---|---|---|
+| Accessibility | WCAG 2.2 AA; keyboard order/focus-visible; accessible names; labels; live/status announcements; color is never the only signal; Storybook a11y test is `error` for applicable stories | axe/Vitest Storybook results, keyboard journey, screen-reader name assertions, and zero unresolved accessibility findings |
+| Touch & interaction | primary pointer and keyboard paths; at least 44×44 CSS-pixel target or documented exception; 8px separation; loading/disabled/pressed feedback; no hover-only action | Storybook `play` events queried by role/label plus touch viewport browser test |
+| Performance | reserved media dimensions, no avoidable layout shift, route/component splitting, virtualized long lists, and responsive feedback for async work | production build budget, responsive capture at 375/768/1024/1440, and measured CLS/input-latency evidence |
+| Style selection | one documented design direction, consistent icon language, semantic tokens, deliberate radius/elevation, and no generic gradient/card/emoji defaults | ADR/Figma decision, token source review, and Anti-Slop heuristic checklist with human disposition |
+| Layout & responsive | mobile-first hierarchy, no horizontal scroll, readable line length, safe-area/fixed-bar offsets, and synchronized desktop/tablet/mobile navigation | Storybook viewport stories and Playwright route/drawer assertions at each supported viewport |
+| Typography & color | semantic foreground/surface/status tokens; body text and line-height contract; contrast ≥4.5:1 for normal text; wrapping/overflow for IDs and user content | token lint, contrast scan, long-content story, dark-mode story, and i18n expansion test |
+| Animation | shared duration/easing tokens, causal motion, transform/opacity preference, interruptibility, and `prefers-reduced-motion` behavior | reduced-motion Storybook story and browser assertion that action remains usable during transitions |
+| Forms & feedback | visible labels, field-local errors, helper text, async progress, retry/undo or next action, and server error preservation | valid/invalid/loading/success/timeout/permission stories with submit and recovery events |
+| Navigation patterns | predictable back/deep links, stable route identity, focus restoration, drawer parity, and one primary action per surface | route matrix, keyboard navigation journey, refresh/deep-link test, and mobile drawer test |
+| Charts & data | legends/tooltips or accessible table, empty/loading/error/partial states, textual values, and color-independent meaning | chart stories for every state, keyboard/tooltip test, screen-reader text, and deterministic snapshot/visual evidence |
+
+Each reusable component must have a Storybook story for its meaningful states.
+Each interactive story must use a `play` function and user-like queries such as
+role or accessible label; `data-testid` is a last resort. Storybook render,
+interaction, accessibility, and visual tests are complementary: a passing
+render story does not prove keyboard, async, responsive, or data correctness.
+
+The minimum scene/event matrix is:
+
+| Scene | Required event or assertion | Failure prevented |
+|---|---|---|
+| initial/ready | render, accessible name, primary action | dead or unnamed control |
+| loading/pending | click or submit, disabled state, progress/status update | duplicate request and silent wait |
+| empty/no-result | filter/search/reset, next-action copy | inert workspace |
+| success/recognized | inspect, open, confirm, source/provenance text | unsupported product claim |
+| validation/error/timeout | invalid input, server error, retry/recovery | error only in console or lost user work |
+| unauthorized/forbidden | attempted action, denial explanation, no sensitive data | privilege disclosure |
+| offline/connector unavailable | degraded read path, retry/backoff affordance | false provider success |
+| long content/large dataset | wrap, scroll/virtualize, pagination or summary disclosure | layout collapse and browser lock-up |
+| keyboard/touch/reduced motion | tab/enter/escape, pointer/touch, reduced-motion media query | inaccessible or motion-sensitive flow |
+
+The inventory must record component, story name, state, event, expected
+customer-visible outcome, accessibility rule, token source, viewport, and test
+command. A story that only renders a static screenshot is incomplete for a
+button, form, navigation, chart, or asynchronous data surface.
+
+### 6.4 Queue convergence rules
 
 1. One active writer owns each overlapping file/authority cluster.
 2. A stacked child is not promoted before its parent reaches protected
@@ -271,7 +323,7 @@ large copied PR bodies.
 
 | Gap | Buyer problem | Protected/current evidence | Existing work | Completion evidence |
 |---|---|---|---|---|
-| Release-train convergence | no buyer can assess a product with 92 unconverged PRs | strict gates exist but queue topology is fragmented | #1428, #1371, #1324 | all PRs classified; duplicates closed; parent-first integration; one immutable RC SHA |
+| Release-train convergence | no buyer can assess a product with 93 unconverged PRs | strict gates exist but queue topology is fragmented | #1428, #1371, #1324 | all PRs classified; duplicates closed; parent-first integration; one immutable RC SHA |
 | Product/release truth | documentation conflicts with protected behavior/version | retry is shipped; release doc says `v0.1.0`; version is `0.14.4` | #1392, this PR | README, architecture, version, changelog, release manifest, and operator guide agree |
 | Independent review path | automation cannot lawfully self-approve | effective rulesets require independent post-last-push approval | #1371 | verified reviewer route and normal protected merge without bypass |
 
@@ -354,7 +406,7 @@ review approval, hidden manual database edits, or an unreleased sibling branch.
 1. Merge this baseline after exact-head documentation checks and independent
    review.
 2. Keep #1428 as the single completion gate.
-3. Generate the complete 92-PR inventory and classify every PR.
+3. Generate the complete 93-PR inventory and classify every PR.
 4. Resolve #1371 without weakening protection.
 5. Merge/close governance and stale-workflow lanes through normal protected
    integration.
@@ -524,6 +576,19 @@ version 1.2*. https://slsa.dev/spec/v1.2/
 OpenTelemetry Authors. (2025). *OpenTelemetry specification, version 1.60.0*.
 https://opentelemetry.io/docs/specs/otel/
 
+Elkady, H. (2026). *Anti-Slop UI: A multi-layered heuristic approach to
+eliminating artificial intelligence design hallucinations*. Local Over.
+https://local-over.github.io/Anti-Slop-UI/research_paper.pdf
+
+NextLevelBuilder. (2026). *UI/UX Pro Max skill* (Version 2.5.0) [Computer
+software]. GitHub. https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
+
+Storybook. (n.d.). *Accessibility testing*. Retrieved August 21, 2026, from
+https://storybook.js.org/docs/writing-tests/accessibility-testing
+
+Storybook. (n.d.). *Interaction tests*. Retrieved August 21, 2026, from
+https://storybook.js.org/docs/writing-tests/interaction-testing
+
 SPDX Workgroup. (2024). *SPDX specification, version 3.0.1*.
 https://spdx.github.io/spdx-spec/
 
@@ -541,31 +606,32 @@ disposition. Review decisions, unresolved threads, mergeability, and Checks are
 volatile and must be fetched again for the exact head immediately before any
 merge; GraphQL rate-limit failures are not treated as approval or success.
 
-The 92-row inventory is a post-merge snapshot later than the initial #1428
-baseline: PR #1442 merged at 2026-08-21T09:18:28Z and is therefore intentionally
-absent from this open-PR inventory. The earlier 93-open-PR snapshot preceded
-that merge. Its exact-head check observation remains in the historical table
-below for audit traceability.
+The 93-row inventory is a live refresh later than the earlier 92-row snapshot:
+PR #1442 merged at 2026-08-21T09:18:28Z and PR #1448 subsequently opened. The
+earlier 92-open-PR snapshot remains historical and its exact-head observation
+is retained below for audit traceability. This document's own PR row records
+the head observed before the documentation refresh; re-fetch it before merge.
 
 | PR | Title | Exact head SHA | Base ref and SHA | Draft | Authority cluster | Stack parent ref | Disposition | Next action |
 |---:|---|---|---|:---:|---|---|---|---|
-| 1443 | fix: ignore CodeRabbit approval pending notices | 98a9daece9b4e28d5182485af4f105b3bd15f432 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1441 | 🎨 Palette: [UX 개선] 메일 상세 고밀도 컴포넌트 추가 | 3184b272392db315ae502240d7565b4e7a14b0ab | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1448 | test(governance): exercise multiline CodeRabbit pending notice | 874c098548e6794217393e0338074ba2f292d080 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1443 | fix: ignore CodeRabbit approval pending notices | 1bd9782dccda46c4fe5fb3c964417f9e58df6046 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1441 | 🎨 Palette: [UX 개선] 메일 상세 고밀도 컴포넌트 추가 | 2f70f024d3927b7e3d6b7d92eeb042592b4d06f9 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1439 | ⚡ Bolt: 프론트엔드 O(N) Array.find() 룩업을 O(1) Map 룩업으로 성능 개선 | 343973fcbb48767fece938c76b3d65cd779b4cda | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1438 | fix(governance): supersede stale review decisions safely | a9f9b1e09a1333697b7bd73eda294818872f7f40 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1436 | feat(frontend): add Storybook UI inventory | 8aa9571644678689f47909592338efb79eded63b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1436 | feat(frontend): add Storybook UI inventory | db613b0f0dcef39923a9d1407355e1dd497c74d2 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1434 | fix: accept DiskSage cloud-readiness schema 7 | c05fb102ff2f099e9bb6513dd541ec3d0496c472 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1433 | fix(security): reject ambiguous Message-ID whitespace | 0d71272d6ec5420afefa98cd5ae57b91efc31007 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1432 | fix(compose): harden optional pg-llm-batch database | e3dbed9a0d4e08348f94d26de09a2fabbdcfa96b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1431 | test(core): cover operator env path resolution | e058f8c6e50256194d19be617f8df54f60bd1c27 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1430 | 🎨 Palette: 키보드 내비게이션을 위한 focus-visible 스타일 추가 | 49fc3eabd8e94a95dee2af3c1254c4d46a294399 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1429 | docs: establish Naruon product completion gap baseline | b28921fa372d19d90b249aea9f66745ba857a550 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1427 | fix(data): align PDF DOM upload budget with sidecar | 795bfd2c05d6003aacedad043105a15f194687af | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1429 | docs: establish Naruon product completion gap baseline | b90fe329ed60d4359778c77cf2b1460ff7e78cc8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1427 | fix(data): align PDF DOM upload budget with sidecar | 29be15e4ec5e29dc1f62ac636928c9307a6f520f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1426 | fix(governance): wait on stale aggregate review state | 5cc148e1f2f84d1afcd2d3cf3dabaade616c01d0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1424 | ⚡ Bolt: [성능 개선] 네트워크 그래프에서 O(N) 노드 라벨 조회를 O(1) Map 조회로 대체 | 32c7edc11fd6faf8ae6918dae8b00de7c5c0b773 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1421 | 🎨 [UX] 설정 화면 장식용 아이콘에 aria-hidden 추가 | 719c1b347aae52e77ae7e40b0eb60769fd7178cb | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1420 | feat: URL 코덱 및 엄격한 JSON 포매터 추가 | bf7b741ea0b73a146ce9bcd323ca621c1562cb4e | develop@dd8d15191338b841f9e6f3a06507c6a5643b95d0 | yes | other | — | experimental/draft | validate parent and promote only after scope proof |
-| 1419 | feat(attachments): index common image metadata | 7cafeedd9dc518206be5676be8050b85869aa079 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1419 | feat(attachments): index common image metadata | f2e030fcd5767b548a79318e57a0c16bcc29d69c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1418 | feat(tools): add auditable URL and contact hygiene | 19adb3e74c66837c5fb2d0a11a7ac030bbbfe3c4 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1417 | fix(email): enforce shared send throttling | 69fb72d30c71ab7a9c2c6e09413292a05278148d | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1416 | fix(calendar): allow provider-backed create writeback | d8b3df7d19def826a5b92abbcaec043377ceb3a4 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
@@ -591,13 +657,13 @@ below for audit traceability.
 | 1389 | chore(deps): bump python from \`a7fb1e6\` to \`ce40764\` in the docker-base-images group | 13e5bdaafdbf59125292ac34bef685c5bbeaf52b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1387 | fix(a11y): keep unavailable calendar actions discoverable | 37917799e8d27c07e29eeed87a52d5be41528330 | develop@dd8d15191338b841f9e6f3a06507c6a5643b95d0 | yes | frontend/a11y | — | experimental/draft | validate parent and promote only after scope proof |
 | 1384 | feat(noema): route LLM through contextual-orchestrator | 0fd330137cdd19068fa8903dc70e1dc88f42cdc9 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1380 | fix(dav): land capability honesty with tomllib CI import | f0a0a505e1ee2afac15c20827ed4e0ed014bab42 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1376 | fix(email): expose header-derived media pixel dimensions | c798b9fb0e1615ec3e8cc226d06f0243022b76b2 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1380 | fix(dav): land capability honesty with tomllib CI import | 658f69accc627b99e379835593c2b9e49b514d00 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1376 | fix(email): expose header-derived media pixel dimensions | aae34d0a9e7d607070bc98e7b0d03e17f607dd6c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1375 | feat(email-writing): parse contextual review candidates | fa844bd035ab1f188a28c58e0ed2dc45fa31d0f3 | feat/llm-email-writing-orchestrator-task5@9cd9b953a2dd236aebe1fcdc25e59ba3e9388505 | yes | security/governance | feat/llm-email-writing-orchestrator-task5 | experimental/draft | validate parent and promote only after scope proof |
 | 1373 | feat(hwpx): recognize ordered section text with provenance | 32099709bafcee19fb32c385bbe89e0df15fe102 | feat/hwp-hwpx-attachment-recognition@70683266b93233dae62faec6cbd4df118be41383 | yes | ingest/storage | feat/hwp-hwpx-attachment-recognition | experimental/draft | validate parent and promote only after scope proof |
 | 1370 | feat(supply-chain): verify locked hashes against PyPI releases | 1a6ac604e159d98631b3996eb3f74d036e4a760b | feat/dependency-lock-provenance-receipt@f6eeb69f561e94cd50ae38fb1f43faa6cd2c52d7 | no | security/governance | feat/dependency-lock-provenance-receipt | stacked-child | re-fetch exact review/check state, then fix or protected-merge |
 | 1369 | feat(supply-chain): attest Python lock provenance before install | f6eeb69f561e94cd50ae38fb1f43faa6cd2c52d7 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1368 | ⚡ Bolt: [성능 개선] EmailDetail 개별 메시지 컴포넌트 메모이제이션 | 88545fcddf2e48863a1be2aa5cd22035ae9bb97e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1368 | ⚡ Bolt: [성능 개선] EmailDetail 개별 메시지 컴포넌트 메모이제이션 | b68f8a59a56c8d8bb8aaa0132049d85c2ce81bec | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1366 | fix(threading): honor RFC 5256 References ancestry | be0237714e373052b57d73e1168087da3adfda34 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1365 | fix(containers): publish explicit split runtime targets | 43666bed6214ce724d4dc50810d9f65f3d77d3f3 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1364 | feat(storage): add scoped S3 document object backend | 780bc0152b3eee7ddb0a62044ca002ec35471b71 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
@@ -607,10 +673,10 @@ below for audit traceability.
 | 1356 | feat(email-writing): add hardened contextual-orchestrator boundary | 9cd9b953a2dd236aebe1fcdc25e59ba3e9388505 | feat/llm-email-writing-context-task4@4570747ccebd57ccaab30ffc68239f0c9d2f1ca0 | yes | mail/calendar | feat/llm-email-writing-context-task4 | experimental/draft | validate parent and promote only after scope proof |
 | 1355 | fix(email): preserve deterministic descending thread order | 1661a03cf7872d0cf9ad971b9f44f39f85288345 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1354 | feat(ui): add Storybook design-token contract | 84edbbf152d257cd05777bf0b007fcfec2ac1d18 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1353 | feat(attachments): recognize HWP and HWPX parser boundaries | 315ea050b00d71f48398afd4ed1893caa8588be3 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1353 | feat(attachments): recognize HWP and HWPX parser boundaries | 4f3e95daf0d00e43a9907f7afecbb5f9c91907e1 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1352 | fix(a11y): expose async button busy states | 65ab8cb16acd174dc32cd228d95eacfb2dce4d05 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1349 | docs(product): define evidence-based workspace task contract | 3b46e451626f18128a1d93ae000703136a32617b | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1347 | fix(governance): reject rate-limited review status as semantic evidence | 3f6932026fbef281a373d792518058e4aaf5178f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1347 | fix(governance): reject rate-limited review status as semantic evidence | 0f93866d9df98b1f4d4491ad5cb584496c95a0a1 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1345 | fix(dav): reject ambiguous nested authorization encodings | 89d885084fec5510c53c8cab992bf1f41c6abd55 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1339 | fix(host-policy): normalize dotted bracketed IPv6 safely | af32e6728e90acf7506b6e7c372ba9ab926f3020 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1337 | fix(http): reject explicit zero loopback ports | 39a9d08be1b362650b481d75c6334dc9016fc7a2 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
