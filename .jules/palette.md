@@ -80,3 +80,8 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+## 2025-02-12 - Ensure Temporary Files are Removed Before Code Review
+
+**Learning:** When making code modifications using temporary bash heredocs or scripts, and when generating visual verification artifacts (like Playwright screenshots), leaving these files in the working directory during `request_code_review` or `submit` pollutes the repository and creates a blocking scope violation in the code review assessment.
+
+**Action:** Always include a dedicated cleanup step (e.g., `rm script.js frontend-screenshot.png`) explicitly sequenced before calling the code review or submission tools to ensure the workspace remains perfectly clean and the PR contains only the intended application code changes.

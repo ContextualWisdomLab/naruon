@@ -1,3 +1,18 @@
+
+export interface AttachmentData {
+  filename: string;
+  size?: number;
+  url?: string;
+  type?: string;
+}
+
+export interface MeetingProposal {
+  time?: string;
+  location?: string;
+  attendees?: string[];
+  status?: string;
+}
+
 export interface ThreadEmailData {
   id: number;
   subject: string | null;
@@ -9,6 +24,10 @@ export interface ThreadEmailData {
   message_id?: string | null;
   in_reply_to?: string | null;
   references?: string | null;
+  cc?: string[];
+  bcc?: string[];
+  attachments?: AttachmentData[];
+  meeting_proposal?: MeetingProposal;
 }
 
 export interface ReplyPayload {

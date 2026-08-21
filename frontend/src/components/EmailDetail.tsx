@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, Paperclip, Calendar, Users, MapPin, Clock } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -634,6 +634,16 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             <div className="line-clamp-1 text-xs text-muted-foreground">
               답장 주소: {safeReplyTo}
             </div>
+            {(email.cc && email.cc.length > 0) && (
+              <div className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
+                참조: {email.cc.join(', ')}
+              </div>
+            )}
+            {(email.bcc && email.bcc.length > 0) && (
+              <div className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
+                숨은 참조: {email.bcc.join(', ')}
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -647,6 +657,58 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             )}
           </div>
         </div>
+
+        {/* 첨부파일 Rail */}
+        {(email.attachments && email.attachments.length > 0) && (
+          <div className="mt-4 flex flex-wrap gap-2 w-full">
+            {email.attachments.map((file, idx) => (
+              <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm hover:bg-muted/50 transition-colors cursor-pointer">
+                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="font-medium truncate max-w-[150px]">{file.filename}</span>
+                {file.size && <span className="text-muted-foreground/70 text-[10px]">({Math.round(file.size / 1024)}KB)</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 미팅 제안 Panel */}
+        {email.meeting_proposal && (
+          <div className="mt-4 w-full rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 shadow-sm">
+            <div className="flex items-center gap-2 font-semibold text-blue-700 mb-3">
+              <Calendar className="h-4 w-4" />
+              <span>미팅 제안</span>
+              {email.meeting_proposal.status && (
+                <Badge variant="outline" className="ml-auto bg-blue-500/10 text-blue-700 border-blue-500/20 text-[10px]">
+                  {email.meeting_proposal.status}
+                </Badge>
+              )}
+            </div>
+            <div className="grid gap-2 text-xs text-muted-foreground">
+              {email.meeting_proposal.time && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{email.meeting_proposal.time}</span>
+                </div>
+              )}
+              {email.meeting_proposal.location && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-3.5 w-3.5" />
+                  <span>{email.meeting_proposal.location}</span>
+                </div>
+              )}
+              {(email.meeting_proposal.attendees && email.meeting_proposal.attendees.length > 0) && (
+                <div className="flex items-start gap-2">
+                  <Users className="h-3.5 w-3.5 mt-0.5" />
+                  <span>{email.meeting_proposal.attendees.join(', ')}</span>
+                </div>
+              )}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg">수락 및 캘린더 등록</Button>
+              <Button size="sm" variant="outline" className="h-8 text-xs border-blue-500/30 text-blue-700 hover:bg-blue-500/10 rounded-lg">시간 변경 제안</Button>
+            </div>
+          </div>
+        )}
       </div>
       <Separator />
       <ScrollArea className="flex-1">
