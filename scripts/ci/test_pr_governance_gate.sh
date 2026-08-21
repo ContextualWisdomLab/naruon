@@ -240,6 +240,9 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
       coderabbit_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no blocking issues.\\n- [ ] {\\\"headCommitId\\\":\\\"0123456789abcdef0123456789abcdef01234567\\\"}\\n<!-- approval_notice_end -->"}]'
         ;;
+      coderabbit_multiline_approval_pending_comment)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId:\\n0123456789abcdef0123456789abcdef01234567\\n<!-- approval_notice_end -->"}]'
+        ;;
       coderabbit_malformed_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567"}]'
         ;;
@@ -729,6 +732,18 @@ assert_coderabbit_approval_pending_notice_does_not_block() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_multiline_coderabbit_approval_pending_notice_does_not_block() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_multiline_approval_pending_comment "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
 assert_malformed_coderabbit_approval_pending_notice_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -988,6 +1003,7 @@ assert_invalid_pr_number_fails_closed_without_gh_calls
 assert_evaluation_error_publishes_gate_failure
 assert_coderabbit_blocking_issue_comment_blocks
 assert_coderabbit_approval_pending_notice_does_not_block
+assert_multiline_coderabbit_approval_pending_notice_does_not_block
 assert_malformed_coderabbit_approval_pending_notice_blocks
 assert_github_code_quality_approval_pending_notice_does_not_block
 assert_github_code_quality_blocking_issue_comment_blocks
