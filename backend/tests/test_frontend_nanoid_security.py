@@ -18,9 +18,7 @@ def test_frontend_lock_resolves_only_patched_nanoid() -> None:
     for section_name in ("packages", "snapshots"):
         section = lock[section_name]
         nanoid_keys = sorted(
-            package_key
-            for package_key in section
-            if package_key.startswith("nanoid@")
+            package_key for package_key in section if package_key.startswith("nanoid@")
         )
         assert nanoid_keys == [f"nanoid@{PATCHED_NANOID_VERSION}"]
 

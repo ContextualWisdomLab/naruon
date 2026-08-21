@@ -132,7 +132,18 @@ def test_dav_propfind_escapes_path_values(
 
 @pytest.mark.parametrize(
     "method",
-    ["GET", "PUT", "DELETE", "MKCOL", "REPORT", "PROPPATCH", "COPY", "MOVE", "LOCK", "UNLOCK"],
+    [
+        "GET",
+        "PUT",
+        "DELETE",
+        "MKCOL",
+        "REPORT",
+        "PROPPATCH",
+        "COPY",
+        "MOVE",
+        "LOCK",
+        "UNLOCK",
+    ],
 )
 def test_dav_unimplemented_methods_are_not_registered(
     dev_auth_dependency_overrides,
@@ -185,8 +196,12 @@ def test_dav_log_injection_prevention(dev_auth_dependency_overrides, caplog):
     found_in_logs = False
     for record in caplog.records:
         if "DAV Request" in record.message:
-            assert raw_ansi not in record.message, "Raw ANSI escape sequence found in logs!"
-            assert "\n" not in record.message[12:], "Raw newline found in log message body!"
+            assert raw_ansi not in record.message, (
+                "Raw ANSI escape sequence found in logs!"
+            )
+            assert "\n" not in record.message[12:], (
+                "Raw newline found in log message body!"
+            )
             assert (
                 "\\x1b[31minjected\\n\\r" in record.message
                 or "\\x1b[31minjected\\r\\n" in record.message

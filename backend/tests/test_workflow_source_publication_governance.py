@@ -57,11 +57,7 @@ def _step_publishes_source_ref(step: dict[str, Any]) -> bool:
         return True
 
     with_values = step.get("with")
-    script = (
-        str(with_values.get("script", ""))
-        if isinstance(with_values, dict)
-        else ""
-    )
+    script = str(with_values.get("script", "")) if isinstance(with_values, dict) else ""
     normalized_script = re.sub(r"\s+", "", script).lower()
     return any(
         token in normalized_script
