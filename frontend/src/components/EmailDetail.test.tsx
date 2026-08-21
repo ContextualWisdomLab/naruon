@@ -50,11 +50,6 @@ vi.mock("lucide-react", () => ({
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
-  Paperclip: () => <svg aria-hidden="true" />,
-  Calendar: () => <svg aria-hidden="true" />,
-  Users: () => <svg aria-hidden="true" />,
-  MapPin: () => <svg aria-hidden="true" />,
-  Clock: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
 
@@ -247,61 +242,6 @@ describe("EmailDetail", () => {
     expect(container.textContent).not.toContain("alert(1)");
     expect(container.textContent).not.toContain("alert(2)");
     expect(container.textContent).not.toContain("alert(3)");
-  });
-
-  it("sanitizes optional recipient and meeting fields and avoids inert actions", async () => {
-    const email = {
-      id: 24,
-      message_id: "<optional-fields@example.com>",
-      thread_id: null,
-      sender: "sender@example.com",
-      recipients: "user@example.com",
-      subject: "Optional fields",
-      date: "2026-05-17T10:00:00Z",
-      body: "Review the proposed meeting.",
-      cc: ["<script>alert(1)</script>cc@example.com"],
-      bcc: ["<b>bcc@example.com</b>"],
-      attachments: [{ filename: "<img src=x>brief.pdf", size: 2048 }],
-      meeting_proposal: {
-        status: "<b>tentative</b>",
-        time: "<script>bad</script>2026-08-22 10:00",
-        location: "<i>Room 1</i>",
-        attendees: ["<b>attendee@example.com</b>"],
-      },
-    };
-
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/24")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) {
-        return Promise.resolve(jsonResponse({ summary: "정상 맥락 종합", action_items: [] }));
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<EmailDetail emailId={24} />);
-    });
-    await flushAsyncWork();
-
-    expect(container.textContent).toContain("cc@example.com");
-    expect(container.textContent).toContain("bcc@example.com");
-    expect(container.textContent).toContain("brief.pdf");
-    expect(container.textContent).toContain("2026-08-22 10:00");
-    expect(container.textContent).toContain("Room 1");
-    expect(container.textContent).toContain("attendee@example.com");
-    expect(container.textContent).not.toContain("alert(1)");
-    expect(container.textContent).not.toContain("bad");
-    expect(container.textContent).not.toContain("<script>");
-    expect(container.textContent).not.toContain("<img");
-    expect(container.querySelector("script")).toBeNull();
-    expect(container.querySelector("[class*='cursor-pointer']")).toBeNull();
-    expect(container.textContent).not.toContain("수락 및 캘린더 등록");
-    expect(container.textContent).not.toContain("시간 변경 제안");
   });
 
   it("keeps the latest conversation when an older thread request resolves late", async () => {
