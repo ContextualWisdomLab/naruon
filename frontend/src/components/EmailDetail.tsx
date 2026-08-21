@@ -8,7 +8,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare, Paperclip, Calendar, Users, MapPin, Clock } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  Loader2,
+  MapPin,
+  MessagesSquare,
+  Paperclip,
+  Users,
+} from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -662,10 +670,10 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         {(email.attachments && email.attachments.length > 0) && (
           <div className="mt-4 flex flex-wrap gap-2 w-full">
             {email.attachments.map((file, idx) => (
-              <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm hover:bg-muted/50 transition-colors cursor-pointer">
+              <div key={`${file.filename}-${file.type ?? "file"}-${file.size ?? 0}-${idx}`} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm">
                 <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="font-medium truncate max-w-[150px]">{file.filename}</span>
-                {file.size && <span className="text-muted-foreground/70 text-[10px]">({Math.round(file.size / 1024)}KB)</span>}
+                {typeof file.size === "number" && <span className="text-muted-foreground/70 text-[10px]">({Math.round(file.size / 1024)}KB)</span>}
               </div>
             ))}
           </div>
@@ -703,9 +711,17 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 </div>
               )}
             </div>
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg">수락 및 캘린더 등록</Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs border-blue-500/30 text-blue-700 hover:bg-blue-500/10 rounded-lg">시간 변경 제안</Button>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <a
+                href="/calendar"
+                aria-label="캘린더에서 미팅 제안 확인"
+                className="inline-flex h-8 items-center rounded-lg bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700"
+              >
+                캘린더에서 일정 확인
+              </a>
+              <span className="text-[11px] text-muted-foreground">
+                일정 등록 전 원본 시간과 연결된 캘린더를 확인하세요.
+              </span>
             </div>
           </div>
         )}
