@@ -13,14 +13,13 @@ Each fix is anchored to a specific clause of the relevant standard:
 
 - **Header unfolding** — RFC 5322 §2.2.3. When a folded header is rejoined,
   the explicit CRLF fold and its following WSP are removed by
-  `normalize_message_id`; unrelated interior whitespace is not collapsed.
-  only an explicit CRLF fold and its following WSP are removed. Remaining
-  interior whitespace is rejected as ambiguous instead of collapsed, so an
-  attacker cannot make two distinct Message-IDs map to one lookup key.
+  `normalize_message_id`; bare LF and CRLF without following WSP are rejected.
+  Other interior whitespace is also rejected as ambiguous instead of collapsed,
+  so an attacker cannot make two distinct Message-IDs map to one lookup key.
 - **Message-ID** — RFC 5322 §3.6.4 (`msg-id = "<" id-left "@" id-right ">"`).
-  A well-formed Message-ID carries no interior whitespace, so collapsing it is a
-  ambiguous interior whitespace is rejected rather than normalized into a
-  potentially colliding identifier.
+  A well-formed Message-ID carries no interior whitespace, so ambiguous interior
+  whitespace is rejected rather than normalized into a potentially colliding
+  identifier.
 - **In-Reply-To / References** — RFC 5322 §3.6.4 defines both as `1*msg-id`
   (one or more angle-bracketed ids, each optionally wrapped in CFWS, §3.2.2).
   `assign_thread_id` therefore parses In-Reply-To with the same multi-id

@@ -174,6 +174,8 @@ def test_normalize_message_id_unfolds_only_explicit_header_folds():
     assert normalize_message_id("<abc@ example.com>") is None
     assert normalize_message_id("<abc @example.com>") is None
     assert normalize_message_id("<abc@\r\n example.com>") == canonical
+    assert normalize_message_id("<abc@\n example.com>") is None
+    assert normalize_message_id("<abc@\r\nexample.com>") is None
     assert normalize_message_id("<abc@\texample.com>") is None
 
 

@@ -43,7 +43,7 @@ def normalize_message_id(value: str | None) -> str | None:
         return None
 
     stripped = str(value).strip().strip("<>").strip()
-    unfolded = re.sub(r"\r?\n[ \t]*", "", stripped)
+    unfolded = re.sub(r"\r\n[ \t]+", "", stripped)
     if not unfolded or any(character.isspace() for character in unfolded):
         return None
     return unfolded
