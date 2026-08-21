@@ -465,8 +465,7 @@ def _is_hwpx_payload(payload: bytes) -> bool:
 
     has_manifest = "Contents/content.hpf" in names or "META-INF/manifest.xml" in names
     has_section = any(
-        name.startswith("Contents/section") and name.endswith(".xml")
-        for name in names
+        name.startswith("Contents/section") and name.endswith(".xml") for name in names
     )
     return (
         mimetype == _HWPX_MIMETYPE

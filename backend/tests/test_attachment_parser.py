@@ -316,10 +316,13 @@ def test_hwpx_attachment_is_deferred_for_structured_xml_package():
     assert result.parser_key == "hwpx"
     assert result.parse_status == "hwpx_xml_package_pending"
     assert result.parse_error_code is None
-    assert decode_deferred_attachment_payload(
-        result.content,
-        "application/hwp+zip",
-    ) == raw
+    assert (
+        decode_deferred_attachment_payload(
+            result.content,
+            "application/hwp+zip",
+        )
+        == raw
+    )
 
 
 @pytest.mark.parametrize("filename", ["proposal.hwpx", "proposal.owpml"])
@@ -377,10 +380,13 @@ def test_hwp_attachment_is_deferred_for_sandboxed_conversion():
     assert result.parser_key == "hwp"
     assert result.parse_status == "hwp_conversion_pending"
     assert result.parse_error_code is None
-    assert decode_deferred_attachment_payload(
-        result.content,
-        "application/x-hwp",
-    ) == raw
+    assert (
+        decode_deferred_attachment_payload(
+            result.content,
+            "application/x-hwp",
+        )
+        == raw
+    )
 
 
 def test_hwp_extension_with_generic_content_type_is_deferred_pending():
