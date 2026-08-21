@@ -20,15 +20,32 @@ MAX_INLINE_IMAGE_BYTES = 64 * 1024 * 1024
 MAX_INLINE_IMAGE_COUNT = 1_000
 MAX_INLINE_IMAGE_ENCODED_CHARS = ((MAX_INLINE_IMAGE_BYTES + 2) // 3) * 4 + 4
 MAX_INLINE_IMAGE_MEDIA_TYPE_CHARS = 120
+MAX_INLINE_IMAGE_LOCATOR_CHARS = 1_024
+INLINE_IMAGE_LOCATOR_DIGEST_CHARS = 16
 _VOID_HTML_TAGS = frozenset(
-    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
 )
-_INLINE_IMAGE_SRC_RE = re.compile(
-    r"(?P<prefix>\bsrc\s*=\s*)(?P<quote>['\"])(?P<uri>data:image/[^'\"\s>]*)(?P=quote)",
+_INLINE_DATA_URI_SRC_RE = re.compile(
+    r"(?P<prefix>\bsrc\s*=\s*)(?P<quote>['\"])(?P<uri>data:[^'\"\s>]*)(?P=quote)",
     re.IGNORECASE,
 )
-_INLINE_IMAGE_UNQUOTED_SRC_RE = re.compile(
-    r"(?P<prefix>\bsrc\s*=\s*)(?P<uri>data:image/[^\s>]+)",
+_INLINE_DATA_URI_UNQUOTED_SRC_RE = re.compile(
+    r"(?P<prefix>\bsrc\s*=\s*)(?P<uri>data:[^\s>]+)",
     re.IGNORECASE,
 )
 
@@ -106,9 +123,7 @@ class _InlineImageParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._handle_start(tag, attrs, self_closing=tag.lower() in _VOID_HTML_TAGS)
 
-    def handle_startendtag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._handle_start(tag, attrs, self_closing=True)
 
     def handle_endtag(self, tag: str) -> None:
@@ -142,17 +157,16 @@ class _InlineImageParser(HTMLParser):
             f"{current_tag}[{current_index}]"
             for current_tag, current_index in self._path_stack
         )
+        bounded_path = _bound_source_locator(path)
         if normalized_tag == "img" and len(self.sources) < MAX_INLINE_IMAGE_COUNT:
-            attributes = {
-                name.lower(): value or "" for name, value in attrs if name
-            }
+            attributes = {name.lower(): value or "" for name, value in attrs if name}
             source_value = attributes.get("src", "")
             if source_value.lower().startswith("data:"):
                 self._source_ordinal += 1
                 self.sources.append(
                     _parse_data_image_uri(
                         source_value,
-                        source_locator_value=path,
+                        source_locator_value=bounded_path,
                         source_ordinal=self._source_ordinal,
                     )
                 )
@@ -185,8 +199,21 @@ def redact_inline_image_payloads(html: str | None) -> str:
     def unquoted_replacement(match: re.Match[str]) -> str:
         return f"{match.group('prefix')}inline-image://bytes-omitted"
 
-    redacted = _INLINE_IMAGE_SRC_RE.sub(quoted_replacement, html)
-    return _INLINE_IMAGE_UNQUOTED_SRC_RE.sub(unquoted_replacement, redacted)
+    redacted = _INLINE_DATA_URI_SRC_RE.sub(quoted_replacement, html)
+    return _INLINE_DATA_URI_UNQUOTED_SRC_RE.sub(unquoted_replacement, redacted)
+
+
+def _bound_source_locator(path: str) -> str:
+    """Keep a DOM locator within the persistence column without collisions."""
+    if len(path) <= MAX_INLINE_IMAGE_LOCATOR_CHARS:
+        return path
+    digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[
+        :INLINE_IMAGE_LOCATOR_DIGEST_CHARS
+    ]
+    prefix_length = (
+        MAX_INLINE_IMAGE_LOCATOR_CHARS - INLINE_IMAGE_LOCATOR_DIGEST_CHARS - 1
+    )
+    return f"{path[:prefix_length]}#{digest}"
 
 
 def _parse_data_image_uri(

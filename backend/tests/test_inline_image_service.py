@@ -154,9 +154,12 @@ def test_inline_image_oversized_media_type_is_bounded_before_persistence():
 
 
 def test_non_data_images_are_not_treated_as_inline_base64():
-    assert extract_inline_image_sources(
-        "<img src='https://example.test/image.png'><img alt='none'>"
-    ) == ()
+    assert (
+        extract_inline_image_sources(
+            "<img src='https://example.test/image.png'><img alt='none'>"
+        )
+        == ()
+    )
 
 
 def test_empty_inline_inputs_are_safe():
@@ -167,14 +170,26 @@ def test_empty_inline_inputs_are_safe():
 
 
 def test_embedding_input_redacts_inline_image_bytes():
-    html = '<p>Context</p><img src="data:image/png;base64,secret-bytes"><img src=data:image/png;base64,other-bytes>'
+    html = '<p>Context</p><img src="data:image/png;base64,secret-bytes"><img src=data:image/png;base64,other-bytes><img src="data:text/plain;base64,private-text">'
 
     redacted = redact_inline_image_payloads(html)
 
     assert "secret-bytes" not in redacted
     assert "other-bytes" not in redacted
+    assert "private-text" not in redacted
     assert "data:image/png" not in redacted
     assert 'src="inline-image://bytes-omitted"' in redacted
+
+
+def test_deep_dom_locator_is_bounded_without_losing_stable_identity():
+    """A deeply nested HTML email cannot overflow the image source column."""
+    html = "<div>" * 180 + f"<img src='{_data_uri(b'not-an-image')}'>" + "</div>" * 180
+
+    source = extract_inline_image_sources(html)[0]
+
+    assert len(source.source_locator_value) == 1_024
+    assert source.source_locator_value.startswith("/div[1]")
+    assert "#" in source.source_locator_value
 
 
 def test_inline_image_decodes_percent_escaped_base64_payload():
@@ -193,9 +208,7 @@ def test_inline_image_size_limit_is_a_predictable_parse_outcome(monkeypatch):
     import services.inline_image_service as service
 
     monkeypatch.setattr(service, "MAX_INLINE_IMAGE_ENCODED_CHARS", 3)
-    source = extract_inline_image_sources(
-        f"<img src='{_data_uri(_png_fixture())}'>"
-    )[0]
+    source = extract_inline_image_sources(f"<img src='{_data_uri(_png_fixture())}'>")[0]
 
     assert source.parse_status == "inline_image_size_limit_exceeded"
     assert source.parse_error_code == "inline_image_size_limit_exceeded"
@@ -206,9 +219,7 @@ def test_inline_image_decoded_size_limit_is_a_predictable_parse_outcome(monkeypa
     import services.inline_image_service as service
 
     monkeypatch.setattr(service, "MAX_INLINE_IMAGE_BYTES", 1)
-    source = extract_inline_image_sources(
-        f"<img src='{_data_uri(_png_fixture())}'>"
-    )[0]
+    source = extract_inline_image_sources(f"<img src='{_data_uri(_png_fixture())}'>")[0]
 
     assert source.parse_status == "inline_image_size_limit_exceeded"
     assert source.parse_error_code == "inline_image_size_limit_exceeded"
