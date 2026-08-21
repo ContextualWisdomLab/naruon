@@ -137,10 +137,12 @@ export default function ToolsPage() {
     ];
   }, [tools]);
 
+  const toolsMap = useMemo(() => new Map(tools.map((t) => [t.code, t])), [tools]);
+
   const handleExecute = async (code: string) => {
     setExecuting(prev => ({ ...prev, [code]: true }));
     try {
-      const tool = tools.find((item) => item.code === code);
+      const tool = toolsMap.get(code);
       const params = tool ? buildDefaultParameters(tool) : {};
       const response = await apiClient.post<ExecuteResponse>(`/api/tools/${code}/execute`, { parameters: params });
       setResults(prev => ({ ...prev, [code]: response }));
