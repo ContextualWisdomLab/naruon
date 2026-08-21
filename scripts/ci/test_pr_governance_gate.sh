@@ -241,7 +241,7 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no blocking issues.\\n- [ ] {\\\"headCommitId\\\":\\\"0123456789abcdef0123456789abcdef01234567\\\"}\\n<!-- approval_notice_end -->"}]'
         ;;
       coderabbit_multiline_approval_pending_comment)
-        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\n- [ ] {\\"headCommitId\\":\\n  \\"0123456789abcdef0123456789abcdef01234567\\"}\\n<!-- approval_notice_end -->"}]'
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no blocking issues.\\n- [ ] {\\"headCommitId\\":\\n  \\"0123456789abcdef0123456789abcdef01234567\\"}\\n<!-- approval_notice_end -->"}]'
         ;;
       coderabbit_malformed_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567"}]'
