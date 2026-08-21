@@ -688,7 +688,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
               <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm">
                 <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <span className="font-medium truncate max-w-[150px]">{file.filename}</span>
-                {file.size && <span className="text-muted-foreground/70 text-[10px]">({Math.round(file.size / 1024)}KB)</span>}
+                {file.size != null && <span className="text-muted-foreground/70 text-[10px]">({Math.round(file.size / 1024)}KB)</span>}
               </div>
             ))}
           </div>

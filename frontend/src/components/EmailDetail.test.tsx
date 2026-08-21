@@ -261,7 +261,7 @@ describe("EmailDetail", () => {
       body: "Review the proposed meeting.",
       cc: ["<script>alert(1)</script>cc@example.com"],
       bcc: ["<b>bcc@example.com</b>"],
-      attachments: [{ filename: "<img src=x>brief.pdf", size: 2048 }],
+      attachments: [{ filename: "<img src=x>brief.pdf", size: 0 }],
       meeting_proposal: {
         status: "<b>tentative</b>",
         time: "<script>bad</script>2026-08-22 10:00",
@@ -291,6 +291,7 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("cc@example.com");
     expect(container.textContent).toContain("bcc@example.com");
     expect(container.textContent).toContain("brief.pdf");
+    expect(container.textContent).not.toContain("brief.pdf0");
     expect(container.textContent).toContain("2026-08-22 10:00");
     expect(container.textContent).toContain("Room 1");
     expect(container.textContent).toContain("attendee@example.com");
