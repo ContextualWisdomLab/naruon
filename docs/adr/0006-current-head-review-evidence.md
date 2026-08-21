@@ -23,7 +23,8 @@ The metadata-only gate will:
 
 1. Read all pull-request review metadata when the aggregate decision is
    `CHANGES_REQUESTED`.
-2. Keep the blocker when any `CHANGES_REQUESTED` review targets the current
+2. For each reviewer, consider only the latest submitted review. Keep the
+   blocker when that effective review is `CHANGES_REQUESTED` on the current
    head, when review metadata cannot be read, or when current-head robot review
    evidence is absent or pending.
 3. Treat the aggregate decision as superseded only when all requested reviews
@@ -43,8 +44,9 @@ checking for structured OpenCode approval.
 
 ## Verification
 
-`bash scripts/ci/test_pr_governance_gate.sh` proves both stale-review
-supersession and blocking of current-head requested changes.
+`bash scripts/ci/test_pr_governance_gate.sh` proves stale-review supersession,
+blocking of current-head requested changes, and supersession by a later
+same-head approval from the same reviewer.
 
 ## Reference
 

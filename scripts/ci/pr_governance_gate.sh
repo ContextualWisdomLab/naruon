@@ -489,15 +489,22 @@ if [ "$REVIEW_DECISION" = "CHANGES_REQUESTED" ]; then
     add_blocker 'Review decision metadata could not be read; see the workflow run log.'
   else
     CURRENT_CHANGES_REQUESTED_COUNT="$(printf '%s' "$REVIEW_METADATA_JSON" | jq -s --arg head_sha "$HEAD_SHA" '
-      [ .[][]
-        | if type == "array" then .[] else . end
-        | select((.state // "" | ascii_upcase) == "CHANGES_REQUESTED")
-        | select((.commit_id // "") == $head_sha)
+      [ .[]
+        | ..
+        | objects
+        | select(has("state") and has("commit_id"))
       ]
+      | sort_by([(.submitted_at // .created_at // ""), (.id // 0)])
+      | group_by(.user.login // .user.id // "")
+      | map(last)
+      | map(select((.state // "" | ascii_upcase) == "CHANGES_REQUESTED"))
+      | map(select((.commit_id // "") == $head_sha))
       | length
     ')"
-    if [ "$CURRENT_CHANGES_REQUESTED_COUNT" != "0" ] || [ "$CURRENT_ROBOT_REVIEW_READY" != true ]; then
+    if [ "$CURRENT_CHANGES_REQUESTED_COUNT" != "0" ]; then
       add_blocker 'Review decision is CHANGES_REQUESTED; address current-head requested changes before merge.'
+    elif [ "$CURRENT_ROBOT_REVIEW_READY" != true ]; then
+      add_blocker 'Review decision remains CHANGES_REQUESTED; await current-head robot review evidence before merge.'
     else
       printf 'Stale CHANGES_REQUESTED review decision is superseded by current-head robot evidence on %s.\n' "$HEAD_REF_OID"
     fi
