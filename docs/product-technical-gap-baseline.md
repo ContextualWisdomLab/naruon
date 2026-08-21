@@ -7,10 +7,11 @@
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
 **Inventory observation:** the 93-row open-PR inventory below is a snapshot
-taken after PR #1448 opened, later than the 92-PR state after PR #1442 merged
-at `2026-08-21T09:18:28Z`. The PR description and issue #1428 retain the
-earlier 83-PR observation as historical context; all counts are point-in-time
-evidence, not current merge state.
+from the GitHub REST pull-request collection at `2026-08-21T19:25:43Z`, which
+returned 93 open PRs after PR #1448 opened. This is later than the 92-PR state
+after PR #1442 merged at `2026-08-21T09:18:28Z`. The PR description and issue
+#1428 retain the earlier 83-PR observation as historical context; all counts
+are point-in-time evidence, not current merge state.
 
 This document defines the evidence-backed boundary between what Naruon currently
 ships on protected `develop`, what is present only in open pull requests, what is
@@ -582,8 +583,8 @@ version 1.2*. https://slsa.dev/spec/v1.2/
 OpenTelemetry Authors. (2026). *OpenTelemetry specification, version 1.60.0*.
 https://opentelemetry.io/docs/specs/otel/
 
-Elkady, H. (2026). *Anti-Slop UI: A multi-layered heuristic approach to
-eliminating artificial intelligence design hallucinations*. Local Over.
+Elkady, H. (2026). *Anti-Slop UI: A Deterministic State-Machine Architecture
+for Eliminating Design Hallucinations in LLM-Generated Interfaces*. Local Over.
 https://local-over.github.io/Anti-Slop-UI/research_paper.pdf
 
 NextLevelBuilder. (2026). *UI/UX Pro Max skill* (Version 2.5.0) [Computer
@@ -605,8 +606,9 @@ World Wide Web Consortium. (2024). *Web Content Accessibility Guidelines
 
 ## 13. Live open-PR identity inventory
 
-This table was generated from the GitHub REST pull-request collection at the
-observation time. It records every currently open Naruon PR's immutable head,
+This table was generated from the GitHub REST pull-request collection whose
+response date was `2026-08-21T19:25:43Z`. It records every currently open Naruon
+PR's immutable head,
 base, draft state, authority cluster, stack parent reference, and provisional
 disposition. Review decisions, unresolved threads, mergeability, and Checks are
 volatile and must be fetched again for the exact head immediately before any
@@ -615,23 +617,24 @@ merge; GraphQL rate-limit failures are not treated as approval or success.
 The 93-row inventory is a live refresh later than the earlier 92-row snapshot:
 PR #1442 merged at 2026-08-21T09:18:28Z and PR #1448 subsequently opened. The
 earlier 92-open-PR snapshot remains historical and its exact-head observation
-is retained below for audit traceability. This document's own PR row records
-the head observed before the documentation refresh; re-fetch it before merge.
+is retained below for audit traceability. The self-row is refreshed to the
+current PR head, but all review decisions, Checks, and mergeability still
+require a live exact-head fetch before merge.
 
 | PR | Title | Exact head SHA | Base ref and SHA | Draft | Authority cluster | Stack parent ref | Disposition | Next action |
 |---:|---|---|---|:---:|---|---|---|---|
 | 1448 | test(governance): exercise multiline CodeRabbit pending notice | 874c098548e6794217393e0338074ba2f292d080 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1443 | fix: ignore CodeRabbit approval pending notices | 1bd9782dccda46c4fe5fb3c964417f9e58df6046 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1443 | fix: ignore CodeRabbit approval pending notices | 41e48413cffefa8a5393d6af1d5ad16be3c5de7c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1441 | 🎨 Palette: [UX 개선] 메일 상세 고밀도 컴포넌트 추가 | 2f70f024d3927b7e3d6b7d92eeb042592b4d06f9 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1439 | ⚡ Bolt: 프론트엔드 O(N) Array.find() 룩업을 O(1) Map 룩업으로 성능 개선 | 343973fcbb48767fece938c76b3d65cd779b4cda | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1438 | fix(governance): supersede stale review decisions safely | a9f9b1e09a1333697b7bd73eda294818872f7f40 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1439 | ⚡ Bolt: 프론트엔드 O(N) Array.find() 룩업을 O(1) Map 룩업으로 성능 개선 | fb70d5d210029f2ef09b6d38e5688815e6c45f6c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1438 | fix(governance): supersede stale review decisions safely | 4ccee1225fc717556db10e95325e1021af62646e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1436 | feat(frontend): add Storybook UI inventory | db613b0f0dcef39923a9d1407355e1dd497c74d2 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1434 | fix: accept DiskSage cloud-readiness schema 7 | c05fb102ff2f099e9bb6513dd541ec3d0496c472 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1433 | fix(security): reject ambiguous Message-ID whitespace | 0d71272d6ec5420afefa98cd5ae57b91efc31007 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1432 | fix(compose): harden optional pg-llm-batch database | e3dbed9a0d4e08348f94d26de09a2fabbdcfa96b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1431 | test(core): cover operator env path resolution | e058f8c6e50256194d19be617f8df54f60bd1c27 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1430 | 🎨 Palette: 키보드 내비게이션을 위한 focus-visible 스타일 추가 | 49fc3eabd8e94a95dee2af3c1254c4d46a294399 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1429 | docs: establish Naruon product completion gap baseline | b90fe329ed60d4359778c77cf2b1460ff7e78cc8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1429 | docs: establish Naruon product completion gap baseline | 18233ae3641a5540b134d6ceca5a14732a447b5f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1427 | fix(data): align PDF DOM upload budget with sidecar | 29be15e4ec5e29dc1f62ac636928c9307a6f520f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1426 | fix(governance): wait on stale aggregate review state | 5cc148e1f2f84d1afcd2d3cf3dabaade616c01d0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1424 | ⚡ Bolt: [성능 개선] 네트워크 그래프에서 O(N) 노드 라벨 조회를 O(1) Map 조회로 대체 | 32c7edc11fd6faf8ae6918dae8b00de7c5c0b773 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
@@ -711,7 +714,7 @@ the head observed before the documentation refresh; re-fetch it before merge.
 | 1245 | fix(email-detail): make responsive evidence actions functional | 796b34c5a1322f09c6f00b8cf24591ae04b89b6b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | yes | frontend/a11y | — | experimental/draft | validate parent and promote only after scope proof |
 | 1244 | chore(deps): update hash-locked aiohttp to 3.14.3 | c1d4c7fd2b98e464d3ff7e92f26d92a6c0f1e6e8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1241 | fix(a11y): show keyboard focus on OIDC actions | a27ebb0aecca33aaaeff319ae5fca353e777d8b0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1206 | fix(security,api): opaque prompt IDs and CardDAV single-decode | f15542c06f71135081b8c4f99231b264ca878b69 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1206 | fix(security,api): opaque prompt IDs and CardDAV single-decode | d7ae4768b7c30be7bac19fb9425d40a66e8fda05 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1195 | feat(email): deterministic dedupe provenance — gate strong fingerprints on genuine Date (naruon#1086) | c7aedc6a6a09bc91156e9c62e44f18cf8b4d3846 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 
 The inventory is intentionally identity-first:
