@@ -3,6 +3,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 script="$repo_root/scripts/ci/pr_governance_gate.sh"
+test_temp_root="$(mktemp -d)"
+export TMPDIR="$test_temp_root"
+trap 'rm -rf -- "$test_temp_root"' EXIT
 
 make_fake_gh() {
   local bin_dir="$1"
@@ -554,6 +557,7 @@ assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval() {
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
+  assert_in_file 'Stale CHANGES_REQUESTED review decision is superseded by current-head robot evidence' "$temp_dir/output.txt"
   assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
   assert_in_file 'conclusion=success' "$temp_dir/gh.log"
 }
