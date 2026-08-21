@@ -616,7 +616,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
 
   return (
     <div className="flex h-full flex-col bg-card">
-      <div className="flex items-start bg-gradient-to-br from-card via-card to-primary/5 p-6">
+      <div className="flex flex-col items-start bg-gradient-to-br from-card via-card to-primary/5 p-6">
         <div className="flex w-full items-start gap-4 text-sm">
           <Avatar className="h-11 w-11 border border-primary/10 bg-primary/10 text-primary shadow-sm">
             <AvatarFallback>{safeEmailSender ? safeEmailSender.charAt(0).toUpperCase() : 'U'}</AvatarFallback>

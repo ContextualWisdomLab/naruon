@@ -287,6 +287,7 @@ describe("EmailDetail", () => {
     expect(container.textContent).toContain("참조: observer@example.com");
     expect(container.textContent).toContain("숨은 참조: archive@example.com");
     expect(container.textContent).toContain("2026-05-19 10:00 KST");
+    expect(container.querySelector("div.bg-gradient-to-br")?.className).toContain("flex-col");
     expect(container.querySelector('a[href="/calendar"]')?.getAttribute("aria-label")).toBe(
       "캘린더에서 미팅 제안 확인",
     );
