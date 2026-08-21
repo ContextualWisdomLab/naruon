@@ -1,7 +1,7 @@
 # ADR-0006: Let exact-head robot evidence supersede stale aggregate review state
 
 - Status: Accepted
-- Date: 2026-08-21
+- Date: 2026-08-20
 - Decision owners: Naruon maintainers
 
 ## Context
@@ -42,7 +42,7 @@ pull requests whose aggregate decision is `CHANGES_REQUESTED`.
 ## Verification
 
 `bash scripts/ci/test_pr_governance_gate.sh` proves both stale-review
-supersession and current-head requested-change blocking.
+supersession and blocking of current-head requested changes.
 
 ## Reference
 
