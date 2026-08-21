@@ -42,10 +42,12 @@ sequenceDiagram
 ## Inline `data:image` source implementation and analysis contract
 
 HTML body images are a separate source kind from MIME attachments. The current
-bounded parser identifies each `data:image/<format>;base64,...` token in DOM
-order, validates the media signature after decoding, and retains its original
-`html_dom_path` plus ordinal. The source bytes remain scoped and bounded; the
-search layer indexes only derived metadata and explicitly versioned evidence.
+bounded parser identifies each `data:` token in DOM order, validates image
+signatures after decoding, and retains a bounded `html_dom_path` plus ordinal.
+Paths deeper than 1,024 characters use a stable digest suffix. Non-image data
+URLs are recorded as unsupported evidence and redacted before embedding. The
+source bytes remain scoped and bounded; the search layer indexes only derived
+metadata and explicitly versioned evidence.
 
 The normalized tables are `image_sources`, `image_analysis_models`,
 `image_analysis_runs`, `image_annotations`, and `image_embedding_records`.
@@ -59,7 +61,7 @@ OCR span, object label, caption, safety label, or embedding row.
 
 ```mermaid
 flowchart LR
-    body[HTML body] --> uri[data:image base64 token]
+    body[HTML body] --> uri[data URI in img[src]]
     uri --> validate[bounded decode and signature validation]
     validate --> source[image_sources with DOM locator]
     source --> search[inline_image content graph and email embedding]
@@ -80,7 +82,7 @@ GIF, and BMP attachments. It reads only format headers and adds the detected
 format, dimensions, and animation flag to the existing attachment content
 graph and embedding path. It does not decode pixels or send image bytes to a
 hosted model. HTML `data:image` sources now use the same header facts, retain a
-DOM locator and digest in `image_sources`, and add a separate `inline_image`
+bounded DOM locator and digest in `image_sources`, and add a separate `inline_image`
 content-graph source. OCR, captioning, and object detection remain deferred
 until a configured local vision sidecar can provide source-backed results.
 

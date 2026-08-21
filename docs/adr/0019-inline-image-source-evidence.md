@@ -16,16 +16,20 @@ location and bounded evidence are preserved first.
 ## Decision
 
 1. During EML parsing, inspect every non-attachment `text/html` part for
-   `data:image/*;base64,...` values on `img[src]`.
+   `data:` values on `img[src]`. Image media types receive bounded signature
+   metadata; non-image data URLs remain explicit unsupported evidence and are
+   never passed through as embedding input.
 2. Store only a normalized `image_sources` row: MIME type, source DOM path,
    ordinal, byte count, SHA-256 digest, bounded format/dimensions/animation
    facts, and an explicit parse status. The persisted media type is capped at
-   the `image_sources.media_type` column width, while the full DOM path stays
-   only in the source-location column. Raw base64 and decoded pixels are never
-   persisted or sent to a provider.
+   the `image_sources.media_type` column width. A DOM path up to 1,024
+   characters is retained; a deeper path is represented by its bounded prefix
+   and a stable SHA-256 suffix so the source row remains within its column
+   without collapsing distinct locations. Raw base64 and decoded pixels are
+   never persisted or sent to a provider.
 3. Add the bounded metadata to the email's selected embedding input after
    redacting the original data URL, and emit a separate `inline_image`
-   content-graph source with a bounded ordinal label. The full DOM locator
+   content-graph source with a bounded ordinal label. The bounded DOM locator
    remains source evidence rather than a database display label. This makes
    image evidence retrievable without uploading raw base64 or pretending that
    metadata is OCR, object detection, or captioning.
@@ -58,7 +62,8 @@ erDiagram
 
 - Run `python3 -m pytest -q backend/tests/test_inline_image_service.py
   backend/tests/test_inline_image_import_wiring.py` to verify DOM location,
-  digest, metadata, failure states, and content-graph wiring.
+  digest, metadata, deep-path bounds, non-image data-URI redaction, failure
+  states, and content-graph wiring.
 - Run `alembic upgrade head` before enabling the import path in a deployed
   environment; the `0018_inline_image_sources` migration is additive.
 - When OCR or object search is needed, add a local sidecar connector and
