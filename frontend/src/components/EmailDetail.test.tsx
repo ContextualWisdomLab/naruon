@@ -1326,4 +1326,69 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("답장 전송에 실패했습니다.");
   });
+
+  it("keeps unchanged thread messages memoized while the reply draft changes", async () => {
+    const selectedEmail: TestEmail = {
+      id: 41,
+      message_id: "<selected@example.com>",
+      thread_id: "memo-thread",
+      sender: "selected@example.com",
+      recipients: "user@example.com",
+      subject: "Memoization proof",
+      date: "2026-08-16T08:00:00Z",
+      body: "Selected message body",
+    };
+    const siblingEmail: TestEmail = {
+      ...selectedEmail,
+      id: 42,
+      message_id: "<sibling@example.com>",
+      sender: "sibling@example.com",
+      date: "2026-08-16T08:05:00Z",
+      body: "Sibling message body",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/41")) return Promise.resolve(jsonResponse(selectedEmail));
+      if (url.endsWith("/api/emails/thread/memo-thread")) {
+        return Promise.resolve(jsonResponse({ thread: [selectedEmail, siblingEmail] }));
+      }
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "Memoization context", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const dateFormattingSpy = vi
+      .spyOn(Date.prototype, "toLocaleString")
+      .mockReturnValue("formatted date");
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<EmailDetail emailId={41} />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("Sibling message body") ?? false);
+    await flushAsyncWork();
+
+    const callsBeforeDraftEdit = dateFormattingSpy.mock.calls.length;
+    const draftTextarea = container.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="답장 초안"]',
+    );
+    expect(draftTextarea).not.toBeNull();
+    const nativeValueSetter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    )?.set;
+    expect(nativeValueSetter).toBeDefined();
+
+    await act(async () => {
+      nativeValueSetter?.call(draftTextarea, "Unrelated draft edit");
+      draftTextarea?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    expect(draftTextarea?.value).toBe("Unrelated draft edit");
+    expect(dateFormattingSpy.mock.calls.length - callsBeforeDraftEdit).toBe(1);
+  });
 });
