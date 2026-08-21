@@ -10,6 +10,7 @@ from api.auth import get_auth_context, preload_oidc_jwks
 from api.search import router as search_router
 from api.llm import router as llm_router
 from api.calendar import router as calendar_router
+from api.calendar_projection import router as calendar_projection_router
 from api.calendar_conflicts import router as calendar_conflicts_router
 from api.network import router as network_router
 from api.emails import router as emails_router
@@ -214,6 +215,10 @@ app.add_middleware(
     ],
     allow_headers=["Accept", "Content-Type", "Authorization"],
 )
+
+# The calendar projection is service-to-service and validates its own exact
+# audience. Do not apply the browser/end-user session dependency to this route.
+app.include_router(calendar_projection_router)
 
 app.include_router(search_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(llm_router, dependencies=PRIVATE_API_DEPENDENCIES)
