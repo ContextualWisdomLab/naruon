@@ -72,7 +72,9 @@ async def test_content_checksum_generator_matches_published_vectors(
 
 
 @pytest.mark.asyncio
-async def test_content_checksum_generator_hashes_exact_utf8_without_normalizing() -> None:
+async def test_content_checksum_generator_hashes_exact_utf8_without_normalizing() -> (
+    None
+):
     """Canonically equivalent Unicode strings must remain distinct exact-byte inputs."""
     composed = await registry.invoke_tool(
         "content_checksum_generator",

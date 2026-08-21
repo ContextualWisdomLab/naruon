@@ -15,9 +15,7 @@ os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 from main import app
 
 
-EXPECTED_SHA256_ABC = (
-    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-)
+EXPECTED_SHA256_ABC = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 
 
 def _base64url_encode(raw: bytes) -> str:
@@ -69,9 +67,7 @@ def _tampered_session_token() -> str:
         base64.urlsafe_b64decode(signature_segment + signature_padding)
     )
     signature[0] ^= 0x01
-    return (
-        f"{header_segment}.{payload_segment}.{_base64url_encode(bytes(signature))}"
-    )
+    return f"{header_segment}.{payload_segment}.{_base64url_encode(bytes(signature))}"
 
 
 def test_content_checksum_api_executes_authenticated_request() -> None:

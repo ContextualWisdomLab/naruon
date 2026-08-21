@@ -721,6 +721,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -782,7 +784,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
