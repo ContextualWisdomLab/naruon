@@ -453,7 +453,14 @@ else
       | select(
           (.body // "") as $body
           | ($body | split("<details>")[0]) as $summary
-          | ($body | test($pattern; "i"))
+          | ($body | test($pattern; "i")) as $general_blocking
+          | (
+              ($body | test("approval_notice_start"; "i"))
+              and ($body | test("approval_notice_end"; "i"))
+              and ($body | test("(^|[^A-Za-z0-9_])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))
+            ) as $current_approval_notice
+          | ($body | test($approval_notice_blocking_pattern; "i")) as $approval_notice_blocking
+          | ($general_blocking or ($current_approval_notice and $approval_notice_blocking))
             and (
               (($body | test($no_actionable_pattern; "i")) | not)
               or ($summary | test($substantive_pattern; "i"))
