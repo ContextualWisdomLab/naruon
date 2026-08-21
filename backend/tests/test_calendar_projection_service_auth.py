@@ -19,14 +19,17 @@ from api.calendar_projection_auth import (
 from core.config import settings
 
 
-def _signing_material() -> tuple[object, object]:
+def _signing_material(
+    *,
+    key_id: str = "calendar-projection-key",
+) -> tuple[object, object]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     jwk_payload = json.loads(
         jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key())
     )
     jwk_payload.update(
         {
-            "kid": "calendar-projection-key",
+            "kid": key_id,
             "alg": "RS256",
             "use": "sig",
         }
@@ -42,6 +45,7 @@ def _service_token(
     organization_id: str = "org-acme",
     workspace_id: str = "workspace-org-acme",
     subject: str = "service-lineageweave",
+    key_id: str = "calendar-projection-key",
 ) -> str:
     now = datetime.datetime.now(datetime.timezone.utc)
     return jwt.encode(
@@ -57,7 +61,7 @@ def _service_token(
         },
         private_key,
         algorithm="RS256",
-        headers={"kid": "calendar-projection-key"},
+        headers={"kid": key_id},
     )
 
 
@@ -115,7 +119,9 @@ def test_decode_calendar_projection_service_token_rejects_wrong_contract_claims(
         decode_calendar_projection_service_token(token)
 
     assert captured.value.status_code == 401
-    assert captured.value.detail == "Calendar projection service authentication failed"
+    assert captured.value.detail == (
+        "Calendar projection service authentication failed"
+    )
 
 
 def test_decode_calendar_projection_service_token_fails_closed_without_oidc(
@@ -128,15 +134,18 @@ def test_decode_calendar_projection_service_token_fails_closed_without_oidc(
         decode_calendar_projection_service_token("opaque-secret")
 
     assert captured.value.status_code == 503
-    assert captured.value.detail == "Calendar projection service authentication unavailable"
+    assert captured.value.detail == (
+        "Calendar projection service authentication unavailable"
+    )
 
 
 def test_decode_calendar_projection_service_token_rejects_duplicate_key_identity(
     configured_service_auth,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _private_key, duplicate_key = _signing_material()
-    duplicate_key._jwk_data["kid"] = "calendar-projection-key"  # type: ignore[attr-defined]
+    _private_key, duplicate_key = _signing_material(
+        key_id="calendar-projection-key"
+    )
     monkeypatch.setattr(
         auth_module,
         "_cached_oidc_signing_keys",
