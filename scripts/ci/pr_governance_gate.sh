@@ -438,7 +438,13 @@ else
     --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" '
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
-      | select((.body // "") | test("approval_notice_start"; "i") | not)
+      | select(
+          (((.user.login // "") | test("coderabbit"; "i"))
+            and ((.body // "") | test("approval_notice_start"; "i"))
+            and ((.body // "") | test("approval_notice_end"; "i"))
+            and ((.body // "") | test("headCommitId[^\\n]*" + $head_sha; "i")))
+          | not
+        )
       | select(
           (.body // "") as $body
           | ($body | split("<details>")[0]) as $summary
