@@ -175,6 +175,57 @@ describe("ToolsPage", () => {
     expect(container.textContent).toContain("Success message");
   });
 
+  it("uses the first definition when the registry repeats a tool code", async () => {
+    let executeBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        if (url.includes("/api/tools") && !url.includes("execute")) {
+          return jsonResponse([
+            {
+              code: "shared_tool",
+              name: "첫 번째 도구",
+              description: "첫 번째 계약",
+              category: "카테고리",
+              parameters: { first_value: "string" },
+            },
+            {
+              code: "shared_tool",
+              name: "두 번째 도구",
+              description: "두 번째 계약",
+              category: "카테고리",
+              parameters: { second_value: "number" },
+            },
+          ]);
+        }
+        if (url.includes("/api/tools/shared_tool/execute")) {
+          executeBody = JSON.parse(String(init?.body));
+          return jsonResponse({ status: "success", result: null });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<ToolsPage />);
+    });
+    await flushAsyncWork();
+
+    const button = container.querySelector('button[data-tool-execute="shared_tool"]');
+    expect(button).not.toBeNull();
+
+    act(() => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    expect(executeBody).toEqual({ parameters: { first_value: "test_value" } });
+  });
+
   it("shows error when tool execution fails", async () => {
     vi.stubGlobal(
       "fetch",
