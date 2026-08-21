@@ -58,6 +58,7 @@ def test_email_source_of_truth_tables_present():
     for live_table_name in (
         "email_records",
         "email_attachments",
+        "image_sources",
         "tenant_configs",
         "caldav_accounts",
         "webdav_accounts",

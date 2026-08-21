@@ -8,6 +8,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
+    BigInteger,
     DateTime,
     ForeignKey,
     Float,
@@ -809,6 +810,9 @@ class Email(Base):
     attachments: Mapped[list["Attachment"]] = relationship(
         back_populates="email", cascade="all, delete-orphan"
     )
+    image_sources: Mapped[list["ImageSource"]] = relationship(
+        back_populates="email", cascade="all, delete-orphan"
+    )
     content_nodes: Mapped[list["ContentNodeRecord"]] = relationship(
         back_populates="email", cascade="all, delete-orphan"
     )
@@ -910,6 +914,54 @@ class Attachment(Base):
     knowledge_graph_edges: Mapped[list["KnowledgeGraphEdgeRecord"]] = relationship(
         back_populates="attachment"
     )
+
+
+class ImageSource(Base):
+    """Persist source-linked metadata for an inline HTML image."""
+
+    __tablename__ = "image_sources"
+    __table_args__ = (
+        UniqueConstraint("image_source_uid", name="uq_image_sources_uid"),
+        UniqueConstraint(
+            "email_record_id",
+            "source_locator_value",
+            name="uq_image_sources_email_locator",
+        ),
+        Index(
+            "ix_image_sources_email_ordinal",
+            "email_record_id",
+            "source_ordinal",
+        ),
+        Index("ix_image_sources_content_digest", "content_digest"),
+    )
+
+    image_source_id: Mapped[int] = mapped_column(primary_key=True)
+    image_source_uid: Mapped[str] = mapped_column(String(96), nullable=False)
+    email_record_id: Mapped[int] = mapped_column(
+        ForeignKey("email_records.id", ondelete="CASCADE"), nullable=False
+    )
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_locator_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_locator_value: Mapped[str] = mapped_column(String(1024), nullable=False)
+    source_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    media_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    byte_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    content_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    detected_format: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    pixel_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pixel_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_animated: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    parse_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    parse_error_code: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    email: Mapped["Email"] = relationship(back_populates="image_sources")
 
 
 class ContentNodeRecord(Base):

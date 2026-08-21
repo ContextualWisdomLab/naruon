@@ -39,11 +39,11 @@ sequenceDiagram
 3. **Future sidecar boundary:** A separately configured local vision sidecar may later receive a bounded, source-authorized payload. It must report unavailable, pending, or failure states instead of claiming detection success.
 4. **Future classification:** OCR, captioning, object detection, and safety labels require their own source-backed contract, tests, and ADR amendment.
 
-## Inline `data:image` relational contract
+## Inline `data:image` source implementation and analysis contract
 
-HTML body images are a separate source kind from MIME attachments. A future
-bounded parser must identify each `data:image/<format>;base64,...` token in DOM
-order, validate the media signature after decoding, and retain its original
+HTML body images are a separate source kind from MIME attachments. The current
+bounded parser identifies each `data:image/<format>;base64,...` token in DOM
+order, validates the media signature after decoding, and retains its original
 `html_dom_path` plus ordinal. The source bytes remain scoped and bounded; the
 search layer indexes only derived metadata and explicitly versioned evidence.
 
@@ -62,15 +62,16 @@ flowchart LR
     body[HTML body] --> uri[data:image base64 token]
     uri --> validate[bounded decode and signature validation]
     validate --> source[image_sources with DOM locator]
+    source --> search[inline_image content graph and email embedding]
     source --> run[image_analysis_runs]
     run --> annotations[OCR/object/caption/safety rows]
     run --> embedding[image_embedding_records]
 ```
 
-No hosted vision call is implied. The local sidecar must receive a bounded,
+No hosted vision call is implied. The current source slice is header-only and
+does not create analysis runs. A future local sidecar must receive a bounded,
 scope-authorized payload and report `pending`, `unavailable`, or `failed` until
-it has source-backed output. This contract is the next implementation slice;
-the current parser remains header-only and attachment-scoped.
+it has source-backed output.
 
 ## Current Naruon implementation boundary
 
@@ -78,8 +79,10 @@ Email ingestion now runs the bounded `image_metadata` parser for PNG, JPEG,
 GIF, and BMP attachments. It reads only format headers and adds the detected
 format, dimensions, and animation flag to the existing attachment content
 graph and embedding path. It does not decode pixels or send image bytes to a
-hosted model. OCR, captioning, and object detection remain deferred until a
-configured local vision sidecar can provide source-backed results.
+hosted model. HTML `data:image` sources now use the same header facts, retain a
+DOM locator and digest in `image_sources`, and add a separate `inline_image`
+content-graph source. OCR, captioning, and object detection remain deferred
+until a configured local vision sidecar can provide source-backed results.
 
 The decision and failure states are fixed in [ADR-0009](../adr/0009-image-attachment-metadata-parser.md).
 
@@ -134,10 +137,11 @@ and BMP payloads, malformed inputs, generic-MIME signature fallback, and large
 payload regressions. Vision-sidecar behavior is not claimed until that
 component and its source-backed test corpus exist.
 
-The inline-image slice must additionally test DOM-order preservation, malformed
-and over-budget base64 rejection, source digest stability, cross-workspace
-authorization, and that OCR/object labels retain the source locator while raw
-base64 is excluded from searchable evidence.
+The inline-image slice tests DOM-order preservation, malformed and over-budget
+base64 rejection, source digest stability, EML MIME-part provenance, and that
+raw base64 is excluded from searchable evidence. A future sidecar slice must
+add cross-workspace authorization and prove that OCR/object labels retain the
+source locator.
 
 ## References (APA 7th)
 
@@ -148,4 +152,4 @@ WHATWG. (n.d.). *Data URLs*. In *HTML Living Standard*. Retrieved August 21,
 Huang, Y., Lv, T., Cui, L., Lu, Y., & Wei, F. (2022). LayoutLMv3:
 Pre-training for document AI with unified text and image masking. *Proceedings
 of the 30th ACM International Conference on Multimedia*, 4321–4330.
-<https://doi.org/10.1145/3503161.3548110>
+<https://doi.org/10.1145/3503161.3548112>
