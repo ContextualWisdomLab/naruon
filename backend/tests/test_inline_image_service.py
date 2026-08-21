@@ -171,13 +171,22 @@ def test_empty_inline_inputs_are_safe():
 
 
 def test_embedding_input_redacts_inline_image_bytes():
-    html = '<p>Context</p><img src="data:image/png;base64,secret-bytes"><img src=data:image/png;base64,other-bytes><img src="data:text/plain;base64,private-text">'
+    html = (
+        '<p>Context</p><img src="data:image/png;base64,secret-bytes">'
+        "<img src=data:image/png;base64,other-bytes>"
+        '<img src="data:text/plain;base64,private-text">'
+        '<img srcset="data:image/png;base64,srcset-bytes 1x">'
+        '<div style="background-image:url(data:image/png;base64,css-bytes)"></div>'
+    )
 
     redacted = redact_inline_image_payloads(html)
 
     assert "secret-bytes" not in redacted
     assert "other-bytes" not in redacted
     assert "private-text" not in redacted
+    assert "srcset-bytes" not in redacted
+    assert "css-bytes" not in redacted
+    assert "data:" not in redacted
     assert "data:image/png" not in redacted
     assert 'src="inline-image://bytes-omitted"' in redacted
 

@@ -40,12 +40,8 @@ _VOID_HTML_TAGS = frozenset(
         "wbr",
     }
 )
-_INLINE_DATA_URI_SRC_RE = re.compile(
-    r"(?P<prefix>\bsrc\s*=\s*)(?P<quote>['\"])(?P<uri>data:[^'\"\s>]*)(?P=quote)",
-    re.IGNORECASE,
-)
-_INLINE_DATA_URI_UNQUOTED_SRC_RE = re.compile(
-    r"(?P<prefix>\bsrc\s*=\s*)(?P<uri>data:[^\s>]+)",
+_INLINE_DATA_URI_RE = re.compile(
+    r"data:[^'\"<>\s)]+",
     re.IGNORECASE,
 )
 
@@ -194,20 +190,14 @@ def extract_inline_image_sources(
 
 
 def redact_inline_image_payloads(html: str | None) -> str:
-    """Remove base64 bytes before an HTML body reaches an embedding provider."""
+    """Remove every HTML/CSS data URL before embedding the body.
+
+    Redaction is intentionally broader than the ``img[src]`` metadata
+    extractor: ``srcset`` and inline CSS can carry the same base64 payload.
+    """
     if not html:
         return ""
-
-    def quoted_replacement(match: re.Match[str]) -> str:
-        prefix = match.group("prefix")
-        quote = match.group("quote")
-        return f"{prefix}{quote}inline-image://bytes-omitted{quote}"
-
-    def unquoted_replacement(match: re.Match[str]) -> str:
-        return f"{match.group('prefix')}inline-image://bytes-omitted"
-
-    redacted = _INLINE_DATA_URI_SRC_RE.sub(quoted_replacement, html)
-    return _INLINE_DATA_URI_UNQUOTED_SRC_RE.sub(unquoted_replacement, redacted)
+    return _INLINE_DATA_URI_RE.sub("inline-image://bytes-omitted", html)
 
 
 def _bound_source_locator(path: str) -> str:
