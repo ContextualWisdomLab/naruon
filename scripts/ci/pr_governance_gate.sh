@@ -439,8 +439,7 @@ else
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select(
-          (((.user.login // "") | test("coderabbit"; "i"))
-            and ((.body // "") | test("approval_notice_start"; "i"))
+          (((.body // "") | test("approval_notice_start"; "i"))
             and ((.body // "") | test("approval_notice_end"; "i"))
             and ((.body // "") | test("headCommitId[^\\n]*" + $head_sha; "i")))
           | not

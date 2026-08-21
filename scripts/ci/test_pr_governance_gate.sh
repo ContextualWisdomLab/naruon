@@ -140,7 +140,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown|coderabbit_approval_pending_comment)
+    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown|coderabbit_approval_pending_comment|github_code_quality_approval_pending_comment)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -739,13 +739,15 @@ assert_malformed_coderabbit_approval_pending_notice_blocks() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
-assert_github_code_quality_approval_pending_notice_blocks() {
+assert_github_code_quality_approval_pending_notice_does_not_block() {
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate github_code_quality_approval_pending_comment "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
@@ -987,7 +989,7 @@ assert_evaluation_error_publishes_gate_failure
 assert_coderabbit_blocking_issue_comment_blocks
 assert_coderabbit_approval_pending_notice_does_not_block
 assert_malformed_coderabbit_approval_pending_notice_blocks
-assert_github_code_quality_approval_pending_notice_blocks
+assert_github_code_quality_approval_pending_notice_does_not_block
 assert_github_code_quality_blocking_issue_comment_blocks
 assert_coderabbit_stale_issue_comment_does_not_block
 assert_coderabbit_review_limit_issue_comment_does_not_block
