@@ -6,6 +6,7 @@
 **Scope:** Email attachment classification and deferred-recognition admission.
 This ADR does not authorize inline document conversion, XML extraction, OCR, or
 LLM processing.
+**Figma File ID:** N/A — backend attachment admission; no visual surface.
 
 ## Context
 
