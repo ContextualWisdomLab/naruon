@@ -36,8 +36,10 @@ The metadata-only gate will:
 
 Protected merges can proceed after a later exact-head review supersedes stale
 aggregate state. A current requested change remains a hard blocker, and an API
-failure fails closed. The gate adds one read-only reviews API call only for
-pull requests whose aggregate decision is `CHANGES_REQUESTED`.
+failure fails closed. The gate performs an additional read-only reviews API
+call only for pull requests whose aggregate decision is `CHANGES_REQUESTED`;
+the CodeRabbit-absent path may already have read the same endpoint while
+checking for structured OpenCode approval.
 
 ## Verification
 
