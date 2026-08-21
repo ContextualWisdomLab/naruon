@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare, Paperclip, Calendar, Users, MapPin, Clock } from "lucide-react";
+import { Loader2, MessagesSquare, Paperclip } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -570,29 +570,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const safeEmailSender = toMailDisplayText(email.sender, '보낸 사람');
   const safeEmailSubject = toMailDisplayText(email.subject, '(제목 없음)');
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
-  const safeCc = (email.cc ?? []).map((address) => toMailDisplayText(address, '참조 주소 없음'));
-  const safeBcc = (email.bcc ?? []).map((address) => toMailDisplayText(address, '숨은 참조 주소 없음'));
   const safeAttachments = (email.attachments ?? []).map((file) => ({
-    ...file,
     filename: toMailDisplayText(file.filename, '첨부파일'),
+    contentType: toMailDisplayText(file.content_type, '첨부파일'),
+    parseStatus: toMailDisplayText(file.parse_status, 'unknown'),
   }));
-  const safeMeetingProposal = email.meeting_proposal
-    ? {
-        ...email.meeting_proposal,
-        status: email.meeting_proposal.status
-          ? toMailDisplayText(email.meeting_proposal.status)
-          : undefined,
-        time: email.meeting_proposal.time
-          ? toMailDisplayText(email.meeting_proposal.time)
-          : undefined,
-        location: email.meeting_proposal.location
-          ? toMailDisplayText(email.meeting_proposal.location)
-          : undefined,
-        attendees: (email.meeting_proposal.attendees ?? []).map((attendee) =>
-          toMailDisplayText(attendee, '참석자 정보 없음'),
-        ),
-      }
-    : null;
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
 
@@ -657,16 +639,6 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             <div className="line-clamp-1 text-xs text-muted-foreground">
               답장 주소: {safeReplyTo}
             </div>
-            {safeCc.length > 0 && (
-              <div className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
-                참조: {safeCc.join(', ')}
-              </div>
-            )}
-            {safeBcc.length > 0 && (
-              <div className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
-                숨은 참조: {safeBcc.join(', ')}
-              </div>
-            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -688,47 +660,10 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
               <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm">
                 <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <span className="font-medium truncate max-w-[150px]">{file.filename}</span>
-                {file.size != null && <span className="text-muted-foreground/70 text-[10px]">({Math.round(file.size / 1024)}KB)</span>}
+                <span className="text-muted-foreground/70 text-[10px]">{file.contentType}</span>
+                <span className="sr-only">{file.parseStatus}</span>
               </div>
             ))}
-          </div>
-        )}
-
-        {/* 미팅 제안 Panel */}
-        {safeMeetingProposal && (
-          <div className="mt-4 w-full rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 shadow-sm">
-            <div className="flex items-center gap-2 font-semibold text-blue-700 mb-3">
-              <Calendar className="h-4 w-4" aria-hidden="true" />
-              <span>미팅 제안</span>
-              {safeMeetingProposal.status && (
-                <Badge variant="outline" className="ml-auto bg-blue-500/10 text-blue-700 border-blue-500/20 text-[10px]">
-                  {safeMeetingProposal.status}
-                </Badge>
-              )}
-            </div>
-            <div className="grid gap-2 text-xs text-muted-foreground">
-              {safeMeetingProposal.time && (
-                <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{safeMeetingProposal.time}</span>
-                </div>
-              )}
-              {safeMeetingProposal.location && (
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{safeMeetingProposal.location}</span>
-                </div>
-              )}
-              {safeMeetingProposal.attendees.length > 0 && (
-                <div className="flex items-start gap-2">
-                  <Users className="h-3.5 w-3.5 mt-0.5" aria-hidden="true" />
-                  <span>{safeMeetingProposal.attendees.join(', ')}</span>
-                </div>
-              )}
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              캘린더 등록은 아래 실행 항목에서 원본 계정을 확인한 뒤 진행하세요.
-            </p>
           </div>
         )}
       </div>

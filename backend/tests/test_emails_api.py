@@ -17,7 +17,7 @@ from pydantic import SecretStr
 from api import emails as emails_api
 from api.auth import get_auth_context as auth_get_auth_context
 from core.config import settings
-from db.models import Email, LLMProvider
+from db.models import Attachment, Email, LLMProvider
 from main import app
 import datetime
 from unittest.mock import AsyncMock, patch
@@ -163,9 +163,7 @@ class LimitAwareMockSession(MockSession):
             # Emulate the SQL window query: newest head row per thread,
             # ordered by date desc, LIMIT applied to heads (not raw rows).
             heads: dict[str, object] = {}
-            for item in sorted(
-                self.items, key=lambda email: email.date, reverse=True
-            ):
+            for item in sorted(self.items, key=lambda email: email.date, reverse=True):
                 key = item.thread_id or item.message_id
                 heads.setdefault(key, item)
             rows = list(heads.values())
@@ -953,7 +951,9 @@ async def test_import_email_files_rejects_invalid_canonical_filename(
 ):
     response = await client.post(
         "/api/emails/import-files",
-        files=[("files", (upload_filename, b"not accepted", "application/octet-stream"))],
+        files=[
+            ("files", (upload_filename, b"not accepted", "application/octet-stream"))
+        ],
         headers={"X-Organization-Id": "org-acme"},
     )
 
@@ -1611,6 +1611,31 @@ async def test_get_email_by_id_returns_ui_safe_display_fields(
 
 
 @pytest.mark.asyncio
+async def test_get_email_by_id_returns_safe_attachment_metadata(
+    client: AsyncClient, db_session, sample_email: Email
+):
+    sample_email.attachments.append(
+        Attachment(
+            filename="<img src=x onerror=alert(1)>brief.pdf",
+            content="private attachment body",
+            content_type="application/pdf",
+            parse_status="pdf_dom_recognition_pending",
+        )
+    )
+
+    response = await client.get(f"/api/emails/{sample_email.id}")
+
+    assert response.status_code == 200
+    assert response.json()["attachments"] == [
+        {
+            "filename": "brief.pdf",
+            "content_type": "application/pdf",
+            "parse_status": "pdf_dom_recognition_pending",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_get_email_thread(client: AsyncClient, db_session, sample_email: Email):
     response = await client.get(f"/api/emails/thread/{sample_email.thread_id}")
     assert response.status_code == 200
@@ -2127,6 +2152,7 @@ def test_email_owner_filters():
         == "email_records.organization_id IS NULL"
     )
 
+
 def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
     """
     Test to guarantee 100% coverage on the bolt performance optimization in
@@ -2143,7 +2169,7 @@ def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
         sender="test@test.com",
         recipients="test2@test.com",
         subject="Subject",
-        body="Body"
+        body="Body",
     )
 
     candidates = [candidate]

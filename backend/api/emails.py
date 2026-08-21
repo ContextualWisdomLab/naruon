@@ -3,6 +3,7 @@ from threading import Lock
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import selectinload
 from db.session import get_db
 from db.models import Email
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -178,6 +179,16 @@ def _email_detail_response(email: Email) -> "EmailDetailResponse":
         thread_id=canonical_thread_key(email),
         in_reply_to=email.in_reply_to,
         references=email.references,
+        attachments=[
+            EmailAttachmentResponse(
+                filename=_safe_email_display_text(attachment.filename) or "첨부파일",
+                content_type=_safe_email_display_text(attachment.content_type)
+                or "application/octet-stream",
+                parse_status=_safe_email_display_text(attachment.parse_status)
+                or "unknown",
+            )
+            for attachment in email.attachments
+        ],
     )
 
 
@@ -197,6 +208,14 @@ class EmailListItem(BaseModel):
     schedule_conflict: bool = False
 
 
+class EmailAttachmentResponse(BaseModel):
+    """Safe attachment metadata returned with an email detail response."""
+
+    filename: str
+    content_type: str
+    parse_status: str
+
+
 class EmailDetailResponse(BaseModel):
     id: int
     message_id: str
@@ -209,6 +228,7 @@ class EmailDetailResponse(BaseModel):
     body: str
     in_reply_to: str | None = None
     references: str | None = None
+    attachments: list["EmailAttachmentResponse"] = Field(default_factory=list)
     requires_reply: bool = False
     schedule_conflict: bool = False
 
@@ -645,7 +665,9 @@ async def get_email(
 ):
     # Ensure auth context validates the request payload and scopes access
     result = await db.execute(
-        select(Email).where(
+        select(Email)
+        .options(selectinload(Email.attachments))
+        .where(
             Email.id == email_id,
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
         )
@@ -668,6 +690,7 @@ async def get_email_thread(
     lookup_values = thread_lookup_values(thread_id)
     result = await db.execute(
         select(Email)
+        .options(selectinload(Email.attachments))
         .where(
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
             or_(

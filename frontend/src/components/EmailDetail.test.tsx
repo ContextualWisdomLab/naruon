@@ -249,7 +249,7 @@ describe("EmailDetail", () => {
     expect(container.textContent).not.toContain("alert(3)");
   });
 
-  it("sanitizes optional recipient and meeting fields and avoids inert actions", async () => {
+  it("renders source-backed attachment metadata safely", async () => {
     const email = {
       id: 24,
       message_id: "<optional-fields@example.com>",
@@ -258,16 +258,14 @@ describe("EmailDetail", () => {
       recipients: "user@example.com",
       subject: "Optional fields",
       date: "2026-05-17T10:00:00Z",
-      body: "Review the proposed meeting.",
-      cc: ["<script>alert(1)</script>cc@example.com"],
-      bcc: ["<b>bcc@example.com</b>"],
-      attachments: [{ filename: "<img src=x>brief.pdf", size: 0 }],
-      meeting_proposal: {
-        status: "<b>tentative</b>",
-        time: "<script>bad</script>2026-08-22 10:00",
-        location: "<i>Room 1</i>",
-        attendees: ["<b>attendee@example.com</b>"],
-      },
+      body: "Review the attached document.",
+      attachments: [
+        {
+          filename: "<img src=x>brief.pdf",
+          content_type: "application/pdf",
+          parse_status: "pdf_dom_recognition_pending",
+        },
+      ],
     };
 
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
@@ -288,21 +286,12 @@ describe("EmailDetail", () => {
     });
     await flushAsyncWork();
 
-    expect(container.textContent).toContain("cc@example.com");
-    expect(container.textContent).toContain("bcc@example.com");
     expect(container.textContent).toContain("brief.pdf");
-    expect(container.textContent).not.toContain("brief.pdf0");
-    expect(container.textContent).toContain("2026-08-22 10:00");
-    expect(container.textContent).toContain("Room 1");
-    expect(container.textContent).toContain("attendee@example.com");
-    expect(container.textContent).not.toContain("alert(1)");
-    expect(container.textContent).not.toContain("bad");
+    expect(container.textContent).toContain("application/pdf");
+    expect(container.textContent).toContain("pdf_dom_recognition_pending");
     expect(container.textContent).not.toContain("<script>");
     expect(container.textContent).not.toContain("<img");
     expect(container.querySelector("script")).toBeNull();
-    expect(container.querySelector("[class*='cursor-pointer']")).toBeNull();
-    expect(container.textContent).not.toContain("수락 및 캘린더 등록");
-    expect(container.textContent).not.toContain("시간 변경 제안");
   });
 
   it("keeps the latest conversation when an older thread request resolves late", async () => {
