@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary --coverage.reporter=json --coverage.include='src/**/*.ts' --coverage.include='src/**/*.tsx' --coverage.exclude='src/**/*.test.ts' --coverage.exclude='src/**/*.test.tsx' --coverage.exclude='src/test/**'",
+    "coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary --coverage.reporter=json --coverage.include='src/**/*.ts' --coverage.include='src/**/*.tsx' --coverage.exclude='src/**/*.test.ts' --coverage.exclude='src/**/*.test.tsx' --coverage.exclude='src/**/*.stories.*' --coverage.exclude='src/test/**'",
     "typecheck": "tsc --noEmit",
     "full:smoke": "node scripts/full-product-ui-smoke.mjs",
     "pilot:smoke": "node scripts/pilot-ui-smoke.mjs",
