@@ -455,11 +455,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
           blockedSummaries,
         ),
       });
-      if (conflictState === "conflict") {
-        setEmail((current) => (
-          current ? { ...current, schedule_conflict: true } : current
-        ));
-      }
+      setEmail((current) => (
+        current
+          ? { ...current, schedule_conflict: conflictState === "conflict" }
+          : current
+      ));
       recordProductEvent("calendar_reflected", {
         surface: "mail_detail",
         calendar_candidate_id: `mail-calendar:${actionEmailId ?? "unknown"}`,

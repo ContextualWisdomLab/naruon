@@ -933,6 +933,7 @@ describe("EmailDetail", () => {
       body: "Standup is now Friday 15:00 in Room A.",
     };
 
+    let writebackCallCount = 0;
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/emails/19")) return Promise.resolve(jsonResponse(email));
@@ -944,6 +945,17 @@ describe("EmailDetail", () => {
       }
       if (url.endsWith("/api/calendar/writeback-intent")) {
         expect(init?.method).toBe("POST");
+        writebackCallCount += 1;
+        if (writebackCallCount > 1) {
+          return Promise.resolve(jsonResponse({
+            target_source_id: "caldav-primary",
+            protocol: "caldav",
+            provider_write_executed: false,
+            requires_if_match: false,
+            if_match: null,
+            provenance: { source_provider: "Customer CalDAV" },
+          }));
+        }
         return Promise.resolve(jsonResponse({
           workspace_id: "default",
           target_source_id: "caldav-primary",
@@ -991,6 +1003,14 @@ describe("EmailDetail", () => {
       event.payload.conflict_state === "conflict" &&
       event.payload.provider_write_executed === false,
     )).toBe(true);
+
+    await act(async () => {
+      syncButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("1개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.");
+    expect(container.textContent).not.toContain("일정 충돌 조율");
   });
 
   it("ignores a late draft response after the selected email changes", async () => {
