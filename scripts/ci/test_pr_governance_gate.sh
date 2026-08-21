@@ -140,7 +140,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown|coderabbit_approval_pending_comment|coderabbit_multiline_approval_pending_comment|github_code_quality_approval_pending_comment|coderabbit_stale_head_with_unrelated_current_sha)
+    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown|coderabbit_approval_pending_comment|coderabbit_approval_pending_walkthrough|coderabbit_multiline_approval_pending_comment|github_code_quality_approval_pending_comment|coderabbit_stale_head_with_unrelated_current_sha)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -239,6 +239,9 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         ;;
       coderabbit_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no pre-merge blocking issues.\\n- [ ] {\\\"headCommitId\\\":\\\"0123456789abcdef0123456789abcdef01234567\\\"}\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_approval_pending_walkthrough)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no pre-merge blocking issues.\\n- [ ] {\\\"headCommitId\\\":\\\"0123456789abcdef0123456789abcdef01234567\\\"}\\n<!-- approval_notice_end -->\\n<!-- walkthrough_start -->\\nGeneric walkthrough terms: Failure, Warning, Potential issue, and blocking comments are described here.\\n<!-- walkthrough_end -->"}]'
         ;;
       coderabbit_multiline_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId:\\n0123456789abcdef0123456789abcdef01234567\\n<!-- approval_notice_end -->"}]'
@@ -747,6 +750,17 @@ assert_coderabbit_approval_pending_notice_does_not_block() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_coderabbit_approval_pending_walkthrough_does_not_block() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_approval_pending_walkthrough "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
 assert_multiline_coderabbit_approval_pending_notice_does_not_block() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -1050,6 +1064,7 @@ assert_invalid_pr_number_fails_closed_without_gh_calls
 assert_evaluation_error_publishes_gate_failure
 assert_coderabbit_blocking_issue_comment_blocks
 assert_coderabbit_approval_pending_notice_does_not_block
+assert_coderabbit_approval_pending_walkthrough_does_not_block
 assert_multiline_coderabbit_approval_pending_notice_does_not_block
 assert_stale_coderabbit_head_with_unrelated_current_sha_blocks
 assert_mixed_coderabbit_approval_pending_notice_blocks

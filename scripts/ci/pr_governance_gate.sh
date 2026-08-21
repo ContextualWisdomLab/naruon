@@ -444,13 +444,6 @@ else
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select(
-          (((.body // "") | test("approval_notice_start"; "i"))
-            and ((.body // "") | test("approval_notice_end"; "i"))
-            and ((.body // "") | test("(^|[^A-Za-z0-9_])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))
-            and (((.body // "") | test($approval_notice_blocking_pattern; "i")) | not))
-          | not
-        )
-      | select(
           (.body // "") as $body
           | ($body | split("<details>")[0]) as $summary
           | ($body | test($pattern; "i")) as $general_blocking
@@ -459,8 +452,14 @@ else
               and ($body | test("approval_notice_end"; "i"))
               and ($body | test("(^|[^A-Za-z0-9_])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))
             ) as $current_approval_notice
-          | ($body | test($approval_notice_blocking_pattern; "i")) as $approval_notice_blocking
-          | ($general_blocking or ($current_approval_notice and $approval_notice_blocking))
+          | (if $current_approval_notice then
+               (($body | split("<!-- approval_notice_start -->") | .[1] // "")
+                | split("<!-- approval_notice_end -->") | .[0]) as $approval_notice
+               | if ($approval_notice | length) == 0 then true
+                 else ($approval_notice | test($approval_notice_blocking_pattern; "i"))
+                 end
+             else false end) as $approval_notice_blocking
+          | (if $current_approval_notice then $approval_notice_blocking else $general_blocking end)
             and (
               (($body | test($no_actionable_pattern; "i")) | not)
               or ($summary | test($substantive_pattern; "i"))
