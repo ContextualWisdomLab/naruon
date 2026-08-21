@@ -6,10 +6,11 @@
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-**Inventory observation:** the 93-row open-PR inventory below is a post-merge
-snapshot taken after PR #1442 merged at `2026-08-21T09:18:28Z`. The PR
-description and issue #1428 retain the earlier 83-PR observation as historical
-context; both counts are point-in-time evidence, not current merge state.
+**Inventory observation:** the 93-row open-PR inventory below is a snapshot
+taken after PR #1448 opened, later than the 92-PR state after PR #1442 merged
+at `2026-08-21T09:18:28Z`. The PR description and issue #1428 retain the
+earlier 83-PR observation as historical context; all counts are point-in-time
+evidence, not current merge state.
 
 This document defines the evidence-backed boundary between what Naruon currently
 ships on protected `develop`, what is present only in open pull requests, what is
