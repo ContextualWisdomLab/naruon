@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import struct
+import sys
 
 import pytest
 
@@ -205,9 +206,11 @@ def test_inline_image_decodes_percent_escaped_base64_payload():
 
 
 def test_inline_image_size_limit_is_a_predictable_parse_outcome(monkeypatch):
-    import services.inline_image_service as service
-
-    monkeypatch.setattr(service, "MAX_INLINE_IMAGE_ENCODED_CHARS", 3)
+    monkeypatch.setattr(
+        sys.modules["services.inline_image_service"],
+        "MAX_INLINE_IMAGE_ENCODED_CHARS",
+        3,
+    )
     source = extract_inline_image_sources(f"<img src='{_data_uri(_png_fixture())}'>")[0]
 
     assert source.parse_status == "inline_image_size_limit_exceeded"
@@ -216,9 +219,11 @@ def test_inline_image_size_limit_is_a_predictable_parse_outcome(monkeypatch):
 
 
 def test_inline_image_decoded_size_limit_is_a_predictable_parse_outcome(monkeypatch):
-    import services.inline_image_service as service
-
-    monkeypatch.setattr(service, "MAX_INLINE_IMAGE_BYTES", 1)
+    monkeypatch.setattr(
+        sys.modules["services.inline_image_service"],
+        "MAX_INLINE_IMAGE_BYTES",
+        1,
+    )
     source = extract_inline_image_sources(f"<img src='{_data_uri(_png_fixture())}'>")[0]
 
     assert source.parse_status == "inline_image_size_limit_exceeded"

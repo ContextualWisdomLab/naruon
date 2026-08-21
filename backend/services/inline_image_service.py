@@ -113,8 +113,9 @@ class InlineImageSource:
 class _InlineImageParser(HTMLParser):
     """Track enough HTML structure to produce stable DOM-path locators."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, locator_prefix: str = "") -> None:
         super().__init__(convert_charrefs=True)
+        self._locator_prefix = locator_prefix
         self._path_stack: list[tuple[str, int]] = []
         self._child_counts: list[dict[str, int]] = [{}]
         self._source_ordinal = 0
@@ -157,7 +158,7 @@ class _InlineImageParser(HTMLParser):
             f"{current_tag}[{current_index}]"
             for current_tag, current_index in self._path_stack
         )
-        bounded_path = _bound_source_locator(path)
+        bounded_path = _bound_source_locator(f"{self._locator_prefix}{path}")
         if normalized_tag == "img" and len(self.sources) < MAX_INLINE_IMAGE_COUNT:
             attributes = {name.lower(): value or "" for name, value in attrs if name}
             source_value = attributes.get("src", "")
@@ -176,11 +177,17 @@ class _InlineImageParser(HTMLParser):
             self._child_counts.append({})
 
 
-def extract_inline_image_sources(html: str | None) -> tuple[InlineImageSource, ...]:
-    """Extract bounded base64 ``img`` data URLs from one HTML body."""
+def extract_inline_image_sources(
+    html: str | None, *, locator_prefix: str = ""
+) -> tuple[InlineImageSource, ...]:
+    """Extract bounded base64 ``img`` data URLs from one HTML body.
+
+    ``locator_prefix`` is included before bounding so callers that add a MIME
+    part or document scope cannot exceed the persistence column afterward.
+    """
     if not html:
         return ()
-    parser = _InlineImageParser()
+    parser = _InlineImageParser(locator_prefix=locator_prefix)
     parser.feed(html)
     parser.close()
     return tuple(parser.sources)

@@ -961,7 +961,13 @@ def test_office_and_archive_safety_edges_are_explicit(monkeypatch):
         raw_content=_zip_fixture(
             (
                 "word/document.xml",
-                "<!DOCTYPE t><t xmlns='urn:test'>x</t>".encode("utf-16"),
+                (
+                    "<?xml version='1.0' encoding='utf-16'?>"
+                    "<!DOCTYPE w:document>"
+                    "<w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>"
+                    "<w:body><w:p><w:r><w:t>x</w:t></w:r></w:p></w:body>"
+                    "</w:document>"
+                ).encode("utf-16"),
             )
         ),
     )

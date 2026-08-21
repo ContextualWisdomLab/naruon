@@ -1,4 +1,3 @@
-from dataclasses import replace
 from email import message_from_binary_file, message_from_bytes, policy
 from email.message import Message
 from pathlib import Path
@@ -243,16 +242,11 @@ def _extract_inline_images_from_message(msg: Message) -> list[dict]:
         if not isinstance(html_content, str):
             continue
         html_part_ordinal += 1
-        for source in extract_inline_image_sources(html_content):
-            inline_images.append(
-                replace(
-                    source,
-                    source_locator_value=(
-                        f"/mime_part[{html_part_ordinal}]"
-                        f"{source.source_locator_value}"
-                    ),
-                ).as_payload()
-            )
+        for source in extract_inline_image_sources(
+            html_content,
+            locator_prefix=f"/mime_part[{html_part_ordinal}]",
+        ):
+            inline_images.append(source.as_payload())
     return inline_images
 
 
