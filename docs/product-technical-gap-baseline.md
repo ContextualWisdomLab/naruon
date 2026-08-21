@@ -38,7 +38,7 @@ decision/action experience.
 The accurate current product classification is:
 
 > **Production-oriented pre-GA communication control plane with substantial
-> protected-branch capability, an unconverged 93-PR integration surface, and an
+> protected-branch capability, an unconverged 92-PR integration surface, and an
 > incomplete buyer-visible release/operations contract.**
 
 The first sellable boundary is **GA-1: Customer-owned Mail, Calendar, Contact,
@@ -72,13 +72,21 @@ it. Conversely, an old README statement that calls a protected implementation
 |---|---|
 | Protected branch | `develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b` |
 | Product/package version | `0.14.4` |
-| Open pull requests | **93** |
+| Open pull requests | **92** |
 | Open issues before this baseline program | **59** |
 | New completion issue | #1428 |
 | Required backend runtime | Python 3.14 exact-head lane |
 | Core runtime | Next.js frontend, FastAPI backend, PostgreSQL + pgvector |
 | Default data authority | customer-owned mail, CalDAV/CardDAV, and WebDAV providers |
 | Default merge posture | strict exact-head checks plus qualifying independent review |
+
+The **92-open-PR** count is the current inventory snapshot captured on
+2026-08-21 against the protected branch shown above, after PR #1442 merged. An
+earlier same-day snapshot recorded **93 open PRs** before that merge, and the
+initial completion issue #1428 recorded **83 open PRs** on 2026-08-20 against
+`develop@c9bfba2...`; both are historical baselines, not contradictions. Later
+live counts can change as PRs open, close, or merge, so every release decision
+must re-fetch the REST state.
 
 The protected branch requires exact-head backend, frontend, security, CodeQL,
 dependency review, Scorecard, OSV, Trivy, Strix, source/evidence coverage,
@@ -169,7 +177,7 @@ scientific payload.
 | README says durable retry/audit remains future work | protected operations document describes encrypted retry rows, retry worker, backoff, exhaustion, and aggregate visibility | buyers and contributors cannot tell what is shipped | merge a customer/operator README based on protected truth; keep unsupported behavior explicitly limited |
 | Release architecture says first candidate should be `v0.1.0` | `VERSION` and backend package are `0.14.4` | release procedure may publish or validate the wrong identity | replace historical hypothesis with current release-train policy and immutable release manifest |
 | Product plan marks typed Person/Event/Commitment/Plugin concepts as new/planned | current code search does not prove authoritative `graph_persons`, `graph_events`, `graph_commitments`, or `plugin_registrations` stores | UI/marketing can imply dense-KG/product-platform completion that does not exist | keep north-star language, implement typed domains through bounded PRs, and gate claims on protected code |
-| 93 open PRs contain many overlapping, stacked, micro, dependency, governance, and broad integration changes | current GitHub inventory | predecessor evidence, writer collision, stale branches, and integration starvation | establish a release train, classify every PR, close duplicates, merge parent-first, and use one writer per authority cluster |
+| 92 open PRs contain many overlapping, stacked, micro, dependency, governance, and broad integration changes | current GitHub inventory | predecessor evidence, writer collision, stale branches, and integration starvation | establish a release train, classify every PR, close duplicates, merge parent-first, and use one writer per authority cluster |
 | Required independent review exists but the current human reviewer path is unresolved | #1371 | green automation cannot produce a lawful protected merge | resolve reviewer governance without weakening rulesets or self-approval |
 | Connector is described through a self-hosted-runner analogy | protected code has protocol adapters and retry behavior but no complete released connector lifecycle | operators may deploy test infrastructure as production relay | deliver signed installable connector artifacts, enrollment/rotation, source health, fleet SLO, and runbooks |
 
@@ -178,7 +186,7 @@ scientific payload.
 ## 6. Current pull-request surface
 
 The current open PR count is too large to treat as one releasable integration
-unit. This baseline does not claim that every one of the 93 PRs has been
+unit. This baseline does not claim that every one of the 92 PRs has been
 line-by-line approved. It records the product-significant active lanes observed
 and defines the inventory that must be completed before GA.
 
@@ -263,7 +271,7 @@ large copied PR bodies.
 
 | Gap | Buyer problem | Protected/current evidence | Existing work | Completion evidence |
 |---|---|---|---|---|
-| Release-train convergence | no buyer can assess a product with 93 unconverged PRs | strict gates exist but queue topology is fragmented | #1428, #1371, #1324 | all PRs classified; duplicates closed; parent-first integration; one immutable RC SHA |
+| Release-train convergence | no buyer can assess a product with 92 unconverged PRs | strict gates exist but queue topology is fragmented | #1428, #1371, #1324 | all PRs classified; duplicates closed; parent-first integration; one immutable RC SHA |
 | Product/release truth | documentation conflicts with protected behavior/version | retry is shipped; release doc says `v0.1.0`; version is `0.14.4` | #1392, this PR | README, architecture, version, changelog, release manifest, and operator guide agree |
 | Independent review path | automation cannot lawfully self-approve | effective rulesets require independent post-last-push approval | #1371 | verified reviewer route and normal protected merge without bypass |
 
@@ -346,7 +354,7 @@ review approval, hidden manual database edits, or an unreleased sibling branch.
 1. Merge this baseline after exact-head documentation checks and independent
    review.
 2. Keep #1428 as the single completion gate.
-3. Generate the complete 93-PR inventory and classify every PR.
+3. Generate the complete 92-PR inventory and classify every PR.
 4. Resolve #1371 without weakening protection.
 5. Merge/close governance and stale-workflow lanes through normal protected
    integration.
@@ -510,10 +518,10 @@ https://doi.org/10.17487/RFC9700
 Melnikov, A., & Leiba, B. (2021). *Internet Message Access Protocol (IMAP)
 version 4rev2* (RFC 9051). RFC Editor. https://doi.org/10.17487/RFC9051
 
-OpenSSF. (2026). *Supply-chain Levels for Software Artifacts specification,
+OpenSSF. (2025). *Supply-chain Levels for Software Artifacts specification,
 version 1.2*. https://slsa.dev/spec/v1.2/
 
-OpenTelemetry Authors. (2026). *OpenTelemetry specification, version 1.59.0*.
+OpenTelemetry Authors. (2025). *OpenTelemetry specification, version 1.60.0*.
 https://opentelemetry.io/docs/specs/otel/
 
 SPDX Workgroup. (2024). *SPDX specification, version 3.0.1*.
@@ -532,6 +540,12 @@ base, draft state, authority cluster, stack parent reference, and provisional
 disposition. Review decisions, unresolved threads, mergeability, and Checks are
 volatile and must be fetched again for the exact head immediately before any
 merge; GraphQL rate-limit failures are not treated as approval or success.
+
+The 92-row inventory is a post-merge snapshot later than the initial #1428
+baseline: PR #1442 merged at 2026-08-21T09:18:28Z and is therefore intentionally
+absent from this open-PR inventory. The earlier 93-open-PR snapshot preceded
+that merge. Its exact-head check observation remains in the historical table
+below for audit traceability.
 
 | PR | Title | Exact head SHA | Base ref and SHA | Draft | Authority cluster | Stack parent ref | Disposition | Next action |
 |---:|---|---|---|:---:|---|---|---|---|
