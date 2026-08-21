@@ -346,6 +346,10 @@ CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potent
 CODERABBIT_ISSUE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|actionable comments?|changes requested|request changes'
 CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|changes requested|request changes'
 CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
+# A current-head approval notice may contain the generic phrase "blocking
+# issues" as part of its promise to review later. Only explicit singular
+# findings, pre-merge warnings, or change requests make the notice substantive.
+CODERABBIT_APPROVAL_NOTICE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(warning|failure|failed|blocking)|blocking (issue|finding)([^[:alpha:]]|$)|changes requested|request changes|actionable comments?'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 COMMIT_STATUS_JSON='{"statuses":[]}'
 if ! COMMIT_STATUS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
@@ -440,7 +444,8 @@ else
     --arg head_sha "$HEAD_SHA" \
     --arg pattern "$CODERABBIT_ISSUE_BLOCKING_PATTERN" \
     --arg substantive_pattern "$CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN" \
-    --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" '
+    --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" \
+    --arg approval_notice_blocking_pattern "$CODERABBIT_APPROVAL_NOTICE_BLOCKING_PATTERN" '
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select(
@@ -449,7 +454,8 @@ else
             # CodeRabbit has emitted both one-line JSON and pretty-printed notices. Allow
             # whitespace/newlines between the field and value, but still require the exact
             # current head SHA so an unbound approval notice remains blocking.
-            and ((.body // "") | test("headCommitId[^0-9a-fA-F]*" + $head_sha; "i")))
+            and ((.body // "") | test("headCommitId[^0-9a-fA-F]*" + $head_sha; "i"))
+            and (((.body // "") | test($approval_notice_blocking_pattern; "i")) | not))
           | not
         )
       | select(
