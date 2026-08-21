@@ -17,7 +17,7 @@ args="$*"
 
 if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
   case "${GH_SCENARIO:-pass}" in
-    changes_requested)
+    changes_requested|changes_requested_current_coderabbit|changes_requested_current_review|missing_coderabbit_with_adversarial_approval)
       printf '{"number":42,"state":"OPEN","headRefOid":"%s","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"CHANGES_REQUESTED","statusCheckRollup":[]}' "$head_sha"
       ;;
     transient_unknown)
@@ -125,6 +125,9 @@ if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then
     failure|failed_existing)
       printf '[{"name":"Application CI","state":"FAILURE","link":"https://checks/app-ci"}]'
       ;;
+    changes_requested_current_coderabbit|changes_requested_current_review)
+      printf '[{"name":"Application CI","state":"SUCCESS","link":"https://checks/app-ci"}]'
+      ;;
     self_gate_failed)
       printf '[{"name":"metadata-only gate evaluation","state":"FAILURE","link":"https://checks/governance"},{"name":"Application CI","state":"SUCCESS","link":"https://checks/app-ci"}]'
       ;;
@@ -140,7 +143,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown)
+    changes_requested|missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -151,6 +154,9 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
       ;;
     coderabbit_review_skipped)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"neutral","output":{"title":"CodeRabbit","summary":"Review skipped","text":"Review skipped"},"html_url":"https://checks/coderabbit"}]}'
+      ;;
+    changes_requested_current_coderabbit|changes_requested_current_review)
+      printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"success","html_url":"https://checks/coderabbit"}]}'
       ;;
     coderabbit_skip_with_warning)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"completed","conclusion":"neutral","output":{"title":"CodeRabbit","summary":"Review skipped","text":"Pre-merge blocking warning"},"html_url":"https://checks/coderabbit"}]}'
@@ -192,6 +198,9 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/pulls/42/reviews* ]]; then
     exit 1
   fi
   case "${GH_SCENARIO:-pass}" in
+    changes_requested_current_review)
+      printf '[{"user":{"login":"human-reviewer"},"state":"CHANGES_REQUESTED","commit_id":"%s"}]' "$head_sha"
+      ;;
     missing_coderabbit_with_adversarial_approval)
       printf '[[{"user":{"login":"opencode-agent[bot]"},"state":"APPROVED","commit_id":"%s","body":"## Adversarial validation\\n\\n```json\\n{\\\"status\\\":\\\"passed\\\",\\\"probes\\\":[{\\\"outcome\\\":\\\"falsified\\\"},{\\\"outcome\\\":\\\"falsified\\\"}]}\\n```\\n\\nHead SHA: `%s`"}]]' "$head_sha" "$head_sha"
       ;;
@@ -839,6 +848,27 @@ assert_changes_requested_creates_marker_comment() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_stale_changes_requested_is_superseded_by_current_robot_evidence() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate changes_requested_current_coderabbit "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Stale CHANGES_REQUESTED review decision is superseded by current-head robot evidence' "$temp_dir/output.txt"
+  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_not_in_file 'Review decision is CHANGES_REQUESTED' "$temp_dir/gh.log"
+}
+
+assert_current_changes_requested_remains_blocking() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate changes_requested_current_review "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Review decision is CHANGES_REQUESTED; address current-head requested changes before merge.' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
 assert_passing_gate_is_metadata_only_without_merge() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -956,6 +986,8 @@ assert_truncated_review_thread_comments_metadata_blocks
 assert_github_code_quality_current_review_comment_blocks
 assert_coderabbit_stale_review_comment_does_not_block
 assert_changes_requested_creates_marker_comment
+assert_stale_changes_requested_is_superseded_by_current_robot_evidence
+assert_current_changes_requested_remains_blocking
 assert_passing_gate_is_metadata_only_without_merge
 assert_no_required_checks_waits_without_hard_comment
 assert_self_gate_failure_does_not_recurse

@@ -46,8 +46,12 @@ awaited by default.
   resolution via GITHUB_PATH.
 - Authoritative `Review skipped` evidence counts only when the same check
   output carries no blocking warning/failure language alongside it.
-- `reviewDecision=CHANGES_REQUESTED` is a blocker until requested changes are
-  addressed or superseded on the current head.
+- `reviewDecision=CHANGES_REQUESTED` is a blocker when a `CHANGES_REQUESTED`
+  review targets the current head, review metadata cannot be read, or no
+  current-head robot evidence supersedes the stale aggregate decision. When
+  every requested review targets an older commit and current-head CodeRabbit
+  or structured OpenCode evidence passes, the stale aggregate is informational;
+  the gate never dismisses the review object or bypasses a current request.
 - Blocker comments use the idempotent
   `<!-- pr-governance:metadata-gate -->` marker and are patched in place instead
   of duplicated on repeated workflow events.
