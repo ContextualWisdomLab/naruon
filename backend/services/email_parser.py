@@ -232,6 +232,7 @@ def _extract_inline_images_from_message(msg: Message) -> list[dict]:
     """Extract source-linked inline images from every non-attachment HTML part."""
     inline_images: list[dict] = []
     html_part_ordinal = 0
+    source_ordinal = 0
     for part in msg.walk():
         if part.get_filename() or part.get_content_type() != "text/html":
             continue
@@ -246,7 +247,10 @@ def _extract_inline_images_from_message(msg: Message) -> list[dict]:
             html_content,
             locator_prefix=f"/mime_part[{html_part_ordinal}]",
         ):
-            inline_images.append(source.as_payload())
+            source_ordinal += 1
+            source_payload = source.as_payload()
+            source_payload["source_ordinal"] = source_ordinal
+            inline_images.append(source_payload)
     return inline_images
 
 
