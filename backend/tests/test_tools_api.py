@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,63 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+@pytest.mark.asyncio
+async def test_url_encoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world/test"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert result["encoded_url"] == "hello%20world%2Ftest"
+
+
+@pytest.mark.asyncio
+async def test_url_decoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"encoded_url": "hello%20world%2Ftest"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert result["decoded_url"] == "hello world/test"
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key":"value","number":1}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    result = data["result"]
+    assert result["formatted_json"] == '{\n  "key": "value",\n  "number": 1\n}'
+
+
+@pytest.mark.asyncio
+async def test_json_formatter_tool_invalid():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": '{"key":"value",}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Invalid JSON string:" in data["message"]
+    assert data.get("result") is None
