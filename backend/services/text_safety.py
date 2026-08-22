@@ -457,16 +457,10 @@ def strip_html_markup(value: str) -> str:
     parser.close()
     text = parser.get_text()
 
-
     cleaned_lines = []
     for line in text.splitlines():
-        cleaned_line = _strip_tag_like_segments(line)
-        if cleaned_line == "-->" or cleaned_line.endswith("-->"):
-            # Clean up residual artifacts from malformed comments parsed differently in py3.14
-            cleaned_line = cleaned_line[:-3].strip()
-        cleaned_lines.append(cleaned_line)
+        cleaned_lines.append(_strip_tag_like_segments(line))
     text = "\n".join(cleaned_lines).strip()
-
 
     for token, original in placeholders.items():
         text = text.replace(token, original)
