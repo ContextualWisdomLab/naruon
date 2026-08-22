@@ -64,4 +64,21 @@ describe("host-policy", () => {
       expect(isPrivateOrLoopbackHostname(hostname), hostname).toBe(false);
     }
   });
+
+  it("rejects SSRF-bypass hostnames that merely start with a private-IP prefix", () => {
+    for (const hostname of [
+      "10.0.0.1.attacker.com",
+      "10.0.0.0.example.com",
+      "10.255.255.255.malicious.org",
+      "172.16.0.1.attacker.com",
+      "172.31.255.255.evil.net",
+      "192.168.1.1.attacker.com",
+      "192.168.0.0.example.com",
+      "127.0.0.1.attacker.com",
+      "0.0.0.0.example.com",
+      "169.254.0.1.attacker.com",
+    ]) {
+      expect(isPrivateOrLoopbackHostname(hostname), hostname).toBe(false);
+    }
+  });
 });
