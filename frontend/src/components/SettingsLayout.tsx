@@ -1299,17 +1299,22 @@ export function SettingsLayout() {
                         빈 secret 입력은 기존 저장값을 유지합니다. 실제 연결과 외부 쓰기는 서버 검증과 self-hosted connector 정책을 통과한 뒤 별도 실행됩니다.
                       </p>
                     </div>
-                    <button
-                      type="submit"
-                      disabled={accountSaving || !accountReady}
-                      aria-disabled={accountSaving || !accountReady}
-                      aria-busy={accountSaving}
+                    <span
+                      tabIndex={accountSaving || !accountReady ? 0 : undefined}
                       title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className={accountSaving || !accountReady ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
                     >
-                      {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-                      {accountSaving ? '저장 중' : '계정 설정 저장'}
-                    </button>
+                      <button
+                        type="submit"
+                        disabled={accountSaving || !accountReady}
+                        aria-disabled={accountSaving || !accountReady}
+                        aria-busy={accountSaving}
+                        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 ${accountSaving || !accountReady ? "pointer-events-none" : ""}`}
+                      >
+                        {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                        {accountSaving ? '저장 중' : '계정 설정 저장'}
+                      </button>
+                    </span>
                   </div>
 
                   <div className="mt-6 grid gap-5">
@@ -1623,15 +1628,20 @@ export function SettingsLayout() {
                       >
                         OIDC 로그인
                       </button>
-                      <button
-                        type="button"
-                        onClick={handleOidcLogout}
-                        disabled={!oidcSessionClaims.userId}
+                      <span
+                        tabIndex={!oidcSessionClaims.userId ? 0 : undefined}
                         title={!oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className={!oidcSessionClaims.userId ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
                       >
-                        로그아웃
-                      </button>
+                        <button
+                          type="button"
+                          onClick={handleOidcLogout}
+                          disabled={!oidcSessionClaims.userId}
+                          className={`rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 ${!oidcSessionClaims.userId ? "pointer-events-none" : ""}`}
+                        >
+                          로그아웃
+                        </button>
+                      </span>
                     </div>
                   </div>
                   {oidcActionError ? (
