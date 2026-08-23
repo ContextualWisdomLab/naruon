@@ -66,7 +66,7 @@ focused region comparison evidence:
 
 patches made since the previous QA pass:
 
-- Created the Figma file `https://www.figma.com/design/68b5XB58w8nwT2LYOOnikK`.
+- Reused the existing Figma file `https://www.figma.com/design/68b5XB58w8nwT2LYOOnikK` as the design authority; this delivery did not create a new Figma file.
 - Created required Figma pages and first vertical slice frames.
 - Uploaded source mockups into the Figma `Source Map` page.
 - Captured Figma desktop/mobile screenshots and generated source-vs-Figma comparison boards.
