@@ -193,4 +193,66 @@ describe("SearchLayout product events", () => {
     )).toBe(true);
     expect(JSON.stringify(getRecordedProductEvents())).not.toContain("계약");
   });
+
+  it("uses the shared confidence scale and distinct missing/low/evidence states", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/search")) {
+        return Promise.resolve(jsonResponse({
+          results: [{
+            id: 401,
+            subject: "신뢰도 척도",
+            sender: "pm@example.com",
+            date: "2026-08-23T09:00:00Z",
+            snippet: "1.01 must not render as 1%.",
+            thread_id: null,
+            reply_count: 1,
+            score: 1.01,
+          }, {
+            id: 402,
+            source_message_id: "<low@example.com>",
+            subject: "낮은 신뢰도 결과",
+            sender: "pm@example.com",
+            date: "2026-08-23T09:01:00Z",
+            snippet: "Low confidence row.",
+            thread_id: "thread-low",
+            reply_count: 1,
+            score: 0.42,
+          }],
+        }));
+      }
+      if (url.includes("/api/ontology/relationships")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith("/api/search/answer")) {
+        return Promise.resolve(jsonResponse({ answer: null, citations: [], provenance: null }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SearchLayout />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("신뢰도 척도") ?? false);
+
+    expect(container.textContent).toContain("신뢰도 100%");
+    expect(container.textContent).not.toContain("신뢰도 1%");
+    expect(container.textContent).toContain("근거 없음");
+
+    const lowRow = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("낮은 신뢰도 결과"),
+    );
+    expect(lowRow).toBeTruthy();
+    await act(async () => {
+      lowRow?.click();
+    });
+    await waitForCondition(() => container?.textContent?.includes("신뢰도 42%") ?? false);
+    expect(container.textContent).toContain("낮은 신뢰도");
+    expect(container.textContent).toContain("신뢰도 42%");
+  });
 });

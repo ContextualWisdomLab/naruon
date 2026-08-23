@@ -20,9 +20,13 @@ Use Storybook's `@storybook/nextjs-vite` framework with CSF stories for the
 shared UI components. Storybook imports the production global stylesheet, so
 stories exercise the existing design tokens instead of defining a second theme.
 The first inventory covers `Button` and `Badge`, including ordinary, outline,
-destructive, and disabled states. New reusable UI components must add stories
-for their meaningful states and accessibility labels; page-specific stories
-remain optional until a page has a stable isolated contract.
+destructive, and disabled states. Analysis/judgment/execution stories cover
+`DecisionPointCard` scene events (source open, draft review, calendar reflect,
+task create) and edge events (loading, empty, error, low confidence, missing
+source, blocked/intent-only) using the same production tokens. New reusable UI
+components must add stories for their meaningful states and accessibility
+labels; page-specific stories remain optional until a page has a stable
+isolated contract.
 
 The existing Figma file remains the design source for visual decisions. No new
 Figma file or Code Connect integration is created by this delivery; record any

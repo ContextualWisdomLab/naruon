@@ -37,11 +37,11 @@ focused region comparison evidence:
 
 **Findings**
 
-- No actionable P0/P1/P2 findings remain for the first vertical slice.
-  Location: desktop and mobile Figma frames.
-  Evidence: the Figma screenshots render the mail detail, context synthesis, decision point, source chips, confidence badge, and execution actions without visible overlap, clipped Korean UI labels, blank placeholder frames, or shimmer placeholders.
-  Impact: the design package is usable as a design handoff for the scoped slice.
-  Fix: none required before handoff.
+- The Figma first vertical slice remains a usable design handoff for layout of mail detail, `맥락 종합`, source chips, and execution actions. That is not the same as “no product defects.”
+  Location: shipped mail/search analysis UI versus Figma `68b5XB58w8nwT2LYOOnikK` and mapping §3/§4.1.
+  Evidence: see `docs/product-technical-gap-baseline.md` (dual confidence scale, missing titled `판단 포인트` card, provenance overclaim `판단 보조 생성`, empty execution with no blocked/intent-only footer, mapping GNB omitting 작업/맥락 검색).
+  Impact: users could read 100% and ~1% for nearly the same score, or treat placeholder provenance and empty footers as successful synthesis.
+  Fix: ADR-0014 display contract on the Storybook branch; do not treat this QA file as a clean bill of health for the incomplete slice.
 
 **Open Questions**
 

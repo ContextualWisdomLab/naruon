@@ -14,6 +14,7 @@ govern implementation.
 | [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md) | Keep statistical measurement separate from agenda generation | Proposed | Target and future capability `PLANNED`; no implementation authorization |
 | [ADR-0004](0004-status-weighted-calendar-conflicts.md) | Evaluate CalDAV VEVENT overlaps by occupying status; cancelled does not occupy | Accepted | `ACCEPTED-NARUON-POLICY`; advisory evaluate API only |
 | [ADR-0013](0013-storybook-design-system.md) | Keep the shared UI component inventory in Storybook while reusing production design tokens | Accepted | `ACCEPTED-NARUON-UI`; visual inventory only, behavior remains in Vitest and browser tests |
+| [ADR-0014](0014-analysis-result-display-contract.md) | One confidence scale and honest empty/error/evidence/next-action labels for analysis-result UI | Accepted | `ACCEPTED-NARUON-UI`; Figma file ID `68b5XB58w8nwT2LYOOnikK` |
 
 The complete topic-intelligence requirements, architecture, contract, UML,
 conceptual ERD, security, test, and operability graph is indexed at

@@ -21,6 +21,14 @@ import Link from "next/link";
 
 import { apiClient } from "@/lib/api-client";
 import {
+  confidenceLabel,
+  confidenceToneClass,
+  EVIDENCE_MISSING_LABEL,
+  isLowConfidence,
+  LOW_CONFIDENCE_LABEL,
+  toConfidencePercent,
+} from "@/lib/confidence";
+import {
   bucketSearchRank,
   bucketTextLength,
   createProductEventId,
@@ -127,24 +135,6 @@ function formatResultDate(value: string) {
 
 function resultTitle(result: SearchResultItem) {
   return result.subject?.trim() || "(제목 없음)";
-}
-
-function confidencePercent(score: number | undefined) {
-  if (typeof score !== "number" || !Number.isFinite(score)) return null;
-  const normalized = score <= 1 ? score * 100 : score;
-  return Math.max(0, Math.min(100, Math.round(normalized)));
-}
-
-function confidenceTone(percent: number | null) {
-  if (percent === null) return "border-slate-200 bg-slate-50 text-slate-600";
-  if (percent >= 90) return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (percent >= 75) return "border-blue-200 bg-blue-50 text-blue-700";
-  if (percent >= 60) return "border-amber-200 bg-amber-50 text-amber-700";
-  return "border-red-200 bg-red-50 text-red-700";
-}
-
-function confidenceLabel(percent: number | null) {
-  return percent === null ? "신뢰도 미제공" : `신뢰도 ${percent}%`;
 }
 
 function nowMs() {
@@ -256,7 +246,7 @@ function SenderDagPanel({
             </div>
             <div className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
               {relationship.relationship_type} ·{" "}
-              {(relationship.confidence_score * 100).toFixed(0)}%
+              {confidenceLabel(toConfidencePercent(relationship.confidence_score))}
             </div>
           </div>
           <div className="mt-4 grid gap-2 text-xs font-semibold text-muted-foreground sm:grid-cols-2">
@@ -291,7 +281,7 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
 }: {
   result: SearchResultItem;
   isActive: boolean;
-  confidence: number | null;
+  confidence: number | undefined;
   onSelect: (id: number) => void;
 }) {
   return (
@@ -333,11 +323,16 @@ const SearchResultItemComponent = memo(function SearchResultItemComponent({
               <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
                 근거: {evidenceKindLabel(result.result_kind)}
               </span>
-            ) : null}
+            ) : result.source_message_id ? null : (
+              <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                {EVIDENCE_MISSING_LABEL}
+              </span>
+            )}
             <span
-              className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${confidenceTone(confidence)}`}
+              className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${confidenceToneClass(confidence)}`}
             >
               {confidenceLabel(confidence)}
+              {isLowConfidence(confidence) ? ` · ${LOW_CONFIDENCE_LABEL}` : ""}
             </span>
           </div>
         </div>
@@ -489,7 +484,7 @@ export function SearchLayout() {
     !relationshipError &&
     relationships.length === 0,
   );
-  const activeConfidence = confidencePercent(activeResult?.score);
+  const activeConfidence = toConfidencePercent(activeResult?.score);
 
   useEffect(() => {
     if (!activeResult || loading) return;
@@ -626,7 +621,7 @@ export function SearchLayout() {
             key={result.id}
             result={result}
             isActive={activeResult?.id === result.id}
-            confidence={confidencePercent(result.score)}
+            confidence={toConfidencePercent(result.score)}
             onSelect={setActiveResultId}
           />
         ))
@@ -795,9 +790,12 @@ export function SearchLayout() {
                       </div>
                       <div className="rounded-lg border border-border bg-background px-3 py-2">
                         <p className="text-foreground">
-                          {activeConfidence === null ? "미제공" : `${activeConfidence}%`}
+                          {activeConfidence === undefined ? "미제공" : `${activeConfidence}%`}
                         </p>
-                        <p className="mt-1">신뢰도</p>
+                        <p className="mt-1">
+                          신뢰도
+                          {isLowConfidence(activeConfidence) ? ` · ${LOW_CONFIDENCE_LABEL}` : ""}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -872,17 +870,24 @@ export function SearchLayout() {
                           </div>
                           <p className="text-xs font-black text-primary">증거 바인딩</p>
                           <div className="flex flex-wrap gap-2 text-xs font-bold">
-                            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">
-                              <FileText className="size-3.5" aria-hidden="true" />
-                              메일 원본
-                            </span>
-                            <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-indigo-700">
+                            {activeResult.source_message_id ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-primary">
+                                <FileText className="size-3.5" aria-hidden="true" />
+                                메일 원본
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-3 py-1 text-muted-foreground">
+                                {EVIDENCE_MISSING_LABEL}
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 rounded-full border border-accent bg-accent px-3 py-1 text-accent-foreground">
                               <CornerDownRight className="size-3.5" aria-hidden="true" />
                               {activeResult.thread_id ? "스레드 근거 연결" : "단일 메일"}
                             </span>
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${confidenceTone(activeConfidence)}`}>
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${confidenceToneClass(activeConfidence)}`}>
                               <CheckCircle2 className="size-3.5" aria-hidden="true" />
                               {confidenceLabel(activeConfidence)}
+                              {isLowConfidence(activeConfidence) ? ` · ${LOW_CONFIDENCE_LABEL}` : ""}
                             </span>
                           </div>
                         </div>
