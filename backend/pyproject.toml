@@ -48,6 +48,3 @@ dev = [
   "pytest-cov==7.1.0",
   "ruff==0.15.21",
 ]
-
-[tool.pytest.ini_options]
-asyncio_default_fixture_loop_scope = "function"
