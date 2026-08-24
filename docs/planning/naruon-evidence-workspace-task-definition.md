@@ -210,8 +210,8 @@ Hancom. (n.d.). *HWP/OWPML format*. https://online.hancom.co.kr/support/download
 
 Hancom Tech. (2024). *HWPX format structure*. https://tech.hancom.com/hwpxformat/
 
-Levinson, E. (1998). *The Content-ID and Message-ID Uniform Resource Locators* (RFC 2392). RFC Editor. https://www.rfc-editor.org/rfc/rfc2392
+Levinson, E. (1998a). *The MIME Multipart/Related Content-type* (RFC 2387). RFC Editor. https://www.rfc-editor.org/rfc/rfc2387
 
-Levinson, E. (1998). *The MIME Multipart/Related Content-type* (RFC 2387). RFC Editor. https://www.rfc-editor.org/rfc/rfc2387
+Levinson, E. (1998b). *The Content-ID and Message-ID Uniform Resource Locators* (RFC 2392). RFC Editor. https://www.rfc-editor.org/rfc/rfc2392
 
 Resnick, P. (2008). *Internet Message Format* (RFC 5322). RFC Editor. https://www.rfc-editor.org/rfc/rfc5322
