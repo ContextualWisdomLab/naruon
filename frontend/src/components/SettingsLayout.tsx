@@ -30,7 +30,14 @@ function AccessibleDisabledButton({
 
   if (disabled) {
     return (
-      <span tabIndex={0} title={title} className="cursor-not-allowed">
+      <span
+        tabIndex={0}
+        role="button"
+        title={title}
+        aria-disabled="true"
+        aria-describedby={`desc-${id}`}
+        className="cursor-not-allowed"
+      >
         <span id={`desc-${id}`} className="sr-only">{title}</span>
         {buttonContent}
       </span>
@@ -571,6 +578,15 @@ export function SettingsLayout() {
   const activeModelProvider = modelProviders.find((provider) => provider.is_active) ?? modelProviders[0] ?? null;
   const selectedEmbeddingProvider = modelProviders.find((provider) => provider.id === selectedEmbeddingProviderId) ?? activeModelProvider;
   const accountReady = !accountLoading && !accountError && accountConfig !== null;
+  const accountActionTitle = accountSaving
+    ? "저장 중입니다"
+    : accountLoading
+      ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요."
+      : accountError
+        ? "계정 설정을 불러오지 못했습니다. 다시 시도하세요."
+        : !accountReady
+          ? "계정 설정이 준비되지 않았습니다"
+          : "계정 설정 저장";
   const oauthAppConfigured = Boolean(
     accountConfig?.oauth_client_id
       && accountConfig?.oauth_redirect_uri
@@ -641,7 +657,7 @@ export function SettingsLayout() {
 
   const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!accountReady) return;
+    if (accountSaving || !accountReady) return;
     setAccountSaving(true);
     setAccountError(null);
     setAccountStatus(null);
@@ -1335,7 +1351,7 @@ export function SettingsLayout() {
                       disabled={accountSaving || !accountReady}
                       aria-disabled={accountSaving || !accountReady}
                       aria-busy={accountSaving}
-                      title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
+                      title={accountActionTitle}
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:opacity-60"
                     >
                       {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}

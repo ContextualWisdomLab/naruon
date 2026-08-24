@@ -400,6 +400,93 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("***rotated");
   });
 
+  it("associates a disabled account reason with its focusable wrapper", async () => {
+    const defaultFetch = vi.mocked(fetch);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/accounts/config" && init?.method !== "PUT") {
+        return new Promise<Response>(() => undefined);
+      }
+      return defaultFetch(input, init);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const accountTab = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    const wrapper = saveButton?.parentElement;
+    const descriptionId = wrapper?.getAttribute("aria-describedby");
+    expect(saveButton?.disabled).toBe(true);
+    expect(wrapper?.getAttribute("role")).toBe("button");
+    expect(wrapper?.getAttribute("aria-disabled")).toBe("true");
+    expect(descriptionId).toBeTruthy();
+    expect(wrapper?.querySelector(`#${descriptionId}`)?.textContent).toBe("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+  });
+
+  it("does not submit account settings twice while the first save is pending", async () => {
+    let resolvePut!: (response: Response) => void;
+    const pendingPut = new Promise<Response>((resolve) => {
+      resolvePut = resolve;
+    });
+    const defaultFetch = vi.mocked(fetch);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/accounts/config" && init?.method === "PUT") {
+        return pendingPut;
+      }
+      return defaultFetch(input, init);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const accountTab = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    const form = saveButton?.closest("form");
+    expect(form).toBeTruthy();
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const putCalls = vi.mocked(fetch).mock.calls.filter(
+      ([input, init]) => String(input) === "/api/accounts/config" && init?.method === "PUT",
+    );
+    expect(putCalls).toHaveLength(1);
+    await act(async () => {
+      resolvePut(jsonResponse({}));
+      await pendingPut;
+    });
+  });
+
   it("marks external operational console links with explicit noopener", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
