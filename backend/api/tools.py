@@ -817,7 +817,12 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
             json_string,
             parse_constant=_reject_non_standard_json_constant,
         )
-        formatted_json = json.dumps(parsed_json, indent=2, allow_nan=False)
+        formatted_json = json.dumps(
+            parsed_json,
+            indent=2,
+            allow_nan=False,
+            ensure_ascii=False,
+        )
         return {"formatted_json": formatted_json}
     except (json.JSONDecodeError, ValueError) as e:
         raise ValueError(f"Invalid JSON string: {e}") from e
