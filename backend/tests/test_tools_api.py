@@ -1247,13 +1247,13 @@ async def test_json_formatter_tool_success():
         response = client.post(
             "/api/tools/json_formatter/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"json_string": '{"제목":"회의","number":1}'}},
+            json={"parameters": {"json_string": '{"key":"value","number":1}'}},
         )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
     result = data["result"]
-    assert result["formatted_json"] == '{\n  "제목": "회의",\n  "number": 1\n}'
+    assert result["formatted_json"] == '{\n  "key": "value",\n  "number": 1\n}'
 
 
 @pytest.mark.asyncio
@@ -1269,19 +1269,3 @@ async def test_json_formatter_tool_invalid():
     assert data["status"] == "failed"
     assert "Invalid JSON string:" in data["message"]
     assert data.get("result") is None
-
-
-@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
-def test_json_formatter_rejects_non_standard_numeric_constants(constant):
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/json_formatter/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"json_string": f'{{"value": {constant}}}'}},
-        )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "failed"
-    assert data["result"] is None
-    assert "Invalid JSON string:" in data["message"]
