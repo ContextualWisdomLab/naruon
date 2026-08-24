@@ -1965,6 +1965,72 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("runner_req_data_doc_1");
   });
 
+  it("shows loading feedback only on the document action that is pending", async () => {
+    const fetchMock = mockWebdavFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+
+    const originalFetch = fetchMock.getMockImplementation();
+    const reparsePath = "/api/data/documents/doc_repository_ready/reparse";
+    let releaseReparse: (() => void) | null = null;
+    const pendingReparse = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
+      releaseReparse = () => resolve(jsonResponse({
+        document_id: "doc_repository_ready",
+        workspace_id: "workspace-org-acme",
+        document_name: "roadmap.md",
+        document_type: "text/markdown",
+        document_status: "parsed",
+        content_chars: 128,
+        provider_write_executed: false,
+        provenance: "server-authoritative",
+        audit_event: "data.document.reparsed",
+        message: "Document parse metadata refreshed in the signed workspace scope.",
+      }));
+    });
+    fetchMock.mockImplementation((input, init) => {
+      if (String(input) === reparsePath) return pendingReparse;
+      return originalFetch?.(input, init) ?? Promise.reject(new Error("missing fetch implementation"));
+    });
+
+    const findButton = (label: string) => Array.from(container?.querySelectorAll("button") ?? []).find((candidate) => (
+      candidate.textContent?.includes(label)
+    ));
+    const reparseButton = findButton("재파싱 실행");
+    const embeddingButton = findButton("임베딩 재생성 의도");
+    const hwpButton = findButton("HWP 변환 의도");
+    const materializeButton = findButton("WebDAV 문서 실행 요청");
+    expect(reparseButton).toBeDefined();
+    expect(embeddingButton).toBeDefined();
+    expect(hwpButton).toBeDefined();
+    expect(materializeButton).toBeDefined();
+
+    await act(async () => {
+      reparseButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(reparseButton?.getAttribute("aria-busy")).toBe("true");
+    expect(reparseButton?.textContent).toContain("실행 중");
+    for (const button of [embeddingButton, hwpButton, materializeButton]) {
+      expect(button?.getAttribute("aria-busy")).toBe("false");
+      expect(button?.disabled).toBe(true);
+      expect(button?.textContent).not.toContain("생성 중");
+      expect(button?.textContent).not.toContain("요청 중");
+    }
+
+    await act(async () => {
+      releaseReparse?.();
+      await pendingReparse;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  });
+
   it("loads signed data quality surface without public identity headers", async () => {
     const fetchMock = mockWebdavFetch();
     vi.stubGlobal("fetch", fetchMock);
