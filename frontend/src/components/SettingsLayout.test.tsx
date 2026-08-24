@@ -474,6 +474,7 @@ describe("SettingsLayout", () => {
     const logoutButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "로그아웃");
     expect(loginButton).toBeTruthy();
     expect(logoutButton).toBeTruthy();
+    expect(loginButton?.parentElement?.getAttribute("title")).toBe("OIDC 로그인");
 
     await act(async () => {
       loginButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -603,7 +604,7 @@ describe("SettingsLayout", () => {
       (button) => button.textContent?.includes("계정 설정 저장"),
     );
     expect(readyAccountSaveButton?.parentElement?.getAttribute("tabindex")).toBeNull();
-    expect(readyAccountSaveButton?.parentElement?.getAttribute("title")).toBeNull();
+    expect(readyAccountSaveButton?.parentElement?.getAttribute("title")).toBe("계정 설정 저장");
     expect(readyAccountSaveButton?.disabled).toBe(false);
     expect(readyAccountSaveButton?.className).not.toContain("pointer-events-none");
   });

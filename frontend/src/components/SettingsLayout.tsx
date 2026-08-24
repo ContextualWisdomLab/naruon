@@ -546,11 +546,11 @@ export function SettingsLayout() {
     ? "저장 중입니다"
     : accountLoading
       ? "계정 설정을 불러오는 중입니다"
-      : accountError
-        ? "계정 설정을 불러오지 못했습니다"
-        : !accountReady
-          ? "입력값이 부족합니다"
-          : undefined;
+        : accountError
+          ? "계정 설정을 불러오지 못했습니다"
+          : !accountReady
+            ? "입력값이 부족합니다"
+            : "계정 설정 저장";
   const oidcLoginDisabled = !oidcBrowserConfig;
   const oidcLogoutDisabled = oidcSessionLoading || !oidcSessionClaims.userId;
   const oidcLogoutTitle = oidcSessionLoading
@@ -1643,8 +1643,8 @@ export function SettingsLayout() {
                     <div className="flex flex-wrap gap-2">
                       <span
                         tabIndex={oidcLoginDisabled ? 0 : undefined}
-                        title={oidcLoginDisabled ? "OIDC 브라우저 설정이 없습니다" : undefined}
-                        aria-label={oidcLoginDisabled ? "OIDC 브라우저 설정이 없습니다" : undefined}
+                        title={oidcLoginDisabled ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
+                        aria-label={oidcLoginDisabled ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
                         className={oidcLoginDisabled ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
                       >
                         <button
