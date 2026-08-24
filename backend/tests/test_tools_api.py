@@ -611,6 +611,22 @@ async def test_hash_generator_invalid_algorithm():
 
 
 @pytest.mark.asyncio
+async def test_hash_generator_defaults_to_sha256_when_algorithm_is_omitted():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["hash"] == (
+        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+
+@pytest.mark.asyncio
 async def test_base64_encoder_tool_success():
     with TestClient(app) as client:
         response = client.post(

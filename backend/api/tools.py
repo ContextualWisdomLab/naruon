@@ -176,6 +176,8 @@ class ToolRegistry:
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
             if key not in params:
+                if isinstance(descriptor, dict) and descriptor.get("required") is False:
+                    continue
                 raise ValueError("Missing required tool parameter")
             value = params[key]
             expected_type = _parameter_type_name(descriptor)
@@ -830,7 +832,10 @@ registry.register(
         name="해시 생성기 (Hash Generator)",
         description="텍스트를 지정된 해시 알고리즘(md5, sha1, sha256, sha512)으로 해시값을 생성합니다. 기본값은 sha256입니다.",
         category="유틸리티",
-        parameters={"text": "string", "algorithm": "string"},
+        parameters={
+            "text": "string",
+            "algorithm": {"type": "string", "required": False},
+        },
     ),
     hash_generator_handler,
 )
