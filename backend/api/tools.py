@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +770,70 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    return {"encoded_url": urllib.parse.quote(text, safe="")}
+
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="텍스트를 URL 인코딩(퍼센트 인코딩)된 문자열로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    encoded_url = params.get("encoded_url", "")
+    return {"decoded_url": urllib.parse.unquote(encoded_url)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩(퍼센트 인코딩)된 문자열을 일반 텍스트로 변환합니다.",
+        category="유틸리티",
+        parameters={"encoded_url": "string"},
+    ),
+    url_decoder_handler,
+)
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    algorithm = params.get("algorithm", "sha256").lower()
+
+    encoded_text = text.encode("utf-8")
+    if algorithm == "md5":
+        hash_obj = hashlib.md5(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha1":
+        hash_obj = hashlib.sha1(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha256":
+        hash_obj = hashlib.sha256(encoded_text)
+    elif algorithm == "sha512":
+        hash_obj = hashlib.sha512(encoded_text)
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+
+    return {"hash": hash_obj.hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트를 지정된 해시 알고리즘(md5, sha1, sha256, sha512)으로 해시값을 생성합니다. 기본값은 sha256입니다.",
+        category="유틸리티",
+        parameters={"text": "string", "algorithm": "string"},
+    ),
+    hash_generator_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
