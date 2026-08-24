@@ -1,0 +1,6 @@
+# uv pip compile override for requirements-strix-ci.txt.
+# strix-agent 1.5.3 declares cryptography<49, but its installed source does
+# not import cryptography directly. Keep the repository security pin at the
+# fixed release; the central Strix installer installs the hash lock with
+# --no-deps after independently verifying this compatibility boundary.
+cryptography==50.0.0

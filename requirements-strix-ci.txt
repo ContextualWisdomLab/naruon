@@ -1,8 +1,8 @@
 strix-agent==1.5.3
 google-cloud-aiplatform==1.165.1
-# Strix 1.5.3 currently requires cryptography>=48.0.1,<49 and openai<3.
-# Keep this isolated CI lock at the newest compatible cryptography release;
-# the application runtime remains independently pinned to cryptography==50.0.0.
-cryptography==48.0.1
+# strix-agent 1.5.3 declares cryptography<49, but its installed source does
+# not import cryptography directly. The central Strix installer uses this
+# hash-locked security override with --no-deps; keep the fixed runtime pin.
+cryptography==50.0.0
 protobuf==6.33.6
 python-multipart==0.0.32
