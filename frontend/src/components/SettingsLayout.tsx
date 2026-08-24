@@ -541,17 +541,6 @@ export function SettingsLayout() {
   const activeModelProvider = modelProviders.find((provider) => provider.is_active) ?? modelProviders[0] ?? null;
   const selectedEmbeddingProvider = modelProviders.find((provider) => provider.id === selectedEmbeddingProviderId) ?? activeModelProvider;
   const accountReady = !accountLoading && !accountError && accountConfig !== null;
-  // Single source of truth for why the save action is unavailable so the
-  // sr-only description and the hover tooltip always announce the same reason.
-  const accountSaveAvailabilityHint = accountSaving
-    ? "계정 설정을 저장하는 중입니다."
-    : accountLoading
-      ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요."
-      : accountError
-        ? "계정 설정을 불러오지 못했습니다. 잠시 후 다시 시도하세요."
-        : !accountReady
-          ? "입력값이 부족합니다."
-          : null;
   const oauthAppConfigured = Boolean(
     accountConfig?.oauth_client_id
       && accountConfig?.oauth_redirect_uri
@@ -1316,14 +1305,16 @@ export function SettingsLayout() {
                     </div>
                     <div className="inline-flex">
                       {(accountSaving || !accountReady) && (
-                        <span id="account-save-availability" className="sr-only">{accountSaveAvailabilityHint}</span>
+                        <span id="account-save-availability" className="sr-only">
+                          {!accountConfig || accountLoading ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요." : accountSaving ? "계정 설정을 저장하는 중입니다." : "입력값이 부족합니다."}
+                        </span>
                       )}
                       <button
                         type="submit"
                         aria-disabled={accountSaving || !accountReady ? "true" : undefined}
                         aria-describedby={accountSaving || !accountReady ? "account-save-availability" : undefined}
                         aria-busy={accountSaving}
-                        title={accountSaveAvailabilityHint ?? "계정 설정 저장"}
+                        title={accountLoading ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요." : accountSaving ? "계정 설정을 저장하는 중입니다." : !accountReady ? "입력값이 부족합니다." : "계정 설정 저장"}
                         onClick={(e) => {
                           if (accountSaving || !accountReady) {
                             e.preventDefault();
