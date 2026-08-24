@@ -692,12 +692,17 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             </div>
             {hasDisplayableParticipants ? (
               <div className="flex flex-col gap-1.5 text-xs mt-2">
-                {senderParticipants.length > 0 && (
+                {senderParticipants.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-semibold text-foreground/80 min-w-[50px]">보낸 사람</span>
                     {senderParticipants.map((participant, index) => (
                       <span key={index} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{participant.name} <span className="text-muted-foreground">&lt;{participant.email}&gt;</span></span>
                     ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-semibold text-foreground/80 min-w-[50px]">보낸 사람</span>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{safeEmailSender}</span>
                   </div>
                 )}
                 {(recipientParticipants.length > 0 || ccParticipants.length > 0) && (

@@ -978,8 +978,10 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("0 B");
     expect(container.textContent).toContain("20.0 MB");
-    expect(container.textContent).not.toContain("보낸 사람");
+    expect(container.textContent).toContain("보낸 사람");
+    expect(container.textContent).toContain("organizer@example.com");
     expect(container.textContent).not.toContain("받는 사람");
+    expect(container.textContent).toContain("참조");
     const acceptButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("수락 및 일정 추가 요청"),
     );
