@@ -491,6 +491,97 @@ describe("SettingsLayout", () => {
     });
   });
 
+  it("shows loading state on disabled account and OIDC actions until their reads settle", async () => {
+    let releaseSession!: (response: Response) => void;
+    let releaseAccount!: (response: Response) => void;
+    const sessionPending = new Promise<Response>((resolve) => {
+      releaseSession = resolve;
+    });
+    const accountPending = new Promise<Response>((resolve) => {
+      releaseAccount = resolve;
+    });
+    const fallbackFetch = vi.mocked(fetch).getMockImplementation();
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      if (String(input) === "/auth/session") return sessionPending;
+      if (String(input) === "/api/accounts/config" && init?.method !== "PUT") return accountPending;
+      return fallbackFetch?.(input, init) ?? Promise.resolve(jsonResponse({}));
+    });
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+    });
+
+    const accountTab = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "연결 계정",
+    );
+    expect(accountTab).toBeTruthy();
+    await act(async () => {
+      accountTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    const accountSaveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("계정 설정 저장"),
+    );
+    expect(accountSaveButton?.parentElement?.getAttribute("title")).toBe("계정 설정을 불러오는 중입니다");
+    expect(accountSaveButton?.getAttribute("aria-busy")).toBe("true");
+
+    const developerTab = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "개발자",
+    );
+    expect(developerTab).toBeTruthy();
+    await act(async () => {
+      developerTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    const logoutButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "로그아웃",
+    );
+    expect(logoutButton?.parentElement?.getAttribute("title")).toBe("세션을 확인하는 중입니다");
+    expect(logoutButton?.getAttribute("aria-busy")).toBe("true");
+
+    await act(async () => {
+      releaseSession(jsonResponse({
+        authenticated: true,
+        claims: { userId: "alice", organizationId: "org-acme", workspaceId: "workspace-org-acme" },
+      }));
+      releaseAccount(jsonResponse({
+        user_id: "default",
+        smtp_server: "smtp.example.com",
+        smtp_port: 587,
+        smtp_username: "sender@example.com",
+        has_smtp_password: true,
+        imap_server: "imap.example.com",
+        imap_port: 993,
+        imap_username: "inbox@example.com",
+        has_imap_password: true,
+        pop3_server: "pop3.example.com",
+        pop3_port: 995,
+        pop3_username: "archive@example.com",
+        has_pop3_password: false,
+        oauth_client_id: "oauth-client-id",
+        oauth_redirect_uri: "https://naruon.net/oauth/mail/callback",
+        has_oauth_client_secret: true,
+      }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(logoutButton?.parentElement?.getAttribute("title")).toBe("로그아웃");
+    await act(async () => {
+      accountTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    const readyAccountSaveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("계정 설정 저장"),
+    );
+    expect(readyAccountSaveButton?.parentElement?.getAttribute("title")).toBe("계정 설정 저장");
+  });
+
   it("loads and saves source-backed mail account settings without public identity headers or secret replay", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
