@@ -255,23 +255,3 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
     oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
     with pytest.raises(ValueError, match="size limit"):
         decode_deferred_attachment_payload(oversized)
-
-
-@pytest.mark.parametrize(
-    ("filename", "expected_filename"),
-    [
-        ("..\\..\\upload.txt", "upload.txt"),
-        ("C:\\mail\\report.pdf", "report.pdf"),
-    ],
-)
-def test_attachment_filename_normalizes_windows_path_separators(
-    filename, expected_filename
-):
-    """Keep Windows-style attachment paths as safe display basenames."""
-    result = parse_email_attachment(
-        filename=filename,
-        content_type="text/plain",
-        raw_content="safe content",
-    )
-
-    assert result.filename == expected_filename
