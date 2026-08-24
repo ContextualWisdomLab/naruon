@@ -354,7 +354,8 @@ defusedxml==0.7.1 \
     --hash=sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61
     # via -r backend/requirements.txt
 egressweave==0.1.0 \
-    --hash=sha256:6bcb07109bdee25a6d49e5516f4c99ecd172ffe8536455d2cac860c44a4492f6
+    --hash=sha256:6bcb07109bdee25a6d49e5516f4c99ecd172ffe8536455d2cac860c44a4492f6 \
+    --hash=sha256:e1e3a6dbabd4084fb03f19a95931ab96e4beeef96bc8fc7cf0d8e5b91e266057
     # via -r backend/requirements.txt
 distro==1.9.0 \
     --hash=sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed \

@@ -106,6 +106,16 @@ def test_container_provenance_dependency_pins_match_reviewed_manifests() -> None
         for digest in backend_records[pin]
     )
 
+    # EgressWeave must stay hash-locked to BOTH released PyPI artifacts
+    # (bdist_wheel + sdist) so a require-hashes install can resolve either.
+    assert backend_pins["egressweave"] == "0.1.0"
+    assert backend_records["egressweave==0.1.0"] == frozenset(
+        {
+            "6bcb07109bdee25a6d49e5516f4c99ecd172ffe8536455d2cac860c44a4492f6",
+            "e1e3a6dbabd4084fb03f19a95931ab96e4beeef96bc8fc7cf0d8e5b91e266057",
+        }
+    )
+
     assert strix_pins["cryptography"] == "50.0.0"
     assert strix_pins["protobuf"] == "6.33.6"
     assert "cryptography==50.0.0" in strix_records
