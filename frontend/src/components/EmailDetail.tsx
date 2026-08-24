@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare, Paperclip, Calendar, Check, X } from "lucide-react";
+import { Loader2, MessagesSquare, Paperclip, Calendar, Check } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -469,6 +469,30 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     }
   }, [email, emailId, llmData]);
 
+  const handleAcceptMeetingProposal = useCallback(async () => {
+    const proposal = email?.meeting_proposal;
+    const actionEmailId = emailId;
+    const isCurrentEmail = () => currentEmailIdRef.current === actionEmailId;
+    if (!proposal || proposal.status !== "proposed") return;
+
+    setIsSyncing(true);
+    setSyncStatus(null);
+    try {
+      const location = proposal.location ? " · " + proposal.location : "";
+      await apiClient.post<CalendarWritebackIntentResponse>('/api/calendar/writeback-intent', {
+        action: 'create',
+        summary: proposal.title + " (" + proposal.start_time + " - " + proposal.end_time + location + ")",
+      });
+      if (!isCurrentEmail()) return;
+      setSyncStatus({ type: 'success', message: '회의 제안의 일정 반영 의도를 선택한 원본 계정에 요청했습니다.' });
+    } catch {
+      if (!isCurrentEmail()) return;
+      setSyncStatus({ type: 'error', message: '회의 제안 일정 반영 의도 요청에 실패했습니다.' });
+    } finally {
+      if (isCurrentEmail()) setIsSyncing(false);
+    }
+  }, [email, emailId]);
+
   const handleCreateTask = useCallback(async () => {
     const actionEmail = email;
     const actionEmailId = actionEmail?.id ?? null;
@@ -702,29 +726,41 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
               provenance="일정 자동 추출"
             >
               <div className="flex flex-col gap-4">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-bold text-foreground">{email.meeting_proposal.title}</span>
-                    <span className="text-xs text-muted-foreground font-medium">
-                      {new Date(email.meeting_proposal.start_time).toLocaleString()} - {new Date(email.meeting_proposal.end_time).toLocaleTimeString()}
-                    </span>
-                    {email.meeting_proposal.location && (
-                      <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                        📍 {email.meeting_proposal.location}
+                {email.meeting_proposal.status === "proposed" ? (
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-bold text-foreground">{email.meeting_proposal.title}</span>
+                      <span className="text-xs text-muted-foreground font-medium">
+                        {new Date(email.meeting_proposal.start_time).toLocaleString()} - {new Date(email.meeting_proposal.end_time).toLocaleTimeString()}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex gap-2 self-start md:self-auto">
-                    <Button size="sm" variant="outline" className="h-9 rounded-xl border-border bg-background px-4 text-xs font-semibold shadow-sm hover:bg-secondary">
-                      <X className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                      거절
-                    </Button>
-                    <Button size="sm" className="h-9 rounded-xl bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
+                      {email.meeting_proposal.location && (
+                        <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          📍 {email.meeting_proposal.location}
+                        </span>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleAcceptMeetingProposal}
+                      disabled={isSyncing}
+                      aria-busy={isSyncing}
+                      className="h-9 rounded-xl bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                    >
+                      {isSyncing && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
                       <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                      수락 및 일정 추가
+                      {isSyncing ? "일정 추가 요청 중" : "수락 및 일정 추가 요청"}
                     </Button>
                   </div>
-                </div>
+                ) : (
+                  <p role="status" className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                    이 회의 제안은 이미 {email.meeting_proposal.status === "confirmed" ? "확정" : "취소"}되었습니다.
+                  </p>
+                )}
+                {syncStatus && (
+                  <span role="status" aria-live="polite" className={"text-xs " + (syncStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
+                    {syncStatus.message}
+                  </span>
+                )}
               </div>
             </DecisionPointCard>
           )}
