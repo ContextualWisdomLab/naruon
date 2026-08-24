@@ -27,6 +27,26 @@ def test_html_attachment_preserves_parse_source_and_safe_display_text():
     assert result.parse_error_code is None
 
 
+@pytest.mark.parametrize(
+    ("filename", "expected_filename"),
+    [
+        ("..\\\\upload.txt", "upload.txt"),
+        ("C:\\\\mail\\\\report.pdf", "report.pdf"),
+    ],
+)
+def test_attachment_filename_normalizes_windows_path_separators(
+    filename, expected_filename
+):
+    """Keep Windows-style attachment paths as safe display basenames."""
+    result = parse_email_attachment(
+        filename=filename,
+        content_type="text/plain",
+        raw_content="safe content",
+    )
+
+    assert result.filename == expected_filename
+
+
 def test_markdown_attachment_is_parseable_markdown():
     result = parse_email_attachment(
         filename="plan.md",
