@@ -25,8 +25,10 @@ location and bounded evidence are preserved first.
    the `image_sources.media_type` column width. A DOM path up to 1,024
    characters is retained; a deeper path is represented by its bounded prefix
    and a stable SHA-256 suffix so the source row remains within its column
-   without collapsing distinct locations. Raw base64 and decoded pixels are
-   never persisted or sent to a provider.
+   without collapsing distinct locations. The immutable source UID also binds
+   organization, user, message, ordinal, locator, and content digest so equal
+   message IDs from different tenants cannot collide. Raw base64 and decoded
+   pixels are never persisted or sent to a provider.
 3. Add the bounded metadata to the email's selected embedding input after
    redacting the original data URL, and emit a separate `inline_image`
    content-graph source with a bounded ordinal label. The bounded DOM locator

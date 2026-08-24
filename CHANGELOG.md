@@ -9,7 +9,9 @@
   dimensions, and explicit parse state; raw base64 and decoded pixels are not
   persisted. The raw data URL is redacted before embedding, while bounded
   metadata is included in the email embedding input and emitted as an
-  `inline_image` content-graph source. OCR, object detection, captions, and
+  `inline_image` content-graph source. Source UIDs bind tenant scope, message,
+  location, and content digest to prevent cross-tenant collisions. OCR, object
+  detection, captions, and
   image embeddings remain deferred to a configured local vision sidecar under
   ADR-0019 and `docs/doctoring/inline-image-source-evidence.md`.
 - Signed email file import now accepts source files up to 64 MiB, covering

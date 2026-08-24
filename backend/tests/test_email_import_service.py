@@ -246,6 +246,59 @@ def test_build_email_object_keeps_inline_image_graph_label_bounded():
     assert len(image_documents[0].display_label or "") <= 240
 
 
+def test_inline_image_source_uid_is_tenant_and_content_scoped():
+    """Identical message ids cannot collide across tenants or image content."""
+
+    def build_email(*, user_id: str, organization_id: str, content_digest: str):
+        return email_import_module._build_email_object(
+            parsed={
+                "body": "See image",
+                "body_parse_content": "See image",
+                "body_content_type": "text/plain",
+                "attachments": [],
+                "inline_images": [
+                    {
+                        "source_locator_value": "/html[1]/img[1]",
+                        "source_ordinal": 1,
+                        "content_digest": content_digest,
+                        "media_type": "image/png",
+                        "searchable_text": "image metadata",
+                        "parse_status": "metadata_ready",
+                    }
+                ],
+            },
+            user_id=user_id,
+            organization_id=organization_id,
+            message_id="<same-message@example.com>",
+            thread_id="thread-1",
+            fingerprint=f"fingerprint-{organization_id}",
+            persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+            attachment_payloads=[],
+            fitted_embeddings=[],
+        )[0]
+
+    first_email = build_email(
+        user_id="user-1", organization_id="org-1", content_digest="a" * 64
+    )
+    second_email = build_email(
+        user_id="user-2", organization_id="org-2", content_digest="b" * 64
+    )
+
+    assert (
+        first_email.image_sources[0].image_source_uid
+        != second_email.image_sources[0].image_source_uid
+    )
+    first_node = next(
+        node for node in first_email.content_nodes if node.source_kind == "inline_image"
+    )
+    second_node = next(
+        node
+        for node in second_email.content_nodes
+        if node.source_kind == "inline_image"
+    )
+    assert first_node.source_record_uid != second_node.source_record_uid
+
+
 def test_build_email_object_indexes_image_metadata_as_attachment_text():
     image_metadata = (
         "Image metadata: format=png; width=320px; height=200px; animated=no"

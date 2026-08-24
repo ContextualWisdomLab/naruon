@@ -16,6 +16,10 @@ persistence. Before an embedding request, `redact_inline_image_payloads`
 removes every `data:` URI from `img[src]`, including non-image media types, and
 leaves only bounded searchable metadata.
 
+The source UID is scoped by organization, user, message, ordinal, DOM locator,
+and content digest, preventing equal message IDs from different tenants or
+different image bytes from colliding in the global source identity.
+
 ## Failure and privacy boundary
 
 Malformed data URLs, unsupported formats/encodings, invalid image headers, and

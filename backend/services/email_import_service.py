@@ -391,11 +391,11 @@ def _build_email_object(
 
     inline_image_payloads = list(parsed.get("inline_images", []))
     for image_payload in inline_image_payloads:
-        image_source_uid = _content_graph_source_record_uid(
-            "image_source",
-            message_id,
-            str(image_payload.get("source_ordinal") or "0"),
-            str(image_payload.get("source_locator_value") or ""),
+        image_source_uid = _inline_image_source_uid(
+            organization_id=organization_id,
+            user_id=user_id,
+            message_id=message_id,
+            image_payload=image_payload,
         )
         email_obj.image_sources.append(
             ImageSource(
@@ -551,11 +551,11 @@ def _append_email_content_graph(
     )
 
     for image_payload in inline_image_payloads:
-        image_source_uid = _content_graph_source_record_uid(
-            "image_source",
-            message_id,
-            str(image_payload.get("source_ordinal") or "0"),
-            str(image_payload.get("source_locator_value") or ""),
+        image_source_uid = _inline_image_source_uid(
+            organization_id=str(email_obj.organization_id or ""),
+            user_id=str(email_obj.user_id),
+            message_id=message_id,
+            image_payload=image_payload,
         )
         image_parse_result = parse_content(
             source_kind="inline_image",
@@ -840,6 +840,25 @@ def _content_graph_source_record_uid(prefix: str, *parts: str) -> str:
     payload = "\x00".join(str(part) for part in parts)
     digest = hashlib.sha256(payload.encode("utf-8", errors="surrogatepass")).hexdigest()
     return f"{prefix}:{digest[:32]}"
+
+
+def _inline_image_source_uid(
+    *,
+    organization_id: str,
+    user_id: str,
+    message_id: str,
+    image_payload: dict,
+) -> str:
+    """Bind inline-image identity to tenant scope, location, and content."""
+    return _content_graph_source_record_uid(
+        "image_source",
+        organization_id,
+        user_id,
+        message_id,
+        str(image_payload.get("source_ordinal") or "0"),
+        str(image_payload.get("source_locator_value") or ""),
+        str(image_payload.get("content_digest") or ""),
+    )
 
 
 def _project_source_segments(email_obj: Email) -> list[ProjectSourceSegment]:
