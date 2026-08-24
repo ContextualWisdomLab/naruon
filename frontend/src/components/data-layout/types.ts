@@ -43,12 +43,6 @@ export type UniqueThreadIntentResponse = {
 export type UniqueThreadStatus = 'idle' | 'loading' | 'success' | 'auth' | 'error';
 export type EmailImportStatus = 'idle' | 'loading' | 'success' | 'auth' | 'error';
 export type DocumentActionStatus = 'idle' | 'loading' | 'success' | 'auth' | 'error';
-export type DocumentActionKind =
-  | 'upload'
-  | 'reparse'
-  | 'embedding-regeneration-intent'
-  | 'hwp-conversion-intent'
-  | 'webdav-materialization-intent';
 
 export type DataSurfaceStatus = 'loading' | 'ready' | 'error';
 
