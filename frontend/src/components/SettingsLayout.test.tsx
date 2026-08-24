@@ -591,9 +591,9 @@ describe("SettingsLayout", () => {
       await Promise.resolve();
     });
 
-    expect(logoutButton?.parentElement?.getAttribute("title")).toBeNull();
+    expect(logoutButton?.parentElement?.getAttribute("title")).toBe("로그아웃");
     expect(logoutButton?.parentElement?.getAttribute("tabindex")).toBeNull();
-    expect(logoutButton?.parentElement?.getAttribute("aria-label")).toBeNull();
+    expect(logoutButton?.parentElement?.getAttribute("aria-label")).toBe("로그아웃");
     expect(logoutButton?.disabled).toBe(false);
     expect(logoutButton?.className).not.toContain("pointer-events-none");
     await act(async () => {

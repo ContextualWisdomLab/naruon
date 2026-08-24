@@ -557,7 +557,7 @@ export function SettingsLayout() {
     ? "세션을 확인하는 중입니다"
     : !oidcSessionClaims.userId
       ? "로그인된 세션이 없습니다"
-      : undefined;
+      : "로그아웃";
   const oauthAppConfigured = Boolean(
     accountConfig?.oauth_client_id
       && accountConfig?.oauth_redirect_uri
