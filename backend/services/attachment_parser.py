@@ -268,7 +268,8 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 
 def _safe_filename(filename: str | None) -> str:
     """Return a basename-only attachment display filename."""
-    decoded_filename = filename or "attachment"
+    supplied_filename = _sanitize_nul(filename or "attachment")
+    decoded_filename = supplied_filename
     for _ in range(MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS):
         next_filename = urllib.parse.unquote(decoded_filename)
         if next_filename == decoded_filename:
@@ -277,7 +278,15 @@ def _safe_filename(filename: str | None) -> str:
     if urllib.parse.unquote(decoded_filename) != decoded_filename:
         return "attachment"
 
-    display_filename = strip_html_markup(_sanitize_nul(decoded_filename))
+    decoded_display_filename = strip_html_markup(decoded_filename)
+    decoded_path = Path(decoded_display_filename.replace("\\", "/"))
+    has_decoded_path = "/" in decoded_display_filename or "\\" in decoded_display_filename
+    has_parent_component = ".." in decoded_path.parts
+    display_filename = (
+        decoded_display_filename
+        if has_decoded_path or has_parent_component
+        else strip_html_markup(supplied_filename)
+    )
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"

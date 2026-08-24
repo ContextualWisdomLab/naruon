@@ -28,21 +28,24 @@ def test_html_attachment_preserves_parse_source_and_safe_display_text():
 
 
 @pytest.mark.parametrize(
-    "filename",
+    ("filename", "expected_filename"),
     [
-        "%2e%2e%2fsecret.txt",
-        "%255c%252e%252e%255csecret.txt",
+        ("%2e%2e%2fsecret.txt", "secret.txt"),
+        ("%255c%252e%252e%255csecret.txt", "secret.txt"),
+        ("Invoice %231234.pdf", "Invoice %231234.pdf"),
     ],
 )
-def test_encoded_attachment_filename_is_decoded_before_basename_safety(filename):
-    """Decode nested URL escapes before removing path components."""
+def test_encoded_attachment_filename_is_safe_without_rewriting_literal_percent_text(
+    filename, expected_filename
+):
+    """Decode path escapes for safety while preserving literal percent text."""
     result = parse_email_attachment(
         filename=filename,
         content_type="text/plain",
         raw_content="safe content",
     )
 
-    assert result.filename == "secret.txt"
+    assert result.filename == expected_filename
 
 
 def test_markdown_attachment_is_parseable_markdown():
