@@ -33,6 +33,7 @@ function AccessibleDisabledButton({
     return (
       <span
         tabIndex={0}
+        role="button"
         title={title}
         aria-disabled="true"
         aria-describedby={descriptionId}
