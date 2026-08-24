@@ -75,6 +75,21 @@ function getMessageEventId(email: EmailData) {
   return email.message_id || `email-${email.id}`;
 }
 
+function getAttachmentParseStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case 'parsed':
+      return '분석 완료';
+    case 'pdf_dom_recognition_pending':
+      return '분석 중';
+    case 'unsupported_content_type':
+      return '지원되지 않는 형식';
+    case 'parse_size_limit_exceeded':
+      return '크기 제한으로 분석 불가';
+    default:
+      return '분석 상태 확인 필요';
+  }
+}
+
 function nowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
@@ -573,7 +588,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const safeAttachments = (email.attachments ?? []).map((file) => ({
     filename: toMailDisplayText(file.filename, '첨부파일'),
     contentType: toMailDisplayText(file.content_type, '알 수 없는 형식'),
-    parseStatus: toMailDisplayText(file.parse_status, 'unknown'),
+    parseStatus: getAttachmentParseStatusLabel(file.parse_status),
   }));
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
@@ -661,7 +676,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <span className="font-medium truncate max-w-[150px]">{file.filename}</span>
                 <span className="text-muted-foreground/70 text-[10px]">{file.contentType}</span>
-                <span className="sr-only">{file.parseStatus}</span>
+                <span className="text-muted-foreground/70 text-[10px]" aria-label={`파싱 상태: ${file.parseStatus}`}>
+                  {file.parseStatus}
+                </span>
               </div>
             ))}
           </div>

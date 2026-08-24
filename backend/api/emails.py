@@ -187,7 +187,7 @@ def _email_detail_response(email: Email) -> "EmailDetailResponse":
                 parse_status=_safe_email_display_text(attachment.parse_status)
                 or "unknown",
             )
-            for attachment in email.attachments
+            for attachment in sorted(email.attachments, key=lambda item: item.id)
         ],
     )
 

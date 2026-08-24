@@ -1614,13 +1614,23 @@ async def test_get_email_by_id_returns_ui_safe_display_fields(
 async def test_get_email_by_id_returns_safe_attachment_metadata(
     client: AsyncClient, db_session, sample_email: Email
 ):
-    sample_email.attachments.append(
-        Attachment(
-            filename="<img src=x onerror=alert(1)>brief.pdf",
-            content="private attachment body",
-            content_type="application/pdf",
-            parse_status="pdf_dom_recognition_pending",
-        )
+    sample_email.attachments.extend(
+        [
+            Attachment(
+                id=910002,
+                filename="second.txt",
+                content="private second attachment body",
+                content_type="text/plain",
+                parse_status="parsed",
+            ),
+            Attachment(
+                id=910001,
+                filename="<img src=x onerror=alert(1)>brief.pdf",
+                content="private attachment body",
+                content_type="application/pdf",
+                parse_status="pdf_dom_recognition_pending",
+            ),
+        ]
     )
 
     response = await client.get(f"/api/emails/{sample_email.id}")
@@ -1631,7 +1641,12 @@ async def test_get_email_by_id_returns_safe_attachment_metadata(
             "filename": "brief.pdf",
             "content_type": "application/pdf",
             "parse_status": "pdf_dom_recognition_pending",
-        }
+        },
+        {
+            "filename": "second.txt",
+            "content_type": "text/plain",
+            "parse_status": "parsed",
+        },
     ]
 
 

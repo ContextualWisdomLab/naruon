@@ -51,10 +51,6 @@ vi.mock("lucide-react", () => ({
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
   Paperclip: () => <svg aria-hidden="true" />,
-  Calendar: () => <svg aria-hidden="true" />,
-  Users: () => <svg aria-hidden="true" />,
-  MapPin: () => <svg aria-hidden="true" />,
-  Clock: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
 
@@ -288,7 +284,7 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("brief.pdf");
     expect(container.textContent).toContain("application/pdf");
-    expect(container.textContent).toContain("pdf_dom_recognition_pending");
+    expect(container.textContent).toContain("분석 중");
     expect(container.textContent).not.toContain("<script>");
     expect(container.textContent).not.toContain("<img");
     expect(container.querySelector("script")).toBeNull();
@@ -327,6 +323,7 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("notes.bin");
     expect(container.textContent).toContain("알 수 없는 형식");
+    expect(container.textContent).toContain("분석 상태 확인 필요");
     expect(container.textContent).not.toContain("notes.bin첨부파일");
   });
 
