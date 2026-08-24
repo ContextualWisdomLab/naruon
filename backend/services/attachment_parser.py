@@ -267,7 +267,7 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 def _safe_filename(filename: str | None) -> str:
     """Return a basename-only attachment display filename."""
     display_filename = strip_html_markup(_sanitize_nul(filename or "attachment"))
-    display_filename = Path(display_filename).name.strip()
+    display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"
     return display_filename
