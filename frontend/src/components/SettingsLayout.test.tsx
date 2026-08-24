@@ -637,6 +637,58 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("계정 설정을 저장했습니다");
   });
 
+  it("does not submit account settings twice while the first save is pending", async () => {
+    let resolvePut!: (response: Response) => void;
+    const pendingPut = new Promise<Response>((resolve) => {
+      resolvePut = resolve;
+    });
+    const defaultFetch = vi.mocked(fetch);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/accounts/config" && init?.method === "PUT") {
+        return pendingPut;
+      }
+      return defaultFetch(input, init);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    const form = saveButton?.closest("form");
+    expect(form).toBeTruthy();
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const putCalls = vi.mocked(fetch).mock.calls.filter(
+      ([input, init]) => String(input) === "/api/accounts/config" && init?.method === "PUT",
+    );
+    expect(putCalls).toHaveLength(1);
+    await act(async () => {
+      resolvePut(jsonResponse({}));
+      await pendingPut;
+    });
+  });
+
   it("loads and saves AI model registry entries without public identity headers or secret replay", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);

@@ -611,7 +611,7 @@ export function SettingsLayout() {
 
   const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!accountReady) return;
+    if (accountSaving || !accountReady) return;
     setAccountSaving(true);
     setAccountError(null);
     setAccountStatus(null);
