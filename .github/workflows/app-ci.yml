@@ -27,6 +27,11 @@ jobs:
         python-version: ["3.14"]
     env:
       PYTHONWARNINGS: error
+      # The backend dependency set includes LangSmith, whose pytest entrypoint
+      # imports deprecated Python 3.14 APIs before tests can start. Load only
+      # the two plugins used by this suite so third-party entrypoints cannot
+      # turn a dependency warning into a false test failure.
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
       DISABLE_BACKGROUND_WORKERS: "1"
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -70,7 +75,7 @@ jobs:
         run: |
           set -o pipefail
           cd backend
-          python -m pytest -q 2>&1 | tee pytest_output.log
+          python -m pytest -p pytest_asyncio.plugin -p anyio.pytest_plugin -q 2>&1 | tee pytest_output.log
           if grep -qiE 'timeout|fatal|warn|denied' pytest_output.log; then
             echo "::error::Tests produced Timeout, Fatal, Warn, or Denied outputs"
             exit 1

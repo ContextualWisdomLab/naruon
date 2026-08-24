@@ -653,6 +653,8 @@ def test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushe
     assert "pull_request:" in workflow
     assert "release/**" in workflow
     assert "python -m pytest" in workflow
+    assert 'PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"' in workflow
+    assert "-p pytest_asyncio.plugin -p anyio.pytest_plugin" in workflow
     assert "PYTHONWARNINGS: error" in workflow
     assert 'DISABLE_BACKGROUND_WORKERS: "1"' in workflow
     assert "npm test" in workflow
