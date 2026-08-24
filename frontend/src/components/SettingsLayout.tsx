@@ -5,9 +5,41 @@ import { apiClient } from '@/lib/api-client';
 import type { SessionClaims } from '@/lib/session-cookie';
 import { clearOidcSession, getOidcBrowserConfig, startOidcLogin } from '@/lib/oidc-session';
 import { useWorkspaceStartupView, setWorkspaceStartupView } from '@/lib/workspace-preferences';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import React, { useEffect, useRef, useState, type RefObject } from 'react';
 
 export type SettingsTab = '워크스페이스' | '멤버' | 'AI 모델' | '연결 계정' | '알림' | '자동화' | '결제' | '개발자';
+
+function AccessibleDisabledButton({
+  disabled,
+  title,
+  children,
+  onClick,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { title: string }) {
+  const id = React.useId();
+  const descriptionId = `desc-${id}`;
+  return (
+    <>
+      <button
+        {...props}
+        aria-disabled={disabled || props["aria-disabled"] ? "true" : undefined}
+        aria-describedby={disabled ? descriptionId : props["aria-describedby"]}
+        title={title}
+        onClick={(event) => {
+          if (disabled) {
+            event.preventDefault();
+            return;
+          }
+          onClick?.(event);
+        }}
+        className={`${props.className ?? ''} ${disabled ? 'cursor-not-allowed pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2' : ''}`}
+      >
+        {children}
+      </button>
+      {disabled && <span id={descriptionId} className="sr-only">{title}</span>}
+    </>
+  );
+}
 const EMPTY_SESSION_CLAIMS: SessionClaims = {
   userId: null,
   organizationId: null,
@@ -1299,7 +1331,7 @@ export function SettingsLayout() {
                         빈 secret 입력은 기존 저장값을 유지합니다. 실제 연결과 외부 쓰기는 서버 검증과 self-hosted connector 정책을 통과한 뒤 별도 실행됩니다.
                       </p>
                     </div>
-                    <button
+                    <AccessibleDisabledButton
                       type="submit"
                       disabled={accountSaving || !accountReady}
                       aria-disabled={accountSaving || !accountReady}
@@ -1309,7 +1341,7 @@ export function SettingsLayout() {
                     >
                       {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                       {accountSaving ? '저장 중' : '계정 설정 저장'}
-                    </button>
+                    </AccessibleDisabledButton>
                   </div>
 
                   <div className="mt-6 grid gap-5">
@@ -1434,7 +1466,7 @@ export function SettingsLayout() {
                         <dd className="mt-1 break-all font-mono text-sm text-foreground">{runnerConfig?.fingerprint ?? '기록 없음'}</dd>
                       </div>
                     </dl>
-                    <button
+                    <AccessibleDisabledButton
                       type="button"
                       onClick={handleRunnerTokenRotate}
                       disabled={runnerRotating}
@@ -1445,7 +1477,7 @@ export function SettingsLayout() {
                     >
                       <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} />
                       {runnerRotating ? '회전 중' : '등록 토큰 회전'}
-                    </button>
+                    </AccessibleDisabledButton>
                   </div>
                   {runnerRotateError ? (
                     <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{runnerRotateError}</p>
@@ -1614,7 +1646,7 @@ export function SettingsLayout() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button
+                      <AccessibleDisabledButton
                         type="button"
                         onClick={handleOidcLogin}
                         disabled={!oidcBrowserConfig}
@@ -1622,8 +1654,8 @@ export function SettingsLayout() {
                         className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         OIDC 로그인
-                      </button>
-                      <button
+                      </AccessibleDisabledButton>
+                      <AccessibleDisabledButton
                         type="button"
                         onClick={handleOidcLogout}
                         disabled={!oidcSessionClaims.userId}
@@ -1631,7 +1663,7 @@ export function SettingsLayout() {
                         className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         로그아웃
-                      </button>
+                      </AccessibleDisabledButton>
                     </div>
                   </div>
                   {oidcActionError ? (
