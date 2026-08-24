@@ -192,7 +192,7 @@ def test_python_314_backend_image_uses_binary_wheel_dependencies() -> None:
 
     assert "PIP_ONLY_BINARY=:all:" in dockerfile
     assert "asyncpg==0.31.0" in requirements
-    assert "tiktoken==0.13.0" in requirements
+    assert "tiktoken==0.14.0" in requirements
     assert "build-essential" not in dockerfile
     assert "cargo" not in dockerfile
     assert "libpq-dev" not in dockerfile
@@ -209,21 +209,21 @@ def test_python_314_backend_image_uses_binary_wheel_dependencies() -> None:
 def test_backend_runtime_toolchain_uses_image_scan_clean_security_pins() -> None:
     requirements = read_repo_text("backend/requirements.txt")
 
-    assert "sqlalchemy==2.0.51" in requirements
+    assert "sqlalchemy==2.0.52" in requirements
     assert "asyncpg==0.31.0" in requirements
-    assert "tiktoken==0.13.0" in requirements
-    assert "protobuf==7.35.1" in requirements
-    assert "setuptools==83.0.0" in requirements
-    assert "wheel==0.47.0" in requirements
-    assert "opentelemetry-api==1.43.0" in requirements
-    assert "opentelemetry-instrumentation-fastapi==0.64b0" in requirements
+    assert "tiktoken==0.14.0" in requirements
+    assert "protobuf==7.36.0" in requirements
+    assert "setuptools==84.0.0" in requirements
+    assert "wheel==0.48.0" in requirements
+    assert "opentelemetry-api==1.44.0" in requirements
+    assert "opentelemetry-instrumentation-fastapi==0.65b0" in requirements
 
 
 def test_strix_ci_requirements_use_security_quality_clean_pins() -> None:
     strix_ci_requirements = read_repo_text("requirements-strix-ci.txt")
 
-    assert "strix-agent==1.0.4" in strix_ci_requirements
-    assert "cryptography==50.0.0" in strix_ci_requirements
+    assert "strix-agent==1.5.3" in strix_ci_requirements
+    assert "cryptography==48.0.1" in strix_ci_requirements
     assert "python-multipart==0.0.32" in strix_ci_requirements
 
 
