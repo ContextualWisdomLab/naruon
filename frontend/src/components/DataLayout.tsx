@@ -18,7 +18,6 @@ import {
   UniqueThreadStatus,
   EmailImportStatus,
   DocumentActionStatus,
-  DocumentActionKind,
   DataSurfaceStatus,
   DataEvidenceSnapshotResponse,
   DataQualitySurfaceResponse,
@@ -66,7 +65,6 @@ export function DataLayout() {
   const [emailImportResult, setEmailImportResult] = useState<EmailFileImportResponse | null>(null);
   const [emailImportFiles, setEmailImportFiles] = useState<File[]>([]);
   const [documentActionStatus, setDocumentActionStatus] = useState<DocumentActionStatus>('idle');
-  const [activeDocumentAction, setActiveDocumentAction] = useState<DocumentActionKind | null>(null);
   const [documentActionResult, setDocumentActionResult] = useState<DataDocumentActionResponse | null>(null);
   const [documentUploadFiles, setDocumentUploadFiles] = useState<File[]>([]);
   const [dataSurfaceStatus, setDataSurfaceStatus] = useState<DataSurfaceStatus>('loading');
@@ -226,26 +224,22 @@ export function DataLayout() {
     setDocumentUploadFiles(Array.from(event.target.files ?? []));
     setDocumentActionResult(null);
     setDocumentActionStatus('idle');
-    setActiveDocumentAction(null);
   }, []);
 
   const requestDocumentUpload = useCallback(async () => {
     const [file] = documentUploadFiles;
     if (!file) {
       setDocumentActionStatus('error');
-      setActiveDocumentAction(null);
       return;
     }
 
     // 50MB file size limit
     if (file.size > 50 * 1024 * 1024) {
       setDocumentActionStatus('error');
-      setActiveDocumentAction(null);
       return;
     }
 
     setDocumentActionStatus('loading');
-    setActiveDocumentAction('upload');
     setDocumentActionResult(null);
     try {
       const documentType = getDocumentTypeForFile(file);
@@ -269,8 +263,6 @@ export function DataLayout() {
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
-    } finally {
-      setActiveDocumentAction(null);
     }
   }, [documentUploadFiles, loadDataQualitySurface]);
 
@@ -282,7 +274,6 @@ export function DataLayout() {
     )) ?? dataQualitySurface?.repository_assets[0] ?? null;
     if (!asset || asset.asset_type !== 'workspace_document') {
       setDocumentActionStatus('error');
-      setActiveDocumentAction(null);
       return;
     }
     const targetSourceId = webdavAccounts.find((account) => (
@@ -290,12 +281,10 @@ export function DataLayout() {
     ))?.source_id ?? webdavAccounts.find((account) => account.writeback_enabled)?.source_id;
     if (action === 'webdav-materialization-intent' && (webdavAccountStatus !== 'ready' || !targetSourceId)) {
       setDocumentActionStatus('error');
-      setActiveDocumentAction(null);
       return;
     }
 
     setDocumentActionStatus('loading');
-    setActiveDocumentAction(action);
     setDocumentActionResult(null);
     try {
       const result = await apiClient.post<DataDocumentActionResponse>(
@@ -311,8 +300,6 @@ export function DataLayout() {
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
-    } finally {
-      setActiveDocumentAction(null);
     }
   }, [
     dataQualitySurface,
@@ -454,7 +441,6 @@ export function DataLayout() {
               handleDocumentFileChange={handleDocumentFileChange}
               requestDocumentUpload={requestDocumentUpload}
               isDocumentActionLoading={isDocumentActionLoading}
-              activeDocumentAction={activeDocumentAction}
               documentUploadFiles={documentUploadFiles}
               documentActionStatus={documentActionStatus}
               documentActionResult={documentActionResult}
