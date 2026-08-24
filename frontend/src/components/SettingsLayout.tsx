@@ -1314,7 +1314,6 @@ export function SettingsLayout() {
                         aria-disabled={accountSaving || !accountReady ? "true" : undefined}
                         aria-describedby={accountSaving || !accountReady ? "account-save-availability" : undefined}
                         aria-busy={accountSaving}
-                        title={accountLoading ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요." : accountSaving ? "계정 설정을 저장하는 중입니다." : !accountReady ? "입력값이 부족합니다." : "계정 설정 저장"}
                         onClick={(e) => {
                           if (accountSaving || !accountReady) {
                             e.preventDefault();
@@ -1648,36 +1647,29 @@ export function SettingsLayout() {
                           }}
                           aria-disabled={!oidcBrowserConfig ? "true" : undefined}
                           aria-describedby={!oidcBrowserConfig ? "oidc-login-availability" : undefined}
-                          title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다. 잠시 후 다시 시도하세요." : "OIDC 로그인"}
                           className={`rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${!oidcBrowserConfig ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
                           OIDC 로그인
                         </button>
                       </div>
                       <div className="inline-flex">
-                        {(!oidcSessionLoading && !oidcSessionClaims.userId) && (
+                        {!oidcSessionClaims.userId && (
                           <span id="oidc-logout-availability" className="sr-only">
-                            로그인된 세션이 없습니다. 먼저 로그인하세요.
-                          </span>
-                        )}
-                        {oidcSessionLoading && (
-                          <span id="oidc-logout-availability" className="sr-only">
-                            로그인 세션을 불러오는 중입니다. 잠시 후 다시 시도하세요.
+                            {oidcSessionLoading ? "로그인 세션을 확인하는 중입니다. 잠시 후 다시 시도하세요." : "로그인된 세션이 없습니다."}
                           </span>
                         )}
                         <button
                           type="button"
                           onClick={(e) => {
-                            if (oidcSessionLoading || !oidcSessionClaims.userId) {
+                            if (!oidcSessionClaims.userId) {
                               e.preventDefault();
                               return;
                             }
                             handleOidcLogout();
                           }}
-                          aria-disabled={oidcSessionLoading || !oidcSessionClaims.userId ? "true" : undefined}
-                          aria-describedby={oidcSessionLoading || !oidcSessionClaims.userId ? "oidc-logout-availability" : undefined}
-                          title={oidcSessionLoading ? "로그인 세션을 불러오는 중입니다. 잠시 후 다시 시도하세요." : !oidcSessionClaims.userId ? "로그인된 세션이 없습니다. 먼저 로그인하세요." : "로그아웃"}
-                          className={`rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${oidcSessionLoading || !oidcSessionClaims.userId ? "opacity-50 cursor-not-allowed" : ""}`}
+                          aria-disabled={!oidcSessionClaims.userId ? "true" : undefined}
+                          aria-describedby={!oidcSessionClaims.userId ? "oidc-logout-availability" : undefined}
+                          className={`rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${!oidcSessionClaims.userId ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
                           로그아웃
                         </button>

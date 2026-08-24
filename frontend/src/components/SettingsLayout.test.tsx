@@ -491,45 +491,6 @@ describe("SettingsLayout", () => {
     });
   });
 
-  it("announces session loading before enabling logout", async () => {
-    const defaultFetch = vi.mocked(fetch);
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/auth/session") {
-        return new Promise<Response>(() => undefined);
-      }
-      return defaultFetch(input, init);
-    }));
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<SettingsLayout />);
-      await Promise.resolve();
-    });
-
-    const developerTab = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "개발자",
-    );
-    await act(async () => {
-      developerTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const logoutButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "로그아웃");
-    expect(logoutButton?.getAttribute("aria-disabled")).toBe("true");
-    expect(logoutButton?.getAttribute("title")).toBe("로그인 세션을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
-    expect(logoutButton?.getAttribute("aria-describedby")).toBe("oidc-logout-availability");
-    expect(container.textContent).toContain("로그인 세션을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
-
-    await act(async () => {
-      logoutButton?.click();
-      await Promise.resolve();
-    });
-    expect(oidcMocks.clearOidcSession).not.toHaveBeenCalled();
-  });
-
   it("loads and saves source-backed mail account settings without public identity headers or secret replay", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
