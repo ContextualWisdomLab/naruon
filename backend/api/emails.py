@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 from db.session import get_db
-from db.models import Email
+from db.models import Attachment, Email
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import datetime
 import time
@@ -666,7 +666,13 @@ async def get_email(
     # Ensure auth context validates the request payload and scopes access
     result = await db.execute(
         select(Email)
-        .options(selectinload(Email.attachments))
+        .options(
+            selectinload(Email.attachments).load_only(
+                Attachment.filename,
+                Attachment.content_type,
+                Attachment.parse_status,
+            )
+        )
         .where(
             Email.id == email_id,
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
@@ -690,7 +696,13 @@ async def get_email_thread(
     lookup_values = thread_lookup_values(thread_id)
     result = await db.execute(
         select(Email)
-        .options(selectinload(Email.attachments))
+        .options(
+            selectinload(Email.attachments).load_only(
+                Attachment.filename,
+                Attachment.content_type,
+                Attachment.parse_status,
+            )
+        )
         .where(
             *Email.owner_filters(auth_context.user_id, auth_context.organization_id),
             or_(
