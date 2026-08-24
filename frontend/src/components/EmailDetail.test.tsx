@@ -921,6 +921,52 @@ describe("EmailDetail", () => {
     )).toBe(true);
   });
 
+  it("surfaces provider conflict evidence without claiming a calendar write", async () => {
+    const email: TestEmail = {
+      id: 10,
+      message_id: "<calendar-conflict@example.com>",
+      thread_id: null,
+      sender: "calendar@example.com",
+      recipients: "user@example.com",
+      subject: "Calendar conflict",
+      date: "2026-05-17T10:00:00Z",
+      body: "Please protect the confirmed launch meeting.",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/10")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "회의 일정", action_items: ["확정 launch meeting"] }));
+      if (url.endsWith("/api/calendar/writeback-intent")) {
+        return Promise.resolve(jsonResponse({
+          provider_status: 412,
+          requires_if_match: false,
+          if_match: null,
+          provider_write_executed: false,
+        }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={10} actionCommand={{ id: 4, action: "calendar-sync" }} />);
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("기존 확정 일정과 충돌이 있어 ‘확정 launch meeting’을 덮어쓰지 않았습니다.");
+    expect(container.textContent).toContain("일정 충돌 조율");
+    expect(getRecordedProductEvents().some((event) =>
+      event.name === "calendar_reflected" &&
+      event.payload.calendar_candidate_id === "mail-calendar:10" &&
+      event.payload.provider_write_executed === false &&
+      event.payload.conflict_state === "conflict",
+    )).toBe(true);
+  });
+
   it("ignores a late draft response after the selected email changes", async () => {
     const emailA: TestEmail = {
       id: 10,
