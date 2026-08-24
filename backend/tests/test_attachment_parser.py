@@ -260,3 +260,5 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
 def test_safe_filename_handles_windows_path_traversal():
     assert _safe_filename("..\\..\\upload.txt") == "upload.txt"
     assert _safe_filename("C:\\mail\\report.pdf") == "report.pdf"
+    assert _safe_filename("%5c%2e%2e%5csecret.txt") == "secret.txt"
+    assert _safe_filename("%252e%252e%252fsecret.txt") == "secret.txt"
