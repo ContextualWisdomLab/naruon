@@ -1965,6 +1965,58 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("runner_req_data_doc_1");
   });
 
+  it("shows loading feedback only on the document action that is running", async () => {
+    const baseFetch = mockWebdavFetch();
+    let resolveReparse!: (response: ReturnType<typeof jsonResponse>) => void;
+    const pendingReparse = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
+      resolveReparse = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/data/documents/doc_repository_ready/reparse") return pendingReparse;
+      return baseFetch(input, init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<DataPage />);
+    });
+    const reparseButton = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("재파싱 실행"),
+    );
+    const embeddingButton = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("임베딩 재생성 의도"),
+    );
+    expect(reparseButton).toBeDefined();
+    expect(embeddingButton).toBeDefined();
+
+    await act(async () => {
+      reparseButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(reparseButton?.getAttribute("aria-busy")).toBe("true");
+    expect(embeddingButton?.getAttribute("aria-busy")).toBe("false");
+    expect(reparseButton?.textContent).toContain("실행 중");
+    expect(embeddingButton?.textContent).toContain("임베딩 재생성 의도");
+
+    await act(async () => {
+      resolveReparse(jsonResponse({
+        document_id: "doc_repository_ready",
+        workspace_id: "workspace-org-acme",
+        document_name: "roadmap.md",
+        document_type: "text/markdown",
+        document_status: "parsed",
+        content_chars: 128,
+        provider_write_executed: false,
+        provenance: "server-authoritative",
+        audit_event: "data.document.reparsed",
+        message: "Document parse metadata refreshed in the signed workspace scope.",
+      }));
+    });
+  });
+
   it("loads signed data quality surface without public identity headers", async () => {
     const fetchMock = mockWebdavFetch();
     vi.stubGlobal("fetch", fetchMock);
