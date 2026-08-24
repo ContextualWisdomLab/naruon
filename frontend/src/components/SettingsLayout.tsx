@@ -23,7 +23,6 @@ function AccessibleDisabledButton({
       {...props}
       className={`${props.className ?? ''} ${disabled ? 'pointer-events-none' : ''}`}
       {...(disabled ? {} : { title })}
-      aria-describedby={disabled ? descriptionId : undefined}
     >
       {children}
     </button>
@@ -31,17 +30,17 @@ function AccessibleDisabledButton({
 
   if (disabled) {
     return (
-      <span
-        tabIndex={0}
-        role="button"
-        title={title}
-        aria-disabled="true"
-        aria-describedby={descriptionId}
-        className="cursor-not-allowed"
-      >
+      <>
+        <span
+          tabIndex={0}
+          title={title}
+          aria-describedby={descriptionId}
+          className="cursor-not-allowed"
+        >
+          {buttonContent}
+        </span>
         <span id={descriptionId} className="sr-only">{title}</span>
-        {buttonContent}
-      </span>
+      </>
     );
   }
   return buttonContent;

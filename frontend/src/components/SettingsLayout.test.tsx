@@ -429,10 +429,10 @@ describe("SettingsLayout", () => {
     const wrapper = saveButton?.parentElement;
     const descriptionId = wrapper?.getAttribute("aria-describedby");
     expect(saveButton?.disabled).toBe(true);
-    expect(wrapper?.getAttribute("role")).toBe("button");
-    expect(wrapper?.getAttribute("aria-disabled")).toBe("true");
+    expect(wrapper?.getAttribute("role")).toBeNull();
+    expect(saveButton?.getAttribute("aria-describedby")).toBeNull();
     expect(descriptionId).toBeTruthy();
-    expect(wrapper?.querySelector(`#${descriptionId}`)?.textContent).toBe("계정 설정을 불러오는 중입니다");
+    expect(descriptionId ? document.getElementById(descriptionId)?.textContent : null).toBe("계정 설정을 불러오는 중입니다");
     expect(wrapper?.getAttribute("title")).toBe("계정 설정을 불러오는 중입니다");
   });
 
