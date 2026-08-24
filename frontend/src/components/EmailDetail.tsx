@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare, Paperclip, Calendar, Check } from "lucide-react";
+import { Loader2, MessagesSquare, Paperclip, Calendar, Check, X } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -79,18 +79,6 @@ function nowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
-function formatAttachmentSize(size?: number) {
-  if (typeof size !== "number" || !Number.isFinite(size) || size < 0) return null;
-  const units = ["B", "KB", "MB", "GB"];
-  let value = size;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${unitIndex === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`;
-}
-
 function toStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
@@ -139,10 +127,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [instruction, setInstruction] = useState('정중하게 답장해줘');
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isAcceptingMeetingProposal, setIsAcceptingMeetingProposal] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{type: 'success' | 'error', message: string} | null>(null);
-  const [meetingProposalStatus, setMeetingProposalStatus] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [taskStatus, setTaskStatus] = useState<string | null>(null);
   const [sourceDrawerOpen, setSourceDrawerOpen] = useState(false);
   const threadRequestIdRef = useRef(0);
@@ -212,10 +198,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setIsDrafting(false);
       setIsSending(false);
       setIsSyncing(false);
-      setIsAcceptingMeetingProposal(false);
       setIsCreatingTask(false);
       setSyncStatus(null);
-      setMeetingProposalStatus(null);
       setTaskStatus(null);
       setSourceDrawerOpen(false);
       activeDraftReplyIdRef.current = null;
@@ -485,53 +469,6 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     }
   }, [email, emailId, llmData]);
 
-  const handleAcceptMeetingProposal = useCallback(async () => {
-    const proposal = email?.meeting_proposal;
-    const actionEmailId = emailId;
-    const isCurrentEmail = () => currentEmailIdRef.current === actionEmailId;
-    if (!proposal || proposal.status !== "proposed") return;
-
-    setIsAcceptingMeetingProposal(true);
-    setMeetingProposalStatus(null);
-    const startedAt = nowMs();
-    try {
-      const location = proposal.location ? " · " + proposal.location : "";
-      const intent = await apiClient.post<CalendarWritebackIntentResponse>('/api/calendar/writeback-intent', {
-        action: 'create',
-        summary: proposal.title + " (" + proposal.start_time + " - " + proposal.end_time + location + ")",
-      });
-      if (!isCurrentEmail()) return;
-      setMeetingProposalStatus({ type: 'success', message: '회의 제안의 일정 반영 의도를 선택한 원본 계정에 요청했습니다.' });
-      recordProductEvent("calendar_reflected", {
-        surface: "mail_detail",
-        calendar_candidate_id: `mail-meeting:${actionEmailId ?? "unknown"}`,
-        calendar_event_id: null,
-        thread_id: email ? getThreadEventId(email) : null,
-        conflict_state: "none",
-        provider_write_executed: Boolean(intent.provider_write_executed),
-      });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("meeting_calendar_trace"),
-        operation: "calendar_reflection",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "success",
-      });
-    } catch {
-      if (!isCurrentEmail()) return;
-      setMeetingProposalStatus({ type: 'error', message: '회의 제안 일정 반영 의도 요청에 실패했습니다.' });
-      recordProductEvent("latency_guardrail_recorded", {
-        surface: "mail_detail",
-        request_trace_id: createProductEventId("meeting_calendar_trace"),
-        operation: "calendar_reflection",
-        duration_ms: Math.round(nowMs() - startedAt),
-        status: "error",
-      });
-    } finally {
-      if (isCurrentEmail()) setIsAcceptingMeetingProposal(false);
-    }
-  }, [email, emailId]);
-
   const handleCreateTask = useCallback(async () => {
     const actionEmail = email;
     const actionEmailId = actionEmail?.id ?? null;
@@ -635,10 +572,6 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
-  const senderParticipants = email.participants?.filter((participant) => participant.role === 'sender') ?? [];
-  const recipientParticipants = email.participants?.filter((participant) => participant.role === 'to') ?? [];
-  const ccParticipants = email.participants?.filter((participant) => participant.role === 'cc') ?? [];
-  const hasDisplayableParticipants = senderParticipants.length > 0 || recipientParticipants.length > 0 || ccParticipants.length > 0;
 
   const handleOpenSourceDrawer = () => {
     recordProductEvent("source_chip_opened", {
@@ -695,36 +628,28 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 {isTranslating ? "번역 중" : "번역"}
               </Button>
             </div>
-            {hasDisplayableParticipants ? (
+            {email.participants && email.participants.length > 0 ? (
               <div className="flex flex-col gap-1.5 text-xs mt-2">
-                {senderParticipants.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-semibold text-foreground/80 min-w-[50px]">보낸 사람</span>
-                    {senderParticipants.map((participant, index) => (
-                      <span key={index} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{participant.name} <span className="text-muted-foreground">&lt;{participant.email}&gt;</span></span>
-                    ))}
-                  </div>
-                )}
-                {(recipientParticipants.length > 0 || ccParticipants.length > 0) && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {recipientParticipants.length > 0 && (
-                      <>
-                        <span className="font-semibold text-foreground/80 min-w-[50px]">받는 사람</span>
-                        {recipientParticipants.map((participant, index) => (
-                          <span key={index} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{participant.name} <span className="text-muted-foreground">&lt;{participant.email}&gt;</span></span>
-                        ))}
-                      </>
-                    )}
-                  {ccParticipants.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-semibold text-foreground/80 min-w-[50px]">보낸 사람</span>
+                  {email.participants.filter(p => p.role === 'sender').map((p, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-semibold text-foreground/80 min-w-[50px]">받는 사람</span>
+                  {email.participants.filter(p => p.role === 'to').map((p, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
+                  ))}
+                  {email.participants.some(p => p.role === 'cc') && (
                     <>
                       <span className="font-semibold text-foreground/80 ml-2">참조</span>
-                      {ccParticipants.map((participant, index) => (
-                        <span key={index} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{participant.name} <span className="text-muted-foreground">&lt;{participant.email}&gt;</span></span>
+                      {email.participants.filter(p => p.role === 'cc').map((p, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
                       ))}
                     </>
                   )}
-                  </div>
-                )}
+                </div>
               </div>
             ) : (
               <>
@@ -740,13 +665,13 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             {email.attachments && email.attachments.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-4">
                 {email.attachments.map((file) => (
-                  <div key={file.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 text-xs shadow-sm">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <div key={file.id} className="group flex items-center gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 text-xs shadow-sm hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20">
                       <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium text-foreground line-clamp-1 max-w-[180px]">{file.name}</span>
-                      {formatAttachmentSize(file.size) && <span className="text-[10px] text-muted-foreground">{formatAttachmentSize(file.size)}</span>}
+                      {file.size && <span className="text-[10px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>}
                     </div>
                   </div>
                 ))}
@@ -777,41 +702,29 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
               provenance="일정 자동 추출"
             >
               <div className="flex flex-col gap-4">
-                {email.meeting_proposal.status === "proposed" ? (
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm font-bold text-foreground">{email.meeting_proposal.title}</span>
-                      <span className="text-xs text-muted-foreground font-medium">
-                        {new Date(email.meeting_proposal.start_time).toLocaleString()} - {new Date(email.meeting_proposal.end_time).toLocaleString()}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-bold text-foreground">{email.meeting_proposal.title}</span>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {new Date(email.meeting_proposal.start_time).toLocaleString()} - {new Date(email.meeting_proposal.end_time).toLocaleTimeString()}
+                    </span>
+                    {email.meeting_proposal.location && (
+                      <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                        📍 {email.meeting_proposal.location}
                       </span>
-                      {email.meeting_proposal.location && (
-                        <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                          📍 {email.meeting_proposal.location}
-                        </span>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={handleAcceptMeetingProposal}
-                      disabled={isAcceptingMeetingProposal}
-                      aria-busy={isAcceptingMeetingProposal}
-                      className="h-9 rounded-xl bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
-                    >
-                      {isAcceptingMeetingProposal && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                    )}
+                  </div>
+                  <div className="flex gap-2 self-start md:self-auto">
+                    <Button size="sm" variant="outline" className="h-9 rounded-xl border-border bg-background px-4 text-xs font-semibold shadow-sm hover:bg-secondary">
+                      <X className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      거절
+                    </Button>
+                    <Button size="sm" className="h-9 rounded-xl bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
                       <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                      {isAcceptingMeetingProposal ? "일정 추가 요청 중" : "수락 및 일정 추가 요청"}
+                      수락 및 일정 추가
                     </Button>
                   </div>
-                ) : (
-                  <p role="status" className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                    이 회의 제안은 이미 {email.meeting_proposal.status === "confirmed" ? "확정" : "취소"}되었습니다.
-                  </p>
-                )}
-                {meetingProposalStatus && (
-                  <span role="status" aria-live="polite" className={"text-xs " + (meetingProposalStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
-                    {meetingProposalStatus.message}
-                  </span>
-                )}
+                </div>
               </div>
             </DecisionPointCard>
           )}

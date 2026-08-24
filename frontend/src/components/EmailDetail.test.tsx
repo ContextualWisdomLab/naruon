@@ -50,9 +50,6 @@ vi.mock("lucide-react", () => ({
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
-  Paperclip: () => <svg aria-hidden="true" />,
-  Calendar: () => <svg aria-hidden="true" />,
-  Check: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
 
@@ -920,89 +917,6 @@ describe("EmailDetail", () => {
       event.name === "calendar_reflected" &&
       event.payload.calendar_candidate_id === "mail-calendar:9" &&
       event.payload.provider_write_executed === false,
-    )).toBe(true);
-  });
-
-  it("requests a calendar writeback intent for a proposed meeting", async () => {
-    const email = {
-      id: 24,
-      message_id: "<meeting-proposal@example.com>",
-      thread_id: null,
-      sender: "organizer@example.com",
-      recipients: "user@example.com",
-      subject: "Launch meeting",
-      date: "2026-05-17T10:00:00Z",
-      body: "Please join the launch meeting.",
-      attachments: [{ id: "attachment-24", name: "launch-deck.pptx", size: 20 * 1024 * 1024 }],
-      participants: [{ name: "CC only", email: "cc@example.com", role: "cc" as const }],
-      meeting_proposal: {
-        id: "meeting-24",
-        title: "Launch meeting",
-        start_time: "2026-05-20T10:00:00Z",
-        end_time: "2026-05-20T11:00:00Z",
-        location: "Room A",
-        status: "proposed",
-      },
-    };
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/24")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "회의", action_items: [] }));
-      if (url.endsWith("/api/calendar/writeback-intent")) {
-        expect(init?.method).toBe("POST");
-        expect(JSON.parse(String(init?.body))).toEqual({
-          action: "create",
-          summary: "Launch meeting (2026-05-20T10:00:00Z - 2026-05-20T11:00:00Z · Room A)",
-        });
-        return Promise.resolve(jsonResponse({
-          workspace_id: "workspace-24",
-          target_source_id: "calendar-source-24",
-          protocol: "caldav",
-          writeback_mode: "customer_owned",
-          requires_if_match: false,
-          if_match: null,
-          provenance: { created_by: "user-24", source_provider: "Customer CalDAV", source_protocol: "caldav" },
-          audit_event: "calendar.writeback_intent.created",
-        }));
-      }
-      throw new Error("Unexpected fetch: " + url);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-    await act(async () => { root?.render(<EmailDetail emailId={24} />); });
-    await flushAsyncWork();
-
-    expect(container.textContent).toContain("20.0 MB");
-    const attachmentName = Array.from(container.querySelectorAll("span")).find(
-      (span) => span.textContent === "launch-deck.pptx",
-    );
-    const attachmentChip = attachmentName?.parentElement?.parentElement;
-    expect(attachmentChip?.className).not.toContain("cursor-pointer");
-    expect(attachmentChip?.className).not.toContain("hover:");
-    expect(container.textContent).toContain("참조");
-    expect(container.textContent).not.toContain("보낸 사람");
-    expect(container.textContent).not.toContain("받는 사람");
-    const acceptButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("수락 및 일정 추가 요청"),
-    );
-    expect(acceptButton).toBeTruthy();
-    await act(async () => {
-      acceptButton?.click();
-      await flushAsyncWork();
-    });
-    expect(container.textContent).toContain("회의 제안의 일정 반영 의도를 선택한 원본 계정에 요청했습니다.");
-    expect(getRecordedProductEvents().some((event) =>
-      event.name === "calendar_reflected" &&
-      event.payload.calendar_candidate_id === "mail-meeting:24" &&
-      event.payload.provider_write_executed === false,
-    )).toBe(true);
-    expect(getRecordedProductEvents().some((event) =>
-      event.name === "latency_guardrail_recorded" &&
-      event.payload.operation === "calendar_reflection" &&
-      event.payload.status === "success",
     )).toBe(true);
   });
 
