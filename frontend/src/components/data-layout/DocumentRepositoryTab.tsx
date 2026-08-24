@@ -484,8 +484,8 @@ return (
                     aria-busy={isWebdavSourceLoading || isWritebackLoading}
                     className="inline-flex items-center justify-center gap-2 w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
-                    {isWritebackLoading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-                    {isWritebackLoading ? '점검 중' : 'WebDAV 반영 의도 점검'}
+                    {(isWebdavSourceLoading || isWritebackLoading) && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                    {isWebdavSourceLoading ? '원본 확인 중' : isWritebackLoading ? '점검 중' : 'WebDAV 반영 의도 점검'}
                   </button>
                 </div>
 
