@@ -13,33 +13,32 @@ function AccessibleDisabledButton({
   disabled,
   title,
   children,
-  onClick,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { title: string }) {
   const id = React.useId();
-  const descriptionId = `desc-${id}`;
-  return (
-    <>
-      <button
-        {...props}
-        aria-disabled={disabled || props["aria-disabled"] ? "true" : undefined}
-        aria-describedby={disabled ? descriptionId : props["aria-describedby"]}
-        title={title}
-        onClick={(event) => {
-          if (disabled) {
-            event.preventDefault();
-            return;
-          }
-          onClick?.(event);
-        }}
-        className={`${props.className ?? ''} ${disabled ? 'cursor-not-allowed opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2' : ''}`}
-      >
-        {children}
-      </button>
-      {disabled && <span id={descriptionId} className="sr-only">{title}</span>}
-    </>
+  const buttonContent = (
+    <button
+      disabled={disabled}
+      {...props}
+      className={`${props.className ?? ''} ${disabled ? 'pointer-events-none' : ''}`}
+      {...(disabled ? {} : { title })}
+      aria-describedby={disabled ? `desc-${id}` : undefined}
+    >
+      {children}
+    </button>
   );
+
+  if (disabled) {
+    return (
+      <span tabIndex={0} title={title} className="cursor-not-allowed">
+        <span id={`desc-${id}`} className="sr-only">{title}</span>
+        {buttonContent}
+      </span>
+    );
+  }
+  return buttonContent;
 }
+
 const EMPTY_SESSION_CLAIMS: SessionClaims = {
   userId: null,
   organizationId: null,
@@ -572,15 +571,6 @@ export function SettingsLayout() {
   const activeModelProvider = modelProviders.find((provider) => provider.is_active) ?? modelProviders[0] ?? null;
   const selectedEmbeddingProvider = modelProviders.find((provider) => provider.id === selectedEmbeddingProviderId) ?? activeModelProvider;
   const accountReady = !accountLoading && !accountError && accountConfig !== null;
-  const accountActionTitle = accountSaving
-    ? "저장 중입니다"
-    : accountLoading
-      ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요."
-      : accountError
-        ? "계정 설정을 불러오지 못했습니다. 다시 시도하세요."
-        : !accountReady
-          ? "계정 설정이 준비되지 않았습니다"
-          : "계정 설정 저장";
   const oauthAppConfigured = Boolean(
     accountConfig?.oauth_client_id
       && accountConfig?.oauth_redirect_uri
@@ -651,7 +641,7 @@ export function SettingsLayout() {
 
   const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (accountSaving || !accountReady) return;
+    if (!accountReady) return;
     setAccountSaving(true);
     setAccountError(null);
     setAccountStatus(null);
@@ -1345,8 +1335,8 @@ export function SettingsLayout() {
                       disabled={accountSaving || !accountReady}
                       aria-disabled={accountSaving || !accountReady}
                       aria-busy={accountSaving}
-                      title={accountActionTitle}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:opacity-60"
                     >
                       {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                       {accountSaving ? '저장 중' : '계정 설정 저장'}
@@ -1482,7 +1472,7 @@ export function SettingsLayout() {
                       aria-disabled={runnerRotating}
                       aria-busy={runnerRotating}
                       title={runnerRotating ? "등록 토큰을 회전 중입니다" : "등록 토큰을 회전합니다"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:opacity-60"
                     >
                       <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} />
                       {runnerRotating ? '회전 중' : '등록 토큰 회전'}
@@ -1660,7 +1650,7 @@ export function SettingsLayout() {
                         onClick={handleOidcLogin}
                         disabled={!oidcBrowserConfig}
                         title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
                       >
                         OIDC 로그인
                       </AccessibleDisabledButton>
@@ -1669,7 +1659,7 @@ export function SettingsLayout() {
                         onClick={handleOidcLogout}
                         disabled={!oidcSessionClaims.userId}
                         title={!oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:opacity-50"
                       >
                         로그아웃
                       </AccessibleDisabledButton>
