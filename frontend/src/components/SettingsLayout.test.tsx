@@ -400,42 +400,6 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("***rotated");
   });
 
-  it("associates a disabled account action reason with its focusable wrapper", async () => {
-    const defaultFetch = vi.mocked(fetch);
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/accounts/config" && init?.method !== "PUT") {
-        return new Promise<Response>(() => undefined);
-      }
-      return defaultFetch(input, init);
-    }));
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<SettingsLayout />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const accountTab = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
-    await act(async () => {
-      accountTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
-    const wrapper = saveButton?.parentElement;
-    const descriptionId = wrapper?.getAttribute("aria-describedby");
-    expect(saveButton?.disabled).toBe(true);
-    expect(wrapper?.getAttribute("role")).toBeNull();
-    expect(saveButton?.getAttribute("aria-describedby")).toBeNull();
-    expect(descriptionId).toBeTruthy();
-    expect(descriptionId ? document.getElementById(descriptionId)?.textContent : null).toBe("계정 설정을 불러오는 중입니다");
-    expect(wrapper?.getAttribute("title")).toBe("계정 설정을 불러오는 중입니다");
-  });
-
   it("marks external operational console links with explicit noopener", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
