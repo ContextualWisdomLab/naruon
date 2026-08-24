@@ -430,8 +430,8 @@ describe("SettingsLayout", () => {
     expect(saveButton?.disabled).toBe(false);
     expect(saveButton?.getAttribute("aria-disabled")).toBe("true");
     expect(descriptionId).toBeTruthy();
-    expect(descriptionId ? document.getElementById(descriptionId)?.textContent : null).toBe("입력값이 부족합니다");
-    expect(saveButton?.getAttribute("title")).toBe("입력값이 부족합니다");
+    expect(descriptionId ? document.getElementById(descriptionId)?.textContent : null).toBe("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+    expect(saveButton?.getAttribute("title")).toBe("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
 
     await act(async () => {
       saveButton?.click();

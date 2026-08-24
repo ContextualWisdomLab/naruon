@@ -32,7 +32,7 @@ function AccessibleDisabledButton({
           }
           onClick?.(event);
         }}
-        className={`${props.className ?? ''} ${disabled ? 'cursor-not-allowed pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2' : ''}`}
+        className={`${props.className ?? ''} ${disabled ? 'cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2' : ''}`}
       >
         {children}
       </button>
@@ -1336,7 +1336,7 @@ export function SettingsLayout() {
                       disabled={accountSaving || !accountReady}
                       aria-disabled={accountSaving || !accountReady}
                       aria-busy={accountSaving}
-                      title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
+                      title={accountSaving ? "저장 중입니다" : accountLoading ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요." : accountError ? "계정 설정을 불러오지 못했습니다. 다시 시도하세요." : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
