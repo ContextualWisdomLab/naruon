@@ -1328,7 +1328,7 @@ describe("EmailDetail", () => {
   });
 
   it("keeps unchanged thread messages memoized while the reply draft changes", async () => {
-    const selectedEmail: TestEmail = {
+    const selectedThreadEmail: TestEmail = {
       id: 41,
       message_id: "<selected@example.com>",
       thread_id: "memo-thread",
@@ -1338,8 +1338,15 @@ describe("EmailDetail", () => {
       date: "2026-08-16T08:00:00Z",
       body: "Selected message body",
     };
+    // The detail endpoint serves its own copy with a distinct date so the
+    // header clock (formatEmailDate(email.date)) is distinguishable from the
+    // selected ConversationMessage's date in the formatting spy below.
+    const selectedDetailEmail: TestEmail = {
+      ...selectedThreadEmail,
+      date: "2026-08-16T09:00:00Z",
+    };
     const siblingEmail: TestEmail = {
-      ...selectedEmail,
+      ...selectedThreadEmail,
       id: 42,
       message_id: "<sibling@example.com>",
       sender: "sibling@example.com",
@@ -1348,9 +1355,9 @@ describe("EmailDetail", () => {
     };
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.endsWith("/api/emails/41")) return Promise.resolve(jsonResponse(selectedEmail));
+      if (url.endsWith("/api/emails/41")) return Promise.resolve(jsonResponse(selectedDetailEmail));
       if (url.endsWith("/api/emails/thread/memo-thread")) {
-        return Promise.resolve(jsonResponse({ thread: [selectedEmail, siblingEmail] }));
+        return Promise.resolve(jsonResponse({ thread: [selectedThreadEmail, siblingEmail] }));
       }
       if (url.endsWith("/api/llm/summarize")) {
         return Promise.resolve(jsonResponse({ summary: "Memoization context", action_items: [] }));
@@ -1358,9 +1365,15 @@ describe("EmailDetail", () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
+    // `toLocaleString()` receives no arguments (the Date is `this`), so record
+    // the formatted instance to attribute every call to its source date.
+    const formattedDates: string[] = [];
     const dateFormattingSpy = vi
       .spyOn(Date.prototype, "toLocaleString")
-      .mockReturnValue("formatted date");
+      .mockImplementation(function mockToLocaleString(this: Date) {
+        formattedDates.push(this.toISOString());
+        return "formatted date";
+      });
 
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -1371,7 +1384,13 @@ describe("EmailDetail", () => {
     await waitForCondition(() => container?.textContent?.includes("Sibling message body") ?? false);
     await flushAsyncWork();
 
-    const callsBeforeDraftEdit = dateFormattingSpy.mock.calls.length;
+    const callsBeforeDraftEdit = formattedDates.length;
+    const selectedMessageFormatsBefore = formattedDates.filter(
+      (iso) => iso === "2026-08-16T08:00:00.000Z",
+    ).length;
+    const siblingFormatsBefore = formattedDates.filter(
+      (iso) => iso === "2026-08-16T08:05:00.000Z",
+    ).length;
     const draftTextarea = container.querySelector<HTMLTextAreaElement>(
       'textarea[aria-label="답장 초안"]',
     );
@@ -1389,6 +1408,20 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
 
     expect(draftTextarea?.value).toBe("Unrelated draft edit");
-    expect(dateFormattingSpy.mock.calls.length - callsBeforeDraftEdit).toBe(1);
+    // The only expected reformat comes from EmailDetail's own header date
+    // display (formatEmailDate(email.date) at the top of the detail card),
+    // which re-renders with the parent. Neither ConversationMessage instance
+    // reformats: their date-call totals are unchanged, proving both stayed
+    // memoized through the draft edit.
+    expect(formattedDates.slice(callsBeforeDraftEdit)).toEqual([
+      "2026-08-16T09:00:00.000Z",
+    ]);
+    expect(
+      formattedDates.filter((iso) => iso === "2026-08-16T08:00:00.000Z").length,
+    ).toBe(selectedMessageFormatsBefore);
+    expect(
+      formattedDates.filter((iso) => iso === "2026-08-16T08:05:00.000Z").length,
+    ).toBe(siblingFormatsBefore);
+    expect(dateFormattingSpy).toHaveBeenCalled();
   });
 });
