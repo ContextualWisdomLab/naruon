@@ -175,10 +175,15 @@ class ToolRegistry:
 
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
+            is_required = True
+            if isinstance(descriptor, dict) and "required" in descriptor:
+                is_required = descriptor["required"]
+
             if key not in params:
-                if isinstance(descriptor, dict) and descriptor.get("required") is False:
-                    continue
-                raise ValueError("Missing required tool parameter")
+                if is_required:
+                    raise ValueError("Missing required tool parameter")
+                continue
+
             value = params[key]
             expected_type = _parameter_type_name(descriptor)
             if not _parameter_matches_type(value, expected_type):
