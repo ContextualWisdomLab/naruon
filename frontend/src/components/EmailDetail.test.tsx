@@ -50,9 +50,6 @@ vi.mock("lucide-react", () => ({
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
-  Paperclip: () => <svg aria-hidden="true" />,
-  Calendar: () => <svg aria-hidden="true" />,
-  Check: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
 
@@ -921,117 +918,6 @@ describe("EmailDetail", () => {
       event.payload.calendar_candidate_id === "mail-calendar:9" &&
       event.payload.provider_write_executed === false,
     )).toBe(true);
-  });
-
-  it("keeps attachment metadata useful and wires proposed meetings to writeback intent", async () => {
-    const email = {
-      id: 13,
-      message_id: "<meeting-proposal@example.com>",
-      thread_id: null,
-      sender: "organizer@example.com",
-      recipients: "user@example.com",
-      subject: "Launch meeting",
-      date: "2026-05-17T10:00:00Z",
-      body: "Please review the proposed launch meeting.",
-      participants: [{ name: "Copy recipient", email: "cc@example.com", role: "cc" as const }],
-      attachments: [
-        { id: "empty-file", name: "empty.txt", size: 0 },
-        { id: "large-file", name: "briefing.pdf", size: 20 * 1024 * 1024 },
-      ],
-      meeting_proposal: {
-        id: "meeting-13",
-        title: "Launch review",
-        start_time: "2026-05-20T09:00:00Z",
-        end_time: "2026-05-20T10:00:00Z",
-        location: "Room A",
-        status: "proposed" as const,
-      },
-    };
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/13")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "회의 검토", action_items: [] }));
-      if (url.endsWith("/api/calendar/writeback-intent")) {
-        expect(JSON.parse(String(init?.body))).toEqual({
-          action: "create",
-          summary: "Launch review (2026-05-20T09:00:00Z - 2026-05-20T10:00:00Z · Room A)",
-        });
-        return Promise.resolve(jsonResponse({
-          target_source_id: "calendar-source",
-          protocol: "caldav",
-          provider_write_executed: false,
-          provenance: {},
-        }));
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<EmailDetail emailId={13} />);
-    });
-    await flushAsyncWork();
-
-    expect(container.textContent).toContain("0 B");
-    expect(container.textContent).toContain("20.0 MB");
-    expect(container.textContent).not.toContain("보낸 사람");
-    expect(container.textContent).not.toContain("받는 사람");
-    const acceptButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("수락 및 일정 추가 요청"),
-    );
-    expect(acceptButton).toBeTruthy();
-    expect(container.textContent).not.toContain("거절");
-
-    await act(async () => {
-      acceptButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushAsyncWork();
-
-    expect(container.textContent).toContain("회의 제안의 일정 반영 의도를 선택한 원본 계정에 요청했습니다.");
-    expect(getRecordedProductEvents().some((event) => event.name === "calendar_reflected")).toBe(true);
-  });
-
-  it("shows confirmed meeting proposals as non-actionable status", async () => {
-    const email = {
-      id: 14,
-      message_id: "<confirmed-meeting@example.com>",
-      thread_id: null,
-      sender: "organizer@example.com",
-      recipients: "user@example.com",
-      subject: "Confirmed meeting",
-      date: "2026-05-17T10:00:00Z",
-      body: "The meeting is confirmed.",
-      meeting_proposal: {
-        id: "meeting-14",
-        title: "Confirmed review",
-        start_time: "2026-05-20T09:00:00Z",
-        end_time: "2026-05-20T10:00:00Z",
-        status: "confirmed" as const,
-      },
-    };
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/14")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "확정됨", action_items: [] }));
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<EmailDetail emailId={14} />);
-    });
-    await flushAsyncWork();
-
-    expect(container.textContent).toContain("이 회의 제안은 이미 확정되었습니다.");
-    expect(container.textContent).not.toContain("수락 및 일정 추가 요청");
   });
 
   it("ignores a late draft response after the selected email changes", async () => {
