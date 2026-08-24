@@ -481,17 +481,40 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
 
     setIsAcceptingMeetingProposal(true);
     setMeetingProposalStatus(null);
+    const startedAt = nowMs();
     try {
       const location = proposal.location ? " · " + proposal.location : "";
-      await apiClient.post<CalendarWritebackIntentResponse>('/api/calendar/writeback-intent', {
+      const intent = await apiClient.post<CalendarWritebackIntentResponse>('/api/calendar/writeback-intent', {
         action: 'create',
         summary: proposal.title + " (" + proposal.start_time + " - " + proposal.end_time + location + ")",
       });
       if (!isCurrentEmail()) return;
       setMeetingProposalStatus({ type: 'success', message: '회의 제안의 일정 반영 의도를 선택한 원본 계정에 요청했습니다.' });
+      recordProductEvent("calendar_reflected", {
+        surface: "mail_detail",
+        calendar_candidate_id: `mail-meeting:${actionEmailId ?? "unknown"}`,
+        calendar_event_id: null,
+        thread_id: email ? getThreadEventId(email) : null,
+        conflict_state: "none",
+        provider_write_executed: Boolean(intent.provider_write_executed),
+      });
+      recordProductEvent("latency_guardrail_recorded", {
+        surface: "mail_detail",
+        request_trace_id: createProductEventId("meeting_calendar_trace"),
+        operation: "calendar_reflection",
+        duration_ms: Math.round(nowMs() - startedAt),
+        status: "success",
+      });
     } catch {
       if (!isCurrentEmail()) return;
       setMeetingProposalStatus({ type: 'error', message: '회의 제안 일정 반영 의도 요청에 실패했습니다.' });
+      recordProductEvent("latency_guardrail_recorded", {
+        surface: "mail_detail",
+        request_trace_id: createProductEventId("meeting_calendar_trace"),
+        operation: "calendar_reflection",
+        duration_ms: Math.round(nowMs() - startedAt),
+        status: "error",
+      });
     } finally {
       if (isCurrentEmail()) setIsAcceptingMeetingProposal(false);
     }

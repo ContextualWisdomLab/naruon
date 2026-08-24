@@ -982,6 +982,16 @@ describe("EmailDetail", () => {
       await flushAsyncWork();
     });
     expect(container.textContent).toContain("회의 제안의 일정 반영 의도를 선택한 원본 계정에 요청했습니다.");
+    expect(getRecordedProductEvents().some((event) =>
+      event.name === "calendar_reflected" &&
+      event.payload.calendar_candidate_id === "mail-meeting:24" &&
+      event.payload.provider_write_executed === false,
+    )).toBe(true);
+    expect(getRecordedProductEvents().some((event) =>
+      event.name === "latency_guardrail_recorded" &&
+      event.payload.operation === "calendar_reflection" &&
+      event.payload.status === "success",
+    )).toBe(true);
   });
 
   it("ignores a late draft response after the selected email changes", async () => {
