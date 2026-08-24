@@ -54,6 +54,30 @@ def assert_dockerfile_stage_from(dockerfile: str, image: str, stage_alias: str) 
     )
 
 
+def first_dockerfile_base_reference(dockerfile: str) -> str:
+    """Return the first exact tag-and-digest Dockerfile base reference."""
+    first_from = re.search(r"^FROM (?P<declaration>.+)$", dockerfile, flags=re.MULTILINE)
+    assert first_from is not None, "Dockerfile must declare a base image"
+    match = re.fullmatch(
+        r"(?P<reference>[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+"
+        r"@sha256:[0-9a-f]{64})(?: AS [A-Za-z0-9._-]+)?",
+        first_from.group("declaration"),
+    )
+    assert match is not None, "Dockerfile first stage must use an exact tag-and-digest pin"
+    return match.group("reference")
+
+
+def assert_oci_metadata_matches_first_base(dockerfile: str) -> None:
+    """Require OCI base metadata defaults to describe the real first stage."""
+    base_reference = first_dockerfile_base_reference(dockerfile)
+    image_reference, base_digest = base_reference.rsplit("@", 1)
+    if "/" not in image_reference:
+        image_reference = f"docker.io/library/{image_reference}"
+
+    assert f'ARG OCI_IMAGE_BASE_DIGEST="{base_digest}"' in dockerfile
+    assert f'ARG OCI_IMAGE_BASE_NAME="{image_reference}@{base_digest}"' in dockerfile
+
+
 def test_root_version_exists_and_is_initial_semver_release() -> None:
     version = read_repo_text("VERSION").strip()
 
@@ -95,6 +119,29 @@ def test_container_images_cover_all_oci_predefined_image_annotations() -> None:
     assert (
         "annotations: ${{ steps.meta.outputs.annotations }}" in docker_publish_workflow
     )
+    assert_oci_metadata_matches_first_base(root_dockerfile)
+    assert_oci_metadata_matches_first_base(frontend_dockerfile)
+
+
+def test_container_base_image_pins_are_synchronized() -> None:
+    root_dockerfile = read_repo_text("Dockerfile")
+    frontend_dockerfile = read_repo_text("frontend/Dockerfile")
+    connector_dockerfile = read_repo_text("connector/Dockerfile")
+
+    root_python = first_dockerfile_base_reference(root_dockerfile)
+    connector_python = first_dockerfile_base_reference(connector_dockerfile)
+    root_node_match = re.search(
+        r"^FROM (?P<reference>node:26-slim@sha256:[0-9a-f]{64}) "
+        r"AS frontend-builder$",
+        root_dockerfile,
+        flags=re.MULTILINE,
+    )
+    assert root_node_match is not None
+
+    assert connector_python == root_python
+    assert first_dockerfile_base_reference(frontend_dockerfile) == (
+        root_node_match.group("reference")
+    )
 
 
 def test_container_images_use_pinned_node_runtimes() -> None:
@@ -106,7 +153,8 @@ def test_container_images_use_pinned_node_runtimes() -> None:
     assert_dockerfile_stage_from(root_dockerfile, "node:26-slim", "frontend-builder")
     assert "FROM node:26-slim@sha256:" in frontend_dockerfile
     assert "docker.io/library/node:26-slim" in frontend_dockerfile
-    assert "docker.io/library/node:26-slim" in docker_publish_workflow
+    assert "base_dockerfile: frontend/Dockerfile" in docker_publish_workflow
+    assert 'base_name="docker.io/library/$base_reference"' in docker_publish_workflow
     assert "Node 26 toolchain" in render_deployment
     assert "node:24" not in root_dockerfile
     assert "node:24" not in frontend_dockerfile
@@ -127,7 +175,8 @@ def test_backend_images_use_python_314_runtime() -> None:
 
     assert_dockerfile_stage_from(root_dockerfile, "python:3.14-slim", "backend-runtime")
     assert "docker.io/library/python:3.14-slim" in root_dockerfile
-    assert "docker.io/library/python:3.14-slim" in docker_publish_workflow
+    assert "base_dockerfile: Dockerfile" in docker_publish_workflow
+    assert 'base_name="docker.io/library/$base_reference"' in docker_publish_workflow
     assert 'python-version: ["3.14"]' in app_ci_workflow
     assert 'python-version: "3.14"' in bandit_workflow
     assert "Python 3.14 toolchain" in render_deployment
