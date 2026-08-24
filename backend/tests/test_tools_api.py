@@ -1269,3 +1269,18 @@ async def test_json_formatter_tool_invalid():
     assert data["status"] == "failed"
     assert "Invalid JSON string:" in data["message"]
     assert data.get("result") is None
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+def test_json_formatter_rejects_non_standard_numeric_constants(constant):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_string": f'{{"value": {constant}}}'}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Invalid JSON constant" in data["message"]
+    assert data.get("result") is None
