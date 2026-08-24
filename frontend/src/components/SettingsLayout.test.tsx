@@ -46,10 +46,8 @@ function jsonResponse(body: unknown) {
 describe("SettingsLayout", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
-  let failAccountConfigLoad = false;
 
   beforeEach(() => {
-    failAccountConfigLoad = false;
     oidcMocks.getOidcBrowserConfig.mockReturnValue({
       issuerUrl: "https://login.example.com/realms/naruon",
       clientId: "naruon-web",
@@ -269,9 +267,6 @@ describe("SettingsLayout", () => {
           });
         }
         if (String(input) === "/api/accounts/config") {
-          if (failAccountConfigLoad) {
-            return Promise.reject(new Error("계정 설정 조회 실패"));
-          }
           return jsonResponse({
             user_id: "default",
             smtp_server: "smtp.example.com",
@@ -640,32 +635,6 @@ describe("SettingsLayout", () => {
     expect(putBody).not.toHaveProperty("pop3_password");
     expect(putBody).not.toHaveProperty("oauth_client_secret");
     expect(container.textContent).toContain("계정 설정을 저장했습니다");
-  });
-
-  it("announces an account configuration load error instead of a loading state", async () => {
-    failAccountConfigLoad = true;
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<SettingsLayout />);
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
-    await act(async () => {
-      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
-    expect(saveButton?.getAttribute("title")).toBe("계정 설정을 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요.");
-    expect(saveButton?.getAttribute("aria-describedby")).toBe("account-save-availability");
-    expect(container.textContent).toContain("계정 설정을 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요.");
-    expect(container.textContent).not.toContain("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
   });
 
   it("loads and saves AI model registry entries without public identity headers or secret replay", async () => {

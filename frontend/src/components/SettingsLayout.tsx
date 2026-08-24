@@ -611,7 +611,7 @@ export function SettingsLayout() {
 
   const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (accountSaving || !accountReady) return;
+    if (!accountReady) return;
     setAccountSaving(true);
     setAccountError(null);
     setAccountStatus(null);
@@ -1306,7 +1306,7 @@ export function SettingsLayout() {
                     <div className="inline-flex">
                       {(accountSaving || !accountReady) && (
                         <span id="account-save-availability" className="sr-only">
-                          {accountLoading ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요." : accountError ? "계정 설정을 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요." : accountSaving ? "계정 설정을 저장하는 중입니다." : "입력값이 부족합니다."}
+                          {!accountConfig || accountLoading ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요." : accountSaving ? "계정 설정을 저장하는 중입니다." : "입력값이 부족합니다."}
                         </span>
                       )}
                       <button
@@ -1314,7 +1314,7 @@ export function SettingsLayout() {
                         aria-disabled={accountSaving || !accountReady ? "true" : undefined}
                         aria-describedby={accountSaving || !accountReady ? "account-save-availability" : undefined}
                         aria-busy={accountSaving}
-                        title={accountLoading ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요." : accountError ? "계정 설정을 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요." : accountSaving ? "계정 설정을 저장하는 중입니다." : !accountReady ? "입력값이 부족합니다." : "계정 설정 저장"}
+                        title={accountLoading ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요." : accountSaving ? "계정 설정을 저장하는 중입니다." : !accountReady ? "입력값이 부족합니다." : "계정 설정 저장"}
                         onClick={(e) => {
                           if (accountSaving || !accountReady) {
                             e.preventDefault();
