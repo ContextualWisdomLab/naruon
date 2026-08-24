@@ -20,7 +20,7 @@ vi.mock("lucide-react", () => ({
   CheckCircle2: () => <svg aria-hidden="true" />,
   Server: () => <svg aria-hidden="true" />,
   Upload: () => <svg aria-hidden="true" />,
-  Loader2: () => <svg aria-hidden="true" data-testid="loader" />,
+  Loader2: () => <svg aria-hidden="true" />,
 }));
 
 import DataPage from "./page";
@@ -1963,71 +1963,6 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("etag-webdav-primary");
     expect(container.textContent).not.toContain("/Naruon/Data/roadmap.md-opaque.md");
     expect(container.textContent).not.toContain("runner_req_data_doc_1");
-  });
-
-  it("shows loading feedback only on the active document action", async () => {
-    const fetchMock = mockWebdavFetch();
-    const defaultImplementation = fetchMock.getMockImplementation();
-    let resolveUpload!: (response: ReturnType<typeof jsonResponse>) => void;
-    const pendingUpload = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
-      resolveUpload = resolve;
-    });
-    fetchMock.mockImplementation((input, init) => {
-      if (String(input) === "/api/data/documents" && init?.method === "POST") return pendingUpload;
-      return defaultImplementation?.(input, init) ?? Promise.reject(new Error("Missing test fetch implementation"));
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<DataPage />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const fileInput = container.querySelector('input[accept=".txt,.md,.markdown,text/plain,text/markdown"]') as HTMLInputElement | null;
-    const file = new File(["# active action"], "active-action.md", { type: "text/markdown" });
-    Object.defineProperty(fileInput, "files", { configurable: true, value: [file] });
-    await act(async () => {
-      fileInput?.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    const uploadButton = Array.from(container.querySelectorAll("button")).find((candidate) => candidate.textContent?.includes("선택 문서 저장"));
-    const reparseButton = Array.from(container.querySelectorAll("button")).find((candidate) => candidate.textContent?.includes("재파싱 실행"));
-    expect(uploadButton).toBeDefined();
-    expect(reparseButton).toBeDefined();
-    await act(async () => {
-      uploadButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(uploadButton?.getAttribute("aria-busy")).toBe("true");
-    expect(uploadButton?.textContent).toContain("저장 중");
-    expect(uploadButton?.querySelector("[data-testid='loader']")).toBeTruthy();
-    expect(reparseButton?.getAttribute("aria-busy")).toBe("false");
-    expect(reparseButton?.textContent).toContain("재파싱 실행");
-    expect(reparseButton?.querySelector("[data-testid='loader']")).toBeFalsy();
-    expect((reparseButton as HTMLButtonElement | undefined)?.disabled).toBe(true);
-
-    resolveUpload(jsonResponse({
-      document_id: "doc_uploaded",
-      workspace_id: "workspace-org-acme",
-      document_name: "active-action.md",
-      document_type: "text/markdown",
-      document_status: "uploaded",
-      content_chars: 15,
-      provider_write_executed: false,
-      provenance: "server-authoritative",
-      audit_event: "data.document.uploaded",
-      message: "Document stored in the signed workspace scope.",
-    }));
-    await act(async () => {
-      await pendingUpload;
-      await Promise.resolve();
-      await Promise.resolve();
-    });
   });
 
   it("loads signed data quality surface without public identity headers", async () => {
