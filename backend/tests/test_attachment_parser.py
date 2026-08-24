@@ -3,6 +3,7 @@ import base64
 import pytest
 
 from services.attachment_parser import (
+    MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS,
     MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
     MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
     decode_deferred_attachment_payload,
@@ -32,6 +33,8 @@ def test_html_attachment_preserves_parse_source_and_safe_display_text():
     [
         ("..\\\\upload.txt", "upload.txt"),
         ("C:\\\\mail\\\\report.pdf", "report.pdf"),
+        ("%2e%2e%2fupload.txt", "upload.txt"),
+        ("%252e%252e%252fsecret.txt", "secret.txt"),
     ],
 )
 def test_attachment_filename_normalizes_windows_path_separators(
@@ -45,6 +48,20 @@ def test_attachment_filename_normalizes_windows_path_separators(
     )
 
     assert result.filename == expected_filename
+
+
+def test_attachment_filename_rejects_unresolved_nested_encoding():
+    encoded_filename = "%2e%2e%2fsecret.txt"
+    for _ in range(MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS):
+        encoded_filename = encoded_filename.replace("%", "%25")
+
+    result = parse_email_attachment(
+        filename=encoded_filename,
+        content_type="text/plain",
+        raw_content="safe content",
+    )
+
+    assert result.filename == "attachment"
 
 
 def test_markdown_attachment_is_parseable_markdown():
