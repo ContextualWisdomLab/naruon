@@ -2,9 +2,9 @@
 
 import pytest
 
-import main
 from api.content_checksum_tool import register_content_checksum_tool
 from api.tools import registry
+from main import app
 
 
 SECURITY_NOTE = (
@@ -15,7 +15,7 @@ SECURITY_NOTE = (
 
 def test_application_bootstrap_registers_content_checksum_tool() -> None:
     """Loading the FastAPI application must expose the built-in checksum tool."""
-    assert main.app is not None
+    assert app is not None
     assert registry.get("content_checksum_generator") is not None
 
 
