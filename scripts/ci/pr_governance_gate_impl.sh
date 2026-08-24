@@ -43,6 +43,9 @@ cleanup_temp_files() {
     "$REVIEW_COMMENTS_ERROR_FILE" \
     "$OPENCODE_REVIEWS_ERROR_FILE" \
     "$COMMIT_STATUS_ERROR_FILE"
+  if [ -n "${PR_GOVERNANCE_WRAPPER_COMMENTS_FILE:-}" ]; then
+    rm -f "$PR_GOVERNANCE_WRAPPER_COMMENTS_FILE"
+  fi
 }
 
 trap cleanup_temp_files EXIT
@@ -358,6 +361,13 @@ if ! COMMIT_STATUS_RAW="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}
   printf '%s\n' "$(<"$COMMIT_STATUS_ERROR_FILE")" | sed 's/^/    /'
   add_blocker 'Current-head commit statuses could not be read; see the workflow run log.'
 else
+  # The trusted entrypoint may emit normalization diagnostics on stderr while
+  # still returning a usable payload; surface them on the success path too so
+  # audit evidence is not swallowed by the error-file capture.
+  if [ -s "$COMMIT_STATUS_ERROR_FILE" ]; then
+    printf 'commit status normalization notes:\n'
+    printf '%s\n' "$(<"$COMMIT_STATUS_ERROR_FILE")" | sed 's/^/    /'
+  fi
   COMMIT_STATUS_JSON="$COMMIT_STATUS_RAW"
 fi
 CODERABBIT_MATCHES="$(printf '%s' "$CHECK_RUNS" | jq '
@@ -438,12 +448,24 @@ else
   fi
 fi
 
-if ! ISSUE_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" 2>"$ISSUE_COMMENTS_ERROR_FILE")"; then
-  printf 'issue comment lookup failed:\n'
-  printf '%s\n' "$(<"$ISSUE_COMMENTS_ERROR_FILE")" | sed 's/^/    /'
-  add_blocker 'PR issue comments could not be read; see the workflow run log.'
-else
-  CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s \
+# Reuse the issue-comments snapshot the trusted entrypoint already fetched for
+# unavailable-review normalization (one API call per run); fall back to a fresh
+# fetch when the entrypoint never intercepted a status read in this process.
+ISSUE_COMMENTS_JSON=''
+if [ -n "${PR_GOVERNANCE_WRAPPER_COMMENTS_FILE:-}" ] \
+  && [ -s "$PR_GOVERNANCE_WRAPPER_COMMENTS_FILE" ]; then
+  printf 'Reusing entrypoint issue-comments snapshot for review evidence.\n'
+  ISSUE_COMMENTS_JSON="$(<"$PR_GOVERNANCE_WRAPPER_COMMENTS_FILE")"
+fi
+if [ -z "$ISSUE_COMMENTS_JSON" ]; then
+  if ! ISSUE_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" 2>"$ISSUE_COMMENTS_ERROR_FILE")"; then
+    printf 'issue comment lookup failed:\n'
+    printf '%s\n' "$(<"$ISSUE_COMMENTS_ERROR_FILE")" | sed 's/^/    /'
+    add_blocker 'PR issue comments could not be read; see the workflow run log.'
+    ISSUE_COMMENTS_JSON='[]'
+  fi
+fi
+CODERABBIT_ISSUE_BLOCKERS="$(printf '%s' "$ISSUE_COMMENTS_JSON" | jq -s \
     --arg head_sha "$HEAD_SHA" \
     --arg pattern "$CODERABBIT_ISSUE_BLOCKING_PATTERN" \
     --arg substantive_pattern "$CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN" \
@@ -461,10 +483,9 @@ else
         )
       | select((.body // "") | contains($head_sha))]
     | length'
-  )"
-  if [ "$CODERABBIT_ISSUE_BLOCKERS" != "0" ]; then
-    add_blocker "Current-head CodeRabbit issue comment has blocking warning/failure evidence on ${HEAD_REF_OID}."
-  fi
+)"
+if [ "$CODERABBIT_ISSUE_BLOCKERS" != "0" ]; then
+  add_blocker "Current-head CodeRabbit issue comment has blocking warning/failure evidence on ${HEAD_REF_OID}."
 fi
 
 if ! REVIEW_COMMENTS_JSON="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/comments" 2>"$REVIEW_COMMENTS_ERROR_FILE")"; then

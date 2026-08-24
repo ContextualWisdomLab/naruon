@@ -48,6 +48,15 @@ if ! [[ "${GITHUB_REPOSITORY:-}" =~ ^[^/]+/[^/]+$ ]]; then
   exit 1
 fi
 
+# Shared snapshot of this run's issue comments. Both the unavailable-review
+# normalization below and the delegated evaluator need the same
+# issues/<pr>/comments payload; persisting one fetch into a file (env-var state
+# cannot survive command-substitution subshells) keeps the gate at one API call
+# per run on a deliberately rate-sensitive path. The evaluator prefers this
+# snapshot when present and falls back to its own fetch otherwise.
+PR_GOVERNANCE_WRAPPER_COMMENTS_FILE="$(mktemp)"
+export PR_GOVERNANCE_WRAPPER_COMMENTS_FILE
+
 gh() {
   if [ "${1:-}" = "api" ] \
     && [[ "${2:-}" =~ ^repos/.+/commits/[0-9a-fA-F]{40}/status$ ]]; then
@@ -61,9 +70,19 @@ gh() {
       printf '%s' "$status_json"
       return 0
     fi
-    if ! comments_json="$("$PR_GOVERNANCE_REAL_GH" api --paginate \
+    # A transient comments-endpoint failure must not corrupt the successful
+    # status read itself: pass the original payload through and let the
+    # delegated evaluator's own comments lookup fail closed with its causal
+    # blocker. Only the normalization here is skipped.
+    if [ -s "$PR_GOVERNANCE_WRAPPER_COMMENTS_FILE" ]; then
+      comments_json="$(<"$PR_GOVERNANCE_WRAPPER_COMMENTS_FILE")"
+    elif ! comments_json="$("$PR_GOVERNANCE_REAL_GH" api --paginate \
       "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments")"; then
-      return 1
+      printf 'Review-unavailable comment normalization skipped: issue comments could not be read.\n' >&2
+      printf '%s' "$status_json"
+      return 0
+    else
+      printf '%s' "$comments_json" >"$PR_GOVERNANCE_WRAPPER_COMMENTS_FILE"
     fi
     unavailable_count="$(printf '%s' "$comments_json" | jq -s \
       --arg head_sha "$HEAD_SHA" '
@@ -95,6 +114,11 @@ gh() {
   fi
   "$PR_GOVERNANCE_REAL_GH" "$@"
 }
+# The interception relies on bash exporting this function through the
+# environment (BASH_FUNC_gh%%) so the delegated evaluator's `gh` calls route
+# through it. POSIX-mode or privileged shells that drop exported functions
+# silently disable only this normalization; the evaluator still enforces the
+# gate on raw provider evidence. Keep that constraint in mind when editing.
 export -f gh
 
 exec bash "$IMPLEMENTATION"

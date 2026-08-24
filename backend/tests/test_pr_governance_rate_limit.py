@@ -114,18 +114,31 @@ def _write_fake_gh(bin_dir: Path) -> None:
                     raise SystemExit(0)
 
                 if endpoint.endswith("/issues/42/comments"):
+                    if "--method" in args:
+                        emit({{"id": 999}})
+                        raise SystemExit(0)
                     if "--jq" in args:
                         raise SystemExit(0)
-                    emit([{{
-                        "id": 777,
-                        "user": {{"login": "coderabbitai[bot]"}},
-                        "created_at": "2026-08-15T00:00:00Z",
-                        "body": CONFIG.get(
-                            "comment_body",
-                            "Review limit reached. We couldn't start this review. "
-                            "Next review available later. Head SHA: " + HEAD,
-                        ),
-                    }}])
+                    if "--paginate" in args:
+                        if CONFIG.get("fail_issue_comments"):
+                            print("synthetic issue-comments outage", file=sys.stderr)
+                            raise SystemExit(1)
+                        # Count raw paginated comment reads so tests can
+                        # prove the gate fetches this payload once per run.
+                        counter = CONFIG_PATH.with_name("comments-fetch-count")
+                        count = int(counter.read_text()) + 1 if counter.exists() else 1
+                        counter.write_text(str(count), encoding="utf-8")
+                        emit([{{
+                            "id": 777,
+                            "user": {{"login": "coderabbitai[bot]"}},
+                            "created_at": "2026-08-15T00:00:00Z",
+                            "body": CONFIG.get(
+                                "comment_body",
+                                "Review limit reached. We couldn't start this review. "
+                                "Next review available later. Head SHA: " + HEAD,
+                            ),
+                        }}])
+                        raise SystemExit(0)
                     raise SystemExit(0)
 
                 if endpoint.endswith("/pulls/42/comments"):
@@ -324,6 +337,66 @@ def test_gate_harness_ignores_ambient_fake_cli_controls(
         in output
     )
     assert "PR governance metadata gate is ready" not in output
+
+
+def test_comments_outage_during_normalization_keeps_status_readable(
+    tmp_path: Path,
+) -> None:
+    """A comments-endpoint hiccup must not corrupt the successful status read."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    result = _run_gate(
+        repo_root,
+        bin_dir,
+        fake_gh_config={"fail_issue_comments": True},
+    )
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert (
+        "Current-head commit statuses could not be read" not in output
+    ), output
+    assert "Review-unavailable comment normalization skipped" in output
+    assert "PR issue comments could not be read; see the workflow run log" in output
+    assert "PR governance metadata gate errored" not in output
+
+
+def test_normalization_diagnostic_is_surfaced_on_success_path(tmp_path: Path) -> None:
+    """The ignored-status diagnostic must survive the impl's stderr capture."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    result = _run_gate(repo_root, bin_dir)
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert "Ignoring successful CodeRabbit commit status" in output
+    assert "commit status normalization notes:" in output
+
+
+def test_issue_comments_are_fetched_once_per_gate_run(tmp_path: Path) -> None:
+    """Normalization and evaluator evidence must share one comments API call."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    result = _run_gate(repo_root, bin_dir)
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    counter = bin_dir / "comments-fetch-count"
+    assert counter.exists(), output
+    assert counter.read_text(encoding="utf-8").strip() == "1", output
+    assert "Reusing entrypoint issue-comments snapshot for review evidence." in output
 
 
 def test_skipped_and_neutral_required_checks_are_accepted(tmp_path: Path) -> None:
