@@ -127,8 +127,10 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const [instruction, setInstruction] = useState('정중하게 답장해줘');
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isAcceptingMeetingProposal, setIsAcceptingMeetingProposal] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [meetingProposalStatus, setMeetingProposalStatus] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [taskStatus, setTaskStatus] = useState<string | null>(null);
   const [sourceDrawerOpen, setSourceDrawerOpen] = useState(false);
   const threadRequestIdRef = useRef(0);
@@ -198,8 +200,10 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       setIsDrafting(false);
       setIsSending(false);
       setIsSyncing(false);
+      setIsAcceptingMeetingProposal(false);
       setIsCreatingTask(false);
       setSyncStatus(null);
+      setMeetingProposalStatus(null);
       setTaskStatus(null);
       setSourceDrawerOpen(false);
       activeDraftReplyIdRef.current = null;
@@ -475,8 +479,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
     const isCurrentEmail = () => currentEmailIdRef.current === actionEmailId;
     if (!proposal || proposal.status !== "proposed") return;
 
-    setIsSyncing(true);
-    setSyncStatus(null);
+    setIsAcceptingMeetingProposal(true);
+    setMeetingProposalStatus(null);
     try {
       const location = proposal.location ? " · " + proposal.location : "";
       await apiClient.post<CalendarWritebackIntentResponse>('/api/calendar/writeback-intent', {
@@ -484,12 +488,12 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         summary: proposal.title + " (" + proposal.start_time + " - " + proposal.end_time + location + ")",
       });
       if (!isCurrentEmail()) return;
-      setSyncStatus({ type: 'success', message: '회의 제안의 일정 반영 의도를 선택한 원본 계정에 요청했습니다.' });
+      setMeetingProposalStatus({ type: 'success', message: '회의 제안의 일정 반영 의도를 선택한 원본 계정에 요청했습니다.' });
     } catch {
       if (!isCurrentEmail()) return;
-      setSyncStatus({ type: 'error', message: '회의 제안 일정 반영 의도 요청에 실패했습니다.' });
+      setMeetingProposalStatus({ type: 'error', message: '회의 제안 일정 반영 의도 요청에 실패했습니다.' });
     } finally {
-      if (isCurrentEmail()) setIsSyncing(false);
+      if (isCurrentEmail()) setIsAcceptingMeetingProposal(false);
     }
   }, [email, emailId]);
 
@@ -731,7 +735,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     <div className="flex flex-col gap-1">
                       <span className="text-sm font-bold text-foreground">{email.meeting_proposal.title}</span>
                       <span className="text-xs text-muted-foreground font-medium">
-                        {new Date(email.meeting_proposal.start_time).toLocaleString()} - {new Date(email.meeting_proposal.end_time).toLocaleTimeString()}
+                        {new Date(email.meeting_proposal.start_time).toLocaleString()} - {new Date(email.meeting_proposal.end_time).toLocaleString()}
                       </span>
                       {email.meeting_proposal.location && (
                         <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -742,13 +746,13 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     <Button
                       size="sm"
                       onClick={handleAcceptMeetingProposal}
-                      disabled={isSyncing}
-                      aria-busy={isSyncing}
+                      disabled={isAcceptingMeetingProposal}
+                      aria-busy={isAcceptingMeetingProposal}
                       className="h-9 rounded-xl bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
                     >
-                      {isSyncing && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                      {isAcceptingMeetingProposal && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
                       <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                      {isSyncing ? "일정 추가 요청 중" : "수락 및 일정 추가 요청"}
+                      {isAcceptingMeetingProposal ? "일정 추가 요청 중" : "수락 및 일정 추가 요청"}
                     </Button>
                   </div>
                 ) : (
@@ -756,9 +760,9 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     이 회의 제안은 이미 {email.meeting_proposal.status === "confirmed" ? "확정" : "취소"}되었습니다.
                   </p>
                 )}
-                {syncStatus && (
-                  <span role="status" aria-live="polite" className={"text-xs " + (syncStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
-                    {syncStatus.message}
+                {meetingProposalStatus && (
+                  <span role="status" aria-live="polite" className={"text-xs " + (meetingProposalStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
+                    {meetingProposalStatus.message}
                   </span>
                 )}
               </div>
