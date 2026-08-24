@@ -438,10 +438,32 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         ),
       );
       if (!isCurrentEmail()) return;
-      const providerWriteExecuted = intents.some((intent) => Boolean(intent.provider_write_executed));
+      const providerWriteCount = intents.filter((intent) => Boolean(intent.provider_write_executed)).length;
+      const providerWriteExecuted = providerWriteCount === intents.length;
+      const hardFailureSignals = ["timeout", "fatal", "warn", "denied"];
+      const hasHardFailure = intents.some((intent) =>
+        [intent.status, intent.error_code].some((value) => {
+          const normalized = String(value ?? "").toLowerCase();
+          return hardFailureSignals.some((signal) => normalized.includes(signal));
+        }),
+      );
+      const batchStatus = hasHardFailure
+        ? "error"
+        : providerWriteCount === 0
+          ? "intent-only"
+          : providerWriteExecuted
+            ? "success"
+            : "partial";
+      const batchMessage = batchStatus === "error"
+        ? "일정 반영 결과에 실패 상태가 포함되어 완료하지 못했습니다."
+        : batchStatus === "partial"
+          ? "요청한 일정 중 일부만 반영되어 추가 확인이 필요합니다."
+          : batchStatus === "success"
+            ? String(intents.length) + "개 일정이 선택한 원본 계정에 반영되었습니다."
+            : String(intents.length) + "개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.";
       setSyncStatus({
-        type: providerWriteExecuted ? "success" : "intent-only",
-        message: `${intents.length}개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.`,
+        type: batchStatus === "success" ? "success" : batchStatus === "intent-only" ? "intent-only" : "error",
+        message: batchMessage,
       });
       recordProductEvent("calendar_reflected", {
         surface: "mail_detail",
@@ -450,13 +472,16 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         thread_id: email ? getThreadEventId(email) : null,
         conflict_state: "none",
         provider_write_executed: providerWriteExecuted,
+        calendar_batch_status: batchStatus,
+        calendar_intent_count: intents.length,
+        calendar_provider_write_count: providerWriteCount,
       });
       recordProductEvent("latency_guardrail_recorded", {
         surface: "mail_detail",
         request_trace_id: createProductEventId("calendar_trace"),
         operation: "calendar_reflection",
         duration_ms: Math.round(nowMs() - startedAt),
-        status: "success",
+        status: batchStatus === "error" ? "error" : "success",
       });
     } catch {
       if (!isCurrentEmail()) return;

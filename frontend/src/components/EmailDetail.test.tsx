@@ -977,6 +977,56 @@ describe("EmailDetail", () => {
     expect(container.querySelector<HTMLTextAreaElement>('#reply-draft')?.value).toBe("");
   });
 
+  it("marks mixed provider execution as a partial calendar result", async () => {
+    const email = {
+      id: 25,
+      message_id: "<partial-calendar@example.com>",
+      thread_id: null,
+      sender: "organizer@example.com",
+      recipients: "user@example.com",
+      subject: "Partial calendar result",
+      date: "2026-05-17T10:00:00Z",
+      body: "Create two calendar items.",
+    };
+    let calendarRequestCount = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/25")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "회의", action_items: ["첫 번째 일정", "두 번째 일정"] }));
+      if (url.endsWith("/api/calendar/writeback-intent")) {
+        expect(init?.method).toBe("POST");
+        calendarRequestCount += 1;
+        return Promise.resolve(jsonResponse({ provider_write_executed: calendarRequestCount === 1 }));
+      }
+      throw new Error("Unexpected fetch: " + url);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={25} />); });
+    await flushAsyncWork();
+
+    const syncButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("일정 반영"),
+    );
+    expect(syncButton).toBeTruthy();
+    await act(async () => {
+      syncButton?.click();
+      await flushAsyncWork();
+    });
+
+    expect(container.textContent).toContain("요청한 일정 중 일부만 반영되어 추가 확인이 필요합니다.");
+    expect(getRecordedProductEvents().some((event) =>
+      event.name === "calendar_reflected" &&
+      event.payload.calendar_batch_status === "partial" &&
+      event.payload.calendar_intent_count === 2 &&
+      event.payload.calendar_provider_write_count === 1 &&
+      event.payload.provider_write_executed === false,
+    )).toBe(true);
+  });
+
   it("handles errors when generating reply drafts", async () => {
     const email: TestEmail = {
       id: 15,

@@ -28,9 +28,10 @@ components must add stories for their meaningful states and accessibility
 labels; page-specific stories remain optional until a page has a stable
 isolated contract.
 
-The existing Figma file remains the design source for visual decisions. No new
-Figma file or Code Connect integration is created by this delivery; record any
-future replacement file ID in this ADR before changing token values.
+The existing Figma file remains the visual reference for design decisions, while
+Storybook is the executable authority for the shared component inventory. No
+new Figma file or Code Connect integration is created by this delivery; record
+any future replacement file ID in this ADR before changing token values.
 
 ## Consequences
 
