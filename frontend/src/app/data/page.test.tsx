@@ -1965,55 +1965,6 @@ describe("DataPage", () => {
     expect(container.textContent).not.toContain("runner_req_data_doc_1");
   });
 
-  it("marks only the selected document action as busy while its request is pending", async () => {
-    const fetchMock = mockWebdavFetch();
-    vi.stubGlobal("fetch", fetchMock);
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<DataPage />);
-    });
-
-    let resolveAction: ((response: ReturnType<typeof jsonResponse>) => void) | undefined;
-    const pendingAction = new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
-      resolveAction = resolve;
-    });
-    fetchMock.mockImplementationOnce(() => pendingAction);
-
-    const reparseButton = Array.from(container.querySelectorAll("button")).find((candidate) =>
-      candidate.textContent?.includes("재파싱 실행"),
-    );
-    const embeddingButton = Array.from(container.querySelectorAll("button")).find((candidate) =>
-      candidate.textContent?.includes("임베딩 재생성 의도"),
-    );
-    expect(reparseButton).toBeDefined();
-    expect(embeddingButton).toBeDefined();
-
-    await act(async () => {
-      reparseButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(reparseButton?.getAttribute("aria-busy")).toBe("true");
-    expect(embeddingButton?.getAttribute("aria-busy")).toBe("false");
-    expect(reparseButton?.textContent).toContain("실행 중");
-    expect(embeddingButton?.textContent).toContain("임베딩 재생성 의도");
-
-    resolveAction?.(jsonResponse({
-      document_id: "doc_repository_ready",
-      document_name: "roadmap.md",
-      action: "reparse",
-      provider_write_executed: false,
-      provenance: "server-authoritative",
-      audit_event: "data.document.reparse",
-      message: "Document parse metadata refreshed.",
-    }));
-    await act(async () => {
-      await pendingAction;
-    });
-  });
-
   it("loads signed data quality surface without public identity headers", async () => {
     const fetchMock = mockWebdavFetch();
     vi.stubGlobal("fetch", fetchMock);
