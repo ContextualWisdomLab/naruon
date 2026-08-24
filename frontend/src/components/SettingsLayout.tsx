@@ -1635,7 +1635,7 @@ export function SettingsLayout() {
                       <div className="inline-flex">
                         {!oidcBrowserConfig && (
                           <span id="oidc-login-availability" className="sr-only">
-                            OIDC 브라우저 설정이 없습니다. 관리자에게 OIDC 설정을 확인해 달라고 요청하세요.
+                            OIDC 브라우저 설정이 없습니다. 잠시 후 다시 시도하세요.
                           </span>
                         )}
                         <button
@@ -1649,7 +1649,7 @@ export function SettingsLayout() {
                           }}
                           aria-disabled={!oidcBrowserConfig ? "true" : undefined}
                           aria-describedby={!oidcBrowserConfig ? "oidc-login-availability" : undefined}
-                          title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다. 관리자에게 OIDC 설정을 확인해 달라고 요청하세요." : "OIDC 로그인"}
+                          title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다. 잠시 후 다시 시도하세요." : "OIDC 로그인"}
                           className={`rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${!oidcBrowserConfig ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
                           OIDC 로그인
