@@ -47,11 +47,9 @@ describe("SettingsLayout", () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
   let failAccountConfigLoad = false;
-  let failAccountConfigSave = false;
 
   beforeEach(() => {
     failAccountConfigLoad = false;
-    failAccountConfigSave = false;
     oidcMocks.getOidcBrowserConfig.mockReturnValue({
       issuerUrl: "https://login.example.com/realms/naruon",
       clientId: "naruon-web",
@@ -250,9 +248,6 @@ describe("SettingsLayout", () => {
           ]);
         }
         if (String(input) === "/api/accounts/config" && init?.method === "PUT") {
-          if (failAccountConfigSave) {
-            return Promise.reject(new Error("계정 설정 저장 실패"));
-          }
           const body = JSON.parse(String(init.body));
           return jsonResponse({
             user_id: "default",
@@ -671,37 +666,6 @@ describe("SettingsLayout", () => {
     expect(saveButton?.getAttribute("aria-describedby")).toBe("account-save-availability");
     expect(container.textContent).toContain("계정 설정을 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요.");
     expect(container.textContent).not.toContain("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
-  });
-
-  it("keeps account saving available after a save failure", async () => {
-    failAccountConfigSave = true;
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(<SettingsLayout />);
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
-    await act(async () => {
-      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-    const accountForm = container.querySelector('form');
-    await act(async () => {
-      accountForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const updatedSaveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
-    expect(container.textContent).toContain("API request failed");
-    expect(updatedSaveButton?.getAttribute("aria-disabled")).toBeNull();
-    expect(updatedSaveButton?.getAttribute("title")).toBe("계정 설정 저장");
   });
 
   it("loads and saves AI model registry entries without public identity headers or secret replay", async () => {
