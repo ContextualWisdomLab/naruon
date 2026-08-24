@@ -122,6 +122,7 @@ describe("ToolsPage", () => {
     expect(container.textContent).toContain("테스트 카테고리");
   });
 
+
   it("keeps first-wins tool summaries consistent with rendered tools", async () => {
     vi.stubGlobal(
       "fetch",
