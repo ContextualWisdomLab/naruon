@@ -173,6 +173,7 @@ describe("ToolsPage", () => {
       "1",
     ]);
     expect(container.textContent).toContain("첫 번째 도구");
+    expect(container.textContent).toContain("고유 도구");
     expect(container.textContent).not.toContain("무시되는 중복 도구");
   });
 
