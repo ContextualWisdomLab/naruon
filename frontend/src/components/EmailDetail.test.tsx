@@ -933,6 +933,7 @@ describe("EmailDetail", () => {
       subject: "Launch meeting",
       date: "2026-05-17T10:00:00Z",
       body: "Please join the launch meeting.",
+      attachments: [{ id: "attachment-24", name: "launch-deck.pptx", size: 20 * 1024 * 1024 }],
       meeting_proposal: {
         id: "meeting-24",
         title: "Launch meeting",
@@ -973,6 +974,7 @@ describe("EmailDetail", () => {
     await act(async () => { root?.render(<EmailDetail emailId={24} />); });
     await flushAsyncWork();
 
+    expect(container.textContent).toContain("20.0 MB");
     const acceptButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("수락 및 일정 추가 요청"),
     );

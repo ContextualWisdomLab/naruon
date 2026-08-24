@@ -79,6 +79,18 @@ function nowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
+function formatAttachmentSize(size?: number) {
+  if (typeof size !== "number" || !Number.isFinite(size) || size < 0) return null;
+  const units = ["B", "KB", "MB", "GB"];
+  let value = size;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${unitIndex === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`;
+}
+
 function toStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
@@ -722,7 +734,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium text-foreground line-clamp-1 max-w-[180px]">{file.name}</span>
-                      {file.size && <span className="text-[10px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>}
+                      {formatAttachmentSize(file.size) && <span className="text-[10px] text-muted-foreground">{formatAttachmentSize(file.size)}</span>}
                     </div>
                   </div>
                 ))}
