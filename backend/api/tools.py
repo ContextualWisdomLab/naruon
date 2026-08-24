@@ -28,11 +28,6 @@ ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
 
 
-def _reject_non_standard_json_constant(value: str) -> None:
-    """Reject JavaScript-style numeric constants that are not valid JSON."""
-    raise ValueError(f"Non-standard JSON constant: {value}")
-
-
 def _tool_code_fingerprint(code: str) -> str:
     """Return a stable non-reversible identifier for correlating tool failures."""
     return hashlib.sha256(code.encode("utf-8", errors="replace")).hexdigest()[:12]
@@ -810,22 +805,24 @@ registry.register(
 )
 
 
+def _reject_non_standard_json_constants(val: str) -> float:
+    raise ValueError(f"Non-standard JSON constant: {val}")
+
+
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
     json_string = params.get("json_string") or ""
     try:
         parsed_json = json.loads(
-            json_string,
-            parse_constant=_reject_non_standard_json_constant,
+            json_string, parse_constant=_reject_non_standard_json_constants
         )
         formatted_json = json.dumps(
-            parsed_json,
-            indent=2,
-            allow_nan=False,
-            ensure_ascii=False,
+            parsed_json, indent=2, ensure_ascii=False, allow_nan=False
         )
         return {"formatted_json": formatted_json}
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise ValueError(f"Invalid JSON string: {exc}") from exc
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {e}") from e
+    except ValueError as e:
+        raise ValueError(f"Invalid JSON string: {e}") from e
 
 
 registry.register(
