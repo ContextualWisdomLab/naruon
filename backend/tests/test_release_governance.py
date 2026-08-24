@@ -686,7 +686,7 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     )
     assert (
         workflow.count(
-                "docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0"
+            "docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0"
         )
         == 2
     )
