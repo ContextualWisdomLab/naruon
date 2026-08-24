@@ -47,3 +47,8 @@ dev = [
   "pytest-asyncio==1.4.0",
   "ruff==0.16.4",
 ]
+
+[tool.ruff.lint]
+# Keep the existing CI lint contract explicit when Ruff expands its defaults;
+# broader rule adoption belongs in a separately reviewed modernization change.
+select = ["E4", "E7", "E9", "F"]
