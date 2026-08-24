@@ -976,6 +976,12 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
 
     expect(container.textContent).toContain("20.0 MB");
+    const attachmentName = Array.from(container.querySelectorAll("span")).find(
+      (span) => span.textContent === "launch-deck.pptx",
+    );
+    const attachmentChip = attachmentName?.parentElement?.parentElement;
+    expect(attachmentChip?.className).not.toContain("cursor-pointer");
+    expect(attachmentChip?.className).not.toContain("hover:");
     expect(container.textContent).toContain("참조");
     expect(container.textContent).not.toContain("보낸 사람");
     expect(container.textContent).not.toContain("받는 사람");

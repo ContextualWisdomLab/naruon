@@ -740,8 +740,8 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             {email.attachments && email.attachments.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-4">
                 {email.attachments.map((file) => (
-                  <div key={file.id} className="group flex items-center gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 text-xs shadow-sm hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20">
+                  <div key={file.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 text-xs shadow-sm">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                       <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
                     </div>
                     <div className="flex flex-col gap-0.5">
