@@ -812,7 +812,7 @@ def test_kubernetes_deployments_use_restricted_runtime_security_contexts() -> No
         "image: ghcr.io/contextualwisdomlab/ai_email_client-backend"
         in backend_deployment
     )
-    assert "image: docker.io/pgvector/pgvector:pg16" in db_statefulset
+    assert "image: ghcr.io/pgvector/pgvector:pg16-v0.5.0" in db_statefulset
     assert (
         "image: ghcr.io/contextualwisdomlab/ai_email_client-frontend"
         in frontend_deployment

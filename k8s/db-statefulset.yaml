@@ -30,7 +30,7 @@ spec:
         emptyDir: {}
       containers:
       - name: postgres
-        image: docker.io/pgvector/pgvector:pg16
+        image: ghcr.io/pgvector/pgvector:pg16-v0.5.0
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
