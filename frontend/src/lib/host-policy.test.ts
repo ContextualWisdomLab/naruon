@@ -23,6 +23,19 @@ describe("host-policy", () => {
     expect(isLoopbackHostname("example.com")).toBe(false);
   });
 
+  it("recognizes expanded IPv6 loopback spellings via canonicalization", () => {
+    expect(isLoopbackHostname("0:0:0:0:0:0:0:1")).toBe(true);
+    expect(isLoopbackHostname("[0:0:0:0:0:0:0:1]")).toBe(true);
+    expect(isLoopbackHostname(new URL("http://[0:0:0:0:0:0:0:1]/"))).toBe(true);
+    expect(isLoopbackHostname("0:0:0:0:0:0:0:2")).toBe(false);
+  });
+
+  it("recognizes expanded IPv4-mapped IPv6 spellings via canonicalization", () => {
+    expect(isIpv4MappedHostname("0:0:0:0:0:ffff:c0a8:101")).toBe(true);
+    expect(isIpv4MappedHostname("::ffff:c0a8:0101")).toBe(true);
+    expect(isIpv4MappedHostname("0:0:0:0:0:0:c0a8:101")).toBe(false);
+  });
+
   it("recognizes IPv4-mapped IPv6 syntax after normalization", () => {
     expect(isIpv4MappedHostname("[::ffff:192.168.1.1].")).toBe(true);
     expect(isIpv4MappedHostname("192.168.1.1")).toBe(false);
@@ -48,6 +61,38 @@ describe("host-policy", () => {
     ]) {
       expect(isPrivateOrLoopbackHostname(hostname), hostname).toBe(true);
     }
+  });
+
+  it("fails closed on legacy numeric encodings of private addresses", () => {
+    for (const hostname of [
+      // Leading-zero octets have octal semantics on legacy resolvers.
+      "010.0.0.1",
+      "0127.0.0.1",
+      "0169.254.0.1",
+      "0172.16.0.1",
+      "0192.168.0.1",
+      // Bare decimal/hex integers resolve as IP literals on some stacks.
+      "2130706433",
+      "0x7f000001",
+      // Uncompressed private IPv6 spellings must canonicalize to private...
+      "0:0:0:0:0:0:0:0",
+      "0:0:0:0:0:0:0:1",
+      "fc00:0000:0000:0000:0000:0000:0000:0001",
+      "fe80:0:0:0:0:0:0:1",
+      // ...and mapped literals with ambiguous dotted tails fail closed.
+      "::ffff:010.0.0.001",
+    ]) {
+      expect(isPrivateOrLoopbackHostname(hostname), hostname).toBe(true);
+    }
+  });
+
+  it("still classifies public canonical IPv6 spellings as non-private", () => {
+    expect(isPrivateOrLoopbackHostname("2001:4860:4860:0:0:0:0:8888")).toBe(
+      false,
+    );
+    expect(
+      isPrivateOrLoopbackHostname(new URL("http://[2606:4700::6810:85e5]/")),
+    ).toBe(false);
   });
 
   it("does not classify public or malformed mapped addresses as private", () => {
