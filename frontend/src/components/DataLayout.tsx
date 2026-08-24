@@ -18,7 +18,6 @@ import {
   UniqueThreadStatus,
   EmailImportStatus,
   DocumentActionStatus,
-  DocumentActionKind,
   DataSurfaceStatus,
   DataEvidenceSnapshotResponse,
   DataQualitySurfaceResponse,
@@ -66,7 +65,6 @@ export function DataLayout() {
   const [emailImportResult, setEmailImportResult] = useState<EmailFileImportResponse | null>(null);
   const [emailImportFiles, setEmailImportFiles] = useState<File[]>([]);
   const [documentActionStatus, setDocumentActionStatus] = useState<DocumentActionStatus>('idle');
-  const [documentActionPendingAction, setDocumentActionPendingAction] = useState<DocumentActionKind | null>(null);
   const [documentActionResult, setDocumentActionResult] = useState<DataDocumentActionResponse | null>(null);
   const [documentUploadFiles, setDocumentUploadFiles] = useState<File[]>([]);
   const [dataSurfaceStatus, setDataSurfaceStatus] = useState<DataSurfaceStatus>('loading');
@@ -226,7 +224,6 @@ export function DataLayout() {
     setDocumentUploadFiles(Array.from(event.target.files ?? []));
     setDocumentActionResult(null);
     setDocumentActionStatus('idle');
-    setDocumentActionPendingAction(null);
   }, []);
 
   const requestDocumentUpload = useCallback(async () => {
@@ -243,13 +240,11 @@ export function DataLayout() {
     }
 
     setDocumentActionStatus('loading');
-    setDocumentActionPendingAction('upload');
     setDocumentActionResult(null);
     try {
       const documentType = getDocumentTypeForFile(file);
       if (!isTextDocumentUploadType(documentType)) {
         setDocumentActionStatus('error');
-        setDocumentActionPendingAction(null);
         return;
       }
       const documentContent = await file.text();
@@ -263,13 +258,11 @@ export function DataLayout() {
       );
       setDocumentActionResult(result);
       setDocumentActionStatus('success');
-      setDocumentActionPendingAction(null);
       setDataSurfaceStatus('loading');
       await loadDataQualitySurface();
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
-      setDocumentActionPendingAction(null);
     }
   }, [documentUploadFiles, loadDataQualitySurface]);
 
@@ -292,7 +285,6 @@ export function DataLayout() {
     }
 
     setDocumentActionStatus('loading');
-    setDocumentActionPendingAction(action);
     setDocumentActionResult(null);
     try {
       const result = await apiClient.post<DataDocumentActionResponse>(
@@ -303,13 +295,11 @@ export function DataLayout() {
       );
       setDocumentActionResult(result);
       setDocumentActionStatus('success');
-      setDocumentActionPendingAction(null);
       setDataSurfaceStatus('loading');
       await loadDataQualitySurface();
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
-      setDocumentActionPendingAction(null);
     }
   }, [
     dataQualitySurface,
@@ -451,7 +441,6 @@ export function DataLayout() {
               handleDocumentFileChange={handleDocumentFileChange}
               requestDocumentUpload={requestDocumentUpload}
               isDocumentActionLoading={isDocumentActionLoading}
-              documentActionPendingAction={documentActionPendingAction}
               documentUploadFiles={documentUploadFiles}
               documentActionStatus={documentActionStatus}
               documentActionResult={documentActionResult}
