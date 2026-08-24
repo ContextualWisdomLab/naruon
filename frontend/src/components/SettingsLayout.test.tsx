@@ -474,7 +474,7 @@ describe("SettingsLayout", () => {
     const logoutButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "로그아웃");
     expect(loginButton).toBeTruthy();
     expect(logoutButton).toBeTruthy();
-    expect(loginButton?.parentElement?.getAttribute("title")).toBe("OIDC 로그인");
+    expect(loginButton?.getAttribute("title")).toBe("OIDC 로그인");
 
     await act(async () => {
       loginButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -529,10 +529,10 @@ describe("SettingsLayout", () => {
     const accountSaveButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("계정 설정 저장"),
     );
-    expect(accountSaveButton?.parentElement?.getAttribute("tabindex")).toBe("0");
-    expect(accountSaveButton?.parentElement?.getAttribute("title")).toBe("계정 설정을 불러오는 중입니다");
-    expect(accountSaveButton?.parentElement?.getAttribute("aria-label")).toBe("계정 설정을 불러오는 중입니다");
-    expect(accountSaveButton?.disabled).toBe(true);
+    expect(accountSaveButton?.tabIndex).toBe(0);
+    expect(accountSaveButton?.getAttribute("title")).toBe("계정 설정을 불러오는 중입니다");
+    expect(accountSaveButton?.getAttribute("aria-describedby")).toBeTruthy();
+    expect(accountSaveButton?.disabled).toBe(false);
     expect(accountSaveButton?.getAttribute("aria-disabled")).toBe("true");
     expect(accountSaveButton?.className).toContain("pointer-events-none");
     expect(accountSaveButton?.getAttribute("aria-busy")).toBe("true");
@@ -551,15 +551,16 @@ describe("SettingsLayout", () => {
     const loginButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "OIDC 로그인",
     );
-    expect(loginButton?.parentElement?.getAttribute("tabindex")).toBe("0");
-    expect(loginButton?.parentElement?.getAttribute("title")).toBe("OIDC 브라우저 설정이 없습니다");
-    expect(loginButton?.disabled).toBe(true);
+    expect(loginButton?.tabIndex).toBe(0);
+    expect(loginButton?.getAttribute("title")).toBe("OIDC 브라우저 설정이 없습니다");
+    expect(loginButton?.getAttribute("aria-describedby")).toBeTruthy();
+    expect(loginButton?.disabled).toBe(false);
     expect(loginButton?.getAttribute("aria-disabled")).toBe("true");
     expect(loginButton?.className).toContain("pointer-events-none");
-    expect(logoutButton?.parentElement?.getAttribute("tabindex")).toBe("0");
-    expect(logoutButton?.parentElement?.getAttribute("title")).toBe("세션을 확인하는 중입니다");
-    expect(logoutButton?.parentElement?.getAttribute("aria-label")).toBe("세션을 확인하는 중입니다");
-    expect(logoutButton?.disabled).toBe(true);
+    expect(logoutButton?.tabIndex).toBe(0);
+    expect(logoutButton?.getAttribute("title")).toBe("세션을 확인하는 중입니다");
+    expect(logoutButton?.getAttribute("aria-describedby")).toBeTruthy();
+    expect(logoutButton?.disabled).toBe(false);
     expect(logoutButton?.getAttribute("aria-disabled")).toBe("true");
     expect(logoutButton?.className).toContain("pointer-events-none");
     expect(logoutButton?.getAttribute("aria-busy")).toBe("true");
@@ -591,9 +592,8 @@ describe("SettingsLayout", () => {
       await Promise.resolve();
     });
 
-    expect(logoutButton?.parentElement?.getAttribute("title")).toBe("로그아웃");
-    expect(logoutButton?.parentElement?.getAttribute("tabindex")).toBeNull();
-    expect(logoutButton?.parentElement?.getAttribute("aria-label")).toBe("로그아웃");
+    expect(logoutButton?.getAttribute("title")).toBe("로그아웃");
+    expect(logoutButton?.getAttribute("tabindex")).toBeNull();
     expect(logoutButton?.disabled).toBe(false);
     expect(logoutButton?.className).not.toContain("pointer-events-none");
     await act(async () => {
@@ -603,8 +603,8 @@ describe("SettingsLayout", () => {
     const readyAccountSaveButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("계정 설정 저장"),
     );
-    expect(readyAccountSaveButton?.parentElement?.getAttribute("tabindex")).toBeNull();
-    expect(readyAccountSaveButton?.parentElement?.getAttribute("title")).toBe("계정 설정 저장");
+    expect(readyAccountSaveButton?.getAttribute("tabindex")).toBeNull();
+    expect(readyAccountSaveButton?.getAttribute("title")).toBe("계정 설정 저장");
     expect(readyAccountSaveButton?.disabled).toBe(false);
     expect(readyAccountSaveButton?.className).not.toContain("pointer-events-none");
   });

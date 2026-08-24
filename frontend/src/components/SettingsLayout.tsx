@@ -5,9 +5,41 @@ import { apiClient } from '@/lib/api-client';
 import type { SessionClaims } from '@/lib/session-cookie';
 import { clearOidcSession, getOidcBrowserConfig, startOidcLogin } from '@/lib/oidc-session';
 import { useWorkspaceStartupView, setWorkspaceStartupView } from '@/lib/workspace-preferences';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type RefObject } from 'react';
 
 export type SettingsTab = '워크스페이스' | '멤버' | 'AI 모델' | '연결 계정' | '알림' | '자동화' | '결제' | '개발자';
+
+function AccessibleDisabledButton({
+  disabled,
+  title,
+  children,
+  onClick,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { title: string }) {
+  const descriptionId = `desc-${useId()}`;
+  return (
+    <>
+      <button
+        {...props}
+        aria-disabled={disabled || props["aria-disabled"] ? "true" : undefined}
+        aria-describedby={disabled ? descriptionId : props["aria-describedby"]}
+        title={title}
+        onClick={(event) => {
+          if (disabled) {
+            event.preventDefault();
+            return;
+          }
+          onClick?.(event);
+        }}
+        className={`${props.className ?? ''} ${disabled ? 'cursor-not-allowed pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2' : ''}`}
+      >
+        {children}
+      </button>
+      {disabled && <span id={descriptionId} className="sr-only">{title}</span>}
+    </>
+  );
+}
+
 const EMPTY_SESSION_CLAIMS: SessionClaims = {
   userId: null,
   organizationId: null,
@@ -1320,23 +1352,16 @@ export function SettingsLayout() {
                         빈 secret 입력은 기존 저장값을 유지합니다. 실제 연결과 외부 쓰기는 서버 검증과 self-hosted connector 정책을 통과한 뒤 별도 실행됩니다.
                       </p>
                     </div>
-                    <span
-                      tabIndex={accountActionDisabled ? 0 : undefined}
+                    <AccessibleDisabledButton
+                      type="submit"
+                      disabled={accountActionDisabled}
+                      aria-busy={accountSaving || accountLoading}
                       title={accountActionTitle}
-                      aria-label={accountActionTitle}
-                      className={accountActionDisabled ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:opacity-60"
                     >
-                      <button
-                        type="submit"
-                        disabled={accountActionDisabled}
-                        aria-disabled={accountActionDisabled}
-                        aria-busy={accountSaving || accountLoading}
-                        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 ${accountActionDisabled ? "pointer-events-none" : ""}`}
-                      >
-                        {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-                        {accountSaving ? '저장 중' : '계정 설정 저장'}
-                      </button>
-                    </span>
+                      {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                      {accountSaving ? '저장 중' : '계정 설정 저장'}
+                    </AccessibleDisabledButton>
                   </div>
 
                   <div className="mt-6 grid gap-5">
@@ -1641,39 +1666,25 @@ export function SettingsLayout() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <span
-                        tabIndex={oidcLoginDisabled ? 0 : undefined}
+                      <AccessibleDisabledButton
+                        type="button"
+                        onClick={handleOidcLogin}
+                        disabled={oidcLoginDisabled}
                         title={oidcLoginDisabled ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        aria-label={oidcLoginDisabled ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className={oidcLoginDisabled ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
+                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
                       >
-                        <button
-                          type="button"
-                          onClick={handleOidcLogin}
-                          disabled={oidcLoginDisabled}
-                          aria-disabled={oidcLoginDisabled}
-                          className={`rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 ${oidcLoginDisabled ? "pointer-events-none" : ""}`}
-                        >
-                          OIDC 로그인
-                        </button>
-                      </span>
-                      <span
-                        tabIndex={oidcLogoutDisabled ? 0 : undefined}
+                        OIDC 로그인
+                      </AccessibleDisabledButton>
+                      <AccessibleDisabledButton
+                        type="button"
+                        onClick={handleOidcLogout}
+                        disabled={oidcLogoutDisabled}
+                        aria-busy={oidcSessionLoading}
                         title={oidcLogoutTitle}
-                        aria-label={oidcLogoutTitle}
-                        className={oidcLogoutDisabled ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
+                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:opacity-50"
                       >
-                        <button
-                          type="button"
-                          onClick={handleOidcLogout}
-                          disabled={oidcLogoutDisabled}
-                          aria-disabled={oidcLogoutDisabled}
-                          aria-busy={oidcSessionLoading}
-                          className={`rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 ${oidcLogoutDisabled ? "pointer-events-none" : ""}`}
-                        >
-                          로그아웃
-                        </button>
-                      </span>
+                        로그아웃
+                      </AccessibleDisabledButton>
                     </div>
                   </div>
                   {oidcActionError ? (
