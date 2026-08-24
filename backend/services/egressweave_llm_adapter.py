@@ -40,6 +40,12 @@ def _custom_provider_authority(base_url: str) -> tuple[str, int]:
     The selected host must already be present in naruon's operator allowlist;
     EgressWeave performs canonical URL, scheme, address, DNS, TLS, framing, and
     resource validation before any connection is opened.
+
+    The derived port intentionally never constrains the policy:
+    :class:`EgressPolicy` is host-only by design. Reading ``parsed.port`` here
+    merely fails closed early on malformed ports (it raises ``ValueError``
+    before any policy is built); EgressWeave re-derives and pins the effective
+    host-and-port pair from the URL itself during resolution.
     """
     try:
         parsed = urlsplit(base_url.strip())
