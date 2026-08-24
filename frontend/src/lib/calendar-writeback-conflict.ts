@@ -28,9 +28,11 @@ const CONFLICT_STATUS_CODES = new Set([
 /**
  * Return the strongest conflict state across one writeback-intent batch.
  *
- * A 412 / explicit conflict error is `conflict` (do not overwrite a confirmed
- * commitment). An If-Match token without an error is `warning` (existing
- * event, fail closed until the human confirms). Otherwise `none`.
+ * A 412 / 409 provider response or explicit conflict error is `conflict`
+ * (do not overwrite a confirmed commitment; repository policy renders 409
+ * as a conflict even when the envelope omits `status`). An If-Match token
+ * without an error is `warning` (existing event, fail closed until the
+ * human confirms). Otherwise `none`.
  */
 export function calendarWritebackConflictState(
   intents: readonly CalendarWritebackConflictIntent[],
@@ -41,6 +43,7 @@ export function calendarWritebackConflictState(
     const status = (intent.status || "").trim().toLowerCase();
     if (
       intent.provider_status === 412 ||
+      intent.provider_status === 409 ||
       CONFLICT_ERROR_CODES.has(errorCode) ||
       CONFLICT_STATUS_CODES.has(status)
     ) {

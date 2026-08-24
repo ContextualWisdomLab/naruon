@@ -45,6 +45,16 @@ describe("calendarWritebackConflictState", () => {
     ).toBe("conflict");
   });
 
+  it("classifies a bare 409 as conflict even when the envelope omits status", () => {
+    // Repository policy: 409 must render as a conflict, not degrade to
+    // warning/none when status/error_code are missing from the envelope.
+    expect(
+      calendarWritebackConflictState([
+        { provider_status: 409, error_code: null, status: null },
+      ]),
+    ).toBe("conflict");
+  });
+
   it("warns when an existing event needs If-Match but has not failed yet", () => {
     expect(
       calendarWritebackConflictState([
