@@ -2016,6 +2016,8 @@ describe("DataPage", () => {
 
     expect(reparseButton?.getAttribute("aria-busy")).toBe("true");
     expect(reparseButton?.textContent).toContain("실행 중");
+    const documentFileInput = container?.querySelector('input[accept=".txt,.md,.markdown,text/plain,text/markdown"]');
+    expect(documentFileInput).toHaveProperty("disabled", true);
     for (const button of [embeddingButton, hwpButton, materializeButton]) {
       expect(button?.getAttribute("aria-busy")).toBe("false");
       expect(button?.disabled).toBe(true);

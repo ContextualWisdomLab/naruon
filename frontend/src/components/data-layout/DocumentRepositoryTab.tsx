@@ -185,6 +185,7 @@ return (
                           type="file"
                           accept=".txt,.md,.markdown,text/plain,text/markdown"
                           className="sr-only"
+                          disabled={documentActionPendingAction !== null}
                           onChange={handleDocumentFileChange}
                         />
                       </label>
