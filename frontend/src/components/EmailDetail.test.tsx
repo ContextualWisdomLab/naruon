@@ -1033,7 +1033,49 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
 
     expect(container.textContent).toContain("이 회의 제안은 이미 확정되었습니다.");
+    expect(container.textContent).toContain("Confirmed review");
+    expect(container.textContent).toContain("2026");
     expect(container.textContent).not.toContain("수락 및 일정 추가 요청");
+  });
+
+  it("renders an unknown date instead of Invalid Date for malformed meeting times", async () => {
+    const email = {
+      id: 15,
+      message_id: "<invalid-meeting@example.com>",
+      thread_id: null,
+      sender: "organizer@example.com",
+      recipients: "user@example.com",
+      subject: "Invalid meeting time",
+      date: "2026-05-17T10:00:00Z",
+      body: "The meeting time needs review.",
+      meeting_proposal: {
+        id: "meeting-15",
+        title: "Time needs review",
+        start_time: "not-a-date",
+        end_time: "also-not-a-date",
+        status: "cancelled" as const,
+      },
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/15")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "시간 확인", action_items: [] }));
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={15} />);
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("Time needs review");
+    expect(container.textContent).toContain("Unknown date - Unknown date");
+    expect(container.textContent).not.toContain("Invalid Date");
   });
 
   it("ignores a late draft response after the selected email changes", async () => {

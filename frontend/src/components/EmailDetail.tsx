@@ -634,6 +634,20 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const recipientParticipants = email.participants?.filter((participant) => participant.role === 'to') ?? [];
   const ccParticipants = email.participants?.filter((participant) => participant.role === 'cc') ?? [];
   const hasDisplayableParticipants = senderParticipants.length > 0 || recipientParticipants.length > 0 || ccParticipants.length > 0;
+  const meetingProposal = email.meeting_proposal;
+  const meetingDetails = meetingProposal ? (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm font-bold text-foreground">{meetingProposal.title}</span>
+      <span className="text-xs text-muted-foreground font-medium">
+        {formatEmailDate(meetingProposal.start_time)} - {formatEmailDate(meetingProposal.end_time)}
+      </span>
+      {meetingProposal.location && (
+        <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+          📍 {meetingProposal.location}
+        </span>
+      )}
+    </div>
+  ) : null;
 
   const handleOpenSourceDrawer = () => {
     recordProductEvent("source_chip_opened", {
@@ -770,26 +784,16 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
 
-          {email.meeting_proposal && (
+          {meetingProposal && (
             <DecisionPointCard
               title="회의 제안"
               icon={<Calendar className="h-4 w-4 text-emerald-600" aria-hidden="true" />}
               provenance="일정 자동 추출"
             >
               <div className="flex flex-col gap-4">
-                {email.meeting_proposal.status === "proposed" ? (
+                {meetingProposal.status === "proposed" ? (
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm font-bold text-foreground">{email.meeting_proposal.title}</span>
-                      <span className="text-xs text-muted-foreground font-medium">
-                        {new Date(email.meeting_proposal.start_time).toLocaleString()} - {new Date(email.meeting_proposal.end_time).toLocaleString()}
-                      </span>
-                      {email.meeting_proposal.location && (
-                        <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                          📍 {email.meeting_proposal.location}
-                        </span>
-                      )}
-                    </div>
+                    {meetingDetails}
                     <Button
                       size="sm"
                       onClick={handleAcceptMeetingProposal}
@@ -803,9 +807,12 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     </Button>
                   </div>
                 ) : (
-                  <p role="status" aria-live="polite" className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                    이 회의 제안은 이미 {email.meeting_proposal.status === "confirmed" ? "확정" : "취소"}되었습니다.
-                  </p>
+                  <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4">
+                    {meetingDetails}
+                    <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+                      이 회의 제안은 이미 {meetingProposal.status === "confirmed" ? "확정" : "취소"}되었습니다.
+                    </p>
+                  </div>
                 )}
                 {meetingProposalStatus && (
                   <span role="status" aria-live="polite" className={"text-xs " + (meetingProposalStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
