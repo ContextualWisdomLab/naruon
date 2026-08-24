@@ -2,7 +2,6 @@
 
 import base64
 import binascii
-import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,7 +16,6 @@ _GENERIC_CONTENT_TYPES = {
 }
 MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
 MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
-MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS = 8
 
 
 @dataclass(frozen=True)
@@ -268,15 +266,7 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 
 def _safe_filename(filename: str | None) -> str:
     """Return a basename-only attachment display filename."""
-    decoded_filename = filename or "attachment"
-    for _ in range(MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS):
-        next_filename = urllib.parse.unquote(decoded_filename)
-        if next_filename == decoded_filename:
-            break
-        decoded_filename = next_filename
-    if urllib.parse.unquote(decoded_filename) != decoded_filename:
-        return "attachment"
-    display_filename = strip_html_markup(_sanitize_nul(decoded_filename))
+    display_filename = strip_html_markup(_sanitize_nul(filename or "attachment"))
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"

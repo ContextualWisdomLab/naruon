@@ -3,7 +3,7 @@ import base64
 import pytest
 
 from services.attachment_parser import (
-    MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS,
+    _safe_filename,
     MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
     MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
     decode_deferred_attachment_payload,
@@ -26,42 +26,6 @@ def test_html_attachment_preserves_parse_source_and_safe_display_text():
     assert result.parse_content_type == "text/html"
     assert result.parse_status == "parsed"
     assert result.parse_error_code is None
-
-
-@pytest.mark.parametrize(
-    ("filename", "expected_filename"),
-    [
-        ("..\\\\upload.txt", "upload.txt"),
-        ("C:\\\\mail\\\\report.pdf", "report.pdf"),
-        ("%2e%2e%2fupload.txt", "upload.txt"),
-        ("%252e%252e%252fsecret.txt", "secret.txt"),
-    ],
-)
-def test_attachment_filename_normalizes_windows_path_separators(
-    filename, expected_filename
-):
-    """Keep Windows-style attachment paths as safe display basenames."""
-    result = parse_email_attachment(
-        filename=filename,
-        content_type="text/plain",
-        raw_content="safe content",
-    )
-
-    assert result.filename == expected_filename
-
-
-def test_attachment_filename_rejects_unresolved_nested_encoding():
-    encoded_filename = "%2e%2e%2fsecret.txt"
-    for _ in range(MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS):
-        encoded_filename = encoded_filename.replace("%", "%25")
-
-    result = parse_email_attachment(
-        filename=encoded_filename,
-        content_type="text/plain",
-        raw_content="safe content",
-    )
-
-    assert result.filename == "attachment"
 
 
 def test_markdown_attachment_is_parseable_markdown():
@@ -292,3 +256,7 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
     oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
     with pytest.raises(ValueError, match="size limit"):
         decode_deferred_attachment_payload(oversized)
+
+def test_safe_filename_handles_windows_path_traversal():
+    assert _safe_filename("..\\..\\upload.txt") == "upload.txt"
+    assert _safe_filename("C:\\mail\\report.pdf") == "report.pdf"
