@@ -80,3 +80,9 @@
 ## 2025-05-19 - Dynamic ARIA labels and robust disabled states for sidebar actions
 **Learning:** Hardcoded ARIA labels in mockups (like "출시 회의 일정 삭제") are often left intact during implementation, leading to incorrect screen reader announcements when different items are selected. In addition, action buttons that depend on selection state often lack correct visual and functional disabled states.
 **Action:** When implementing detail views or sidebars, always replace hardcoded mockup ARIA labels with dynamic data (e.g. `${event.title} 삭제`), and ensure action buttons are explicitly disabled (both functionally via `disabled` and visually via `opacity-50 cursor-not-allowed`) when their prerequisites (like a selected item or specific properties like location) are unmet.
+
+## 2024-08-24 - 이메일 상세 화면 동적 UI 컴포넌트 추가
+**Learning:**
+설계 기획안(mockup)에 있는 고밀도 컴포넌트들(참여자 리스트, 첨부파일 레일, 회의 제안 패널)을 구현할 때, 데이터의 존재 여부에 따라 조건부로 동적 렌더링되도록 타입을 확장하여 구현해야 합니다. 특히 아이콘 등에는 `aria-hidden="true"`를 적절히 명시하여 스크린 리더에서 읽히지 않도록 접근성을 고려해야 합니다.
+**Action:**
+향후 기능 추가 시 기획 문서(design-qa.md 등)를 꼼꼼히 확인하고, 불필요한 하드코딩이 아닌 유연한 타입 확장을 통해 디자인 불일치를 해소합니다.

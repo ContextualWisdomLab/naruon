@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, Paperclip, Calendar, Check, X } from "lucide-react";
 import { DecisionPointCard } from "@/components/DecisionPointCard";
 import { SourceDrawer } from "@/components/SourceDrawer";
 import {
@@ -628,12 +628,55 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 {isTranslating ? "번역 중" : "번역"}
               </Button>
             </div>
-            <div className="line-clamp-1 text-xs">
-              <span className="text-muted-foreground">{safeEmailSender}</span>
-            </div>
-            <div className="line-clamp-1 text-xs text-muted-foreground">
-              답장 주소: {safeReplyTo}
-            </div>
+            {email.participants && email.participants.length > 0 ? (
+              <div className="flex flex-col gap-1.5 text-xs mt-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-semibold text-foreground/80 min-w-[50px]">보낸 사람</span>
+                  {email.participants.filter(p => p.role === 'sender').map((p, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-semibold text-foreground/80 min-w-[50px]">받는 사람</span>
+                  {email.participants.filter(p => p.role === 'to').map((p, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
+                  ))}
+                  {email.participants.some(p => p.role === 'cc') && (
+                    <>
+                      <span className="font-semibold text-foreground/80 ml-2">참조</span>
+                      {email.participants.filter(p => p.role === 'cc').map((p, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="line-clamp-1 text-xs mt-1">
+                  <span className="text-muted-foreground">{safeEmailSender}</span>
+                </div>
+                <div className="line-clamp-1 text-xs text-muted-foreground mt-0.5">
+                  답장 주소: {safeReplyTo}
+                </div>
+              </>
+            )}
+
+            {email.attachments && email.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-4">
+                {email.attachments.map((file) => (
+                  <div key={file.id} className="group flex items-center gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 text-xs shadow-sm hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20">
+                      <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium text-foreground line-clamp-1 max-w-[180px]">{file.name}</span>
+                      {file.size && <span className="text-[10px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="hidden whitespace-nowrap rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm 2xl:block">
@@ -651,6 +694,40 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       <Separator />
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-6 bg-background/50 p-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
+
+          {email.meeting_proposal && (
+            <DecisionPointCard
+              title="회의 제안"
+              icon={<Calendar className="h-4 w-4 text-emerald-600" aria-hidden="true" />}
+              provenance="일정 자동 추출"
+            >
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-bold text-foreground">{email.meeting_proposal.title}</span>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {new Date(email.meeting_proposal.start_time).toLocaleString()} - {new Date(email.meeting_proposal.end_time).toLocaleTimeString()}
+                    </span>
+                    {email.meeting_proposal.location && (
+                      <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                        📍 {email.meeting_proposal.location}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 self-start md:self-auto">
+                    <Button size="sm" variant="outline" className="h-9 rounded-xl border-border bg-background px-4 text-xs font-semibold shadow-sm hover:bg-secondary">
+                      <X className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      거절
+                    </Button>
+                    <Button size="sm" className="h-9 rounded-xl bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
+                      <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      수락 및 일정 추가
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </DecisionPointCard>
+          )}
 
           <DecisionPointCard
             title="맥락 종합"

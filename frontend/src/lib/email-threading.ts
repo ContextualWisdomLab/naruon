@@ -1,3 +1,27 @@
+export interface ThreadParticipant {
+  name: string;
+  email: string;
+  role: 'sender' | 'to' | 'cc';
+  status?: 'accepted' | 'declined' | 'tentative' | 'needs_action';
+}
+
+export interface ThreadAttachment {
+  id: string;
+  name: string;
+  size?: number;
+  type?: string;
+  url?: string;
+}
+
+export interface MeetingProposal {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  location?: string;
+  status: 'proposed' | 'confirmed' | 'cancelled';
+}
+
 export interface ThreadEmailData {
   id: number;
   subject: string | null;
@@ -9,6 +33,9 @@ export interface ThreadEmailData {
   message_id?: string | null;
   in_reply_to?: string | null;
   references?: string | null;
+  participants?: ThreadParticipant[];
+  attachments?: ThreadAttachment[];
+  meeting_proposal?: MeetingProposal;
 }
 
 export interface ReplyPayload {
