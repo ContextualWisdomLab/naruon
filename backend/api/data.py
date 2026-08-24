@@ -2489,16 +2489,10 @@ async def _get_workspace_document(
     auth_context: AuthContext,
     document_id: str,
 ) -> Document:
-    organization_filter = (
-        Document.organization_id == auth_context.organization_id
-        if auth_context.organization_id is not None
-        else Document.organization_id.is_(None)
-    )
     result = await db.execute(
         select(Document).where(
             Document.document_id == document_id,
             Document.workspace_id == auth_context.workspace_id,
-            organization_filter,
         )
     )
     document = result.scalar_one_or_none()

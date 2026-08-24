@@ -101,23 +101,11 @@ class MockAsyncSession:
                 ),
                 None,
             )
-            organization_id = next(
-                (
-                    value
-                    for key, value in params.items()
-                    if key.startswith("organization_id")
-                ),
-                None,
-            )
             rows = [
                 document
                 for document in self.documents
                 if (document_id is None or document.document_id == document_id)
                 and (workspace_id is None or document.workspace_id == workspace_id)
-                and (
-                    organization_id is None
-                    or document.organization_id == organization_id
-                )
             ]
             if "order by" in rendered_query_lower:
                 return MockResult(rows)
@@ -2500,7 +2488,6 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
                 document_type="text/markdown",
                 document_content="# Roadmap",
                 document_status="uploaded",
-                organization_id="org-acme",
                 created_at=_now(),
             ),
             Document(
@@ -2603,17 +2590,15 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
         document_type="application/x-hwp",
         document_content="opaque hwp extraction placeholder",
         document_status="uploaded",
-        organization_id="org-acme",
         created_at=_now(),
     )
     rival_document = Document(
         document_id="doc_rival",
-        workspace_id="workspace-org-acme",
+        workspace_id="workspace-rival",
         document_name="rival.md",
         document_type="text/markdown",
         document_content="rival",
         document_status="uploaded",
-        organization_id="org-rival",
         created_at=_now(),
     )
     mock_db.documents.extend([document, rival_document])
@@ -2667,7 +2652,6 @@ def test_data_document_webdav_materialization_executes_source_backed_write(
             document_type="text/markdown",
             document_content="# Roadmap\nPhase 10",
             document_status="uploaded",
-            organization_id="org-acme",
             created_at=_now(),
         )
     )
@@ -2763,7 +2747,6 @@ def test_data_document_webdav_materialization_rejects_empty_document(mock_db):
             document_type="text/markdown",
             document_content="   ",
             document_status="uploaded",
-            organization_id="org-acme",
             created_at=_now(),
         )
     )
@@ -2798,7 +2781,6 @@ def test_data_document_webdav_materialization_rejects_pending_pdf(mock_db):
             document_type="pdf",
             document_content="JVBERi0xLjcK",  # base64 %PDF-1.7\n
             document_status="pdf_dom_recognition_pending",
-            organization_id="org-acme",
             created_at=_now(),
         )
     )
@@ -2829,7 +2811,6 @@ def test_data_pdf_dom_recognition_intent_rejects_non_pdf_document(mock_db):
             document_type="text/markdown",
             document_content="# Notes",
             document_status="uploaded",
-            organization_id="org-acme",
             created_at=_now(),
         )
     )
@@ -2853,7 +2834,6 @@ def test_data_pdf_dom_recognition_intent_rejects_non_pdf_document(mock_db):
             document_type="pdf",
             document_content="JVBERi0xLjcK",
             document_status="uploaded",
-            organization_id="org-acme",
             created_at=_now(),
         )
     )
@@ -2879,7 +2859,6 @@ def test_data_pdf_dom_recognition_intent_rejects_invalid_stored_payload(mock_db)
             document_type="pdf",
             document_content=base64.b64encode(b"not a PDF").decode("ascii"),
             document_status="uploaded",
-            organization_id="org-acme",
             created_at=_now(),
         )
     )
