@@ -80,19 +80,19 @@ jobs:
             frontend)
               title="naruon frontend"
               description="Naruon Next.js frontend runtime image"
-              base_digest="sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09"
+              base_digest="sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1"
               base_name="docker.io/library/node:26-slim@${base_digest}"
               ;;
             backend)
               title="naruon backend"
               description="Naruon FastAPI backend runtime image"
-              base_digest="sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1"
+              base_digest="sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
               base_name="docker.io/library/python:3.14-slim@${base_digest}"
               ;;
             *)
               title="naruon"
               description="Naruon combined FastAPI and Next.js runtime image"
-              base_digest="sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1"
+              base_digest="sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
               base_name="docker.io/library/python:3.14-slim@${base_digest}"
               ;;
           esac
@@ -218,19 +218,19 @@ jobs:
             frontend)
               title="naruon frontend"
               description="Naruon Next.js frontend runtime image"
-              base_digest="sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09"
+              base_digest="sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1"
               base_name="docker.io/library/node:26-slim@${base_digest}"
               ;;
             backend)
               title="naruon backend"
               description="Naruon FastAPI backend runtime image"
-              base_digest="sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1"
+              base_digest="sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
               base_name="docker.io/library/python:3.14-slim@${base_digest}"
               ;;
             *)
               title="naruon"
               description="Naruon combined FastAPI and Next.js runtime image"
-              base_digest="sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1"
+              base_digest="sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
               base_name="docker.io/library/python:3.14-slim@${base_digest}"
               ;;
           esac

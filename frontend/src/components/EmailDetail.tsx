@@ -751,7 +751,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                   {conversationMessages.length}개 메시지
                 </Badge>
               </div>
-              <Button size="sm" variant="outline" disabled title="현재는 원본 메일에서 스레드를 확인하세요." aria-label="다른 스레드 병합 (준비 중)" className="h-7 text-xs bg-white text-muted-foreground hover:text-foreground">
+              <Button size="sm" variant="outline" className="h-7 text-xs bg-white text-muted-foreground hover:text-foreground">
                 다른 스레드 병합
               </Button>
             </div>
@@ -771,7 +771,7 @@ export function EmailDetail({ emailId, actionCommand = null }: { emailId: number
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">{formatEmailDate(msg.date)}</span>
                       {msg.id !== conversationMessages[0]?.id && (
-                        <Button size="sm" variant="ghost" disabled title="현재는 원본 메일에서 스레드를 확인하세요." aria-label="스레드 분리 (준비 중)" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-red-600 hover:bg-red-50">
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-red-600 hover:bg-red-50">
                           스레드 분리
                         </Button>
                       )}

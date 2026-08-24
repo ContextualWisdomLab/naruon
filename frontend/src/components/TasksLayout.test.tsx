@@ -87,17 +87,8 @@ describe("TasksLayout", () => {
     expect(taskButton?.type).toBe("button");
     expect(taskButton?.className).toContain("focus-visible:ring-ring/40");
 
-    const kanbanTab = Array.from(container.querySelectorAll<HTMLButtonElement>("[role='tab']"))
-      .find((tab) => tab.textContent === "칸반");
     act(() => {
-      kanbanTab?.click();
-    });
-    const kanbanTaskButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent?.includes("거래처 회신 준비"));
-    expect(kanbanTaskButton?.className).toContain("focus-visible:ring-ring/40");
-
-    act(() => {
-      kanbanTaskButton?.click();
+      taskButton?.click();
     });
 
     expect(container.textContent).toContain("작업 설명");

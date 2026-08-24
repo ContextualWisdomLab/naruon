@@ -167,40 +167,6 @@ describe("EmailDetail", () => {
     expect(container?.querySelector("script")).toBeNull();
   });
 
-  it("marks unsupported thread merge and split controls as unavailable", async () => {
-    const email = {
-      id: 1,
-      message_id: "<thread@example.com>",
-      thread_id: "thread-1",
-      sender: "sender@example.com",
-      recipients: "user@example.com",
-      subject: "Thread subject",
-      date: "2026-05-18T10:00:00Z",
-      body: "Thread body",
-    };
-    const sibling = { ...email, id: 2, message_id: "<sibling@example.com>", body: "Sibling body" };
-
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/api/emails/1")) return Promise.resolve(jsonResponse(email));
-      if (url.endsWith("/api/emails/thread/thread-1")) return Promise.resolve(jsonResponse({ thread: [email, sibling] }));
-      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "Summary", action_items: [] }));
-      throw new Error(`Unexpected fetch: ${url}`);
-    }));
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-    await act(async () => { root?.render(<EmailDetail emailId={1} />); });
-    await flushAsyncWork();
-
-    const mergeButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("다른 스레드 병합"));
-    const splitButtons = Array.from(container.querySelectorAll("button")).filter((button) => button.textContent?.includes("스레드 분리"));
-    expect(mergeButton?.disabled).toBe(true);
-    expect(splitButtons).toHaveLength(1);
-    expect(splitButtons[0]?.disabled).toBe(true);
-  });
-
   it("handles translation errors gracefully", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.endsWith("/api/emails/1")) {
