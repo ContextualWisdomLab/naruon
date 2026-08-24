@@ -637,6 +637,110 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("계정 설정을 저장했습니다");
   });
 
+  it("does not submit account settings twice while the first save is pending", async () => {
+    let resolvePut!: (response: Response) => void;
+    const pendingPut = new Promise<Response>((resolve) => {
+      resolvePut = resolve;
+    });
+    const defaultFetch = vi.mocked(fetch);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/accounts/config" && init?.method === "PUT") {
+          return pendingPut;
+        }
+        return defaultFetch(input, init);
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    const form = saveButton?.closest("form");
+    expect(form).toBeTruthy();
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const putCalls = vi.mocked(fetch).mock.calls.filter(([input, init]) => String(input) === "/api/accounts/config" && init?.method === "PUT");
+    expect(putCalls).toHaveLength(1);
+
+    resolvePut(jsonResponse({
+      user_id: "default",
+      smtp_server: null,
+      smtp_port: null,
+      smtp_username: null,
+      has_smtp_password: false,
+      imap_server: null,
+      imap_port: null,
+      imap_username: null,
+      has_imap_password: false,
+      pop3_server: null,
+      pop3_port: null,
+      pop3_username: null,
+      has_pop3_password: false,
+      oauth_client_id: null,
+      oauth_redirect_uri: null,
+      has_oauth_client_secret: false,
+    }));
+    await act(async () => {
+      await pendingPut;
+      await Promise.resolve();
+    });
+  });
+
+  it("uses the account load error as the save button reason", async () => {
+    const defaultFetch = vi.mocked(fetch);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/accounts/config" && init?.method !== "PUT") {
+          return Promise.reject(new Error("account unavailable"));
+        }
+        return defaultFetch(input, init);
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const reason = "계정 설정을 불러오지 못했습니다. 다시 시도하세요.";
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    expect(saveButton?.getAttribute("title")).toBe(reason);
+    const descriptionId = saveButton?.getAttribute("aria-describedby");
+    expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(reason);
+  });
+
   it("loads and saves AI model registry entries without public identity headers or secret replay", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
