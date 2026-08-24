@@ -492,6 +492,7 @@ describe("SettingsLayout", () => {
   });
 
   it("shows loading state on disabled account and OIDC actions until their reads settle", async () => {
+    oidcMocks.getOidcBrowserConfig.mockReturnValue(null);
     let releaseSession!: (response: Response) => void;
     let releaseAccount!: (response: Response) => void;
     const sessionPending = new Promise<Response>((resolve) => {
@@ -527,7 +528,12 @@ describe("SettingsLayout", () => {
     const accountSaveButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("계정 설정 저장"),
     );
+    expect(accountSaveButton?.parentElement?.getAttribute("tabindex")).toBe("0");
     expect(accountSaveButton?.parentElement?.getAttribute("title")).toBe("계정 설정을 불러오는 중입니다");
+    expect(accountSaveButton?.parentElement?.getAttribute("aria-label")).toBe("계정 설정을 불러오는 중입니다");
+    expect(accountSaveButton?.disabled).toBe(true);
+    expect(accountSaveButton?.getAttribute("aria-disabled")).toBe("true");
+    expect(accountSaveButton?.className).toContain("pointer-events-none");
     expect(accountSaveButton?.getAttribute("aria-busy")).toBe("true");
 
     const developerTab = Array.from(container.querySelectorAll("button")).find(
@@ -541,7 +547,20 @@ describe("SettingsLayout", () => {
     const logoutButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "로그아웃",
     );
+    const loginButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "OIDC 로그인",
+    );
+    expect(loginButton?.parentElement?.getAttribute("tabindex")).toBe("0");
+    expect(loginButton?.parentElement?.getAttribute("title")).toBe("OIDC 브라우저 설정이 없습니다");
+    expect(loginButton?.disabled).toBe(true);
+    expect(loginButton?.getAttribute("aria-disabled")).toBe("true");
+    expect(loginButton?.className).toContain("pointer-events-none");
+    expect(logoutButton?.parentElement?.getAttribute("tabindex")).toBe("0");
     expect(logoutButton?.parentElement?.getAttribute("title")).toBe("세션을 확인하는 중입니다");
+    expect(logoutButton?.parentElement?.getAttribute("aria-label")).toBe("세션을 확인하는 중입니다");
+    expect(logoutButton?.disabled).toBe(true);
+    expect(logoutButton?.getAttribute("aria-disabled")).toBe("true");
+    expect(logoutButton?.className).toContain("pointer-events-none");
     expect(logoutButton?.getAttribute("aria-busy")).toBe("true");
 
     await act(async () => {
@@ -571,7 +590,11 @@ describe("SettingsLayout", () => {
       await Promise.resolve();
     });
 
-    expect(logoutButton?.parentElement?.getAttribute("title")).toBe("로그아웃");
+    expect(logoutButton?.parentElement?.getAttribute("title")).toBeNull();
+    expect(logoutButton?.parentElement?.getAttribute("tabindex")).toBeNull();
+    expect(logoutButton?.parentElement?.getAttribute("aria-label")).toBeNull();
+    expect(logoutButton?.disabled).toBe(false);
+    expect(logoutButton?.className).not.toContain("pointer-events-none");
     await act(async () => {
       accountTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
@@ -579,7 +602,10 @@ describe("SettingsLayout", () => {
     const readyAccountSaveButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("계정 설정 저장"),
     );
-    expect(readyAccountSaveButton?.parentElement?.getAttribute("title")).toBe("계정 설정 저장");
+    expect(readyAccountSaveButton?.parentElement?.getAttribute("tabindex")).toBeNull();
+    expect(readyAccountSaveButton?.parentElement?.getAttribute("title")).toBeNull();
+    expect(readyAccountSaveButton?.disabled).toBe(false);
+    expect(readyAccountSaveButton?.className).not.toContain("pointer-events-none");
   });
 
   it("loads and saves source-backed mail account settings without public identity headers or secret replay", async () => {

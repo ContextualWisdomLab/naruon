@@ -541,6 +541,23 @@ export function SettingsLayout() {
   const activeModelProvider = modelProviders.find((provider) => provider.is_active) ?? modelProviders[0] ?? null;
   const selectedEmbeddingProvider = modelProviders.find((provider) => provider.id === selectedEmbeddingProviderId) ?? activeModelProvider;
   const accountReady = !accountLoading && !accountError && accountConfig !== null;
+  const accountActionDisabled = accountSaving || !accountReady;
+  const accountActionTitle = accountSaving
+    ? "저장 중입니다"
+    : accountLoading
+      ? "계정 설정을 불러오는 중입니다"
+      : accountError
+        ? "계정 설정을 불러오지 못했습니다"
+        : !accountReady
+          ? "입력값이 부족합니다"
+          : undefined;
+  const oidcLoginDisabled = !oidcBrowserConfig;
+  const oidcLogoutDisabled = oidcSessionLoading || !oidcSessionClaims.userId;
+  const oidcLogoutTitle = oidcSessionLoading
+    ? "세션을 확인하는 중입니다"
+    : !oidcSessionClaims.userId
+      ? "로그인된 세션이 없습니다"
+      : undefined;
   const oauthAppConfigured = Boolean(
     accountConfig?.oauth_client_id
       && accountConfig?.oauth_redirect_uri
@@ -1304,16 +1321,17 @@ export function SettingsLayout() {
                       </p>
                     </div>
                     <span
-                      tabIndex={accountSaving || !accountReady ? 0 : undefined}
-                      title={accountSaving ? "저장 중입니다" : accountLoading ? "계정 설정을 불러오는 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
-                      className={accountSaving || !accountReady ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
+                      tabIndex={accountActionDisabled ? 0 : undefined}
+                      title={accountActionTitle}
+                      aria-label={accountActionTitle}
+                      className={accountActionDisabled ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
                     >
                       <button
                         type="submit"
-                        disabled={accountSaving || !accountReady}
-                        aria-disabled={accountSaving || !accountReady}
+                        disabled={accountActionDisabled}
+                        aria-disabled={accountActionDisabled}
                         aria-busy={accountSaving || accountLoading}
-                        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 ${accountSaving || !accountReady ? "pointer-events-none" : ""}`}
+                        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 ${accountActionDisabled ? "pointer-events-none" : ""}`}
                       >
                         {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                         {accountSaving ? '저장 중' : '계정 설정 저장'}
@@ -1623,26 +1641,35 @@ export function SettingsLayout() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleOidcLogin}
-                        disabled={!oidcBrowserConfig}
-                        title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        OIDC 로그인
-                      </button>
                       <span
-                        tabIndex={oidcSessionLoading || !oidcSessionClaims.userId ? 0 : undefined}
-                        title={oidcSessionLoading ? "세션을 확인하는 중입니다" : !oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className={oidcSessionLoading || !oidcSessionClaims.userId ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
+                        tabIndex={oidcLoginDisabled ? 0 : undefined}
+                        title={oidcLoginDisabled ? "OIDC 브라우저 설정이 없습니다" : undefined}
+                        aria-label={oidcLoginDisabled ? "OIDC 브라우저 설정이 없습니다" : undefined}
+                        className={oidcLoginDisabled ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
+                      >
+                        <button
+                          type="button"
+                          onClick={handleOidcLogin}
+                          disabled={oidcLoginDisabled}
+                          aria-disabled={oidcLoginDisabled}
+                          className={`rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 ${oidcLoginDisabled ? "pointer-events-none" : ""}`}
+                        >
+                          OIDC 로그인
+                        </button>
+                      </span>
+                      <span
+                        tabIndex={oidcLogoutDisabled ? 0 : undefined}
+                        title={oidcLogoutTitle}
+                        aria-label={oidcLogoutTitle}
+                        className={oidcLogoutDisabled ? "cursor-not-allowed inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" : undefined}
                       >
                         <button
                           type="button"
                           onClick={handleOidcLogout}
-                          disabled={oidcSessionLoading || !oidcSessionClaims.userId}
+                          disabled={oidcLogoutDisabled}
+                          aria-disabled={oidcLogoutDisabled}
                           aria-busy={oidcSessionLoading}
-                          className={`rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 ${oidcSessionLoading || !oidcSessionClaims.userId ? "pointer-events-none" : ""}`}
+                          className={`rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 ${oidcLogoutDisabled ? "pointer-events-none" : ""}`}
                         >
                           로그아웃
                         </button>
