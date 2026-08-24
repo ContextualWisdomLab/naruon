@@ -400,7 +400,7 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("***rotated");
   });
 
-  it("associates a disabled account reason with its focusable wrapper", async () => {
+  it("associates a disabled account reason with its focusable button", async () => {
     const defaultFetch = vi.mocked(fetch);
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/accounts/config" && init?.method !== "PUT") {
@@ -426,13 +426,13 @@ describe("SettingsLayout", () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
-    const wrapper = saveButton?.parentElement;
-    const descriptionId = wrapper?.getAttribute("aria-describedby");
-    expect(saveButton?.disabled).toBe(true);
-    expect(wrapper?.getAttribute("role")).toBe("button");
-    expect(wrapper?.getAttribute("aria-disabled")).toBe("true");
+    const descriptionId = saveButton?.getAttribute("aria-describedby");
+    expect(saveButton?.disabled).toBe(false);
+    expect(saveButton?.tabIndex).toBe(0);
+    expect(saveButton?.getAttribute("aria-disabled")).toBe("true");
     expect(descriptionId).toBeTruthy();
-    expect(wrapper?.querySelector(`#${descriptionId}`)?.textContent).toBe("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+    expect(document.getElementById(descriptionId ?? "")?.textContent).toBe("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+    expect(saveButton?.getAttribute("title")).toBe("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
   });
 
   it("does not submit account settings twice while the first save is pending", async () => {
@@ -472,6 +472,7 @@ describe("SettingsLayout", () => {
       form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
+    expect(container.querySelector('button[type="submit"]')).toBe(saveButton);
     await act(async () => {
       form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
       await Promise.resolve();

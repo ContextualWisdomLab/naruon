@@ -13,37 +13,31 @@ function AccessibleDisabledButton({
   disabled,
   title,
   children,
+  onClick,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { title: string }) {
   const id = React.useId();
-  const buttonContent = (
-    <button
-      disabled={disabled}
-      {...props}
-      className={`${props.className ?? ''} ${disabled ? 'pointer-events-none' : ''}`}
-      {...(disabled ? {} : { title })}
-      aria-describedby={disabled ? `desc-${id}` : undefined}
-    >
-      {children}
-    </button>
-  );
-
-  if (disabled) {
-    return (
-      <span
-        tabIndex={0}
-        role="button"
+  return (
+    <>
+      <button
+        {...props}
+        aria-disabled={disabled ? true : props['aria-disabled']}
+        aria-describedby={disabled ? `desc-${id}` : undefined}
         title={title}
-        aria-disabled="true"
-        aria-describedby={`desc-${id}`}
-        className="cursor-not-allowed"
+        className={`${props.className ?? ''} ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
+        onClick={(event) => {
+          if (disabled) {
+            event.preventDefault();
+            return;
+          }
+          onClick?.(event);
+        }}
       >
-        <span id={`desc-${id}`} className="sr-only">{title}</span>
-        {buttonContent}
-      </span>
-    );
-  }
-  return buttonContent;
+        {children}
+      </button>
+      {disabled ? <span id={`desc-${id}`} className="sr-only">{title}</span> : null}
+    </>
+  );
 }
 
 const EMPTY_SESSION_CLAIMS: SessionClaims = {
