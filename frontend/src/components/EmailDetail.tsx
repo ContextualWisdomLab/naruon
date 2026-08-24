@@ -635,6 +635,10 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
   const confidencePercent = toConfidencePercent(llmData?.confidence);
   const actionItems = llmData?.action_items ?? [];
+  const senderParticipants = email.participants?.filter((participant) => participant.role === 'sender') ?? [];
+  const recipientParticipants = email.participants?.filter((participant) => participant.role === 'to') ?? [];
+  const ccParticipants = email.participants?.filter((participant) => participant.role === 'cc') ?? [];
+  const hasDisplayableParticipants = senderParticipants.length > 0 || recipientParticipants.length > 0 || ccParticipants.length > 0;
 
   const handleOpenSourceDrawer = () => {
     recordProductEvent("source_chip_opened", {
@@ -691,28 +695,36 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                 {isTranslating ? "번역 중" : "번역"}
               </Button>
             </div>
-            {email.participants && email.participants.length > 0 ? (
+            {hasDisplayableParticipants ? (
               <div className="flex flex-col gap-1.5 text-xs mt-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-semibold text-foreground/80 min-w-[50px]">보낸 사람</span>
-                  {email.participants.filter(p => p.role === 'sender').map((p, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-semibold text-foreground/80 min-w-[50px]">받는 사람</span>
-                  {email.participants.filter(p => p.role === 'to').map((p, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
-                  ))}
-                  {email.participants.some(p => p.role === 'cc') && (
+                {senderParticipants.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-semibold text-foreground/80 min-w-[50px]">보낸 사람</span>
+                    {senderParticipants.map((participant, index) => (
+                      <span key={index} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{participant.name} <span className="text-muted-foreground">&lt;{participant.email}&gt;</span></span>
+                    ))}
+                  </div>
+                )}
+                {(recipientParticipants.length > 0 || ccParticipants.length > 0) && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {recipientParticipants.length > 0 && (
+                      <>
+                        <span className="font-semibold text-foreground/80 min-w-[50px]">받는 사람</span>
+                        {recipientParticipants.map((participant, index) => (
+                          <span key={index} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{participant.name} <span className="text-muted-foreground">&lt;{participant.email}&gt;</span></span>
+                        ))}
+                      </>
+                    )}
+                  {ccParticipants.length > 0 && (
                     <>
                       <span className="font-semibold text-foreground/80 ml-2">참조</span>
-                      {email.participants.filter(p => p.role === 'cc').map((p, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{p.name} <span className="text-muted-foreground">&lt;{p.email}&gt;</span></span>
+                      {ccParticipants.map((participant, index) => (
+                        <span key={index} className="inline-flex items-center gap-1 rounded-md bg-secondary/50 px-2 py-0.5 border border-border/50 text-foreground">{participant.name} <span className="text-muted-foreground">&lt;{participant.email}&gt;</span></span>
                       ))}
                     </>
                   )}
-                </div>
+                  </div>
+                )}
               </div>
             ) : (
               <>

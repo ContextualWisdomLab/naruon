@@ -934,6 +934,7 @@ describe("EmailDetail", () => {
       date: "2026-05-17T10:00:00Z",
       body: "Please join the launch meeting.",
       attachments: [{ id: "attachment-24", name: "launch-deck.pptx", size: 20 * 1024 * 1024 }],
+      participants: [{ name: "CC only", email: "cc@example.com", role: "cc" as const }],
       meeting_proposal: {
         id: "meeting-24",
         title: "Launch meeting",
@@ -975,6 +976,9 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
 
     expect(container.textContent).toContain("20.0 MB");
+    expect(container.textContent).toContain("참조");
+    expect(container.textContent).not.toContain("보낸 사람");
+    expect(container.textContent).not.toContain("받는 사람");
     const acceptButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("수락 및 일정 추가 요청"),
     );
