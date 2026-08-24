@@ -2,6 +2,7 @@
 """Local-only Naruon mail smoke test without printing private mail content."""
 
 from __future__ import annotations
+import typing
 
 import argparse
 import base64
@@ -15,6 +16,7 @@ import os
 import sys
 import time
 from collections import Counter
+from collections.abc import Iterator
 from email import message_from_bytes, policy
 from email.parser import BytesHeaderParser
 from pathlib import Path
@@ -293,6 +295,47 @@ def _matches_queries(
     return False
 
 
+def _iter_raw_emails(path: Path) -> Iterator[bytes]:
+    suffix = path.suffix.lower()
+    if suffix in {".eml", ".emlx"}:
+        raw = _read_eml_like_bytes(path)
+        if raw is not None:
+            yield raw
+    elif suffix == ".mbox":
+        try:
+            box = mailbox.mbox(path, create=False)
+        except (OSError, mailbox.Error):
+            return
+        try:
+            for msg in box:
+                yield msg.as_bytes(policy=policy.default)
+        finally:
+            box.close()
+    elif suffix == ".zip":
+        try:
+            archive = ZipFile(path)
+        except (OSError, BadZipFile):
+            return
+        with archive:
+            entries = archive.infolist()
+            if len(entries) > MAX_ARCHIVE_ENTRIES:
+                return
+            for info in entries:
+                entry_suffix = Path(info.filename).suffix.lower()
+                if (
+                    info.is_dir()
+                    or entry_suffix not in {".eml", ".emlx"}
+                    or info.file_size > MAX_PRIVATE_MAIL_FILE_BYTES
+                ):
+                    continue
+                try:
+                    raw = archive.read(info)
+                except (OSError, BadZipFile):
+                    continue
+                if entry_suffix == ".emlx":
+                    raw = _strip_emlx_prefix(raw)
+                yield raw
+
 def _selected_upload_files(
     mail_dir: Path,
     queries: list[str],
@@ -328,62 +371,13 @@ def _selected_upload_files(
         for path in _private_files(mail_dir, limit=1000000):
             if len(selected) >= limit:
                 break
-            suffix = path.suffix.lower()
-            if suffix in {".eml", ".emlx"}:
-                raw = _read_eml_like_bytes(path)
-                if raw is None:
-                    continue
+            for raw in _iter_raw_emails(path):
+                if len(selected) >= limit:
+                    break
                 scanned += 1
                 report_progress()
                 if _matches_queries(raw, queries, max_parse_bytes, match_mode):
                     add_raw(raw)
-                continue
-            if suffix == ".mbox":
-                try:
-                    box = mailbox.mbox(path, create=False)
-                except (OSError, mailbox.Error):
-                    continue
-                try:
-                    for msg in box:
-                        if len(selected) >= limit:
-                            break
-                        raw = msg.as_bytes(policy=policy.default)
-                        scanned += 1
-                        report_progress()
-                        if _matches_queries(raw, queries, max_parse_bytes, match_mode):
-                            add_raw(raw)
-                finally:
-                    box.close()
-                continue
-            if suffix == ".zip":
-                try:
-                    archive = ZipFile(path)
-                except (OSError, BadZipFile):
-                    continue
-                with archive:
-                    entries = archive.infolist()
-                    if len(entries) > MAX_ARCHIVE_ENTRIES:
-                        continue
-                    for info in entries:
-                        if len(selected) >= limit:
-                            break
-                        entry_suffix = Path(info.filename).suffix.lower()
-                        if (
-                            info.is_dir()
-                            or entry_suffix not in {".eml", ".emlx"}
-                            or info.file_size > MAX_PRIVATE_MAIL_FILE_BYTES
-                        ):
-                            continue
-                        try:
-                            raw = archive.read(info)
-                        except (OSError, BadZipFile):
-                            continue
-                        if entry_suffix == ".emlx":
-                            raw = _strip_emlx_prefix(raw)
-                        scanned += 1
-                        report_progress()
-                        if _matches_queries(raw, queries, max_parse_bytes, match_mode):
-                            add_raw(raw)
 
         persistent: list[Path] = []
         final_dir = _validated_cache_directory()
@@ -853,8 +847,8 @@ def main() -> None:
         token = _signed_token(args.session_secret)
         session_claims = _check_frontend_session(frontend_base_url, token)
         _print_session_check_summary(session_claims)
-        totals = Counter()
-        reasons = Counter()
+        totals: typing.Counter[str] = Counter()
+        reasons: typing.Counter[str] = Counter()
         for offset in range(0, len(files), args.batch_size):
             body, content_type = _multipart(files[offset : offset + args.batch_size])
             data = _post_multipart_with_retry(
@@ -867,11 +861,11 @@ def main() -> None:
                 delay_seconds=args.inbox_retry_delay_seconds,
                 timeout=120.0,
             )
-            totals["imported"] += int(data.get("imported_count", 0))
-            totals["skipped"] += int(data.get("skipped_count", 0))
-            totals["failed"] += int(data.get("failed_count", 0))
-            totals["attachments"] += int(data.get("attachment_count", 0))
-            for item in data.get("items", []):
+            totals["imported"] += int(str(data.get("imported_count", 0)))
+            totals["skipped"] += int(str(data.get("skipped_count", 0)))
+            totals["failed"] += int(str(data.get("failed_count", 0)))
+            totals["attachments"] += int(str(data.get("attachment_count", 0)))
+            for item in typing.cast(list, data.get("items", [])):
                 if isinstance(item, dict) and item.get("reason_code"):
                     reasons[str(item["reason_code"])] += 1
 
@@ -983,7 +977,7 @@ def main() -> None:
             )
             llm_status = (
                 f"ok summary_chars={len(str(summary.get('summary', '')))} "
-                f"todos={len(summary.get('todos', []))}"
+                f"todos={len(typing.cast(list, summary.get('todos', [])))}"
             )
             draft = _post_json(
                 api_base_url,
