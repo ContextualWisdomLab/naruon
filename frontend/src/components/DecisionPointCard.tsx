@@ -52,7 +52,7 @@ export function DecisionPointCard({
   footerActions,
 }: DecisionPointCardProps) {
   const percent = toConfidencePercent(confidence);
-  const displayConfidence = showConfidence || percent !== undefined;
+  const displayConfidence = !loading && !error && (showConfidence || percent !== undefined);
   const analysisState = loading
     ? "loading"
     : error

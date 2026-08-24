@@ -129,6 +129,24 @@ describe("DecisionPointCard analysis contract", () => {
     expect(node.querySelector('[data-confidence-state="low"]')).not.toBeNull();
   });
 
+  it("does not show an unknown confidence badge while loading or in error", () => {
+    const node = renderCard(
+      <DecisionPointCard title="맥락 종합" loading showConfidence>
+        hidden
+      </DecisionPointCard>,
+    );
+    expect(node.textContent).not.toContain(MISSING_CONFIDENCE_LABEL);
+
+    act(() => {
+      root?.render(
+        <DecisionPointCard title="맥락 종합" error="분석 실패" showConfidence>
+          hidden
+        </DecisionPointCard>,
+      );
+    });
+    expect(node.textContent).not.toContain(MISSING_CONFIDENCE_LABEL);
+  });
+
   it("shows 근거 없음 when evidence is missing and blocked or intent-only when no next action", () => {
     const node = renderCard(
       <DecisionPointCard title="판단 포인트" evidenceMissing>
