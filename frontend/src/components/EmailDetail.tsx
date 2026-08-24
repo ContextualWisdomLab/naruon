@@ -572,7 +572,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
   const safeReplyTo = toMailDisplayText(email.reply_to || email.sender, '답장 주소 없음');
   const safeAttachments = (email.attachments ?? []).map((file) => ({
     filename: toMailDisplayText(file.filename, '첨부파일'),
-    contentType: toMailDisplayText(file.content_type, '첨부파일'),
+    contentType: toMailDisplayText(file.content_type, '알 수 없는 형식'),
     parseStatus: toMailDisplayText(file.parse_status, 'unknown'),
   }));
   const confidencePercent = toConfidencePercent(llmData?.confidence);

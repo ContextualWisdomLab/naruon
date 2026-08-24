@@ -294,6 +294,42 @@ describe("EmailDetail", () => {
     expect(container.querySelector("script")).toBeNull();
   });
 
+  it("uses a format label when an attachment has no MIME type", async () => {
+    const email = {
+      id: 25,
+      message_id: "<unknown-format@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Unknown attachment format",
+      date: "2026-05-17T10:00:00Z",
+      body: "Review the attached file.",
+      attachments: [{ filename: "notes.bin", content_type: "", parse_status: "unparsed" }],
+    };
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/25")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "정상 맥락 종합", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={25} />);
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("notes.bin");
+    expect(container.textContent).toContain("알 수 없는 형식");
+    expect(container.textContent).not.toContain("notes.bin첨부파일");
+  });
+
   it("keeps the latest conversation when an older thread request resolves late", async () => {
     const emailA: TestEmail = {
       id: 1,
