@@ -21,6 +21,30 @@ describe("calendarWritebackConflictState", () => {
     ).toBe("conflict");
   });
 
+  it("classifies the real runner conflict shape (provider_conflict / status conflict)", () => {
+    // backend/runner/local_dav_adapters.py returns exactly this shape for
+    // provider 409/412 responses; keep coverage on the production contract,
+    // not only on forward-compatible placeholder codes.
+    expect(
+      calendarWritebackConflictState([
+        {
+          requires_if_match: true,
+          if_match: "etag-friday-1500-standup",
+          provider_status: 412,
+          error_code: "provider_conflict",
+          status: "conflict",
+        },
+        {
+          requires_if_match: false,
+          if_match: null,
+          provider_status: 409,
+          error_code: "provider_conflict",
+          status: "conflict",
+        },
+      ]),
+    ).toBe("conflict");
+  });
+
   it("warns when an existing event needs If-Match but has not failed yet", () => {
     expect(
       calendarWritebackConflictState([
