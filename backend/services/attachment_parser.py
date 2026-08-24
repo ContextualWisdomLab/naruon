@@ -41,6 +41,8 @@ MAX_HWPX_ZIP_ENTRIES = 4_096
 MAX_HWPX_CENTRAL_DIRECTORY_BYTES = 4 * 1024 * 1024
 MAX_HWPX_ZIP_NAME_BYTES = 1 * 1024 * 1024
 MAX_HWPX_MIMETYPE_BYTES = 128
+HWPX_XML_PACKAGE_PENDING_STATUS = "hwpx_xml_package_pending"
+HWP_CONVERSION_PENDING_STATUS = "hwp_conversion_pending"
 
 
 @dataclass(frozen=True)
@@ -116,14 +118,14 @@ _PARSER_MANIFEST = (
         display_name="HWPX documents (OWPML XML package recognition)",
         content_types=_HWPX_CONTENT_TYPES,
         extensions=(".hwpx", ".owpml"),
-        parse_status="hwpx_xml_package_pending",
+        parse_status=HWPX_XML_PACKAGE_PENDING_STATUS,
     ),
     AttachmentParserDescriptor(
         parser_key="hwp",
         display_name="HWP binary documents (sandboxed conversion)",
         content_types=_HWP_CONTENT_TYPES,
         extensions=(".hwp",),
-        parse_status="hwp_conversion_pending",
+        parse_status=HWP_CONVERSION_PENDING_STATUS,
     ),
     AttachmentParserDescriptor(
         parser_key="unsupported_binary",
@@ -139,8 +141,8 @@ _PARSER_MANIFEST = (
 _DEFERRED_PARSE_STATUSES = frozenset(
     {
         "pdf_dom_recognition_pending",
-        "hwpx_xml_package_pending",
-        "hwp_conversion_pending",
+        HWPX_XML_PACKAGE_PENDING_STATUS,
+        HWP_CONVERSION_PENDING_STATUS,
     }
 )
 _SUPPORTED_CONTENT_TYPES = {

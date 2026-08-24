@@ -3,9 +3,9 @@
 **Status:** Accepted (Naruon-local attachment import policy)
 **Date:** 2026-08-20
 **Decision owner:** Naruon maintainers
-**Scope:** Email attachment classification and deferred-recognition admission.
-This ADR does not authorize inline document conversion, XML extraction, OCR, or
-LLM processing.
+**Scope:** Email attachment classification and bounded deferred-recognition
+workers. Import remains admission-only; HWPX extraction runs later in the
+worker, while HWP binary conversion, OCR, and LLM processing remain separate.
 **Figma File ID:** N/A — backend attachment admission; no visual surface.
 
 ## Context
@@ -30,6 +30,10 @@ silently discard a valid deferred source below that transport ceiling.
    fail-closed with stable status codes.
 4. Repeat format, path, compression, XML, resource, and expansion-ratio checks
    in the later sandboxed worker before extraction or conversion.
+5. The worker extracts only canonical `Contents/sectionN.xml` HWPX members,
+   rejects XML entity declarations and unsupported/encrypted compression, and
+   records paragraph text plus stable content-graph provenance. HWP binary
+   inputs remain pending until an independently sandboxed converter is wired.
 
 ## Consequences
 
@@ -37,8 +41,9 @@ silently discard a valid deferred source below that transport ceiling.
   worker, instead of seeing an opaque unsupported binary or losing the source.
 - Large valid inputs up to 64 MiB preserve provenance, while bounded admission
   prevents unbounded memory and database payload growth.
-- Semantic extraction and conversion remain a separately auditable worker
-  capability; this ADR does not claim that capability is shipped.
+- HWPX paragraph extraction is shipped as a bounded local worker capability.
+  HWP binary conversion remains a separately auditable capability and is not
+  claimed by this ADR.
 
 ## References (APA 7th)
 
@@ -50,3 +55,6 @@ Support. https://www.hancom.com/support/downloadCenter/hwpOwpml
 
 PKWARE, Inc. (2024). *APPNOTE.TXT: .ZIP file format specification*.
 https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
+
+World Wide Web Consortium. (2008, November 26). *Extensible Markup Language
+(XML) 1.0 (Fifth Edition)*. https://www.w3.org/TR/xml/

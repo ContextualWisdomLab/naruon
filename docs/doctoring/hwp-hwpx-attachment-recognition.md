@@ -40,6 +40,10 @@ sandboxed workers perform heavier extraction.
   type from `decode_deferred_attachment_payload()` still get PDF validation.
 - Invalid HWPX/HWP/PDF payloads fail closed and are not retained as deferred
   parser inputs.
+- The recognition worker reads only canonical `Contents/sectionN.xml` members,
+  bounds each section and the aggregate XML bytes, rejects entity declarations,
+  and lands paragraph text with stable content-graph provenance. The worker
+  never executes package content or follows external resources.
 
 ## HWPX resource bounds
 
@@ -91,10 +95,11 @@ authoritative for merge.
 
 ## Out of scope
 
-This slice does not implement semantic HWPX section extraction, embedded image
-recognition, table reconstruction, HWP binary conversion, OCR, or LLM/VLM
-interpretation. Those belong to a later worker-backed pipeline from the
-evidence-based workspace epic.
+This slice does not implement embedded image recognition, table reconstruction,
+HWP binary conversion, OCR, or LLM/VLM interpretation. HWPX paragraph
+extraction is implemented in the bounded worker; richer layout reconstruction
+belongs to a later worker-backed pipeline from the evidence-based workspace
+epic.
 
 ## Safety and buyer value
 
@@ -124,3 +129,6 @@ https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 
 Fielding, R., Nottingham, M., & Reschke, J. (Eds.). (2022). *HTTP semantics*
 (RFC 9110). RFC Editor. https://doi.org/10.17487/RFC9110
+
+World Wide Web Consortium. (2008, November 26). *Extensible Markup Language
+(XML) 1.0 (Fifth Edition)*. https://www.w3.org/TR/xml/
