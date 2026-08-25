@@ -130,7 +130,7 @@ export function DecisionPointCard({
               )}
             </div>
           ) : empty ? (
-            <div className="flex h-32 flex-col items-center justify-center space-y-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+            <div role="status" aria-live="polite" className="flex h-32 flex-col items-center justify-center space-y-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
               <Info className="h-5 w-5 text-muted-foreground/50" aria-hidden="true" />
               <span>{emptyMessage}</span>
             </div>
