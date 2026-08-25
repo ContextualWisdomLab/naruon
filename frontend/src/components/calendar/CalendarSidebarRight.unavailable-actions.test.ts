@@ -8,7 +8,7 @@ const sidebarSource = readFileSync(
 
 describe("CalendarSidebarRight unavailable-action contract", () => {
   it("keeps the unavailable location action itself discoverable", () => {
-    expect(sidebarSource).toContain('aria-disabled={ !selectedDetailEvent?.location }');
+    expect(sidebarSource).toContain('aria-disabled={locationUnavailable}');
     expect(sidebarSource).toContain(
       'aria-describedby={!selectedDetailEvent?.location ? "calendar-location-unavailable" : undefined}',
     );
@@ -28,7 +28,7 @@ describe("CalendarSidebarRight unavailable-action contract", () => {
       "왼쪽 캘린더에서 일정을 선택하면 삭제·복사·수정할 수 있습니다.",
     );
     expect(
-      sidebarSource.match(/aria-disabled=\{ !selectedDetailEvent \}/g) ?? [],
+      sidebarSource.match(/aria-disabled=\{selectionRequired\}/g) ?? [],
     ).toHaveLength(3);
     expect(
       sidebarSource.match(

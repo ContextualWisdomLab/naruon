@@ -54,7 +54,7 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
               type="button"
               variant="link"
               size="xs"
-              aria-disabled={ !selectedDetailEvent?.location }
+              aria-disabled={locationUnavailable}
               aria-describedby={!selectedDetailEvent?.location ? "calendar-location-unavailable" : undefined}
               aria-label={`${selectedDetailEvent?.location ?? '장소'} 위치 보기`}
               className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:no-underline"
@@ -118,7 +118,7 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
               type="button"
               variant="outline"
               className="flex-1 w-full aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-              aria-disabled={ !selectedDetailEvent }
+              aria-disabled={selectionRequired}
               aria-describedby={!selectedDetailEvent ? "calendar-selection-required" : undefined}
               aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 삭제` : '일정 삭제'}
               onClick={selectionRequired ? blockUnavailableAction : undefined}
@@ -131,7 +131,7 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
               type="button"
               variant="outline"
               className="flex-1 w-full aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-              aria-disabled={ !selectedDetailEvent }
+              aria-disabled={selectionRequired}
               aria-describedby={!selectedDetailEvent ? "calendar-selection-required" : undefined}
               aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 복사` : '일정 복사'}
               onClick={selectionRequired ? blockUnavailableAction : undefined}
@@ -144,7 +144,7 @@ export function CalendarSidebarRight({ selectedDetailEvent }: Props) {
               type="button"
               variant="default"
               className="flex-1 w-full aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-              aria-disabled={ !selectedDetailEvent }
+              aria-disabled={selectionRequired}
               aria-describedby={!selectedDetailEvent ? "calendar-selection-required" : undefined}
               aria-label={selectedDetailEvent ? `${selectedDetailEvent.title} 일정 수정` : '일정 수정'}
               onClick={selectionRequired ? blockUnavailableAction : undefined}
