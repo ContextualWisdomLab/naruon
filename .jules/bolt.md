@@ -44,3 +44,17 @@ is not an optimization.
 `docs/doctoring/local-http-origin-port-validation.md`, or the security contract
 entry in `CHANGELOG.md`. Keep explicit-port validation and its 45 regression cases
 intact; validate the scoped diff and tests before publishing.
+
+## 2026-08-25 - Preserve origin-integrity security evidence during scoped optimizations
+
+**Learning:** A NetworkGraph optimization is scoped to the graph component and its
+direct tests. Deleting unrelated URL/loopback validators, their regression tests,
+the RFC doctoring record, or the CHANGELOG evidence weakens a security contract and
+is not an optimization.
+
+**Action:** Before committing a Bolt optimization, abort if the diff changes
+`backend/core/local_http.py`, `backend/core/url_validation.py`,
+`backend/tests/test_local_http.py`, `backend/tests/test_url_validation.py`,
+`docs/doctoring/local-http-origin-port-validation.md`, or the security contract
+entry in `CHANGELOG.md`. Keep explicit-port validation and its 45 regression cases
+intact; validate the scoped diff and tests before publishing.
