@@ -452,19 +452,32 @@ else
           (.body // "") as $body
           | ($body | split("<details>")[0]) as $summary
           | ($body | test($pattern; "i")) as $general_blocking
-          | (
-              ($body | test("approval_notice_start"; "i"))
-              and ($body | test("approval_notice_end"; "i"))
-              and ($body | test("(^|[^A-Za-z0-9_])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))
-            ) as $current_approval_notice
-          | (if $current_approval_notice then
-               (($body | split("<!-- approval_notice_start -->") | .[1] // "")
-                | split("<!-- approval_notice_end -->") | .[0]) as $approval_notice
-               | if ($approval_notice | length) == 0 then true
-                 else ($approval_notice | test($approval_notice_blocking_pattern; "i"))
-                 end
-             else false end) as $approval_notice_blocking
-          | (if $current_approval_notice then $approval_notice_blocking else $general_blocking end)
+          | ($body | test("approval_notice_start"; "i")) as $has_approval_start
+          | ($body | test("approval_notice_end"; "i")) as $has_approval_end
+          | ($body | split("<!-- approval_notice_start -->")) as $approval_start_parts
+          | ($body | split("<!-- approval_notice_end -->")) as $approval_end_parts
+          | (($approval_start_parts | length) == 2 and ($approval_end_parts | length) == 2) as $single_approval_pair
+          | (if $single_approval_pair
+             then ($approval_start_parts[1] | split("<!-- approval_notice_end -->"))
+             else []
+             end) as $approval_content_parts
+          | (($approval_content_parts | length) == 2) as $ordered_approval_pair
+          | (if $ordered_approval_pair
+             then ($approval_content_parts[0] | gsub("^[[:space:]]+|[[:space:]]+$"; ""))
+             else ""
+             end) as $approval_notice
+          | (($has_approval_start or $has_approval_end)
+             and $single_approval_pair
+             and $ordered_approval_pair
+             and (($approval_notice | gsub("[[:space:]]"; "")) | length > 0)) as $approval_notice_well_formed
+          | ($approval_notice_well_formed
+             and ($approval_notice | test("(^|[^A-Za-z0-9_])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))) as $current_approval_notice
+          | (if ($has_approval_start or $has_approval_end) then
+               if $current_approval_notice
+               then ($approval_notice | test($approval_notice_blocking_pattern; "i"))
+               else true
+               end
+             else $general_blocking end)
             and (
               (($body | test($no_actionable_pattern; "i")) | not)
               or ($summary | test($substantive_pattern; "i"))

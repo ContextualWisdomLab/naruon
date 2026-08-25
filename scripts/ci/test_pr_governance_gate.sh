@@ -249,6 +249,9 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
       coderabbit_stale_head_with_unrelated_current_sha)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue remains under review.\\n- [ ] {\\"headCommitId\\":\\"old-head\\"}\\nThe current head is 0123456789abcdef0123456789abcdef01234567, but this is unrelated prose.\\n<!-- approval_notice_end -->"}]'
         ;;
+      coderabbit_stale_head_with_current_sha_outside_notice)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\n- [ ] {\\"headCommitId\\":\\"old-head\\"}\\n<!-- approval_notice_end -->\\nThe current head is 0123456789abcdef0123456789abcdef01234567, but this is unrelated prose."}]'
+        ;;
       coderabbit_current_head_mixed_approval_pending_blocking_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId: old-head\\nBlocking issue: the current parser can cross tenant boundaries.\\nCurrent head is 0123456789abcdef0123456789abcdef01234567 in unrelated prose.\\n<!-- approval_notice_end -->"}]'
         ;;
@@ -269,6 +272,9 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         ;;
       coderabbit_malformed_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567"}]'
+        ;;
+      coderabbit_whitespace_only_approval_notice)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n   \\n<!-- approval_notice_end -->"}]'
         ;;
       github_code_quality_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"github-code-quality[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567\\n- [ ] {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"}\\n<!-- approval_notice_end -->"}]'
@@ -799,21 +805,33 @@ assert_coderabbit_approval_pending_walkthrough_does_not_block() {
 }
 
 assert_multiline_coderabbit_approval_pending_notice_does_not_block() {
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  run_gate coderabbit_multiline_json_approval_pending_comment "$temp_dir"
+  local scenario temp_dir
+  for scenario in coderabbit_multiline_json_approval_pending_comment coderabbit_multiline_approval_pending_comment; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
 
-  assert_exit_code 0 "$temp_dir"
-  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
-  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
-  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/gh.log"
-  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+    assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
+    assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
 }
 
 assert_stale_coderabbit_head_with_unrelated_current_sha_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_stale_head_with_unrelated_current_sha "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_stale_coderabbit_head_with_current_sha_outside_notice_blocks() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_stale_head_with_current_sha_outside_notice "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
@@ -846,6 +864,16 @@ assert_malformed_coderabbit_approval_pending_notice_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate coderabbit_malformed_approval_pending_comment "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_whitespace_only_coderabbit_approval_pending_notice_blocks() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_whitespace_only_approval_notice "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
@@ -1105,9 +1133,11 @@ assert_coderabbit_approval_pending_notice_does_not_block
 assert_multiline_coderabbit_approval_pending_notice_does_not_block
 assert_coderabbit_approval_pending_walkthrough_does_not_block
 assert_stale_coderabbit_head_with_unrelated_current_sha_blocks
+assert_stale_coderabbit_head_with_current_sha_outside_notice_blocks
 assert_current_coderabbit_approval_notice_findings_block
 assert_mixed_coderabbit_approval_pending_notice_blocks
 assert_malformed_coderabbit_approval_pending_notice_blocks
+assert_whitespace_only_coderabbit_approval_pending_notice_blocks
 assert_github_code_quality_approval_pending_notice_does_not_block
 assert_github_code_quality_blocking_issue_comment_blocks
 assert_coderabbit_stale_issue_comment_does_not_block
