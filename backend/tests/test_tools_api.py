@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -1211,3 +1209,83 @@ def test_execute_analysis_tool_rejects_oversized_text():
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
     }
+
+
+
+def test_url_encoder_tool_success() -> None:
+    with TestClient(app) as client:
+        request_data = {"parameters": {"text": "hello world/&?"}}
+        response = client.post(
+            "/api/tools/url_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json=request_data
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["result"]["encoded_url"] == "hello%20world%2F%26%3F"
+
+def test_url_decoder_tool_success() -> None:
+    with TestClient(app) as client:
+        request_data = {"parameters": {"encoded_url": "hello%20world%2F%26%3F"}}
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json=request_data
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["result"]["decoded_url"] == "hello world/&?"
+
+def test_json_formatter_tool_success() -> None:
+    with TestClient(app) as client:
+        request_data = {"parameters": {"json_str": '{"key":"value"}'}}
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json=request_data
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["result"]["formatted_json"] == '{\n  "key": "value"\n}'
+
+def test_json_formatter_tool_invalid() -> None:
+    with TestClient(app) as client:
+        request_data = {"parameters": {"json_str": "invalid json"}}
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json=request_data
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert "Invalid JSON string" in data["message"]
+
+def test_html_escape_tool_success() -> None:
+    with TestClient(app) as client:
+        request_data = {"parameters": {"text": "<div>&</div>"}}
+        response = client.post(
+            "/api/tools/html_escape/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json=request_data
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["result"]["escaped_html"] == "&lt;div&gt;&amp;&lt;/div&gt;"
+
+def test_html_unescape_tool_success() -> None:
+    with TestClient(app) as client:
+        request_data = {"parameters": {"escaped_html": "&lt;div&gt;&amp;&lt;/div&gt;"}}
+        response = client.post(
+            "/api/tools/html_unescape/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json=request_data
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["result"]["unescaped_html"] == "<div>&</div>"

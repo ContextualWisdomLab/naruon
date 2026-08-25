@@ -2,6 +2,7 @@ import base64
 import hashlib
 import inspect
 import json
+import html
 import logging
 import re
 import unicodedata
@@ -706,6 +707,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -768,6 +771,94 @@ registry.register(
     uuid_v4_generator_handler,
 )
 
+
+async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    return {"encoded_url": urllib.parse.quote(text, safe="")}
+
+
+registry.register(
+    ToolInfo(
+        code="url_encoder",
+        name="URL 인코더 (URL Encoder)",
+        description="일반 텍스트를 URL 인코딩합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_encoder_handler,
+)
+
+
+async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    encoded_url = params.get("encoded_url") or ""
+    return {"decoded_url": urllib.parse.unquote(encoded_url)}
+
+
+registry.register(
+    ToolInfo(
+        code="url_decoder",
+        name="URL 디코더 (URL Decoder)",
+        description="URL 인코딩된 문자열을 디코딩합니다.",
+        category="유틸리티",
+        parameters={"encoded_url": "string"},
+    ),
+    url_decoder_handler,
+)
+
+
+async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    json_str = params.get("json_str") or ""
+    try:
+        parsed = json.loads(json_str)
+        return {"formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False)}
+    except Exception as e:
+        raise ValueError(f"Invalid JSON string: {e}")
+
+
+registry.register(
+    ToolInfo(
+        code="json_formatter",
+        name="JSON 포매터 (JSON Formatter)",
+        description="JSON 문자열을 보기 좋게 들여쓰기하여 포매팅합니다.",
+        category="유틸리티",
+        parameters={"json_str": "string"},
+    ),
+    json_formatter_handler,
+)
+
+
+async def html_escape_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text") or ""
+    return {"escaped_html": html.escape(text)}
+
+
+registry.register(
+    ToolInfo(
+        code="html_escape",
+        name="HTML 이스케이프 (HTML Escape)",
+        description="텍스트 내 특수 문자를 HTML 안전 문자열로 변환합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    html_escape_handler,
+)
+
+
+async def html_unescape_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    escaped_html = params.get("escaped_html") or ""
+    return {"unescaped_html": html.unescape(escaped_html)}
+
+
+registry.register(
+    ToolInfo(
+        code="html_unescape",
+        name="HTML 언이스케이프 (HTML Unescape)",
+        description="HTML 이스케이프된 문자열을 복원합니다.",
+        category="유틸리티",
+        parameters={"escaped_html": "string"},
+    ),
+    html_unescape_handler,
+)
 
 
 @router.get("/tools", response_model=list[ToolInfo])
