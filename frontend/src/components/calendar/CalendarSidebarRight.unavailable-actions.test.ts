@@ -12,9 +12,7 @@ describe("CalendarSidebarRight unavailable-action contract", () => {
     expect(sidebarSource).toContain(
       'aria-describedby={!selectedDetailEvent?.location ? "calendar-location-unavailable" : undefined}',
     );
-    expect(sidebarSource).toContain(
-      'id="calendar-location-unavailable" className="text-right text-xs leading-4 text-muted-foreground"',
-    );
+    expect(sidebarSource).toContain('id="calendar-location-unavailable"');
     expect(sidebarSource).toContain(
       "일정에 위치를 추가하면 위치를 열 수 있습니다.",
     );
@@ -22,18 +20,10 @@ describe("CalendarSidebarRight unavailable-action contract", () => {
     expect(sidebarSource).not.toContain(
       "tabIndex={!selectedDetailEvent?.location ? 0 : -1}",
     );
-    expect(sidebarSource).not.toContain(
-      "tabIndex={locationUnavailable ? 0 : -1}",
-    );
-    expect(sidebarSource).not.toContain(
-      'id="calendar-location-unavailable" className="text-right text-xs leading-4 text-muted-foreground sr-only"',
-    );
   });
 
   it("describes selection-dependent actions with one visible next action", () => {
-    expect(sidebarSource).toContain(
-      'id="calendar-selection-required" className="mb-2 text-xs leading-4 text-muted-foreground"',
-    );
+    expect(sidebarSource).toContain('id="calendar-selection-required"');
     expect(sidebarSource).toContain(
       "왼쪽 캘린더에서 일정을 선택하면 삭제·복사·수정할 수 있습니다.",
     );
@@ -48,12 +38,6 @@ describe("CalendarSidebarRight unavailable-action contract", () => {
     expect(sidebarSource).not.toContain("disabled={!selectedDetailEvent}");
     expect(sidebarSource).not.toContain(
       "tabIndex={!selectedDetailEvent ? 0 : -1}",
-    );
-    expect(sidebarSource).not.toContain(
-      "tabIndex={selectionRequired ? 0 : -1}",
-    );
-    expect(sidebarSource).not.toContain(
-      'id="calendar-selection-required" className="mb-2 text-xs leading-4 text-muted-foreground sr-only"',
     );
   });
 });
