@@ -893,6 +893,16 @@ assert_mixed_coderabbit_approval_pending_notice_blocks() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_current_coderabbit_approval_pending_notice_blocks() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_mixed_approval_pending_blocking_comment "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
 assert_current_coderabbit_approval_notice_findings_block() {
   local scenario temp_dir
   for scenario in coderabbit_current_failure_approval_notice coderabbit_current_warning_approval_notice coderabbit_current_potential_issue_approval_notice; do
@@ -1183,6 +1193,7 @@ assert_stale_coderabbit_head_with_current_sha_outside_notice_blocks
 assert_stale_prefixed_coderabbit_head_field_blocks
 assert_current_coderabbit_approval_notice_findings_block
 assert_mixed_coderabbit_approval_pending_notice_blocks
+assert_current_coderabbit_approval_pending_notice_blocks
 assert_malformed_coderabbit_approval_pending_notice_blocks
 assert_whitespace_only_coderabbit_approval_pending_notice_blocks
 assert_github_code_quality_approval_pending_notice_does_not_block
