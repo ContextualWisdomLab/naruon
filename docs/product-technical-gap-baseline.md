@@ -19,7 +19,8 @@ current merge state.
 `2026-08-25T13:24:55Z` found 106 open PRs. It includes the current exact-head
 work relevant to this baseline: #1468 (`1da167de…`, PostgreSQL smoke fixture
 schema alignment), #1455 (`d8757e6…`, attachment filename traversal hardening),
-and #1469 (`dd1fb33…`, 64 MiB deferred attachment parse-source admission).
+#1467 (`ed2c80f…`, utility-tool JSON boundary and Strix-trigger restoration),
+and #1469 (`8bd9c0c…`, 64 MiB deferred attachment parse-source admission).
 These PRs remain open until their current-head required Checks and qualifying
 independent approval satisfy the protected ruleset; this follow-up does not
 reuse predecessor evidence or claim a merge.
@@ -234,6 +235,7 @@ and defines the inventory that must be completed before GA.
 | #1241, #1320, #1408, #1410, #1411, #1421, #1422 | accessibility micro-lanes | useful but numerous; consolidate non-overlapping UI fixes into bounded component-level trains to reduce 17-check amplification |
 | #1424, #1412, #1401 | micro performance lanes | require real benchmark or stable complexity contract; do not let automated micro-PRs displace GA integration work |
 | #1455 | path-traversal attachment parser hardening | high-value Sentinel security lane; prioritize within the new wave and merge only with exact-head Strix evidence once the provider outage clears |
+| #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
 | #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence |
 | #1469 | deferred attachment parse-source admission | aligns the hidden 20 MiB parser bound with the authenticated 64 MiB import contract while keeping unsupported binaries metadata-only; requires the ADR-0006 contract and bounded parser regression |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
