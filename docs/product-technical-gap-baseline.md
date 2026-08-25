@@ -15,17 +15,28 @@ context, as do the earlier 92-PR state after PR #1442 merged and the initial
 83-PR observation in issue #1428; all counts are point-in-time evidence, not
 current merge state.
 
-**Follow-up delta observation:** a third live scan at
-`2026-08-25T14:20:19Z` found the active exact-head work relevant to this
+**Follow-up delta observation:** a fourth live scan at
+`2026-08-25T14:34:20Z` found the active exact-head work relevant to this
 baseline: #1465 (`70596e26…`, tenant-archive import sanitization and duplicate
 identity rejection), #1466 (`a3e6762f…`, origin-integrity port validation),
-#1467 (`b0208fd2…`, utility-tool JSON boundary and Strix-trigger restoration),
+#1467 (`6816bc7f…`, utility-tool JSON boundary and Strix-trigger restoration),
 #1468 (`1da167de…`, PostgreSQL smoke fixture schema alignment), #1469
 (`de6d7128…`, bounded 20–64 MiB deferred attachment parse-source admission),
 and #1455 (`d8757e65…`, attachment filename traversal hardening).
 These PRs remain open until their current-head required Checks and qualifying
 independent approval satisfy the protected ruleset; this follow-up does not
 reuse predecessor evidence or claim a merge.
+
+**Current Checks inventory:** the same live scan found 106 open PRs. Completed
+failures were limited to `metadata-only gate evaluation` and `strix`; the
+metadata gate reports the underlying Strix failure and, on some heads, a
+current-head CodeRabbit quota/provider warning. The representative Strix logs
+show NVIDIA NIM HTTP 429 rate limiting followed by an unavailable direct
+fallback, so this is failed infrastructure evidence rather than a clean
+security result or a source defect. These PRs remain blocked and are not
+force-merged; the exact head must receive a successful hosted security result.
+PR #1466 has successful required Checks but remains in GitHub's protected
+auto-merge queue, so it is also not treated as manually merged.
 
 The protected-branch SHA in this header identifies the baseline's observation
 point. The inventory's `Base-SHA` column is captured independently for each PR
