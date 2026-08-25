@@ -1211,19 +1211,19 @@ def test_execute_analysis_tool_rejects_oversized_text():
     }
 
 
-
 def test_url_encoder_tool_success() -> None:
     with TestClient(app) as client:
         request_data = {"parameters": {"text": "hello world/&?"}}
         response = client.post(
             "/api/tools/url_encoder/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json=request_data
+            json=request_data,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
         assert data["result"]["encoded_url"] == "hello%20world%2F%26%3F"
+
 
 def test_url_decoder_tool_success() -> None:
     with TestClient(app) as client:
@@ -1231,12 +1231,13 @@ def test_url_decoder_tool_success() -> None:
         response = client.post(
             "/api/tools/url_decoder/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json=request_data
+            json=request_data,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
         assert data["result"]["decoded_url"] == "hello world/&?"
+
 
 def test_json_formatter_tool_success() -> None:
     with TestClient(app) as client:
@@ -1244,12 +1245,13 @@ def test_json_formatter_tool_success() -> None:
         response = client.post(
             "/api/tools/json_formatter/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json=request_data
+            json=request_data,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
         assert data["result"]["formatted_json"] == '{\n  "key": "value"\n}'
+
 
 def test_json_formatter_tool_invalid() -> None:
     with TestClient(app) as client:
@@ -1257,12 +1259,13 @@ def test_json_formatter_tool_invalid() -> None:
         response = client.post(
             "/api/tools/json_formatter/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json=request_data
+            json=request_data,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "failed"
         assert "Invalid JSON string" in data["message"]
+
 
 def test_html_escape_tool_success() -> None:
     with TestClient(app) as client:
@@ -1270,12 +1273,13 @@ def test_html_escape_tool_success() -> None:
         response = client.post(
             "/api/tools/html_escape/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json=request_data
+            json=request_data,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
         assert data["result"]["escaped_html"] == "&lt;div&gt;&amp;&lt;/div&gt;"
+
 
 def test_html_unescape_tool_success() -> None:
     with TestClient(app) as client:
@@ -1283,7 +1287,7 @@ def test_html_unescape_tool_success() -> None:
         response = client.post(
             "/api/tools/html_unescape/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json=request_data
+            json=request_data,
         )
         assert response.status_code == 200
         data = response.json()
