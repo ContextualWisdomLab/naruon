@@ -772,11 +772,11 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 text("""
                     INSERT INTO email_records (
                         user_id, organization_id, message_id, sender, recipients,
-                        subject, "date", body
+                        subject, "date", body, is_read
                     )
                     VALUES (
                         :user_id, :organization_id, :message_id, :sender,
-                        :recipients, :subject, now(), :body
+                        :recipients, :subject, now(), :body, true
                     )
                     RETURNING id
                     """),
