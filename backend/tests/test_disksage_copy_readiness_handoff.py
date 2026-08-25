@@ -129,6 +129,26 @@ def test_main_accepts_current_disksage_schema_versions(tmp_path, capsys, schema_
     assert json.loads(capsys.readouterr().out) == payload
 
 
+def test_main_rejects_native_summary_fields_on_legacy_schema_six(tmp_path, capsys):
+    payload = _success_payload()
+    payload["schema_version"] = 6
+    payload.update(
+        {
+            "pre_copy_evidence_met": None,
+            "icloud_native_status_observed": None,
+            "icloud_native_sync_state": None,
+            "icloud_native_status_timed_out": None,
+        }
+    )
+    verifier = _json_verifier(tmp_path / "verifier", payload, 0)
+
+    assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 70
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-protocol-invalid",
+    }
+
+
 def test_main_accepts_bounded_native_status_summary(tmp_path, capsys):
     payload = _success_payload()
     payload["schema_version"] = 8

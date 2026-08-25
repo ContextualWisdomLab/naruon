@@ -75,9 +75,9 @@ READINESS_STATES = frozenset(
     {"no-candidates", "blocked", "partially-ready", "ready-without-new-review"}
 )
 # DiskSage schema v5+ retains this path-free success contract while adding evidence fields to
-# the signed envelope. Schemas v6-v8 add bounded provider evidence and explicit iCloud File
-# Provider admission blockers without changing this handoff's path-free success shape. Keep
-# older records readable; add newer envelope versions deliberately.
+# the signed envelope. Schemas v7-v8 add bounded provider evidence and explicit iCloud File
+# Provider admission blockers without changing this handoff's path-free success shape. Schema
+# v6 remains a legacy envelope so independently deployed producers and consumers stay compatible.
 SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4, 5, 6, 7, 8})
 ERROR_CODE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 NATIVE_STATUS_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9|_.-]{1,128}")
