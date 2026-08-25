@@ -47,7 +47,7 @@ decision/action experience.
 The accurate current product classification is:
 
 > **Production-oriented pre-GA communication control plane with substantial
-> protected-branch capability, an unconverged 93-PR integration surface, and an
+> protected-branch capability, an unconverged ~100-open-PR integration surface (102 at the 2026-08-25 snapshot), and an
 > incomplete buyer-visible release/operations contract.**
 
 The first sellable boundary is **GA-1: Customer-owned Mail, Calendar, Contact,
@@ -187,7 +187,7 @@ scientific payload.
 | README says durable retry/audit remains future work | protected operations document describes encrypted retry rows, retry worker, backoff, exhaustion, and aggregate visibility | buyers and contributors cannot tell what is shipped | merge a customer/operator README based on protected truth; keep unsupported behavior explicitly limited |
 | Release architecture says first candidate should be `v0.1.0` | `VERSION` and backend package are `0.14.4` | release procedure may publish or validate the wrong identity | replace historical hypothesis with current release-train policy and immutable release manifest |
 | Product plan marks typed Person/Event/Commitment/Plugin concepts as new/planned | current code search does not prove authoritative `graph_persons`, `graph_events`, `graph_commitments`, or `plugin_registrations` stores | UI/marketing can imply dense-KG/product-platform completion that does not exist | keep north-star language, implement typed domains through bounded PRs, and gate claims on protected code |
-| 93 open PRs contain many overlapping, stacked, micro, dependency, governance, and broad integration changes | current GitHub inventory | predecessor evidence, writer collision, stale branches, and integration starvation | establish a release train, classify every PR, close duplicates, merge parent-first, and use one writer per authority cluster |
+| The live open-PR population (93 on 2026-08-21; 102 on 2026-08-25) contains many overlapping, stacked, micro, dependency, governance, and broad integration changes | current GitHub inventory | predecessor evidence, writer collision, stale branches, and integration starvation | establish a release train, classify every PR, close duplicates, merge parent-first, and use one writer per authority cluster |
 | Required independent review exists but the current human reviewer path is unresolved | #1371 | green automation cannot produce a lawful protected merge | resolve reviewer governance without weakening rulesets or self-approval |
 | Connector is described through a self-hosted-runner analogy | protected code has protocol adapters and retry behavior but no complete released connector lifecycle | operators may deploy test infrastructure as production relay | deliver signed installable connector artifacts, enrollment/rotation, source health, fleet SLO, and runbooks |
 
@@ -348,7 +348,7 @@ button, form, navigation, chart, or asynchronous data surface.
 
 | Gap | Buyer problem | Protected/current evidence | Existing work | Completion evidence |
 |---|---|---|---|---|
-| Release-train convergence | no buyer can assess a product with 93 unconverged PRs | strict gates exist but queue topology is fragmented | #1428, #1371, #1324 | all PRs classified; duplicates closed; parent-first integration; one immutable RC SHA |
+| Release-train convergence | no buyer can assess a product with ~100 unconverged open PRs (102 at the 2026-08-25 snapshot) | strict gates exist but queue topology is fragmented | #1428, #1371, #1324 | all PRs classified; duplicates closed; parent-first integration; one immutable RC SHA |
 | Product/release truth | documentation conflicts with protected behavior/version | retry is shipped; release doc says `v0.1.0`; version is `0.14.4` | #1392, this PR | README, architecture, version, changelog, release manifest, and operator guide agree |
 | Independent review path | automation cannot lawfully self-approve | effective rulesets require independent post-last-push approval | #1371 | verified reviewer route and normal protected merge without bypass |
 
@@ -431,7 +431,7 @@ review approval, hidden manual database edits, or an unreleased sibling branch.
 1. Merge this baseline after exact-head documentation checks and independent
    review.
 2. Keep #1428 as the single completion gate.
-3. Generate the complete 93-PR inventory and classify every PR.
+3. Maintain the complete open-PR inventory (section 13) and classify every PR as it arrives.
 4. Resolve #1371 without weakening protection.
 5. Merge/close governance and stale-workflow lanes through normal protected
    integration.
@@ -641,6 +641,10 @@ and are retained in baseline v0.2 and in git history for audit
 traceability. The self-row reflects the head observed at scan time and may
 trail this document's own commit; all review decisions, Checks, and
 mergeability still require a live exact-head fetch before merge.
+Base-SHA columns record the protected-branch tip each row was scanned
+against (`develop@81c10564...` for rows captured before PR #1337
+merged; `develop@e5e99b4e...` for rows captured after), so they are
+scan-provenance evidence rather than one shared base declaration.
 
 | PR | Title | Exact head SHA | Base ref and SHA | Draft | Authority cluster | Stack parent ref | Disposition | Next action |
 |---:|---|---|---|:---:|---|---|---|---|
