@@ -2,7 +2,9 @@ import datetime
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from api.auth import AuthContext
 from api.disksage import ingest_organization_lineage, list_organization_lineage
@@ -51,10 +53,12 @@ class _Result:
 
 
 class _Session:
-    def __init__(self, results):
+    def __init__(self, results, *, commit_error=None):
         self._results = iter(results)
+        self.commit_error = commit_error
         self.statements = []
         self.commit_count = 0
+        self.rollback_count = 0
 
     async def execute(self, statement):
         self.statements.append(statement)
@@ -65,12 +69,14 @@ class _Session:
 
     async def commit(self):
         self.commit_count += 1
+        if self.commit_error is not None:
+            raise self.commit_error
 
     async def refresh(self, _record):
         pass
 
     async def rollback(self):
-        pass
+        self.rollback_count += 1
 
 
 def _auth() -> AuthContext:
@@ -87,6 +93,7 @@ def _record(**overrides):
     batch = OrganizationLineageBatch.model_validate(_batch())
     values = {
         "organization_lineage_record_uid": "disksage_org_lineage_1",
+        "organization_id": "org-1",
         "batch_fingerprint_sha256": batch.batch_fingerprint_sha256,
         "envelope_sha256": canonical_batch_sha256(batch),
         "schema_version": 1,
@@ -112,6 +119,31 @@ def test_contract_rejects_duplicate_lineage_fingerprints():
     unsafe["items"] = [unsafe["items"][0], unsafe["items"][0]]
     with pytest.raises(ValidationError):
         OrganizationLineageBatch.model_validate(unsafe)
+
+
+@pytest.mark.asyncio
+async def test_racing_batch_in_another_organization_returns_conflict():
+    envelope = OrganizationLineageBatch.model_validate(_batch())
+    record = _record(
+        organization_id="org-2",
+        envelope_sha256=canonical_batch_sha256(envelope),
+    )
+    session = _Session(
+        [_Result(None), _Result(record)],
+        commit_error=IntegrityError("unique violation", None, Exception("duplicate")),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await ingest_organization_lineage(
+            envelope=envelope,
+            auth_context=_auth(),
+            db=session,
+        )
+
+    assert error.value.status_code == 409
+    assert "different organization" in error.value.detail
+    assert session.rollback_count == 1
+    assert "organization_id" not in str(session.statements[1]).split("WHERE", 1)[1]
 
 
 @pytest.mark.asyncio
