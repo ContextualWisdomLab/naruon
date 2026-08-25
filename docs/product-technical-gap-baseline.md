@@ -6,10 +6,11 @@
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-**Inventory observation:** the 102-row open-PR inventory below is a fresh live
-scan captured at `2026-08-25T00:26:45Z`, which returned 102 open PRs after
+**Inventory observation:** the 106-row open-PR inventory below is a fresh live
+scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
 PR #1337 merged into protected `develop` at `2026-08-25T00:10:39Z` and
-fifteen new PRs (#1449–#1463) opened since the previous observation. The
+the later governance stack merge (#1448) and additional PR wave opened since
+the previous observation. The
 v0.2 baseline's 93-row snapshot from `2026-08-21T19:25:43Z` remains historical
 context, as do the earlier 92-PR state after PR #1442 merged and the initial
 83-PR observation in issue #1428; all counts are point-in-time evidence, not
@@ -53,6 +54,18 @@ force-merged; the exact head must receive a successful hosted security result.
 PR #1466 has successful required Checks but remains in GitHub's protected
 auto-merge queue with `REVIEW_REQUIRED` and no qualifying independent
 approval, so it is also not treated as manually merged.
+
+The latest exact-head follow-up also records: #1347 at
+`e97fa1e4…` with its governance regression tests passing but hosted required
+Checks queued and no qualifying approval; #1433 at `b84255e5…` with source
+checks passing but Strix failed closed after NVIDIA NIM HTTP 429 retries and a
+configured direct OpenAI HTTP 404 fallback; #1450 at `073408ce…` with all
+other Checks successful while the metadata gate remains in progress; #1455 at
+`d8757e65…` with all hosted Checks successful but no current-head approval;
+and #1466 at `a3e6762f…` with all hosted Checks successful but no qualifying
+independent approval. These are live queue observations, not merge evidence.
+The provider failures are retained as infrastructure evidence and are not
+converted into source changes or clean security claims.
 
 The protected-branch SHA in this header identifies the baseline's observation
 point. The inventory's `Base-SHA` column is captured independently for each PR
@@ -264,6 +277,9 @@ and defines the inventory that must be completed before GA.
 | #1241, #1320, #1408, #1410, #1411, #1421, #1422 | accessibility micro-lanes | useful but numerous; consolidate non-overlapping UI fixes into bounded component-level trains to reduce 17-check amplification |
 | #1424, #1412, #1401 | micro performance lanes | require real benchmark or stable complexity contract; do not let automated micro-PRs displace GA integration work |
 | #1455 | path-traversal attachment parser hardening | high-value Sentinel security lane; prioritize within the new wave and merge only with exact-head Strix evidence once the provider outage clears |
+| #1347 | rate-limited review status governance | current head constrains repository API-scope identifiers and merges the protected base; local tests pass, while hosted Checks and independent review are still required |
+| #1433 | Message-ID whitespace hardening | source/security checks pass; the observed Strix failure is provider infrastructure (NVIDIA NIM 429 and direct OpenAI 404), so retry exact-head evidence without weakening the gate |
+| #1450 | stray scratch/debug cleanup | all source and security Checks passed; wait for the in-progress metadata gate and current-head independent review |
 | #1465 | scoped tenant archive import hardening | portability slice now rejects duplicate identities before writes and sanitizes archive-controlled display fields; retain the bounded slice-1 query cost and require current-head hosted evidence |
 | #1466 | origin-integrity URL validation | current head rejects explicit zero/out-of-range ports; keep the signed-session and SSRF contract tied to exact-head regression evidence |
 | #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
