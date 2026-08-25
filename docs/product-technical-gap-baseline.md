@@ -66,6 +66,32 @@ not merge evidence and the remaining hosted checks are queued. None of these
 states satisfies the two-approval protected ruleset, and none is a force-merge
 candidate.
 
+**Live exact-head queue refresh (2026-08-25T18:06Z):** a subsequent
+re-fetch supersedes only the matching queue entries above. PR #1436 moved to
+exact head `034d2ff4e0d120d1e7b7669b35ea8eea7d8c1221`; its frontend, backend,
+and Strix checks were recreated and queued, with zero unresolved review
+threads and no qualifying approval. PR #1470 remains
+`aba77cf5b6a47985b352e8d2c2d76413579ea88a`; its metadata, OpenCode,
+frontend, backend, Strix, and security checks are successful, but only the
+exact-head CodeRabbit approval exists and the protected ruleset requires a
+second qualifying approval. PR #1467 remains
+`6816bc7f938fe361f2eb7a0ecee427f87170fbcb`; source/security checks are
+successful, metadata is still in progress, and only CodeRabbit has approved.
+PR #1466 remains `a3e6762f01666f5b4e9d202932012de23b942c59` with all
+observed required checks successful but no current approval. PR #1468 remains
+`1da167de26b442be6961622f15bb36ae9374e6c4`; its source checks are successful,
+the retried Strix check is queued, and its metadata gate is not a merge
+result. PR #1469 remains `575b0c24fd9cb98106989eb101de74c5ce383db3`; its
+source checks pass while image validation and Strix are running and metadata
+is failed pending current review evidence. PR #1455 remains
+`b2b4701366bc6bb2de1347b19eac9b4ed64cc614` with image checks successful,
+coverage and metadata pending, and Strix running. PR #1347 remains
+`f9e1751e2d5069841b279ecd2414fbbcad2e5692`; its three informational review
+threads are resolved, but metadata is failed and Strix/coverage are still
+running. PR #1429 remains `39d796d14b93484e004c13d7e2db4cc2eee5cdb1` with
+the refreshed hosted suite queued. No entry satisfies the two-approval
+ruleset, and no entry is a force-merge candidate.
+
 **Current Checks inventory:** the same live scan found 106 open PRs. Completed
 failures were limited to `metadata-only gate evaluation` and `strix`; the
 metadata gate reports the underlying Strix failure and, on some heads, a
