@@ -9,11 +9,13 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary --coverage.reporter=json --coverage.include='src/**/*.ts' --coverage.include='src/**/*.tsx' --coverage.exclude='src/**/*.test.ts' --coverage.exclude='src/**/*.test.tsx' --coverage.exclude='src/test/**'",
+    "coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=json-summary --coverage.reporter=json --coverage.include='src/**/*.ts' --coverage.include='src/**/*.tsx' --coverage.exclude='src/**/*.test.ts' --coverage.exclude='src/**/*.test.tsx' --coverage.exclude='src/**/*.stories.*' --coverage.exclude='src/test/**'",
     "typecheck": "tsc --noEmit",
     "full:smoke": "node scripts/full-product-ui-smoke.mjs",
     "pilot:smoke": "node scripts/pilot-ui-smoke.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -34,6 +36,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
+    "@storybook/nextjs-vite": "^10.5.9",
     "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -43,6 +46,7 @@
     "fast-check": "^4.9.0",
     "jsdom": "^30.0.1",
     "postcss": "8.5.24",
+    "storybook": "^10.5.9",
     "typescript": "^6",
     "vitest": "^4.1.10"
   },

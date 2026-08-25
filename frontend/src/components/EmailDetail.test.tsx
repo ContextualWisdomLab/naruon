@@ -403,7 +403,7 @@ describe("EmailDetail", () => {
 
     const cards = Array.from(container.querySelectorAll<HTMLElement>('article[data-decision-point-card="true"]'));
     expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual(
-      expect.arrayContaining(["맥락 종합", "실행 항목", "답장 초안"]),
+      expect.arrayContaining(["맥락 종합", "판단 포인트", "실행 항목", "답장 초안"]),
     );
     expect(cards.find((card) => card.getAttribute("aria-label") === "답장 초안")?.querySelector('[role="heading"][aria-level="3"]')?.textContent).toContain("답장 초안");
     expect(cards.find((card) => card.getAttribute("aria-label") === "맥락 종합")?.textContent).toContain("출시 메시지의 핵심 맥락입니다.");
@@ -689,7 +689,8 @@ describe("EmailDetail", () => {
     await flushAsyncWork();
 
     expect(container.textContent).toContain("맥락 종합");
-    expect(container.textContent).toContain("판단 보조 생성");
+    expect(container.textContent).toContain("판단 포인트");
+    expect(container.textContent).not.toContain("판단 보조 생성");
     expect(container.textContent).toContain("실행 항목");
     expect(container.textContent).toContain("신뢰도 91%");
     expect(container.textContent).not.toContain("AI Generated");
@@ -974,6 +975,56 @@ describe("EmailDetail", () => {
 
     expect(container.textContent).toContain("Late B");
     expect(container.querySelector<HTMLTextAreaElement>('#reply-draft')?.value).toBe("");
+  });
+
+  it("marks mixed provider execution as a partial calendar result", async () => {
+    const email = {
+      id: 25,
+      message_id: "<partial-calendar@example.com>",
+      thread_id: null,
+      sender: "organizer@example.com",
+      recipients: "user@example.com",
+      subject: "Partial calendar result",
+      date: "2026-05-17T10:00:00Z",
+      body: "Create two calendar items.",
+    };
+    let calendarRequestCount = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/25")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) return Promise.resolve(jsonResponse({ summary: "회의", action_items: ["첫 번째 일정", "두 번째 일정"] }));
+      if (url.endsWith("/api/calendar/writeback-intent")) {
+        expect(init?.method).toBe("POST");
+        calendarRequestCount += 1;
+        return Promise.resolve(jsonResponse({ provider_write_executed: calendarRequestCount === 1 }));
+      }
+      throw new Error("Unexpected fetch: " + url);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => { root?.render(<EmailDetail emailId={25} />); });
+    await flushAsyncWork();
+
+    const syncButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("일정 반영"),
+    );
+    expect(syncButton).toBeTruthy();
+    await act(async () => {
+      syncButton?.click();
+      await flushAsyncWork();
+    });
+
+    expect(container.textContent).toContain("요청한 일정 중 일부만 반영되어 추가 확인이 필요합니다.");
+    expect(getRecordedProductEvents().some((event) =>
+      event.name === "calendar_reflected" &&
+      event.payload.calendar_batch_status === "partial" &&
+      event.payload.calendar_intent_count === 2 &&
+      event.payload.calendar_provider_write_count === 1 &&
+      event.payload.provider_write_executed === false,
+    )).toBe(true);
   });
 
   it("handles errors when generating reply drafts", async () => {
@@ -1325,5 +1376,135 @@ describe("EmailDetail", () => {
     await act(async () => { await flushAsyncWork(); });
 
     expect(container.textContent).toContain("답장 전송에 실패했습니다.");
+  });
+
+  it("renders 1 and 1.01 on one confidence scale and does not overclaim missing provenance", async () => {
+    const email: TestEmail = {
+      id: 31,
+      message_id: "<scale@example.com>",
+      thread_id: null,
+      sender: "scale@example.com",
+      recipients: "user@example.com",
+      subject: "Scale",
+      date: "2026-08-23T10:00:00Z",
+      body: "Scale check",
+    };
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/31")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({
+          summary: "동일 척도 합성",
+          action_items: ["초안 검토"],
+          confidence: 1.01,
+        }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={31} />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("동일 척도 합성") ?? false);
+
+    expect(container.textContent).toContain("신뢰도 100%");
+    expect(container.textContent).not.toContain("신뢰도 1%");
+    expect(container.textContent).not.toContain("판단 보조 생성");
+    expect(container.querySelector('article[aria-label="판단 포인트"]')?.textContent).toContain("초안 검토");
+  });
+
+  it("keeps empty synthesis, synthesis error, and low confidence visibly distinct", async () => {
+    const emptyEmail: TestEmail = {
+      id: 32,
+      message_id: "<empty-synthesis@example.com>",
+      thread_id: null,
+      sender: "empty@example.com",
+      recipients: "user@example.com",
+      subject: "Empty",
+      date: "2026-08-23T10:00:00Z",
+      body: "Empty",
+    };
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/32")) return Promise.resolve(jsonResponse(emptyEmail));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({
+          summary: "후속 조치 없음",
+          action_items: [],
+        }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<EmailDetail emailId={32} />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("후속 조치 없음") ?? false);
+
+    expect(container.querySelector('article[aria-label="실행 항목"]')?.textContent).toContain("실행 항목이 없습니다.");
+    expect(container.querySelector('article[aria-label="실행 항목"]')?.textContent).toContain("실행 차단됨");
+    expect(container.querySelector('article[aria-label="판단 포인트"]')?.textContent).toContain("이 메일에서 추출된 판단 포인트가 없습니다.");
+    expect(container.textContent).toContain("신뢰도 미제공");
+    expect(container.textContent).not.toContain("맥락 종합을 생성하지 못했습니다.");
+    expect(container.querySelector('article[aria-label="맥락 종합"]')?.querySelector('[role="alert"]')).toBeNull();
+
+    const errorEmail: TestEmail = {
+      ...emptyEmail,
+      id: 33,
+      message_id: "<error-synthesis@example.com>",
+    };
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/33")) return Promise.resolve(jsonResponse(errorEmail));
+      if (url.endsWith("/api/llm/summarize")) return Promise.reject(new Error("Summarize failed"));
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    await act(async () => {
+      root?.render(<EmailDetail emailId={33} />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("맥락 종합을 생성하지 못했습니다.") ?? false);
+
+    expect(container.textContent).toContain("맥락 종합을 생성하지 못했습니다.");
+    expect(container.textContent).toContain("판단 포인트를 생성하지 못했습니다.");
+    expect(container.textContent).toContain("실행 항목을 추출하지 못했습니다.");
+    expect(container.querySelector('article[aria-label="실행 항목"]')?.textContent).not.toContain("실행 항목이 없습니다.");
+
+    const lowEmail: TestEmail = {
+      ...emptyEmail,
+      id: 34,
+      message_id: "<low-confidence@example.com>",
+    };
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/34")) return Promise.resolve(jsonResponse(lowEmail));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({
+          summary: "낮은 확신 합성",
+          action_items: ["초안 확인"],
+          confidence: 0.42,
+        }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    await act(async () => {
+      root?.render(<EmailDetail emailId={34} />);
+    });
+    await waitForCondition(() => container?.textContent?.includes("낮은 확신 합성") ?? false);
+
+    expect(container.textContent).toContain("신뢰도 42%");
+    expect(container.textContent).toContain("낮은 신뢰도");
+    expect(container.querySelector('article[aria-label="맥락 종합"]')?.getAttribute("data-analysis-state")).toBe("low-confidence");
+    expect(container.querySelector('article[aria-label="맥락 종합"]')?.textContent).toContain("근거 원본 보기");
+    expect(container.querySelector('article[aria-label="실행 항목"]')?.textContent).toContain("일정 반영");
+    expect(container.querySelector('article[aria-label="실행 항목"]')?.textContent).toContain("실행 항목 생성");
   });
 });

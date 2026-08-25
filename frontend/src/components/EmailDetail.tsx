@@ -19,7 +19,7 @@ import {
   type ThreadEmailData,
 } from "@/lib/email-threading";
 import { toMailBodyText, toMailDisplayText } from "@/lib/mail-text";
-import { toConfidencePercent } from "@/lib/confidence";
+import { isLowConfidence, toConfidencePercent } from "@/lib/confidence";
 import {
   bucketTextLength,
   createProductEventId,
@@ -128,7 +128,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{type: 'success' | 'error' | 'intent-only', message: string} | null>(null);
   const [taskStatus, setTaskStatus] = useState<string | null>(null);
   const [sourceDrawerOpen, setSourceDrawerOpen] = useState(false);
   const threadRequestIdRef = useRef(0);
@@ -276,7 +276,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
       view_state: "loaded",
     });
 
-    if (confidence !== undefined && confidence < 50) {
+    if (isLowConfidence(confidence)) {
       recordProductEvent("model_quality_guardrail_recorded", {
         surface: "mail_detail",
         guardrail_evaluation_id: createProductEventId("quality_guardrail"),
@@ -438,21 +438,50 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         ),
       );
       if (!isCurrentEmail()) return;
-      setSyncStatus({ type: 'success', message: `${intents.length}개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.` });
+      const providerWriteCount = intents.filter((intent) => Boolean(intent.provider_write_executed)).length;
+      const providerWriteExecuted = providerWriteCount === intents.length;
+      const hardFailureSignals = ["timeout", "fatal", "warn", "denied"];
+      const hasHardFailure = intents.some((intent) =>
+        [intent.status, intent.error_code].some((value) => {
+          const normalized = String(value ?? "").toLowerCase();
+          return hardFailureSignals.some((signal) => normalized.includes(signal));
+        }),
+      );
+      const batchStatus = hasHardFailure
+        ? "error"
+        : providerWriteCount === 0
+          ? "intent-only"
+          : providerWriteExecuted
+            ? "success"
+            : "partial";
+      const batchMessage = batchStatus === "error"
+        ? "일정 반영 결과에 실패 상태가 포함되어 완료하지 못했습니다."
+        : batchStatus === "partial"
+          ? "요청한 일정 중 일부만 반영되어 추가 확인이 필요합니다."
+          : batchStatus === "success"
+            ? String(intents.length) + "개 일정이 선택한 원본 계정에 반영되었습니다."
+            : String(intents.length) + "개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.";
+      setSyncStatus({
+        type: batchStatus === "success" ? "success" : batchStatus === "intent-only" ? "intent-only" : "error",
+        message: batchMessage,
+      });
       recordProductEvent("calendar_reflected", {
         surface: "mail_detail",
         calendar_candidate_id: `mail-calendar:${actionEmailId ?? "unknown"}`,
         calendar_event_id: intents[0]?.target_source_id ?? null,
         thread_id: email ? getThreadEventId(email) : null,
         conflict_state: "none",
-        provider_write_executed: intents.some((intent) => Boolean(intent.provider_write_executed)),
+        provider_write_executed: providerWriteExecuted,
+        calendar_batch_status: batchStatus,
+        calendar_intent_count: intents.length,
+        calendar_provider_write_count: providerWriteCount,
       });
       recordProductEvent("latency_guardrail_recorded", {
         surface: "mail_detail",
         request_trace_id: createProductEventId("calendar_trace"),
         operation: "calendar_reflection",
         duration_ms: Math.round(nowMs() - startedAt),
-        status: "success",
+        status: batchStatus === "error" ? "error" : "success",
       });
     } catch {
       if (!isCurrentEmail()) return;
@@ -657,8 +686,11 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             icon={<span aria-hidden="true">✦</span>}
             loading={!llmData && !llmError}
             error={llmError}
-            provenance={llmData?.provenance || "판단 보조 생성"}
-            confidence={confidencePercent}
+            empty={Boolean(llmData && !llmData.summary.trim())}
+            emptyMessage="맥락 종합이 없습니다."
+            provenance={llmData?.provenance}
+            showConfidence
+            confidence={llmData?.confidence}
           >
             {llmData ? (
               <div className="flex flex-col gap-2">
@@ -677,16 +709,46 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
           </DecisionPointCard>
 
           <DecisionPointCard
+            title="판단 포인트"
+            icon={<span aria-hidden="true">▣</span>}
+            loading={!llmData && !llmError}
+            error={llmError ? "판단 포인트를 생성하지 못했습니다." : null}
+            empty={Boolean(llmData && actionItems.length === 0)}
+            emptyMessage="이 메일에서 추출된 판단 포인트가 없습니다."
+            provenance={llmData?.provenance}
+            showConfidence
+            confidence={llmData?.confidence}
+            evidenceMissing={Boolean(llmData && !email.message_id && !email.thread_id)}
+          >
+            {llmData && actionItems.length > 0 ? (
+              <ul className="list-none space-y-2 text-sm">
+                {actionItems.map((actionItem, idx) => (
+                  <li key={`judgment-${idx}`} className="rounded-xl border border-border bg-secondary/40 p-3 font-semibold leading-5 text-foreground">
+                    {actionItem}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </DecisionPointCard>
+
+          <DecisionPointCard
             title="실행 항목"
             icon={<span aria-hidden="true">✓</span>}
             loading={!llmData && !llmError}
             error={llmError ? '실행 항목을 추출하지 못했습니다.' : null}
             empty={Boolean(llmData && actionItems.length === 0)}
             emptyMessage="실행 항목이 없습니다."
-            provenance={
-              confidencePercent !== undefined ? `신뢰도 ${confidencePercent}%` : undefined
+            showConfidence
+            confidence={llmData?.confidence}
+            executionState={
+              llmData && actionItems.length === 0
+                ? "blocked"
+                : syncStatus?.type === "intent-only"
+                  ? "intent-only"
+                  : actionItems.length > 0
+                    ? "ready"
+                    : undefined
             }
-            confidence={confidencePercent}
             footerActions={llmData && (actionItems.length > 0 || syncStatus || taskStatus) ? (
               <>
                 {actionItems.length > 0 && (
@@ -695,7 +757,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     onClick={handleSyncCalendar}
                     disabled={isSyncing}
                     aria-busy={isSyncing}
-                    className="h-9 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700"
+                    className="h-9 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
                   >
                     {isSyncing && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                     {isSyncing ? "동기화 중" : "일정 반영"}
@@ -708,19 +770,19 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
                     onClick={handleCreateTask}
                     disabled={isCreatingTask}
                     aria-busy={isCreatingTask}
-                    className="h-9 rounded-xl border-emerald-500/30 px-4 text-emerald-700 hover:bg-emerald-500/10"
+                    className="h-9 rounded-xl px-4"
                   >
                     {isCreatingTask && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                     {isCreatingTask ? "추적 중" : "실행 항목 생성"}
                   </Button>
                 )}
                 {syncStatus && (
-                  <span className={`self-center text-xs ${syncStatus.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+                  <span className={`self-center text-xs ${syncStatus.type === "error" ? "text-destructive" : "text-primary"}`}>
                     {syncStatus.message}
                   </span>
                 )}
                 {taskStatus && (
-                  <span role="status" aria-live="polite" className="self-center text-xs text-emerald-700">
+                  <span role="status" aria-live="polite" className="self-center text-xs text-primary">
                     {taskStatus}
                   </span>
                 )}
@@ -871,7 +933,7 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         sourceType="mail"
         sourceId={getMessageEventId(email)}
         summary={llmData?.summary || "선택한 메일 원문과 스레드를 근거로 맥락 종합을 생성합니다."}
-        provenance={llmData?.provenance || "판단 보조 생성"}
+        provenance={llmData?.provenance}
         confidence={confidencePercent}
         onClose={() => setSourceDrawerOpen(false)}
         onOpenOriginal={handleOpenOriginalSource}

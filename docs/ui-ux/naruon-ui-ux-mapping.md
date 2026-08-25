@@ -82,7 +82,7 @@ All Naruon UI/UX visual source material is consolidated under `docs/ui-ux/`. Thi
 ### 4.1 Common Visual Structure
 The mockups use a quiet workbench layout rather than a marketing layout. Most desktop screens follow a 3-column shell:
 
-1. **Global navigation:** Naruon logo on the left, top GNB items for Home, Mail, Calendar, Project, Data, AI Hub, Security, and Settings, plus global search, notifications, app switcher/help, and profile controls on the right.
+1. **Global navigation:** Naruon logo on the left, top GNB items for Home, Mail, Calendar, Tasks (작업), Projects, Context Search (맥락 검색), Data, AI Hub, Security, and Settings, plus global search, notifications, app switcher/help, and profile controls on the right. Section 3 lists the same ten areas; this GNB list must not omit 작업 or 맥락 검색.
 2. **Local navigation:** A left sidebar lists the current domain's folders, filters, saved views, labels, and support/help controls.
 3. **Primary work area:** The center area carries the active list, calendar, editor, canvas, table, or search result.
 4. **Evidence or action panel:** The right side is often a detail drawer or AI/evidence panel showing source metadata, confidence, related people, attached files, schedule proposals, decision points, risks, and executable actions.

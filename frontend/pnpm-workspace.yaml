@@ -1,4 +1,5 @@
 allowBuilds:
+  esbuild: true
   sharp: true
   unrs-resolver: true
 
@@ -21,3 +22,4 @@ overrides:
 
 patchedDependencies:
   minimatch@3.1.5: patches/minimatch@3.1.5.patch
+  vite-plugin-storybook-nextjs@3.3.2: patches/vite-plugin-storybook-nextjs@3.3.2.patch

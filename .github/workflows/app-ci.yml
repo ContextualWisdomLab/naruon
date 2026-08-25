@@ -128,6 +128,20 @@ jobs:
           rm -f ~/package-lock.json
           cd frontend && pnpm run build
 
+      - name: Build Storybook UI inventory
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+        run: |
+          set -o pipefail
+          storybook_log="$(mktemp)"
+          trap 'rm -f "$storybook_log"' EXIT
+          cd frontend
+          pnpm run build-storybook 2>&1 | tee "$storybook_log"
+          if grep -Eiq '(^|[^[:alnum:]_])(Timeout|Fatal|Warn|Denied)([^[:alnum:]_]|$)' "$storybook_log"; then
+            echo "::error::Storybook build produced Timeout, Fatal, Warn, or Denied output"
+            exit 1
+          fi
+
       - name: Install Playwright Chromium
         run: cd frontend && pnpm exec playwright install --with-deps chromium
 
