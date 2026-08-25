@@ -43,6 +43,29 @@ reuse predecessor evidence or claim a merge. #1448 is historical after its
 normal merge; #1443's current head is `62a0d645…` and must be reviewed and
 checked again from that exact head.
 
+**Live exact-head queue refresh (2026-08-25T17:51Z):** the following
+post-snapshot states supersede only the matching historical SHA references
+above; the full inventory remains a point-in-time record and is not silently
+rewritten. #1468 is `1da167de26b442be6961622f15bb36ae9374e6c4`; its source,
+backend, and frontend evidence is successful, while the retried Strix run is
+queued after the earlier NVIDIA NIM provider failure. #1469 is now
+`575b0c24fd9cb98106989eb101de74c5ce383db3`, after a remote follow-up removed
+the unreachable document-size branch; 109 attachment/import/NewsDOM tests
+pass locally, and the PR remains stacked behind #1468 because the selected
+full suite exposes the base fixture defect repaired by #1468. #1470 remains
+`aba77cf5b6a47985b352e8d2c2d76413579ea88a`; backend, frontend, Strix, and
+metadata checks are successful, and its exact-head CodeRabbit approval is
+present, but the ruleset still requires the second qualifying approval and
+the exact-head OpenCode dispatch is queued. #1455 remains
+`b2b4701366bc6bb2de1347b19eac9b4ed64cc614` with backend/frontend evidence
+successful and Strix still running. #1429 remains
+`b93caf0e00d09de0f836d8e4b869054d792e674b`; its refreshed hosted checks are
+queued or in progress. #1347 remains
+`f9e1751e2d5069841b279ecd2414fbbcad2e5692`; its newest metadata result is
+not merge evidence and the remaining hosted checks are queued. None of these
+states satisfies the two-approval protected ruleset, and none is a force-merge
+candidate.
+
 **Current Checks inventory:** the same live scan found 106 open PRs. Completed
 failures were limited to `metadata-only gate evaluation` and `strix`; the
 metadata gate reports the underlying Strix failure and, on some heads, a
