@@ -566,6 +566,13 @@ The following standards are not decorative references. They define protocol,
 security, accessibility, observability, or supply-chain acceptance tests in the
 issues above.
 
+For the DiskSage boundary specifically, PROV-O supplies the provenance
+relations, DCAT supplies catalog/dataset/service discovery terms, OpenLineage
+supplies run and facet vocabulary, and NIST SP 800-209 supplies storage
+protection and recovery controls. The implementation must keep these as
+metadata relationships and receipts; a provider upload or local path alone is
+not an eviction or lineage claim.
+
 ### APA 7th references
 
 Crispin, M. (2003). *Internet Message Access Protocol—Version 4rev1* (RFC
@@ -624,6 +631,19 @@ https://spdx.github.io/spdx-spec/
 
 World Wide Web Consortium. (2024). *Web Content Accessibility Guidelines
 (WCAG) 2.2*. https://www.w3.org/TR/WCAG22/
+
+National Institute of Standards and Technology. (2020). *Security guidelines
+for storage infrastructure* (NIST Special Publication 800-209).
+https://doi.org/10.6028/NIST.SP.800-209
+
+OpenLineage. (n.d.). *OpenLineage documentation: Object model, run cycle, and
+facets*. Retrieved August 25, 2026, from https://openlineage.io/docs/
+
+World Wide Web Consortium. (2013). *PROV-O: The PROV ontology*.
+https://www.w3.org/TR/prov-o/
+
+World Wide Web Consortium. (2024). *Data Catalog Vocabulary (DCAT) — Version
+3*. https://www.w3.org/TR/vocab-dcat-3/
 
 ---
 
