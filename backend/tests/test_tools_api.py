@@ -571,6 +571,34 @@ async def test_url_decoder_success():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "tool_code, parameter_name",
+    [
+        ("url_encoder", "text"),
+        ("url_decoder", "encoded_url"),
+        ("hash_generator", "text"),
+    ],
+)
+async def test_utility_tools_reject_oversized_input(tool_code, parameter_name):
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/tools/{tool_code}/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {parameter_name: "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "failed",
+        "result": None,
+        "message": (
+            f"Utility text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        ),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "algorithm, expected_hash",
     [
         ("md5", "5d41402abc4b2a76b9719d911017c592"),

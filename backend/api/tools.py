@@ -715,6 +715,17 @@ _KEYWORD_STOPWORDS = frozenset(
 )
 
 
+def _validate_utility_text(value: Any) -> str:
+    """Keep utility transforms bounded without changing their input bytes."""
+    if not isinstance(value, str):
+        raise ValueError("Utility text must be a string")
+    if len(value) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Utility text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    return value
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -779,7 +790,7 @@ registry.register(
 
 
 async def url_encoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
+    text = _validate_utility_text(params.get("text", ""))
     return {"encoded_url": urllib.parse.quote(text, safe="")}
 
 
@@ -796,7 +807,7 @@ registry.register(
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    encoded_url = params.get("encoded_url", "")
+    encoded_url = _validate_utility_text(params.get("encoded_url", ""))
     return {"decoded_url": urllib.parse.unquote(encoded_url)}
 
 
@@ -813,7 +824,7 @@ registry.register(
 
 
 async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    text = params.get("text", "")
+    text = _validate_utility_text(params.get("text", ""))
     algorithm = params.get("algorithm", "sha256").lower()
 
     encoded_text = text.encode("utf-8")
