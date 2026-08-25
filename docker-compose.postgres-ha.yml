@@ -1,6 +1,13 @@
 services:
   db-primary:
     image: pgvector/pgvector:pg16
+    # Prepare the WAL archive and base-backup volumes as root before the stock
+    # entrypoint initializes the cluster and drops privileges to postgres.
+    entrypoint:
+      - "/bin/bash"
+      - "-c"
+      - 'set -e; mkdir -p /wal_archive /base_backup; chown -R postgres:postgres /wal_archive /base_backup; chmod 700 /wal_archive /base_backup; exec /usr/local/bin/docker-entrypoint.sh "$$@"'
+      - "postgres-entrypoint-wrapper"
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-ai_email}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -16,11 +23,17 @@ services:
       - "max_replication_slots=10"
       - "-c"
       - "hot_standby=on"
+      - "-c"
+      - "archive_mode=on"
+      - "-c"
+      - "archive_command=test ! -f /wal_archive/%f && cp %p /wal_archive/%f"
     ports:
       - "${POSTGRES_HA_PRIMARY_PORT:-5432}:5432"
     volumes:
       - pgdata_primary:/var/lib/postgresql/data
       - ./scripts/postgres-ha/init-primary-replication.sh:/docker-entrypoint-initdb.d/010-replication-hba.sh:ro
+      - wal_archive:/wal_archive
+      - base_backup:/base_backup
 
   db-replica:
     image: pgvector/pgvector:pg16
@@ -51,3 +64,5 @@ services:
 volumes:
   pgdata_primary:
   pgdata_replica:
+  wal_archive:
+  base_backup:
