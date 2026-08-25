@@ -85,10 +85,6 @@ function isGraphId(value: unknown): value is number | string {
   return typeof value === 'number' || typeof value === 'string';
 }
 
-function graphIdEquals(left: unknown, right: unknown) {
-  return isGraphId(left) && isGraphId(right) && String(left) === String(right);
-}
-
 function stableEdgeId(edge: Edge, index: number) {
   if (isGraphId(edge.id)) return edge.id;
   return `relationship-${index}-${String(edge.from)}-${String(edge.to)}`;
@@ -127,11 +123,6 @@ function titleText(value: unknown) {
   return value == null ? '' : String(value).trim();
 }
 
-function findNodeLabel(nodes: Node[], id: number | string) {
-  const node = nodes.find((candidate) => graphIdEquals(candidate.id, id));
-  return String(node?.label ?? id);
-}
-
 /**
  * Index graph records by public id, keeping the first instance.
  *
@@ -157,15 +148,9 @@ function firstGraphEntryById<T>(
   return map;
 }
 
-function describeEdge(edge: Edge, nodes: Node[], nodeMap?: Map<string | number, string>) {
-  let fromLabel, toLabel;
-  if (nodeMap) {
-    fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
-    toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
-  } else {
-    fromLabel = findNodeLabel(nodes, edge.from);
-    toLabel = findNodeLabel(nodes, edge.to);
-  }
+function describeEdge(edge: Edge, nodes: Node[], nodeMap: Map<string | number, string>) {
+  const fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
+  const toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
   const title = titleText(edge.title);
   return title ? `${fromLabel} -> ${toLabel} (${title})` : `${fromLabel} -> ${toLabel}`;
 }
