@@ -217,6 +217,32 @@ def test_rate_limited_coderabbit_status_requires_structured_fallback(
     assert "PR governance metadata gate is ready" not in output
 
 
+def test_no_pr_early_exit_removes_wrapper_comment_snapshot(tmp_path: Path) -> None:
+    """The wrapper snapshot is removed even when no PR number is available."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    temp_dir = tmp_path / "runner-tmp"
+    bin_dir.mkdir()
+    temp_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    result = _run_gate(
+        repo_root,
+        bin_dir,
+        gate_env={
+            "DIRECT_PR_NUMBER": "",
+            "TARGET_PR_NUMBER": "",
+            "WORKFLOW_RUN_PR_NUMBER": "",
+            "CHECK_RUN_PR_NUMBER": "",
+            "TMPDIR": str(temp_dir),
+        },
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert list(temp_dir.iterdir()) == []
+
+
 def test_review_unavailable_pattern_rejects_unrelated_separator(tmp_path: Path) -> None:
     """Only apostrophe variants may classify a review as not having started."""
 

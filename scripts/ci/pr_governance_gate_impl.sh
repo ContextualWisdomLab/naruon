@@ -12,6 +12,18 @@ CHECK_NAME='metadata-only gate evaluation'
 REVIEW_BOT_LOGIN_PATTERN='coderabbit|github-code-quality'
 
 PR_NUMBER="${DIRECT_PR_NUMBER:-${TARGET_PR_NUMBER:-${WORKFLOW_RUN_PR_NUMBER:-${CHECK_RUN_PR_NUMBER:-}}}}"
+
+# The wrapper creates a shared comments snapshot before delegating here. Arm a
+# small cleanup trap before validating the PR number so no-PR and malformed-PR
+# early exits cannot leave that snapshot behind on reusable runners.
+cleanup_wrapper_comments_file() {
+  if [ -n "${PR_GOVERNANCE_WRAPPER_COMMENTS_FILE:-}" ]; then
+    rm -f "$PR_GOVERNANCE_WRAPPER_COMMENTS_FILE"
+  fi
+}
+
+trap cleanup_wrapper_comments_file EXIT
+
 if [ -z "$PR_NUMBER" ]; then
   printf 'No pull request number is available for event %s; nothing to evaluate.\n' "${EVENT_NAME:-unknown}"
   exit 0
