@@ -9,7 +9,9 @@ import pytest
 from core.config import settings
 from services.newsdom_client import (
     NEWSDOM_BASE_URL_NOT_ALLOWED,
+    NEWSDOM_MAX_PARSE_UPLOAD_BYTES,
     NewsdomConfigurationError,
+    NewsdomPayloadTooLargeError,
     NewsdomRequestError,
     _normalize_newsdom_base_url,
     request_pdf_dom,
@@ -83,6 +85,18 @@ async def test_request_pdf_dom_rejects_empty_payload(newsdom_allowlist):
             base_url="https://newsdom.example.com",
             api_token=None,
             pdf_bytes=b"",
+        )
+
+
+@pytest.mark.asyncio
+async def test_request_pdf_dom_rejects_payload_above_sidecar_contract_before_network(
+    newsdom_allowlist,
+):
+    with pytest.raises(NewsdomPayloadTooLargeError):
+        await request_pdf_dom(
+            base_url="https://newsdom.example.com",
+            api_token=None,
+            pdf_bytes=b"%PDF-" + b"A" * NEWSDOM_MAX_PARSE_UPLOAD_BYTES,
         )
 
 

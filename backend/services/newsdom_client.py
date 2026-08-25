@@ -34,6 +34,9 @@ _DNS_RESOLUTION_TIMEOUT_SECONDS = 5.0
 _LOCAL_DEV_HOSTNAMES = {"localhost", "localhost.localdomain"}
 _LOCAL_DEV_IP_LITERALS = {"127.0.0.1", "::1"}
 _DEFAULT_PARSE_TIMEOUT_SECONDS = 300.0
+# The deployed NewsDOM ``/parse`` contract accepts at most 20 MiB. Keep this
+# boundary explicit so deferred 64 MiB retention cannot remain pending forever.
+NEWSDOM_MAX_PARSE_UPLOAD_BYTES = 20 * 1024 * 1024
 
 
 class NewsdomConfigurationError(RuntimeError):
@@ -42,6 +45,10 @@ class NewsdomConfigurationError(RuntimeError):
 
 class NewsdomRequestError(RuntimeError):
     """Raised when the NewsDOM sidecar cannot fulfil a parse request."""
+
+
+class NewsdomPayloadTooLargeError(NewsdomRequestError):
+    """Raised before network I/O when a PDF exceeds the sidecar contract."""
 
 
 class NewsdomEmptyRecognitionError(NewsdomRequestError):
@@ -393,6 +400,10 @@ async def request_pdf_dom(
     """
     if not pdf_bytes:
         raise NewsdomRequestError("Cannot recognize an empty PDF payload")
+    if len(pdf_bytes) > NEWSDOM_MAX_PARSE_UPLOAD_BYTES:
+        raise NewsdomPayloadTooLargeError(
+            "NewsDOM PDF payload exceeds the 20 MiB parse upload contract"
+        )
 
     validated = await validate_newsdom_base_url_details_async(base_url)
     if validated is None:

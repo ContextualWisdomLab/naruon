@@ -34,6 +34,7 @@ from services.attachment_parser import get_attachment_parser_manifest
 from services.newsdom_pdf_recognition import (
     PDF_DOM_RECOGNITION_PENDING_STATUS,
 )
+from services.newsdom_client import NEWSDOM_MAX_PARSE_UPLOAD_BYTES
 from services.ontology_service import ontology_service
 from services.webdav_service import webdav_service
 
@@ -44,7 +45,7 @@ DATA_VECTOR_DIMENSIONS = 1536
 # with the NewsDOM sidecar's own MAX_PARSE_UPLOAD_BYTES (20 MiB): accepting more
 # would let a caller stash a pending document the configured sidecar will always
 # reject while the base64 copy inflates the database.
-_MAX_PDF_DOM_UPLOAD_BYTES = 20 * 1024 * 1024
+_MAX_PDF_DOM_UPLOAD_BYTES = NEWSDOM_MAX_PARSE_UPLOAD_BYTES
 ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
     "email_attachments.content_type, "
     "email_attachments.parse_content_type, "

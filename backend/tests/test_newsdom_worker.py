@@ -14,7 +14,7 @@ import pytest
 
 from db.models import Attachment, Document, Email
 from services.content_graph import ContentSegment, ParseResult
-from services.newsdom_client import NewsdomConfigurationError
+from services.newsdom_client import NewsdomConfigurationError, NewsdomPayloadTooLargeError
 from services.newsdom_pdf_recognition import (
     PDF_DOM_RECOGNITION_FAILED_STATUS,
     PDF_DOM_RECOGNITION_PENDING_STATUS,
@@ -218,6 +218,25 @@ async def test_attachment_failed_on_empty_sidecar_response():
     assert attachment.parse_error_code == "recognition_failed"
     # Never landed as parsed with empty content.
     assert attachment.parse_status != "parsed"
+
+
+@pytest.mark.asyncio
+async def test_attachment_above_provider_limit_fails_instead_of_remaining_pending():
+    attachment = _pending_attachment()
+
+    async def oversized_request(**_kwargs):
+        raise NewsdomPayloadTooLargeError("provider limit")
+
+    result = await process_pending_attachment(
+        session=object(),
+        attachment=attachment,
+        config_resolver=await _resolver_with(_config()),
+        request_fn=oversized_request,
+    )
+
+    assert result == RESULT_FAILED
+    assert attachment.parse_status == PDF_DOM_RECOGNITION_FAILED_STATUS
+    assert attachment.parse_error_code == "provider_payload_size_exceeded"
 
 
 @pytest.mark.asyncio

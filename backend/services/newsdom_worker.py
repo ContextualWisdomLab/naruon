@@ -33,6 +33,7 @@ from services.attachment_parser import decode_deferred_attachment_payload
 from services.content_graph import ParseResult
 from services.newsdom_client import (
     NewsdomConfigurationError,
+    NewsdomPayloadTooLargeError,
     NewsdomRequestError,
     request_pdf_dom,
 )
@@ -257,6 +258,15 @@ async def process_pending_attachment(
             exc,
         )
         return RESULT_PENDING
+    except NewsdomPayloadTooLargeError as exc:
+        attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
+        attachment.parse_error_code = "provider_payload_size_exceeded"
+        logger.warning(
+            "NewsDOM attachment %s exceeds the provider payload contract: %s",
+            getattr(attachment, "id", "?"),
+            exc,
+        )
+        return RESULT_FAILED
     except (NewsdomRequestError, ValueError) as exc:
         attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         attachment.parse_error_code = "recognition_failed"
@@ -315,6 +325,14 @@ async def process_pending_document(
             exc,
         )
         return RESULT_PENDING
+    except NewsdomPayloadTooLargeError as exc:
+        document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
+        logger.warning(
+            "NewsDOM document %s exceeds the provider payload contract: %s",
+            getattr(document, "document_id", "?"),
+            exc,
+        )
+        return RESULT_FAILED
     except (NewsdomRequestError, ValueError) as exc:
         document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         logger.warning(
