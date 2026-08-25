@@ -13,6 +13,7 @@ asyncpg==0.31.0
 pgvector==0.5.0
 rankweave==0.1.0  # hybrid-retrieval fusion + query normalization (OSMU spin-off)
 pytest-asyncio==1.4.0
+pytest-cov==7.1.0
 openai==2.45.0
 langchain-text-splitters==1.1.2
 tiktoken==0.13.0
