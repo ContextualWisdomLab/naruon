@@ -5,6 +5,7 @@ from unittest.mock import patch
 from core.url_validation import (
     parse_allowed_hosts,
     validate_https_url_host,
+    validate_same_or_subdomain_host,
     validate_https_url_host_details,
     _normalize_host,
     _reject_unsafe_ip_literal,
@@ -150,3 +151,46 @@ def test_validate_https_url_host_details(mock_resolve):
 def test_validate_https_url_host(mock_details):
     validate_https_url_host("setting", "https://example.com", frozenset({"example.com"}), "ALLOWED_HOSTS")
     mock_details.assert_called_once_with("setting", "https://example.com", frozenset({"example.com"}), "ALLOWED_HOSTS")
+
+
+@patch("core.url_validation._resolve_global_addresses")
+def test_validate_https_url_host_rejects_explicit_zero_port(mock_resolve):
+    mock_resolve.return_value = ("8.8.8.8",)
+    with pytest.raises(ValueError, match="port must be between 1 and 65535"):
+        validate_https_url_host_details(
+            "setting", "https://example.com:0", frozenset({"example.com"}), "ALLOWED_HOSTS"
+        )
+
+
+@patch("core.url_validation._resolve_global_addresses")
+def test_validate_https_url_host_rejects_numeric_port_above_maximum(mock_resolve):
+    mock_resolve.return_value = ("8.8.8.8",)
+    with pytest.raises(ValueError, match="port must be between 1 and 65535"):
+        validate_https_url_host_details(
+            "setting", "https://example.com:65536", frozenset({"example.com"}), "ALLOWED_HOSTS"
+        )
+
+
+def test_validate_same_or_subdomain_host_rejects_suffix_confusion():
+    for valid_host in (
+        "issuer.example.com",
+        "jwks.issuer.example.com",
+        "a.b.c.issuer.example.com",
+    ):
+        validate_same_or_subdomain_host(
+            "OIDC_JWKS_URL", valid_host, "OIDC_ISSUER_URL", "issuer.example.com"
+        )
+
+    for invalid_host in (
+        "other.com",
+        "fakeissuer.example.com",
+        "issuer.example.com.attacker.com",
+        "notexample.com",
+    ):
+        with pytest.raises(
+            ValueError,
+            match="OIDC_JWKS_URL host must match or be a subdomain of OIDC_ISSUER_URL host",
+        ):
+            validate_same_or_subdomain_host(
+                "OIDC_JWKS_URL", invalid_host, "OIDC_ISSUER_URL", "issuer.example.com"
+            )
