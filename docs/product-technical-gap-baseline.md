@@ -184,6 +184,10 @@ provider-infrastructure Strix run (NVIDIA NIM rate limiting followed by an
 unavailable fallback); no source vulnerability report was produced and the
 normal rerun workflow is unavailable. The provider PR therefore remains
 `WAIT_AND_REMEDIATE`, not a clean security pass or a force-merge candidate.
+NewsDOM issue [#707](https://github.com/Seongho-Bae/newsdom-api/issues/707)
+owns the follow-up resumable-upload contract for documents above 64 MiB, so
+the current synchronous fallback must not be mistaken for the target
+commercial large-document UX.
 
 This document defines the evidence-backed boundary between what Naruon currently
 ships on protected `develop`, what is present only in open pull requests, what is
@@ -559,7 +563,7 @@ button, form, navigation, chart, or asynchronous data surface.
 | Disaster recovery | a release is not enterprise-ready without restore evidence | HA evaluation exists; production WAL/PITR policy remains incomplete | #1428 | WAL archive/PITR, failover fencing, backup and clean restore rehearsal |
 | Tenant export/reimport | customers need exit and migration without losing provenance | no single demonstrated full tenant round trip | #1428 | export → clean instance import preserving source, opaque IDs, history, evidence, policy |
 | Retention/legal hold/disposition | deletion and evidence preservation conflict unless modeled | partial security/key/retention work exists across repository history | #1428, #1364 | purpose-scoped retention, legal hold, verified disposition, object/DB reconciliation |
-| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit, while unsupported binaries are not searchable | Naruon import transport and generic deferred parser admission are bounded at 64 MiB; the NewsDOM `/parse` provider contract remains 20 MiB, so PDF bytes from 20–64 MiB are admitted and retained fail-closed but are not sent to NewsDOM; unsupported types remain metadata-only | #1427, #1469, #1353, #1419 | one documented bounded admission contract, provider-side PDF limit alignment or an explicit large-PDF fallback, parser/status evidence, deferred recognition, and object-backed retention before increasing the bound again |
+| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit, while unsupported binaries are not searchable | Naruon import transport and generic deferred parser admission are bounded at 64 MiB; the NewsDOM `/parse` provider contract remains 20 MiB, so PDF bytes from 20–64 MiB are admitted and retained fail-closed but are not sent to NewsDOM; unsupported types remain metadata-only | #1427, #1469, #1353, #1419, NewsDOM #682/#707 | one documented bounded admission contract, provider-side PDF limit alignment or an explicit large-PDF fallback, parser/status evidence, deferred recognition, and object-backed retention before increasing the bound again |
 
 ### P0 — Evidence-based AI and document intelligence
 
