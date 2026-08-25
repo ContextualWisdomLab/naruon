@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 0.6
+**Baseline version:** 0.7
 **Observed on:** 2026-08-26 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
@@ -15,14 +15,19 @@ context, as do the earlier 92-PR state after PR #1442 merged and the initial
 83-PR observation in issue #1428; all counts are point-in-time evidence, not
 current merge state.
 
-**Follow-up delta observation:** a fifth live scan at
-`2026-08-25T15:08:57Z` found the active exact-head work relevant to this
+**Follow-up delta observation:** a sixth live scan at
+`2026-08-25T15:35:25Z` found the active exact-head work relevant to this
 baseline: #1465 (`70596e26…`, tenant-archive import sanitization and duplicate
 identity rejection), #1466 (`a3e6762f…`, origin-integrity port validation),
 #1467 (`6816bc7f…`, utility-tool JSON boundary and Strix-trigger restoration),
 #1468 (`1da167de…`, PostgreSQL smoke fixture schema alignment), #1469
 (`de6d7128…`, bounded 20–64 MiB deferred attachment parse-source admission),
-and #1455 (`d8757e65…`, attachment filename traversal hardening).
+and #1455 (`d8757e65…`, attachment filename traversal hardening). The
+governance root #1443 remains `55a84f90…`; its stacked regression child #1448
+now has exact head `068aefdf…` on base
+`fix/coderabbit-approval-pending-gate-develop@55a84f90…` after a normal merge
+commit. The child keeps the parent gate fix and the multiline, stale-head, and
+current-finding regression cases.
 The newly opened #1470 is now `68a0576d…` (NetworkGraph edge-description
 lookup cleanup); the predecessor `f8a70d37…` was discarded after a remote
 commit reintroduced the dead argument and its callers. The current head was
@@ -30,7 +35,9 @@ repaired with the smallest caller/signature change and requeued for hosted
 Checks.
 These PRs remain open until their current-head required Checks and qualifying
 independent approval satisfy the protected ruleset; this follow-up does not
-reuse predecessor evidence or claim a merge.
+reuse predecessor evidence or claim a merge. #1448's targeted central
+scheduler dispatch is currently queued, so its prior check inventory is not
+treated as hosted evidence.
 
 **Current Checks inventory:** the same live scan found 107 open PRs. Completed
 failures were limited to `metadata-only gate evaluation` and `strix`; the
@@ -260,6 +267,8 @@ and defines the inventory that must be completed before GA.
 | #1466 | origin-integrity URL validation | current head rejects explicit zero/out-of-range ports; keep the signed-session and SSRF contract tied to exact-head regression evidence |
 | #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
 | #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence; the observed Naruon Strix run failed at the provider boundary (NVIDIA NIM 429/OpenAI 404), not in this source change |
+| #1443 | CodeRabbit approval-notice governance root | current source/test lane narrows approval-notice parsing to the exact current head and ignores pending-review prose while retaining explicit findings; current hosted Strix evidence is provider-failed and no qualifying independent approval exists |
+| #1448 | stacked governance regression coverage | child is restacked on #1443 at `068aefdf…`; parent gate logic plus multiline JSON, stale-head unrelated prose, mixed blocker, and explicit current-head finding fixtures pass locally; hosted metadata is queued and CodeRabbit is disabled for this non-default base, so protected merge remains pending |
 | #1469 | deferred attachment parse-source admission | aligns the hidden 20 MiB parser bound with the authenticated 64 MiB import contract while keeping unsupported binaries metadata-only; current changelog states the supported 20–64 MiB range and the ADR-0006 contract remains required |
 | #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head `68a0576d…` preserves first-instance duplicate-ID selection and removes the dead `describeEdge` input; local 11-test, TypeScript, zero-warning ESLint, responsive screenshot, and diff checks passed, while hosted Checks and independent approval remain required |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
@@ -436,6 +445,7 @@ button, form, navigation, chart, or asynchronous data surface.
 | Gap | Buyer problem | Protected/current evidence | Existing work | Completion evidence |
 |---|---|---|---|---|
 | Responsive shell hydration and unavailable state | a buyer can see a polished navigation shell but no actionable content when a data request is unavailable, and hydration drift can produce inconsistent controls | local fixed-origin capture showed tablet/mobile loading feedback, desktop blank content without the backend, and a development-server caret-style hydration mismatch; this is not a hosted release result | follow-up required; keep separate from #1470's bounded lookup optimization | deterministic server/client markup, explicit desktop unavailable/error state, backend-backed responsive Playwright evidence, and no hydration warnings |
+| Stacked PR current-head review dispatch | a dependent PR can show only metadata while the central OpenCode/required checks are still being materialized on a non-default base branch | #1448 exact head `068aefdf…` received a targeted scheduler dispatch that is queued; no prior head evidence is reusable | #1443, #1448, ContextualWisdomLab/.github scheduler | every supported stack base receives a bounded exact-head OpenCode/Noema/required-check run, with queued/provider states observable and no false merge readiness |
 | Typed Person/Event/Commitment graph | generic string graph cannot safely drive high-stakes action | planning spec marks types as new/planned | #977, #978, #1000 | normalized temporal/multi-membership identities, evidence/confidence/correction on every inferred edge |
 | Status-weighted scheduling | calendar CRUD does not prevent harmful double booking | CalDAV source/writeback/retry foundation exists | #978, #988, #989, #990, #1416 | confirmed/tentative/desired + organizer/attendee + recurrence/free-busy/resource end-to-end |
 | Minimal-disclosure bridge | personal context can influence work availability without exposing private reason | policy substrate exists; product bridge is planned | #979, #991 | consented consequence-only propagation, revocation, audit, regression tests |
@@ -843,7 +853,8 @@ snapshot and are retained as RCA pointers, not as reusable merge evidence:
 |---:|---|---|---|
 | #1347 | `3f6932026fbef281a373d792518058e4aaf5178f` | Strix run `32440010004`, job `96648648553` | provider/model infrastructure returned NVIDIA NIM 404 and no complete Strix report; rerun after the central fail-closed workflow repair, without weakening the gate |
 | #1442 | `94e10a6188a1b96ac162fa659ae4025bc00895bd` | metadata gate `96719432050`; merged `2026-08-21T09:18:28Z` | historical pre-merge observation only; the post-merge 93-row inventory excludes this PR |
-| #1443 | `98a9daece9b4e28d5182485af4f105b3bd15f432` | metadata gate `96721371765` | one current review thread remained unresolved; do not merge or bypass until the current-head review state is resolved |
+| #1443 | `55a84f904f11203f49c356d95d7d88ba9f903030` | Strix job `97705801302`; metadata gate failed | NVIDIA NIM returned HTTP 429 across retries, the configured fallback produced no structured report, and direct OpenAI fallback returned 404; this is provider infrastructure failure, not clean security evidence. Review remains required with no qualifying independent approval; do not merge or bypass |
+| #1448 | `068aefdfa48122bc73cb85a1dc23614bb09ebc04` | metadata controller `97862156380` queued; Devin Review passed | normal stack merge commit after exact parent/head verification; local governance shell regression suite passed, but hosted required checks and qualifying approval remain incomplete on the non-default base |
 
 Queued or pending Checks are not treated as source failures, and completed
 predecessor-head evidence is never reused.
