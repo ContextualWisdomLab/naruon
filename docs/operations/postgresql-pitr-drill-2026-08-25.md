@@ -22,7 +22,7 @@ Environment:
 - Project name: `naruon-postgres-pitr-drill`.
 - WAL archive: dedicated named volume mounted at `/wal_archive` on the primary
   with `archive_mode=on` and
-  `archive_command=test ! -f /wal_archive/%f && cp %p /wal_archive/%f`.
+  `archive_command=test -f /wal_archive/%f || cp %p /wal_archive/%f`.
 - Base backup: `pg_basebackup -X stream` executed inside `db-primary` into a
   named volume mounted at `/base_backup`.
 - Raw local logs were captured during the drill and summarized below; the
@@ -34,12 +34,12 @@ Verified evidence:
 ok: primary accepts SQL
 ok: base backup completed
 ok: pre-recovery target marker committed
-Recovery target time (UTC): 2026-08-25 06:49:50.961210
+Recovery target time (UTC): 2026-08-25 06:49:50.961210 +00
 ok: WAL segment containing pre-recovery marker archived (000000010000000000000004)
 ok: archived segment present in /wal_archive volume
 ok: post-target marker WAL archived (000000010000000000000005)
 Stopping db-primary to simulate loss of the source primary.
-Restoring into a fresh instance targeting 2026-08-25 06:49:50.961210 UTC.
+Restoring into a fresh instance targeting 2026-08-25 06:49:50.961210 +00 UTC.
 ok: restored instance finished targeted recovery and promoted
 ok: restored instance contains pre-recovery marker
 ok: restored instance excludes post-target marker
