@@ -1,5 +1,11 @@
 services:
   db-primary:
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/postgresql
     image: pgvector/pgvector:pg16
     # Prepare the WAL archive and base-backup volumes as root before the stock
     # entrypoint initializes the cluster and drops privileges to postgres.
@@ -36,6 +42,12 @@ services:
       - base_backup:/base_backup
 
   db-replica:
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/postgresql
     image: pgvector/pgvector:pg16
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-ai_email}

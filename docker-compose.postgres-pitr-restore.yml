@@ -9,6 +9,12 @@
 # scripts/postgres_pitr_drill.sh for the full drill flow.
 services:
   db-restore:
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/postgresql
     image: pgvector/pgvector:pg16
     entrypoint:
       - "/bin/bash"
