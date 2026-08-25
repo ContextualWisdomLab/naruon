@@ -349,7 +349,7 @@ CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
 # A current-head approval notice may contain the generic phrase "blocking
 # issues" as part of its promise to review later. Only explicit singular
 # findings, pre-merge warnings, or change requests make the notice substantive.
-CODERABBIT_APPROVAL_NOTICE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(warning|failure|failed|blocking)|blocking (issue|finding)([^[:alpha:]]|$)|changes requested|request changes|actionable comments?'
+CODERABBIT_APPROVAL_NOTICE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(warning|failure|failed)|(^|[^[:alpha:]])(failure|failed|warning)([[:space:]]*:|[^[:alpha:]])|blocking (issue|finding)([^[:alpha:]]|$)|potential issue[[:space:]]*:|changes requested|request changes|actionable comments?'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 COMMIT_STATUS_JSON='{"statuses":[]}'
 if ! COMMIT_STATUS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
@@ -449,19 +449,22 @@ else
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select(
-          (((.body // "") | test("approval_notice_start"; "i"))
-            and ((.body // "") | test("approval_notice_end"; "i"))
-            # CodeRabbit has emitted both one-line JSON and pretty-printed notices. Allow
-            # whitespace/newlines between the field and value, but still require the exact
-            # current head SHA so an unbound approval notice remains blocking.
-            and ((.body // "") | test("headCommitId[^0-9a-fA-F]*" + $head_sha; "i"))
-            and (((.body // "") | test($approval_notice_blocking_pattern; "i")) | not))
-          | not
-        )
-      | select(
           (.body // "") as $body
           | ($body | split("<details>")[0]) as $summary
-          | ($body | test($pattern; "i"))
+          | ($body | test($pattern; "i")) as $general_blocking
+          | (
+              ($body | test("approval_notice_start"; "i"))
+              and ($body | test("approval_notice_end"; "i"))
+              and ($body | test("(^|[^A-Za-z0-9_])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))
+            ) as $current_approval_notice
+          | (if $current_approval_notice then
+               (($body | split("<!-- approval_notice_start -->") | .[1] // "")
+                | split("<!-- approval_notice_end -->") | .[0]) as $approval_notice
+               | if ($approval_notice | length) == 0 then true
+                 else ($approval_notice | test($approval_notice_blocking_pattern; "i"))
+                 end
+             else false end) as $approval_notice_blocking
+          | (if $current_approval_notice then $approval_notice_blocking else $general_blocking end)
             and (
               (($body | test($no_actionable_pattern; "i")) | not)
               or ($summary | test($substantive_pattern; "i"))

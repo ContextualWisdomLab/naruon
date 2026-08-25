@@ -140,7 +140,7 @@ if [ "$1" = "api" ] && [[ "$2" == repos/*/commits/*/check-runs* ]]; then
     coderabbit_pending)
       printf '{"check_runs":[{"name":"CodeRabbit","app":{"slug":"coderabbitai"},"status":"in_progress","conclusion":null,"html_url":"https://checks/coderabbit"}]}'
       ;;
-    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown|coderabbit_approval_pending_comment|coderabbit_multiline_approval_pending_comment|github_code_quality_approval_pending_comment)
+    missing_coderabbit|missing_coderabbit_with_adversarial_approval|missing_coderabbit_stale_approval|missing_coderabbit_actions_approval|missing_coderabbit_one_probe|opencode_reviews_error|coderabbit_status_success|coderabbit_status_pending|coderabbit_status_failed|coderabbit_status_unknown|coderabbit_approval_pending_comment|coderabbit_approval_pending_walkthrough|coderabbit_multiline_approval_pending_comment|coderabbit_multiline_json_approval_pending_comment|github_code_quality_approval_pending_comment|coderabbit_stale_head_with_unrelated_current_sha|coderabbit_current_head_mixed_approval_pending_blocking_comment)
       printf '{"check_runs":[]}'
       ;;
     coderabbit_failed)
@@ -238,7 +238,28 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Pre-merge warning for 0123456789abcdef0123456789abcdef01234567"}]'
         ;;
       coderabbit_approval_pending_comment)
-        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no blocking issues.\\n- [ ] {\\\"headCommitId\\\":\\\"0123456789abcdef0123456789abcdef01234567\\\"}\\n<!-- approval_notice_end -->"}]'
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no pre-merge blocking issues.\\n- [ ] {\\\"headCommitId\\\":\\\"0123456789abcdef0123456789abcdef01234567\\\"}\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_approval_pending_walkthrough)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no pre-merge blocking issues.\\n- [ ] {\\\"headCommitId\\\":\\\"0123456789abcdef0123456789abcdef01234567\\\"}\\n<!-- approval_notice_end -->\\n<!-- walkthrough_start -->\\nGeneric walkthrough terms: Failure, Warning, Potential issue, and blocking comments are described here.\\n<!-- walkthrough_end -->"}]'
+        ;;
+      coderabbit_multiline_json_approval_pending_comment)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId:\\n0123456789abcdef0123456789abcdef01234567\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_stale_head_with_unrelated_current_sha)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue remains under review.\\n- [ ] {\\"headCommitId\\":\\"old-head\\"}\\nThe current head is 0123456789abcdef0123456789abcdef01234567, but this is unrelated prose.\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_current_head_mixed_approval_pending_blocking_comment)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId: old-head\\nBlocking issue: the current parser can cross tenant boundaries.\\nCurrent head is 0123456789abcdef0123456789abcdef01234567 in unrelated prose.\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_current_failure_approval_notice)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId: 0123456789abcdef0123456789abcdef01234567\\nFailure: the current parser can cross tenant boundaries.\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_current_warning_approval_notice)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId: 0123456789abcdef0123456789abcdef01234567\\nWarning: the current parser can cross tenant boundaries.\\n<!-- approval_notice_end -->"}]'
+        ;;
+      coderabbit_current_potential_issue_approval_notice)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nheadCommitId: 0123456789abcdef0123456789abcdef01234567\\nPotential issue: the current parser can cross tenant boundaries.\\n<!-- approval_notice_end -->"}]'
         ;;
       coderabbit_multiline_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nCodeRabbit has no unresolved comments, but it has not reviewed the latest commit.\\nCodeRabbit will approve the changes if it finds no blocking issues.\\n- [ ] {\\"headCommitId\\":\\n  \\"0123456789abcdef0123456789abcdef01234567\\"}\\n<!-- approval_notice_end -->"}]'
@@ -766,10 +787,21 @@ assert_coderabbit_approval_pending_notice_does_not_block() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_coderabbit_approval_pending_walkthrough_does_not_block() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_approval_pending_walkthrough "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
+  assert_not_in_file 'Current-head CodeRabbit issue comment' "$temp_dir/output.txt"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
 assert_multiline_coderabbit_approval_pending_notice_does_not_block() {
   local temp_dir
   temp_dir="$(mktemp -d)"
-  run_gate coderabbit_multiline_approval_pending_comment "$temp_dir"
+  run_gate coderabbit_multiline_json_approval_pending_comment "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'Waiting for current-head CodeRabbit evidence' "$temp_dir/output.txt"
@@ -778,14 +810,36 @@ assert_multiline_coderabbit_approval_pending_notice_does_not_block() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
-assert_mixed_coderabbit_approval_pending_notice_blocks() {
+assert_stale_coderabbit_head_with_unrelated_current_sha_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
-  run_gate coderabbit_mixed_approval_pending_blocking_comment "$temp_dir"
+  run_gate coderabbit_stale_head_with_unrelated_current_sha "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
   assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_mixed_coderabbit_approval_pending_notice_blocks() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_current_head_mixed_approval_pending_blocking_comment "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
+assert_current_coderabbit_approval_notice_findings_block() {
+  local scenario temp_dir
+  for scenario in coderabbit_current_failure_approval_notice coderabbit_current_warning_approval_notice coderabbit_current_potential_issue_approval_notice; do
+    temp_dir="$(mktemp -d)"
+    run_gate "$scenario" "$temp_dir"
+
+    assert_exit_code 0 "$temp_dir"
+    assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+    assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+  done
 }
 
 assert_malformed_coderabbit_approval_pending_notice_blocks() {
@@ -1049,6 +1103,9 @@ assert_evaluation_error_publishes_gate_failure
 assert_coderabbit_blocking_issue_comment_blocks
 assert_coderabbit_approval_pending_notice_does_not_block
 assert_multiline_coderabbit_approval_pending_notice_does_not_block
+assert_coderabbit_approval_pending_walkthrough_does_not_block
+assert_stale_coderabbit_head_with_unrelated_current_sha_blocks
+assert_current_coderabbit_approval_notice_findings_block
 assert_mixed_coderabbit_approval_pending_notice_blocks
 assert_malformed_coderabbit_approval_pending_notice_blocks
 assert_github_code_quality_approval_pending_notice_does_not_block
