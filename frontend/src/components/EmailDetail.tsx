@@ -102,6 +102,42 @@ function normalizeLlmData(payload: unknown): LlmData {
   };
 }
 
+const ConversationMessage = memo(function ConversationMessage({
+  msg,
+  isSelected,
+  translationError,
+  translation,
+}: {
+  msg: EmailData;
+  isSelected: boolean;
+  translationError: string | null;
+  translation: string | null;
+}) {
+  return (
+    <div id={`msg-${msg.id}`} className={`rounded-2xl border p-4 text-card-foreground ${isSelected ? 'border-primary/60 bg-primary/5 shadow-sm' : 'border-border bg-background/60'}`} aria-current={isSelected ? "true" : undefined}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-medium text-sm">{toMailDisplayText(msg.sender, '보낸 사람')}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{formatEmailDate(msg.date)}</span>
+        </div>
+      </div>
+      {isSelected && <Badge variant="outline" className="mb-2 border-primary/30 text-[10px] text-primary">선택된 메시지</Badge>}
+      {isSelected && translationError && (
+        <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+          {translationError}
+        </div>
+      )}
+      {isSelected && translation && (
+        <div className="mb-6 rounded-2xl bg-secondary/40 p-4 border border-border">
+          <p className="text-xs font-bold text-primary mb-2">한국어 번역 결과</p>
+          <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(translation)}</div>
+        </div>
+      )}
+      <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
+    </div>
+  );
+});
+
 // ⚡ Bolt: Memoized EmailDetail to prevent unnecessary re-renders
 // 🎯 Why: Re-renders of EmailDetail when the parent components (like WorkspaceHome) re-render can cause performance issues, especially when switching active layout tabs or receiving polling updates that don't affect the selected email.
 // 📊 Impact: Significantly reduces React reconciliation work when the workspace state changes but the selected email remains the same.
@@ -765,27 +801,13 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
             )}
             <div className="space-y-4">
               {conversationMessages.map((msg) => (
-                <div id={`msg-${msg.id}`} key={msg.id} className={`rounded-2xl border p-4 text-card-foreground ${msg.id === email.id ? 'border-primary/60 bg-primary/5 shadow-sm' : 'border-border bg-background/60'}`} aria-current={msg.id === email.id ? "true" : undefined}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm">{toMailDisplayText(msg.sender, '보낸 사람')}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">{formatEmailDate(msg.date)}</span>
-                    </div>
-                  </div>
-                  {msg.id === email.id && <Badge variant="outline" className="mb-2 border-primary/30 text-[10px] text-primary">선택된 메시지</Badge>}
-                  {msg.id === email.id && translationError && (
-                    <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-                      {translationError}
-                    </div>
-                  )}
-                  {msg.id === email.id && translation && (
-                    <div className="mb-6 rounded-2xl bg-secondary/40 p-4 border border-border">
-                      <p className="text-xs font-bold text-primary mb-2">한국어 번역 결과</p>
-                      <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(translation)}</div>
-                    </div>
-                  )}
-                  <div className="text-sm leading-6 whitespace-pre-wrap">{toMailBodyText(msg.body)}</div>
-                </div>
+                <ConversationMessage
+                  key={msg.id}
+                  msg={msg}
+                  isSelected={msg.id === email.id}
+                  translationError={msg.id === email.id ? translationError : null}
+                  translation={msg.id === email.id ? translation : null}
+                />
               ))}
             </div>
           </div>
