@@ -486,8 +486,11 @@ else
               (($body | test($no_actionable_pattern; "i")) | not)
               or ($summary | test($substantive_pattern; "i"))
             )
-        )
-      | select((.body // "") | contains($head_sha))]
+            and (
+              ($body | contains($head_sha))
+              or (($has_approval_start or $has_approval_end) and ($approval_notice_well_formed | not))
+            )
+        )]
     | length'
   )"
   if [ "$CODERABBIT_ISSUE_BLOCKERS" != "0" ]; then
