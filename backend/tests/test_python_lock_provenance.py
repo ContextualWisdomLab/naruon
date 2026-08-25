@@ -178,6 +178,23 @@ def test_uv_generation_source_version_mismatch_is_rejected(tmp_path: Path) -> No
     assert _violation_codes(receipt) == {"generation-version-mismatch"}
 
 
+def test_uv_generation_source_inline_comment_still_binds_version(
+    tmp_path: Path,
+) -> None:
+    """A valid source pin with an inline comment remains part of the contract."""
+    _write(tmp_path / "requirements.txt", "example==2.0  # updated source pin\n")
+    lock_path = _write(
+        tmp_path / "requirements-hashes.txt",
+        "# uv pip compile --generate-hashes --output-file requirements-hashes.txt requirements.txt\n"
+        + _simple_lock(version="1.0"),
+    )
+
+    receipt = python_lock_provenance.validate_lock_file(lock_path, tmp_path)
+
+    assert receipt["status"] == "failed"
+    assert _violation_codes(receipt) == {"generation-version-mismatch"}
+
+
 def test_uv_generation_accepts_requirements_in_source(tmp_path: Path) -> None:
     """The conventional requirements.in source form is valid uv provenance."""
     _write(tmp_path / "requirements.in", "example==1.0\n")
@@ -297,6 +314,19 @@ def test_repository_receipt_is_deterministic_and_path_relative(tmp_path: Path) -
     assert [item["path"] for item in first["lock_files"]] == [
         "requirements-hashes.txt"
     ]
+
+
+def test_discovery_skips_non_file_requirements_candidates(tmp_path: Path) -> None:
+    """A directory or broken link named like a lock cannot crash discovery."""
+    (tmp_path / "requirements-directory.txt").mkdir()
+    (tmp_path / "requirements-broken.txt").symlink_to(
+        tmp_path / "missing-target.txt"
+    )
+
+    receipt = python_lock_provenance.validate_repository(tmp_path)
+
+    assert receipt["status"] == "passed"
+    assert receipt["lock_files"] == []
 
 
 def test_outside_repository_lock_fails_without_reading_payload(tmp_path: Path) -> None:

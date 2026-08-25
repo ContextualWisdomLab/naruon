@@ -80,7 +80,7 @@ def _parse_source_pins(text: str) -> dict[str, str]:
     """Return exact direct pins declared by a source requirements file."""
     pins: dict[str, str] = {}
     for raw_line in text.splitlines():
-        stripped = raw_line.strip()
+        stripped = re.split(r"\s+#", raw_line, maxsplit=1)[0].strip()
         if not stripped or stripped.startswith(("#", "-")):
             continue
         match = _EXACT_PIN.fullmatch(stripped)
@@ -442,6 +442,8 @@ def discover_hash_locks(repository_root: Path) -> list[Path]:
         resolved_path = _resolve_repository_path(path, repository_root)
         if resolved_path is None:
             candidates.append(path)
+            continue
+        if not resolved_path.is_file():
             continue
         try:
             text = resolved_path.read_text(encoding="utf-8")
