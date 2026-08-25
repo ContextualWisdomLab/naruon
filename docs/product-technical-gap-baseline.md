@@ -668,8 +668,10 @@ trail this document's own commit; all review decisions, Checks, and
 mergeability still require a live exact-head fetch before merge.
 Base-SHA columns record the protected-branch tip each row was scanned
 against (`develop@81c10564...` for rows captured before PR #1337
-merged; `develop@e5e99b4e...` for rows captured after), so they are
-scan-provenance evidence rather than one shared base declaration.
+merged; `develop@e5e99b4e...` for rows captured after). A few older rows
+retain `develop@dd8d1519...` from an earlier scan window; that value is also
+historical scan provenance, not a second claim about the current protected
+branch. These values are therefore not one shared base declaration.
 
 | PR | Title | Exact head SHA | Base ref and SHA | Draft | Authority cluster | Stack parent ref | Disposition | Next action |
 |---:|---|---|---|:---:|---|---|---|---|
