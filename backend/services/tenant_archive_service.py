@@ -433,12 +433,15 @@ async def _find_existing_email(
 ) -> Email | None:
     """Find an existing owner-scoped duplicate by message id or fingerprint."""
     message_lookup_values = {message_id, f"<{message_id}>"}
-    duplicate_conditions = [Email.message_id.in_(message_lookup_values)]
+    duplicate_predicate = Email.message_id.in_(message_lookup_values)
     if fingerprint:
-        duplicate_conditions.append(Email.fingerprint == fingerprint)
+        duplicate_predicate = duplicate_predicate | (Email.fingerprint == fingerprint)
     result = await session.execute(
         select(Email)
-        .where(*Email.owner_filters(owner_user_id, organization_id), *duplicate_conditions)
+        .where(
+            *Email.owner_filters(owner_user_id, organization_id),
+            duplicate_predicate,
+        )
         .order_by(Email.id)
     )
     return result.scalars().first()
@@ -533,6 +536,7 @@ async def import_tenant_archive(
             fingerprint=record["fingerprint"],
         )
         if existing_email is not None and existing_email.id is not None:
+            imported_email_ids_by_message_id[record["message_id"]] = existing_email.id
             imported_email_ids_by_message_id[existing_email.message_id] = (
                 existing_email.id
             )
@@ -569,6 +573,21 @@ async def import_tenant_archive(
             tasks_skipped += 1
             continue
         related_message_id = record["related_message_id"]
+        related_email_id = (
+            imported_email_ids_by_message_id.get(related_message_id)
+            if related_message_id is not None
+            else None
+        )
+        if related_message_id is not None and related_email_id is None:
+            existing_related_email = await _find_existing_email(
+                session,
+                owner_user_id=owner_user_id,
+                organization_id=organization_id,
+                message_id=related_message_id,
+                fingerprint=None,
+            )
+            if existing_related_email is not None:
+                related_email_id = existing_related_email.id
         staged_tasks.append(
             TicketTask(
                 task_uid=record["task_uid"],
@@ -578,11 +597,7 @@ async def import_tenant_archive(
                 status=record["status"],
                 priority=record["priority"],
                 source_type=record["source_type"],
-                related_email_id=(
-                    imported_email_ids_by_message_id.get(related_message_id)
-                    if related_message_id is not None
-                    else None
-                ),
+                related_email_id=related_email_id,
                 related_thread_id=record["related_thread_id"],
                 created_at=record["created_at"],
                 updated_at=record["updated_at"],
