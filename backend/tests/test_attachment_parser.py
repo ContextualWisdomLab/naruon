@@ -160,6 +160,11 @@ def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
     assert result.parse_error_code == "unsupported_content_type"
 
 
+def test_attachment_source_budget_accepts_payloads_above_twenty_mib():
+    assert MAX_ATTACHMENT_PARSE_SOURCE_BYTES == 64 * 1024 * 1024
+    assert MAX_ATTACHMENT_PARSE_SOURCE_BYTES > 20 * 1024 * 1024
+
+
 def test_pdf_attachment_is_deferred_pending_newsdom_recognition():
     raw = b"%PDF-1.7 raw bytes"
     result = parse_email_attachment(

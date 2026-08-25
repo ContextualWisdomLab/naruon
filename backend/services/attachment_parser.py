@@ -15,7 +15,10 @@ _GENERIC_CONTENT_TYPES = {
     "application/x-binary",
 }
 MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
-MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
+# Keep deferred attachment recognition aligned with the authenticated upload
+# transport. Unsupported binaries remain metadata-only; recognized/deferred
+# formats may retain at most this bounded source payload for a worker.
+MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 64 * 1024 * 1024
 
 
 @dataclass(frozen=True)
