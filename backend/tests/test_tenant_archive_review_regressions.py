@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
 import pytest
@@ -11,8 +12,11 @@ from services.tenant_archive_service import (
     ARCHIVE_KIND,
     CURRENT_ARCHIVE_SCHEMA_VERSION,
     _find_existing_email,
+    export_tenant_archive,
     import_tenant_archive,
 )
+
+UTC = datetime.timezone.utc
 
 
 class _Scalars:
@@ -20,6 +24,9 @@ class _Scalars:
 
     def __init__(self, rows: list[Any]) -> None:
         self._rows = rows
+
+    def all(self) -> list[Any]:
+        return list(self._rows)
 
     def first(self):
         return self._rows[0] if self._rows else None
@@ -164,3 +171,58 @@ async def test_partial_bundle_task_relinks_to_existing_destination_email():
     assert summary["ticket_tasks"]["imported"] == 1
     assert len(session.tasks) == 1
     assert session.tasks[0].related_email_id == session.existing_email.id
+
+
+class _MixedTimezoneExportSession:
+    """Return one naive and one aware email datetime from the read boundary."""
+
+    def __init__(self) -> None:
+        self._calls = 0
+        self.emails = [
+            Email(
+                id=1,
+                user_id="alice",
+                organization_id="org-acme",
+                message_id="<naive@example.com>",
+                fingerprint="fp-naive",
+                sender="sender@example.com",
+                recipients="alice@example.com",
+                subject="Naive",
+                body="naive",
+                date=datetime.datetime(2026, 8, 25, 8, 0),
+                is_read=True,
+            ),
+            Email(
+                id=2,
+                user_id="alice",
+                organization_id="org-acme",
+                message_id="<aware@example.com>",
+                fingerprint="fp-aware",
+                sender="sender@example.com",
+                recipients="alice@example.com",
+                subject="Aware",
+                body="aware",
+                date=datetime.datetime(2026, 8, 25, 9, 0, tzinfo=UTC),
+                is_read=True,
+            ),
+        ]
+
+    async def execute(self, statement):
+        self._calls += 1
+        if self._calls == 1:
+            return _Result(self.emails)
+        return _Result([])
+
+
+@pytest.mark.asyncio
+async def test_export_normalizes_mixed_timezone_datetimes_before_sorting():
+    """Legacy naive timestamps must not crash deterministic archive export."""
+    bundle = await export_tenant_archive(
+        _MixedTimezoneExportSession(),
+        owner_user_id="alice",
+        organization_id="org-acme",
+    )
+
+    assert [
+        record["message_id"] for record in bundle["records"]["emails"]
+    ] == ["<naive@example.com>", "<aware@example.com>"]
