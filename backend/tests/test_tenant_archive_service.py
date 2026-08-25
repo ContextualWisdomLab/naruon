@@ -572,3 +572,86 @@ async def test_import_rejects_malformed_bundles(mutation):
             owner_user_id="alice",
             organization_id="org-acme",
         )
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_angle_bracket_message_id_duplicates_before_writes():
+    """Equivalent message-id spellings must not reach a unique constraint."""
+    bundle = build_valid_bundle()
+    duplicate = dict(bundle["records"]["emails"][0])
+    duplicate["message_id"] = "clean@example.com"
+    bundle["records"]["emails"].append(duplicate)
+    destination = MockArchiveSession()
+
+    with pytest.raises(TenantArchiveBundleInvalid):
+        await import_tenant_archive(
+            destination,
+            bundle=bundle,
+            owner_user_id="alice",
+            organization_id="org-acme",
+        )
+
+    assert destination.emails == []
+    assert destination.commit_count == 0
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_duplicate_task_uids_before_writes():
+    """Duplicate task identities must fail before email rows are staged."""
+    bundle = build_valid_bundle()
+    task = {
+        "task_uid": "taskuidduplicate000000000000000001",
+        "title": "Review report",
+    }
+    bundle["records"]["ticket_tasks"].extend([dict(task), dict(task)])
+    destination = MockArchiveSession()
+
+    with pytest.raises(TenantArchiveBundleInvalid):
+        await import_tenant_archive(
+            destination,
+            bundle=bundle,
+            owner_user_id="alice",
+            organization_id="org-acme",
+        )
+
+    assert destination.emails == []
+    assert destination.tasks == []
+    assert destination.commit_count == 0
+
+
+@pytest.mark.asyncio
+async def test_import_sanitizes_email_attachment_and_task_display_text():
+    """Archive display fields cannot persist active HTML or script markup."""
+    bundle = build_valid_bundle()
+    email = bundle["records"]["emails"][0]
+    email.update(
+        {
+            "sender": '<img src=x onerror="alert(1)">sender@example.com',
+            "recipients": '<b>owner@example.com</b>',
+            "subject": '<b>Quarterly report</b>',
+            "body": '<script>alert(1)</script><p>Read me</p>',
+            "attachments": [{"filename": "<script>x</script>report.txt"}],
+        }
+    )
+    bundle["records"]["ticket_tasks"].append(
+        {
+            "task_uid": "taskuidhtml0000000000000000000001",
+            "title": "<strong>Review report</strong>",
+        }
+    )
+    destination = MockArchiveSession()
+
+    await import_tenant_archive(
+        destination,
+        bundle=bundle,
+        owner_user_id="alice",
+        organization_id="org-acme",
+    )
+
+    imported_email = destination.emails[0]
+    assert imported_email.sender == "sender@example.com"
+    assert imported_email.recipients == "owner@example.com"
+    assert imported_email.subject == "Quarterly report"
+    assert imported_email.body == "Read me"
+    assert imported_email.attachments[0].filename == "report.txt"
+    assert destination.tasks[0].title == "Review report"

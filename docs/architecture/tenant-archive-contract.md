@@ -81,6 +81,13 @@ Re-importing the same bundle therefore reports every record under
 `error_code` values (`archive_bundle_malformed`, HTTP 422) rather than
 message-derived statuses.
 
+Before any database write, import rejects duplicate email identities (including
+the equivalent `message-id` forms `value` and `<value>`) and duplicate task
+uids. Archive-controlled display fields are normalized through the same
+markup-removal boundary used by email ingestion: sender, recipients, subject,
+body, attachment filename, and task title cannot persist active HTML or NUL
+characters. A value that becomes empty after this normalization is rejected.
+
 ## Test coverage
 
 - `backend/tests/test_tenant_archive_service.py` — mocked-session unit tests

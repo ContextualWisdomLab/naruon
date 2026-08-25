@@ -31,6 +31,7 @@ from sqlalchemy.orm import selectinload
 
 from db.models import Attachment, Email, TicketTask
 from services.embedding import STORAGE_EMBEDDING_DIMENSION
+from services.text_safety import strip_html_markup
 
 ARCHIVE_KIND = "naruon_tenant_archive"
 CURRENT_ARCHIVE_SCHEMA_VERSION = 1
@@ -158,6 +159,19 @@ def _optional_bundle_bool(record: dict, key: str, default: bool) -> bool:
             f"Bundle record field '{key}' must be a boolean when present"
         )
     return value
+
+
+def _safe_archive_display_text(value: str) -> str:
+    """Remove active markup and invalid NUL characters from display text."""
+    return strip_html_markup(value.replace("\x00", ""))
+
+
+def _canonical_message_id(value: str) -> str:
+    """Return the archive identity used for angle-bracket message-id variants."""
+    normalized = value.strip()
+    if normalized.startswith("<") and normalized.endswith(">"):
+        return normalized[1:-1]
+    return normalized
 
 
 def _attachment_reference(message_id: str, ordinal_index: int) -> str:
@@ -301,7 +315,11 @@ async def export_tenant_archive(
 
 def _validate_attachment_record(record: object) -> dict:
     """Validate and normalize one attachment metadata entry."""
-    filename = _require_bundle_str(record, "filename")
+    filename = _safe_archive_display_text(_require_bundle_str(record, "filename"))
+    if not filename:
+        raise TenantArchiveBundleInvalid(
+            "Bundle attachment field 'filename' must contain display text"
+        )
     source = record if isinstance(record, dict) else {}
 
     def optional_str(key: str) -> str | None:
@@ -332,7 +350,11 @@ def _validate_email_record(record: object) -> dict:
     """Validate and normalize one email bundle record."""
     message_id = _require_bundle_str(record, "message_id")
     source = record if isinstance(record, dict) else {}
-    sender = _require_bundle_str(record, "sender")
+    sender = _safe_archive_display_text(_require_bundle_str(record, "sender"))
+    if not sender:
+        raise TenantArchiveBundleInvalid(
+            "Bundle email record field 'sender' must contain display text"
+        )
     body_value = source.get("body")
     if not isinstance(body_value, str):
         raise TenantArchiveBundleInvalid(
@@ -348,13 +370,25 @@ def _validate_email_record(record: object) -> dict:
         "thread_id": _optional_bundle_str(source, "thread_id"),
         "fingerprint": _optional_bundle_str(source, "fingerprint"),
         "sender": sender,
-        "reply_to": _optional_bundle_str(source, "reply_to"),
-        "recipients": _optional_bundle_str(source, "recipients"),
-        "subject": _optional_bundle_str(source, "subject"),
+        "reply_to": (
+            _safe_archive_display_text(value)
+            if (value := _optional_bundle_str(source, "reply_to")) is not None
+            else None
+        ),
+        "recipients": (
+            _safe_archive_display_text(value)
+            if (value := _optional_bundle_str(source, "recipients")) is not None
+            else None
+        ),
+        "subject": (
+            _safe_archive_display_text(value)
+            if (value := _optional_bundle_str(source, "subject")) is not None
+            else None
+        ),
         "in_reply_to": _optional_bundle_str(source, "in_reply_to"),
         "references": _optional_bundle_str(source, "references"),
         "date": _parse_bundle_datetime(source.get("date"), "date"),
-        "body": body_value,
+        "body": _safe_archive_display_text(body_value),
         "is_read": _optional_bundle_bool(source, "is_read", True),
         "attachments": [
             _validate_attachment_record(entry) for entry in raw_attachments
@@ -365,7 +399,11 @@ def _validate_email_record(record: object) -> dict:
 def _validate_task_record(record: object) -> dict:
     """Validate and normalize one ticket-task bundle record."""
     task_uid = _require_bundle_str(record, "task_uid")
-    title = _require_bundle_str(record, "title")
+    title = _safe_archive_display_text(_require_bundle_str(record, "title"))
+    if not title:
+        raise TenantArchiveBundleInvalid(
+            "Bundle task record field 'title' must contain display text"
+        )
     source = record if isinstance(record, dict) else {}
     status = _optional_bundle_str(source, "status") or "open"
     priority = _optional_bundle_str(source, "priority") or "normal"
@@ -431,10 +469,25 @@ def _validated_bundle(
         raise TenantArchiveBundleInvalid(
             "Bundle records must contain 'emails' and 'ticket_tasks' lists"
         )
-    return (
-        [_validate_email_record(entry) for entry in raw_emails],
-        [_validate_task_record(entry) for entry in raw_tasks],
-    )
+    email_records = [_validate_email_record(entry) for entry in raw_emails]
+    task_records = [_validate_task_record(entry) for entry in raw_tasks]
+    seen_message_ids: set[str] = set()
+    for record in email_records:
+        canonical_message_id = _canonical_message_id(record["message_id"])
+        if canonical_message_id in seen_message_ids:
+            raise TenantArchiveBundleInvalid(
+                "Bundle contains duplicate email message identifiers"
+            )
+        seen_message_ids.add(canonical_message_id)
+    seen_task_uids: set[str] = set()
+    for record in task_records:
+        task_uid = record["task_uid"]
+        if task_uid in seen_task_uids:
+            raise TenantArchiveBundleInvalid(
+                "Bundle contains duplicate ticket-task identifiers"
+            )
+        seen_task_uids.add(task_uid)
+    return email_records, task_records
 
 
 async def _find_existing_email(
