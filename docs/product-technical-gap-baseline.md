@@ -30,11 +30,13 @@ normally into its stack branch. #1448 merged at
 parent gate fix and the multiline, stale-head, and current-finding regression
 cases. The merge-result Checks for that commit remain queued and are tracked
 as post-merge canary evidence, not success.
-The newly opened #1470 is now `68a0576d…` (NetworkGraph edge-description
+The newly opened #1470 is now `aba77cf5…` (NetworkGraph edge-description
 lookup cleanup); the predecessor `f8a70d37…` was discarded after a remote
-commit reintroduced the dead argument and its callers. The current head was
-repaired with the smallest caller/signature change and requeued for hosted
-Checks.
+commit reintroduced the dead argument and its callers. The current head also
+removes the tracked 452-line `NetworkGraph.tsx.out` pre-refactor copy found by
+Devin, with the 11-test focused suite, TypeScript, zero-warning ESLint, and
+diff checks passing locally. Hosted Checks and independent approval remain
+required.
 These PRs remain open until their current-head required Checks and qualifying
 independent approval satisfy the protected ruleset; this follow-up does not
 reuse predecessor evidence or claim a merge. #1448 is historical after its
@@ -303,7 +305,7 @@ and defines the inventory that must be completed before GA.
 | #1443 | CodeRabbit approval-notice governance root | current source/test lane narrows approval-notice parsing to the exact current head and ignores pending-review prose while retaining explicit findings; current hosted Strix evidence is provider-failed and no qualifying independent approval exists |
 | #1448 | stacked governance regression coverage | merged normally into #1443's stack branch at `62a0d645…`; parent gate logic plus multiline JSON, stale-head unrelated prose, mixed blocker, and explicit current-head finding fixtures passed locally; merge-result hosted Checks remain queued and are post-merge canary evidence |
 | #1469 | deferred attachment parse-source admission | aligns the hidden 20 MiB parser bound with the authenticated 64 MiB import contract while keeping unsupported binaries metadata-only; current changelog states the supported 20–64 MiB range and the ADR-0006 contract remains required |
-| #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head `68a0576d…` preserves first-instance duplicate-ID selection and removes the dead `describeEdge` input; local 11-test, TypeScript, zero-warning ESLint, responsive screenshot, and diff checks passed, while hosted Checks and independent approval remain required |
+| #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head `aba77cf5…` preserves first-instance duplicate-ID selection, removes the dead `describeEdge` input, and deletes the tracked pre-refactor `NetworkGraph.tsx.out` copy; local 11-test, TypeScript, zero-warning ESLint, and diff checks passed, while hosted Checks and independent approval remain required |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
 | #1462 | utility tool trio (URL codec, hash generator) | bounded deterministic tooling consistent with #1418/#1361; must not be represented as AI judgment or topic evidence |
 | #1457–#1461 | refreshed dependency-group bumps | successor waves to the v0.2-flagged groups; the 64- and 86-package backend/CI bumps remain excessive blast radius and still require splitting and migration rehearsal |
