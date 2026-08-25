@@ -32,10 +32,12 @@ reuse predecessor evidence or claim a merge.
 **Current Checks inventory:** the same live scan found 107 open PRs. Completed
 failures were limited to `metadata-only gate evaluation` and `strix`; the
 metadata gate reports the underlying Strix failure and, on some heads, a
-current-head CodeRabbit quota/provider warning. The representative Strix logs
-show NVIDIA NIM HTTP 429 rate limiting followed by an unavailable direct
-fallback, so this is failed infrastructure evidence rather than a clean
-security result or a source defect. These PRs remain blocked and are not
+current-head CodeRabbit quota/provider warning. The Naruon hosted Strix logs
+for the observed #1468 run show NVIDIA NIM HTTP 429 rate limiting followed by
+an unavailable direct fallback. This describes that run's provider evidence,
+not the central Strix default documented in `AGENTS.md`; it is failed
+infrastructure evidence rather than a clean security result or a source defect.
+These PRs remain blocked and are not
 force-merged; the exact head must receive a successful hosted security result.
 PR #1466 has successful required Checks but remains in GitHub's protected
 auto-merge queue, so it is also not treated as manually merged.
@@ -253,7 +255,7 @@ and defines the inventory that must be completed before GA.
 | #1465 | scoped tenant archive import hardening | portability slice now rejects duplicate identities before writes and sanitizes archive-controlled display fields; retain the bounded slice-1 query cost and require current-head hosted evidence |
 | #1466 | origin-integrity URL validation | current head rejects explicit zero/out-of-range ports; keep the signed-session and SSRF contract tied to exact-head regression evidence |
 | #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
-| #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence; current Strix failure is provider-only (NVIDIA NIM 429/OpenAI 404) |
+| #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence; the observed Naruon Strix run failed at the provider boundary (NVIDIA NIM 429/OpenAI 404), not in this source change |
 | #1469 | deferred attachment parse-source admission | aligns the hidden 20 MiB parser bound with the authenticated 64 MiB import contract while keeping unsupported binaries metadata-only; current changelog states the supported 20–64 MiB range and the ADR-0006 contract remains required |
 | #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head preserves first-instance duplicate-ID selection and removes the dead `describeEdge` input; require current-head interaction, type, lint, and hosted security evidence |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
@@ -305,7 +307,7 @@ claim requires a live exact-head re-fetch before any decision:
 - **Merge-gate progression:** #1337 completed its gate progression (CodeRabbit exact-head approval obtained, branch updated onto the base) and merged into protected `develop` at `2026-08-25T00:10:39Z`; #1438 obtained CodeRabbit exact-head approval and branch updates and remains open pending terminal required-check states.
 - **Stale-snapshot repair:** #1241, #1368, #1412, and #1320 received systemic develop-baseline restores that preserved each PR's intended delta while removing predecessor-base drift from the diff surface.
 - **Thread remediation waves:** unresolved review threads progressed through repeated remediation cycles on #1264, #1332, #1347, #1349, #1361, #1380, #1339, #1376, #1412, #1452, #1454, #1449, #1457, #1436, and #1441.
-- **External blocker:** the central Strix security scan has been blocked org-wide since approximately 2026-08-24 by NVIDIA NIM provider rate-limit failures (HTTP 429) that emitted zero model-reported vulnerabilities before the infrastructure failure; per repository policy this is failed evidence, not clean-scan evidence, and strix-dependent gates cannot pass until the provider recovers.
+- **External blocker:** Naruon hosted Strix runs have observed NVIDIA NIM provider rate-limit failures (HTTP 429) since approximately 2026-08-24, emitting zero model-reported vulnerabilities before infrastructure failure. This is an observation of the affected hosted runs, not a change to the central GitHub Models default in `AGENTS.md`; per repository policy it is failed evidence, not clean-scan evidence, and Strix-dependent gates cannot pass until the provider path recovers.
 
 ### 6.4 UI/UX quality contract and Storybook event inventory
 
