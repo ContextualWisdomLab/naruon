@@ -23,13 +23,17 @@ if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-if ! [[ "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+REPOSITORY_OWNER="${GITHUB_REPOSITORY%/*}"
+REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
+if ! [[ "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
+  || [[ "$REPOSITORY_OWNER" == "." || "$REPOSITORY_OWNER" == ".." \
+    || "$REPOSITORY_NAME" == "." || "$REPOSITORY_NAME" == ".." ]]; then
   printf 'Repository identity is invalid; refusing to evaluate.\n'
   exit 1
 fi
 
-OWNER="${GITHUB_REPOSITORY%/*}"
-REPO="${GITHUB_REPOSITORY#*/}"
+OWNER="$REPOSITORY_OWNER"
+REPO="$REPOSITORY_NAME"
 BLOCKERS=()
 WAITING=()
 PR_CHECKS_ERROR_FILE="$(mktemp)"
