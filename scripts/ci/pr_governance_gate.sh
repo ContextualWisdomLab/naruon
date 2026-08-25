@@ -475,7 +475,7 @@ else
              and $ordered_approval_pair
              and (($approval_notice | gsub("[[:space:]]"; "")) | length > 0)) as $approval_notice_well_formed
           | ($approval_notice_well_formed
-             and ($approval_notice | test("(^|[^A-Za-z0-9_])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))) as $current_approval_notice
+             and ($approval_notice | test("(^|[^A-Za-z0-9_-])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))) as $current_approval_notice
           | (if ($has_approval_start or $has_approval_end) then
                if $current_approval_notice
                then ($approval_notice | test($approval_notice_blocking_pattern; "i"))
