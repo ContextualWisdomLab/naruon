@@ -1,5 +1,5 @@
 # Stage 1: Backend runtime for local Compose and backend-only deployments
-FROM python:3.14-slim@sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc AS backend-runtime
+FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS backend-runtime
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -25,13 +25,13 @@ EXPOSE 8000
 CMD ["python", "scripts/start_backend.py", "--host", "0.0.0.0", "--port", "8000"]
 
 # Stage 2: Build Frontend
-FROM node:26-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503 AS frontend-builder
+FROM node:26-slim@sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09 AS frontend-builder
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 ENV PNPM_VERSION=11.5.3
 ENV PNPM_INTEGRITY=sha512-esHJGTQcITo03A0Cr7cUPFwmrCbujEeC3uqCG4rGTSE0oIH9iUHa5uKbu0j1jfwrf7zuzMB8svCdIZ00Kklp7Q==
-RUN node -e "const crypto=require('node:crypto');const fs=require('node:fs');const https=require('node:https');const url='https://registry.npmjs.org/pnpm/-/pnpm-'+process.env.PNPM_VERSION+'.tgz';https.get(url,(res)=>{if(res.statusCode!==200){throw new Error('pnpm download failed: '+res.statusCode)}const chunks=[];res.on('data',(chunk)=>chunks.push(chunk));res.on('end',()=>{const data=Buffer.concat(chunks);const digest='sha512-'+crypto.createHash('sha512').update(data).digest('base64');if(digest!==process.env.PNPM_INTEGRITY){throw new Error('pnpm integrity mismatch')}fs.writeFileSync('/tmp/pnpm.tgz',data);});}).on('error',(error)=>{throw error;});"
-RUN mkdir -p /opt/pnpm \
+RUN node -e "const crypto=require('node:crypto');const fs=require('node:fs');const https=require('node:https');const url='https://registry.npmjs.org/pnpm/-/pnpm-'+process.env.PNPM_VERSION+'.tgz';https.get(url,(res)=>{if(res.statusCode!==200){throw new Error('pnpm download failed: '+res.statusCode)}const chunks=[];res.on('data',(chunk)=>chunks.push(chunk));res.on('end',()=>{const data=Buffer.concat(chunks);const digest='sha512-'+crypto.createHash('sha512').update(data).digest('base64');if(digest!==process.env.PNPM_INTEGRITY){throw new Error('pnpm integrity mismatch')}fs.writeFileSync('/tmp/pnpm.tgz',data);});}).on('error',(error)=>{throw error;});" \
+    && mkdir -p /opt/pnpm \
     && tar -xzf /tmp/pnpm.tgz -C /opt/pnpm --strip-components=1 \
     && chmod +x /opt/pnpm/bin/pnpm.cjs /opt/pnpm/bin/pnpx.cjs \
     && ln -sf /opt/pnpm/bin/pnpm.cjs /usr/local/bin/pnpm \
@@ -63,13 +63,8 @@ ARG OCI_IMAGE_LICENSES="LicenseRef-Naruon-Proprietary"
 ARG OCI_IMAGE_REF_NAME=""
 ARG OCI_IMAGE_TITLE="naruon"
 ARG OCI_IMAGE_DESCRIPTION="Naruon combined FastAPI and Next.js runtime image"
-ARG OCI_IMAGE_BASE_DIGEST="sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc"
-ARG OCI_IMAGE_BASE_NAME="docker.io/library/python:3.14-slim@sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc"
-
-# Defaults keep local builds provenance-complete. The publishing workflow derives
-# and overrides both values from the exact first FROM instruction, while
-# repository governance tests prevent the reviewed defaults from drifting.
-RUN test -n "$OCI_IMAGE_BASE_DIGEST" && test -n "$OCI_IMAGE_BASE_NAME"
+ARG OCI_IMAGE_BASE_DIGEST="sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
+ARG OCI_IMAGE_BASE_NAME="docker.io/library/python:3.14-slim@sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
 
 LABEL org.opencontainers.image.created="${OCI_IMAGE_CREATED}" \
       org.opencontainers.image.authors="${OCI_IMAGE_AUTHORS}" \

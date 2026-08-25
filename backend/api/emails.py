@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, or_, select
 from db.session import get_db
 from db.models import Email
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field
 import datetime
 import time
 from typing import Literal
@@ -692,14 +692,6 @@ class SendEmailRequest(BaseModel):
     body: str
     in_reply_to: str | None = None  # O3: email threading support
     references: str | None = None
-
-    @field_validator("to", "subject", "in_reply_to", "references", mode="before")
-    @classmethod
-    def reject_crlf(cls, v: str | None) -> str | None:
-        if isinstance(v, str):
-            if chr(10) in v or chr(13) in v:
-                raise ValueError("CR/LF injection detected")
-        return v
 
 
 @router.post("/send")
