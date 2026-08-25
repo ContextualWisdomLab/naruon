@@ -1,17 +1,19 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 0.2
-**Observed on:** 2026-08-21 (Asia/Seoul)
-**Observed protected branch:** `develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b`
+**Baseline version:** 0.3
+**Observed on:** 2026-08-25 (Asia/Seoul)
+**Observed protected branch:** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-**Inventory observation:** the 93-row open-PR inventory below is a snapshot
-from the GitHub REST pull-request collection at `2026-08-21T19:25:43Z`, which
-returned 93 open PRs after PR #1448 opened. This is later than the 92-PR state
-after PR #1442 merged at `2026-08-21T09:18:28Z`. The PR description and issue
-#1428 retain the earlier 83-PR observation as historical context; all counts
-are point-in-time evidence, not current merge state.
+**Inventory observation:** the 102-row open-PR inventory below is a fresh live
+scan captured at `2026-08-25T00:26:45Z`, which returned 102 open PRs after
+PR #1337 merged into protected `develop` at `2026-08-25T00:10:39Z` and
+fifteen new PRs (#1449–#1463) opened since the previous observation. The
+v0.2 baseline's 93-row snapshot from `2026-08-21T19:25:43Z` remains historical
+context, as do the earlier 92-PR state after PR #1442 merged and the initial
+83-PR observation in issue #1428; all counts are point-in-time evidence, not
+current merge state.
 
 This document defines the evidence-backed boundary between what Naruon currently
 ships on protected `develop`, what is present only in open pull requests, what is
@@ -77,23 +79,24 @@ it. Conversely, an old README statement that calls a protected implementation
 
 | Item | Observation |
 |---|---|
-| Protected branch | `develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b` |
+| Protected branch | `develop@e5e99b4e3bb081b92c602358878856536030e2ca` |
 | Product/package version | `0.14.4` |
-| Open pull requests | **93** (post-#1442 snapshot at `2026-08-21T09:18:28Z`) |
-| Open issues before this baseline program | **59** |
+| Open pull requests | **102** (live scan at `2026-08-25T00:26:45Z`, post-#1337 merge) |
+| Open issues | **61** (live count at the same 2026-08-25 snapshot; 59 were open before this baseline program) |
 | New completion issue | #1428 |
 | Required backend runtime | Python 3.14 exact-head lane |
 | Core runtime | Next.js frontend, FastAPI backend, PostgreSQL + pgvector |
 | Default data authority | customer-owned mail, CalDAV/CardDAV, and WebDAV providers |
 | Default merge posture | strict exact-head checks plus qualifying independent review |
 
-The **93-open-PR** count is the current inventory snapshot captured on
-2026-08-21 against the protected branch shown above, after PR #1448 opened. An
-earlier same-day snapshot recorded **92 open PRs** after PR #1442 merged, and
-the initial completion issue #1428 recorded **83 open PRs** on 2026-08-20
-against `develop@c9bfba2...`; these are historical baselines, not
-contradictions. Later live counts can change as PRs open, close, or merge, so
-every release decision must re-fetch the REST state.
+The **102-open-PR** count is the live inventory snapshot captured on
+2026-08-25 against the protected branch shown above, after PR #1337 merged.
+The v0.2 baseline recorded **93 open PRs** on 2026-08-21 after PR #1448
+opened, an earlier same-day snapshot recorded **92 open PRs** after
+PR #1442 merged, and the initial completion issue #1428 recorded **83 open
+PRs** on 2026-08-20 against `develop@c9bfba2...`; these are historical
+baselines, not contradictions. Later live counts can change as PRs open,
+close, or merge, so every release decision must re-fetch the REST state.
 
 The protected branch requires exact-head backend, frontend, security, CodeQL,
 dependency review, Scorecard, OSV, Trivy, Strix, source/evidence coverage,
@@ -193,7 +196,7 @@ scientific payload.
 ## 6. Current pull-request surface
 
 The current open PR count is too large to treat as one releasable integration
-unit. This baseline does not claim that every one of the 93 PRs has been
+unit. This baseline does not claim that every one of the 102 PRs has been
 line-by-line approved. It records the product-significant active lanes observed
 and defines the inventory that must be completed before GA.
 
@@ -216,6 +219,10 @@ and defines the inventory that must be completed before GA.
 | #1426 / #1414 | review-governance gate refresh | metadata-only governance repair; must not dismiss review, weaken rulesets, or turn stale aggregate state into false success |
 | #1241, #1320, #1408, #1410, #1411, #1421, #1422 | accessibility micro-lanes | useful but numerous; consolidate non-overlapping UI fixes into bounded component-level trains to reduce 17-check amplification |
 | #1424, #1412, #1401 | micro performance lanes | require real benchmark or stable complexity contract; do not let automated micro-PRs displace GA integration work |
+| #1455 | path-traversal attachment parser hardening | high-value Sentinel security lane; prioritize within the new wave and merge only with exact-head Strix evidence once the provider outage clears |
+| #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
+| #1462 | utility tool trio (URL codec, hash generator) | bounded deterministic tooling consistent with #1418/#1361; must not be represented as AI judgment or topic evidence |
+| #1457–#1461 | refreshed dependency-group bumps | successor waves to the v0.2-flagged groups; the 64- and 86-package backend/CI bumps remain excessive blast radius and still require splitting and migration rehearsal |
 
 ### 6.2 Required complete inventory
 
@@ -253,7 +260,18 @@ The inventory must be regenerated after every parent merge or branch movement.
 It must not embed provider credentials, customer data, review-body secrets, or
 large copied PR bodies.
 
-### 6.3 UI/UX quality contract and Storybook event inventory
+### 6.3 Merge-loop progress since v0.2
+
+Point-in-time progress observed between the v0.2 snapshot (2026-08-21) and
+this v0.3 observation (2026-08-25). None of this is merge evidence; every
+claim requires a live exact-head re-fetch before any decision:
+
+- **Merge-gate progression:** #1337 completed its gate progression (CodeRabbit exact-head approval obtained, branch updated onto the base) and merged into protected `develop` at `2026-08-25T00:10:39Z`; #1438 obtained CodeRabbit exact-head approval and branch updates and remains open pending terminal required-check states.
+- **Stale-snapshot repair:** #1241, #1368, #1412, and #1320 received systemic develop-baseline restores that preserved each PR's intended delta while removing predecessor-base drift from the diff surface.
+- **Thread remediation waves:** unresolved review threads progressed through repeated remediation cycles on #1264, #1332, #1347, #1349, #1361, #1380, #1339, #1376, #1412, #1452, #1454, #1449, #1457, #1436, and #1441.
+- **External blocker:** the central Strix security scan has been blocked org-wide since approximately 2026-08-24 by NVIDIA NIM provider rate-limit failures (HTTP 429) that emitted zero model-reported vulnerabilities before the infrastructure failure; per repository policy this is failed evidence, not clean-scan evidence, and strix-dependent gates cannot pass until the provider recovers.
+
+### 6.4 UI/UX quality contract and Storybook event inventory
 
 The UI is a buyer-facing control surface, not a decorative shell. The current
 design-system implementation is carried by PR #1436 and ADR-0013; it uses the
@@ -305,7 +323,7 @@ customer-visible outcome, accessibility rule, token source, viewport, and test
 command. A story that only renders a static screenshot is incomplete for a
 button, form, navigation, chart, or asynchronous data surface.
 
-### 6.4 Queue convergence rules
+### 6.5 Queue convergence rules
 
 1. One active writer owns each overlapping file/authority cluster.
 2. A stacked child is not promoted before its parent reaches protected
@@ -606,47 +624,65 @@ World Wide Web Consortium. (2024). *Web Content Accessibility Guidelines
 
 ## 13. Live open-PR identity inventory
 
-This table was generated from the GitHub REST pull-request collection whose
-response date was `2026-08-21T19:25:43Z`. It records every currently open Naruon
+This table was generated from a live GitHub pull-request collection whose
+response was captured at `2026-08-25T00:26:45Z`. It records every currently open Naruon
 PR's immutable head,
 base, draft state, authority cluster, stack parent reference, and provisional
 disposition. Review decisions, unresolved threads, mergeability, and Checks are
 volatile and must be fetched again for the exact head immediately before any
 merge; GraphQL rate-limit failures are not treated as approval or success.
 
-The 93-row inventory is a live refresh later than the earlier 92-row snapshot:
-PR #1442 merged at 2026-08-21T09:18:28Z and PR #1448 subsequently opened. The
-earlier 92-open-PR snapshot remains historical and its exact-head observation
-is retained below for audit traceability. The self-row is refreshed to the
-current PR head, but all review decisions, Checks, and mergeability still
-require a live exact-head fetch before merge.
+The 102-row inventory is a fresh refresh later than baseline v0.2's 93-row
+snapshot captured at `2026-08-21T19:25:43Z`: PR #1337 merged into protected
+`develop` at `2026-08-25T00:10:39Z` and PRs #1449–#1463 opened since that
+observation. The v0.2 93-row snapshot, the earlier 92-row snapshot taken
+after PR #1442 merged, and their exact-head observations remain historical
+and are retained in baseline v0.2 and in git history for audit
+traceability. The self-row reflects the head observed at scan time and may
+trail this document's own commit; all review decisions, Checks, and
+mergeability still require a live exact-head fetch before merge.
 
 | PR | Title | Exact head SHA | Base ref and SHA | Draft | Authority cluster | Stack parent ref | Disposition | Next action |
 |---:|---|---|---|:---:|---|---|---|---|
+| 1463 | 🎨 Palette: 비동기 작업 버튼의 로딩 상태 시각적 피드백 개선 | d0f51274dc86271e365aa1384e1362daf93f1d7d | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1462 | feat: 신규 유틸리티 도구 3종 추가 (URL 인코더, URL 디코더, 해시 생성기) | dba144b01be8a7e332c9fc7b390e1d9b105536c4 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1461 | chore(deps): bump the ci-python group across 1 directory with 86 updates | f012853e6123017c290a7782cc7cf8e4801e4bb7 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1460 | chore(deps): bump the backend-python group across 1 directory with 64 updates | dec4329986b261607204c0711d62f3bcd782d181 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1459 | chore(deps): bump the frontend-npm group across 1 directory with 14 updates | 3edb8320b0288f2bba54ce7e28083164e0d51966 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1458 | chore(deps): bump the github-actions group across 1 directory with 3 updates | f7099f951574a01f1333cb72a5e48ac91e7f4ea5 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1457 | chore(deps): bump the docker-base-images group across 1 directory with 2 updates | 245c8f1d2177e451e9812525ef6bbd7db9be3e6e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1456 | 🎨 Palette: 이메일 상세 화면 UX 밀도 개선 | 20b1c7f4798343d6949ab57ee9ab015d928b04bf | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1455 | 🛡️ Sentinel: [HIGH] 첨부 파일 파서의 경로 탐색 취약점 수정 | 40c5b7087a92a23eba787682fe32604861a9474b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1454 | ⚡ Bolt: Optimize NetworkGraph edge description lookups to strictly O(1) | 9cb7883cd0a41b9634f4f74e77f3595d754ab7e7 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1453 | 🎨 Palette: SettingsLayout 비활성화 버튼 접근성 툴팁 개선 | eef7e8d2eb25199afeb13c6b8a24f0f73bbd0fe5 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1452 | 🎨 Palette: 비활성화 버튼 접근성(Tooltip) 개선 추가 | ad32c8d35c11a76f52e189d7a5e83fb74fb603df | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1451 | feat: 텍스트 유틸리티 도구 추가 및 테스트 보완 | a2a20e3eb14bb65fab8ee2f2f9199dd76dd71bce | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1450 | chore: remove stray scratch/debug files committed to develop | 7d1f57a83a34312bea265ae3095bc67ff4e0493e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1449 | 🎨 Palette: 데이터 저장소 버튼 액션 로딩 UX 및 접근성 개선 | 90248b26fff37f395c6918525c4eef041d683e09 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1448 | test(governance): exercise multiline CodeRabbit pending notice | 874c098548e6794217393e0338074ba2f292d080 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1443 | fix: ignore CodeRabbit approval pending notices | 41e48413cffefa8a5393d6af1d5ad16be3c5de7c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1441 | 🎨 Palette: [UX 개선] 메일 상세 고밀도 컴포넌트 추가 | 2f70f024d3927b7e3d6b7d92eeb042592b4d06f9 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1439 | ⚡ Bolt: 프론트엔드 O(N) Array.find() 룩업을 O(1) Map 룩업으로 성능 개선 | fb70d5d210029f2ef09b6d38e5688815e6c45f6c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1438 | fix(governance): supersede stale review decisions safely | 4ccee1225fc717556db10e95325e1021af62646e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1436 | feat(frontend): add Storybook UI inventory | db613b0f0dcef39923a9d1407355e1dd497c74d2 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1441 | 🎨 Palette: [UX 개선] 메일 상세 고밀도 컴포넌트 추가 | ce6ff8f26e4cfdc76be7d667c7b159c57f8e0ac5 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1439 | ⚡ Bolt: 프론트엔드 O(N) Array.find() 룩업을 O(1) Map 룩업으로 성능 개선 | 68106d13175d7ff67978de66e31d385237ca53b1 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1438 | fix(governance): supersede stale review decisions safely | 5cc9ca3348575931b5d2ec35d1277436d1eece63 | develop@e5e99b4e3bb081b92c602358878856536030e2ca | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1436 | feat(frontend): add Storybook UI inventory | becc4e9e56bb30e511e812e8c66b19d094b28de0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1434 | fix: accept DiskSage cloud-readiness schema 7 | c05fb102ff2f099e9bb6513dd541ec3d0496c472 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1433 | fix(security): reject ambiguous Message-ID whitespace | 0d71272d6ec5420afefa98cd5ae57b91efc31007 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1432 | fix(compose): harden optional pg-llm-batch database | e3dbed9a0d4e08348f94d26de09a2fabbdcfa96b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1431 | test(core): cover operator env path resolution | e058f8c6e50256194d19be617f8df54f60bd1c27 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1430 | 🎨 Palette: 키보드 내비게이션을 위한 focus-visible 스타일 추가 | 49fc3eabd8e94a95dee2af3c1254c4d46a294399 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1429 | docs: establish Naruon product completion gap baseline | 18233ae3641a5540b134d6ceca5a14732a447b5f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1429 | docs: establish Naruon product completion gap baseline | 69f77f5323be94769552745416edce19a06f877a | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1427 | fix(data): align PDF DOM upload budget with sidecar | 29be15e4ec5e29dc1f62ac636928c9307a6f520f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1426 | fix(governance): wait on stale aggregate review state | 5cc148e1f2f84d1afcd2d3cf3dabaade616c01d0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1424 | ⚡ Bolt: [성능 개선] 네트워크 그래프에서 O(N) 노드 라벨 조회를 O(1) Map 조회로 대체 | 32c7edc11fd6faf8ae6918dae8b00de7c5c0b773 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1421 | 🎨 [UX] 설정 화면 장식용 아이콘에 aria-hidden 추가 | 719c1b347aae52e77ae7e40b0eb60769fd7178cb | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1420 | feat: URL 코덱 및 엄격한 JSON 포매터 추가 | bf7b741ea0b73a146ce9bcd323ca621c1562cb4e | develop@dd8d15191338b841f9e6f3a06507c6a5643b95d0 | yes | other | — | experimental/draft | validate parent and promote only after scope proof |
-| 1419 | feat(attachments): index common image metadata | f2e030fcd5767b548a79318e57a0c16bcc29d69c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1419 | feat(attachments): index common image metadata | a0f5e03107e6ec3e85eea029bb11c8c8e784b907 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1418 | feat(tools): add auditable URL and contact hygiene | 19adb3e74c66837c5fb2d0a11a7ac030bbbfe3c4 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1417 | fix(email): enforce shared send throttling | 69fb72d30c71ab7a9c2c6e09413292a05278148d | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1416 | fix(calendar): allow provider-backed create writeback | d8b3df7d19def826a5b92abbcaec043377ceb3a4 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1415 | fix(auth): select OIDC signing key by kid | e0a1f166221790e7ba4f0df37b328ac3cb896092 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1414 | fix(governance): refresh gate after OpenCode review | df1642c473011e935ab7501f4012fb58b8d06e21 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1412 | ⚡ Bolt: [성능 개선] tools 배열 탐색을 Map 기반 O(1)로 변경 | e3a7443b550055b4bc5841b05bc6bcf10a612a7d | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1412 | ⚡ Bolt: [성능 개선] tools 배열 탐색을 Map 기반 O(1)로 변경 | b5032d7fb428189da86c10221d58d093d3abcc6e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | performance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1411 | 🎨 Palette: 검색어 지우기 ARIA 라벨 통일 | 6369e91f2f10ed9b6b436a41a08d89b7aedf9008 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1410 | 🎨 [OIDC 로그인/로그아웃 버튼 로딩 상태 및 접근성 개선] | fac7a5377bd7c5bc7bde89a6f0f05b3fd2c47632 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1408 | fix(a11y): expose keyboard focus on AI Hub tabs | cda57c26e75788eaa350d0faeb898349818da074 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
@@ -661,9 +697,6 @@ require a live exact-head fetch before merge.
 | 1398 | feat(email): Slice 3 wire admission so only document_image continues | 1af546dbb01964e9a620ed341ae0dd3dab9439fd | cursor/email-media-admission-slice3-c9de@5a80583bcabc22609e8677864ae86f867d85fd45 | yes | ingest/storage | cursor/email-media-admission-slice3-c9de | experimental/draft | validate parent and promote only after scope proof |
 | 1397 | feat(email): Slice 3 inline-media admission and tracking-pixel classification | 5a80583bcabc22609e8677864ae86f867d85fd45 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1392 | docs: make README customer and operator focused | c0ac8c01d58473680b89a225107366fec4fae986 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1391 | chore(deps): bump the ci-python group across 1 directory with 78 updates | f8117892ce00717a2bdab2c78e979ceda59e4338 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1390 | chore(deps): bump the backend-python group across 1 directory with 56 updates | 74c7def09d7ad75a5654307b754e86cb34508b6f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1389 | chore(deps): bump python from \`a7fb1e6\` to \`ce40764\` in the docker-base-images group | 13e5bdaafdbf59125292ac34bef685c5bbeaf52b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1387 | fix(a11y): keep unavailable calendar actions discoverable | 37917799e8d27c07e29eeed87a52d5be41528330 | develop@dd8d15191338b841f9e6f3a06507c6a5643b95d0 | yes | frontend/a11y | — | experimental/draft | validate parent and promote only after scope proof |
 | 1384 | feat(noema): route LLM through contextual-orchestrator | 0fd330137cdd19068fa8903dc70e1dc88f42cdc9 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1380 | fix(dav): land capability honesty with tomllib CI import | 658f69accc627b99e379835593c2b9e49b514d00 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
@@ -672,54 +705,53 @@ require a live exact-head fetch before merge.
 | 1373 | feat(hwpx): recognize ordered section text with provenance | 32099709bafcee19fb32c385bbe89e0df15fe102 | feat/hwp-hwpx-attachment-recognition@70683266b93233dae62faec6cbd4df118be41383 | yes | ingest/storage | feat/hwp-hwpx-attachment-recognition | experimental/draft | validate parent and promote only after scope proof |
 | 1370 | feat(supply-chain): verify locked hashes against PyPI releases | 1a6ac604e159d98631b3996eb3f74d036e4a760b | feat/dependency-lock-provenance-receipt@f6eeb69f561e94cd50ae38fb1f43faa6cd2c52d7 | no | security/governance | feat/dependency-lock-provenance-receipt | stacked-child | re-fetch exact review/check state, then fix or protected-merge |
 | 1369 | feat(supply-chain): attest Python lock provenance before install | f6eeb69f561e94cd50ae38fb1f43faa6cd2c52d7 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1368 | ⚡ Bolt: [성능 개선] EmailDetail 개별 메시지 컴포넌트 메모이제이션 | b68f8a59a56c8d8bb8aaa0132049d85c2ce81bec | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1368 | ⚡ Bolt: [성능 개선] EmailDetail 개별 메시지 컴포넌트 메모이제이션 | 5c2f048c0e9fc97545e1d6f09d1379b3ae8f8b68 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1366 | fix(threading): honor RFC 5256 References ancestry | be0237714e373052b57d73e1168087da3adfda34 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1365 | fix(containers): publish explicit split runtime targets | 43666bed6214ce724d4dc50810d9f65f3d77d3f3 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1364 | feat(storage): add scoped S3 document object backend | 780bc0152b3eee7ddb0a62044ca002ec35471b71 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1363 | fix(governance): audit orphaned Actions workflow identities | b9f758184067ad72fd3b5d0e4176430ff85504cf | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1361 | feat(tools): add bounded content checksum generator | 85678dc97af38d3fd023b90eb49d483ad03227e5 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1357 | chore(deps): bump the frontend-npm group across 1 directory with 10 updates | ae9d6f0300446e64c5c39d92a9ff928e7faf4222 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1363 | fix(governance): audit orphaned Actions workflow identities | 48593a1cab22cca86e2dbfb7e6d5cb89cf298f3c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1361 | feat(tools): add bounded content checksum generator | 5859a8f3f5e9dddf20a43313b53d7aa6453f8cd7 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1356 | feat(email-writing): add hardened contextual-orchestrator boundary | 9cd9b953a2dd236aebe1fcdc25e59ba3e9388505 | feat/llm-email-writing-context-task4@4570747ccebd57ccaab30ffc68239f0c9d2f1ca0 | yes | mail/calendar | feat/llm-email-writing-context-task4 | experimental/draft | validate parent and promote only after scope proof |
-| 1355 | fix(email): preserve deterministic descending thread order | 1661a03cf7872d0cf9ad971b9f44f39f85288345 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1355 | fix(email): preserve deterministic descending thread order | fddc883ca2911c138bd9fcc3a9bd8257e1036124 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1354 | feat(ui): add Storybook design-token contract | 84edbbf152d257cd05777bf0b007fcfec2ac1d18 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1353 | feat(attachments): recognize HWP and HWPX parser boundaries | 4f3e95daf0d00e43a9907f7afecbb5f9c91907e1 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1352 | fix(a11y): expose async button busy states | 65ab8cb16acd174dc32cd228d95eacfb2dce4d05 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1349 | docs(product): define evidence-based workspace task contract | 3b46e451626f18128a1d93ae000703136a32617b | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1347 | fix(governance): reject rate-limited review status as semantic evidence | 0f93866d9df98b1f4d4491ad5cb584496c95a0a1 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1345 | fix(dav): reject ambiguous nested authorization encodings | 89d885084fec5510c53c8cab992bf1f41c6abd55 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1339 | fix(host-policy): normalize dotted bracketed IPv6 safely | af32e6728e90acf7506b6e7c372ba9ab926f3020 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1337 | fix(http): reject explicit zero loopback ports | 39a9d08be1b362650b481d75c6334dc9016fc7a2 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1353 | feat(attachments): recognize HWP and HWPX parser boundaries | dd501dae0fc03d813f4a65aa21318cc89d1a193c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1352 | fix(a11y): expose async button busy states | 8b7731da7063c39651aa9e3debfaa2052c476c35 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1349 | docs(product): define evidence-based workspace task contract | 559d091a9a75d8e79ab9608c04931c5a1e82e173 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | docs/product | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1347 | fix(governance): reject rate-limited review status as semantic evidence | cd973fc364efb8d150786f4c2bceec54187eb806 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1345 | fix(dav): reject ambiguous nested authorization encodings | 07954b2e4d402fa2fd1e9775c52ec6b9483de52d | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1339 | fix(host-policy): normalize dotted bracketed IPv6 safely | 44b65cac131ab5c4be25cfdebc026c4a1cf3bc35 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1333 | feat: persist DiskSage file lineage ontology | 34b0cafef6d029b749a695047bf05f447e8450dc | develop@dd8d15191338b841f9e6f3a06507c6a5643b95d0 | yes | other | — | experimental/draft | validate parent and promote only after scope proof |
-| 1332 | feat(email): surface calendar writeback If-Match conflicts | 59888d2759091327a30937bc5f74cdb1d1250b24 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1332 | feat(email): surface calendar writeback If-Match conflicts | d53598dc7e45b470907fd97dffb9d64e954f2731 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1329 | feat(email-writing): build authorized thread context | 4570747ccebd57ccaab30ffc68239f0c9d2f1ca0 | feat/llm-email-writing-review-evidence-task3@51fb5e8543247b1e5c790f3fdf98424c8fbed669 | yes | security/governance | feat/llm-email-writing-review-evidence-task3 | experimental/draft | validate parent and promote only after scope proof |
 | 1328 | feat(email-writing): persist privacy-minimized review evidence | 51fb5e8543247b1e5c790f3fdf98424c8fbed669 | feat/llm-email-writing-contracts-task2@fb7c406ee1328a6ac42dbaf54bb6852c199d8b0a | yes | security/governance | feat/llm-email-writing-contracts-task2 | experimental/draft | validate parent and promote only after scope proof |
 | 1327 | feat(email-writing): define strict review contracts | fb7c406ee1328a6ac42dbaf54bb6852c199d8b0a | feat/inkspan-email-writing-guide@bfc2df112136bb9fe358778d701e78bf9e78b685 | yes | security/governance | feat/inkspan-email-writing-guide | experimental/draft | validate parent and promote only after scope proof |
-| 1322 | docs(adr): design Inkspan-based LLM email writing guidance | afec4189ba2113e01605bf76e8bd9b9c67af9743 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1321 | fix(auth): require issued-at in Keyverse OIDC sessions | 091e9f85c561b2d43e050484dcfab4fa1807fd41 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1320 | fix(calendar): expose proposal context to screen readers | 32421428f8b583867e7c533904b5b963626bf257 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1317 | feat: harden live macOS runtime and governance | 248652dbb0f807ad59187f168dfa9aff9fb9772f | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1308 | chore(deps): bump the github-actions group with 2 updates | 4d984af7e4074b50ba5836eef9e402e14ffc74c9 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1322 | docs(adr): design Inkspan-based LLM email writing guidance | d943203afc0afae0c9a6190681675f4d30dcf257 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1321 | fix(auth): require issued-at in Keyverse OIDC sessions | d06eff3875543b1afa28570f9269571a63a81983 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1320 | fix(calendar): expose proposal context to screen readers | 1a9afa0cf845a49db4c2eb2372f9f36eaf4c8c4e | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1317 | feat: harden live macOS runtime and governance | 25d80197ee0eb8cb2aafc7d205ac7b98ccccba0c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1302 | fix(tools): remove canned source-derived tools | 2ee0c65097c78a99849fc749a3a848440c50271c | fix/remove-unsafe-phishing-detector@646a2401de35529425163fdefa7ad5e6355c349f | yes | other | fix/remove-unsafe-phishing-detector | experimental/draft | validate parent and promote only after scope proof |
 | 1301 | fix(tools): remove unsafe phishing detector | 646a2401de35529425163fdefa7ad5e6355c349f | fix/fail-closed-tool-mutations@67dbfddb01bacb604a0533ce486a550115ff0d64 | yes | other | fix/fail-closed-tool-mutations | experimental/draft | validate parent and promote only after scope proof |
-| 1300 | fix(tools): fail closed on unsafe global tool mutations | 8439a13b061c01e8c5e861836f7c1288ae7735af | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1288 | test(email): consolidate thread identity and folder visibility coverage | 9884ffccde55b47577537a18c693ad31fe74f68f | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1287 | 🧪 테스트: runtime_secrets.py의 build_encryption_keyring 누락된 테스트 추가 | 6f1c62b4eafa1bb9cec6c649c69f771d605d7144 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1284 | test(pdf): cover pending document decode success | 8df069719a0ca18e1ff9b7d3a47d1cae269f3705 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1280 | test(search): cover configured fusion settings | 74182c4ea63a692bddc3e4e3eea28836b78877da | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1279 | test(tools): consolidate webhook validation and execution coverage | 186c0a1c2d9cb0153a526d338ecf4d88e9a76568 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1277 | test(core): cover connector scope statement | f3bb6b3562dc8e6654eea09d3a5d0550da949a3e | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1300 | fix(tools): fail closed on unsafe global tool mutations | 7ea4bad69cf36acb9c8fbca48d32333907cce55f | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1288 | test(email): consolidate thread identity and folder visibility coverage | b7db9a316162a70bf8e594faf4f2e73766d9dc6c | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1287 | 🧪 테스트: runtime_secrets.py의 build_encryption_keyring 누락된 테스트 추가 | 4de4f5d5850baf1abc05203f204c489650ba9624 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1284 | test(pdf): cover pending document decode success | 68da2a53084751361f6332ca4f3fe82c34443964 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | ingest/storage | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1280 | test(search): cover configured fusion settings | 89742939fe8b9a9a33a9018d6863050f5c7a7fc7 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1279 | test(tools): consolidate webhook validation and execution coverage | c6a50e97b7742a7172d80de01159516796d4d1a0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1277 | test(core): cover connector scope statement | aa04c9392c86c29fd39cae80149fbbd02681cff8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | other | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1267 | perf(mail): memoize email list element mapping | 8fccadb727ac54a81422642022ccc2b31723bab9 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | mail/calendar | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1264 | integration: route LLM egress through EgressWeave | 899a18b42fda90fcb8ff10e56e50bb0dd727bdeb | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1257 | chore(deps): update connector websockets to 17.0.1 | c9437460200018ff5b5eb73b18d76a14d4e2e705 | develop@c9bfba2dc2063b82741686a3b3120a66c269ab27 | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1264 | integration: route LLM egress through EgressWeave | 5a46a85f75dfae94dd8c1f8df0b88150b40ab3c8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | llm/orchestration | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1257 | chore(deps): update connector websockets to 17.0.1 | 4613ff5a1a85e4882af1a3a4abd0e56b3b574187 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | dependency | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1245 | fix(email-detail): make responsive evidence actions functional | 796b34c5a1322f09c6f00b8cf24591ae04b89b6b | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | yes | frontend/a11y | — | experimental/draft | validate parent and promote only after scope proof |
 | 1244 | chore(deps): update hash-locked aiohttp to 3.14.3 | c1d4c7fd2b98e464d3ff7e92f26d92a6c0f1e6e8 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
-| 1241 | fix(a11y): show keyboard focus on OIDC actions | a27ebb0aecca33aaaeff319ae5fca353e777d8b0 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
+| 1241 | fix(a11y): show keyboard focus on OIDC actions | fb7e63dee1d72365db595edb1bc49e097202e707 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1206 | fix(security,api): opaque prompt IDs and CardDAV single-decode | d7ae4768b7c30be7bac19fb9425d40a66e8fda05 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | security/governance | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 | 1195 | feat(email): deterministic dedupe provenance — gate strong fingerprints on genuine Date (naruon#1086) | c7aedc6a6a09bc91156e9c62e44f18cf8b4d3846 | develop@81c105645ca6e680f5f8c15ba9c33b67eb63c48b | no | frontend/a11y | — | normal-or-stacked-root | re-fetch exact review/check state, then fix or protected-merge |
 
 The inventory is intentionally identity-first:
 
-It represents the post-#1442 93-row snapshot described above: no review body, credential,
+It represents the 2026-08-25 102-row refresh described above, which supersedes
+the v0.2 post-#1442 93-row snapshot as current evidence while that snapshot
+remains historical context: no review body, credential,
 customer data, or copied provider payload is stored in this document. A parent
 merge or head movement invalidates the affected row and requires regeneration.
 
