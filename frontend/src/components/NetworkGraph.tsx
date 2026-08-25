@@ -148,7 +148,7 @@ function firstGraphEntryById<T>(
   return map;
 }
 
-function describeEdge(edge: Edge, nodes: Node[], nodeMap: Map<string | number, string>) {
+function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
   const fromLabel = nodeMap.get(String(edge.from)) ?? String(edge.from);
   const toLabel = nodeMap.get(String(edge.to)) ?? String(edge.to);
   const title = titleText(edge.title);
@@ -219,7 +219,7 @@ export default function NetworkGraph() {
         if (!edge) return;
         setRelationshipOptionId(String(edge.id));
         setNodeOptionId('');
-        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes, nodeMap)}`);
+        setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodeMap)}`);
         setGraphActionStatus('그래프에서 관계를 선택했습니다.');
       };
 
@@ -289,9 +289,9 @@ export default function NetworkGraph() {
     return Array.from(edgeMap.values()).slice(0, 5).map((edge, index) => ({
       edge,
       id: String(edge.id),
-      label: `관계 ${index + 1}: ${describeEdge(edge, nodes, nodeMap)}`,
+      label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
     }));
-  }, [edgeMap, nodes, nodeMap]);
+  }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
     return Array.from(nodeInstanceMap.values()).slice(0, 8).map((node) => ({
@@ -304,7 +304,7 @@ export default function NetworkGraph() {
   const selectRelationship = (edge: Edge, status: string) => {
     setRelationshipOptionId(String(edge.id));
     setNodeOptionId('');
-    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodes, nodeMap)}`);
+    setSelectedGraphDetail(`선택된 관계: ${describeEdge(edge, nodeMap)}`);
     setGraphActionStatus(status);
     if (isGraphId(edge.id)) {
       networkRef.current?.selectEdges?.([edge.id]);
