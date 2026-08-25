@@ -1267,6 +1267,21 @@ def test_json_formatter_tool_invalid() -> None:
         assert "Invalid JSON string" in data["message"]
 
 
+@pytest.mark.parametrize("json_str", ["NaN", "Infinity", "-Infinity"])
+def test_json_formatter_tool_rejects_non_standard_numbers(json_str: str) -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_str": json_str}},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert "Invalid JSON string" in data["message"]
+
+
 def test_html_escape_tool_success() -> None:
     with TestClient(app) as client:
         request_data = {"parameters": {"text": "<div>&</div>"}}

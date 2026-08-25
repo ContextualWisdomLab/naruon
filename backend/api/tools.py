@@ -806,12 +806,27 @@ registry.register(
 )
 
 
+def _reject_non_standard_json_number(value: str) -> None:
+    """Reject JavaScript numeric extensions that are not valid JSON."""
+    raise ValueError(f"Non-standard JSON number: {value}")
+
+
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
     json_str = params.get("json_str") or ""
     try:
-        parsed = json.loads(json_str)
-        return {"formatted_json": json.dumps(parsed, indent=2, ensure_ascii=False)}
-    except Exception as e:
+        parsed = json.loads(
+            json_str,
+            parse_constant=_reject_non_standard_json_number,
+        )
+        return {
+            "formatted_json": json.dumps(
+                parsed,
+                indent=2,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        }
+    except (TypeError, ValueError) as e:
         raise ValueError(f"Invalid JSON string: {e}")
 
 

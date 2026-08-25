@@ -10,6 +10,7 @@ on:
       - Application CI
       - Bandit Security Scan
       - Build and Publish Docker Images
+      - Strix Security Scan
 
     types: [completed]
   check_run:
