@@ -260,6 +260,26 @@ def test_malformed_repository_identifier_fails_closed(tmp_path: Path) -> None:
     assert "GitHub repository identifier must be owner/repo" in output
 
 
+def test_repository_identifier_rejects_api_scope_metacharacters(tmp_path: Path) -> None:
+    """Repository API scope rejects URL, whitespace, and newline characters."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+
+    for repository in ("owner/repo?x=1", "owner/repo name", "owner/repo\nextra"):
+        result = _run_gate(
+            repo_root,
+            bin_dir,
+            gate_env={"GITHUB_REPOSITORY": repository},
+        )
+        output = result.stdout + result.stderr
+
+        assert result.returncode != 0, (repository, output)
+        assert "GitHub repository identifier must be owner/repo" in output
+
+
 def test_actions_entrypoint_hardens_path_before_resolving_gh() -> None:
     """Actions must resolve the trusted GitHub CLI only after PATH hardening."""
 

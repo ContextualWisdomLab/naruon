@@ -43,7 +43,7 @@ export PR_GOVERNANCE_REAL_GH
 # GitHub's repository-scoped API paths and GraphQL owner/name variables require
 # exactly one owner/repository pair. Validate the trusted workflow identifier
 # before either the wrapper or delegated implementation constructs API paths.
-if ! [[ "${GITHUB_REPOSITORY:-}" =~ ^[^/]+/[^/]+$ ]]; then
+if ! [[ "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
   printf 'GitHub repository identifier must be owner/repo; refusing to evaluate.\n' >&2
   exit 1
 fi
