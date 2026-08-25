@@ -53,6 +53,15 @@ SUCCESS_FIELDS = frozenset(
         "icloud_native_status_timed_out",
     }
 )
+NATIVE_SUMMARY_FIELDS = frozenset(
+    {
+        "pre_copy_evidence_met",
+        "icloud_native_status_observed",
+        "icloud_native_sync_state",
+        "icloud_native_status_timed_out",
+    }
+)
+LEGACY_SUCCESS_FIELDS = SUCCESS_FIELDS - NATIVE_SUMMARY_FIELDS
 FAILURE_FIELDS = frozenset({"ok", "error_code"})
 FALSE_CLAIM_FIELDS = (
     "local_paths_included",
@@ -373,9 +382,15 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
         raise HandoffError("disksage-verifier-protocol-invalid")
 
     if result.returncode == 0:
+        schema_version = payload.get("schema_version")
+        expected_success_fields = (
+            SUCCESS_FIELDS
+            if type(schema_version) is int and schema_version >= 7
+            else LEGACY_SUCCESS_FIELDS
+        )
         valid = (
             not result.stderr
-            and frozenset(payload) == SUCCESS_FIELDS
+            and frozenset(payload) == expected_success_fields
             and payload.get("ok") is True
             and payload.get("schema_kind") == "disksage.naruon.cloud-copy-readiness"
             and type(payload.get("schema_version")) is int
