@@ -116,6 +116,10 @@ def test_schema_backfill_adds_email_indexes(monkeypatch):
         and "user_id, organization_id, date" in statement
         for statement in statements
     )
+    assert not any(
+        "on emails (user_id, organization_id, date)" in statement
+        for statement in statements
+    )
     assert any(
         "drop index if exists ix_email_records_message_id" in statement
         for statement in statements
@@ -770,11 +774,11 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 text("""
                     INSERT INTO email_records (
                         user_id, organization_id, message_id, sender, recipients,
-                        subject, "date", body
+                        subject, "date", body, is_read
                     )
                     VALUES (
                         :user_id, :organization_id, :message_id, :sender,
-                        :recipients, :subject, now(), :body
+                        :recipients, :subject, now(), :body, true
                     )
                     RETURNING id
                     """),
