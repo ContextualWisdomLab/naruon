@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, StatementError
 
 from api.auth import AuthContext, get_auth_context
 from db.models import (
@@ -93,6 +93,15 @@ def _organization_summary(
     )
 
 
+def _is_missing_encryption_key(error: BaseException) -> bool:
+    """Recognize direct and SQLAlchemy-wrapped missing-key failures."""
+
+    return isinstance(error, EncryptionKeyMissingError) or (
+        isinstance(error, StatementError)
+        and isinstance(error.orig, EncryptionKeyMissingError)
+    )
+
+
 @router.post("/file-lineage", response_model=FileLineageSummary, status_code=201)
 async def ingest_file_lineage(
     envelope: FileLineageEnvelope,
@@ -162,7 +171,9 @@ async def ingest_file_lineage(
                 detail="lineage fingerprint is already bound to different evidence",
             ) from None
         return _summary(replayed)
-    except EncryptionKeyMissingError as error:
+    except (EncryptionKeyMissingError, StatementError) as error:
+        if not _is_missing_encryption_key(error):
+            raise
         await db.rollback()
         raise HTTPException(
             status_code=503,
@@ -255,7 +266,9 @@ async def ingest_organization_lineage(
                 detail="organization lineage fingerprint is already bound to different evidence",
             ) from None
         return _organization_summary(replayed)
-    except EncryptionKeyMissingError as error:
+    except (EncryptionKeyMissingError, StatementError) as error:
+        if not _is_missing_encryption_key(error):
+            raise
         await db.rollback()
         raise HTTPException(
             status_code=503,

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import StatementError
 
 from api.auth import AuthContext
 from api.disksage import ingest_file_lineage, list_file_lineage
@@ -185,6 +186,30 @@ async def test_missing_encryption_key_rolls_back_as_service_unavailable():
     session = _Session(
         [_Result(None)],
         commit_error=EncryptionKeyMissingError("missing active key"),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await ingest_file_lineage(
+            envelope=envelope,
+            auth_context=_auth(),
+            db=session,
+        )
+
+    assert error.value.status_code == 503
+    assert session.rollback_count == 1
+
+
+@pytest.mark.asyncio
+async def test_wrapped_missing_encryption_key_rolls_back_as_service_unavailable():
+    envelope = FileLineageEnvelope.model_validate(_envelope())
+    session = _Session(
+        [_Result(None)],
+        commit_error=StatementError(
+            "encrypted bind failed",
+            None,
+            None,
+            EncryptionKeyMissingError("missing active key"),
+        ),
     )
 
     with pytest.raises(HTTPException) as error:
