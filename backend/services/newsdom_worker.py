@@ -261,7 +261,10 @@ async def process_pending_attachment(
     except NewsdomPayloadTooLargeError as exc:
         attachment.parse_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         attachment.parse_error_code = "provider_payload_size_exceeded"
-        logger.warning(
+        # A bounded, expected admission rejection is operational information,
+        # not an infrastructure warning; the persisted error code remains the
+        # customer-visible source of truth.
+        logger.info(
             "NewsDOM attachment %s exceeds the provider payload contract: %s",
             getattr(attachment, "id", "?"),
             exc,

@@ -8,6 +8,7 @@ failed) that keep a pending PDF from ever masquerading as parsed.
 
 import asyncio
 import base64
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -221,22 +222,25 @@ async def test_attachment_failed_on_empty_sidecar_response():
 
 
 @pytest.mark.asyncio
-async def test_attachment_above_provider_limit_fails_instead_of_remaining_pending():
+async def test_attachment_above_provider_limit_fails_instead_of_remaining_pending(caplog):
     attachment = _pending_attachment()
 
     async def oversized_request(**_kwargs):
         raise NewsdomPayloadTooLargeError("provider limit")
 
-    result = await process_pending_attachment(
-        session=object(),
-        attachment=attachment,
-        config_resolver=await _resolver_with(_config()),
-        request_fn=oversized_request,
-    )
+    with caplog.at_level(logging.INFO, logger="services.newsdom_worker"):
+        result = await process_pending_attachment(
+            session=object(),
+            attachment=attachment,
+            config_resolver=await _resolver_with(_config()),
+            request_fn=oversized_request,
+        )
 
     assert result == RESULT_FAILED
     assert attachment.parse_status == PDF_DOM_RECOGNITION_FAILED_STATUS
     assert attachment.parse_error_code == "provider_payload_size_exceeded"
+    records = [record for record in caplog.records if "exceeds the provider payload contract" in record.message]
+    assert records and all(record.levelno == logging.INFO for record in records)
 
 
 @pytest.mark.asyncio
