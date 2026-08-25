@@ -59,6 +59,19 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
+      - name: Validate PyPI release hash provenance
+        run: |
+          status=0
+          receipt="$(python scripts/ci/python_lock_registry_provenance.py --json)" || status=$?
+          printf '%s\n' "$receipt"
+          {
+            echo '### PyPI release hash provenance'
+            echo '```json'
+            printf '%s\n' "$receipt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
       - name: Install backend dependencies
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
