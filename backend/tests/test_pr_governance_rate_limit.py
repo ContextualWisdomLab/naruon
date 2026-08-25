@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import textwrap
 
@@ -332,6 +333,52 @@ def test_commit_status_lookup_failure_preserves_causal_blocker(tmp_path: Path) -
     assert result.returncode == 0, output
     assert "Current-head commit statuses could not be read" in output
     assert "PR governance metadata gate errored" not in output
+
+
+def test_rate_limit_normalization_fails_closed_when_jq_fails(
+    tmp_path: Path,
+) -> None:
+    """A normalization parser failure must not remove semantic-review evidence."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_gh(bin_dir)
+    real_jq = shutil.which("jq")
+    assert real_jq is not None
+    jq_wrapper = bin_dir / "jq"
+    jq_wrapper.write_text(
+        textwrap.dedent(
+            f'''\
+            #!/usr/bin/env python3
+            from pathlib import Path
+            import os
+            import subprocess
+            import sys
+
+            marker = Path(os.environ["JQ_FAILURE_MARKER"])
+            if "-s" in sys.argv[1:] and not marker.exists():
+                marker.write_text("failed", encoding="utf-8")
+                print("synthetic jq normalization failure", file=sys.stderr)
+                raise SystemExit(1)
+            raise SystemExit(subprocess.call([{real_jq!r}, *sys.argv[1:]]))
+            '''
+        ),
+        encoding="utf-8",
+    )
+    jq_wrapper.chmod(0o755)
+
+    result = _run_gate(
+        repo_root,
+        bin_dir,
+        gate_env={"JQ_FAILURE_MARKER": str(bin_dir / "jq-failure-marker")},
+    )
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert "Failed to evaluate review-unavailable evidence" in output
+    assert "Current-head commit statuses could not be read" in output
+    assert "PR governance metadata gate is ready" not in output
 
 
 def test_gate_harness_ignores_ambient_fake_cli_controls(

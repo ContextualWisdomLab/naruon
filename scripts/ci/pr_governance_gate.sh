@@ -84,13 +84,20 @@ gh() {
     else
       printf '%s' "$comments_json" >"$PR_GOVERNANCE_WRAPPER_COMMENTS_FILE"
     fi
-    unavailable_count="$(printf '%s' "$comments_json" | jq -s \
+    if ! unavailable_count="$(printf '%s' "$comments_json" | jq -s \
       --arg head_sha "$HEAD_SHA" '
       [.[][]
         | select((.user.login // "") | test("coderabbit|github-code-quality"; "i"))
         | select((.body // "") | contains($head_sha))
         | select((.body // "") | test("review limit reached|couldn\u0027?t start (this )?review|review (did not|didn\u0027?t) start"; "i"))]
-      | length')"
+      | length')"; then
+      printf 'Failed to evaluate review-unavailable evidence; refusing to normalize statuses.\n' >&2
+      return 1
+    fi
+    if ! [[ "$unavailable_count" =~ ^[0-9]+$ ]]; then
+      printf 'Review-unavailable evidence count was not numeric; refusing to normalize statuses.\n' >&2
+      return 1
+    fi
     if [ "$unavailable_count" != "0" ]; then
       printf 'Ignoring successful CodeRabbit commit status: authoritative current-head review comment reports that semantic review did not start.\n' >&2
       local filtered_json
