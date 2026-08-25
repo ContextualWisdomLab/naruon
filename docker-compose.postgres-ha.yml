@@ -32,7 +32,7 @@ services:
       - "-c"
       - "archive_mode=on"
       - "-c"
-      - 'archive_command=if test -e /wal_archive/%f; then cmp -s %p /wal_archive/%f; else t=/wal_archive/.%f.$$; cp %p "$t" && mv "$t" /wal_archive/%f; fi'
+      - 'archive_command=if test -e /wal_archive/%f; then cmp -s %p /wal_archive/%f; else t=/wal_archive/.%f.$$$$; cp %p "$$t" && mv "$$t" /wal_archive/%f; fi'
     ports:
       - "${POSTGRES_HA_PRIMARY_PORT:-5432}:5432"
     volumes:
