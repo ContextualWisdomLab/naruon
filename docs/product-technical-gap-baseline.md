@@ -16,18 +16,20 @@ context, as do the earlier 92-PR state after PR #1442 merged and the initial
 current merge state.
 
 **Follow-up delta observation:** a fourth live scan at
-`2026-08-25T14:34:20Z` found the active exact-head work relevant to this
+`2026-08-25T14:49:36Z` found the active exact-head work relevant to this
 baseline: #1465 (`70596e26…`, tenant-archive import sanitization and duplicate
 identity rejection), #1466 (`a3e6762f…`, origin-integrity port validation),
 #1467 (`6816bc7f…`, utility-tool JSON boundary and Strix-trigger restoration),
 #1468 (`1da167de…`, PostgreSQL smoke fixture schema alignment), #1469
 (`de6d7128…`, bounded 20–64 MiB deferred attachment parse-source admission),
 and #1455 (`d8757e65…`, attachment filename traversal hardening).
+The newly opened #1470 (`f8a70d37…`, NetworkGraph edge-description lookup
+cleanup) is also in the active performance lane.
 These PRs remain open until their current-head required Checks and qualifying
 independent approval satisfy the protected ruleset; this follow-up does not
 reuse predecessor evidence or claim a merge.
 
-**Current Checks inventory:** the same live scan found 106 open PRs. Completed
+**Current Checks inventory:** the same live scan found 107 open PRs. Completed
 failures were limited to `metadata-only gate evaluation` and `strix`; the
 metadata gate reports the underlying Strix failure and, on some heads, a
 current-head CodeRabbit quota/provider warning. The representative Strix logs
@@ -253,6 +255,7 @@ and defines the inventory that must be completed before GA.
 | #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
 | #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence; current Strix failure is provider-only (NVIDIA NIM 429/OpenAI 404) |
 | #1469 | deferred attachment parse-source admission | aligns the hidden 20 MiB parser bound with the authenticated 64 MiB import contract while keeping unsupported binaries metadata-only; current changelog states the supported 20–64 MiB range and the ADR-0006 contract remains required |
+| #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head preserves first-instance duplicate-ID selection and removes the dead `describeEdge` input; require current-head interaction, type, lint, and hosted security evidence |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
 | #1462 | utility tool trio (URL codec, hash generator) | bounded deterministic tooling consistent with #1418/#1361; must not be represented as AI judgment or topic evidence |
 | #1457–#1461 | refreshed dependency-group bumps | successor waves to the v0.2-flagged groups; the 64- and 86-package backend/CI bumps remain excessive blast radius and still require splitting and migration rehearsal |
