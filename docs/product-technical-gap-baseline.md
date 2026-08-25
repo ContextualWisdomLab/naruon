@@ -189,6 +189,15 @@ owns the follow-up resumable-upload contract for documents above 64 MiB, so
 the current synchronous fallback must not be mistaken for the target
 commercial large-document UX.
 
+The central `ContextualWisdomLab/.github` control plane has two related
+current-head repairs: PR #1331 (`a1408f52…`) separates the direct-OpenAI
+fallback API base from the primary provider and has all observed checks passing
+except queued coverage, while PR #1333 (`5454a196…`) adds bounded provider
+retry/attempt-log handling with OpenCode still queued. Both have zero
+qualifying approvals and remain normal protected-merge candidates; their
+changes overlap in `.github/workflows/strix.yml`, so the first protected merge
+must be re-fetched before the second is restacked.
+
 This document defines the evidence-backed boundary between what Naruon currently
 ships on protected `develop`, what is present only in open pull requests, what is
 still a product-plan aspiration, and what a buyer must be able to complete before
