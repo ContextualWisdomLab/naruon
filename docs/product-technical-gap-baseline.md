@@ -6,7 +6,7 @@
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
-**Inventory observation:** the 106-row open-PR inventory below is a fresh live
+**Inventory observation:** the 106-PR open surface below is a fresh live
 scan captured at `2026-08-25T15:52:01Z`, which returned 106 open PRs after
 PR #1337 merged into protected `develop` at `2026-08-25T00:10:39Z` and
 the later governance stack merge (#1448) and additional PR wave opened since
