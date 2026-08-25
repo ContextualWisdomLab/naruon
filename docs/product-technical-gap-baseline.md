@@ -163,6 +163,28 @@ point. The inventory's `Base-SHA` column is captured independently for each PR
 at its scan time, so an older `develop` SHA in a row is expected snapshot
 metadata rather than a second claim about the current protected branch.
 
+**Live exact-head queue refresh (2026-08-25T18:38Z):** PR #1468 remains at
+`1da167de26b442be6961622f15bb36ae9374e6c4` and its current hosted check rollup
+has no failed or pending run; it still has zero qualifying approvals and zero
+unresolved threads, so protected auto-merge has not occurred. PR #1469 remains
+at `575b0c24fd9cb98106989eb101de74c5ce383db3`; its source checks are passing,
+while the metadata gate remains failed on current review evidence and
+OpenCode is queued. PR #1429 remains at
+`f2143f9d997736040eb3152f59ce058dc22ea72b` with the refreshed hosted suite
+queued or in progress. PR #1436 remains at
+`034d2ff4e0d120d1e7b7669b35ea8eea7d8c1221` with frontend image, coverage, and
+Strix work still running. PR #1470 has a successful current check rollup and
+one exact-head bot approval, but still lacks the second qualifying approval.
+None of these observations authorizes a bypass merge.
+
+The owning upstream sidecar `Seongho-Bae/newsdom-api` PR #682 remains at
+`585bb4e0fb719ab6a576cf46d1ef12b77872557b`. Its bounded 64 MiB source and
+boundary tests are present, while its only failed hosted check is the
+provider-infrastructure Strix run (NVIDIA NIM rate limiting followed by an
+unavailable fallback); no source vulnerability report was produced and the
+normal rerun workflow is unavailable. The provider PR therefore remains
+`WAIT_AND_REMEDIATE`, not a clean security pass or a force-merge candidate.
+
 This document defines the evidence-backed boundary between what Naruon currently
 ships on protected `develop`, what is present only in open pull requests, what is
 still a product-plan aspiration, and what a buyer must be able to complete before
