@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy.exc import StatementError
+from sqlalchemy.exc import IntegrityError, StatementError
 
 from api.auth import AuthContext
 from api.disksage import ingest_file_lineage, list_file_lineage
@@ -126,6 +126,7 @@ def _auth() -> AuthContext:
 def _record(**overrides):
     values = {
         "lineage_record_uid": "disksage_lineage_1",
+        "organization_id": "org-1",
         "lineage_fingerprint": "f" * 64,
         "schema_version": 1,
         "source_kind": "file",
@@ -220,6 +221,30 @@ async def test_wrapped_missing_encryption_key_rolls_back_as_service_unavailable(
         )
 
     assert error.value.status_code == 503
+    assert session.rollback_count == 1
+
+
+@pytest.mark.asyncio
+async def test_racing_fingerprint_in_another_organization_returns_conflict():
+    envelope = FileLineageEnvelope.model_validate(_envelope())
+    record = _record(
+        envelope_sha256=canonical_envelope_sha256(envelope),
+        organization_id="org-2",
+    )
+    session = _Session(
+        [_Result(None), _Result(record)],
+        commit_error=IntegrityError("unique violation", None, Exception("duplicate")),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await ingest_file_lineage(
+            envelope=envelope,
+            auth_context=_auth(),
+            db=session,
+        )
+
+    assert error.value.status_code == 409
+    assert "different organization" in error.value.detail
     assert session.rollback_count == 1
 
 

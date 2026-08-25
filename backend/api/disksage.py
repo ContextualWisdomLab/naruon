@@ -67,6 +67,15 @@ def _lineage_scope(auth_context: AuthContext) -> tuple[object, ...]:
     )
 
 
+def _lineage_identity_scope(auth_context: AuthContext) -> tuple[object, ...]:
+    """Return the columns covered by the lineage uniqueness constraint."""
+
+    return (
+        DiskSageFileLineageRecord.user_id == auth_context.user_id,
+        DiskSageFileLineageRecord.workspace_id == auth_context.workspace_id,
+    )
+
+
 def _organization_lineage_scope(auth_context: AuthContext) -> tuple[object, ...]:
     organization_filter = (
         DiskSageOrganizationLineageRecord.organization_id == auth_context.organization_id
@@ -158,13 +167,18 @@ async def ingest_file_lineage(
         await db.rollback()
         replayed_result = await db.execute(
             select(DiskSageFileLineageRecord).where(
-                *_lineage_scope(auth_context),
+                *_lineage_identity_scope(auth_context),
                 DiskSageFileLineageRecord.lineage_fingerprint == lineage_fingerprint,
             )
         )
         replayed = replayed_result.scalar_one_or_none()
         if replayed is None:
             raise
+        if replayed.organization_id != auth_context.organization_id:
+            raise HTTPException(
+                status_code=409,
+                detail="lineage fingerprint is already bound to a different organization",
+            ) from None
         if replayed.envelope_sha256 != envelope_sha256:
             raise HTTPException(
                 status_code=409,
