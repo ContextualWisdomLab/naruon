@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.1
+**Baseline version:** 1.2
 **Observed on:** 2026-08-26 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
@@ -70,10 +70,12 @@ The provider failures are retained as infrastructure evidence and are not
 converted into source changes or clean security claims.
 
 **Exact-head maintenance ledger (2026-08-26):** PR #1347 now has exact head
-`48cf095768203f2a1a3c98ff447d5293b7176d86` on this protected base. Its
+`f9e1751e2d5069841b279ecd2414fbbcad2e5692` on this protected base. Its
 governance normalization wrapper now fails closed when the review-unavailable
-`jq` parser fails or emits a non-numeric count; the exact-head local contract
-suite is 13 passed and the shell self-test remains green. Hosted required Checks
+`jq` parser fails or emits a non-numeric count, and its early-exit cleanup trap
+removes the wrapper-created comments snapshot when no PR number is available.
+The exact-head local contract suite is 14 passed and the shell self-test remains
+green. Hosted required Checks
 were recreated and remain queued, so this is not a hosted pass or merge claim.
 PR #1364 now has exact head
 `3a3baa6b8dc9ea224f46395cb78c91a45be2090c` on this protected base. Its scoped
@@ -102,7 +104,7 @@ authentication tests. PR #1417 now has exact head
 `46f4b92a717361e3e4e42fcebc1d8c090a64c59b`; its PostgreSQL smoke seed now
 explicitly supplies `is_read` after a real existing-schema NOT NULL failure,
 and 180 focused tests pass. PR #1455 now has exact head
-`d8757e65d55ee9bf42479852c963f5a931bdb165`; bounded filename decoding and
+`b2b4701366bc6bb2de1347b19eac9b4ed64cc614`; bounded filename decoding and
 Windows-separator traversal protection passed 130 focused parser/import tests.
 All three have recreated hosted Checks and remain normal protected-merge
 candidates; no hosted pass or merge is claimed.
