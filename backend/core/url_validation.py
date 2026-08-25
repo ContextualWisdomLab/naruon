@@ -72,9 +72,18 @@ def validate_https_url_host_details(
             f"{setting_name} host must be listed in {allowed_hosts_setting_name}"
         )
     _reject_unsafe_ip_literal(setting_name, host)
-    port = parsed.port or 443
+    try:
+        explicit_port = parsed.port
+    except ValueError as exc:
+        raw_port = parsed.netloc.rsplit(":", 1)[-1]
+        if raw_port.isascii() and raw_port.isdecimal():
+            raise ValueError(f"{setting_name} port must be between 1 and 65535") from exc
+        raise ValueError(f"{setting_name} port is invalid") from exc
+    port = explicit_port if explicit_port is not None else 443
+    if not 1 <= port <= 65535:
+        raise ValueError(f"{setting_name} port must be between 1 and 65535")
     addresses = _resolve_global_addresses(setting_name, host, port)
-    normalized_netloc = host if parsed.port is None else f"{host}:{port}"
+    normalized_netloc = host if explicit_port is None else f"{host}:{port}"
     normalized_url = parsed._replace(netloc=normalized_netloc).geturl()
     return ValidatedHTTPSURLHost(
         normalized_url=normalized_url,
