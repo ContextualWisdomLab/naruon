@@ -32,11 +32,22 @@ compose=(docker compose -p "${project_name}" -f "${ha_compose_file}")
 full_compose=("${compose[@]}" -f "${restore_compose_file}")
 
 cleanup() {
+  local main_status=$?
   if [ "${POSTGRES_PITR_DRILL_KEEP_STACK:-0}" = "1" ]; then
     echo "Keeping PostgreSQL PITR drill stack: ${project_name}"
-    return
+    return "${main_status}"
   fi
-  "${full_compose[@]}" down -v >/dev/null 2>&1 || true
+  local cleanup_status=0
+  if "${full_compose[@]}" down -v; then
+    :
+  else
+    cleanup_status=$?
+    echo "Failed to clean up PostgreSQL PITR drill stack: ${project_name}" >&2
+  fi
+  if [ "${main_status}" -ne 0 ]; then
+    return "${main_status}"
+  fi
+  return "${cleanup_status}"
 }
 trap cleanup EXIT
 
@@ -98,7 +109,7 @@ wait_for_sql_result "db-primary" \
   "pre-recovery target marker committed"
 
 recovery_target_time="$(sql_exec "db-primary" \
-  "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.US');")"
+  "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') || ' +00';")"
 echo "Recovery target time (UTC): ${recovery_target_time}"
 export RECOVERY_TARGET_TIME="${recovery_target_time}"
 

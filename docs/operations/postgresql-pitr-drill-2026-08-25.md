@@ -65,6 +65,10 @@ Outcome:
   the pre-target marker, excluded the post-target marker, and accepted new
   writes.
 - The drill stack and volumes were removed after the run (`down -v`).
+- The drill contract now emits `recovery_target_time` with an explicit numeric
+  UTC offset (`+00`); a restore-server session `TimeZone` therefore cannot move
+  the target implicitly. Cleanup errors are surfaced when the validation itself
+  succeeds, so a reported success also proves that `down -v` completed.
 
 Production boundary:
 
