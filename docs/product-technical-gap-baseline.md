@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 1.0
+**Baseline version:** 1.1
 **Observed on:** 2026-08-26 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
@@ -96,6 +96,16 @@ remains pending because it carries a UI overlay at this document path while
 PR #1429 owns the canonical commercial baseline; merge #1429 first, then
 reconcile #1436 against the canonical file before enabling auto-merge. These
 observations are exact-head evidence, not a release or hosted security claim.
+PR #1415 now has exact head `994c6d40bb8a5a1de82e2f137300ea620bcdf933`; the
+OIDC `kid` selection and strict administrator-role boundary passed 98 focused
+authentication tests. PR #1417 now has exact head
+`46f4b92a717361e3e4e42fcebc1d8c090a64c59b`; its PostgreSQL smoke seed now
+explicitly supplies `is_read` after a real existing-schema NOT NULL failure,
+and 180 focused tests pass. PR #1455 now has exact head
+`d8757e65d55ee9bf42479852c963f5a931bdb165`; bounded filename decoding and
+Windows-separator traversal protection passed 130 focused parser/import tests.
+All three have recreated hosted Checks and remain normal protected-merge
+candidates; no hosted pass or merge is claimed.
 
 The protected-branch SHA in this header identifies the baseline's observation
 point. The inventory's `Base-SHA` column is captured independently for each PR
