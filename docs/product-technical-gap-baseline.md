@@ -1,7 +1,7 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 0.5
-**Observed on:** 2026-08-25 (Asia/Seoul)
+**Baseline version:** 0.6
+**Observed on:** 2026-08-26 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
@@ -15,16 +15,19 @@ context, as do the earlier 92-PR state after PR #1442 merged and the initial
 83-PR observation in issue #1428; all counts are point-in-time evidence, not
 current merge state.
 
-**Follow-up delta observation:** a fourth live scan at
-`2026-08-25T14:49:36Z` found the active exact-head work relevant to this
+**Follow-up delta observation:** a fifth live scan at
+`2026-08-25T15:08:57Z` found the active exact-head work relevant to this
 baseline: #1465 (`70596e26…`, tenant-archive import sanitization and duplicate
 identity rejection), #1466 (`a3e6762f…`, origin-integrity port validation),
 #1467 (`6816bc7f…`, utility-tool JSON boundary and Strix-trigger restoration),
 #1468 (`1da167de…`, PostgreSQL smoke fixture schema alignment), #1469
 (`de6d7128…`, bounded 20–64 MiB deferred attachment parse-source admission),
 and #1455 (`d8757e65…`, attachment filename traversal hardening).
-The newly opened #1470 (`f8a70d37…`, NetworkGraph edge-description lookup
-cleanup) is also in the active performance lane.
+The newly opened #1470 is now `68a0576d…` (NetworkGraph edge-description
+lookup cleanup); the predecessor `f8a70d37…` was discarded after a remote
+commit reintroduced the dead argument and its callers. The current head was
+repaired with the smallest caller/signature change and requeued for hosted
+Checks.
 These PRs remain open until their current-head required Checks and qualifying
 independent approval satisfy the protected ruleset; this follow-up does not
 reuse predecessor evidence or claim a merge.
@@ -40,7 +43,8 @@ infrastructure evidence rather than a clean security result or a source defect.
 These PRs remain blocked and are not
 force-merged; the exact head must receive a successful hosted security result.
 PR #1466 has successful required Checks but remains in GitHub's protected
-auto-merge queue, so it is also not treated as manually merged.
+auto-merge queue with `REVIEW_REQUIRED` and no qualifying independent
+approval, so it is also not treated as manually merged.
 
 The protected-branch SHA in this header identifies the baseline's observation
 point. The inventory's `Base-SHA` column is captured independently for each PR
@@ -257,7 +261,7 @@ and defines the inventory that must be completed before GA.
 | #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
 | #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence; the observed Naruon Strix run failed at the provider boundary (NVIDIA NIM 429/OpenAI 404), not in this source change |
 | #1469 | deferred attachment parse-source admission | aligns the hidden 20 MiB parser bound with the authenticated 64 MiB import contract while keeping unsupported binaries metadata-only; current changelog states the supported 20–64 MiB range and the ADR-0006 contract remains required |
-| #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head preserves first-instance duplicate-ID selection and removes the dead `describeEdge` input; require current-head interaction, type, lint, and hosted security evidence |
+| #1470 | NetworkGraph lookup optimization | bounded frontend performance slice; current head `68a0576d…` preserves first-instance duplicate-ID selection and removes the dead `describeEdge` input; local 11-test, TypeScript, zero-warning ESLint, responsive screenshot, and diff checks passed, while hosted Checks and independent approval remain required |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
 | #1462 | utility tool trio (URL codec, hash generator) | bounded deterministic tooling consistent with #1418/#1361; must not be represented as AI judgment or topic evidence |
 | #1457–#1461 | refreshed dependency-group bumps | successor waves to the v0.2-flagged groups; the 64- and 86-package backend/CI bumps remain excessive blast radius and still require splitting and migration rehearsal |
@@ -322,6 +326,15 @@ inputs, not as normative standards or automatic approval. They help select one
 coherent design direction, expose generic UI defaults, and force explicit
 review of accessibility, touch targets, hierarchy, and state behavior. WCAG
 2.2 and the repository's security/accessibility gates remain authoritative.
+
+The latest local fixed-origin capture for #1470 used `/` at desktop (1440×900),
+tablet (834×1112), and mobile (390×844). Tablet and mobile presented the
+responsive shell and an explicit mail-loading state. Desktop presented the
+navigation shell but no data surface while the backend was intentionally not
+running; the Next development server also reported a hydration mismatch for
+the search-input caret style. This is local diagnostic evidence, not hosted
+release evidence, and is tracked as a separate UX/runtime gap rather than
+mixed into the bounded NetworkGraph change.
 
 | Quality axis | Required definition and applied evidence | Audit gate before GA-1 |
 |---|---|---|
@@ -422,6 +435,7 @@ button, form, navigation, chart, or asynchronous data surface.
 
 | Gap | Buyer problem | Protected/current evidence | Existing work | Completion evidence |
 |---|---|---|---|---|
+| Responsive shell hydration and unavailable state | a buyer can see a polished navigation shell but no actionable content when a data request is unavailable, and hydration drift can produce inconsistent controls | local fixed-origin capture showed tablet/mobile loading feedback, desktop blank content without the backend, and a development-server caret-style hydration mismatch; this is not a hosted release result | follow-up required; keep separate from #1470's bounded lookup optimization | deterministic server/client markup, explicit desktop unavailable/error state, backend-backed responsive Playwright evidence, and no hydration warnings |
 | Typed Person/Event/Commitment graph | generic string graph cannot safely drive high-stakes action | planning spec marks types as new/planned | #977, #978, #1000 | normalized temporal/multi-membership identities, evidence/confidence/correction on every inferred edge |
 | Status-weighted scheduling | calendar CRUD does not prevent harmful double booking | CalDAV source/writeback/retry foundation exists | #978, #988, #989, #990, #1416 | confirmed/tentative/desired + organizer/attendee + recurrence/free-busy/resource end-to-end |
 | Minimal-disclosure bridge | personal context can influence work availability without exposing private reason | policy substrate exists; product bridge is planned | #979, #991 | consented consequence-only propagation, revocation, audit, regression tests |
