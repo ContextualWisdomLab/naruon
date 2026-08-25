@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 0.9
+**Baseline version:** 1.0
 **Observed on:** 2026-08-26 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
@@ -69,8 +69,20 @@ independent approval. These are live queue observations, not merge evidence.
 The provider failures are retained as infrastructure evidence and are not
 converted into source changes or clean security claims.
 
-**Exact-head maintenance ledger (2026-08-26):** the attachment and UI work
-continued on independent branches while hosted runners were queued. PR #1419
+**Exact-head maintenance ledger (2026-08-26):** PR #1347 now has exact head
+`48cf095768203f2a1a3c98ff447d5293b7176d86` on this protected base. Its
+governance normalization wrapper now fails closed when the review-unavailable
+`jq` parser fails or emits a non-numeric count; the exact-head local contract
+suite is 13 passed and the shell self-test remains green. Hosted required Checks
+were recreated and remain queued, so this is not a hosted pass or merge claim.
+PR #1364 now has exact head
+`3a3baa6b8dc9ea224f46395cb78c91a45be2090c` on this protected base. Its scoped
+S3 document lifecycle, encrypted provider registry, compensation/orphan cleanup,
+migrations, API, and LocalStack/PostgreSQL integration contract passed 195
+focused local tests, Ruff, compileall, and diff checks. Hosted required Checks
+and independent approval remain required; protected auto-merge is enabled but
+no merge is claimed. The attachment and UI work continued on independent
+branches while hosted runners were queued. PR #1419
 now has exact head `2924b5598d4f527d493e1fc88cebd8fe87e1a3c4` on this protected
 base, with 263 focused attachment/inline-image/email tests plus Ruff passing;
 its hosted required checks were recreated for that head and remain queued, so
