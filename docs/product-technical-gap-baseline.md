@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 0.3
+**Baseline version:** 0.4
 **Observed on:** 2026-08-25 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
@@ -14,6 +14,15 @@ v0.2 baseline's 93-row snapshot from `2026-08-21T19:25:43Z` remains historical
 context, as do the earlier 92-PR state after PR #1442 merged and the initial
 83-PR observation in issue #1428; all counts are point-in-time evidence, not
 current merge state.
+
+**Follow-up delta observation:** a second live scan at
+`2026-08-25T13:24:55Z` found 106 open PRs. It includes the current exact-head
+work relevant to this baseline: #1468 (`1da167de…`, PostgreSQL smoke fixture
+schema alignment), #1455 (`d8757e6…`, attachment filename traversal hardening),
+and #1469 (`dd1fb33…`, 64 MiB deferred attachment parse-source admission).
+These PRs remain open until their current-head required Checks and qualifying
+independent approval satisfy the protected ruleset; this follow-up does not
+reuse predecessor evidence or claim a merge.
 
 The protected-branch SHA in this header identifies the baseline's observation
 point. The inventory's `Base-SHA` column is captured independently for each PR
@@ -225,6 +234,8 @@ and defines the inventory that must be completed before GA.
 | #1241, #1320, #1408, #1410, #1411, #1421, #1422 | accessibility micro-lanes | useful but numerous; consolidate non-overlapping UI fixes into bounded component-level trains to reduce 17-check amplification |
 | #1424, #1412, #1401 | micro performance lanes | require real benchmark or stable complexity contract; do not let automated micro-PRs displace GA integration work |
 | #1455 | path-traversal attachment parser hardening | high-value Sentinel security lane; prioritize within the new wave and merge only with exact-head Strix evidence once the provider outage clears |
+| #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence |
+| #1469 | deferred attachment parse-source admission | aligns the hidden 20 MiB parser bound with the authenticated 64 MiB import contract while keeping unsupported binaries metadata-only; requires the ADR-0006 contract and bounded parser regression |
 | #1456 | email-detail UX density | buyer-visible mail surface polish; hold to the responsive/accessibility evidence contract in the UI quality section before protected integration |
 | #1462 | utility tool trio (URL codec, hash generator) | bounded deterministic tooling consistent with #1418/#1361; must not be represented as AI judgment or topic evidence |
 | #1457–#1461 | refreshed dependency-group bumps | successor waves to the v0.2-flagged groups; the 64- and 86-package backend/CI bumps remain excessive blast radius and still require splitting and migration rehearsal |
@@ -374,6 +385,7 @@ button, form, navigation, chart, or asynchronous data surface.
 | Disaster recovery | a release is not enterprise-ready without restore evidence | HA evaluation exists; production WAL/PITR policy remains incomplete | #1428 | WAL archive/PITR, failover fencing, backup and clean restore rehearsal |
 | Tenant export/reimport | customers need exit and migration without losing provenance | no single demonstrated full tenant round trip | #1428 | export → clean instance import preserving source, opaque IDs, history, evidence, policy |
 | Retention/legal hold/disposition | deletion and evidence preservation conflict unless modeled | partial security/key/retention work exists across repository history | #1428, #1364 | purpose-scoped retention, legal hold, verified disposition, object/DB reconciliation |
+| Attachment parser admission and unsupported formats | a file above 20 MiB can pass import transport but fail later at a hidden parser limit, while unsupported binaries are not searchable | import transport is 64 MiB; protected parser admission is 20 MiB and unsupported types are metadata-only | #1427, #1469, #1353, #1419 | one documented bounded admission contract, parser/status evidence, deferred recognition, and object-backed retention before increasing the bound again |
 
 ### P0 — Evidence-based AI and document intelligence
 
