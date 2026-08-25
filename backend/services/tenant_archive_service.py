@@ -86,6 +86,17 @@ def _utc_now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def _normalized_utc_datetime(
+    value: datetime.datetime | None,
+) -> datetime.datetime:
+    """Normalize optional legacy timestamps for deterministic comparisons."""
+    if value is None:
+        return datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    return value.astimezone(datetime.timezone.utc)
+
+
 def _iso_utc(value: datetime.datetime) -> str:
     """Normalize a datetime to a timezone-aware UTC ISO-8601 string."""
     if value.tzinfo is None:
@@ -234,7 +245,10 @@ async def export_tenant_archive(
     )
     emails = sorted(
         email_result.scalars().all(),
-        key=lambda email: (email.date, email.id if email.id is not None else -1),
+        key=lambda email: (
+            _normalized_utc_datetime(email.date),
+            email.id if email.id is not None else -1,
+        ),
     )
     task_result = await session.execute(
         select(TicketTask)
@@ -247,7 +261,7 @@ async def export_tenant_archive(
     tasks = sorted(
         task_result.scalars().all(),
         key=lambda task: (
-            task.created_at or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc),
+            _normalized_utc_datetime(task.created_at),
             task.id if task.id is not None else -1,
         ),
     )
