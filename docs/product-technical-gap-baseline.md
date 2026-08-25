@@ -2,7 +2,7 @@
 
 **Baseline version:** 0.3
 **Observed on:** 2026-08-25 (Asia/Seoul)
-**Observed protected branch:** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
+**Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
 **Canonical completion issue:** [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428)
 
