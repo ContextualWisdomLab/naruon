@@ -49,7 +49,9 @@ provenance, and regression review.
   metadata-only behavior.
 - The import transport remains covered by
   `backend/tests/test_email_import_service.py`.
-- The existing PDF DOM upload contract is recorded separately in ADR-0005.
+- The PDF DOM upload contract is being integrated separately by stacked PR
+  #1427; this ADR governs the attachment-parser source budget and remains
+  valid if that transport change is merged independently.
 
 ## References (APA 7th)
 
