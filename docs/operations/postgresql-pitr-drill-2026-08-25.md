@@ -22,7 +22,7 @@ Environment:
 - Project name: `naruon-postgres-pitr-drill`.
 - WAL archive: dedicated named volume mounted at `/wal_archive` on the primary
   with `archive_mode=on` and
-  `archive_command=test -f /wal_archive/%f || cp %p /wal_archive/%f`.
+  `archive_command=if test -e /wal_archive/%f; then cmp -s %p /wal_archive/%f; else t=/wal_archive/.%f.$$; cp %p "$t" && mv "$t" /wal_archive/%f; fi`.
 - Base backup: `pg_basebackup -X stream` executed inside `db-primary` into a
   named volume mounted at `/base_backup`.
 - Raw local logs were captured during the drill and summarized below; the
