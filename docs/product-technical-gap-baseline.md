@@ -15,6 +15,11 @@ context, as do the earlier 92-PR state after PR #1442 merged and the initial
 83-PR observation in issue #1428; all counts are point-in-time evidence, not
 current merge state.
 
+The protected-branch SHA in this header identifies the baseline's observation
+point. The inventory's `Base-SHA` column is captured independently for each PR
+at its scan time, so an older `develop` SHA in a row is expected snapshot
+metadata rather than a second claim about the current protected branch.
+
 This document defines the evidence-backed boundary between what Naruon currently
 ships on protected `develop`, what is present only in open pull requests, what is
 still a product-plan aspiration, and what a buyer must be able to complete before
