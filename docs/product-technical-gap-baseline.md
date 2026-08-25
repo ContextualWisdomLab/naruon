@@ -1,6 +1,6 @@
 # Naruon Product and Technical Gap Baseline
 
-**Baseline version:** 0.8
+**Baseline version:** 0.9
 **Observed on:** 2026-08-26 (Asia/Seoul)
 **Observed protected branch (current scan; row Base-SHA values remain historical):** `develop@e5e99b4e3bb081b92c602358878856536030e2ca`
 **Observed product version:** `0.14.4`  
@@ -66,6 +66,22 @@ and #1466 at `a3e6762f…` with all hosted Checks successful but no qualifying
 independent approval. These are live queue observations, not merge evidence.
 The provider failures are retained as infrastructure evidence and are not
 converted into source changes or clean security claims.
+
+**Exact-head maintenance ledger (2026-08-26):** the attachment and UI work
+continued on independent branches while hosted runners were queued. PR #1419
+now has exact head `2924b5598d4f527d493e1fc88cebd8fe87e1a3c4` on this protected
+base, with 263 focused attachment/inline-image/email tests plus Ruff passing;
+its hosted required checks were recreated for that head and remain queued, so
+the normal protected squash auto-merge is enabled but not claimed as complete.
+PR #1436 now has exact head
+`1573be3332725bfbd05053943988d652df22a846` on the same base, with 446 frontend
+tests, lint, typecheck, Next production build, Storybook build, and desktop /
+mobile Storybook screenshots for source-open, low-confidence,
+blocked-execution, and shared-scale states passing locally. It intentionally
+remains pending because it carries a UI overlay at this document path while
+PR #1429 owns the canonical commercial baseline; merge #1429 first, then
+reconcile #1436 against the canonical file before enabling auto-merge. These
+observations are exact-head evidence, not a release or hosted security claim.
 
 The protected-branch SHA in this header identifies the baseline's observation
 point. The inventory's `Base-SHA` column is captured independently for each PR
