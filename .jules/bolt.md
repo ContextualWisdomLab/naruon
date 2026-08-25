@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+
+## 2026-08-16 - Memoized EmailDetail thread item components
+**Learning:** When rendering lists where items depend on dynamic parent state (like the currently selected `email.id`), wrapping the inline `.map()` block in `useMemo` is an anti-pattern as it forces a full recalculation on every selection change or parent draft keystroke.
+**Action:** Extract the individual list item into a separate component and wrap that child component in `React.memo()`. This ensures only the items whose props actually change will re-render when unrelated parent state updates.

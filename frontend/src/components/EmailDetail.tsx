@@ -102,11 +102,6 @@ function normalizeLlmData(payload: unknown): LlmData {
   };
 }
 
-// ⚡ Bolt: Memoized conversation items to prevent unnecessary re-renders.
-// 🎯 Why: Draft edits and polling can re-render the detail parent without
-// changing every message in the conversation.
-// 📊 Impact: Only messages whose selection or translation props changed need
-// to reconcile again.
 const ConversationMessage = memo(function ConversationMessage({
   msg,
   isSelected,
@@ -143,6 +138,9 @@ const ConversationMessage = memo(function ConversationMessage({
   );
 });
 
+// ⚡ Bolt: Memoized EmailDetail to prevent unnecessary re-renders
+// 🎯 Why: Re-renders of EmailDetail when the parent components (like WorkspaceHome) re-render can cause performance issues, especially when switching active layout tabs or receiving polling updates that don't affect the selected email.
+// 📊 Impact: Significantly reduces React reconciliation work when the workspace state changes but the selected email remains the same.
 export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = null }: { emailId: number | null; actionCommand?: EmailDetailActionCommand | null }) {
   const [email, setEmail] = useState<EmailData | null>(null);
   const [threadEmails, setThreadEmails] = useState<EmailData[]>([]);
