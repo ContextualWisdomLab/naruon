@@ -102,6 +102,7 @@ describe("DecisionPointCard analysis contract", () => {
     });
     expect(node.textContent).toContain("맥락 종합이 없습니다.");
     expect(node.querySelector('[role="alert"]')).toBeNull();
+    expect(node.querySelector('[role="status"]')?.textContent).toContain("맥락 종합이 없습니다.");
     expect(node.querySelector('[data-analysis-state="empty"]')).not.toBeNull();
 
     act(() => {
