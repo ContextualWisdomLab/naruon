@@ -274,6 +274,8 @@ def _safe_filename(filename: str | None) -> str:
         if decoded_filename == display_filename:
             break
         display_filename = decoded_filename
+    if unquote(display_filename) != display_filename:
+        return "attachment"
     display_filename = strip_html_markup(_sanitize_nul(display_filename))
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:

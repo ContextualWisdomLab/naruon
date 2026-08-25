@@ -262,3 +262,4 @@ def test_safe_filename_handles_windows_path_traversal():
     assert _safe_filename("C:\\mail\\report.pdf") == "report.pdf"
     assert _safe_filename("%5c%2e%2e%5csecret.txt") == "secret.txt"
     assert _safe_filename("%252e%252e%252fsecret.txt") == "secret.txt"
+    assert _safe_filename("%252525252e%252525252e%252525252fsecret.txt") == "attachment"
