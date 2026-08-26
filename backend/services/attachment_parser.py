@@ -274,9 +274,12 @@ def _safe_filename(filename: str | None) -> str:
         if decoded_filename == display_filename:
             break
         display_filename = decoded_filename
+    # Entity-encoded percent escapes (for example ``&#37;2e``) only become
+    # literal ``%`` sequences during markup decoding, so the residual-encoding
+    # guard must run after ``strip_html_markup`` to stay fail-closed.
+    display_filename = strip_html_markup(_sanitize_nul(display_filename))
     if unquote(display_filename) != display_filename:
         return "attachment"
-    display_filename = strip_html_markup(_sanitize_nul(display_filename))
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"
