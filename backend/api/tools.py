@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -753,6 +755,29 @@ registry.register(
 )
 
 
+_PHONE_PATTERN = re.compile(r"(?<!\d)\d{2,3}[-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)")
+_RRN_PATTERN = re.compile(r"(?<!\d)\d{6}[-.\s]?[1-4]\d{6}(?!\d)")
+
+
+async def pii_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params["text"]
+    text = _PHONE_PATTERN.sub("***-****-****", text)
+    text = _RRN_PATTERN.sub("******-*******", text)
+    return {"masked_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="pii_masker",
+        name="개인정보 마스킹 (PII Masker)",
+        description="텍스트에서 전화번호, 주민등록번호 등 민감한 개인정보를 마스킹 처리합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    pii_masker_handler,
+)
+
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
@@ -767,7 +792,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
