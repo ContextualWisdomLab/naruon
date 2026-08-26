@@ -34,16 +34,37 @@ Verified evidence:
 ok: primary accepts SQL
 ok: base backup completed
 ok: pre-recovery target marker committed
-Recovery target time (UTC): 2026-08-25 06:49:50.961210 +00
+Recovery target time (UTC): 2026-08-26 03:43:51.657456 +00
 ok: WAL segment containing pre-recovery marker archived (000000010000000000000004)
 ok: archived segment present in /wal_archive volume
 ok: post-target marker WAL archived (000000010000000000000005)
 Stopping db-primary to simulate loss of the source primary.
-Restoring into a fresh instance targeting 2026-08-25 06:49:50.961210 +00 UTC.
+Restoring into a fresh instance targeting 2026-08-26 03:43:51.657456 +00 UTC.
 ok: restored instance finished targeted recovery and promoted
 ok: restored instance contains pre-recovery marker
 ok: restored instance excludes post-target marker
 ok: restored instance accepts writes after promotion
+```
+
+Re-target guarantee evidence:
+
+The restore entrypoint is retarget-safe. The `restore_data` volume keeps a
+stamp file recording the exact `RECOVERY_TARGET_TIME` the current data
+directory was recovered to; starting `db-restore` with a different target
+wipes the stale data directory and re-materializes from the base backup, and
+an unchanged target reuses it as-is. A missing `RECOVERY_TARGET_TIME` fails
+closed at Compose interpolation time (`:?`) and again inside the entrypoint.
+The drill now runs a second restore against an earlier target (captured
+strictly before the pre-marker commit) on the same volume and asserts the
+included/excluded rows flip accordingly:
+
+```text
+Stopping the first restored instance to re-target recovery.
+Restoring again from the same volume targeting 2026-08-26 03:43:49.773286 +00 UTC.
+ok: second restore finished targeted recovery and promoted
+ok: second restore excludes pre-recovery marker committed after the new target
+ok: second restore excludes post-target marker
+ok: second restore excludes the first restore's post-promotion write
 PITR validation complete; restored DSN: postgresql+asyncpg://postgres:<redacted>@127.0.0.1:55444/ai_email
 ```
 
@@ -64,6 +85,10 @@ Outcome:
 - Targeted recovery replayed archived WAL, promoted out of recovery, contained
   the pre-target marker, excluded the post-target marker, and accepted new
   writes.
+- A second restore on the same `restore_data` volume against an earlier target
+  re-materialized the data directory from the base backup and flipped marker
+  inclusion (pre-marker row absent), proving the overlay is retarget-safe
+  instead of silently serving a previously applied recovery target.
 - The drill stack and volumes were removed after the run (`down -v`).
 - The drill contract now emits `recovery_target_time` with an explicit numeric
   UTC offset (`+00`); a restore-server session `TimeZone` therefore cannot move

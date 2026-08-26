@@ -7,6 +7,12 @@
 #
 # RECOVERY_TARGET_TIME must be exported before starting db-restore; see
 # scripts/postgres_pitr_drill.sh for the full drill flow.
+#
+# Re-target safety: the restore volume keeps a stamp file recording the exact
+# recovery target the current data directory was recovered to. Starting
+# db-restore with a different RECOVERY_TARGET_TIME wipes the stale data
+# directory and re-materializes from /base_backup for the requested target;
+# an unchanged target reuses the existing data directory as-is.
 services:
   db-restore:
     security_opt:
@@ -22,30 +28,50 @@ services:
       - "-c"
       - |
         set -euo pipefail
-        pg_data=/var/lib/postgresql/data
-        if [ ! -s "$${pg_data}/PG_VERSION" ]; then
-          echo "Materializing restore data directory from base backup."
+        pg_root=/var/lib/postgresql
+        pg_data=$${pg_root}/data
+        # The stamp lives in the restore volume next to (not inside) the data
+        # directory so it survives data-directory wipes and records the exact
+        # recovery target currently materialized.
+        target_stamp_file=$${pg_root}/recovery_target_stamp
+        if [ -z "$${RECOVERY_TARGET_TIME}" ]; then
+          echo "RECOVERY_TARGET_TIME must be exported before starting db-restore." >&2
+          exit 1
+        fi
+        requested_target="$${RECOVERY_TARGET_TIME}"
+        applied_target=""
+        if [ -s "$${target_stamp_file}" ]; then
+          applied_target="$(cat "$${target_stamp_file}")"
+        fi
+        if [ ! -s "$${pg_data}/PG_VERSION" ] || [ "$${applied_target}" != "$${requested_target}" ]; then
+          echo "Materializing restore data directory for recovery target: $${requested_target}"
           find "$${pg_data}" -mindepth 1 -delete
           cp -a /base_backup/. "$${pg_data}/"
           rm -f "$${pg_data}/postmaster.pid" "$${pg_data}/standby.signal"
           touch "$${pg_data}/recovery.signal"
           {
             printf "restore_command = 'cp /wal_archive/%%f %%p'\n"
-            printf "recovery_target_time = '%s'\n" "$${RECOVERY_TARGET_TIME}"
+            printf "recovery_target_time = '%s'\n" "$${requested_target}"
             printf "recovery_target_action = 'promote'\n"
           } >> "$${pg_data}/postgresql.auto.conf"
+          printf '%s' "$${requested_target}" > "$${target_stamp_file}.tmp"
+          mv "$${target_stamp_file}.tmp" "$${target_stamp_file}"
           chown -R postgres:postgres "$${pg_data}"
           chmod 700 "$${pg_data}"
+        else
+          echo "Reusing restore data directory for unchanged recovery target."
         fi
         exec gosu postgres postgres
     environment:
-      - RECOVERY_TARGET_TIME=${RECOVERY_TARGET_TIME:-unset}
+      - RECOVERY_TARGET_TIME=${RECOVERY_TARGET_TIME:?Set RECOVERY_TARGET_TIME before running the PITR restore overlay}
     ports:
       - "${POSTGRES_PITR_RESTORE_PORT:-55444}:5432"
     volumes:
       - wal_archive:/wal_archive:ro
       - base_backup:/base_backup:ro
-      - restore_data:/var/lib/postgresql/data
+      # Mounted at the parent of PGDATA so the recovery-target stamp file can
+      # persist inside this single restore volume across data-directory wipes.
+      - restore_data:/var/lib/postgresql
 
 volumes:
   wal_archive:

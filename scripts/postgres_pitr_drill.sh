@@ -37,6 +37,10 @@ cleanup() {
     echo "Keeping PostgreSQL PITR drill stack: ${project_name}"
     return "${main_status}"
   fi
+  # The restore overlay requires RECOVERY_TARGET_TIME even for teardown-only
+  # compose commands; fall back to a placeholder when the drill failed before
+  # exporting a real target so the stack still gets removed.
+  export RECOVERY_TARGET_TIME="${RECOVERY_TARGET_TIME:-teardown-placeholder}"
   local cleanup_status=0
   if "${full_compose[@]}" down -v; then
     :
@@ -103,6 +107,12 @@ sql_exec "db-primary" \
   "CREATE TABLE IF NOT EXISTS naruon_pitr_drill (drill_marker text PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now());"
 
 before_marker="pitr_before_$(date -u +%Y%m%d%H%M%S)_$$"
+# Capture a second recovery target strictly before the pre-marker commit (and
+# strictly after table creation) so the retarget phase can prove that marker
+# inclusion flips when the same restore volume is reused with a new target.
+second_recovery_target_time="$(sql_exec "db-primary" \
+  "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') || ' +00';")"
+sleep 0.2
 sql_exec "db-primary" "INSERT INTO naruon_pitr_drill (drill_marker) VALUES ('${before_marker}');"
 wait_for_sql_result "db-primary" \
   "SELECT COUNT(*) FROM naruon_pitr_drill WHERE drill_marker = '${before_marker}'" "1" \
@@ -152,5 +162,25 @@ sql_exec "db-restore" \
 wait_for_sql_result "db-restore" \
   "SELECT COUNT(*) FROM naruon_pitr_drill WHERE drill_marker = 'pitr_post_recovery_write'" "1" \
   "restored instance accepts writes after promotion"
+
+echo "Stopping the first restored instance to re-target recovery."
+"${full_compose[@]}" stop db-restore
+
+echo "Restoring again from the same volume targeting ${second_recovery_target_time} UTC."
+export RECOVERY_TARGET_TIME="${second_recovery_target_time}"
+"${full_compose[@]}" up -d db-restore
+
+wait_for_sql_result "db-restore" \
+  "SELECT CASE WHEN pg_is_in_recovery() THEN 0 ELSE 1 END" "1" \
+  "second restore finished targeted recovery and promoted"
+wait_for_sql_result "db-restore" \
+  "SELECT COUNT(*) FROM naruon_pitr_drill WHERE drill_marker = '${before_marker}'" "0" \
+  "second restore excludes pre-recovery marker committed after the new target"
+wait_for_sql_result "db-restore" \
+  "SELECT COUNT(*) FROM naruon_pitr_drill WHERE drill_marker = 'pitr_after_target'" "0" \
+  "second restore excludes post-target marker"
+wait_for_sql_result "db-restore" \
+  "SELECT COUNT(*) FROM naruon_pitr_drill WHERE drill_marker = 'pitr_post_recovery_write'" "0" \
+  "second restore excludes the first restore's post-promotion write"
 
 echo "PITR validation complete; restored DSN: postgresql+asyncpg://${postgres_user}:<redacted>@127.0.0.1:${restore_port}/${postgres_db}"
