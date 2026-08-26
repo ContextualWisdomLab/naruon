@@ -329,11 +329,11 @@ const settingsTabs: { id: SettingsTab; icon: typeof Monitor }[] = [
 ];
 
 function getWritebackReadinessLabel(writebackEnabled: boolean) {
-  return writebackEnabled ? '쓰기 의도 가능' : '읽기 전용';
+  return writebackEnabled ? '쓰기 가능' : '읽기 전용';
 }
 
 function getEtagReadinessLabel(etag: string | null | undefined) {
-  return etag ? '충돌 검사용 ETag 준비' : 'ETag 확인 필요';
+  return etag ? '변경 충돌 검사 준비' : '최신 변경 정보 확인 필요';
 }
 
 function getCapabilityLabel(capability: string) {
@@ -352,7 +352,7 @@ function getCapabilityLabel(capability: string) {
 function getWebdavAccountLabel(account: WebdavAccount, index: number) {
   const label = account.display_label.trim();
   if (!label || label.includes(account.source_id) || /^WebDAV source/i.test(label)) {
-    return `WebDAV 저장소 ${index + 1}`;
+    return `문서 저장소 ${index + 1}`;
   }
   return label;
 }
@@ -467,18 +467,18 @@ const settingsDetailSurfaces: Partial<Record<SettingsTab, {
     heading: '알림 정책',
     copy: '메일 회신 추적, 일정 충돌, writeback conflict, connector health 이벤트를 사용자별 채널 정책으로 정리합니다.',
     items: [
-      { title: '답변 추적', detail: '보낸 메일 답변 기한이 지나면 홈 대기 작업과 알림 큐에 같은 사건으로 표시합니다.', status: '메일 연동' },
-      { title: '일정 충돌', detail: 'CalDAV writeback 후보가 충돌하거나 ETag가 맞지 않으면 재확인 알림을 생성합니다.', status: '캘린더' },
-      { title: 'Connector health', detail: 'self-hosted connector heartbeat, sync lag, provider throttling을 운영 알림으로 묶습니다.', status: '운영' },
+      { title: '답변 추적', detail: '보낸 메일 답변 기한이 지나면 홈 대기 작업과 알림에 같은 사건으로 표시합니다.', status: '메일 연동' },
+      { title: '일정 충돌', detail: '반영할 일정이 기존 일정과 겹치거나 최근 변경과 맞지 않으면 재확인 알림을 만듭니다.', status: '캘린더' },
+      { title: '연동 상태', detail: '메일·저장소 연동의 응답 지연과 동기화 상태를 운영 알림으로 모아 보여줍니다.', status: '운영' },
     ],
   },
   자동화: {
     heading: '자동화 규칙',
-    copy: '메일, 일정, 실행 항목, 프로젝트 상태를 source-linked rule로 연결하되 provider write는 명시적 intent로 남깁니다.',
+    copy: '메일, 일정, 실행 항목, 프로젝트 상태를 서로 연결하고, 외부 계정에 반영하는 단계는 사용자가 명시적으로 요청했을 때만 진행합니다.',
     items: [
-      { title: '메일에서 작업 생성', detail: '실행 항목을 ticket task로 만들고 원본 message/thread provenance를 유지합니다.', status: 'source-linked' },
-      { title: '캘린더 writeback', detail: 'AI가 정리한 일정은 source capability와 owner policy를 확인한 뒤 원천 계정에 반영합니다.', status: 'intent-first' },
-      { title: '지식 정리', detail: '내가 나에게 보낸 메일은 개인 지식 후보로 분류하고 연결 프로젝트를 제안합니다.', status: 'knowledge' },
+      { title: '메일에서 작업 생성', detail: '실행 항목을 작업으로 만들고 어떤 메일·대화에서 나왔는지 함께 유지합니다.', status: '메일 연동' },
+      { title: '캘린더 반영', detail: 'AI가 정리한 일정은 연결 계정 권한을 확인한 뒤 원래 계정에 반영합니다.', status: '확인 후 반영' },
+      { title: '지식 정리', detail: '내가 나에게 보낸 메일은 개인 지식 후보로 분류하고 연결 프로젝트를 제안합니다.', status: '지식 정리' },
     ],
   },
   결제: {
@@ -1414,7 +1414,7 @@ export function SettingsLayout() {
                   </div>
 
                   {runnerLoading ? (
-                    <p className="mt-4 rounded-xl bg-secondary/60 p-3 text-sm font-semibold text-muted-foreground">connector manifest를 불러오는 중입니다.</p>
+                    <p className="mt-4 rounded-xl bg-secondary/60 p-3 text-sm font-semibold text-muted-foreground">연동 목록을 불러오는 중입니다. 잠시만 기다려 주세요.</p>
                   ) : null}
                   {runnerError ? (
                     <p className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{runnerError}</p>
@@ -1508,7 +1508,7 @@ export function SettingsLayout() {
                     </div>
                     {operationalSignals ? (
                       <span className="rounded-full border border-border bg-background px-3 py-1 font-mono text-xs font-bold text-foreground">
-                        감사 근거 기록됨
+                        활동 기록 저장됨
                       </span>
                     ) : null}
                   </div>
@@ -1650,8 +1650,8 @@ export function SettingsLayout() {
                       <dt className="text-xs font-bold uppercase tracking-wide text-muted-foreground">세션</dt>
                       <dd className="mt-1 text-sm font-semibold text-foreground">
                         {oidcSessionClaims.userId
-                          ? `서명된 세션 연결됨 · ${oidcSessionClaims.organizationId ? '조직 스코프' : '개인 스코프'}`
-                          : '서명된 세션 없음'}
+                          ? `로그인됨 · ${oidcSessionClaims.organizationId ? '조직 범위' : '개인 범위'}`
+                          : '로그인 정보 없음'}
                       </dd>
                     </div>
                   </dl>
@@ -1676,7 +1676,7 @@ export function SettingsLayout() {
                   <a href="http://localhost:3200" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
                     <RefreshCw className="size-8 text-teal-500 mb-2" />
                     <h3 className="font-bold text-lg">Tempo 분산 추적</h3>
-                    <p className="text-sm text-muted-foreground">FastAPI의 엔드포인트 지연율 및 MSA 구성요소 간의 호출 트레이스를 시각화합니다.</p>
+                    <p className="text-sm text-muted-foreground">서비스 응답 지연과 구성요소 간 호출 흐름을 추적 그래프로 확인합니다.</p>
                   </a>
                 </div>
               </div>

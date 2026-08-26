@@ -55,7 +55,7 @@ export function getSurfaceStatusLabel(status: SurfaceStatusCode | QualityStatusC
 }
 
 export function getWriteBoundaryLabel(providerWriteExecuted: boolean) {
-  return providerWriteExecuted ? '외부 쓰기 실행됨' : '의도만 기록';
+  return providerWriteExecuted ? '원본 반영 완료' : '점검만 완료';
 }
 
 export function getAssetEvidenceLabel(asset: DataQualitySurfaceResponse['repository_assets'][number]) {
@@ -77,13 +77,13 @@ export function isTextDocumentUploadType(documentType: string) {
 
 export function getSourceReadinessLabel(account: { writeback_enabled: boolean; etag?: string | null }) {
   if (!account.writeback_enabled) return '읽기 전용';
-  return account.etag ? '쓰기 가능 · 충돌 검사용 ETag 준비' : '쓰기 가능 · ETag 확인 필요';
+  return account.etag ? '쓰기 가능 · 변경 충돌 검사 준비' : '쓰기 가능 · 최신 변경 정보 확인 필요';
 }
 
 export function getWebdavAccountLabel(account: WebdavAccount, index: number) {
   const label = account.display_label.trim();
   if (!label || label.includes(account.source_id) || /^WebDAV source/i.test(label)) {
-    return `WebDAV 저장소 ${index + 1}`;
+    return `문서 저장소 ${index + 1}`;
   }
   return label;
 }

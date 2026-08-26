@@ -87,7 +87,7 @@ describe("CalendarPage", () => {
     });
 
     expect(container.textContent).toContain("새 일정");
-    expect(container.textContent).toContain("고객 원본 일정 반영 의도");
+    expect(container.textContent).toContain("고객 원본 일정 반영");
     expect(container.textContent).not.toContain("뷰는 아직 구현 중입니다");
     expect(container.querySelector('button[aria-label="이전 달"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="다음 달"]')).not.toBeNull();
@@ -222,12 +222,12 @@ describe("CalendarPage", () => {
     });
     await flushAsyncWork();
     expect(container.textContent).toContain("일정 원본 1");
-    expect(container.textContent).toContain("충돌 토큰 있음");
+    expect(container.textContent).toContain("변경 충돌 검사 준비됨");
     expect(container.textContent).not.toContain("Customer CalDAV");
     expect(container.textContent).not.toContain("etag=etag-caldav-1");
     expect(container.textContent).not.toContain("caldav-primary");
 
-    const button = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 intent 점검"));
+    const button = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 반영 점검"));
     expect(button).toBeTruthy();
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -235,10 +235,10 @@ describe("CalendarPage", () => {
     await flushAsyncWork();
 
     expect(container.textContent).toContain("고객 원본 계정 반영");
-    expect(container.textContent).toContain("CalDAV 원본 선택됨");
+    expect(container.textContent).toContain("외부 캘린더 계정 선택됨");
     expect(container.textContent).toContain("선택한 일정 원본");
-    expect(container.textContent).toContain("감사 근거");
-    expect(container.textContent).toContain("기록됨");
+    expect(container.textContent).toContain("활동 기록");
+    expect(container.textContent).toContain("저장됨");
     expect(container.textContent).not.toContain("customer_owned");
     expect(container.textContent).not.toContain("caldav-primary");
     expect(container.textContent).not.toContain("calendar.writeback_intent.created");
@@ -298,7 +298,7 @@ describe("CalendarPage", () => {
       teamSourceButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const createButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 intent 점검"));
+    const createButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 반영 점검"));
     await act(async () => {
       createButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -372,7 +372,7 @@ describe("CalendarPage", () => {
     });
     await flushAsyncWork();
 
-    const executeButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("ETag 실행 요청"));
+    const executeButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("실제 반영 실행 요청"));
     expect(executeButton).toBeTruthy();
     await act(async () => {
       executeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -380,8 +380,8 @@ describe("CalendarPage", () => {
     await flushAsyncWork();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(container.textContent).toContain("커넥터 실행 요청 접수");
-    expect(container.textContent).toContain("If-Match 필요");
+    expect(container.textContent).toContain("반영 실행 요청 접수");
+    expect(container.textContent).toContain("최신 변경 확인 필요");
     expect(container.textContent).toContain("재시도 대기");
     expect(container.textContent).not.toContain("runner-request-1");
     expect(container.textContent).not.toContain("retry-item-1");
@@ -402,7 +402,7 @@ describe("CalendarPage", () => {
       root?.render(<CalendarPage />);
     });
 
-    const button = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 intent 점검"));
+    const button = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 반영 점검"));
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -429,7 +429,7 @@ describe("CalendarPage", () => {
     });
     await flushAsyncWork();
 
-    const button = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 intent 점검"));
+    const button = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 반영 점검"));
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -438,10 +438,10 @@ describe("CalendarPage", () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe("/api/calendar/writeback-intent");
     expect(button?.getAttribute("aria-busy")).toBe("true");
     expect(button?.textContent).toContain("처리 중");
-    const updateButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("ETag 업데이트 점검"));
+    const updateButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("변경 확인 후 재점검"));
     expect(updateButton?.getAttribute("aria-busy")).toBe("false");
-    expect(container.textContent).toContain("ETag 실행 요청");
-    expect(container.textContent).toContain("일정 반영 의도 요청 중입니다.");
+    expect(container.textContent).toContain("실제 반영 실행 요청");
+    expect(container.textContent).toContain("일정 반영 점검을 진행하는 중입니다.");
   });
 
   it("distinguishes no-source and ETag conflict writeback errors", async () => {
@@ -460,19 +460,19 @@ describe("CalendarPage", () => {
     });
     await flushAsyncWork();
 
-    const createButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 intent 점검"));
+    const createButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("새 일정 반영 점검"));
     await act(async () => {
       createButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushAsyncWork();
-    expect(container.textContent).toContain("원본 CalDAV/CardDAV/WebDAV 계정이 없어");
+    expect(container.textContent).toContain("반영 가능한 연결 계정이 없어 새 일정 반영을 진행할 수 없습니다");
 
-    const updateButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("ETag 업데이트 점검"));
+    const updateButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("변경 확인 후 재점검"));
     await act(async () => {
       updateButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushAsyncWork();
-    expect(container.textContent).toContain("ETag/If-Match 충돌");
+    expect(container.textContent).toContain("충돌이 감지되었습니다");
   });
 
   it("surfaces selectable signed calendar sources on the coordination view", async () => {
@@ -515,7 +515,7 @@ describe("CalendarPage", () => {
     expect(fetchMock.mock.calls.every(([input]) => String(input) === "/api/calendar/writeback-sources")).toBe(true);
     expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/calendar/conflicts/evaluate")).toBe(false);
     expect(container.textContent).toContain("일정 원본 1");
-    expect(container.textContent).toContain("선택한 일정 원본의 서명된 증거만 조율에 사용합니다.");
+    expect(container.textContent).toContain("선택한 계정의 실제 일정을 기준으로 조율합니다.");
     expect(container.textContent).not.toContain("확정 제안 vs 취소된 기존 일정");
     expect(container.textContent).not.toContain("이 시간은 비어 있습니다. 일정을 계속 진행하세요.");
     expect(container.textContent).not.toContain("모든 참석자 참석 가능");

@@ -133,7 +133,7 @@ export default function ToolsPage() {
       { label: "등록 도구", value: tools.length.toLocaleString(), detail: "워크스페이스 실행 대상", icon: Wrench },
       { label: "활성 도구", value: activeCount.toLocaleString(), detail: "즉시 실행 가능", icon: Power },
       { label: "카테고리", value: categoryCount.toLocaleString(), detail: "운영 분류 기준", icon: SlidersHorizontal },
-      { label: "파라미터 계약", value: parameterizedCount.toLocaleString(), detail: "입력 스키마 보유", icon: CheckCircle2 },
+      { label: "입력값 필요 도구", value: parameterizedCount.toLocaleString(), detail: "실행 전 입력 항목 표시", icon: CheckCircle2 },
     ];
   }, [tools]);
 
@@ -162,14 +162,14 @@ export default function ToolsPage() {
           <div className="min-w-0">
             <Badge variant="outline" className="gap-1 border-primary/20 bg-primary/10 font-black text-primary">
               <Wrench className="size-3" aria-hidden="true" />
-              Tool Registry
+              도구 현황
             </Badge>
             <h1 className="mt-3 flex items-center gap-3 text-2xl font-black md:text-3xl">
               <Wrench className="size-7 text-primary" aria-hidden="true" />
               도구 실행 콘솔
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              자동화 분석과 작업 실행에 연결된 도구의 상태, 입력 계약, 실행 결과를 확인합니다.
+              연결된 도구의 상태와 실행 결과를 확인하고, 실행에 필요한 입력 항목을 미리 살펴봅니다.
             </p>
           </div>
           <Button
@@ -186,7 +186,7 @@ export default function ToolsPage() {
         </header>
 
         {!loading && !loadError && tools.length > 0 && (
-          <section aria-label="도구 레지스트리 종합" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section aria-label="도구 현황 요약" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {summaryCards.map(({ label, value, detail, icon: Icon }) => (
               <Card key={label} size="sm">
                 <CardHeader>
@@ -208,7 +208,7 @@ export default function ToolsPage() {
           <Card role="status" aria-live="polite">
             <CardContent className="flex items-center gap-3 py-6 font-bold text-primary">
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              도구 목록을 불러오는 중입니다.
+              도구 목록을 불러오는 중입니다. 잠시만 기다려 주세요.
             </CardContent>
           </Card>
         ) : loadError ? (
@@ -228,8 +228,8 @@ export default function ToolsPage() {
           <Card role="status" aria-live="polite" className="border-dashed text-center">
             <CardContent className="py-10">
               <Wrench className="mx-auto size-8 text-muted-foreground" aria-hidden="true" />
-              <p className="mt-3 font-black">사용 가능한 도구가 없습니다.</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">백엔드 도구 레지스트리가 비어 있으면 이 화면은 실행 버튼을 표시하지 않습니다.</p>
+              <p className="mt-3 font-black">지금 표시할 도구가 없습니다.</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">도구가 등록되면 이 화면에서 바로 실행할 수 있습니다. 새로고침을 눌러 최신 목록을 확인하세요.</p>
             </CardContent>
           </Card>
         ) : (

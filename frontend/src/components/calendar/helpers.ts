@@ -22,13 +22,13 @@ export function getCalendarSourceLabel(index: number) {
 export function getProtocolLabel(protocol: string) {
   switch (protocol) {
     case 'caldav':
-      return 'CalDAV 원본';
+      return '외부 캘린더 계정';
     case 'carddav':
-      return 'CardDAV 원본';
+      return '외부 주소록 계정';
     case 'webdav':
-      return 'WebDAV 원본';
+      return '외부 문서 저장소 계정';
     default:
-      return '원본 계정';
+      return '연결된 원본 계정';
   }
 }
 
@@ -46,7 +46,7 @@ export function getCapabilityLabel(capability: string) {
 }
 
 export function getEtagLabel(value: string | null) {
-  return value ? '충돌 토큰 있음' : '충돌 토큰 대기';
+  return value ? '변경 충돌 검사 준비됨' : '변경 충돌 검사 정보 대기';
 }
 
 export function getIntentProtocolLabel(protocol: string) {
@@ -58,10 +58,10 @@ export function getWritebackModeLabel(mode: CalendarWritebackIntentResponse['wri
 }
 
 export function getProviderExecutionLabel(result: CalendarWritebackIntentResponse) {
-  if (result.provider_write_executed) return '외부 원본 쓰기 완료';
-  if (result.retry_item_uid || result.status === 'queued') return '커넥터 실행 요청 접수';
-  if (result.error_code) return '커넥터 실행 실패';
-  return '의도만 기록';
+  if (result.provider_write_executed) return '원본 계정 반영 완료';
+  if (result.retry_item_uid || result.status === 'queued') return '반영 실행 요청 접수';
+  if (result.error_code) return '반영 실행 실패';
+  return '점검만 완료(미반영)';
 }
 
 export function getProviderRetryLabel(result: CalendarWritebackIntentResponse) {

@@ -23,8 +23,8 @@ export function CalendarCoordinationView({
       <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <h3 className="text-lg font-bold mb-4">회의 조율</h3>
         <p className="text-sm text-muted-foreground mb-4">
-          서명된 고객 일정 원본을 선택합니다. 고정 ICS 예시나 미리 정해 둔 충돌 결과는
-          조율 증거가 아닙니다. 원본 VEVENT 읽기는 커넥터 조회가 준비될 때까지 대기합니다.
+          조율에 사용할 연결 계정을 선택하면 그 계정의 실제 일정을 기준으로 겹침 여부를 판단합니다.
+          계정을 연결하려면 설정에서 캘린더 계정을 먼저 연결하세요.
         </p>
         <div className="grid gap-3 max-w-2xl md:grid-cols-2">
           {writebackSources.map((source, index) => {
@@ -56,11 +56,11 @@ export function CalendarCoordinationView({
           })}
         </div>
         <p role="status" aria-live="polite" className="mt-4 text-sm font-semibold">
-          {sourceLoadStatus === 'loading' && '서명된 일정 원본을 확인하는 중입니다.'}
-          {sourceLoadStatus === 'error' && '서명 세션으로 일정 원본을 확인할 수 없습니다. 공개 헤더로는 조율할 수 없습니다.'}
-          {sourceLoadStatus === 'ready' && writebackSources.length === 0 && '서명된 고객 일정 원본이 없어 조율 결과를 보여 주지 않습니다.'}
-          {sourceLoadStatus === 'ready' && selectedSource !== null && '선택한 일정 원본의 서명된 증거만 조율에 사용합니다.'}
-          {sourceLoadStatus === 'ready' && writebackSources.length > 0 && selectedSource === null && '조율에 사용할 서명된 일정 원본을 선택하세요.'}
+          {sourceLoadStatus === 'loading' && '일정 원본 목록을 확인하는 중입니다. 잠시만 기다려 주세요.'}
+          {sourceLoadStatus === 'error' && '일정 원본 목록을 확인하지 못했습니다. 잠시 후 다시 시도하세요.'}
+          {sourceLoadStatus === 'ready' && writebackSources.length === 0 && '연결된 캘린더 계정이 없어 조율 결과를 표시하지 않습니다. 설정에서 계정을 연결하면 결과가 표시됩니다.'}
+          {sourceLoadStatus === 'ready' && selectedSource !== null && '선택한 계정의 실제 일정을 기준으로 조율합니다.'}
+          {sourceLoadStatus === 'ready' && writebackSources.length > 0 && selectedSource === null && '조율에 사용할 캘린더 계정을 선택하세요.'}
         </p>
       </div>
     </section>

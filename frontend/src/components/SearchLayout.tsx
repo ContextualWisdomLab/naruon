@@ -726,7 +726,7 @@ export function SearchLayout() {
                   <h3 className="text-sm font-bold text-primary">AI 답변</h3>
                   {answerState.provenance ? (
                     <span className="text-xs text-muted-foreground">
-                      {answerState.provenance}
+                      출처가 확인된 답변입니다.
                     </span>
                   ) : null}
                 </div>

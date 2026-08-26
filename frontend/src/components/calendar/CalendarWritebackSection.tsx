@@ -34,14 +34,14 @@ export function CalendarWritebackSection({
   const isExecutePending = pendingWritebackAction === 'execute';
 
   return (
-    <section aria-label="일정 반영 의도 점검" className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
+    <section aria-label="일정 반영 점검" className="rounded-2xl border border-border bg-card p-4 shadow-sm md:p-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-black text-primary">고객 원본 일정</p>
-          <h2 className="mt-1 text-lg font-black text-foreground">고객 원본 일정 반영 의도</h2>
+          <h2 className="mt-1 text-lg font-black text-foreground">고객 원본 일정 반영</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Naruon은 캘린더 서버가 아니라 고객 원본 계정에 반영할 의도를 기록합니다.
-            실제 외부 쓰기는 원본 기능, 출처 근거, 충돌 토큰, 감사 기록을 통과해야 합니다.
+            선택한 연결 계정에 새 일정을 반영하기 전에 겹치는 일정과 최근 변경을 먼저 점검합니다.
+            점검 기록과 반영 결과는 이 화면에서 언제든 다시 확인할 수 있습니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -53,7 +53,7 @@ export function CalendarWritebackSection({
             className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
           >
             {isCreatePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-            {isCreatePending ? '새 일정 처리 중' : '새 일정 intent 점검'}
+            {isCreatePending ? '점검 처리 중' : '새 일정 반영 점검'}
           </button>
           <button
             type="button"
@@ -63,7 +63,7 @@ export function CalendarWritebackSection({
             className="inline-flex items-center justify-center rounded-xl border border-border bg-background px-4 py-2 text-sm font-bold hover:bg-secondary disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {isUpdatePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-            {isUpdatePending ? 'ETag 업데이트 처리 중' : 'ETag 업데이트 점검'}
+            {isUpdatePending ? '점검 처리 중' : '변경 확인 후 재점검'}
           </button>
           <button
             type="button"
@@ -73,7 +73,7 @@ export function CalendarWritebackSection({
             className="inline-flex items-center justify-center rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {isExecutePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-            {isExecutePending ? 'ETag 실행 처리 중' : 'ETag 실행 요청'}
+            {isExecutePending ? '실행 요청 처리 중' : '실제 반영 실행 요청'}
           </button>
         </div>
       </div>
@@ -110,14 +110,15 @@ export function CalendarWritebackSection({
                 {source.capabilities.map(getCapabilityLabel).join(' · ')}
               </p>
               <p className="mt-2 text-xs font-semibold text-muted-foreground">
-                {getEtagLabel(source.etag)} · {sourceWritable ? '외부 쓰기 전 의도 점검 가능' : '외부 쓰기 차단'}
+                {getEtagLabel(source.etag)} · {sourceWritable ? '점검 후 실제 반영까지 진행할 수 있습니다' : '실제 반영은 차단됩니다'}
               </p>
             </button>
           );
         })}
         {sourceLoadStatus === 'ready' && writebackSources.length === 0 && (
           <p className="rounded-xl border border-border bg-background/70 p-3 text-sm font-bold text-amber-700">
-            연결된 CalDAV/CardDAV/WebDAV 원본이 없습니다.
+            연결된 외부 캘린더·주소록 계정이 없습니다. 설정에서 계정을 연결하면 이 목록에 표시됩니다.{' '}
+            <a href="/settings" className="underline">설정에서 계정 연결하기</a>
           </p>
         )}
         {sourceLoadStatus === 'loading' && (
@@ -127,27 +128,27 @@ export function CalendarWritebackSection({
         )}
         {sourceLoadStatus === 'error' && (
           <p className="rounded-xl border border-border bg-background/70 p-3 text-sm font-bold text-amber-700">
-            서명 세션으로 일정 원본 목록을 확인할 수 없습니다.
+            일정 원본 목록을 확인하지 못했습니다. 잠시 후 다시 시도하세요.
           </p>
         )}
       </div>
 
       <div role="status" aria-live="polite" className="mt-4 rounded-xl border border-border bg-background/70 p-4 text-sm">
         {writebackStatus === 'idle' && (
-          <p className="text-muted-foreground">아직 외부 일정 쓰기는 실행하지 않았습니다. 반영 의도 점검으로 원본 계정과 충돌 조건만 확인합니다.</p>
+          <p className="text-muted-foreground">아직 반영 기록이 없습니다. [새 일정 반영 점검]을 누르면 선택한 계정의 겹침 여부를 먼저 확인합니다.</p>
         )}
-        {writebackStatus === 'loading' && <p className="font-bold text-primary">일정 반영 의도 요청 중입니다.</p>}
+        {writebackStatus === 'loading' && <p className="font-bold text-primary">일정 반영 점검을 진행하는 중입니다.</p>}
         {writebackStatus === 'no_source' && (
-          <p className="font-bold text-amber-700">원본 CalDAV/CardDAV/WebDAV 계정이 없어 일정 반영 의도를 만들 수 없습니다.</p>
+          <p className="font-bold text-amber-700">반영 가능한 연결 계정이 없어 새 일정 반영을 진행할 수 없습니다. 설정에서 캘린더 계정을 연결한 뒤 다시 시도하세요.{' '}<a href="/settings" className="underline">설정 열기</a></p>
         )}
         {writebackStatus === 'conflict' && (
-          <p className="font-bold text-red-700">ETag/If-Match 충돌이 감지되어 원본 일정을 덮어쓰지 않았습니다.</p>
+          <p className="font-bold text-red-700">원본 일정이 다른 곳에서 변경되어 충돌이 감지되었습니다. 기존 일정을 덮어쓰지 않았습니다. 최신 내용을 확인한 뒤 다시 점검하세요.</p>
         )}
         {writebackStatus === 'auth' && (
-          <p className="font-bold text-red-700">서명 세션이 필요합니다. 공개 헤더로는 일정 반영 의도를 만들 수 없습니다.</p>
+          <p className="font-bold text-red-700">로그인 상태를 확인하지 못했습니다. 다시 로그인한 뒤 일정 반영을 진행하세요.</p>
         )}
         {writebackStatus === 'error' && (
-          <p className="font-bold text-red-700">일정 반영 의도 점검에 실패했습니다.</p>
+          <p className="font-bold text-red-700">일정 반영 점검에 실패했습니다. 잠시 후 위 버튼으로 다시 시도하세요.</p>
         )}
         {writebackStatus === 'success' && writebackResult && (
           <dl className="grid gap-3 text-xs sm:grid-cols-2 2xl:grid-cols-3">
@@ -165,11 +166,11 @@ export function CalendarWritebackSection({
             </div>
             <div>
               <dt className="font-black text-muted-foreground">충돌 검사</dt>
-              <dd className="mt-1 text-sm font-bold text-foreground">{writebackResult.if_match ? 'If-Match 필요' : 'If-Match 생략 가능'}</dd>
+              <dd className="mt-1 text-sm font-bold text-foreground">{writebackResult.if_match ? '최신 변경 확인 필요' : '충돌 위험 없음'}</dd>
             </div>
             <div>
-              <dt className="font-black text-muted-foreground">감사 근거</dt>
-              <dd className="mt-1 text-sm font-bold text-foreground">기록됨</dd>
+              <dt className="font-black text-muted-foreground">활동 기록</dt>
+              <dd className="mt-1 text-sm font-bold text-foreground">저장됨</dd>
             </div>
             <div>
               <dt className="font-black text-muted-foreground">커넥터 실행</dt>

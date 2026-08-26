@@ -145,7 +145,7 @@ const priorityLabel: Record<TaskPriority, string> = {
 };
 
 const projectEvidenceSourceOptions = [
-  { value: 'webdav_folder', label: 'WebDAV 폴더', description: '고객 소유 저장소 경계 기준' },
+  { value: 'webdav_folder', label: '프로젝트 폴더', description: '프로젝트 폴더 기준' },
   { value: 'thread', label: '스레드 근거', description: '메일 스레드 의사결정 기준' },
   { value: 'document', label: '문서 근거', description: '문서 저장소 승인 기록 기준' },
 ] satisfies { value: ProjectEvidenceSource; label: string; description: string }[];
@@ -173,15 +173,15 @@ function buildProjectStatus(tasks: TicketTask[]): ProjectSummary['status'] {
 }
 
 function getProjectEvidenceLabel(evidence: string) {
-  if (evidence === 'project_graph') return '문단 KG 근거';
-  if (evidence === 'project_folders') return 'WebDAV 폴더 근거';
+  if (evidence === 'project_graph') return '문단 출처 근거';
+  if (evidence === 'project_folders') return '프로젝트 폴더 근거';
   if (evidence === 'ticket_tasks') return '작업 근거';
   return '원본 근거';
 }
 
 function getProjectBoundaryLabel(project: ProjectSummary) {
-  if (project.evidence === 'project_graph') return '문단 citation 경계 확인됨';
-  return project.sourcePath ? '저장소 경계 확인됨' : '작업 대기열 기준';
+  if (project.evidence === 'project_graph') return '문단 출처까지 확인됨';
+  return project.sourcePath ? '폴더 위치 확인됨' : '실행 항목 기준';
 }
 
 function getTaskSourceLabel(sourceType: string) {
@@ -206,7 +206,7 @@ function getTaskEvidenceLabel(task: TicketTask) {
 }
 
 function getWorkspaceScopeLabel(scope: ProjectAccessScope) {
-  return scope.organizationId ? '서명된 조직 워크스페이스' : '서명된 개인 워크스페이스';
+  return scope.organizationId ? '조직 워크스페이스' : '개인 워크스페이스';
 }
 
 function isAuthorizedToViewProject(folder: ProjectFolder, scope: ProjectAccessScope) {
@@ -223,7 +223,7 @@ function buildProjects(folders: ProjectFolder[], tasks: TicketTask[]): ProjectSu
     title: safeText(folder.project_name, '이름 없는 프로젝트'),
     status,
     progress,
-    category: 'WebDAV 프로젝트',
+    category: '폴더 프로젝트',
     evidence: 'project_folders',
     sourcePath: safeText(folder.webdav_path, ''),
   }));
@@ -233,10 +233,10 @@ function buildProjects(folders: ProjectFolder[], tasks: TicketTask[]): ProjectSu
   return [
     {
       id: 'workspace_task_backlog',
-      title: '원본 연결 작업 대기열',
+      title: '연결 대기 작업 모음',
       status,
       progress,
-      category: '작업 대기열',
+      category: '대기 작업',
       evidence: 'ticket_tasks',
       sourcePath: null,
     },
@@ -331,7 +331,7 @@ export function ProjectsLayout() {
     userId: null,
     organizationId: null,
   });
-  const [evidenceDraft, setEvidenceDraft] = useState('WebDAV 프로젝트 폴더를 작업 경계로 사용합니다.');
+  const [evidenceDraft, setEvidenceDraft] = useState('프로젝트 폴더를 작업 범위로 사용합니다.');
   const [evidenceSource, setEvidenceSource] = useState<ProjectEvidenceSource>('webdav_folder');
   const [evidenceSaveStatus, setEvidenceSaveStatus] = useState<string | null>(null);
 
@@ -360,7 +360,7 @@ export function ProjectsLayout() {
         setFolders([]);
         setTasks([]);
         setSemanticCandidates([]);
-        setError(fetchError.message ? '프로젝트 근거를 불러오지 못했습니다. 데이터 연결 상태를 확인해 주세요.' : '프로젝트 근거를 불러오지 못했습니다.');
+        setError(fetchError.message ? '프로젝트 정보를 불러오지 못했습니다. 데이터 연결 상태를 확인한 뒤 새로고침해 주세요.' : '프로젝트 정보를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -581,7 +581,7 @@ export function ProjectsLayout() {
 
         <div className="flex-1 space-y-1 p-3">
           {loading ? (
-            <div role="status" className="rounded-lg border border-border bg-background p-3 text-sm font-semibold text-muted-foreground">프로젝트 근거를 불러오는 중입니다.</div>
+            <div role="status" className="rounded-lg border border-border bg-background p-3 text-sm font-semibold text-muted-foreground">프로젝트 정보를 불러오는 중입니다.</div>
           ) : null}
           {projects.map((project) => (
             <button
@@ -769,7 +769,7 @@ export function ProjectsLayout() {
                 ) : (
                   <div className="p-5">
                     <p className="rounded-xl border border-dashed border-border p-4 text-sm font-semibold text-muted-foreground">
-                      {traceLoading ? '자동화 브리프를 구성하는 중입니다.' : '자동화 브리프를 구성할 traceability 근거가 없습니다.'}
+                      {traceLoading ? '자동화 브리프를 구성하는 중입니다.' : '자동화 브리프를 구성할 출처 근거가 아직 없습니다. 문단 근거를 먼저 검토해 주세요.'}
                     </p>
                   </div>
                 )}
@@ -835,7 +835,7 @@ export function ProjectsLayout() {
                 ) : (
                   <div className="p-5">
                     <p className="rounded-xl border border-dashed border-border p-4 text-sm font-semibold text-muted-foreground">
-                      {traceLoading ? '보고 초안을 구성하는 중입니다.' : '보고 초안을 구성할 traceability 근거가 없습니다.'}
+                      {traceLoading ? '보고 초안을 구성하는 중입니다.' : '보고 초안을 구성할 출처 근거가 아직 없습니다. 문단 근거를 먼저 검토해 주세요.'}
                     </p>
                   </div>
                 )}
@@ -901,7 +901,7 @@ export function ProjectsLayout() {
                 ) : (
                   <div className="p-5">
                     <p className="rounded-xl border border-dashed border-border p-4 text-sm font-semibold text-muted-foreground">
-                      {traceLoading ? '컨트롤 준비도를 구성하는 중입니다.' : '컨트롤 준비도를 구성할 traceability 근거가 없습니다.'}
+                      {traceLoading ? '컨트롤 준비도를 구성하는 중입니다.' : '컨트롤 준비도를 구성할 출처 근거가 아직 없습니다. 문단 근거를 먼저 검토해 주세요.'}
                     </p>
                   </div>
                 )}
@@ -1043,9 +1043,9 @@ export function ProjectsLayout() {
                       <span className="text-xs text-muted-foreground">{authorizedFolders.length}개 폴더</span>
                     </div>
                     <p className="mt-2 rounded-lg border border-border bg-background p-3 text-sm leading-6 text-foreground">
-                      WebDAV 프로젝트 폴더를 작업 경계로 사용합니다. 외부 저장소 쓰기는 별도 승인 전까지 실행하지 않습니다.
+                      프로젝트 폴더를 작업 범위로 사용합니다. 폴더 파일 변경은 별도 승인 전까지 진행하지 않습니다.
                     </p>
-                    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><User className="size-3.5" /> 근거: WebDAV 폴더</p>
+                    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><User className="size-3.5" /> 출처: 프로젝트 폴더</p>
                   </article>
                   <article className="p-5">
                     <div className="flex items-start justify-between gap-3">
@@ -1055,7 +1055,7 @@ export function ProjectsLayout() {
                     <p className="mt-2 rounded-lg border border-border bg-background p-3 text-sm leading-6 text-foreground">
                       메일과 스레드 근거가 연결된 실행 항목을 기준으로 상태와 완료 흐름을 집계합니다.
                     </p>
-                    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><User className="size-3.5" /> 근거: 실행 항목</p>
+                    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><User className="size-3.5" /> 출처: 실행 항목</p>
                   </article>
                   <article className="p-5">
                     <div className="flex items-start justify-between gap-3">
@@ -1065,7 +1065,7 @@ export function ProjectsLayout() {
                     <p className="mt-2 rounded-lg border border-border bg-background p-3 text-sm leading-6 text-foreground">
                       프로젝트 판단 근거는 맥락 검색에서 메일, 스레드, 문서 근거를 확인한 뒤 연결합니다.
                     </p>
-                    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><User className="size-3.5" /> 상태: 연결 준비</p>
+                    <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground"><User className="size-3.5" /> 상태: 맥락 검색에서 연결 가능</p>
                   </article>
                 </div>
               </section>
@@ -1082,12 +1082,12 @@ export function ProjectsLayout() {
                     <div role="status" aria-live="polite">
                       <p className="text-sm font-bold text-foreground">연결된 실행 항목이 아직 없습니다.</p>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        서명 세션의 작업 API에 프로젝트와 연결된 메일, 문서, 스레드 근거가 기록되면 이 목록에 표시됩니다.
+                        메일, 문서, 스레드를 실행 항목으로 연결하면 이 목록에 표시됩니다. 아래 버튼으로 작업 보드를 열거나 관련 자료를 찾아보세요.
                       </p>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <a href="/tasks" className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">작업 보드 열기</a>
-                      <a href="/search" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-bold hover:bg-secondary">관련 근거 찾기</a>
+                      <a href="/search" className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-bold hover:bg-secondary">관련 자료 찾기</a>
                     </div>
                   </div>
                 </div>
@@ -1111,7 +1111,7 @@ export function ProjectsLayout() {
               <h2 className="mb-4 font-bold text-base">프로젝트 개요</h2>
               <dl className="space-y-4 text-sm">
                 <div>
-                  <dt className="mb-1 font-semibold text-muted-foreground">책임 경계</dt>
+                  <dt className="mb-1 font-semibold text-muted-foreground">담당 범위</dt>
                   <dd className="flex items-center gap-2 font-bold"><User className="size-4 text-primary" /> {workspaceScopeLabel}</dd>
                 </div>
                 <div>
@@ -1190,7 +1190,7 @@ export function ProjectsLayout() {
               <h2 className="mb-4 font-bold text-base">연결된 자원</h2>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 font-semibold"><FolderOpen className="size-4 text-primary" /> WebDAV 폴더</span>
+                  <span className="flex items-center gap-2 font-semibold"><FolderOpen className="size-4 text-primary" /> 프로젝트 폴더</span>
                   <span className="font-mono text-xs text-muted-foreground">{authorizedFolders.length}</span>
                 </li>
                 <li className="flex items-center justify-between gap-3">

@@ -609,7 +609,7 @@ export function AIHubLayout() {
         if (cancelled) return;
         console.error('AI Hub surface fetch error', getSafeErrorSummary(error));
         setSurface(null);
-        setErrorText('AI 허브 원본 근거를 불러오지 못했습니다.');
+        setErrorText('AI 허브 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
         setSurfaceStatus('error');
       });
     return () => {
@@ -703,7 +703,7 @@ export function AIHubLayout() {
           {surfaceStatus === 'loading' && (
             <Card role="status" aria-live="polite">
               <CardContent className="py-6 font-bold text-primary">
-                AI 허브 원본 근거를 불러오는 중입니다.
+                AI 허브 정보를 불러오는 중입니다. 잠시만 기다려 주세요.
               </CardContent>
             </Card>
           )}

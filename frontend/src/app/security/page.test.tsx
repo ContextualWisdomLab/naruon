@@ -177,8 +177,8 @@ describe("SecurityPage", () => {
     ({ container, root } = await renderSecurityPage());
 
     expect(container.querySelector("h1")?.textContent).toContain("보안과 관리자");
-    expect(container.textContent).toContain("원본 연결 RBAC / ABAC");
-    expect(container.textContent).toContain("WebDAV 저장소 1");
+    expect(container.textContent).toContain("원본 연결 접근 권한");
+    expect(container.textContent).toContain("문서 저장소 1");
     expect(container.textContent).toContain("서버에서 검증됨");
     expect(container.textContent).toContain("쓰기 의도 가능");
     expect(container.textContent).not.toContain("webdav_src_primary");
@@ -300,7 +300,7 @@ describe("SecurityPage", () => {
         expect(container.textContent).not.toContain("workspace-org-acme");
       }
       if (tabName === "외부 공유") {
-        expect(container.textContent).toContain("WebDAV 저장소 쓰기 경계");
+        expect(container.textContent).toContain("문서 저장소 쓰기 검토");
         expect(container.textContent).toContain("외부 쓰기 검토");
         expect(container.textContent).toContain("외부 쓰기 실행 안 함");
         expect(container.textContent).not.toContain("webdav_src_primary");
@@ -310,7 +310,7 @@ describe("SecurityPage", () => {
       if (tabName === "정책") {
         expect(container.textContent).toContain("차단 우선 정책 순서");
         expect(container.textContent).toContain("ABAC 차단 후 RBAC 허용");
-        expect(container.textContent).toContain("교차 조직 제공자 secret");
+        expect(container.textContent).toContain("교차 조직 제공자 인증정보");
         expect(container.textContent).not.toContain("Cross-organization provider secret");
         expect(container.textContent).not.toContain("services.access_policy.evaluate_access");
       }
@@ -344,7 +344,7 @@ describe("SecurityPage", () => {
     });
     expect(container.textContent).toContain("외부 쓰기");
     expect(container.textContent).toContain("2건");
-    expect(container.textContent).toContain("현재 signed-session 스코프에서 확인된 접근 판정이 없습니다.");
+    expect(container.textContent).toContain("지금 로그인한 계정 범위에서 확인된 접근 판정이 없습니다.");
     expect(container.querySelector('[role="status"]')?.textContent).toContain("접근 판정");
 
     const policyTab = Array.from(container.querySelectorAll("button")).find((button) =>
@@ -354,8 +354,8 @@ describe("SecurityPage", () => {
     await act(async () => {
       policyTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    expect(container.textContent).toContain("현재 signed-session 스코프에서 확인된 정책 판정 순서가 없습니다.");
-    expect(container.textContent).toContain("현재 signed-session 스코프에서 확인된 정책 판정 샘플이 없습니다.");
+    expect(container.textContent).toContain("지금 로그인한 계정 범위에서 확인된 정책 판정 순서가 없습니다.");
+    expect(container.textContent).toContain("지금 로그인한 계정 범위에서 확인된 정책 판정 샘플이 없습니다.");
     expect(container.textContent).not.toContain("곧 제공됩니다");
   });
 });
