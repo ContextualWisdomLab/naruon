@@ -1179,12 +1179,12 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
   }
 
   if (routeSpec.name === "calendar") {
-    await page.getByRole("button", { name: "새 일정 intent 점검", exact: true }).click();
-    await page.getByText("기록됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "ETag 업데이트 점검", exact: true }).click();
-    await page.getByText("If-Match 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "ETag 실행 요청", exact: true }).click();
-    await page.getByText("외부 원본 쓰기 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "새 일정 반영 점검", exact: true }).click();
+    await page.getByText("저장됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "변경 확인 후 재점검", exact: true }).click();
+    await page.getByText("최신 변경 확인 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "실제 반영 실행 요청", exact: true }).click();
+    await page.getByText("원본 계정 반영 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("재시도 없음", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("calendar:create-writeback-intent"),
@@ -1200,10 +1200,10 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByText("미답변 팔로업 결과가 보드에 반영되었습니다.").waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "20억 판매 검토 실행 항목 상태를 완료로 변경", exact: true }).click();
     await page.getByText("20억 판매 검토 실행 항목 상태를 완료로 변경했습니다.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "나에게 보낸 지식 메모 정리 WebDAV 지식 노트 의도 생성", exact: true }).click();
-    await page.getByText("WebDAV/Notes 의도 준비", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "나에게 보낸 지식 메모 정리 WebDAV 지식 노트 실행 요청", exact: true }).click();
-    await page.getByText("외부 쓰기 실행됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "나에게 보낸 지식 메모 정리 지식 노트 만들기", exact: true }).click();
+    await page.getByText("내 문서 노트로 저장 준비 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "나에게 보낸 지식 메모 정리 지식 노트 지금 저장", exact: true }).click();
+    await page.getByText("문서 노트 저장 완료", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("재시도 없음", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     return [
       evidence("tasks:create-reply-sla-followup"),
@@ -1220,11 +1220,11 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await page.getByRole("link", { name: "관련 문서/메일 연결", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "프로젝트 의사결정 추가" }).first().click();
     await projectContent.getByText("작업 흐름 반영", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await projectContent.getByText("근거: WebDAV 폴더", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("출처: 프로젝트 폴더", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("button", { name: "프로젝트 상세 열기", exact: true }).click();
     await projectContent.getByText("프로젝트 개요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await projectContent.getByText("저장소 경계 확인됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await projectContent.getByText("WebDAV 폴더 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("폴더 위치 확인됨", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await projectContent.getByText("프로젝트 폴더 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await projectContent.getByText("스레드 근거 연결됨", { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("region", { name: "프로젝트 작업 목록" }).getByText("문서 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     const evidenceEditor = page.getByRole("region", { name: "프로젝트 근거 편집" });
@@ -1253,17 +1253,17 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
   }
 
   if (routeSpec.name === "data") {
-    await page.getByRole("button", { name: "임베딩 재생성 의도", exact: true }).click();
-    await page.getByText("Embedding regeneration intent recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "HWP 변환 의도", exact: true }).click();
-    await page.getByText("HWP conversion intent recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "WebDAV 문서 실행 요청", exact: true }).click();
-    await page.getByText("WebDAV materialization executed by the connector.", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByText("외부 쓰기 실행됨", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "WebDAV 반영 의도 점검", exact: true }).click();
-    await page.getByText("원본 반영 의도", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByText("If-Match 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("button", { name: "중복 메일 스레드 의도 점검", exact: true }).click();
+    await page.getByRole("button", { name: "검색 색인 갱신", exact: true }).click();
+    await page.getByText("검색 색인 갱신을 요청했습니다", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "HWP 변환", exact: true }).click();
+    await page.getByText("HWP 변환을 요청했습니다", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "문서 저장소에 저장 실행", exact: true }).click();
+    await page.getByText("연결된 문서 저장소 반영을 요청했습니다", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("원본 반영 완료", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "문서 저장소 반영 점검", exact: true }).click();
+    await page.getByText("문서 저장소 반영", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("최신 변경 확인 필요", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "중복 메일 정리 검토", exact: true }).click();
     await page.getByText("Message-ID 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "품질 점검", exact: true }).click();
     await page.getByRole("heading", { name: "Thread id integrity", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1305,11 +1305,11 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
 
   if (routeSpec.name === "security") {
     const accessRegion = page.getByRole("region", { name: "접근 권한 소스 거버넌스", exact: true });
-    await accessRegion.getByRole("heading", { name: "원본 연결 RBAC / ABAC", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await accessRegion.getByRole("heading", { name: "원본 연결 접근 권한", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     const sourceGovernance = viewportSpec.name === "mobile"
-      ? accessRegion.locator("article").filter({ hasText: "WebDAV 저장소 1" }).first()
-      : accessRegion.locator("tbody tr").filter({ hasText: "WebDAV 저장소 1" }).first();
-    await sourceGovernance.getByText("WebDAV 저장소 1", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      ? accessRegion.locator("article").filter({ hasText: "문서 저장소 1" }).first()
+      : accessRegion.locator("tbody tr").filter({ hasText: "문서 저장소 1" }).first();
+    await sourceGovernance.getByText("문서 저장소 1", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await sourceGovernance.getByText("조직 스코프", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await sourceGovernance.getByText("쓰기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     if (viewportSpec.name !== "mobile") {
@@ -1333,7 +1333,7 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await permissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
     await permissionEditor.getByText("리전 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await permissionEditor.getByText("데이터 내보내기", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await permissionEditor.getByLabel("권한 판정 변경", { exact: true }).selectOption({ label: "동의 없는 CalDAV 쓰기 차단" });
+    await permissionEditor.getByLabel("권한 판정 변경", { exact: true }).selectOption({ label: "동의 없는 일정 쓰기 차단" });
     await permissionEditor.getByText("동의 차단 - 외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await permissionEditor.getByRole("button", { name: "권한 저장", exact: true }).click();
     await permissionEditor.getByText("동의 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1344,13 +1344,13 @@ async function runCriticalInteractionSmoke(page, routeSpec, viewportSpec) {
     await auditRegion.getByText("서버 감사 로그", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await auditRegion.getByText("서버 근거", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await auditRegion.getByText("하트비트 수신", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await auditRegion.getByText("connector 관측 근거", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+    await auditRegion.getByText("연동 상태 관측 근거", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "외부 공유", exact: true }).click();
     await page.getByText("외부 공유 / 쓰기 경계", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("외부 쓰기 실행 안 함", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "정책", exact: true }).click();
     await page.getByText("차단 우선 정책 순서", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByText("교차 조직 제공자 secret", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("교차 조직 제공자 인증정보", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByText("조직 차단", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await page.getByRole("tab", { name: "접근 권한", exact: true }).click();
     const finalPermissionEditor = page.getByRole("region", { name: "보안 권한 편집", exact: true });
