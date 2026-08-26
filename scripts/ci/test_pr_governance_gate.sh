@@ -277,7 +277,7 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567"}]'
         ;;
       coderabbit_whitespace_only_approval_notice)
-        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n   \\n<!-- approval_notice_end -->"}]'
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n   \\n<!-- approval_notice_end -->\\nheadCommitId: 0123456789abcdef0123456789abcdef01234567"}]'
         ;;
       github_code_quality_approval_pending_comment)
         printf '[{"id":777,"user":{"login":"github-code-quality[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->\\n## Approval pending\\nPotential issue for 0123456789abcdef0123456789abcdef01234567\\n- [ ] {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"}\\n<!-- approval_notice_end -->"}]'
