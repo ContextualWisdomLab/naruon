@@ -290,7 +290,16 @@ async def _extract_and_generate_embeddings(
     attachment_payloads = list(parsed.get("attachments", []))
     embedding_texts = [str(parsed.get("body") or "")]
     embedding_texts.extend(
-        str(attachment.get("content") or "") for attachment in attachment_payloads
+        str(
+            ""
+            if (attachment.get("parse_status") or "parsed") != "parsed"
+            else (
+                attachment.get("parse_content")
+                if attachment.get("parse_content") is not None
+                else attachment.get("content") or ""
+            )
+        )
+        for attachment in attachment_payloads
     )
     fitted_embeddings = await _generate_import_embeddings(
         embedding_texts,

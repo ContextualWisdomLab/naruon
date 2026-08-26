@@ -579,3 +579,57 @@ async def test_generate_import_embeddings_recovers_valid_items_after_batch_failu
     assert embeddings[2] == [0.75] * (EMBEDDING_DIMENSION // 2) + [0.0] * (
         EMBEDDING_DIMENSION // 2
     )
+
+
+@pytest.mark.asyncio
+async def test_extract_and_generate_embeddings_skips_unparsed_attachment_content():
+    parsed = {
+        "message_id": "<embed-gating@example.com>",
+        "body": "Body text",
+        "attachments": [
+            {
+                "filename": "report.pdf",
+                "content": "JVBERi0xLjQK",
+                "content_type": "application/pdf",
+                "parse_status": "unsupported_content_type",
+                "parse_error_code": "unsupported_content_type",
+            },
+            {
+                "filename": "notes.txt",
+                "content": "raw-stored-bytes-placeholder",
+                "content_type": "text/plain",
+                "parse_content": "Extracted notes text",
+                "parse_status": "parsed",
+            },
+        ],
+    }
+    provider = EmailImportEmbeddingProvider(
+        api_key="secret-provider-token",
+        base_url="http://ollama:11434/v1",
+        embedding_model="embeddinggemma",
+    )
+
+    with patch(
+        "services.email_import_service.generate_embeddings",
+        new_callable=AsyncMock,
+    ) as mock_generate_embeddings:
+        mock_generate_embeddings.return_value = [
+            [0.5] * EMBEDDING_DIMENSION,
+            [0.5] * EMBEDDING_DIMENSION,
+            [0.5] * EMBEDDING_DIMENSION,
+        ]
+
+        attachment_payloads, fitted_embeddings = (
+            await email_import_module._extract_and_generate_embeddings(
+                parsed,
+                provider,
+            )
+        )
+
+    assert len(attachment_payloads) == 2
+    sent_texts = mock_generate_embeddings.await_args.args[0]
+    # Unparsed attachment raw content must never reach the embedding provider;
+    # parsed attachments embed their extracted parse_content, not stored bytes.
+    assert sent_texts == ["Body text", "", "Extracted notes text"]
+    assert fitted_embeddings == [[0.5] * EMBEDDING_DIMENSION for _ in range(3)]
+    assert "JVBERi0xLjQ" not in str(sent_texts)

@@ -20,6 +20,21 @@ def test_loopback_origin_is_canonicalized() -> None:
 @pytest.mark.parametrize(
     "value",
     [
+        "http://localhost:0/",
+        "https://127.0.0.1:0/",
+    ],
+)
+def test_loopback_origin_rejects_explicit_port_zero(value: str) -> None:
+    with pytest.raises(
+        LocalHTTPValidationError,
+        match=r"local HTTP origin port is invalid",
+    ):
+        validate_loopback_http_origin(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
         "http://[::1",
         "http://[localhost]:18080",
     ],
