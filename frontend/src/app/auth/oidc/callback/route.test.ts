@@ -401,6 +401,7 @@ describe("/auth/oidc/callback route", () => {
     vi.stubEnv("NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT", "https://auth.example.com/auth");
     vi.stubEnv("NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT", "https://auth.example.com/token/%2");
 
+    const warnMock = vi.spyOn(console, "warn").mockImplementation(() => {});
     const req = new NextRequest("http://localhost:3000/auth/callback", {
       method: "POST",
       headers: { cookie: `naruon_oidc_pkce=eyJzdGF0ZSI6InRlc3Qtc3RhdGUiLCJ2ZXJpZmllciI6InRlc3QtdmVyaWZpZXIiLCJyZXR1cm5fdG8iOiIvIn0` },
@@ -409,5 +410,9 @@ describe("/auth/oidc/callback route", () => {
     const response = await POST(req);
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error_code: "oidc_token_exchange_failed" });
+    expect(warnMock).toHaveBeenCalledWith(
+      "oidc_token_exchange_failed",
+      { reason: "configuration_rejected" },
+    );
   });
 });
