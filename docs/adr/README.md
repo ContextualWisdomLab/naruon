@@ -13,6 +13,11 @@ govern implementation.
 | [ADR-0002](0002-fitted-topic-artifact-consumption.md) | Conditionally consume only a versioned fitted topic artifact through a fail-closed adapter | Proposed | Target `PLANNED`; runtime `BLOCKED-UPSTREAM` |
 | [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md) | Keep statistical measurement separate from agenda generation | Proposed | Target and future capability `PLANNED`; no implementation authorization |
 | [ADR-0004](0004-status-weighted-calendar-conflicts.md) | Evaluate CalDAV VEVENT overlaps by occupying status; cancelled does not occupy | Accepted | `ACCEPTED-NARUON-POLICY`; advisory evaluate API only |
+| [ADR-0009](0009-image-attachment-metadata-parser.md) | Parse common image headers into safe searchable metadata; defer OCR/vision to a local sidecar | Accepted | `ACCEPTED-NARUON-POLICY`; no external image upload |
+| [ADR-0010](0010-bounded-office-archive-text-parsing.md) | Parse bounded Office XML text and ZIP manifests without execution or extraction | Accepted | `ACCEPTED-NARUON-POLICY`; no external upload or archive execution |
+| [ADR-0011](0011-safe-nested-media-legacy-metadata.md) | Parse bounded nested-email, MP3, and legacy DOC container metadata; keep unidentified formats unparsed | Accepted | `ACCEPTED-NARUON-POLICY`; no recursion, decoding, or external upload |
+| [ADR-0012](0012-generic-binary-metadata.md) | Index MIME and byte-count metadata for generic binary attachments without format guessing | Accepted | `ACCEPTED-NARUON-POLICY`; no raw-byte indexing or external upload |
+| [ADR-0019](0019-inline-image-source-evidence.md) | Preserve source-linked metadata for base64 images embedded in HTML email bodies | Accepted | `ACCEPTED-NARUON-POLICY`; metadata/content-graph evidence only, no implicit hosted vision |
 
 The complete topic-intelligence requirements, architecture, contract, UML,
 conceptual ERD, security, test, and operability graph is indexed at

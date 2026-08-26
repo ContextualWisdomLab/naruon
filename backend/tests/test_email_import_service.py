@@ -13,6 +13,7 @@ from services.email_import_service import (
     EmailImportBatchContext,
     EMBEDDING_DIMENSION,
     EmailImportEmbeddingProvider,
+    _extract_and_generate_embeddings,
     MAX_EMBEDDING_CHUNKS_PER_WINDOW,
     _generate_import_embeddings,
 )
@@ -74,6 +75,38 @@ def test_canonical_email_import_upload_filename(input_name, expected):
     assert (
         email_import_module.canonical_email_import_upload_filename(input_name)
         == expected
+    )
+
+
+@pytest.mark.asyncio
+async def test_extract_embeddings_does_not_embed_pending_attachment_payload():
+    parsed = {
+        "body": "Email body",
+        "attachments": [
+            {
+                "content": "cHJpdmF0ZS1wZGYtYnl0ZXM=",
+                "parse_status": "pdf_dom_recognition_pending",
+            }
+        ],
+    }
+
+    with patch(
+        "services.email_import_service._generate_import_embeddings",
+        new_callable=AsyncMock,
+        return_value=[[1.0] * EMBEDDING_DIMENSION],
+    ) as mock_generate:
+        attachment_payloads, embeddings = await _extract_and_generate_embeddings(
+            parsed,
+            embedding_provider=None,
+        )
+
+    assert attachment_payloads == parsed["attachments"]
+    assert embeddings == [
+        [1.0] * EMBEDDING_DIMENSION,
+        [0.0] * EMBEDDING_DIMENSION,
+    ]
+    mock_generate.assert_awaited_once_with(
+        ["Email body"], embedding_provider=None, batch_context=None
     )
 
 
@@ -171,6 +204,201 @@ def test_build_email_object_attaches_content_graph_records():
         "email_body",
         "attachment",
     }
+
+
+def test_build_email_object_keeps_inline_image_graph_label_bounded():
+    """The full DOM locator remains source evidence without becoming a DB label."""
+    locator = "/html[1]/" + ("table[1]/" * 80) + "img[1]"
+    parsed = {
+        "body": "See image",
+        "body_parse_content": "See image",
+        "body_content_type": "text/plain",
+        "attachments": [],
+        "inline_images": [
+            {
+                "source_locator_value": locator,
+                "source_ordinal": 1,
+                "media_type": "image/png",
+                "searchable_text": f"source_locator={locator}",
+                "parse_status": "metadata_ready",
+            }
+        ],
+    }
+
+    email_obj, _attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<inline-label@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-inline-label",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=[],
+        fitted_embeddings=[[0.0] * EMBEDDING_DIMENSION],
+    )
+
+    image_documents = [
+        node
+        for node in email_obj.content_nodes
+        if node.source_kind == "inline_image" and node.node_kind == "document"
+    ]
+    assert [node.display_label for node in image_documents] == ["Inline image 1"]
+    assert len(image_documents[0].display_label or "") <= 240
+
+
+def test_inline_image_source_uid_is_tenant_and_content_scoped():
+    """Identical message ids cannot collide across tenants or image content."""
+
+    def build_email(*, user_id: str, organization_id: str, content_digest: str):
+        return email_import_module._build_email_object(
+            parsed={
+                "body": "See image",
+                "body_parse_content": "See image",
+                "body_content_type": "text/plain",
+                "attachments": [],
+                "inline_images": [
+                    {
+                        "source_locator_value": "/html[1]/img[1]",
+                        "source_ordinal": 1,
+                        "content_digest": content_digest,
+                        "media_type": "image/png",
+                        "searchable_text": "image metadata",
+                        "parse_status": "metadata_ready",
+                    }
+                ],
+            },
+            user_id=user_id,
+            organization_id=organization_id,
+            message_id="<same-message@example.com>",
+            thread_id="thread-1",
+            fingerprint=f"fingerprint-{organization_id}",
+            persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+            attachment_payloads=[],
+            fitted_embeddings=[],
+        )[0]
+
+    first_email = build_email(
+        user_id="user-1", organization_id="org-1", content_digest="a" * 64
+    )
+    second_email = build_email(
+        user_id="user-2", organization_id="org-2", content_digest="b" * 64
+    )
+
+    assert (
+        first_email.image_sources[0].image_source_uid
+        != second_email.image_sources[0].image_source_uid
+    )
+    first_node = next(
+        node for node in first_email.content_nodes if node.source_kind == "inline_image"
+    )
+    second_node = next(
+        node
+        for node in second_email.content_nodes
+        if node.source_kind == "inline_image"
+    )
+    assert first_node.source_record_uid != second_node.source_record_uid
+
+
+def test_build_email_object_indexes_image_metadata_as_attachment_text():
+    image_metadata = (
+        "Image metadata: format=png; width=320px; height=200px; animated=no"
+    )
+    parsed = {
+        "message_id": "<image-metadata@example.com>",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": "owner@example.com",
+        "subject": "Image metadata",
+        "in_reply_to": None,
+        "references": None,
+        "body": "See attached",
+        "body_content_type": "text/plain",
+        "body_parse_content": "See attached",
+        "attachments": [
+            {
+                "filename": "preview.png",
+                "content": image_metadata,
+                "content_type": "image/png",
+                "parse_content": image_metadata,
+                "parse_content_type": "text/plain",
+                "parser_key": "image_metadata",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            }
+        ],
+    }
+
+    email_obj, attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<image-metadata@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-image-metadata",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=list(parsed["attachments"]),
+        fitted_embeddings=[
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+        ],
+    )
+
+    assert attachment_count == 1
+    assert email_obj.attachments[0].parser_key == "image_metadata"
+    assert [
+        segment.safe_text_content
+        for segment in email_obj.attachments[0].content_segments
+    ] == [image_metadata]
+
+
+def test_build_email_object_indexes_office_text_as_attachment_text():
+    office_text = "Office metadata: format=docx; members=3; text=Quarterly Plan"
+    parsed = {
+        "message_id": "<office-text@example.com>",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": "owner@example.com",
+        "subject": "Office text",
+        "in_reply_to": None,
+        "references": None,
+        "body": "See attached",
+        "body_content_type": "text/plain",
+        "body_parse_content": "See attached",
+        "attachments": [
+            {
+                "filename": "plan.docx",
+                "content": office_text,
+                "content_type": "application/octet-stream",
+                "parse_content": office_text,
+                "parse_content_type": "text/plain",
+                "parser_key": "office_text",
+                "parse_status": "parsed",
+                "parse_error_code": None,
+            }
+        ],
+    }
+
+    email_obj, attachment_count = email_import_module._build_email_object(
+        parsed=parsed,
+        user_id="user-1",
+        organization_id="org-1",
+        message_id="<office-text@example.com>",
+        thread_id="thread-1",
+        fingerprint="fingerprint-office-text",
+        persisted_date=datetime.datetime(2026, 7, 2, tzinfo=datetime.timezone.utc),
+        attachment_payloads=list(parsed["attachments"]),
+        fitted_embeddings=[
+            [0.0] * EMBEDDING_DIMENSION,
+            [0.0] * EMBEDDING_DIMENSION,
+        ],
+    )
+
+    assert attachment_count == 1
+    assert email_obj.attachments[0].parser_key == "office_text"
+    assert [
+        segment.safe_text_content
+        for segment in email_obj.attachments[0].content_segments
+    ] == [office_text]
 
 
 def test_build_email_object_attaches_knowledge_graph_edges():

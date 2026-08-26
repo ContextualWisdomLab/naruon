@@ -71,6 +71,98 @@ Content-Type: text/html; charset="utf-8"
         os.unlink(temp_path)
 
 
+def test_parse_eml_extracts_inline_base64_images_from_html_part():
+    image_payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR"
+        + b"\x00\x00\x00\x07\x00\x00\x00\x09\x08\x06\x00\x00\x00"
+    )
+    encoded_image = base64.b64encode(image_payload).decode("ascii")
+    eml_content = (
+        b"Message-ID: <inline-image@test.com>\r\n"
+        b"From: sender@test.com\r\n"
+        b"To: recipient@test.com\r\n"
+        b"Subject: Inline image\r\n"
+        b'Content-Type: text/html; charset="utf-8"\r\n'
+        b'\r\n<html><body><p>Context</p><img src="data:image/png;base64,'
+        + encoded_image.encode("ascii")
+        + b'"></body></html>'
+    )
+
+    parsed = parse_eml_bytes(eml_content)
+
+    assert len(parsed["inline_images"]) == 1
+    source = parsed["inline_images"][0]
+    assert source["source_locator_value"] == "/mime_part[1]/html[1]/body[1]/img[1]"
+    assert source["media_type"] == "image/png"
+    assert source["pixel_width"] == 7
+    assert source["pixel_height"] == 9
+    assert source["parse_status"] == "metadata_ready"
+
+
+def test_parse_eml_keeps_inline_image_ordinals_unique_across_html_parts():
+    """Number inline images across one email rather than restarting per MIME part."""
+    image_payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR"
+        + b"\x00\x00\x00\x07\x00\x00\x00\x09\x08\x06\x00\x00\x00"
+    )
+    encoded_image = base64.b64encode(image_payload).decode("ascii")
+    eml_content = (
+        b"Message-ID: <inline-image-parts@test.com>\r\n"
+        b"From: sender@test.com\r\n"
+        b"To: recipient@test.com\r\n"
+        b"Subject: Multiple HTML parts\r\n"
+        b"Content-Type: multipart/mixed; boundary=parts\r\n"
+        b"\r\n"
+        b"--parts\r\n"
+        b"Content-Type: text/html; charset=utf-8\r\n\r\n"
+        b'<img src="data:image/png;base64,' + encoded_image.encode("ascii") + b'">\r\n'
+        b"--parts\r\n"
+        b"Content-Type: text/html; charset=utf-8\r\n\r\n"
+        b'<img src="data:image/png;base64,' + encoded_image.encode("ascii") + b'">\r\n'
+        b"--parts--\r\n"
+    )
+
+    parsed = parse_eml_bytes(eml_content)
+
+    assert [source["source_ordinal"] for source in parsed["inline_images"]] == [1, 2]
+    assert [source["source_locator_value"] for source in parsed["inline_images"]] == [
+        "/mime_part[1]/img[1]",
+        "/mime_part[2]/img[1]",
+    ]
+
+
+def test_parse_eml_bounds_mime_prefixed_inline_image_locator():
+    """The persisted locator stays within the image_sources column limit."""
+    image_payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR"
+        + b"\x00\x00\x00\x07\x00\x00\x00\x09\x08\x06\x00\x00\x00"
+    )
+    encoded_image = base64.b64encode(image_payload).decode("ascii")
+    nested_html = (
+        "<div>" * 180
+        + f'<img src="data:image/png;base64,{encoded_image}">'
+        + "</div>" * 180
+    )
+    eml_content = (
+        b"Message-ID: <deep-inline-image@test.com>\r\n"
+        b"From: sender@test.com\r\n"
+        b"To: recipient@test.com\r\n"
+        b"Subject: Deep inline image\r\n"
+        b'Content-Type: text/html; charset="utf-8"\r\n'
+        b"\r\n" + nested_html.encode("utf-8")
+    )
+
+    parsed = parse_eml_bytes(eml_content)
+
+    source = parsed["inline_images"][0]
+    assert len(source["source_locator_value"]) == 1_024
+    assert source["source_locator_value"].startswith("/mime_part[1]/div[1]")
+    assert "#" in source["source_locator_value"]
+
+
 def test_parse_eml_strips_active_html_from_display_fields():
     eml_content = b"""Message-ID: <xss@test.com>
 From: Attacker <attacker@example.com>

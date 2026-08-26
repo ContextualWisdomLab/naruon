@@ -3,8 +3,16 @@
 import base64
 import binascii
 from dataclasses import dataclass
+from email import message_from_bytes, policy
+from email.message import Message
+from io import BytesIO
 from pathlib import Path
+import struct
 from typing import Any
+from zipfile import BadZipFile, ZipFile
+
+from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
 
 from .text_safety import strip_html_markup
 
@@ -14,8 +22,14 @@ _GENERIC_CONTENT_TYPES = {
     "binary/octet-stream",
     "application/x-binary",
 }
-MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
-MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
+# These are parser safety ceilings, not mailbox/upload limits.  In particular,
+# a large Office package may contain media that is irrelevant to text parsing.
+MAX_ATTACHMENT_PARSE_TEXT_CHARS = 64 * 1024 * 1024
+MAX_OFFICE_XML_PARSE_BYTES = 128 * 1024 * 1024
+IMAGE_METADATA_SCAN_PREFIX_BYTES = 1 * 1024 * 1024
+JPEG_METADATA_HEADER_SCAN_BYTES = 4 * 1024 * 1024
+MAX_NESTED_EMAIL_PARSE_BYTES = 64 * 1024 * 1024
+MAX_NESTED_EMAIL_NESTING_DEPTH = 4
 
 
 @dataclass(frozen=True)
@@ -27,6 +41,16 @@ class AttachmentParserDescriptor:
     content_types: tuple[str, ...]
     extensions: tuple[str, ...]
     parse_status: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImageMetadata:
+    """Describe bounded image-header facts without retaining image bytes."""
+
+    format_name: str
+    width: int
+    height: int
+    animated: bool
 
 
 _PARSER_MANIFEST = (
@@ -75,8 +99,22 @@ _PARSER_MANIFEST = (
     AttachmentParserDescriptor(
         parser_key="calendar",
         display_name="iCalendar attachments",
-        content_types=("text/calendar",),
+        content_types=("text/calendar", "application/ics"),
         extensions=(".ics", ".ifb"),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="vcard",
+        display_name="vCard attachments",
+        content_types=("text/x-vcard", "text/vcard", "text/directory"),
+        extensions=(".vcf",),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="nested_email",
+        display_name="Nested email metadata",
+        content_types=("message/rfc822",),
+        extensions=(".eml",),
         parse_status="parsed",
     ),
     AttachmentParserDescriptor(
@@ -87,9 +125,56 @@ _PARSER_MANIFEST = (
         parse_status="pdf_dom_recognition_pending",
     ),
     AttachmentParserDescriptor(
+        parser_key="image_metadata",
+        display_name="Image metadata attachments",
+        content_types=("image/png", "image/jpeg", "image/gif", "image/bmp"),
+        extensions=(".png", ".jpg", ".jpeg", ".gif", ".bmp"),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="office_text",
+        display_name="Office document text",
+        content_types=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/haansoftdocx",
+        ),
+        extensions=(".docx", ".xlsx", ".pptx", ".hwpx"),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="archive_manifest",
+        display_name="ZIP archive manifests",
+        content_types=("application/zip", "application/x-zip-compressed"),
+        extensions=(".zip",),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="audio_metadata",
+        display_name="MP3 metadata",
+        content_types=("audio/mpeg", "audio/mp3"),
+        extensions=(".mp3",),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="legacy_office_metadata",
+        display_name="Legacy Office container metadata",
+        content_types=("application/msword",),
+        extensions=(".doc",),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
+        parser_key="binary_metadata",
+        display_name="Generic binary metadata",
+        content_types=tuple(sorted(_GENERIC_CONTENT_TYPES - {""})),
+        extensions=(),
+        parse_status="parsed",
+    ),
+    AttachmentParserDescriptor(
         parser_key="unsupported_binary",
         display_name="Unsupported binary attachments",
-        content_types=("application/octet-stream",),
+        content_types=(),
         extensions=(),
         parse_status="unsupported_content_type",
     ),
@@ -117,6 +202,19 @@ _EXTENSION_CONTENT_TYPES = {
     or descriptor.parse_status in _DEFERRED_PARSE_STATUSES
     for extension in descriptor.extensions
 }
+_EXTENSION_CONTENT_TYPES.update(
+    {
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".hwpx": "application/haansoftdocx",
+        ".zip": "application/zip",
+        ".vcf": "text/x-vcard",
+        ".eml": "message/rfc822",
+        ".mp3": "audio/mpeg",
+        ".doc": "application/msword",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -151,6 +249,8 @@ def parse_email_attachment(
         safe_filename,
         normalized_content_type,
     )
+    if parse_content_type in _GENERIC_CONTENT_TYPES:
+        parse_content_type = _sniff_generic_image_content_type(raw_content)
 
     deferred_descriptor = _DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE.get(parse_content_type)
     if deferred_descriptor is not None:
@@ -162,17 +262,6 @@ def parse_email_attachment(
         # ``content`` with the recognized text on success. Without this the
         # source bytes were discarded and recognition was impossible.
         deferred_payload = _coerce_deferred_payload_bytes(raw_content)
-        if len(deferred_payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-            return AttachmentParseResult(
-                filename=safe_filename,
-                content="",
-                content_type=normalized_content_type,
-                parse_content="",
-                parse_content_type=parse_content_type,
-                parser_key=deferred_descriptor.parser_key,
-                parse_status="parse_size_limit_exceeded",
-                parse_error_code="parse_size_limit_exceeded",
-            )
         if parse_content_type == "application/pdf" and not deferred_payload.startswith(
             b"%PDF-"
         ):
@@ -197,25 +286,221 @@ def parse_email_attachment(
             parse_error_code=None,
         )
 
-    if parse_content_type not in _SUPPORTED_CONTENT_TYPES:
-        parser_key = _parser_key_for(
-            parse_content_type,
-            "unsupported_content_type",
+    if parse_content_type in _GENERIC_CONTENT_TYPES:
+        binary_metadata = _parse_generic_binary_metadata(
+            raw_content,
+            normalized_content_type,
         )
         return AttachmentParseResult(
             filename=safe_filename,
-            content="",
+            content=binary_metadata,
             content_type=normalized_content_type,
-            parse_content="",
-            parse_content_type=normalized_content_type,
-            parser_key=parser_key,
-            parse_status="unsupported_content_type",
-            parse_error_code="unsupported_content_type",
+            parse_content=binary_metadata,
+            parse_content_type="text/plain",
+            parser_key="binary_metadata",
+            parse_status="parsed",
+            parse_error_code=None,
+        )
+
+    if parse_content_type in _IMAGE_CONTENT_TYPES:
+        image_payload = _coerce_deferred_payload_bytes(raw_content)
+        metadata = _parse_image_metadata(image_payload)
+        if metadata is None:
+            return AttachmentParseResult(
+                filename=safe_filename,
+                content="",
+                content_type=normalized_content_type,
+                parse_content="",
+                parse_content_type=parse_content_type,
+                parser_key="image_metadata",
+                parse_status="image_metadata_parse_failed",
+                parse_error_code="image_metadata_parse_failed",
+            )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=metadata,
+            content_type=normalized_content_type,
+            parse_content=metadata,
+            parse_content_type="text/plain",
+            parser_key="image_metadata",
+            parse_status="parsed",
+            parse_error_code=None,
+        )
+
+    if parse_content_type in _OFFICE_CONTENT_TYPES:
+        office_payload = _coerce_deferred_payload_bytes(raw_content)
+        office_text, parse_error_code = _parse_office_text(
+            office_payload, parse_content_type
+        )
+        if office_text is None:
+            return AttachmentParseResult(
+                filename=safe_filename,
+                content="",
+                content_type=normalized_content_type,
+                parse_content="",
+                parse_content_type=parse_content_type,
+                parser_key="office_text",
+                parse_status=(
+                    "parse_size_limit_exceeded"
+                    if parse_error_code == "parse_size_limit_exceeded"
+                    else "office_text_parse_failed"
+                ),
+                parse_error_code=parse_error_code,
+            )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=office_text,
+            content_type=normalized_content_type,
+            parse_content=office_text,
+            parse_content_type="text/plain",
+            parser_key="office_text",
+            parse_status="parsed",
+            parse_error_code=None,
+        )
+
+    if parse_content_type in _ARCHIVE_CONTENT_TYPES:
+        archive_payload = _coerce_deferred_payload_bytes(raw_content)
+        archive_text, parse_error_code = _parse_archive_manifest(archive_payload)
+        if archive_text is None:
+            return AttachmentParseResult(
+                filename=safe_filename,
+                content="",
+                content_type=normalized_content_type,
+                parse_content="",
+                parse_content_type=parse_content_type,
+                parser_key="archive_manifest",
+                parse_status=(
+                    "parse_size_limit_exceeded"
+                    if parse_error_code == "parse_size_limit_exceeded"
+                    else "archive_manifest_parse_failed"
+                ),
+                parse_error_code=parse_error_code,
+            )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=archive_text,
+            content_type=normalized_content_type,
+            parse_content=archive_text,
+            parse_content_type="text/plain",
+            parser_key="archive_manifest",
+            parse_status="parsed",
+            parse_error_code=None,
+        )
+
+    if parse_content_type in _NESTED_EMAIL_CONTENT_TYPES:
+        nested_email_payload = _coerce_deferred_payload_bytes(raw_content)
+        if len(nested_email_payload) > MAX_NESTED_EMAIL_PARSE_BYTES:
+            nested_email_text, parse_error_code = (
+                None,
+                "parse_size_limit_exceeded",
+            )
+        else:
+            nested_email_text, parse_error_code = _parse_nested_email_metadata(
+                nested_email_payload
+            )
+        if nested_email_text is None:
+            return AttachmentParseResult(
+                filename=safe_filename,
+                content="",
+                content_type=normalized_content_type,
+                parse_content="",
+                parse_content_type=parse_content_type,
+                parser_key="nested_email",
+                parse_status=(
+                    "parse_size_limit_exceeded"
+                    if parse_error_code == "parse_size_limit_exceeded"
+                    else "nested_email_parse_failed"
+                ),
+                parse_error_code=parse_error_code,
+            )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=nested_email_text,
+            content_type=normalized_content_type,
+            parse_content=nested_email_text,
+            parse_content_type="text/plain",
+            parser_key="nested_email",
+            parse_status="parsed",
+            parse_error_code=None,
+        )
+
+    if parse_content_type in _AUDIO_CONTENT_TYPES:
+        audio_payload = _coerce_deferred_payload_bytes(raw_content)
+        audio_text, parse_error_code = _parse_audio_metadata(audio_payload)
+        if audio_text is None:
+            return AttachmentParseResult(
+                filename=safe_filename,
+                content="",
+                content_type=normalized_content_type,
+                parse_content="",
+                parse_content_type=parse_content_type,
+                parser_key="audio_metadata",
+                parse_status=(
+                    "parse_size_limit_exceeded"
+                    if parse_error_code == "parse_size_limit_exceeded"
+                    else "audio_metadata_parse_failed"
+                ),
+                parse_error_code=parse_error_code,
+            )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=audio_text,
+            content_type=normalized_content_type,
+            parse_content=audio_text,
+            parse_content_type="text/plain",
+            parser_key="audio_metadata",
+            parse_status="parsed",
+            parse_error_code=None,
+        )
+
+    if parse_content_type in _LEGACY_OFFICE_CONTENT_TYPES:
+        legacy_payload = _coerce_deferred_payload_bytes(raw_content)
+        legacy_text, parse_error_code = _parse_legacy_office_metadata(legacy_payload)
+        if legacy_text is None:
+            return AttachmentParseResult(
+                filename=safe_filename,
+                content="",
+                content_type=normalized_content_type,
+                parse_content="",
+                parse_content_type=parse_content_type,
+                parser_key="legacy_office_metadata",
+                parse_status=(
+                    "parse_size_limit_exceeded"
+                    if parse_error_code == "parse_size_limit_exceeded"
+                    else "legacy_office_metadata_parse_failed"
+                ),
+                parse_error_code=parse_error_code,
+            )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=legacy_text,
+            content_type=normalized_content_type,
+            parse_content=legacy_text,
+            parse_content_type="text/plain",
+            parser_key="legacy_office_metadata",
+            parse_status="parsed",
+            parse_error_code=None,
+        )
+
+    if parse_content_type not in _SUPPORTED_CONTENT_TYPES:
+        binary_metadata = _parse_generic_binary_metadata(
+            raw_content,
+            normalized_content_type,
+        )
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content=binary_metadata,
+            content_type=normalized_content_type,
+            parse_content=binary_metadata,
+            parse_content_type="text/plain",
+            parser_key="binary_metadata",
+            parse_status="parsed",
+            parse_error_code=None,
         )
 
     parser_key = _parser_key_for(parse_content_type, "parsed")
     parse_content = _coerce_text(raw_content).strip()
-    if len(parse_content) > MAX_ATTACHMENT_PARSE_SOURCE_CHARS:
+    if len(parse_content) > MAX_ATTACHMENT_PARSE_TEXT_CHARS:
         return AttachmentParseResult(
             filename=safe_filename,
             content="",
@@ -254,6 +539,34 @@ def _parse_content_type_for(filename: str, content_type: str) -> str:
     return _EXTENSION_CONTENT_TYPES.get(extension, content_type)
 
 
+def _sniff_generic_image_content_type(raw_content: Any) -> str:
+    """Resolve only unambiguous image signatures from a generic MIME type."""
+    if isinstance(raw_content, bytes):
+        prefix = raw_content[:8]
+    elif isinstance(raw_content, str):
+        prefix = raw_content[:8].encode("utf-8", errors="surrogatepass")
+    elif isinstance(raw_content, Message):
+        prefix = raw_content.as_bytes()[:8]
+    else:
+        prefix = str(raw_content or "")[:8].encode("utf-8", errors="surrogatepass")
+
+    if prefix.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if prefix.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if prefix[:6] in {b"GIF87a", b"GIF89a"}:
+        return "image/gif"
+    if prefix.startswith(b"BM"):
+        return "image/bmp"
+    return "application/octet-stream"
+
+
+def _parse_generic_binary_metadata(raw_content: Any, content_type: str) -> str:
+    """Return safe type and size metadata without guessing or retaining bytes."""
+    payload = _coerce_deferred_payload_bytes(raw_content)
+    return f"Binary attachment metadata: media_type={content_type}; bytes={len(payload)}"
+
+
 def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
     """Return the parser key associated with a parse MIME type and status."""
     if parse_status == "unsupported_content_type":
@@ -261,7 +574,7 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
     for descriptor in _PARSER_MANIFEST:
         if parse_content_type in descriptor.content_types:
             return descriptor.parser_key
-    return "unsupported_binary"
+    return "binary_metadata" if parse_status == "parsed" else "unsupported_binary"
 
 
 def _safe_filename(filename: str | None) -> str:
@@ -279,6 +592,8 @@ def _coerce_deferred_payload_bytes(raw_content: Any) -> bytes:
         return raw_content
     if isinstance(raw_content, str):
         return raw_content.encode("utf-8", errors="surrogatepass")
+    if isinstance(raw_content, Message):
+        return raw_content.as_bytes()
     if raw_content is None:
         return b""
     return str(raw_content).encode("utf-8", errors="surrogatepass")
@@ -299,8 +614,6 @@ def decode_deferred_attachment_payload(content: str | None) -> bytes:
         payload = base64.b64decode((content or "").encode("ascii"), validate=True)
     except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
         raise ValueError("Pending attachment payload is not valid base64") from exc
-    if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
-        raise ValueError("Pending attachment PDF exceeds the parse size limit")
     if not payload.startswith(b"%PDF-"):
         raise ValueError("Pending attachment payload is not a PDF")
     return payload
@@ -320,6 +633,382 @@ def _coerce_text(raw_content: Any) -> str:
 def _display_text(raw_content: str) -> str:
     """Strip markup and collapse whitespace for safe attachment display."""
     return " ".join(strip_html_markup(raw_content).split())
+
+
+_IMAGE_CONTENT_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/bmp"})
+SUPPORTED_IMAGE_CONTENT_TYPES = frozenset(_IMAGE_CONTENT_TYPES)
+_OFFICE_CONTENT_TYPES = frozenset(
+    {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/haansoftdocx",
+    }
+)
+_ARCHIVE_CONTENT_TYPES = frozenset({"application/zip", "application/x-zip-compressed"})
+_NESTED_EMAIL_CONTENT_TYPES = frozenset({"message/rfc822"})
+_AUDIO_CONTENT_TYPES = frozenset({"audio/mpeg", "audio/mp3"})
+_LEGACY_OFFICE_CONTENT_TYPES = frozenset({"application/msword"})
+MAX_ATTACHMENT_ARCHIVE_MEMBERS = 1_000
+MAX_OFFICE_XML_NODES = 1_000_000
+MAX_OFFICE_XML_TEXT_PARTS = 100_000
+_ZIP_ENCRYPTED_FLAG_MASK = 0x41
+_JPEG_SOF_MARKERS = frozenset(
+    {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
+)
+
+
+class _OfficeXmlParseLimitExceeded(ValueError):
+    """Signal an Office XML safety budget before building an in-memory tree."""
+
+
+@dataclass
+class _OfficeXmlBudget:
+    """Track aggregate XML work across selected Office package members."""
+
+    nodes: int = 0
+    text_parts: int = 0
+    text_chars: int = 0
+
+
+def inspect_image_metadata(payload: bytes) -> ImageMetadata | None:
+    """Read bounded image headers into structured facts without decoding pixels."""
+    if payload.startswith(b"\x89PNG"):
+        dimensions = _png_dimensions(payload)
+        format_name = "png"
+        animated = b"acTL" in payload[:IMAGE_METADATA_SCAN_PREFIX_BYTES]
+    elif payload.startswith(b"\xff\xd8"):
+        dimensions = _jpeg_dimensions(payload[:JPEG_METADATA_HEADER_SCAN_BYTES])
+        format_name = "jpeg"
+        animated = False
+    elif payload[:6] in {b"GIF87a", b"GIF89a"}:
+        dimensions = _gif_dimensions(payload)
+        format_name = "gif"
+        animated = b"NETSCAPE2.0" in payload[:IMAGE_METADATA_SCAN_PREFIX_BYTES]
+    elif payload.startswith(b"BM"):
+        dimensions = _bmp_dimensions(payload)
+        format_name = "bmp"
+        animated = False
+    else:
+        return None
+
+    if dimensions is None:
+        return None
+    width, height = dimensions
+    return ImageMetadata(
+        format_name=format_name,
+        width=width,
+        height=height,
+        animated=animated,
+    )
+
+
+def _parse_image_metadata(payload: bytes) -> str | None:
+    """Render bounded image-header facts as searchable text."""
+    metadata = inspect_image_metadata(payload)
+    if metadata is None:
+        return None
+    return (
+        "Image metadata: "
+        f"format={metadata.format_name}; width={metadata.width}px; "
+        f"height={metadata.height}px; "
+        f"animated={'yes' if metadata.animated else 'no'}"
+    )
+
+
+def _png_dimensions(payload: bytes) -> tuple[int, int] | None:
+    if len(payload) < 24 or payload[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    if payload[12:16] != b"IHDR" or int.from_bytes(payload[8:12], "big") < 13:
+        return None
+    width, height = struct.unpack(">II", payload[16:24])
+    return (width, height) if width and height else None
+
+
+def _jpeg_dimensions(payload: bytes) -> tuple[int, int] | None:
+    if len(payload) < 4 or payload[:2] != b"\xff\xd8":
+        return None
+    position = 2
+    while position + 1 < len(payload):
+        if payload[position] != 0xFF:
+            return None
+        while position < len(payload) and payload[position] == 0xFF:
+            position += 1
+        if position >= len(payload):
+            return None
+        marker = payload[position]
+        position += 1
+        if marker == 0x00:
+            continue
+        if marker == 0xDA:
+            return None
+        if marker == 0x01 or 0xD0 <= marker <= 0xD9:
+            continue
+        if position + 2 > len(payload):
+            return None
+        segment_length = int.from_bytes(payload[position : position + 2], "big")
+        if segment_length < 2 or position + segment_length > len(payload):
+            return None
+        if marker in _JPEG_SOF_MARKERS and segment_length >= 7:
+            height = int.from_bytes(payload[position + 3 : position + 5], "big")
+            width = int.from_bytes(payload[position + 5 : position + 7], "big")
+            return (width, height) if width and height else None
+        position += segment_length
+    return None
+
+
+def _gif_dimensions(payload: bytes) -> tuple[int, int] | None:
+    if len(payload) < 10 or payload[:6] not in {b"GIF87a", b"GIF89a"}:
+        return None
+    width, height = struct.unpack("<HH", payload[6:10])
+    return (width, height) if width and height else None
+
+
+def _bmp_dimensions(payload: bytes) -> tuple[int, int] | None:
+    if len(payload) < 26 or payload[:2] != b"BM":
+        return None
+    dib_size = int.from_bytes(payload[14:18], "little")
+    if dib_size == 12:
+        width, height = struct.unpack("<HH", payload[18:22])
+    elif dib_size >= 40:
+        width = abs(struct.unpack("<i", payload[18:22])[0])
+        height = abs(struct.unpack("<i", payload[22:26])[0])
+    else:
+        return None
+    return (width, height) if width and height else None
+
+
+def _parse_office_text(
+    payload: bytes, content_type: str
+) -> tuple[str | None, str | None]:
+    """Extract bounded text from OOXML/HWPX XML parts without executing macros."""
+    try:
+        with ZipFile(BytesIO(payload)) as archive:
+            infos = [info for info in archive.infolist() if not info.is_dir()]
+            if len(infos) > MAX_ATTACHMENT_ARCHIVE_MEMBERS:
+                return None, "parse_size_limit_exceeded"
+            if any(info.flag_bits & _ZIP_ENCRYPTED_FLAG_MASK for info in infos):
+                return None, "encrypted_archive_entry"
+            selected_infos = [
+                info
+                for info in infos
+                if _is_office_text_part(info.filename, content_type)
+            ]
+            text_parts: list[str] = []
+            declared_size = 0
+            bytes_read = 0
+            xml_budget = _OfficeXmlBudget()
+            for info in selected_infos:
+                declared_size += info.file_size
+                if declared_size > MAX_OFFICE_XML_PARSE_BYTES:
+                    return None, "parse_size_limit_exceeded"
+                remaining_bytes = MAX_OFFICE_XML_PARSE_BYTES - bytes_read
+                with archive.open(info) as source:
+                    xml_payload = source.read(remaining_bytes + 1)
+                bytes_read += len(xml_payload)
+                if len(xml_payload) > remaining_bytes:
+                    return None, "parse_size_limit_exceeded"
+                parts = _xml_text_parts(xml_payload, content_type, xml_budget)
+                text_parts.extend(parts)
+            format_name = _office_format_name(content_type)
+            text = " ".join(part for part in text_parts if part)
+            if len(text) > MAX_ATTACHMENT_PARSE_TEXT_CHARS:
+                text = text[:MAX_ATTACHMENT_PARSE_TEXT_CHARS]
+            summary = f"Office metadata: format={format_name}; members={len(infos)}"
+            return f"{summary}; text={text}" if text else summary, None
+    except _OfficeXmlParseLimitExceeded:
+        return None, "parse_size_limit_exceeded"
+    except DefusedXmlException:
+        return None, "office_text_parse_failed"
+    except (
+        BadZipFile,
+        NotImplementedError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        ElementTree.ParseError,
+    ):
+        return None, "office_text_parse_failed"
+
+
+def _is_office_text_part(filename: str, content_type: str) -> bool:
+    normalized_name = filename.replace("\\", "/").lower()
+    if content_type == "application/haansoftdocx":
+        return normalized_name.startswith("contents/") and normalized_name.endswith(
+            ".xml"
+        )
+    if "wordprocessingml.document" in content_type:
+        return (
+            normalized_name.startswith("word/")
+            and normalized_name.endswith(".xml")
+            and not normalized_name.endswith(".rels")
+        )
+    if "spreadsheetml.sheet" in content_type:
+        return normalized_name in {"xl/sharedstrings.xml"} or (
+            normalized_name.startswith("xl/worksheets/")
+            and normalized_name.endswith(".xml")
+        )
+    if "presentationml.presentation" in content_type:
+        return (
+            normalized_name.startswith("ppt/slides/")
+            or normalized_name.startswith("ppt/notesslides/")
+        ) and normalized_name.endswith(".xml")
+    return False
+
+
+def _xml_text_parts(
+    payload: bytes, content_type: str, budget: _OfficeXmlBudget
+) -> list[str]:
+    if b"<!DOCTYPE" in payload or b"<!ENTITY" in payload:
+        raise ValueError("XML declarations are not supported")
+    if "spreadsheetml.sheet" in content_type:
+        tags = {"t", "v"}
+    else:
+        tags = {"t"}
+    parts: list[str] = []
+    for _, element in ElementTree.iterparse(
+        BytesIO(payload), events=("end",), forbid_dtd=True
+    ):
+        budget.nodes += 1
+        if budget.nodes > MAX_OFFICE_XML_NODES:
+            raise _OfficeXmlParseLimitExceeded("Office XML node budget exceeded")
+        if not isinstance(element.tag, str):
+            element.clear()
+            continue
+        local_tag = element.tag.rsplit("}", 1)[-1]
+        if local_tag in tags:
+            part = " ".join("".join(element.itertext()).split())
+            if part:
+                budget.text_parts += 1
+                budget.text_chars += len(part)
+                if budget.text_parts > MAX_OFFICE_XML_TEXT_PARTS:
+                    raise _OfficeXmlParseLimitExceeded(
+                        "Office XML text-part budget exceeded"
+                    )
+                if budget.text_chars > MAX_ATTACHMENT_PARSE_TEXT_CHARS:
+                    raise _OfficeXmlParseLimitExceeded(
+                        "Office XML text budget exceeded"
+                    )
+                parts.append(part)
+        element.clear()
+    return parts
+
+
+def _office_format_name(content_type: str) -> str:
+    if "spreadsheetml.sheet" in content_type:
+        return "xlsx"
+    if "presentationml.presentation" in content_type:
+        return "pptx"
+    if content_type == "application/haansoftdocx":
+        return "hwpx"
+    return "docx"
+
+
+def _parse_archive_manifest(payload: bytes) -> tuple[str | None, str | None]:
+    """Index ZIP member names and sizes without extracting untrusted content."""
+    try:
+        with ZipFile(BytesIO(payload)) as archive:
+            infos = [info for info in archive.infolist() if not info.is_dir()]
+            if len(infos) > MAX_ATTACHMENT_ARCHIVE_MEMBERS:
+                return None, "parse_size_limit_exceeded"
+            if any(info.flag_bits & _ZIP_ENCRYPTED_FLAG_MASK for info in infos):
+                return None, "encrypted_archive_entry"
+            total_size = sum(info.file_size for info in infos)
+            member_names = []
+            for info in infos[:100]:
+                display_name = " ".join(_display_text(info.filename).split())[:160]
+                if display_name:
+                    member_names.append(display_name)
+            summary = (
+                "Archive manifest: format=zip; "
+                f"entries={len(infos)}; total_uncompressed_bytes={total_size}"
+            )
+            if member_names:
+                summary += "; members=" + " | ".join(member_names)
+            return summary, None
+    except (BadZipFile, OSError, ValueError):
+        return None, "archive_manifest_parse_failed"
+
+
+def _parse_nested_email_metadata(payload: bytes) -> tuple[str | None, str | None]:
+    if len(payload) > MAX_NESTED_EMAIL_PARSE_BYTES:
+        return None, "parse_size_limit_exceeded"
+    try:
+        message = message_from_bytes(payload, policy=policy.default)
+        if _max_nested_email_depth(message) > MAX_NESTED_EMAIL_NESTING_DEPTH:
+            return None, "parse_size_limit_exceeded"
+        subject = " ".join(_display_text(str(message.get("Subject", ""))).split())[:240]
+        sender = " ".join(_display_text(str(message.get("From", ""))).split())[:240]
+        attachment_count = sum(
+            1 for part in message.walk() if part.get_filename() is not None
+        )
+        summary = f"Nested email metadata: attachments={attachment_count}"
+        if subject:
+            summary += f"; subject={subject}"
+        if sender:
+            summary += f"; sender={sender}"
+        return summary, None
+    except (RecursionError, TypeError, ValueError):
+        return None, "nested_email_parse_failed"
+
+
+def _max_nested_email_depth(message: Message) -> int:
+    """Return the deepest attached ``message/rfc822`` descendant level."""
+    maximum_depth = 0
+    pending: list[tuple[Message, int]] = [(message, 0)]
+    while pending:
+        current, current_depth = pending.pop()
+        if not current.is_multipart():
+            continue
+        for part in current.iter_parts():
+            payload = part.get_payload()
+            if isinstance(payload, list):
+                children = tuple(
+                    child for child in payload if isinstance(child, Message)
+                )
+            elif isinstance(payload, Message):
+                children = (payload,)
+            else:
+                children = ()
+            child_depth = current_depth + int(
+                part.get_content_type() == "message/rfc822"
+            )
+            for child in children:
+                maximum_depth = max(maximum_depth, child_depth)
+                pending.append((child, child_depth))
+    return maximum_depth
+
+
+def _parse_audio_metadata(payload: bytes) -> tuple[str | None, str | None]:
+    has_id3 = payload.startswith(b"ID3")
+    if has_id3:
+        if len(payload) < 10 or any(byte & 0x80 for byte in payload[6:10]):
+            return None, "audio_metadata_parse_failed"
+        tag_size = sum(
+            byte << shift for byte, shift in zip(payload[6:10], (21, 14, 7, 0))
+        )
+        if 10 + tag_size > len(payload):
+            return None, "audio_metadata_parse_failed"
+    elif not (
+        len(payload) >= 2
+        and payload[0] == 0xFF
+        and payload[1] & 0xE0 == 0xE0
+        and payload[1] & 0x06 == 0x02
+    ):
+        return None, "audio_metadata_parse_failed"
+    return (
+        f"Audio metadata: format=mp3; bytes={len(payload)}; id3={'yes' if has_id3 else 'no'}",
+        None,
+    )
+
+
+def _parse_legacy_office_metadata(payload: bytes) -> tuple[str | None, str | None]:
+    if not payload.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        return None, "legacy_office_metadata_parse_failed"
+    return (
+        f"Legacy Office metadata: format=doc; container=ole; bytes={len(payload)}",
+        None,
+    )
 
 
 def _sanitize_nul(text: str) -> str:

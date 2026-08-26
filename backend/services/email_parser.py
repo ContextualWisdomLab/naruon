@@ -8,6 +8,7 @@ from email.utils import parsedate_to_datetime
 from typing import NotRequired, TypedDict
 from .attachment_parser import parse_email_attachment
 from .exceptions import EmailParseError
+from .inline_image_service import extract_inline_image_sources
 from .text_safety import strip_html_markup
 
 
@@ -27,6 +28,7 @@ class EmailData(TypedDict):
     body_content_type: NotRequired[str]
     body_parse_content: NotRequired[str]
     attachments: list[dict]
+    inline_images: NotRequired[list[dict]]
 
 
 def _sanitize_nul(text: str) -> str:
@@ -193,6 +195,7 @@ def _extract_thread_id(msg: Message, message_id: str) -> str | None:
 
 def _message_to_email_data(msg: Message) -> EmailData:
     body, body_content_type, attachments = _extract_body_and_attachments(msg)
+    inline_images = _extract_inline_images_from_message(msg)
     parsed_date = _extract_date(msg)
     message_id = _sanitize_nul(msg.get("Message-ID", ""))
     thread_id = _extract_thread_id(msg, message_id)
@@ -221,7 +224,34 @@ def _message_to_email_data(msg: Message) -> EmailData:
         "body_content_type": body_content_type,
         "body_parse_content": _sanitize_nul(body),
         "attachments": attachments,
+        "inline_images": inline_images,
     }
+
+
+def _extract_inline_images_from_message(msg: Message) -> list[dict]:
+    """Extract source-linked inline images from every non-attachment HTML part."""
+    inline_images: list[dict] = []
+    html_part_ordinal = 0
+    source_ordinal = 0
+    for part in msg.walk():
+        if part.get_filename() or part.get_content_type() != "text/html":
+            continue
+        try:
+            html_content = part.get_content()
+        except (LookupError, TypeError, ValueError):
+            continue
+        if not isinstance(html_content, str):
+            continue
+        html_part_ordinal += 1
+        for source in extract_inline_image_sources(
+            html_content,
+            locator_prefix=f"/mime_part[{html_part_ordinal}]",
+        ):
+            source_ordinal += 1
+            source_payload = source.as_payload()
+            source_payload["source_ordinal"] = source_ordinal
+            inline_images.append(source_payload)
+    return inline_images
 
 
 def parse_eml(file_path: str | Path) -> EmailData:

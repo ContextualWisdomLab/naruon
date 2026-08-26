@@ -1,10 +1,30 @@
 import base64
+from email.message import EmailMessage, Message
+from io import BytesIO
+import struct
+from zipfile import ZipFile
+from zipfile import ZIP_STORED
 
 import pytest
 
 from services.attachment_parser import (
-    MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
-    MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
+    _OfficeXmlBudget,
+    _bmp_dimensions,
+    _coerce_deferred_payload_bytes,
+    _coerce_text,
+    _gif_dimensions,
+    _is_office_text_part,
+    _jpeg_dimensions,
+    _max_nested_email_depth,
+    _parse_audio_metadata,
+    _parse_archive_manifest,
+    _parse_nested_email_metadata,
+    _parse_office_text,
+    _parser_key_for,
+    _png_dimensions,
+    _safe_filename,
+    _sniff_generic_image_content_type,
+    _xml_text_parts,
     decode_deferred_attachment_payload,
     get_attachment_parser_manifest,
     parse_email_attachment,
@@ -42,7 +62,7 @@ def test_markdown_attachment_is_parseable_markdown():
     assert result.parse_status == "parsed"
 
 
-def test_parser_manifest_lists_supported_and_unsupported_format_families():
+def test_parser_manifest_lists_supported_format_families():
     manifest = get_attachment_parser_manifest()
     parser_keys = {descriptor.parser_key for descriptor in manifest}
 
@@ -54,7 +74,15 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
         "csv",
         "xml",
         "calendar",
+        "vcard",
+        "nested_email",
         "pdf",
+        "image_metadata",
+        "office_text",
+        "archive_manifest",
+        "audio_metadata",
+        "legacy_office_metadata",
+        "binary_metadata",
         "unsupported_binary",
     } <= parser_keys
     markdown_descriptor = next(
@@ -71,7 +99,553 @@ def test_parser_manifest_lists_supported_and_unsupported_format_families():
         descriptor for descriptor in manifest if descriptor.parser_key == "calendar"
     )
     assert "text/calendar" in calendar_descriptor.content_types
+    assert "application/ics" in calendar_descriptor.content_types
     assert ".ics" in calendar_descriptor.extensions
+    binary_descriptor = next(
+        descriptor for descriptor in manifest if descriptor.parser_key == "binary_metadata"
+    )
+    assert binary_descriptor.content_types == (
+        "application/octet-stream",
+        "application/x-binary",
+        "binary/octet-stream",
+    )
+
+
+def _zip_fixture(*members: tuple[str, str]) -> bytes:
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        for filename, content in members:
+            archive.writestr(filename, content)
+    return payload.getvalue()
+
+
+def _zip_fixture_with_entry_flags(flags: int) -> bytes:
+    payload = bytearray(_zip_fixture(("word/document.xml", "<w:t>Plan</w:t>")))
+    local_header = payload.find(b"PK\x03\x04")
+    central_header = payload.find(b"PK\x01\x02")
+    assert local_header >= 0 and central_header >= 0
+    payload[local_header + 6 : local_header + 8] = flags.to_bytes(2, "little")
+    payload[central_header + 8 : central_header + 10] = flags.to_bytes(2, "little")
+    return bytes(payload)
+
+
+def _png_fixture(width: int = 320, height: int = 200) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", 13)
+        + b"IHDR"
+        + struct.pack(">II", width, height)
+        + b"\x08\x06\x00\x00\x00"
+    )
+
+
+def _jpeg_fixture(width: int = 640, height: int = 480) -> bytes:
+    sof_payload = b"\x08" + struct.pack(">HH", height, width) + b"\x00" * 10
+    return b"\xff\xd8\xff\xc0" + struct.pack(">H", len(sof_payload) + 2) + sof_payload
+
+
+def _nested_email_fixture(depth: int) -> bytes:
+    payload = b"Subject: leaf\nContent-Type: text/plain\n\nbody\n"
+    for index in range(depth):
+        boundary = f"nested-{index}".encode()
+        payload = (
+            b"Content-Type: multipart/mixed; boundary="
+            + boundary
+            + b"\n\n--"
+            + boundary
+            + b"\nContent-Type: message/rfc822\n"
+            + b'Content-Disposition: attachment; filename="inner.eml"\n\n'
+            + payload
+            + b"\n--"
+            + boundary
+            + b"--\n"
+        )
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "raw_content", "format_name"),
+    [
+        ("preview.png", "image/png", _png_fixture(), "png"),
+        ("preview.jpg", "image/jpeg", _jpeg_fixture(), "jpeg"),
+        ("preview.gif", "image/gif", b"GIF89a" + struct.pack("<HH", 80, 60), "gif"),
+        (
+            "preview.bmp",
+            "image/bmp",
+            b"BM" + bytes(12) + struct.pack("<Iii", 40, 100, 75),
+            "bmp",
+        ),
+    ],
+)
+def test_image_attachment_metadata_is_searchable_without_pixel_decoding(
+    filename, content_type, raw_content, format_name
+):
+    result = parse_email_attachment(
+        filename=filename,
+        content_type=content_type,
+        raw_content=raw_content,
+    )
+
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "parsed"
+    assert result.parse_content_type == "text/plain"
+    assert result.parse_content == result.content
+    assert f"format={format_name}" in result.content
+    assert "width=" in result.content
+    assert "height=" in result.content
+    assert "animated=no" in result.content
+
+
+def test_generic_image_mime_uses_filename_extension_for_metadata_parser():
+    result = parse_email_attachment(
+        filename="preview.png",
+        content_type="application/octet-stream",
+        raw_content=_png_fixture(12, 34),
+    )
+
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "parsed"
+    assert "width=12px" in result.content
+    assert "height=34px" in result.content
+
+
+def test_extensionless_generic_gif_uses_unambiguous_image_signature():
+    result = parse_email_attachment(
+        filename=None,
+        content_type="application/octet-stream",
+        raw_content=b"GIF89a" + struct.pack("<HH", 1, 1) + b"\x00" * 26,
+    )
+
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "parsed"
+    assert "format=gif" in result.content
+    assert "width=1px" in result.content
+    assert "height=1px" in result.content
+
+
+def test_large_image_attachment_is_not_rejected_by_metadata_scan_ceiling():
+    result = parse_email_attachment(
+        filename="large.png",
+        content_type="image/png",
+        raw_content=_png_fixture() + b"x" * (20 * 1024 * 1024 + 1),
+    )
+
+    assert result.parse_status == "parsed"
+    assert "format=png" in result.content
+    assert "width=320px" in result.content
+
+
+def test_jpeg_header_scan_is_bounded(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.JPEG_METADATA_HEADER_SCAN_BYTES", 32
+    )
+    delayed_sof = (
+        b"\xff\xd8\xff\xe0" + struct.pack(">H", 30) + b"x" * 28 + _jpeg_fixture()
+    )
+
+    result = parse_email_attachment(
+        filename="delayed.jpg",
+        content_type="image/jpeg",
+        raw_content=delayed_sof,
+    )
+
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "image_metadata_parse_failed"
+    assert result.parse_error_code == "image_metadata_parse_failed"
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "member", "text", "format_name"),
+    [
+        (
+            "plan.docx",
+            "application/octet-stream",
+            (
+                "word/document.xml",
+                "<w:document xmlns:w='urn:w'><w:t>Plan</w:t></w:document>",
+            ),
+            "Plan",
+            "docx",
+        ),
+        (
+            "budget.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ("xl/sharedStrings.xml", "<sst xmlns='urn:x'><si><t>Budget</t></si></sst>"),
+            "Budget",
+            "xlsx",
+        ),
+        (
+            "briefing.pptx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            (
+                "ppt/slides/slide1.xml",
+                "<p:sld xmlns:p='urn:p' xmlns:a='urn:a'><a:t>Briefing</a:t></p:sld>",
+            ),
+            "Briefing",
+            "pptx",
+        ),
+        (
+            "report.hwpx",
+            "application/haansoftdocx",
+            (
+                "Contents/section0.xml",
+                "<hp:sec xmlns:hp='urn:hp'><hp:t>Report</hp:t></hp:sec>",
+            ),
+            "Report",
+            "hwpx",
+        ),
+    ],
+)
+def test_office_attachment_text_is_indexed_from_bounded_xml_parts(
+    filename, content_type, member, text, format_name
+):
+    result = parse_email_attachment(
+        filename=filename,
+        content_type=content_type,
+        raw_content=_zip_fixture(member),
+    )
+
+    assert result.parser_key == "office_text"
+    assert result.parse_status == "parsed"
+    assert result.parse_content_type == "text/plain"
+    assert f"format={format_name}" in result.content
+    assert f"text={text}" in result.content
+
+
+def test_generic_office_mime_uses_filename_extension_for_text_parser():
+    result = parse_email_attachment(
+        filename="plan.docx",
+        content_type="application/octet-stream",
+        raw_content=_zip_fixture(
+            (
+                "word/document.xml",
+                "<w:document xmlns:w='urn:w'><w:t>Plan</w:t></w:document>",
+            )
+        ),
+    )
+
+    assert result.content_type == "application/octet-stream"
+    assert result.parse_content_type == "text/plain"
+    assert result.parse_status == "parsed"
+    assert "text=Plan" in result.content
+
+
+def test_office_text_applies_one_aggregate_xml_budget(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_PARSE_BYTES", 20)
+    result = parse_email_attachment(
+        filename="combined.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(
+            ("word/document.xml", "<t>first</t>"),
+            ("word/header.xml", "<t>second</t>"),
+        ),
+    )
+
+    assert result.parse_status == "parse_size_limit_exceeded"
+    assert result.parse_error_code == "parse_size_limit_exceeded"
+    assert result.content == ""
+
+
+def test_office_text_streams_many_xml_nodes_with_a_bounded_budget(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_NODES", 4)
+    xml = "<w:document xmlns:w='urn:w'>" + "".join(
+        f"<w:t>{index}</w:t>" for index in range(8)
+    ) + "</w:document>"
+
+    result = parse_email_attachment(
+        filename="many-nodes.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(("word/document.xml", xml)),
+    )
+
+    assert result.parse_status == "parse_size_limit_exceeded"
+    assert result.parse_error_code == "parse_size_limit_exceeded"
+    assert result.content == ""
+
+
+def test_office_text_bounds_extracted_xml_text_parts(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_NODES", 100)
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_TEXT_PARTS", 2)
+    xml = "<w:document xmlns:w='urn:w'>" + "".join(
+        f"<w:t>{index}</w:t>" for index in range(4)
+    ) + "</w:document>"
+
+    result = parse_email_attachment(
+        filename="many-text-parts.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(("word/document.xml", xml)),
+    )
+
+    assert result.parse_status == "parse_size_limit_exceeded"
+    assert result.parse_error_code == "parse_size_limit_exceeded"
+    assert result.content == ""
+
+
+def test_office_xml_ignores_empty_text_parts():
+    xml = "<w:document xmlns:w='urn:w'><w:t /></w:document>"
+    assert _xml_text_parts(
+        xml.encode(),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        _OfficeXmlBudget(),
+    ) == []
+
+
+def test_large_office_package_parses_selected_xml_without_a_package_size_cap():
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            "<w:document xmlns:w='urn:w'><w:t>Plan</w:t></w:document>",
+        )
+        archive.writestr(
+            "word/media/large.bin",
+            b"x" * (20 * 1024 * 1024 + 1),
+            compress_type=ZIP_STORED,
+        )
+
+    result = parse_email_attachment(
+        filename="large.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=payload.getvalue(),
+    )
+
+    assert result.parse_status == "parsed"
+    assert "text=Plan" in result.content
+
+
+@pytest.mark.parametrize("flags", [0x01, 0x40])
+@pytest.mark.parametrize(
+    ("filename", "content_type", "parser_key"),
+    [
+        (
+            "encrypted.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "office_text",
+        ),
+        ("encrypted.zip", "application/zip", "archive_manifest"),
+    ],
+)
+def test_encrypted_zip_entries_fail_closed_for_office_and_archive(
+    flags, filename, content_type, parser_key
+):
+    result = parse_email_attachment(
+        filename=filename,
+        content_type=content_type,
+        raw_content=_zip_fixture_with_entry_flags(flags),
+    )
+
+    assert result.parser_key == parser_key
+    assert result.parse_status.endswith("_parse_failed")
+    assert result.parse_error_code == "encrypted_archive_entry"
+    assert result.content == ""
+
+
+def test_invalid_office_attachment_fails_closed_without_binary_content():
+    result = parse_email_attachment(
+        filename="broken.docx",
+        content_type="application/octet-stream",
+        raw_content=b"not a zip archive",
+    )
+
+    assert result.content == ""
+    assert result.parse_content == ""
+    assert result.parser_key == "office_text"
+    assert result.parse_status == "office_text_parse_failed"
+    assert result.parse_error_code == "office_text_parse_failed"
+
+
+def test_zip_attachment_indexes_manifest_without_extracting_members():
+    result = parse_email_attachment(
+        filename="bundle.zip",
+        content_type="application/x-zip-compressed",
+        raw_content=_zip_fixture(
+            ("docs/plan.txt", "Plan"), ("data/status.csv", "Ready")
+        ),
+    )
+
+    assert result.parser_key == "archive_manifest"
+    assert result.parse_status == "parsed"
+    assert result.parse_content_type == "text/plain"
+    assert "entries=2" in result.content
+    assert "docs/plan.txt" in result.content
+    assert "data/status.csv" in result.content
+
+
+def test_invalid_zip_attachment_fails_closed_without_binary_content():
+    result = parse_email_attachment(
+        filename="broken.zip",
+        content_type="application/zip",
+        raw_content=b"not a zip archive",
+    )
+
+    assert result.content == ""
+    assert result.parse_content == ""
+    assert result.parser_key == "archive_manifest"
+    assert result.parse_status == "archive_manifest_parse_failed"
+    assert result.parse_error_code == "archive_manifest_parse_failed"
+
+
+def test_nested_email_attachment_indexes_safe_headers_only():
+    result = parse_email_attachment(
+        filename="forwarded.eml",
+        content_type="application/octet-stream",
+        raw_content=(
+            b"From: sender@example.com\nSubject: Project plan\n"
+            b"Content-Type: text/plain\n\nbody"
+        ),
+    )
+
+    assert result.parser_key == "nested_email"
+    assert result.parse_status == "parsed"
+    assert result.parse_content_type == "text/plain"
+    assert "subject=Project plan" in result.content
+    assert "sender=sender@example.com" in result.content
+
+
+def test_nested_email_attachment_accepts_exact_byte_budget_and_rejects_next_byte(
+    monkeypatch,
+):
+    payload = b"Subject: bounded\nContent-Type: text/plain\n\nbody"
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_NESTED_EMAIL_PARSE_BYTES", len(payload)
+    )
+
+    allowed = parse_email_attachment(
+        filename="bounded.eml",
+        content_type="message/rfc822",
+        raw_content=payload,
+    )
+    rejected = parse_email_attachment(
+        filename="oversized.eml",
+        content_type="message/rfc822",
+        raw_content=payload + b"x",
+    )
+
+    assert allowed.parse_status == "parsed"
+    assert rejected.parse_status == "parse_size_limit_exceeded"
+    assert rejected.parse_error_code == "parse_size_limit_exceeded"
+
+
+def test_nested_email_attachment_rejects_excessive_mime_depth(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_NESTED_EMAIL_NESTING_DEPTH", 1)
+
+    allowed = parse_email_attachment(
+        filename="one-level.eml",
+        content_type="message/rfc822",
+        raw_content=_nested_email_fixture(1),
+    )
+    rejected = parse_email_attachment(
+        filename="deep.eml",
+        content_type="message/rfc822",
+        raw_content=_nested_email_fixture(2),
+    )
+
+    assert allowed.parse_status == "parsed"
+    assert rejected.parse_status == "parse_size_limit_exceeded"
+    assert rejected.parse_error_code == "parse_size_limit_exceeded"
+
+
+def test_mp3_attachment_indexes_bounded_container_metadata():
+    result = parse_email_attachment(
+        filename="briefing.mp3",
+        content_type="audio/mp3",
+        raw_content=b"ID3\x04\x00\x00\x00\x00\x00\x03abc",
+    )
+
+    assert result.parser_key == "audio_metadata"
+    assert result.parse_status == "parsed"
+    assert "format=mp3" in result.content
+    assert "id3=yes" in result.content
+
+
+def test_mp3_frame_without_id3_indexes_metadata():
+    result = parse_email_attachment(
+        filename="frame-only.mp3",
+        content_type="audio/mpeg",
+        raw_content=b"\xff\xfa",
+    )
+
+    assert result.parser_key == "audio_metadata"
+    assert result.parse_status == "parsed"
+    assert "id3=no" in result.content
+
+
+def test_invalid_mp3_attachment_fails_closed_without_binary_content():
+    result = parse_email_attachment(
+        filename="broken.mp3",
+        content_type="audio/mpeg",
+        raw_content=b"not an mp3",
+    )
+
+    assert result.content == ""
+    assert result.parser_key == "audio_metadata"
+    assert result.parse_status == "audio_metadata_parse_failed"
+    assert result.parse_error_code == "audio_metadata_parse_failed"
+
+
+@pytest.mark.parametrize("layer_bits", [0x00, 0x04, 0x06])
+def test_mp3_frame_metadata_rejects_non_layer_iii_headers(layer_bits):
+    result = parse_email_attachment(
+        filename="not-layer-iii.mp3",
+        content_type="audio/mpeg",
+        raw_content=bytes((0xFF, 0xE0 | layer_bits)),
+    )
+
+    assert result.parse_status == "audio_metadata_parse_failed"
+    assert result.parse_error_code == "audio_metadata_parse_failed"
+
+
+def test_legacy_doc_attachment_indexes_ole_container_metadata():
+    result = parse_email_attachment(
+        filename="legacy.doc",
+        content_type="application/msword",
+        raw_content=b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 8,
+    )
+
+    assert result.parser_key == "legacy_office_metadata"
+    assert result.parse_status == "parsed"
+    assert "format=doc" in result.content
+    assert "container=ole" in result.content
+
+
+def test_invalid_legacy_doc_attachment_fails_closed_without_binary_content():
+    result = parse_email_attachment(
+        filename="broken.doc",
+        content_type="application/msword",
+        raw_content=b"not an OLE document",
+    )
+
+    assert result.content == ""
+    assert result.parser_key == "legacy_office_metadata"
+    assert result.parse_status == "legacy_office_metadata_parse_failed"
+    assert result.parse_error_code == "legacy_office_metadata_parse_failed"
+
+
+def test_image_signature_wins_when_mail_mime_type_is_wrong():
+    result = parse_email_attachment(
+        filename="preview.jpg",
+        content_type="image/jpeg",
+        raw_content=_png_fixture(12, 34),
+    )
+
+    assert result.parse_status == "parsed"
+    assert "format=png" in result.content
+    assert "width=12px" in result.content
+    assert "height=34px" in result.content
+
+
+def test_invalid_image_metadata_fails_closed_without_retaining_binary_content():
+    result = parse_email_attachment(
+        filename="broken.png",
+        content_type="image/png",
+        raw_content=b"not an image",
+    )
+
+    assert result.content == ""
+    assert result.parse_content == ""
+    assert result.parser_key == "image_metadata"
+    assert result.parse_status == "image_metadata_parse_failed"
+    assert result.parse_error_code == "image_metadata_parse_failed"
 
 
 def test_generic_binary_content_type_can_fall_back_to_markdown_extension():
@@ -112,6 +686,18 @@ def test_structured_non_pdf_attachment_media_types_are_parseable():
             "BEGIN:VCALENDAR\nSUMMARY:Launch\nEND:VCALENDAR",
             "calendar",
         ),
+        (
+            "invite.ics",
+            "application/ics",
+            "BEGIN:VCALENDAR\nSUMMARY:Launch\nEND:VCALENDAR",
+            "calendar",
+        ),
+        (
+            "contact.vcf",
+            "text/x-vcard",
+            "BEGIN:VCARD\nFN:Launch Owner\nEND:VCARD",
+            "vcard",
+        ),
     ]
 
     for filename, content_type, raw_content, parser_key in cases:
@@ -128,11 +714,14 @@ def test_structured_non_pdf_attachment_media_types_are_parseable():
         assert result.parse_content == raw_content
 
 
-def test_oversized_text_attachment_is_metadata_only_without_raw_content():
+def test_oversized_text_attachment_is_metadata_only_without_raw_content(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_TEXT_CHARS", 20
+    )
     result = parse_email_attachment(
         filename="huge.txt",
         content_type="text/plain",
-        raw_content="A" * (MAX_ATTACHMENT_PARSE_SOURCE_CHARS + 1),
+        raw_content="A" * 21,
     )
 
     assert result.content == ""
@@ -143,21 +732,64 @@ def test_oversized_text_attachment_is_metadata_only_without_raw_content():
     assert result.parse_error_code == "parse_size_limit_exceeded"
 
 
-def test_unsupported_binary_attachment_is_visible_without_raw_bytes():
+@pytest.mark.parametrize(
+    "content_type",
+    ["application/octet-stream", "binary/octet-stream", "application/x-binary"],
+)
+def test_generic_binary_attachment_indexes_metadata_without_raw_bytes(content_type):
     result = parse_email_attachment(
-        filename="archive.zip",
-        content_type="application/zip",
+        filename="unknown.bin",
+        content_type=content_type,
         raw_content=b"PK\x03\x04 raw bytes",
     )
 
-    assert result.filename == "archive.zip"
-    assert result.content_type == "application/zip"
-    assert result.content == ""
-    assert result.parse_content == ""
-    assert result.parse_content_type == "application/zip"
-    assert result.parser_key == "unsupported_binary"
-    assert result.parse_status == "unsupported_content_type"
-    assert result.parse_error_code == "unsupported_content_type"
+    assert result.filename == "unknown.bin"
+    assert result.content_type == content_type
+    assert result.content == (
+        f"Binary attachment metadata: media_type={content_type}; bytes=14"
+    )
+    assert result.parse_content == result.content
+    assert result.parse_content_type == "text/plain"
+    assert result.parser_key == "binary_metadata"
+    assert result.parse_status == "parsed"
+    assert result.parse_error_code is None
+
+
+@pytest.mark.parametrize(
+    "content_type", ["application/octet-stream", "application/x-unknown"]
+)
+def test_large_unrecognized_binary_attachment_has_no_one_megabyte_parse_limit(
+    content_type,
+):
+    result = parse_email_attachment(
+        filename="large.bin",
+        content_type=content_type,
+        raw_content=b"x" * (20 * 1024 * 1024 + 1),
+    )
+
+    assert result.parse_status == "parsed"
+    assert result.parser_key == "binary_metadata"
+    assert result.parse_content == (
+        f"Binary attachment metadata: media_type={content_type}; "
+        "bytes=20971521"
+    )
+
+
+def test_non_generic_unknown_attachment_indexes_declared_metadata_without_guessing():
+    result = parse_email_attachment(
+        filename="unknown.bin",
+        content_type="application/x-unknown",
+        raw_content=b"opaque bytes",
+    )
+
+    assert result.content == (
+        "Binary attachment metadata: media_type=application/x-unknown; bytes=12"
+    )
+    assert result.parse_content == result.content
+    assert result.parse_content_type == "text/plain"
+    assert result.parser_key == "binary_metadata"
+    assert result.parse_status == "parsed"
+    assert result.parse_error_code is None
 
 
 def test_pdf_attachment_is_deferred_pending_newsdom_recognition():
@@ -205,16 +837,16 @@ def test_invalid_pdf_payload_is_rejected_before_deferred_recognition():
     assert result.parse_error_code == "invalid_pdf_payload"
 
 
-def test_oversized_pdf_payload_is_not_retained():
+def test_large_pdf_payload_remains_pending_for_deferred_recognition():
     result = parse_email_attachment(
         filename="huge.pdf",
         content_type="application/pdf",
-        raw_content=b"%PDF-" + b"A" * MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
+        raw_content=b"%PDF-" + b"A" * (20 * 1024 * 1024),
     )
 
-    assert result.content == ""
-    assert result.parse_status == "parse_size_limit_exceeded"
-    assert result.parse_error_code == "parse_size_limit_exceeded"
+    assert result.parse_status == "pdf_dom_recognition_pending"
+    assert result.parse_error_code is None
+    assert decode_deferred_attachment_payload(result.content).startswith(b"%PDF-")
 
 
 @pytest.mark.parametrize(
@@ -244,14 +876,247 @@ def test_string_pdf_input_round_trips_as_deferred_bytes():
     )
 
 
-def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch):
+def test_deferred_pdf_decoder_rejects_non_pdf_payloads():
     non_pdf = base64.b64encode(b"not a PDF").decode("ascii")
     with pytest.raises(ValueError, match="not a PDF"):
         decode_deferred_attachment_payload(non_pdf)
 
-    monkeypatch.setattr(
-        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 5
+
+def test_deferred_pdf_decoder_rejects_invalid_base64():
+    with pytest.raises(ValueError, match="not valid base64"):
+        decode_deferred_attachment_payload("not-base64!")
+
+
+def test_attachment_parser_small_type_and_coercion_helpers_fail_closed():
+    message = EmailMessage()
+    message.set_content("PNG")
+
+    assert _sniff_generic_image_content_type("plain") == "application/octet-stream"
+    assert _sniff_generic_image_content_type(message) == "application/octet-stream"
+    assert _sniff_generic_image_content_type(object()) == "application/octet-stream"
+    assert _sniff_generic_image_content_type(b"\x89PNG\r\n\x1a\n") == "image/png"
+    assert _sniff_generic_image_content_type(b"\xff\xd8") == "image/jpeg"
+    assert _sniff_generic_image_content_type(b"GIF89a") == "image/gif"
+    assert _sniff_generic_image_content_type(b"BM") == "image/bmp"
+    assert _parser_key_for("application/x-unknown", "parsed") == "binary_metadata"
+    assert _parser_key_for("application/octet-stream", "parsed") == "binary_metadata"
+    assert (
+        _parser_key_for("application/x-unknown", "unsupported_content_type")
+        == "unsupported_binary"
     )
-    oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
-    with pytest.raises(ValueError, match="size limit"):
-        decode_deferred_attachment_payload(oversized)
+    assert _safe_filename("") == "attachment"
+    assert _safe_filename(".") == "attachment"
+    assert _coerce_deferred_payload_bytes(message) == message.as_bytes()
+    assert _coerce_text(None) == ""
+    assert _coerce_text(b"text") == "text"
+    assert _coerce_text(123) == "123"
+
+
+def test_image_header_helpers_reject_malformed_payloads():
+    assert _png_dimensions(b"") is None
+    assert _png_dimensions(_png_fixture()[:24].replace(b"IHDR", b"bad!")) is None
+    assert _jpeg_dimensions(b"") is None
+    assert _jpeg_dimensions(b"\xff\xd8\x01") is None
+    assert _jpeg_dimensions(b"\xff\xd8\xff") is None
+    assert _jpeg_dimensions(b"\xff\xd8\xff\x00") is None
+    assert _jpeg_dimensions(b"\xff\xd8\xff\xda\x00\x02") is None
+    assert _jpeg_dimensions(b"\xff\xd8\xff\xd0") is None
+    assert _jpeg_dimensions(b"\xff\xd8\xff\xe0") is None
+    assert _jpeg_dimensions(b"\xff\xd8\xff\xe0\x00\x02") is None
+    assert _jpeg_dimensions(b"\xff\xd8\x01\x00") is None
+    assert _jpeg_dimensions(b"\xff\xd8\xff\xff") is None
+    assert _gif_dimensions(b"") is None
+    assert _bmp_dimensions(b"") is None
+    assert _bmp_dimensions(b"BM" + bytes(12) + struct.pack("<I", 12) + struct.pack("<HH", 3, 4) + bytes(4)) == (3, 4)
+    assert _bmp_dimensions(b"BM" + bytes(12) + struct.pack("<I", 20) + bytes(12)) is None
+
+
+def test_office_and_archive_safety_edges_are_explicit(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_ATTACHMENT_ARCHIVE_MEMBERS", 1)
+    archive_payload = _zip_fixture(("word/document.xml", "<w:t>one</w:t>"), ("word/header.xml", "<w:t>two</w:t>"))
+    office_result = parse_email_attachment(
+        filename="many.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=archive_payload,
+    )
+    archive_result = parse_email_attachment(
+        filename="many.zip",
+        content_type="application/zip",
+        raw_content=archive_payload,
+    )
+    assert office_result.parse_error_code == "parse_size_limit_exceeded"
+    assert archive_result.parse_error_code == "parse_size_limit_exceeded"
+
+    assert _is_office_text_part("anything.xml", "application/x-unknown") is False
+    doctype_result = parse_email_attachment(
+        filename="doctype.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(("word/document.xml", "<!DOCTYPE x><w:t>x</w:t>")),
+    )
+    assert doctype_result.parse_status == "office_text_parse_failed"
+
+    utf16_doctype_result = parse_email_attachment(
+        filename="utf16-doctype.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(
+            (
+                "word/document.xml",
+                (
+                    "<?xml version='1.0' encoding='utf-16'?>"
+                    "<!DOCTYPE w:document>"
+                    "<w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>"
+                    "<w:body><w:p><w:r><w:t>x</w:t></w:r></w:p></w:body>"
+                    "</w:document>"
+                ).encode("utf-16"),
+            )
+        ),
+    )
+    assert utf16_doctype_result.parse_status == "office_text_parse_failed"
+    assert utf16_doctype_result.parse_error_code == "office_text_parse_failed"
+
+    monkeypatch.setattr("services.attachment_parser.MAX_ATTACHMENT_PARSE_TEXT_CHARS", 10)
+    joined_result = parse_email_attachment(
+        filename="joined.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(("word/document.xml", "<w:document xmlns:w='urn:w'>" + "".join("<w:t>abc</w:t>" for _ in range(3)) + "</w:document>")),
+    )
+    assert joined_result.parse_status == "parsed"
+    assert len(joined_result.content) > 10
+
+    monkeypatch.setattr("services.attachment_parser.MAX_ATTACHMENT_PARSE_TEXT_CHARS", 3)
+    text_budget_result = parse_email_attachment(
+        filename="text-budget.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        raw_content=_zip_fixture(("word/document.xml", "<w:t xmlns:w='urn:w'>abcd</w:t>")),
+    )
+    assert text_budget_result.parse_error_code == "parse_size_limit_exceeded"
+
+
+@pytest.mark.parametrize("parser_error", [NotImplementedError, RuntimeError])
+def test_office_parser_converts_zip_reader_errors_to_named_failure(
+    monkeypatch, parser_error
+):
+    payload = _zip_fixture(("word/document.xml", "<w:t>text</w:t>"))
+
+    def raise_parser_error(_archive, _member):
+        raise parser_error("unsupported ZIP reader operation")
+
+    monkeypatch.setattr(
+        "services.attachment_parser.ZipFile.open", raise_parser_error
+    )
+    result = parse_email_attachment(
+        filename="unsupported-compression.docx",
+        content_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        raw_content=payload,
+    )
+
+    assert result.content == ""
+    assert result.parse_status == "office_text_parse_failed"
+    assert result.parse_error_code == "office_text_parse_failed"
+
+
+def test_nested_email_and_audio_metadata_failure_edges(monkeypatch):
+    monkeypatch.setattr("services.attachment_parser.MAX_NESTED_EMAIL_PARSE_BYTES", 1)
+    assert _parse_nested_email_metadata(b"too large")[1] == "parse_size_limit_exceeded"
+
+    def raise_value_error(_payload, *, policy):
+        raise ValueError("invalid message")
+
+    monkeypatch.setattr("services.attachment_parser.message_from_bytes", raise_value_error)
+    assert _parse_nested_email_metadata(b"x")[1] == "nested_email_parse_failed"
+
+    assert _parse_audio_metadata(b"ID3")[1] == "audio_metadata_parse_failed"
+    assert _parse_audio_metadata(b"ID3\x04\x00\x00\x80\x00\x00\x00")[1] == "audio_metadata_parse_failed"
+    assert _parse_audio_metadata(b"ID3\x04\x00\x00\x00\x00\x00\x10")[1] == "audio_metadata_parse_failed"
+
+
+def test_archive_manifest_omits_blank_member_display_names():
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        archive.writestr(" ", b"opaque")
+
+    summary, error = _parse_archive_manifest(payload.getvalue())
+
+    assert error is None
+    assert summary == "Archive manifest: format=zip; entries=1; total_uncompressed_bytes=6"
+
+
+def test_nested_email_depth_handles_message_and_non_message_payloads():
+    root = EmailMessage()
+    child = EmailMessage()
+    child.set_content("child")
+    root.set_payload(child)
+    assert _max_nested_email_depth(root) == 0
+
+    multipart = EmailMessage()
+    multipart.make_mixed()
+    attachment = EmailMessage()
+    attachment.set_content("child")
+    multipart.attach(attachment)
+    assert _max_nested_email_depth(multipart) == 0
+
+    assert _max_nested_email_depth(EmailMessage()) == 0
+
+    message_payload = EmailMessage()
+    message_payload.make_mixed()
+    attached_message = EmailMessage()
+    attached_message.set_type("message/rfc822")
+    attached_message.set_payload(Message())
+    message_payload.attach(attached_message)
+    assert _max_nested_email_depth(message_payload) == 1
+
+
+def test_office_xml_non_string_element_tags_are_ignored(monkeypatch):
+    class Element:
+        tag = object()
+
+        def clear(self):
+            return None
+
+    monkeypatch.setattr(
+        "services.attachment_parser.ElementTree.iterparse",
+        lambda *_args, **_kwargs: iter((("end", Element()),)),
+    )
+    assert _xml_text_parts(b"<x />", "application/x-unknown", _OfficeXmlBudget()) == []
+
+
+def test_office_text_rejects_a_stream_that_exceeds_remaining_budget(monkeypatch):
+    class Info:
+        filename = "word/document.xml"
+        file_size = 0
+        flag_bits = 0
+
+        def is_dir(self):
+            return False
+
+    class Source:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, size):
+            return b"x" * size
+
+    class Archive:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def infolist(self):
+            return [Info()]
+
+        def open(self, _info):
+            return Source()
+
+    monkeypatch.setattr("services.attachment_parser.ZipFile", lambda _payload: Archive())
+    monkeypatch.setattr("services.attachment_parser.MAX_OFFICE_XML_PARSE_BYTES", 2)
+    assert _parse_office_text(
+        b"fake",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ) == (None, "parse_size_limit_exceeded")

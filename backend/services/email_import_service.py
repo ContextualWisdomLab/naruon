@@ -23,6 +23,7 @@ from db.models import (
     ContentNodeRecord,
     ContentSegmentRecord,
     Email,
+    ImageSource,
     KnowledgeGraphEdgeRecord,
 )
 from services.archive import extract_backup_async
@@ -40,6 +41,7 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
+from services.inline_image_service import redact_inline_image_payloads
 from services.project_graph import (
     ProjectSourceSegment,
     persist_project_graph_projection,
@@ -56,9 +58,11 @@ from services.threading_service import (
 
 EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 MAX_IMPORT_UPLOADS = 10
-# Transport safety ceiling only; parser and embedding chunking must accept
-# sources larger than 20 MiB without confusing the request guard for a parser
-# limit.
+# Transport safety ceiling only; attachment parsers do not use this as a raw
+# payload limit.  This covers the largest observed local EML while bounding
+# the bytes held by the import request before it is moved to a temp directory.
+# Parser and embedding chunking must accept sources larger than 20 MiB without
+# confusing the request guard for a parser limit.
 MAX_IMPORT_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_IMPORT_EML_FILES = 100
 MAX_IMPORT_EMAILS_PER_OWNER = 1000
@@ -297,11 +301,22 @@ async def _extract_and_generate_embeddings(
 ) -> tuple[list[dict], list[list[float]]]:
     attachment_payloads = list(parsed.get("attachments", []))
     body_parse_content = parsed.get("body_parse_content")
+    inline_image_text = "\n".join(
+        str(image.get("searchable_text") or "")
+        for image in parsed.get("inline_images", [])
+    )
+    body_source_text = str(
+        body_parse_content
+        if body_parse_content is not None
+        else parsed.get("body") or ""
+    )
+    if str(parsed.get("body_content_type") or "text/plain") == "text/html":
+        body_source_text = redact_inline_image_payloads(body_source_text)
     source_texts = [
-        str(
-            body_parse_content
-            if body_parse_content is not None
-            else parsed.get("body") or ""
+        "\n".join(
+            part
+            for part in (body_source_text, inline_image_text)
+            if part
         )
     ]
     source_texts.extend(
@@ -374,6 +389,69 @@ def _build_email_object(
         embedding=fitted_embeddings[0] if fitted_embeddings else _zero_embedding(),
     )
 
+    inline_image_payloads = list(parsed.get("inline_images", []))
+    for image_payload in inline_image_payloads:
+        image_source_uid = _inline_image_source_uid(
+            organization_id=organization_id,
+            user_id=user_id,
+            message_id=message_id,
+            image_payload=image_payload,
+        )
+        email_obj.image_sources.append(
+            ImageSource(
+                image_source_uid=image_source_uid,
+                source_kind="inline_html_image",
+                source_locator_type=str(
+                    image_payload.get("source_locator_type") or "html_dom_path"
+                ),
+                source_locator_value=str(
+                    image_payload.get("source_locator_value") or ""
+                ),
+                source_ordinal=int(image_payload.get("source_ordinal") or 0),
+                media_type=str(
+                    image_payload.get("media_type") or "application/octet-stream"
+                ),
+                byte_count=(
+                    int(image_payload["byte_count"])
+                    if image_payload.get("byte_count") is not None
+                    else None
+                ),
+                content_digest=(
+                    str(image_payload["content_digest"])
+                    if image_payload.get("content_digest") is not None
+                    else None
+                ),
+                detected_format=(
+                    str(image_payload["detected_format"])
+                    if image_payload.get("detected_format") is not None
+                    else None
+                ),
+                pixel_width=(
+                    int(image_payload["pixel_width"])
+                    if image_payload.get("pixel_width") is not None
+                    else None
+                ),
+                pixel_height=(
+                    int(image_payload["pixel_height"])
+                    if image_payload.get("pixel_height") is not None
+                    else None
+                ),
+                is_animated=(
+                    bool(image_payload["is_animated"])
+                    if image_payload.get("is_animated") is not None
+                    else None
+                ),
+                parse_status=str(
+                    image_payload.get("parse_status") or "inline_image_parse_failed"
+                ),
+                parse_error_code=(
+                    str(image_payload["parse_error_code"])
+                    if image_payload.get("parse_error_code") is not None
+                    else None
+                ),
+            )
+        )
+
     attachment_count = 0
     for attachment_index, attachment in enumerate(attachment_payloads, start=1):
         attachment_content_type = str(
@@ -417,6 +495,7 @@ def _build_email_object(
         parsed=parsed,
         message_id=message_id,
         attachment_payloads=attachment_payloads,
+        inline_image_payloads=inline_image_payloads,
     )
     _append_knowledge_graph_edges(email_obj)
 
@@ -456,6 +535,7 @@ def _append_email_content_graph(
     parsed: EmailData,
     message_id: str,
     attachment_payloads: list[dict],
+    inline_image_payloads: list[dict],
 ) -> None:
     body_parse_result = parse_content(
         source_kind="email_body",
@@ -469,6 +549,26 @@ def _append_email_content_graph(
         attachment_obj=None,
         parse_result=body_parse_result,
     )
+
+    for image_payload in inline_image_payloads:
+        image_source_uid = _inline_image_source_uid(
+            organization_id=str(email_obj.organization_id or ""),
+            user_id=str(email_obj.user_id),
+            message_id=message_id,
+            image_payload=image_payload,
+        )
+        image_parse_result = parse_content(
+            source_kind="inline_image",
+            source_record_uid=image_source_uid,
+            content=str(image_payload.get("searchable_text") or ""),
+            content_type="text/plain",
+            display_name=f"Inline image {image_payload.get('source_ordinal') or 0}",
+        )
+        _append_parse_result_records(
+            email_obj=email_obj,
+            attachment_obj=None,
+            parse_result=image_parse_result,
+        )
 
     for attachment_index, (attachment_obj, attachment_payload) in enumerate(
         zip(email_obj.attachments, attachment_payloads),
@@ -740,6 +840,25 @@ def _content_graph_source_record_uid(prefix: str, *parts: str) -> str:
     payload = "\x00".join(str(part) for part in parts)
     digest = hashlib.sha256(payload.encode("utf-8", errors="surrogatepass")).hexdigest()
     return f"{prefix}:{digest[:32]}"
+
+
+def _inline_image_source_uid(
+    *,
+    organization_id: str,
+    user_id: str,
+    message_id: str,
+    image_payload: dict,
+) -> str:
+    """Bind inline-image identity to tenant scope, location, and content."""
+    return _content_graph_source_record_uid(
+        "image_source",
+        organization_id,
+        user_id,
+        message_id,
+        str(image_payload.get("source_ordinal") or "0"),
+        str(image_payload.get("source_locator_value") or ""),
+        str(image_payload.get("content_digest") or ""),
+    )
 
 
 def _project_source_segments(email_obj: Email) -> list[ProjectSourceSegment]:

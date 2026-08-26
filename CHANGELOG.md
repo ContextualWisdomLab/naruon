@@ -1,4 +1,64 @@
 ## [Unreleased]
+- Inline image imports now bound the complete MIME-prefixed DOM locator before
+  persisting source evidence and use a bounded content-graph label; oversized
+  untrusted media-type tokens are reduced to a safe fallback so PostgreSQL
+  imports cannot fail on column length.
+- HTML email imports now preserve base64 `img[src]` images as separately
+  searchable, source-linked metadata. The new `image_sources` table records
+  only the MIME type, DOM locator, ordinal, digest, byte count, bounded image
+  dimensions, and explicit parse state; raw base64 and decoded pixels are not
+  persisted. The raw data URL is redacted before embedding, while bounded
+  metadata is included in the email embedding input and emitted as an
+  `inline_image` content-graph source. Source UIDs bind tenant scope, message,
+  location, and content digest to prevent cross-tenant collisions. OCR, object
+  detection, captions, and
+  image embeddings remain deferred to a configured local vision sidecar under
+  ADR-0019 and `docs/doctoring/inline-image-source-evidence.md`.
+- Signed email file import now accepts source files up to 64 MiB, covering
+  observed EML sources and attachments over 20 MiB. The image parser's JPEG
+  header scan is bounded to 4 MiB, while its
+  `IMAGE_METADATA_SCAN_PREFIX_BYTES` 1 MiB bound is only an animation-marker
+  prefix; neither is an attachment-size limit.
+- Generic MIME attachments with unambiguous PNG, JPEG, GIF, or BMP signatures
+  now use the image metadata parser instead of remaining unsupported binaries.
+- Generic and otherwise unrecognized binary MIME attachments now use
+  `binary_metadata` to index only their normalized MIME type and byte count
+  when no recognized format signature exists, including payloads over 20 MiB;
+  no 1 MiB attachment limit, format guessing, or raw-byte indexing is
+  introduced.
+- Office XML DTD/entity declarations, including UTF-16 encoded declarations,
+  are rejected through the defused XML boundary and normalized to a named
+  parser failure.
+- Attachment ingestion now indexes bounded metadata for nested `.eml`/
+  `message/rfc822`, Layer III MP3, and legacy `.doc` containers. `message.walk()`
+  traverses parsed MIME descendants for attachment counting, including attached
+  `message/rfc822`; nested messages are not recursively imported or executed.
+  Malformed binary payloads are not retained; unknown formats without a
+  type-specific parser receive safe metadata under ADR-0011 and ADR-0012.
+- Email attachment ingestion now parses bounded text from DOCX, XLSX, PPTX, and
+  HWPX XML parts and indexes ZIP member manifests without extraction. Office
+  packages larger than 20 MiB remain eligible when their selected XML fits the
+  128 MiB parser budget; embedded media is not read. Encrypted ZIP entries fail
+  closed with deterministic evidence. XML is streamed with aggregate node and
+  text-part ceilings. Malformed, safety-budget-exceeding, or
+  unsupported content fails closed without retaining raw bytes; the
+  no-execution boundary is fixed in ADR-0010 and
+  `docs/doctoring/bounded-office-archive-text-parsing.md`.
+- Deferred PDF attachments are no longer discarded solely because they exceed
+  20 MiB. Valid PDF bytes remain pending for NewsDOM recognition; a sidecar
+  rejection is recorded as recognition failure rather than as a parser size
+  classification.
+- Email attachment ingestion now parses PNG, JPEG, GIF, and BMP headers into
+  searchable format/dimension/animation metadata through the `image_metadata`
+  parser. Invalid payloads fail closed without retaining raw bytes; OCR and
+  object detection remain explicitly deferred to a local vision sidecar. The
+  boundary and local confidential-data evidence are recorded in
+  ADR-0009 and `docs/doctoring/image-attachment-metadata-parser.md`.
+- ADR-0009 and the image architecture record now fix the next inline
+  `data:image` contract: a 3NF source/model/run/annotation/embedding model
+  preserves HTML DOM or MIME-part location, source digests, and derived
+  provenance without putting raw base64 in search fields. Implementation stays
+  deferred until the bounded local vision sidecar exists.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
