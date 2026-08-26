@@ -257,6 +257,10 @@ function semanticProgress(candidate: ProjectCandidate) {
   return Math.max(0, Math.min(99, Math.round(candidate.score * 100)));
 }
 
+function hasParagraphEvidence(candidate: ProjectCandidate) {
+  return candidate.source_segment_count > 0 && candidate.citation_bundle.length > 0;
+}
+
 function buildSemanticProjects(candidates: ProjectCandidate[]): ProjectSummary[] {
   return candidates.map((candidate) => ({
     id: candidate.project_uid,
@@ -264,7 +268,7 @@ function buildSemanticProjects(candidates: ProjectCandidate[]): ProjectSummary[]
     status: semanticStatusToProjectStatus(candidate.status_code),
     progress: semanticProgress(candidate),
     category: 'Semantic KG 프로젝트',
-    evidence: 'project_graph',
+    evidence: hasParagraphEvidence(candidate) ? 'project_graph' : 'project_graph_pending',
     sourcePath: null,
   }));
 }

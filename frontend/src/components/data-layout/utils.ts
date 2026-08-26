@@ -54,7 +54,13 @@ export function getSurfaceStatusLabel(status: SurfaceStatusCode | QualityStatusC
   }
 }
 
-export function getWriteBoundaryLabel(providerWriteExecuted: boolean) {
+export type WriteBoundaryContext = 'inspection' | 'local_action';
+
+export function getWriteBoundaryLabel(
+  providerWriteExecuted: boolean,
+  context: WriteBoundaryContext = 'inspection',
+) {
+  if (!providerWriteExecuted && context === 'local_action') return '외부 원본 변경 없음';
   return providerWriteExecuted ? '원본 반영 완료' : '점검만 완료';
 }
 

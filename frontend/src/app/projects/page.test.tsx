@@ -475,6 +475,59 @@ describe("ProjectsPage", () => {
     expect(container.textContent).not.toContain("correction-alpha-1");
   });
 
+  it("hides paragraph-source labels when a semantic candidate has no segment evidence", async () => {
+    const evidencelessCandidate = {
+      candidate_uid: "project_candidate:no-segments",
+      project_uid: "project_candidate:no-segments",
+      title: "Project: No Segment Evidence",
+      status_code: "needs_review",
+      score: 0.4,
+      object_count: 2,
+      requirement_count: 1,
+      issue_count: 1,
+      milestone_count: 0,
+      deliverable_count: 0,
+      participant_count: 0,
+      source_segment_count: 0,
+      representative_object_uids: [],
+      citation_bundle: [],
+      updated_at: "2026-07-02T00:00:00Z",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/auth/session") {
+        return jsonResponse({
+          authenticated: true,
+          claims: { userId: "alice", organizationId: "org-acme" },
+        });
+      }
+      if (path === "/api/webdav/folders") return jsonResponse([]);
+      if (path === "/api/tasks") return jsonResponse([]);
+      if (path === "/api/projects/candidates") {
+        return jsonResponse({ candidates: [evidencelessCandidate] });
+      }
+      return jsonResponse({}, false, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<ProjectsPage />);
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("Project: No Segment Evidence");
+    expect(container.textContent).toContain("원본 근거");
+    expect(container.textContent).toContain("실행 항목 기준");
+    expect(container.textContent).not.toContain("문단 출처 근거");
+    expect(container.textContent).not.toContain("문단 출처까지 확인됨");
+  });
+
   it("renders an actionable fallback when project evidence fails", async () => {
     vi.stubGlobal("fetch", vi.fn(() => jsonResponse({ detail: "failed" }, false, 500)));
 

@@ -8,6 +8,7 @@ import {
   DocumentActionStatus,
   EmailFileImportResponse,
   DataDocumentActionResponse,
+  DataDocumentActionKey,
   WebdavAccountStatus,
   WebdavAccount,
   WebdavAccountLookup,
@@ -23,6 +24,23 @@ import {
   getSurfaceStatusLabel,
   getWritebackTargetLabel
 } from './utils';
+
+function getDocumentActionResultCopy(action: DataDocumentActionKey) {
+  switch (action) {
+    case 'upload':
+      return '문서를 워크스페이스 원본으로 저장했습니다.';
+    case 'reparse':
+      return '문서 본문을 다시 읽어 최신 내용으로 갱신했습니다.';
+    case 'embedding-regeneration-intent':
+      return '검색 색인 갱신을 요청했습니다.';
+    case 'hwp-conversion-intent':
+      return 'HWP 변환을 요청했습니다.';
+    case 'webdav-materialization-intent':
+      return '연결된 문서 저장소 반영을 요청했습니다.';
+    default:
+      return '문서 작업을 완료했습니다.';
+  }
+}
 
 interface DocumentRepositoryTabProps {
   writebackStatus: any;
@@ -56,6 +74,7 @@ interface DocumentRepositoryTabProps {
   documentUploadFiles: File[];
   documentActionStatus: DocumentActionStatus;
   documentActionResult: DataDocumentActionResponse | null;
+  lastDocumentAction: DataDocumentActionKey;
   webdavAccountStatus: WebdavAccountStatus;
   webdavAccounts: WebdavAccount[];
   webdavAccountMap: WebdavAccountLookup;
@@ -85,6 +104,7 @@ export function DocumentRepositoryTab({
   documentUploadFiles,
   documentActionStatus,
   documentActionResult,
+  lastDocumentAction,
   webdavAccountStatus,
   webdavAccounts,
   webdavAccountMap,
@@ -172,7 +192,7 @@ return (
                       {emailImportStatus === 'error' && <span className="font-bold text-red-700">메일 파일 반입에 실패했습니다. 잠시 후 다시 시도하세요.</span>}
                       {emailImportStatus === 'success' && emailImportResult && (
                         <span className="text-foreground">
-                          {formatCount(emailImportResult.imported_count)}개 반입 · 중복 {formatCount(emailImportResult.skipped_count)}개 · 실패 {formatCount(emailImportResult.failed_count)}개 · 첨부 {formatCount(emailImportResult.attachment_count)}개 · {getWriteBoundaryLabel(emailImportResult.provider_write_executed)}
+                          {formatCount(emailImportResult.imported_count)}개 반입 · 중복 {formatCount(emailImportResult.skipped_count)}개 · 실패 {formatCount(emailImportResult.failed_count)}개 · 첨부 {formatCount(emailImportResult.attachment_count)}개 · {getWriteBoundaryLabel(emailImportResult.provider_write_executed, 'local_action')}
                         </span>
                       )}
                     </div>
@@ -206,7 +226,7 @@ return (
                       {documentActionStatus === 'error' && <span className="font-bold text-red-700">문서 작업에 실패했습니다. 잠시 후 다시 시도하세요.</span>}
                       {documentActionStatus === 'success' && documentActionResult && (
                         <span className="text-foreground">
-                          {toSafeReactText(documentActionResult.document_name)} · {toSafeReactText(documentActionResult.message)} · {getWriteBoundaryLabel(documentActionResult.provider_write_executed)}
+                          {toSafeReactText(documentActionResult.document_name)} · {getDocumentActionResultCopy(lastDocumentAction)} · {getWriteBoundaryLabel(documentActionResult.provider_write_executed, 'local_action')}
                         </span>
                       )}
                     </div>

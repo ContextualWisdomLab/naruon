@@ -1901,7 +1901,9 @@ describe("DataPage", () => {
       expect(uploadHeaders[publicHeader]).toBeUndefined();
     }
     expect(container.textContent).toContain("decision-note.md");
-    expect(container.textContent).toContain("점검만 완료");
+    expect(container.textContent).toContain("문서를 워크스페이스 원본으로 저장했습니다.");
+    expect(container.textContent).toContain("외부 원본 변경 없음");
+    expect(container.textContent).not.toContain("signed workspace scope");
 
     for (const buttonLabel of ["본문 다시 읽기", "검색 색인 갱신", "HWP 변환"]) {
       const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
@@ -1916,7 +1918,8 @@ describe("DataPage", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/data/documents/doc_repository_ready/reparse")).toBe(true);
     expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/data/documents/doc_repository_ready/embedding-regeneration-intent")).toBe(true);
     expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/data/documents/doc_repository_ready/hwp-conversion-intent")).toBe(true);
-    expect(container.textContent).toContain("HWP conversion intent recorded");
+    expect(container.textContent).toContain("HWP 변환을 요청했습니다.");
+    expect(container.textContent).not.toContain("intent recorded");
 
     const materializeButton = Array.from(container.querySelectorAll("button")).find((candidate) =>
       candidate.textContent?.includes("문서 저장소에 저장 실행"),
@@ -1958,7 +1961,8 @@ describe("DataPage", () => {
       expect(materializeHeaders[publicHeader]).toBeUndefined();
     }
     expect(container.textContent).toContain("원본 반영 완료");
-    expect(container.textContent).toContain("Workspace document WebDAV materialization executed");
+    expect(container.textContent).toContain("연결된 문서 저장소 반영을 요청했습니다.");
+    expect(container.textContent).not.toContain("WebDAV materialization");
     expect(container.textContent).not.toContain("webdav_src_primary");
     expect(container.textContent).not.toContain("etag-webdav-primary");
     expect(container.textContent).not.toContain("/Naruon/Data/roadmap.md-opaque.md");
@@ -2844,7 +2848,7 @@ describe("DataPage", () => {
     expect(container.textContent).toContain("1개 반입");
     expect(container.textContent).toContain("중복 0개");
     expect(container.textContent).toContain("첨부 1개");
-    expect(container.textContent).toContain("점검만 완료");
+    expect(container.textContent).toContain("외부 원본 변경 없음");
     expect(container.textContent).not.toContain("email.file_import.completed");
     expect(container.textContent).not.toContain("imported@example.com");
   });

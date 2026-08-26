@@ -110,7 +110,11 @@ export function CalendarWritebackSection({
                 {source.capabilities.map(getCapabilityLabel).join(' · ')}
               </p>
               <p className="mt-2 text-xs font-semibold text-muted-foreground">
-                {getEtagLabel(source.etag)} · {sourceWritable ? '점검 후 실제 반영까지 진행할 수 있습니다' : '실제 반영은 차단됩니다'}
+                {getEtagLabel(source.etag)} · {sourceWritable && source.etag
+                  ? '점검 후 실제 반영까지 진행할 수 있습니다'
+                  : sourceWritable
+                    ? '최신 변경 정보가 준비되면 실제 반영까지 진행할 수 있습니다'
+                    : '실제 반영은 차단됩니다'}
               </p>
             </button>
           );

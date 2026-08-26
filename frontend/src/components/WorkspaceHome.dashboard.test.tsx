@@ -692,6 +692,8 @@ describe("WorkspaceHome Today dashboard", () => {
     expect(container.textContent).toContain("작업 완료율");
     expect(container.textContent).toContain("50%");
     expect(container.textContent).toContain("1/2 완료");
+    expect(container.textContent).toContain("실행 대기");
+    expect(container.textContent).not.toContain("메일 연동");
     expect(container.textContent).toContain("계약 승인 확인");
     expect(container.textContent).toContain("일정 조율 후보 1건");
     expect(container.textContent).toContain("엔터프라이즈 데모 일정 조율");

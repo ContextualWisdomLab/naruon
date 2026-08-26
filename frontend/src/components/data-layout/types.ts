@@ -478,6 +478,13 @@ export type EmailFileImportResponse = {
   }>;
 };
 
+export type DataDocumentActionKey =
+  | 'upload'
+  | 'reparse'
+  | 'embedding-regeneration-intent'
+  | 'hwp-conversion-intent'
+  | 'webdav-materialization-intent';
+
 export type DataDocumentActionResponse = {
   document_id: string;
   workspace_id: string;

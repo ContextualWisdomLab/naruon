@@ -202,7 +202,7 @@ export function TasksLayout() {
       );
       setTicketActionStatus(`${safeTaskTitle(updatedTask.title)} 상태를 ${taskStatusChangeLabels[updatedTask.status]} 변경했습니다.`);
     } catch {
-      setTicketActionStatus('티켓 상태 변경에 실패했습니다.');
+      setTicketActionStatus('실행 항목 상태 변경에 실패했습니다.');
     }
   };
 
@@ -480,7 +480,7 @@ export function TasksLayout() {
 
       {/* Kanban Board Area */}
       <main className="flex-1 overflow-x-auto overflow-y-auto bg-secondary/20 px-4 py-4 pb-28 sm:p-6">
-        <section aria-label="원본 연결 티켓 상태 보드" className="mb-6 rounded-xl border border-border bg-card p-4 shadow-sm">
+        <section aria-label="원본 연결 실행 항목 상태 보드" className="mb-6 rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-bold">실행 항목 보드</h2>
@@ -490,9 +490,9 @@ export function TasksLayout() {
             </div>
             <div role="status" aria-live="polite" className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
               {ticketStatus === 'loading' ? '작업 불러오는 중' : null}
-              {ticketStatus === 'ready' ? `${ticketTasks.length}개 티켓 연결` : null}
-              {ticketStatus === 'empty' ? '연결된 티켓 없음' : null}
-              {ticketStatus === 'auth' ? '인증된 세션 필요' : null}
+              {ticketStatus === 'ready' ? `${ticketTasks.length}개 실행 항목 연결` : null}
+              {ticketStatus === 'empty' ? '연결된 실행 항목 없음' : null}
+              {ticketStatus === 'auth' ? '로그인이 필요합니다' : null}
               {ticketStatus === 'error' ? '작업 API 오류' : null}
             </div>
           </div>
@@ -511,7 +511,7 @@ export function TasksLayout() {
               <div>
                 <h3 className="text-sm font-bold text-foreground">기한 지난 답변 처리</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  48시간 넘게 답변이 없는 보낸 메일을 원본 메일과 스레드가 연결된 티켓으로 올립니다.
+                  48시간 넘게 답변이 없는 보낸 메일을 원본 메일과 스레드가 연결된 실행 항목으로 올립니다.
                 </p>
               </div>
               <button
@@ -539,7 +539,7 @@ export function TasksLayout() {
           </section>
 
           {ticketStatus === 'ready' ? (
-            <div aria-label="원본 연결 티켓 목록" className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div aria-label="원본 연결 실행 항목 목록" className="mt-4 grid gap-3 lg:grid-cols-2">
               {filteredTicketTasks.slice(0, 4).map((task) => {
                 const displayTitle = safeTaskTitle(task.title);
                 return (
@@ -684,7 +684,7 @@ export function TasksLayout() {
 
           {ticketStatus === 'empty' ? (
             <p className="mt-4 rounded-lg border border-dashed border-border bg-background/70 p-3 text-sm text-muted-foreground">
-              메일 상세에서 실행 항목을 만들면 원본 연결 티켓으로 표시됩니다.
+              메일 상세에서 실행 항목을 만들면 원본 연결 항목으로 표시됩니다.
             </p>
           ) : null}
 

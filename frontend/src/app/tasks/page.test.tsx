@@ -68,8 +68,9 @@ describe("TasksPage", () => {
     expect(container.textContent).toContain("실행 항목 추적");
     expect(container.textContent).toContain("위임한 작업");
     expect(container.textContent).toContain("실행 항목 보드");
-    expect(container.textContent).toContain("연결된 티켓 없음");
-    expect(container.textContent).toContain("메일 상세에서 실행 항목을 만들면 원본 연결 티켓으로 표시됩니다.");
+    expect(container.textContent).toContain("연결된 실행 항목 없음");
+    expect(container.textContent).toContain("메일 상세에서 실행 항목을 만들면 원본 연결 항목으로 표시됩니다.");
+    expect(container.textContent).not.toContain("티켓");
     expect(container.querySelector('a[href="/mail"]')?.textContent).toContain("메일에서 작업 생성");
   });
 
@@ -126,7 +127,7 @@ describe("TasksPage", () => {
     for (const headerName of publicIdentityHeaders) {
       expect(Object.keys(firstCallHeaders ?? {}).some((key) => key.toLowerCase() === headerName)).toBe(false);
     }
-    expect(container.textContent).toContain("2개 티켓 연결");
+    expect(container.textContent).toContain("2개 실행 항목 연결");
     expect(container.textContent).toContain("보낸 메일 회신 추적");
     expect(container.textContent).toContain("문서 원본 검토");
     expect(container.textContent).toContain("메일 근거");
@@ -478,7 +479,7 @@ describe("TasksPage", () => {
     });
     await flushAsyncWork();
 
-    expect(container.textContent).toContain("인증된 세션 필요");
+    expect(container.textContent).not.toContain("인증된 세션 필요");
     expect(container.textContent).toContain("로그인이 필요합니다");
     expect(container.textContent).not.toContain("작업 API 오류");
   });
