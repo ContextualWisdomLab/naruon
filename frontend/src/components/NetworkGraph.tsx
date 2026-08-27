@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, memo } from 'react';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -157,7 +157,9 @@ function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
 
 import { apiClient } from '@/lib/api-client';
 
-export default function NetworkGraph() {
+// ⚡ Bolt: Memoized NetworkGraph to prevent unnecessary re-renders
+// 🎯 Why: Re-renders of NetworkGraph when the parent components (like WorkspaceHome) re-render can cause performance issues, especially when switching active layout tabs or receiving polling updates that don't affect the graph data.
+export default memo(function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const unavailableRelationshipDescriptionId = useId();
@@ -478,4 +480,4 @@ export default function NetworkGraph() {
       />
     </div>
   );
-}
+});
