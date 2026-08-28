@@ -624,7 +624,7 @@ async def test_partial_batch_falls_back_only_for_unfinished_sources():
     provider = EmailImportEmbeddingProvider(
         api_key="provider-key",
         base_url="https://provider.example/v1",
-        embedding_model="text-embedding-test",
+        embedding_model="orchestrator/free",
     )
     partial = BatchEmbeddingPartial(
         completed_vectors=[[0.25] * EMBEDDING_DIMENSION],
@@ -672,7 +672,7 @@ async def test_partial_batch_fallback_keeps_provider_windows_bounded():
     partial = BatchEmbeddingPartial(
         completed_vectors=[[0.25] * EMBEDDING_DIMENSION],
         pending_texts=pending_texts,
-        zdr_only=False,
+        zdr_only=True,
     )
 
     with (
@@ -702,6 +702,7 @@ async def test_partial_batch_fallback_keeps_provider_windows_bounded():
         MAX_EMBEDDING_CHUNKS_PER_WINDOW,
         1,
     ]
+    assert all(call.kwargs["zdr_only"] is False for call in mock_generate.await_args_list)
     assert len(embeddings) == len(pending_texts) + 1
     assert embeddings[0] == [0.25] * EMBEDDING_DIMENSION
 

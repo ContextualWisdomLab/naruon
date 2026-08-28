@@ -991,11 +991,9 @@ async def _generate_import_embeddings(
                     )
                 return [*batched.completed_vectors, *remainder]
             return batched
-    effective_zdr_only = (
-        uses_contextual_orchestrator(embedding_provider.embedding_model)
-        if zdr_only is None
-        else zdr_only
-    )
+    effective_zdr_only = uses_contextual_orchestrator(
+        embedding_provider.embedding_model
+    ) and (zdr_only is None or zdr_only)
     try:
         provider_embeddings = await generate_embeddings(
             texts,
