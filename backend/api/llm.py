@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth import AuthContext, get_auth_context
 from core.exceptions import LLMServiceError
 from db.session import get_db
-from services.llm_provider_selection import resolve_runtime_llm_provider
+from services.llm_provider_selection import (
+    resolve_runtime_llm_provider,
+    uses_contextual_orchestrator,
+)
 from services.llm_service import (
     ExtractionResult,
     draft_reply,
@@ -104,6 +107,7 @@ async def summarize_endpoint(
             base_url=runtime_provider.base_url,
             provider_name=runtime_provider.provider_name,
             model=runtime_provider.chat_model,
+            zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
         )
     except LLMServiceError:
         raise HTTPException(
@@ -146,6 +150,7 @@ async def draft_endpoint(
             runtime_provider.api_key,
             base_url=runtime_provider.base_url,
             model=runtime_provider.chat_model,
+            zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
         )
         return {"draft": reply}
     except LLMServiceError:
@@ -189,6 +194,7 @@ async def translate_endpoint(
             runtime_provider.api_key,
             base_url=runtime_provider.base_url,
             model=runtime_provider.chat_model,
+            zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
         )
         return {"translation": translation}
     except LLMServiceError:

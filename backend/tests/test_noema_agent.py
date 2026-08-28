@@ -405,6 +405,25 @@ async def test_build_agent_returns_none_without_runtime(monkeypatch):
     await closer()  # no-op closer must be awaitable
 
 
+@pytest.mark.asyncio
+async def test_build_agent_marks_gateway_model_as_zdr_only():
+    pytest.importorskip("pydantic_ai")
+    provider = RuntimeLLMProvider(
+        api_key="gateway-token",
+        base_url=None,
+        chat_model="orchestrator/free",
+        embedding_model="orchestrator/free",
+        provider_name="Contextual Orchestrator",
+        provider_source="llm_provider",
+    )
+    agent, closer = await build_noema_agent(provider)
+    try:
+        assert agent is not None
+        assert agent.model.settings["extra_body"] == {"zdr_only": True}
+    finally:
+        await closer()
+
+
 # --------------------------------------------------------------------------- #
 # Full agent run using pydantic-ai's TestModel (skipped if not installed)
 # --------------------------------------------------------------------------- #

@@ -557,6 +557,27 @@ async def test_generate_import_embeddings_logs_non_secret_provider_fallback(capl
 
 
 @pytest.mark.asyncio
+async def test_generate_import_embeddings_marks_gateway_model_zdr_only():
+    provider = EmailImportEmbeddingProvider(
+        api_key="gateway-token",
+        base_url="https://gateway.example/v1",
+        embedding_model="orchestrator/free",
+    )
+    with patch(
+        "services.email_import_service.generate_embeddings",
+        new_callable=AsyncMock,
+        return_value=[[0.5] * EMBEDDING_DIMENSION],
+    ) as mock_generate_embeddings:
+        result = await _generate_import_embeddings(
+            ["Gateway body"],
+            embedding_provider=provider,
+        )
+
+    assert result == [[0.5] * EMBEDDING_DIMENSION]
+    assert mock_generate_embeddings.await_args.kwargs["zdr_only"] is True
+
+
+@pytest.mark.asyncio
 async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
     provider = EmailImportEmbeddingProvider(
         api_key="provider-key",

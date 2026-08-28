@@ -530,6 +530,7 @@ async def test_execute_prompt_with_llm_disables_redirect_following_for_custom_ba
             "Summarize this",
             "test-key",
             base_url="https://llm-gateway.example.com/v1",
+            model_name="orchestrator/free",
         )
 
     assert result == {"result": "Prompt result"}
@@ -540,6 +541,7 @@ async def test_execute_prompt_with_llm_disables_redirect_following_for_custom_ba
     assert mock_client.chat.completions.create.await_args is not None
     create_kwargs = mock_client.chat.completions.create.await_args.kwargs
     assert create_kwargs["max_tokens"] == 512
+    assert create_kwargs["extra_body"] == {"zdr_only": True}
     assert create_kwargs["messages"] == [{"role": "user", "content": "Summarize this"}]
     await constructor_kwargs["http_client"].aclose()
     mock_client.close.assert_awaited_once()

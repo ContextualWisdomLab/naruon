@@ -29,6 +29,11 @@ class RuntimeLLMProvider:
     provider_id: int | None = None
 
 
+def uses_contextual_orchestrator(model: str | None) -> bool:
+    """Identify the gateway's virtual model names without inspecting secrets."""
+    return isinstance(model, str) and model.strip().startswith("orchestrator/")
+
+
 def _provider_type(provider: LLMProvider) -> str:
     return (provider.provider_type or "").strip().lower()
 
