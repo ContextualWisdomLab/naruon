@@ -2,8 +2,10 @@
 
 **Goal:** route naruon's LLM calls through Contextual Orchestrator
 (`ContextualWisdomLab/contextual-orchestrator`) so model selection, fallback,
-and verification are centralized, and the OpenAI API key lives once in the org
-Secrets on the orchestrator — not sprinkled per naruon tenant.
+and verification are centralized. Runtime provider credentials remain in the
+applicable encrypted/KV registry: naruon keeps tenant-scoped credentials there,
+while the orchestrator's auto-discovery receives its organization provider
+credentials from GitHub Secrets through its bootstrap/KV path.
 
 ## Key fact: it's an OpenAI-compatible gateway
 Contextual Orchestrator exposes **`POST /v1/chat/completions`** (server.py) with
@@ -36,8 +38,10 @@ hard-coding a model candidate array:
 
 ## Integration (config-first)
 1. **Point base_url at the orchestrator:** set the naruon LLM provider's
-   `base_url` (or `OPENAI_BASE_URL`) to `https://<orchestrator>/v1`. The
-   orchestrator holds the org OpenAI key and does the routing.
+   `base_url` (or `OPENAI_BASE_URL`) to `https://<orchestrator>/v1`. Naruon
+   resolves the tenant-scoped credential from its encrypted/KV registry, while
+   the orchestrator uses its own bootstrapped provider registry for discovery
+   and routing.
 2. **Allowlist the host:** add the orchestrator host to
    `ALLOWED_LLM_BASE_URL_HOSTS` so naruon's SSRF-safe
    `build_llm_provider_http_client` accepts it.
@@ -49,9 +53,10 @@ hard-coding a model candidate array:
 ## Why this is the lazy-correct shape
 - No new client module, no new job/poll flow — the existing OpenAI client path
   carries it. Fewer moving parts than a bespoke integration.
-- Key hygiene: the OpenAI key stays in the orchestrator (org Secrets), naruon
-  holds none. Model/provider changes happen centrally in the orchestrator's
-  agent pools without redeploying naruon.
+- Key hygiene: tenant provider credentials stay scoped in naruon's encrypted/KV
+  registry, and the orchestrator's five discovery credentials are bootstrapped
+  from organization Secrets into its own registry. Model/provider changes happen
+  centrally in the orchestrator's agent pools without redeploying naruon.
 
 ## Slices
 1. **Config + allowlist** — document + wire `ALLOWED_LLM_BASE_URL_HOSTS` +
