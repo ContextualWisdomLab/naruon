@@ -673,11 +673,12 @@ async def test_generate_import_embeddings_prefers_batch_context(monkeypatch):
         ["body", "attachment"],
         embedding_provider=PROVIDER,
         batch_context=context,
+        zdr_only=True,
     )
 
     assert result == batched
     routed.assert_awaited_once()
-    assert "zdr_only" not in routed.await_args.kwargs
+    assert routed.await_args.kwargs["zdr_only"] is True
     # Batch path handled it; the per-item embedding path was never touched.
     per_item.assert_not_awaited()
 
