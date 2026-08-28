@@ -17,6 +17,23 @@ naruon already speaks OpenAI-compatible base URLs (`OPENAI_BASE_URL`,
 `LLMProvider.base_url`, `build_llm_provider_http_client`). This is a
 config-level integration, not a bespoke client (unlike clearfolio/codec-carver).
 
+## Current implementation status (2026-08-28)
+
+The integration slice in naruon#1480 adds the request-policy contract without
+hard-coding a model candidate array:
+
+- `orchestrator/*` chat, responses, completion, embedding, project-graph, and
+  batch paths send the strict boolean `zdr_only=true` to the gateway.
+- contextual-orchestrator assembles its provider/model pool through credential-
+  backed auto-discovery and selects ZDR members from the caller-supplied or
+  discovered model-group array.
+- OpenRouter's public ZDR endpoint is provider-neutral evidence and can mark a
+  matching model from another provider; it is not the source of a fixed
+  candidate list.
+- Provider credentials remain in the applicable encrypted/KV registry. The
+  confidential `tests/real_datasets` contents are not uploaded or used in
+  hosted model calls.
+
 ## Integration (config-first)
 1. **Point base_url at the orchestrator:** set the naruon LLM provider's
    `base_url` (or `OPENAI_BASE_URL`) to `https://<orchestrator>/v1`. The
@@ -24,10 +41,10 @@ config-level integration, not a bespoke client (unlike clearfolio/codec-carver).
 2. **Allowlist the host:** add the orchestrator host to
    `ALLOWED_LLM_BASE_URL_HOSTS` so naruon's SSRF-safe
    `build_llm_provider_http_client` accepts it.
-3. **(Optional) orchestration passthrough:** to use routing modes, naruon can
-   send the extra body keys (`orchestration_mode`, `mode`). Only worth a small
-   client tweak if naruon wants to steer routing per call; otherwise the default
-   policy applies and no naruon code changes at all.
+3. **Request policy:** when the configured model uses `orchestrator/*`, naruon
+   sends `zdr_only=true` as a gateway policy field. The gateway validates it as
+   a boolean and applies it while assembling the active model group; it is not
+   forwarded as an OpenRouter-specific provider option.
 
 ## Why this is the lazy-correct shape
 - No new client module, no new job/poll flow — the existing OpenAI client path

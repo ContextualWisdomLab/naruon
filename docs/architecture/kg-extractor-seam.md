@@ -109,6 +109,12 @@ endpoint) instead of the raw provider. Constraints:
   `ExtractorUnavailableError` → deterministic fallback (fail closed).
 - The provider API key stays the tenant's Fernet-encrypted credential; only the
   routing target changes.
+- When the selected model is `orchestrator/*`, naruon sends the strict boolean
+  request policy `zdr_only=true`. contextual-orchestrator filters the
+  caller-supplied/discovered model-group candidate array to members carrying
+  verified ZDR evidence; it does not replace that array with a hard-coded model
+  list. OpenRouter's public ZDR endpoint is evidence that may qualify matching
+  models from other providers, not an OpenRouter-specific request dependency.
 
 This deliberately reuses the OpenAI chat/structured-output contract the merged
 `llm` extractor already speaks, so the orchestrator path is no more speculative
