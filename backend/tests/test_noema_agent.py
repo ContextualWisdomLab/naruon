@@ -8,6 +8,7 @@ These cover three seams without needing a live LLM or a database:
 """
 
 import datetime
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -420,6 +421,48 @@ async def test_build_agent_marks_gateway_model_as_zdr_only():
     try:
         assert agent is not None
         assert agent.model.settings["extra_body"] == {"zdr_only": True}
+    finally:
+        await closer()
+
+
+@pytest.mark.asyncio
+async def test_build_gateway_model_forwards_zdr_policy_to_openai_wire():
+    pytest.importorskip("pydantic_ai")
+    from openai.types.chat import ChatCompletion, ChatCompletionMessage
+    from openai.types.chat.chat_completion import Choice
+    from pydantic_ai.models import ModelRequestParameters
+
+    provider = RuntimeLLMProvider(
+        api_key="gateway-token",
+        base_url=None,
+        chat_model="orchestrator/free",
+        embedding_model="orchestrator/free",
+        provider_name="Contextual Orchestrator",
+        provider_source="llm_provider",
+    )
+    agent, closer = await build_noema_agent(provider)
+    try:
+        assert agent is not None
+        request = AsyncMock(
+            return_value=ChatCompletion(
+                id="test-response",
+                choices=[
+                    Choice(
+                        index=0,
+                        finish_reason="stop",
+                        message=ChatCompletionMessage(role="assistant", content="ok"),
+                    )
+                ],
+                created=0,
+                model="orchestrator/free",
+                object="chat.completion",
+            )
+        )
+        agent.model.client.chat.completions.create = request
+
+        await agent.model.request([], agent.model.settings, ModelRequestParameters())
+
+        assert request.await_args.kwargs["extra_body"] == {"zdr_only": True}
     finally:
         await closer()
 
