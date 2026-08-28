@@ -729,7 +729,10 @@ async def test_import_selection_routes_through_orchestrator_when_configured(monk
         raising=False,
     )
     provider = import_service.EmailImportEmbeddingProvider(
-        api_key="key", base_url="https://provider.example", embedding_model="embed"
+        api_key="key",
+        base_url="https://provider.example",
+        embedding_model="embed",
+        chat_model="orchestrator/free",
     )
 
     result = await import_service._extract_project_semantics_for_import(
@@ -741,6 +744,8 @@ async def test_import_selection_routes_through_orchestrator_when_configured(monk
     assert (
         llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
     )
+    assert llm_mock.await_args.kwargs["model"] == "orchestrator/free"
+    assert llm_mock.await_args.kwargs["zdr_only"] is True
 
 
 @pytest.mark.asyncio

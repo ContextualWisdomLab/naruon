@@ -173,6 +173,7 @@ class LlmGroundedExtractor:
             api_key=context.api_key,
             base_url=base_url,
             model=context.model,
+            zdr_only=self.routed_via_orchestrator,
         )
 
 

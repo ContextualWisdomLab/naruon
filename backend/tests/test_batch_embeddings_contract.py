@@ -91,6 +91,7 @@ async def test_client_serializes_to_exact_contract_request(monkeypatch):
         user_id="user-1",
         organization_id="org-acme",
         dimension=8,
+        zdr_only=CONTRACT["request"]["zdr_only"],
     )
     assert result is not None
     assert len(result) == len(texts)
@@ -106,6 +107,7 @@ async def test_client_serializes_to_exact_contract_request(monkeypatch):
         assert key in body
     assert body["inputs"] == texts
     assert body["model"] == CONTRACT["request"]["model"]
+    assert body["zdr_only"] is True
     assert body["endpoint"] == CONTRACT["request"]["endpoint"]
 
     # FULL attribution: every dimension the orchestrator ledger expects is sent
@@ -117,6 +119,29 @@ async def test_client_serializes_to_exact_contract_request(monkeypatch):
     assert metadata["source"] == "naruon-email-import"
     assert metadata["organization_id"] == "org-acme"
     assert metadata["user_id"] == "user-1"
+
+
+@pytest.mark.asyncio
+async def test_client_forwards_false_zdr_policy(monkeypatch):
+    """The gateway option remains caller-controlled instead of being hardcoded."""
+    session = FakeAsyncSession(_attributed_tenant_config())
+    client = FakeAsyncClient(
+        post_responses=[_contract_completed_response(len(CONTRACT["request"]["inputs"]))]
+    )
+    _patch_client(monkeypatch, client)
+
+    result = await try_batch_import_embeddings(
+        session,
+        list(CONTRACT["request"]["inputs"]),
+        embedding_provider=PROVIDER,
+        user_id="user-1",
+        organization_id="org-acme",
+        dimension=8,
+        zdr_only=False,
+    )
+
+    assert result is not None
+    assert client.post_calls[0]["json"]["zdr_only"] is False
 
 
 @pytest.mark.asyncio

@@ -48,6 +48,7 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import EmbeddingGenerationError
+from services.llm_provider_selection import uses_contextual_orchestrator
 from services.llm_provider_urls import build_llm_provider_http_client
 from services.tenant_config_scope import get_scoped_tenant_config
 
@@ -188,6 +189,7 @@ async def try_batch_import_embeddings(
     user_id: str,
     organization_id: str | None,
     dimension: int = STORAGE_EMBEDDING_DIMENSION,
+    zdr_only: bool | None = None,
 ) -> list[list[float]] | BatchEmbeddingPartial | None:
     """Route bulk embeddings through the batch path, or ``None`` to fall back.
 
@@ -199,6 +201,8 @@ async def try_batch_import_embeddings(
     The run is recorded in ``llm_batch_jobs`` / ``llm_batch_items`` for
     observability.
     """
+    if zdr_only is not None and type(zdr_only) is not bool:
+        raise TypeError("zdr_only must be a boolean")
     if not texts:
         return None
 
@@ -209,6 +213,8 @@ async def try_batch_import_embeddings(
         return None
 
     model = settings.model or embedding_provider.embedding_model
+    if zdr_only is None:
+        zdr_only = uses_contextual_orchestrator(model)
 
     if settings.has_orchestrator:
         result = await _run_orchestrator_batches(
@@ -219,6 +225,7 @@ async def try_batch_import_embeddings(
             user_id=user_id,
             organization_id=organization_id,
             dimension=dimension,
+            zdr_only=zdr_only,
         )
         if result is not None:
             return result
@@ -234,6 +241,7 @@ async def try_batch_import_embeddings(
             user_id=user_id,
             organization_id=organization_id,
             dimension=dimension,
+            zdr_only=zdr_only,
         )
 
     return None
@@ -248,10 +256,12 @@ def _serialized_orchestrator_payload_bytes(
     model: str,
     endpoint_alias: str | None,
     metadata: dict[str, str],
+    zdr_only: bool = False,
 ) -> int:
     """Return the UTF-8 size of the request envelope sent to the orchestrator."""
     payload = {
         "model": model,
+        "zdr_only": zdr_only,
         "endpoint": endpoint_alias,
         "inputs": inputs,
         "metadata": metadata,
@@ -267,6 +277,7 @@ def _partition_orchestrator_inputs(
     model: str = "",
     endpoint_alias: str | None = None,
     metadata: dict[str, str] | None = None,
+    zdr_only: bool = False,
 ) -> list[list[str]] | None:
     """Partition inputs by count and serialized JSON request bytes."""
     request_metadata = metadata or {}
@@ -281,6 +292,7 @@ def _partition_orchestrator_inputs(
                 model=model,
                 endpoint_alias=endpoint_alias,
                 metadata=request_metadata,
+                zdr_only=zdr_only,
             )
             > _ORCHESTRATOR_MAX_INPUT_BYTES
         ):
@@ -292,6 +304,7 @@ def _partition_orchestrator_inputs(
                 model=model,
                 endpoint_alias=endpoint_alias,
                 metadata=request_metadata,
+                zdr_only=zdr_only,
             )
             > _ORCHESTRATOR_MAX_INPUT_BYTES
         ):
@@ -311,6 +324,7 @@ async def _run_orchestrator_batches(
     user_id: str,
     organization_id: str | None,
     dimension: int,
+    zdr_only: bool,
 ) -> list[list[float]] | BatchEmbeddingPartial | None:
     """Submit bounded requests and concatenate vectors in original order."""
     metadata = _attribution_metadata(
@@ -323,6 +337,7 @@ async def _run_orchestrator_batches(
         model=model,
         endpoint_alias=settings.endpoint_alias,
         metadata=metadata,
+        zdr_only=zdr_only,
     )
     if partitions is None:
         logger.warning(
@@ -342,6 +357,7 @@ async def _run_orchestrator_batches(
             user_id=user_id,
             organization_id=organization_id,
             dimension=dimension,
+            zdr_only=zdr_only,
         )
         if partition_vectors is None:
             if not vectors:
@@ -366,6 +382,7 @@ async def _run_orchestrator_batch(
     user_id: str,
     organization_id: str | None,
     dimension: int,
+    zdr_only: bool,
 ) -> list[list[float]] | None:
     """Submit the batch to contextual-orchestrator and collect the vectors.
 
@@ -400,6 +417,7 @@ async def _run_orchestrator_batch(
     }
     payload = {
         "model": model,
+        "zdr_only": zdr_only,
         "endpoint": settings.endpoint_alias,
         "inputs": list(texts),
         "metadata": _attribution_metadata(
@@ -690,6 +708,7 @@ async def _run_local_engine_batch(
     user_id: str,
     organization_id: str | None,
     dimension: int,
+    zdr_only: bool,
 ) -> list[list[float]] | None:
     """Offline-dev fallback: partition locally via a pg-llm-batch package.
 
@@ -746,6 +765,7 @@ async def _run_local_engine_batch(
                 embedding_provider.api_key,
                 base_url=embedding_provider.base_url,
                 model=model,
+                zdr_only=zdr_only,
             )
             for offset, text_index in enumerate(index_group):
                 if offset < len(vectors):

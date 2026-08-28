@@ -40,6 +40,7 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
+from services.llm_provider_selection import uses_contextual_orchestrator
 from services.project_graph import (
     ProjectSourceSegment,
     persist_project_graph_projection,
@@ -86,6 +87,7 @@ class EmailImportEmbeddingProvider:
     api_key: str
     base_url: str | None
     embedding_model: str
+    chat_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -781,7 +783,8 @@ async def _extract_project_semantics_for_import(
     context = KgExtractorContext(
         api_key=embedding_provider.api_key if embedding_provider else None,
         base_url=embedding_provider.base_url if embedding_provider else None,
-        model=settings.OPENAI_MODEL,
+        model=(embedding_provider.chat_model if embedding_provider else None)
+        or settings.OPENAI_MODEL,
         orchestrator_base_url=settings.PROJECT_GRAPH_ORCHESTRATOR_BASE_URL,
     )
     return await run_extraction(
@@ -968,6 +971,7 @@ async def _generate_import_embeddings(
             user_id=batch_context.user_id,
             organization_id=batch_context.organization_id,
             dimension=EMBEDDING_DIMENSION,
+            zdr_only=uses_contextual_orchestrator(embedding_provider.embedding_model),
         )
         if batched is not None:
             if isinstance(batched, BatchEmbeddingPartial):
@@ -992,6 +996,7 @@ async def _generate_import_embeddings(
             embedding_provider.api_key,
             base_url=embedding_provider.base_url,
             model=embedding_provider.embedding_model,
+            zdr_only=uses_contextual_orchestrator(embedding_provider.embedding_model),
         )
     except (EmbeddingGenerationError, ValueError) as exc:
         logger.warning(
@@ -1009,6 +1014,9 @@ async def _generate_import_embeddings(
                     embedding_provider.api_key,
                     base_url=embedding_provider.base_url,
                     model=embedding_provider.embedding_model,
+                    zdr_only=uses_contextual_orchestrator(
+                        embedding_provider.embedding_model
+                    ),
                 )
                 if not single_embedding:
                     recovered.append(_zero_embedding())

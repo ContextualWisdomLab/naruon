@@ -95,6 +95,37 @@ async def test_generate_embeddings_uses_selected_provider_model_and_base_url():
 
 
 @pytest.mark.asyncio
+async def test_generate_embeddings_forwards_zdr_only_to_gateway():
+    with patch(
+        "services.embedding.AsyncOpenAI"
+    ) as mock_async_openai, patch(
+        "services.embedding.build_llm_provider_http_client",
+        new_callable=AsyncMock,
+    ) as mock_build_client:
+        mock_build_client.return_value = ("https://gateway.example/v1", AsyncMock())
+        mock_client = mock_async_openai.return_value
+        mock_client.close = AsyncMock()
+        mock_client.embeddings.create = AsyncMock()
+        data = AsyncMock()
+        data.embedding = [0.1]
+        response = AsyncMock()
+        response.data = [data]
+        mock_client.embeddings.create.return_value = response
+
+        await generate_embeddings(
+            ["test"],
+            "gateway-token",
+            base_url="https://gateway.example/v1",
+            model="orchestrator/free",
+            zdr_only=True,
+        )
+
+    assert mock_client.embeddings.create.call_args.kwargs["extra_body"] == {
+        "zdr_only": True
+    }
+
+
+@pytest.mark.asyncio
 async def test_generate_embeddings_requests_storage_dimensions_for_openai_v3():
     with patch(
         "services.embedding.AsyncOpenAI"

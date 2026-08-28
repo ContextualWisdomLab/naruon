@@ -148,6 +148,7 @@ async def _call_llm(
     base_url: str | None,
     model: str,
     segments_json: str,
+    zdr_only: bool = False,
 ) -> ExtractionPayload:
     """Isolated network seam so tests can fake the provider response."""
     validated_base_url, http_client = await build_llm_provider_http_client(base_url)
@@ -157,13 +158,18 @@ async def _call_llm(
         http_client=http_client,
     )
     try:
-        response = await client.beta.chat.completions.parse(
-            model=model,
-            messages=[
+        request = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": _system_instruction()},
                 {"role": "user", "content": f"SEGMENTS_JSON: {segments_json}"},
             ],
-            response_format=ExtractionPayload,
+            "response_format": ExtractionPayload,
+        }
+        if zdr_only:
+            request["extra_body"] = {"zdr_only": True}
+        response = await client.beta.chat.completions.parse(
+            **request,
         )
     finally:
         await client.close()
@@ -331,6 +337,7 @@ async def extract_project_semantics_llm(
     api_key: str,
     base_url: str | None = None,
     model: str,
+    zdr_only: bool = False,
 ) -> ProjectSemanticExtractionResult:
     segment_list = [
         segment for segment in segments if segment.safe_text_content.strip()
@@ -348,6 +355,7 @@ async def extract_project_semantics_llm(
         base_url=base_url,
         model=model,
         segments_json=_segments_json(segment_list),
+        zdr_only=zdr_only,
     )
     segments_by_uid = {
         segment.content_segment_uid: segment for segment in segment_list

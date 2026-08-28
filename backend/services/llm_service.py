@@ -43,6 +43,7 @@ async def extract_action_items_and_summary(
     base_url: str | None = None,
     provider_name: str = "OpenAI",
     model: str | None = None,
+    zdr_only: bool = False,
 ) -> ExtractionResult:
     """Extract action items and summary from an email."""
     if not openai_api_key:
@@ -63,19 +64,22 @@ async def extract_action_items_and_summary(
             validated_base_url or "openai-default",
             lambda: retry_transient(
             lambda: client.beta.chat.completions.parse(
-            model=selected_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful assistant. Summarize the email, "
-                        "extract action items, and include a confidence score "
-                        "from 0 to 100 when enough evidence is available."
-                    ),
-                },
-                {"role": "user", "content": email_body},
-            ],
-            response_format=ExtractionResult,
+            **{
+                "model": selected_model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful assistant. Summarize the email, "
+                            "extract action items, and include a confidence score "
+                            "from 0 to 100 when enough evidence is available."
+                        ),
+                    },
+                    {"role": "user", "content": email_body},
+                ],
+                "response_format": ExtractionResult,
+                **({"extra_body": {"zdr_only": True}} if zdr_only else {}),
+            }
             ),
             operation_name="summary extraction",
             ),
@@ -111,6 +115,7 @@ async def translate_email_body(
     openai_api_key: str,
     base_url: str | None = None,
     model: str | None = None,
+    zdr_only: bool = False,
 ) -> str:
     """Translate the email body using the LLM."""
     if not openai_api_key:
@@ -142,6 +147,7 @@ async def translate_email_body(
                     model=selected_model,
                     messages=messages,
                     temperature=0.3,
+                    **({"extra_body": {"zdr_only": True}} if zdr_only else {}),
                 ),
                 operation_name="translation",
             ),
@@ -162,6 +168,7 @@ async def draft_reply(
     openai_api_key: str,
     base_url: str | None = None,
     model: str | None = None,
+    zdr_only: bool = False,
 ) -> str:
     """Draft a reply to an email."""
     if not openai_api_key:
@@ -206,6 +213,7 @@ async def draft_reply(
                 lambda: client.chat.completions.create(
                     model=selected_model,
                     messages=messages,
+                    **({"extra_body": {"zdr_only": True}} if zdr_only else {}),
                 ),
                 operation_name="reply drafting",
             ),
