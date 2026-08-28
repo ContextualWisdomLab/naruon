@@ -318,8 +318,44 @@ def test_prompt_test_applies_preview_settings(auth_client, monkeypatch):
     assert resp.status_code == 200
     assert captured["kwargs"]["model_name"] == "gpt-4o"
     assert captured["kwargs"]["temperature"] == 0.6
+    assert captured["kwargs"]["zdr_only"] is False
     assert "Response style: 실행 항목 중심" in captured["kwargs"]["system_message"]
     assert "Output format: JSON 구조화" in captured["kwargs"]["system_message"]
+
+
+def test_prompt_test_preserves_gateway_zdr_when_preview_overrides_model(auth_client, monkeypatch):
+    captured = {}
+
+    async def mock_execute(prompt_text, *args, **kwargs):
+        captured["kwargs"] = kwargs
+        return {"result": "gateway result"}
+
+    monkeypatch.setattr(prompts_module, "execute_prompt_with_llm", mock_execute)
+    mock_session.items.append(
+        LLMProvider(
+            id=1,
+            user_id="testuser",
+            organization_id="org-acme",
+            name="Contextual gateway",
+            provider_type="openai",
+            api_key="test-key",
+            model_identifier="orchestrator/auto",
+            is_active=True,
+        )
+    )
+
+    resp = auth_client.post(
+        "/api/prompts/test",
+        json={
+            "content": "Summarize this",
+            "variables": {},
+            "settings": {"model": "gpt-4o"},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert captured["kwargs"]["model_name"] == "gpt-4o"
+    assert captured["kwargs"]["zdr_only"] is True
 
 
 def test_prompt_test_wraps_variable_values_as_untrusted_data(auth_client, monkeypatch):

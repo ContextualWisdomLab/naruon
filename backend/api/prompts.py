@@ -93,6 +93,7 @@ async def execute_prompt_with_llm(
     model_name: str | None = None,
     temperature: float = 0.0,
     system_message: str | None = None,
+    zdr_only: bool = False,
 ) -> dict:
     from openai import AsyncOpenAI
     from core.config import settings as app_settings
@@ -116,7 +117,7 @@ async def execute_prompt_with_llm(
             max_tokens=512,
             **(
                 {"extra_body": {"zdr_only": True}}
-                if uses_contextual_orchestrator(selected_model)
+                if zdr_only or uses_contextual_orchestrator(selected_model)
                 else {}
             ),
         )
@@ -230,4 +231,8 @@ async def test_prompt(
         model_name=selected_model,
         temperature=data.settings.temperature if data.settings else 0.0,
         system_message=_build_prompt_test_system_message(data.settings),
+        zdr_only=(
+            uses_contextual_orchestrator(runtime_provider.chat_model)
+            or uses_contextual_orchestrator(selected_model)
+        ),
     )
