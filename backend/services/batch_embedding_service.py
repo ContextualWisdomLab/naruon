@@ -127,6 +127,7 @@ class BatchEmbeddingPartial:
 
     completed_vectors: list[list[float]]
     pending_texts: list[str]
+    zdr_only: bool = False
 
 
 async def resolve_batch_embedding_settings(
@@ -368,6 +369,7 @@ async def _run_orchestrator_batches(
             return BatchEmbeddingPartial(
                 completed_vectors=vectors,
                 pending_texts=pending_texts,
+                zdr_only=zdr_only,
             )
         vectors.extend(partition_vectors)
     return vectors
