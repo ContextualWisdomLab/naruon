@@ -218,6 +218,7 @@ def test_search_endpoint_uses_active_provider_embedding_model(mock_generate_embe
         LOCAL_PROVIDER_API_KEY,
         base_url="http://ollama:11434/v1",
         model="embeddinggemma",
+        zdr_only=False,
     )
 
 

@@ -214,6 +214,7 @@ def test_draft_endpoint_uses_active_local_model_provider(mock_draft):
     assert mock_draft.await_args.kwargs == {
         "base_url": "http://ollama:11434/v1",
         "model": "gemma4",
+        "zdr_only": False,
     }
 
 
@@ -333,6 +334,7 @@ def test_translate_endpoint_uses_active_local_model_provider(mock_translate):
     assert mock_translate.await_args.kwargs == {
         "base_url": "http://ollama:11434/v1",
         "model": "gemma4",
+        "zdr_only": False,
     }
 
 
