@@ -266,6 +266,24 @@ async def test_direct_llm_routing_uses_provider_base_url(monkeypatch):
     assert llm_mock.await_args.kwargs["base_url"] == "https://direct-provider.example"
 
 
+@pytest.mark.asyncio
+async def test_direct_llm_gateway_model_forwards_zdr_policy(monkeypatch):
+    llm_mock = AsyncMock(return_value=object())
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=Mock())
+
+    await run_extraction(
+        [_segment()],
+        selector=SELECTOR_LLM,
+        context=KgExtractorContext(
+            api_key="key",
+            base_url="https://gateway.example/v1",
+            model="orchestrator/free",
+        ),
+    )
+
+    assert llm_mock.await_args.kwargs["zdr_only"] is True
+
+
 # --- Extractor units --------------------------------------------------------
 
 

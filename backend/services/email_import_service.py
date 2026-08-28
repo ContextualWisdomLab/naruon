@@ -971,7 +971,7 @@ async def _generate_import_embeddings(
             user_id=batch_context.user_id,
             organization_id=batch_context.organization_id,
             dimension=EMBEDDING_DIMENSION,
-            zdr_only=uses_contextual_orchestrator(embedding_provider.embedding_model),
+            zdr_only=None,
         )
         if batched is not None:
             if isinstance(batched, BatchEmbeddingPartial):

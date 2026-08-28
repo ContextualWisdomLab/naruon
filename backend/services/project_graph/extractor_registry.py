@@ -42,6 +42,7 @@ from .llm_extractor import (
     LLM_EXTRACTOR_VERSION,
     extract_project_semantics_llm,
 )
+from services.llm_provider_selection import uses_contextual_orchestrator
 from .models import ProjectSemanticExtractionResult, ProjectSourceSegment
 
 logger = logging.getLogger(__name__)
@@ -173,7 +174,8 @@ class LlmGroundedExtractor:
             api_key=context.api_key,
             base_url=base_url,
             model=context.model,
-            zdr_only=self.routed_via_orchestrator,
+            zdr_only=self.routed_via_orchestrator
+            or uses_contextual_orchestrator(context.model),
         )
 
 

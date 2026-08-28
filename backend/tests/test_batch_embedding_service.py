@@ -639,6 +639,7 @@ async def test_generate_import_embeddings_prefers_batch_context(monkeypatch):
 
     assert result == batched
     routed.assert_awaited_once()
+    assert routed.await_args.kwargs["zdr_only"] is None
     # Batch path handled it; the per-item embedding path was never touched.
     per_item.assert_not_awaited()
 
