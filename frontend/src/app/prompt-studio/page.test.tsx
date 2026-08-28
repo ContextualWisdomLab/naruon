@@ -231,6 +231,22 @@ describe("PromptStudioPage", () => {
     expect(payload.settings.model).toBe("orchestrator/another-runtime-model");
   });
 
+  it("falls back to the provider default when the model field is cleared", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse({ result: "기본 모델 결과" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const page = await renderPage();
+
+    setControlValue(page.querySelector<HTMLInputElement>("#prompt-model")!, "");
+    act(() => {
+      getButton(page, "실행 (Test)").click();
+    });
+    await flushAsyncWork();
+
+    const requestInit = (fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit])?.[1];
+    const payload = JSON.parse(String(requestInit.body));
+    expect(payload.settings.model).toBe("provider-default");
+  });
+
   it("loads a fresh sample input from the preview panel", async () => {
     const page = await renderPage();
     const variableInput = page.querySelector<HTMLTextAreaElement>("#prompt-variable-email");

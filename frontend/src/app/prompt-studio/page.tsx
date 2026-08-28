@@ -256,7 +256,7 @@ export default function PromptStudioPage() {
   };
 
   const buildPromptTestSettings = () => ({
-    model: promptSettings.model,
+    model: promptSettings.model.trim() || DEFAULT_PROMPT_MODEL,
     temperature: Number.parseFloat(promptSettings.temperature),
     response_style: promptSettings.responseStyle,
     output_format: promptSettings.outputFormat,
