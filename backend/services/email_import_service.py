@@ -954,6 +954,7 @@ async def _generate_import_embeddings(
     *,
     embedding_provider: EmailImportEmbeddingProvider | None,
     batch_context: "EmailImportBatchContext | None" = None,
+    zdr_only: bool | None = None,
 ) -> list[list[float]]:
     if not texts:
         return []
@@ -985,17 +986,23 @@ async def _generate_import_embeddings(
                             ],
                             embedding_provider=embedding_provider,
                             batch_context=None,
+                            zdr_only=batched.zdr_only,
                         )
                     )
                 return [*batched.completed_vectors, *remainder]
             return batched
+    effective_zdr_only = (
+        uses_contextual_orchestrator(embedding_provider.embedding_model)
+        if zdr_only is None
+        else zdr_only
+    )
     try:
         provider_embeddings = await generate_embeddings(
             texts,
             embedding_provider.api_key,
             base_url=embedding_provider.base_url,
             model=embedding_provider.embedding_model,
-            zdr_only=uses_contextual_orchestrator(embedding_provider.embedding_model),
+            zdr_only=effective_zdr_only,
         )
     except (EmbeddingGenerationError, ValueError) as exc:
         logger.warning(
@@ -1013,9 +1020,7 @@ async def _generate_import_embeddings(
                     embedding_provider.api_key,
                     base_url=embedding_provider.base_url,
                     model=embedding_provider.embedding_model,
-                    zdr_only=uses_contextual_orchestrator(
-                        embedding_provider.embedding_model
-                    ),
+                    zdr_only=effective_zdr_only,
                 )
                 if not single_embedding:
                     recovered.append(_zero_embedding())

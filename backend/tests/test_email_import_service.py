@@ -629,6 +629,7 @@ async def test_partial_batch_falls_back_only_for_unfinished_sources():
     partial = BatchEmbeddingPartial(
         completed_vectors=[[0.25] * EMBEDDING_DIMENSION],
         pending_texts=["pending source"],
+        zdr_only=True,
     )
 
     with (
@@ -653,6 +654,7 @@ async def test_partial_batch_falls_back_only_for_unfinished_sources():
 
     mock_batch.assert_awaited_once()
     assert mock_generate.await_args.args[0] == ["pending source"]
+    assert mock_generate.await_args.kwargs["zdr_only"] is True
     assert embeddings == [[0.25] * EMBEDDING_DIMENSION, [0.75] * EMBEDDING_DIMENSION]
 
 
@@ -670,6 +672,7 @@ async def test_partial_batch_fallback_keeps_provider_windows_bounded():
     partial = BatchEmbeddingPartial(
         completed_vectors=[[0.25] * EMBEDDING_DIMENSION],
         pending_texts=pending_texts,
+        zdr_only=False,
     )
 
     with (

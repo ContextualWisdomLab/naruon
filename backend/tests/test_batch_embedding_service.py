@@ -382,7 +382,9 @@ def test_orchestrator_partitions_by_serialized_json_bytes():
 async def test_orchestrator_preserves_completed_partitions_when_later_partition_fails(
     monkeypatch,
 ):
-    session = FakeAsyncSession(_orchestrator_tenant_config())
+    session = FakeAsyncSession(
+        _orchestrator_tenant_config(batch_embedding_model="orchestrator/free")
+    )
     batch_size = batch_module._ORCHESTRATOR_MAX_INPUTS_PER_REQUEST
     texts = [f"text-{index}" for index in range(batch_size + 2)]
     client = FakeAsyncClient(
@@ -411,6 +413,8 @@ async def test_orchestrator_preserves_completed_partitions_when_later_partition_
     assert isinstance(result, batch_module.BatchEmbeddingPartial)
     assert len(result.completed_vectors) == batch_size
     assert result.pending_texts == texts[batch_size:]
+    assert result.zdr_only is True
+    assert client.post_calls[0]["json"]["zdr_only"] is True
     assert len(client.post_calls) == 2
 
 
