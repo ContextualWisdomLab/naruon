@@ -142,11 +142,7 @@ const PROMPT_TABS = [
   { id: 'assistant', label: '어시스턴트 예시' },
 ] as const;
 
-const MODEL_OPTIONS = [
-  { label: 'Naruon GPT-4o Enterprise', value: 'gpt-4o' },
-  { label: 'Naruon Local Gemma', value: 'gemma-3-27b-it' },
-  { label: 'OpenAI Compatible', value: 'provider-default' },
-];
+const DEFAULT_PROMPT_MODEL = 'provider-default';
 const RESPONSE_STYLES = ['전문적이고 간결하게', '친근하고 상세하게', '실행 항목 중심'];
 const OUTPUT_FORMATS = ['마크다운 (Markdown)', 'JSON 구조화', '짧은 종합'];
 
@@ -187,7 +183,7 @@ type PromptSettings = {
 };
 
 function getModelLabel(modelValue: string) {
-  return MODEL_OPTIONS.find((model) => model.value === modelValue)?.label ?? modelValue;
+  return modelValue === DEFAULT_PROMPT_MODEL ? '조직 기본 모델 (자동 선택)' : modelValue;
 }
 
 export default function PromptStudioPage() {
@@ -200,7 +196,7 @@ export default function PromptStudioPage() {
   const [activeTemplateId, setActiveTemplateId] = useState('summary');
   const [activePromptTab, setActivePromptTab] = useState<(typeof PROMPT_TABS)[number]['id']>('system');
   const [promptSettings, setPromptSettings] = useState<PromptSettings>({
-    model: MODEL_OPTIONS[0].value,
+    model: DEFAULT_PROMPT_MODEL,
     temperature: '0.3',
     responseStyle: RESPONSE_STYLES[0],
     outputFormat: OUTPUT_FORMATS[0],
@@ -550,14 +546,17 @@ export default function PromptStudioPage() {
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <label htmlFor="prompt-model" className="text-sm font-bold">모델</label>
-                  <select
+                  <Input
                     id="prompt-model"
+                    aria-describedby="prompt-model-help"
                     value={promptSettings.model}
                     onChange={(event) => setPromptSetting('model', event.target.value)}
+                    placeholder={DEFAULT_PROMPT_MODEL}
                     className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                  >
-                    {MODEL_OPTIONS.map((model) => <option key={model.value} value={model.value}>{model.label}</option>)}
-                  </select>
+                  />
+                  <p id="prompt-model-help" className="text-xs font-semibold text-muted-foreground">
+                    비워두지 말고 `provider-default` 또는 조직 provider의 모델 식별자를 입력하세요.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <label htmlFor="prompt-temperature" className="text-sm font-bold">Temperature</label>
