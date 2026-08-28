@@ -266,6 +266,40 @@ async def test_import_embeddings_route_through_orchestrator(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_orchestrator_free_batch_request_requires_zdr(monkeypatch):
+    session = FakeAsyncSession(
+        _orchestrator_tenant_config(batch_embedding_model="orchestrator/free")
+    )
+    client = FakeAsyncClient(
+        post_responses=[
+            FakeResponse(
+                {
+                    "batch_id": "orc_zdr_batch",
+                    "status": "completed",
+                    "embeddings": _embeddings_payload(1),
+                }
+            )
+        ]
+    )
+    _patch_client(monkeypatch, client)
+
+    result = await batch_module.try_batch_import_embeddings(
+        session,
+        ["sanitized test input"],
+        embedding_provider=PROVIDER,
+        user_id="user-1",
+        organization_id="org-acme",
+        dimension=8,
+        zdr_only=None,
+    )
+
+    assert result is not None
+    body = client.post_calls[0]["json"]
+    assert body["model"] == "orchestrator/free"
+    assert body["zdr_only"] is True
+
+
+@pytest.mark.asyncio
 async def test_orchestrator_bounds_requests_and_preserves_input_order(monkeypatch):
     session = FakeAsyncSession(_orchestrator_tenant_config())
     batch_size = batch_module._ORCHESTRATOR_MAX_INPUTS_PER_REQUEST
