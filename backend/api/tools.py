@@ -706,6 +706,8 @@ _KEYWORD_STOPWORDS = frozenset(
         "합니다",
     }
 )
+
+
 def _normalize_analysis_text(value: str) -> str:
     """Normalize user text for deterministic, multilingual rule matching."""
     if len(value) > ANALYSIS_TEXT_MAX_CHARS:
@@ -757,6 +759,27 @@ async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
 
+async def data_anonymizer_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    text = params.get("text", "")
+    if text is None:
+        text = ""
+    text = re.sub(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "***@***", text)
+    text = re.sub(r"\b01[0-9]-\d{3,4}-\d{4}\b", "***-****-****", text)
+    text = re.sub(r"\b\d{6}-[1-4]\d{6}\b", "******-*******", text)
+    return {"anonymized_text": text}
+
+
+registry.register(
+    ToolInfo(
+        code="data_anonymizer",
+        name="데이터 비식별화 (Data Anonymizer)",
+        description="텍스트 내의 이메일, 휴대전화 번호, 주민등록번호 등 민감한 개인정보를 마스킹 처리하여 비식별화합니다.",
+        category="보안",
+        parameters={"text": "string"},
+    ),
+    data_anonymizer_handler,
+)
+
 registry.register(
     ToolInfo(
         code="uuid_v4_generator",
@@ -767,7 +790,6 @@ registry.register(
     ),
     uuid_v4_generator_handler,
 )
-
 
 
 @router.get("/tools", response_model=list[ToolInfo])
