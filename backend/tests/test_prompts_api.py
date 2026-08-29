@@ -358,6 +358,41 @@ def test_prompt_test_preserves_gateway_zdr_when_preview_overrides_model(auth_cli
     assert captured["kwargs"]["zdr_only"] is True
 
 
+def test_prompt_model_override_does_not_enable_zdr_for_a_direct_provider(auth_client, monkeypatch):
+    captured = {}
+
+    async def mock_execute(prompt_text, *args, **kwargs):
+        captured["kwargs"] = kwargs
+        return {"result": "direct provider result"}
+
+    monkeypatch.setattr(prompts_module, "execute_prompt_with_llm", mock_execute)
+    mock_session.items.append(
+        LLMProvider(
+            id=1,
+            user_id="testuser",
+            organization_id="org-acme",
+            name="Direct provider",
+            provider_type="openai",
+            api_key="test-key",
+            model_identifier="gpt-4o",
+            is_active=True,
+        )
+    )
+
+    resp = auth_client.post(
+        "/api/prompts/test",
+        json={
+            "content": "Summarize this",
+            "variables": {},
+            "settings": {"model": "orchestrator/arbitrary-runtime-model"},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert captured["kwargs"]["model_name"] == "orchestrator/arbitrary-runtime-model"
+    assert captured["kwargs"]["zdr_only"] is False
+
+
 def test_prompt_test_wraps_variable_values_as_untrusted_data(auth_client, monkeypatch):
     from db.models import LLMProvider
 

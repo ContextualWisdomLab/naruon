@@ -98,6 +98,8 @@ async def execute_prompt_with_llm(
     from openai import AsyncOpenAI
     from core.config import settings as app_settings
 
+    if type(zdr_only) is not bool:
+        raise TypeError("zdr_only must be a boolean")
     selected_model = model_name or app_settings.OPENAI_MODEL
     validated_base_url, http_client = await build_llm_provider_http_client(base_url)
     messages = []
@@ -115,11 +117,7 @@ async def execute_prompt_with_llm(
             messages=messages,
             temperature=temperature,
             max_tokens=512,
-            **(
-                {"extra_body": {"zdr_only": True}}
-                if zdr_only or uses_contextual_orchestrator(selected_model)
-                else {}
-            ),
+            **({"extra_body": {"zdr_only": True}} if zdr_only else {}),
         )
         content = response.choices[0].message.content
         return {"result": content if content else ""}
@@ -231,8 +229,7 @@ async def test_prompt(
         model_name=selected_model,
         temperature=data.settings.temperature if data.settings else 0.0,
         system_message=_build_prompt_test_system_message(data.settings),
-        zdr_only=(
-            uses_contextual_orchestrator(runtime_provider.chat_model)
-            or uses_contextual_orchestrator(selected_model)
-        ),
+        # The resolved transport owns the policy. A preview model override is
+        # only a model value and must never enable or disable ZDR by its name.
+        zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
     )

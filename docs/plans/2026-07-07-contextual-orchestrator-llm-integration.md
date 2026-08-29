@@ -45,9 +45,11 @@ hard-coding a model candidate array:
 2. **Allowlist the host:** add the orchestrator host to
    `ALLOWED_LLM_BASE_URL_HOSTS` so naruon's SSRF-safe
    `build_llm_provider_http_client` accepts it.
-3. **Request policy:** when the configured model uses `orchestrator/*`, naruon
-   sends `zdr_only=true` as a gateway policy field. The gateway validates it as
-   a boolean and applies it while assembling the active model group; it is not
+3. **Request policy:** when naruon selects the contextual-orchestrator
+   transport, it sends the strict boolean `zdr_only=true` as a gateway policy
+   field. The gateway validates it as a boolean and applies it while assembling
+   the active model group. A caller-supplied model string or candidate array
+   never enables, disables, or replaces that policy, and the field is not
    forwarded as an OpenRouter-specific provider option.
 
 ## Why this is the lazy-correct shape
