@@ -602,6 +602,7 @@ async def test_execute_prompt_with_llm_disables_redirect_following_for_custom_ba
             "test-key",
             base_url="https://llm-gateway.example.com/v1",
             model_name="orchestrator/free",
+            zdr_only=True,
         )
 
     assert result == {"result": "Prompt result"}
