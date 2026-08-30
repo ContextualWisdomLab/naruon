@@ -14,6 +14,26 @@
   `docs/adr/0005-attachment-content-type-quarantine.md` 참고. 검증: 신규 테스트 8개
   (파서 5개 + API 3개) 추가, 전체 백엔드 스위트 1842 passed/33 skipped, ruff clean,
   `alembic heads`가 `0019_attachment_uid` 단일 head로 수렴.
+- (Devin/CodeRabbit review 반영, G-15) naruon#1486에 도착한 세 건을 실제로 고쳤습니다: (1)
+  🟡 DOCX/XLSX/PPTX 등 ZIP 기반 컨테이너 형식이 ZIP 매직 바이트와 일치한다는 이유만으로
+  content_type_mismatch_quarantined 오탐이 발생하던 문제 — `_is_genuine_content_type_mismatch`가
+  이제 sniff된 타입이 ZIP이고 선언된 타입이 알려진 ZIP 컨테이너 계열(OOXML/ODF/EPUB/JAR, MIME
+  타입 부분 문자열로 판정해 개별 나열 불필요)이면 불일치로 취급하지 않습니다 — 다른 타입으로
+  선언된 ZIP은 여전히 격리됩니다. (2) 🟡 상한을 초과해 원본 바이트를 보존하지 못한 mismatch가
+  여전히 content_type_mismatch_quarantined 상태를 받아 reparse-intent API가 이를 그대로
+  수락해버리는 문제 — 이제 다른 초과-크기 첨부파일과 동일하게 parse_size_limit_exceeded(재시도
+  불가 terminal 상태)를 받아 reparse-intent가 애초에 받아들이지 않습니다. (3) CodeRabbit
+  코드 컨벤션 지적 — `apply_correction`의 status_code/decision_code 검증이 텍스트 전용
+  `ValueError`였던 것을, 저장소 관례(`CalendarPolicyValidationError`와 동일한 패턴)를 따라
+  `error_code` 속성을 가진 `CalendarConflictUnsupportedValueError`로 교체하고 API 라우트에서
+  타입 기반으로 매핑하도록 했습니다(현재 REST 경로는 Literal 타입으로 이미 막혀 있어 도달
+  불가능하지만, 향후 비-HTTP 호출자를 위한 방어적 일관성 확보). 별도로, `_get_scoped_attachment`가
+  workspace_id를 검증하지 않는 🟥 보안 지적은 실재하지만 이 PR이 만든 문제가 아니라 `Email`
+  모델 자체가 애초에 workspace_id 컬럼을 가진 적이 없다는 저장소 전반의 기존 gap임을 확인했다
+  (`docs/adr/0005-attachment-content-type-quarantine.md`의 Consequences에 상세 기록) — 제대로
+  고치려면 `Email` 마이그레이션 + 기존 모든 email/attachment 쿼리 갱신이 필요해 이 PR 범위를
+  벗어나므로, 조용히 임시방편을 넣는 대신 별도 후속 작업으로 명시했다. 검증: 신규/수정 테스트
+  다수 추가, 전체 백엔드 스위트 1845 passed/33 skipped, ruff clean.
 - (Devin review 반영, 3차) override가 judgment의 **현재** decision_code와 동일한 값을 다시
   제출하는 경우, `apply_correction`이 실제로 값이 바뀔 때만 `reason_code`/`recommended_action`을
   교체하도록 고쳤습니다 — 이전에는 "override"라는 이유만으로 실제 변경이 없어도 원래

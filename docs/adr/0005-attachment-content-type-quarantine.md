@@ -123,6 +123,40 @@ that is the point to re-evaluate a dedicated library against this policy.
   before a quarantined-then-reparsed attachment actually gets re-evaluated.
   Until then, `reparse_pending` simply means "queued for a pass that does not
   exist yet" — this is recorded honestly rather than implied to be automatic.
+- **Known, pre-existing, tracked limitation surfaced by this slice, not
+  introduced by it:** `_get_scoped_attachment` (and every other attachment/email
+  query in `api/data.py`) scopes by `user_id`/`organization_id` only, because
+  `Email` itself carries no `workspace_id` column — unlike `Document`,
+  `CalendarConflictJudgment`, `CarddavAccount`, and every other workspace-scoped
+  entity added since that column existed. A session with the same
+  `user_id`/`organization_id` but a different signed `workspace_id` claim can
+  therefore read (pre-existing) and, as of this endpoint, mutate (new) another
+  workspace's attachments. Closing this properly means adding `workspace_id`
+  to `Email` (migration + backfill) and updating every existing email/attachment
+  query in `api/data.py` to filter by it — a repo-wide change far outside this
+  slice's scope, not something to patch narrowly for one new endpoint. Recorded
+  here rather than silently worked around; the fix belongs in its own PR.
+
+## Revisions
+
+Two real gaps were found and fixed after initial review, both narrowing rather
+than reversing the original decision:
+
+- **OOXML/ODF/EPUB/JAR false positives.** DOCX, XLSX, PPTX, and other ZIP-based
+  container formats sniff as `application/zip` by construction — that is not a
+  disguise, it is what those formats are. `_is_genuine_content_type_mismatch`
+  now excludes a ZIP sniff whose declared type is itself a known ZIP-container
+  family (checked by MIME-type substring, not an exhaustive list, so sibling
+  OOXML/ODF variants are covered without enumerating every one). A ZIP sniffed
+  under any other declared type (e.g. `application/pdf`) is still quarantined.
+- **Oversized mismatches were quarantined with no retained bytes, but
+  reparse-intent still accepted them.** A quarantined row whose payload exceeds
+  `MAX_ATTACHMENT_PARSE_SOURCE_BYTES` now gets the existing
+  `parse_size_limit_exceeded` status instead of
+  `content_type_mismatch_quarantined` — the same non-retryable terminal state
+  every other oversized attachment in this parser already gets — so
+  reparse-intent (which only accepts the quarantine status) can never be
+  requested for a row it has nothing left to act on.
 
 ## References (APA 7th)
 

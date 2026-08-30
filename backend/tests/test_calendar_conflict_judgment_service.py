@@ -9,8 +9,11 @@ import pytest
 from db.models import CalendarConflictJudgment
 from services.calendar_conflict_judgment_service import (
     CORRECTED_DECISION_REASON_CODE,
+    UNSUPPORTED_DECISION_CODE_ERROR_CODE,
+    UNSUPPORTED_STATUS_CODE_ERROR_CODE,
     _MAX_JUDGMENTS_PER_LIST,
     CalendarConflictCorrectionIncoherentError,
+    CalendarConflictUnsupportedValueError,
     _conflicts_to_json,
     apply_correction,
     get_judgment,
@@ -139,7 +142,9 @@ def test_validate_correction_coherence_accepts_matching_pairs() -> None:
 @pytest.mark.asyncio
 async def test_apply_correction_rejects_unsupported_status_code() -> None:
     """A bogus status_code must fail closed before any database lookup runs."""
-    with pytest.raises(ValueError, match="status_code"):
+    with pytest.raises(
+        CalendarConflictUnsupportedValueError, match="status_code"
+    ) as exc_info:
         await apply_correction(
             object(),
             judgment_uid="conflict_judgment_test",
@@ -152,12 +157,15 @@ async def test_apply_correction_rejects_unsupported_status_code() -> None:
             status_code="not_a_real_status",
             rationale=None,
         )
+    assert exc_info.value.error_code == UNSUPPORTED_STATUS_CODE_ERROR_CODE
 
 
 @pytest.mark.asyncio
 async def test_apply_correction_rejects_unsupported_decision_code() -> None:
     """A bogus decision_code must fail closed before any database lookup runs."""
-    with pytest.raises(ValueError, match="decision_code"):
+    with pytest.raises(
+        CalendarConflictUnsupportedValueError, match="decision_code"
+    ) as exc_info:
         await apply_correction(
             object(),
             judgment_uid="conflict_judgment_test",
@@ -170,6 +178,7 @@ async def test_apply_correction_rejects_unsupported_decision_code() -> None:
             status_code="confirmed",
             rationale=None,
         )
+    assert exc_info.value.error_code == UNSUPPORTED_DECISION_CODE_ERROR_CODE
 
 
 @pytest.mark.asyncio

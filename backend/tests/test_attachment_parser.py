@@ -290,7 +290,14 @@ def test_declared_text_plain_with_real_zip_bytes_is_quarantined():
     assert base64.b64decode(result.content) == raw
 
 
-def test_oversized_quarantine_payload_is_not_retained(monkeypatch):
+def test_oversized_mismatched_payload_is_size_limited_not_quarantined(monkeypatch):
+    """An oversized mismatch must not enter quarantine with no retained bytes.
+
+    A quarantined row with no bytes is indistinguishable, to the
+    reparse-intent API, from one that still has something to re-evaluate --
+    it must get the same non-retryable status every other oversized
+    attachment already gets instead.
+    """
     monkeypatch.setattr(
         "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 10
     )
@@ -302,8 +309,58 @@ def test_oversized_quarantine_payload_is_not_retained(monkeypatch):
         raw_content=raw,
     )
 
-    assert result.parse_status == "content_type_mismatch_quarantined"
+    assert result.parse_status == "parse_size_limit_exceeded"
+    assert result.parse_error_code == "parse_size_limit_exceeded"
     assert result.content == ""
+
+
+def test_declared_docx_with_real_zip_bytes_is_not_quarantined():
+    """A real DOCX is a ZIP container by specification -- its own magic bytes."""
+    raw = b"PK\x03\x04" + b"fake docx body"
+    result = parse_email_attachment(
+        filename="report.docx",
+        content_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        raw_content=raw,
+    )
+
+    assert result.parse_status == "unsupported_content_type"
+    assert result.parse_error_code == "unsupported_content_type"
+    assert result.content_type == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+
+def test_declared_xlsx_and_pptx_with_real_zip_bytes_are_not_quarantined():
+    raw = b"PK\x03\x04" + b"fake office body"
+    cases = [
+        (
+            "budget.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        (
+            "deck.pptx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ),
+    ]
+    for filename, content_type in cases:
+        result = parse_email_attachment(
+            filename=filename, content_type=content_type, raw_content=raw
+        )
+        assert result.parse_status != "content_type_mismatch_quarantined"
+
+
+def test_declared_pdf_with_real_zip_bytes_is_still_quarantined():
+    """A ZIP disguised as a PDF is a genuine mismatch, unlike a real OOXML file."""
+    raw = b"PK\x03\x04" + b"fake body"
+    result = parse_email_attachment(
+        filename="not-a-pdf.pdf",
+        content_type="application/pdf",
+        raw_content=raw,
+    )
+
+    assert result.parse_status == "content_type_mismatch_quarantined"
 
 
 def test_matching_declared_and_sniffed_binary_type_is_not_quarantined():

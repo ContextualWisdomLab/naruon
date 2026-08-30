@@ -30,6 +30,17 @@ _MAGIC_BYTE_SIGNATURES: tuple[tuple[bytes, str], ...] = (
     (b"GIF89a", "image/gif"),
     (b"PK\x03\x04", "application/zip"),
 )
+# Substrings of MIME types whose files are legitimately ZIP containers under
+# the hood (OOXML Office documents, OpenDocument formats, EPUB, JAR). Sniffing
+# "application/zip" from magic bytes must not quarantine a declared type in
+# this family -- only a declared type outside it that still sniffs as ZIP is
+# a genuine disguise.
+_ZIP_CONTAINER_CONTENT_TYPE_MARKERS = (
+    "openxmlformats-officedocument",
+    "vnd.oasis.opendocument",
+    "application/epub+zip",
+    "application/java-archive",
+)
 
 
 @dataclass(frozen=True)
@@ -166,6 +177,33 @@ def _sniff_content_type(raw_content: Any) -> str | None:
     return None
 
 
+def _is_zip_container_content_type(content_type: str) -> bool:
+    """Return True for a declared MIME type whose files are legitimately ZIPs."""
+    return content_type == "application/zip" or any(
+        marker in content_type for marker in _ZIP_CONTAINER_CONTENT_TYPE_MARKERS
+    )
+
+
+def _is_genuine_content_type_mismatch(
+    *, sniffed_content_type: str | None, parse_content_type: str
+) -> bool:
+    """Return True only for a sniff/declared disagreement worth quarantining.
+
+    A ZIP-sniffed payload declared as an OOXML/ODF/EPUB/JAR type is not a
+    mismatch -- those formats are ZIP containers by specification, so their
+    magic bytes are supposed to match ZIP's. Only a ZIP-sniffed payload
+    declared as something outside that family (or any other sniff/declared
+    disagreement) is a genuine disguise.
+    """
+    if sniffed_content_type is None or sniffed_content_type == parse_content_type:
+        return False
+    if sniffed_content_type == "application/zip" and _is_zip_container_content_type(
+        parse_content_type
+    ):
+        return False
+    return True
+
+
 def _quarantine_result(
     *,
     safe_filename: str,
@@ -174,14 +212,25 @@ def _quarantine_result(
     raw_content: Any,
 ) -> AttachmentParseResult:
     quarantined_payload = _coerce_deferred_payload_bytes(raw_content)
-    retained_content = (
-        _encode_deferred_payload(quarantined_payload)
-        if len(quarantined_payload) <= MAX_ATTACHMENT_PARSE_SOURCE_BYTES
-        else ""
-    )
+    if len(quarantined_payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
+        # An oversized mismatched payload retains no bytes, so it can never
+        # be usefully reparsed -- classify it the same way every other
+        # oversized attachment in this file already is (a non-retryable
+        # terminal status), rather than as a quarantine the reparse-intent
+        # API would otherwise accept for a row it can do nothing with.
+        return AttachmentParseResult(
+            filename=safe_filename,
+            content="",
+            content_type=normalized_content_type,
+            parse_content="",
+            parse_content_type=sniffed_content_type,
+            parser_key=_parser_key_for(sniffed_content_type, "parsed"),
+            parse_status="parse_size_limit_exceeded",
+            parse_error_code="parse_size_limit_exceeded",
+        )
     return AttachmentParseResult(
         filename=safe_filename,
-        content=retained_content,
+        content=_encode_deferred_payload(quarantined_payload),
         content_type=normalized_content_type,
         parse_content="",
         # parse_content_type carries what the bytes actually are here (not
@@ -214,7 +263,9 @@ def parse_email_attachment(
     # or disguised attachment must never reach those paths and get silently
     # parsed or classified under the wrong type.
     sniffed_content_type = _sniff_content_type(raw_content)
-    if sniffed_content_type is not None and sniffed_content_type != parse_content_type:
+    if _is_genuine_content_type_mismatch(
+        sniffed_content_type=sniffed_content_type, parse_content_type=parse_content_type
+    ):
         return _quarantine_result(
             safe_filename=safe_filename,
             normalized_content_type=normalized_content_type,

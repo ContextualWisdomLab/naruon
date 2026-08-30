@@ -38,6 +38,24 @@ class CalendarConflictCorrectionIncoherentError(ValueError):
     """Raised when a correction's status_code and decision_code disagree."""
 
 
+class CalendarConflictUnsupportedValueError(ValueError):
+    """Stable typed failure for an unsupported status_code/decision_code value.
+
+    Mirrors ``CalendarPolicyValidationError``'s pattern (a message-independent
+    ``error_code`` attribute) so a route can map this to a deterministic
+    response without parsing ``str(exc)``.
+    """
+
+    def __init__(self, error_code: str, message: str) -> None:
+        """Create a validation failure with a stable public-facing code."""
+        super().__init__(message)
+        self.error_code = error_code
+
+
+UNSUPPORTED_STATUS_CODE_ERROR_CODE = "calendar_correction_status_code_unsupported"
+UNSUPPORTED_DECISION_CODE_ERROR_CODE = "calendar_correction_decision_code_unsupported"
+
+
 def _utcnow() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
@@ -211,9 +229,15 @@ async def apply_correction(
 ) -> CalendarConflictCorrection:
     """Record a human override/confirmation of a persisted conflict judgment."""
     if status_code not in ALLOWED_STATUS_CODES:
-        raise ValueError(f"Unsupported calendar conflict status_code: {status_code!r}")
+        raise CalendarConflictUnsupportedValueError(
+            UNSUPPORTED_STATUS_CODE_ERROR_CODE,
+            f"Unsupported calendar conflict status_code: {status_code!r}",
+        )
     if decision_code is not None and decision_code not in ALLOWED_DECISION_CODES:
-        raise ValueError(f"Unsupported calendar conflict decision_code: {decision_code!r}")
+        raise CalendarConflictUnsupportedValueError(
+            UNSUPPORTED_DECISION_CODE_ERROR_CODE,
+            f"Unsupported calendar conflict decision_code: {decision_code!r}",
+        )
     validate_correction_coherence(status_code=status_code, decision_code=decision_code)
 
     judgment = await _get_scoped_judgment(

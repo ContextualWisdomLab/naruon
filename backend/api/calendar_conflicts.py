@@ -24,6 +24,7 @@ from services.calendar_conflict_ics import (
 from services.calendar_conflict_judgment_service import (
     CalendarConflictCorrectionIncoherentError,
     CalendarConflictJudgmentNotFoundError,
+    CalendarConflictUnsupportedValueError,
     apply_correction,
     create_judgment,
     get_judgment,
@@ -427,7 +428,7 @@ async def correct_calendar_conflict_judgment(
     request: CalendarConflictCorrectionRequest,
     auth_ctx: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
-) -> CalendarConflictCorrectionResponse:
+) -> CalendarConflictCorrectionResponse | JSONResponse:
     """Record a human override/confirmation of one persisted judgment."""
     try:
         correction = await apply_correction(
@@ -445,6 +446,17 @@ async def correct_calendar_conflict_judgment(
         await db.commit()
     except CalendarConflictJudgmentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CalendarConflictUnsupportedValueError as exc:
+        # Unreachable through this route today (status_code/decision_code are
+        # already Literal-typed on CalendarConflictCorrectionRequest, so
+        # FastAPI rejects an unsupported value before this handler runs) --
+        # kept as defense-in-depth so the service's own ALLOWED_* checks can
+        # never surface as an unhandled 500 if the two ever drift apart.
+        error = CalendarConflictErrorResponse(error_code=exc.error_code, detail=str(exc))
+        return JSONResponse(
+            status_code=POLICY_VALIDATION_HTTP_STATUS,
+            content=error.model_dump(),
+        )
     return CalendarConflictCorrectionResponse(
         correction_uid=correction.correction_uid,
         judgment_uid=judgment_uid,
