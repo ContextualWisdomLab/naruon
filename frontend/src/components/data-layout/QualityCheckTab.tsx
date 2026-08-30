@@ -938,7 +938,7 @@ export function QualityCheckTab({
               {knowledgeGraphEvidenceSamples.length > 0 && (
                 <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
                   <div className="p-5 border-b border-border bg-secondary/30">
-                    <h2 className="font-bold text-lg">KG 근거 샘플</h2>
+                    <h2 className="font-bold text-lg">문단 출처 근거 샘플</h2>
                   </div>
                   <div className="grid gap-3 p-5">
                     {knowledgeGraphEvidenceSamples.map((item) => (

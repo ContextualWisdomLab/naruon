@@ -8,6 +8,7 @@ import {
   DocumentActionStatus,
   EmailFileImportResponse,
   DataDocumentActionResponse,
+  DataDocumentActionKey,
   WebdavAccountStatus,
   WebdavAccount,
   WebdavAccountLookup,
@@ -23,6 +24,23 @@ import {
   getSurfaceStatusLabel,
   getWritebackTargetLabel
 } from './utils';
+
+function getDocumentActionResultCopy(action: DataDocumentActionKey) {
+  switch (action) {
+    case 'upload':
+      return '문서를 워크스페이스 원본으로 저장했습니다.';
+    case 'reparse':
+      return '문서 본문을 다시 읽어 최신 내용으로 갱신했습니다.';
+    case 'embedding-regeneration-intent':
+      return '검색 색인 갱신을 요청했습니다.';
+    case 'hwp-conversion-intent':
+      return 'HWP 변환을 요청했습니다.';
+    case 'webdav-materialization-intent':
+      return '연결된 문서 저장소 반영을 요청했습니다.';
+    default:
+      return '문서 작업을 완료했습니다.';
+  }
+}
 
 interface DocumentRepositoryTabProps {
   writebackStatus: any;
@@ -56,6 +74,7 @@ interface DocumentRepositoryTabProps {
   documentUploadFiles: File[];
   documentActionStatus: DocumentActionStatus;
   documentActionResult: DataDocumentActionResponse | null;
+  lastDocumentAction: DataDocumentActionKey;
   webdavAccountStatus: WebdavAccountStatus;
   webdavAccounts: WebdavAccount[];
   webdavAccountMap: WebdavAccountLookup;
@@ -85,6 +104,7 @@ export function DocumentRepositoryTab({
   documentUploadFiles,
   documentActionStatus,
   documentActionResult,
+  lastDocumentAction,
   webdavAccountStatus,
   webdavAccounts,
   webdavAccountMap,
@@ -168,11 +188,11 @@ return (
                       {emailImportStatus === 'idle' && emailImportFiles.length === 0 && 'EML, ZIP, MBOX 원본을 선택해 메일/첨부 근거로 수집합니다.'}
                       {emailImportStatus === 'idle' && emailImportFiles.length > 0 && `${formatCount(emailImportFiles.length)}개 파일 선택됨`}
                       {emailImportStatus === 'loading' && '이메일 원본 파일을 반입하는 중입니다.'}
-                      {emailImportStatus === 'auth' && <span className="font-bold text-red-700">signed session이 필요합니다. 공개 identity header로는 이메일 원본을 반입할 수 없습니다.</span>}
-                      {emailImportStatus === 'error' && <span className="font-bold text-red-700">이메일 원본 파일 반입에 실패했습니다.</span>}
+                      {emailImportStatus === 'auth' && <span className="font-bold text-red-700">로그인 상태를 확인하지 못했습니다. 다시 로그인한 뒤 파일을 반입하세요.</span>}
+                      {emailImportStatus === 'error' && <span className="font-bold text-red-700">메일 파일 반입에 실패했습니다. 잠시 후 다시 시도하세요.</span>}
                       {emailImportStatus === 'success' && emailImportResult && (
                         <span className="text-foreground">
-                          {formatCount(emailImportResult.imported_count)}개 반입 · 중복 {formatCount(emailImportResult.skipped_count)}개 · 실패 {formatCount(emailImportResult.failed_count)}개 · 첨부 {formatCount(emailImportResult.attachment_count)}개 · {getWriteBoundaryLabel(emailImportResult.provider_write_executed)}
+                          {formatCount(emailImportResult.imported_count)}개 반입 · 중복 {formatCount(emailImportResult.skipped_count)}개 · 실패 {formatCount(emailImportResult.failed_count)}개 · 첨부 {formatCount(emailImportResult.attachment_count)}개 · {getWriteBoundaryLabel(emailImportResult.provider_write_executed, 'local_action')}
                         </span>
                       )}
                     </div>
@@ -202,11 +222,11 @@ return (
                       {documentActionStatus === 'idle' && documentUploadFiles.length === 0 && '텍스트, Markdown, HWP 원본을 워크스페이스 문서 근거로 저장합니다.'}
                       {documentActionStatus === 'idle' && documentUploadFiles.length > 0 && `${documentUploadFiles[0]?.name ?? '문서'} 선택됨`}
                       {documentActionStatus === 'loading' && '문서 작업을 처리하는 중입니다.'}
-                      {documentActionStatus === 'auth' && <span className="font-bold text-red-700">signed session이 필요합니다. 공개 identity header로는 문서 작업을 실행할 수 없습니다.</span>}
-                      {documentActionStatus === 'error' && <span className="font-bold text-red-700">문서 작업에 실패했습니다.</span>}
+                      {documentActionStatus === 'auth' && <span className="font-bold text-red-700">로그인 상태를 확인하지 못했습니다. 다시 로그인한 뒤 문서를 저장하세요.</span>}
+                      {documentActionStatus === 'error' && <span className="font-bold text-red-700">문서 작업에 실패했습니다. 잠시 후 다시 시도하세요.</span>}
                       {documentActionStatus === 'success' && documentActionResult && (
                         <span className="text-foreground">
-                          {toSafeReactText(documentActionResult.document_name)} · {toSafeReactText(documentActionResult.message)} · {getWriteBoundaryLabel(documentActionResult.provider_write_executed)}
+                          {toSafeReactText(documentActionResult.document_name)} · {getDocumentActionResultCopy(lastDocumentAction)} · {getWriteBoundaryLabel(documentActionResult.provider_write_executed, 'local_action')}
                         </span>
                       )}
                     </div>
@@ -217,7 +237,7 @@ return (
                   <div className="flex items-center gap-3 mb-4">
                     <div className="rounded-xl bg-green-100 p-3"><FolderOpen className="size-5 text-green-700" /></div>
                     <div>
-                      <h2 className="font-bold text-sm text-muted-foreground">WebDAV 원본 (연동됨)</h2>
+                      <h2 className="font-bold text-sm text-muted-foreground">연결된 문서 저장소 (연동됨)</h2>
                       <p className="text-xl font-bold">
                         {webdavAccounts.length > 0 ? `${webdavAccounts.length}개 계정` : '연결 없음'}
                       </p>
@@ -341,7 +361,7 @@ return (
                           <dd className="mt-1 break-all text-sm font-bold">{formatDataTimestamp(asset.captured_at)}</dd>
                         </div>
                         <div>
-                          <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                          <dt className="font-black text-muted-foreground">반영 상태</dt>
                           <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(asset.provider_write_executed)}</dd>
                         </div>
                         <div className="min-w-0 sm:col-span-2 lg:col-span-4">
@@ -378,7 +398,7 @@ return (
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
                         <RefreshCw className="size-4" />
-                        재파싱 실행
+                        본문 다시 읽기
                       </button>
                       <button
                         type="button"
@@ -387,7 +407,7 @@ return (
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
                         <Database className="size-4" />
-                        임베딩 재생성 의도
+                        검색 색인 갱신
                       </button>
                       <button
                         type="button"
@@ -396,7 +416,7 @@ return (
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-bold text-foreground hover:bg-secondary disabled:cursor-wait disabled:opacity-60"
                       >
                         <FileText className="size-4" />
-                        HWP 변환 의도
+                        HWP 변환
                       </button>
                       <button
                         type="button"
@@ -406,7 +426,7 @@ return (
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Server className="size-4" />
-                        WebDAV 문서 실행 요청
+                        문서 저장소에 저장 실행
                       </button>
                     </div>
                   )}
@@ -424,7 +444,7 @@ return (
                       <dd className="mt-1 text-sm font-bold">{formatCount(selectedRepositoryAsset.content_chars)}자</dd>
                     </div>
                     <div>
-                      <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                      <dt className="font-black text-muted-foreground">반영 상태</dt>
                       <dd className="mt-1 text-sm font-bold">{getWriteBoundaryLabel(selectedRepositoryAsset.provider_write_executed)}</dd>
                     </div>
                     <div className="sm:col-span-2 lg:col-span-4">
@@ -437,14 +457,14 @@ return (
                 </section>
               )}
 
-              <section aria-label="WebDAV 반영 의도 승인" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <section aria-label="문서 저장소 반영 검토" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <p className="text-xs font-black text-primary">고객 원본 파일 반영</p>
-                    <h2 className="mt-1 text-lg font-black">WebDAV 반영 의도 승인</h2>
+                    <h2 className="mt-1 text-lg font-black">문서 저장소 반영 검토</h2>
                     <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                      첨부파일과 AI가 구조화한 산출물은 고객 WebDAV 원본에 반영할 의도로만 점검합니다.
-                      실제 외부 쓰기는 원본 계정, If-Match 충돌 조건, 근거 확인을 통과한 뒤 별도 실행됩니다.
+                      첨부파일과 AI가 구조화한 산출물은 내 문서 저장소에 저장하기 전에 먼저 점검합니다.
+                      실제 저장은 계정 상태와 충돌 여부 확인을 통과한 뒤 별도로 실행됩니다.
                     </p>
                   </div>
                   <button
@@ -454,38 +474,38 @@ return (
                     aria-busy={isWebdavSourceLoading || isWritebackLoading}
                     className="w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
-                    WebDAV 반영 의도 점검
+                    문서 저장소 반영 점검
                   </button>
                 </div>
 
                 <div role="status" aria-live="polite" className="mt-4 rounded-xl border border-border bg-background/70 p-4 text-sm">
                   {writebackStatus === 'idle' && (
-                    <p className="text-muted-foreground">아직 WebDAV 외부 쓰기는 실행하지 않았습니다. 원본 선택과 충돌 조건만 확인합니다.</p>
+                    <p className="text-muted-foreground">아직 문서 저장소에 저장하지 않았습니다. [문서 저장소 반영 점검]으로 대상과 충돌 여부를 먼저 확인합니다.</p>
                   )}
-                  {writebackStatus === 'loading' && <p className="font-bold text-primary">WebDAV 반영 의도를 요청 중입니다.</p>}
+                  {writebackStatus === 'loading' && <p className="font-bold text-primary">문서 저장소 반영 점검을 진행하는 중입니다.</p>}
                   {writebackStatus === 'idle' && webdavAccountStatus === 'error' && (
-                    <p className="font-bold text-red-700">WebDAV 원본 계정 목록을 확인하지 못했습니다.</p>
+                    <p className="font-bold text-red-700">문서 저장소 계정 목록을 확인하지 못했습니다. 잠시 후 다시 시도하세요.</p>
                   )}
                   {writebackStatus === 'no_source' && (
-                    <p className="font-bold text-amber-700">쓰기 가능한 고객 WebDAV 원본 계정이 없어 반영 의도를 만들 수 없습니다.</p>
+                    <p className="font-bold text-amber-700">쓰기 가능한 문서 저장소 계정이 없어 반영을 진행할 수 없습니다. 설정에서 저장소 계정을 연결한 뒤 다시 시도하세요.</p>
                   )}
                   {writebackStatus === 'fetch_error' && (
-                    <p className="font-bold text-red-700">WebDAV 원본 계정 목록을 확인하지 못해 반영 의도를 만들 수 없습니다.</p>
+                    <p className="font-bold text-red-700">문서 저장소 계정 목록을 확인하지 못해 반영을 진행할 수 없습니다. 잠시 후 다시 시도하세요.</p>
                   )}
                   {writebackStatus === 'conflict' && (
-                    <p className="font-bold text-red-700">If-Match/ETag 충돌이 감지되어 고객 WebDAV 원본 파일을 덮어쓰지 않았습니다.</p>
+                    <p className="font-bold text-red-700">파일이 다른 곳에서 변경되어 충돌이 감지되었습니다. 원본 파일을 덮어쓰지 않았습니다. 최신 파일을 확인한 뒤 다시 시도하세요.</p>
                   )}
                   {writebackStatus === 'auth' && (
-                    <p className="font-bold text-red-700">signed session이 필요합니다. 공개 identity header로는 WebDAV 반영 의도를 만들 수 없습니다.</p>
+                    <p className="font-bold text-red-700">로그인 상태를 확인하지 못했습니다. 다시 로그인한 뒤 반영을 진행하세요.</p>
                   )}
                   {writebackStatus === 'error' && (
-                    <p className="font-bold text-red-700">WebDAV 반영 의도 점검에 실패했습니다.</p>
+                    <p className="font-bold text-red-700">문서 저장소 반영 점검에 실패했습니다. 잠시 후 다시 시도하세요.</p>
                   )}
                   {writebackStatus === 'success' && writebackResult && (
                     <dl className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
                       <div>
                         <dt className="font-black text-muted-foreground">반영 방식</dt>
-                        <dd className="mt-1 text-sm font-bold text-foreground">{writebackResult.intent === 'writeback' ? '원본 반영 의도' : '의도 확인'}</dd>
+                        <dd className="mt-1 text-sm font-bold text-foreground">{writebackResult.intent === 'writeback' ? '문서 저장소 반영' : '점검만 완료'}</dd>
                       </div>
                       <div>
                         <dt className="font-black text-muted-foreground">원본 선택</dt>
@@ -493,25 +513,25 @@ return (
                       </div>
                       <div>
                         <dt className="font-black text-muted-foreground">충돌 조건</dt>
-                        <dd className="mt-1 text-sm font-bold text-foreground">{writebackResult.requires_if_match ? 'If-Match 필요' : '충돌 조건 없음'}</dd>
+                        <dd className="mt-1 text-sm font-bold text-foreground">{writebackResult.requires_if_match ? '최신 변경 확인 필요' : '충돌 위험 없음'}</dd>
                       </div>
                       <div>
-                        <dt className="font-black text-muted-foreground">근거</dt>
-                        <dd className="mt-1 text-sm font-bold text-foreground">{writebackResult.provenance === 'server-authoritative' ? '서버 확인' : '근거 확인'}</dd>
+                        <dt className="font-black text-muted-foreground">기록</dt>
+                        <dd className="mt-1 text-sm font-bold text-foreground">{writebackResult.provenance === 'server-authoritative' ? '서버 기록 확인' : '기록 확인'}</dd>
                       </div>
                     </dl>
                   )}
                 </div>
               </section>
 
-              <section aria-label="중복 메일 canonical 스레드 의도" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <section aria-label="중복 메일 스레드 정리" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <p className="text-xs font-black text-primary">정확한 메일 중복 정리</p>
-                    <h2 className="mt-1 text-lg font-black">중복 메일 스레드 정리 의도</h2>
+                    <h2 className="mt-1 text-lg font-black">중복 메일 스레드 정리</h2>
                     <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                      ZIP 반입과 계정 간 포워딩으로 같은 메일이 다시 들어오면 Message-ID와 강한 본문 fingerprint로 기존 canonical 스레드에 연결할 의도를 만듭니다.
-                      subject만 비슷한 메일은 자동 병합하지 않습니다.
+                      같은 메일이 여러 번 들어온 경우 원래 대화 스레드로 묶을 수 있습니다.
+                      제목만 비슷한 메일은 임의로 합치지 않고 검토 후보로만 표시합니다.
                     </p>
                   </div>
                   <button
@@ -520,20 +540,20 @@ return (
                     disabled={isUniqueThreadLoading}
                     className="w-full whitespace-nowrap rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
                   >
-                    중복 메일 스레드 의도 점검
+                    중복 메일 정리 검토
                   </button>
                 </div>
 
                 <div role="status" aria-live="polite" className="mt-4 rounded-xl border border-border bg-background/70 p-4 text-sm">
                   {uniqueThreadStatus === 'idle' && (
-                    <p className="text-muted-foreground">외부 쓰기나 DB 병합을 실행하지 않고 canonical 스레드 후보만 검증합니다.</p>
+                    <p className="text-muted-foreground">검토만 진행하며 메일을 임의로 합치거나 삭제하지 않습니다.</p>
                   )}
-                  {uniqueThreadStatus === 'loading' && <p className="font-bold text-primary">중복 메일 스레드 의도를 요청 중입니다.</p>}
+                  {uniqueThreadStatus === 'loading' && <p className="font-bold text-primary">중복 메일 검토를 진행하는 중입니다.</p>}
                   {uniqueThreadStatus === 'auth' && (
-                    <p className="font-bold text-red-700">signed session이 필요합니다. 공개 identity header로는 중복 메일 의도를 만들 수 없습니다.</p>
+                    <p className="font-bold text-red-700">로그인 상태를 확인하지 못했습니다. 다시 로그인한 뒤 정리를 진행하세요.</p>
                   )}
                   {uniqueThreadStatus === 'error' && (
-                    <p className="font-bold text-red-700">중복 메일 스레드 의도 점검에 실패했습니다.</p>
+                    <p className="font-bold text-red-700">중복 메일 검토에 실패했습니다. 잠시 후 다시 시도하세요.</p>
                   )}
                   {uniqueThreadStatus === 'success' && uniqueThreadResult && (
                     <div className="space-y-3">
@@ -547,7 +567,7 @@ return (
                           <dd className="mt-1 font-mono text-sm text-foreground">{uniqueThreadResult.duplicates_found}</dd>
                         </div>
                         <div>
-                          <dt className="font-black text-muted-foreground">쓰기 경계</dt>
+                          <dt className="font-black text-muted-foreground">반영 상태</dt>
                           <dd className="mt-1 text-sm font-bold text-foreground">{getWriteBoundaryLabel(uniqueThreadResult.provider_write_executed)}</dd>
                         </div>
                         <div>
@@ -572,7 +592,7 @@ return (
 
               <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
                 <div className="p-5 border-b border-border bg-secondary/30">
-                  <h2 className="font-bold text-lg flex items-center gap-2"><FolderOpen className="size-5" /> AI 프로젝트 구조화된 첨부파일 (WebDAV)</h2>
+                  <h2 className="font-bold text-lg flex items-center gap-2"><FolderOpen className="size-5" /> AI 프로젝트 구조화된 첨부파일 (문서 저장소)</h2>
                 </div>
                 <div className="p-4 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                   {projectFolders.length > 0 ? projectFolders.map(folder => (
@@ -582,7 +602,7 @@ return (
                         <span className="font-bold truncate">{toSafeReactText(folder.project_name)}</span>
                       </div>
                       <p className="mb-2 text-xs font-semibold text-primary">원본 폴더 연결됨</p>
-                      <p className="text-xs text-muted-foreground">고객 WebDAV 경로 기준으로 연결된 프로젝트 폴더입니다.</p>
+                      <p className="text-xs text-muted-foreground">내 문서 저장소 폴더와 연결된 프로젝트입니다.</p>
                     </div>
                   )) : (
                     <p className="text-sm text-muted-foreground col-span-full">AI가 구조화한 프로젝트 폴더가 없습니다.</p>

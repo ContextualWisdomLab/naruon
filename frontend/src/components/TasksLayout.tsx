@@ -128,7 +128,7 @@ function getTaskEvidenceLabel(task: TicketTask) {
 }
 
 function getKnowledgeTargetLabel(intent: KnowledgeMaterializationIntent) {
-  return intent.target_label || intent.source_id ? 'WebDAV/Notes 의도 준비' : '대상 원본 확인 필요';
+  return intent.target_label || intent.source_id ? '내 문서 노트로 저장 준비 완료' : '저장 위치 확인 필요';
 }
 
 function getKnowledgeConflictLabel(intent: KnowledgeMaterializationIntent) {
@@ -136,13 +136,13 @@ function getKnowledgeConflictLabel(intent: KnowledgeMaterializationIntent) {
 }
 
 function getWriteBoundaryLabel(providerWriteExecuted: boolean) {
-  return providerWriteExecuted ? '외부 쓰기 실행됨' : '의도만 기록';
+  return providerWriteExecuted ? '원본 반영 완료' : '점검만 완료';
 }
 
 function getKnowledgeExecutionLabel(intent: KnowledgeMaterializationIntent) {
-  if (intent.provider_write_executed) return '외부 쓰기 실행됨';
-  if (intent.retry_item_uid || intent.status === 'queued') return '커넥터 실행 요청 접수';
-  if (intent.error_code) return '커넥터 실행 실패';
+  if (intent.provider_write_executed) return '문서 노트 저장 완료';
+  if (intent.retry_item_uid || intent.status === 'queued') return '노트 저장 요청 접수';
+  if (intent.error_code) return '노트 저장 실패';
   return getWriteBoundaryLabel(false);
 }
 
@@ -202,7 +202,7 @@ export function TasksLayout() {
       );
       setTicketActionStatus(`${safeTaskTitle(updatedTask.title)} 상태를 ${taskStatusChangeLabels[updatedTask.status]} 변경했습니다.`);
     } catch {
-      setTicketActionStatus('티켓 상태 변경에 실패했습니다.');
+      setTicketActionStatus('실행 항목 상태 변경에 실패했습니다.');
     }
   };
 
@@ -346,7 +346,7 @@ export function TasksLayout() {
                       <span>{getTaskEvidenceLabel(task)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-center size-6 rounded-full bg-primary/10 text-primary" title="서명 세션 작업">
+                  <div className="flex items-center justify-center size-6 rounded-full bg-primary/10 text-primary" title="내 작업">
                     <User className="size-3.5" />
                   </div>
                 </div>
@@ -384,7 +384,7 @@ export function TasksLayout() {
         <span className={`px-2 py-1 rounded-full text-xs font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-secondary text-secondary-foreground'}`}>{taskStatusLabels[task.status]}</span>
       </button>
     )) : (
-      <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground">서명 세션에 연결된 내 작업이 없습니다.</p>
+      <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm font-semibold text-muted-foreground">연결된 내 작업이 아직 없습니다. 메일 상세에서 실행 항목을 만들면 여기에 표시됩니다.</p>
     );
   }, [filteredTicketTasks, setSelectedTaskId, setViewMode, viewMode]);
   const handleViewModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>, mode: TaskViewMode) => {
@@ -480,19 +480,19 @@ export function TasksLayout() {
 
       {/* Kanban Board Area */}
       <main className="flex-1 overflow-x-auto overflow-y-auto bg-secondary/20 px-4 py-4 pb-28 sm:p-6">
-        <section aria-label="원본 연결 티켓 상태 보드" className="mb-6 rounded-xl border border-border bg-card p-4 shadow-sm">
+        <section aria-label="원본 연결 실행 항목 상태 보드" className="mb-6 rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold">실제 티켓 큐</h2>
+              <h2 className="text-base font-bold">실행 항목 보드</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                서명 세션의 작업 API에서 원본 메일, 스레드, 상태와 우선순위를 읽어 티켓 보드와 함께 추적합니다.
+                메일에서 만든 실행 항목을 원본 대화와 함께 추적하고 상태와 우선순위를 관리합니다.
               </p>
             </div>
             <div role="status" aria-live="polite" className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
               {ticketStatus === 'loading' ? '작업 불러오는 중' : null}
-              {ticketStatus === 'ready' ? `${ticketTasks.length}개 티켓 연결` : null}
-              {ticketStatus === 'empty' ? '연결된 티켓 없음' : null}
-              {ticketStatus === 'auth' ? '인증된 세션 필요' : null}
+              {ticketStatus === 'ready' ? `${ticketTasks.length}개 실행 항목 연결` : null}
+              {ticketStatus === 'empty' ? '연결된 실행 항목 없음' : null}
+              {ticketStatus === 'auth' ? '로그인이 필요합니다' : null}
               {ticketStatus === 'error' ? '작업 API 오류' : null}
             </div>
           </div>
@@ -511,7 +511,7 @@ export function TasksLayout() {
               <div>
                 <h3 className="text-sm font-bold text-foreground">기한 지난 답변 처리</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  48시간 넘게 답변이 없는 보낸 메일을 원본 메일과 스레드가 연결된 티켓으로 올립니다.
+                  48시간 넘게 답변이 없는 보낸 메일을 원본 메일과 스레드가 연결된 실행 항목으로 올립니다.
                 </p>
               </div>
               <button
@@ -539,7 +539,7 @@ export function TasksLayout() {
           </section>
 
           {ticketStatus === 'ready' ? (
-            <div aria-label="원본 연결 티켓 목록" className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div aria-label="원본 연결 실행 항목 목록" className="mt-4 grid gap-3 lg:grid-cols-2">
               {filteredTicketTasks.slice(0, 4).map((task) => {
                 const displayTitle = safeTaskTitle(task.title);
                 return (
@@ -589,12 +589,12 @@ export function TasksLayout() {
           ) : null}
 
           {ticketStatus === 'ready' && selfSentKnowledgeTasks.length > 0 ? (
-            <section aria-label="나에게 보낸 지식 메일 WebDAV 의도" className="mt-4 border-t border-border pt-4">
+            <section aria-label="나에게 보낸 지식 메일 노트 정리" className="mt-4 border-t border-border pt-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-bold text-foreground">나에게 보낸 지식 노트</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    나에게 보낸 지식 메일 작업은 고객 WebDAV/Notes 의도로 준비하고, 사용자가 명시적으로 요청한 경우에만 커넥터 실행을 요청합니다.
+                    나에게 보낸 지식 메일은 내 문서 노트로 정리할 수 있습니다. 정리는 내가 저장을 요청한 경우에만 진행됩니다.
                   </p>
                 </div>
                 <span className="rounded-full bg-secondary px-3 py-1 text-xs font-bold text-secondary-foreground">
@@ -619,30 +619,30 @@ export function TasksLayout() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            aria-label={`${displayTitle} WebDAV 지식 노트 의도 생성`}
+                            aria-label={`${displayTitle} 지식 노트 만들기`}
                             disabled={currentKnowledgeIntent.state === 'loading'}
                             aria-busy={currentKnowledgeIntent.state === 'loading'}
                             onClick={() => void handleKnowledgeIntentCreate(task.id)}
                             className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
                           >
                             <Plus className="size-3.5" />
-                            {currentKnowledgeIntent.state === 'loading' ? '생성 중' : '의도 생성'}
+                            {currentKnowledgeIntent.state === 'loading' ? '만드는 중' : '노트 만들기'}
                           </button>
                           <button
                             type="button"
-                            aria-label={`${displayTitle} WebDAV 지식 노트 실행 요청`}
+                            aria-label={`${displayTitle} 지식 노트 지금 저장`}
                             disabled={currentKnowledgeIntent.state === 'loading'}
                             aria-busy={currentKnowledgeIntent.state === 'loading'}
                             onClick={() => void handleKnowledgeIntentCreate(task.id, true)}
                             className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/15 disabled:cursor-wait disabled:opacity-70"
                           >
-                            실행 요청
+                            지금 저장
                           </button>
                         </div>
                       </div>
                       {currentKnowledgeIntent.state === 'error' ? (
                         <p role="status" className="mt-3 rounded-md border border-red-300 bg-red-50 p-2 text-xs font-semibold text-red-900">
-                          WebDAV/Notes 의도를 만들지 못했습니다.
+                          지식 노트 정리를 시작하지 못했습니다. 잠시 후 다시 시도하세요.
                         </p>
                       ) : null}
                       {currentIntent ? (
@@ -652,16 +652,16 @@ export function TasksLayout() {
                             <dd className="text-muted-foreground">{getKnowledgeTargetLabel(currentIntent)}</dd>
                           </div>
                           <div>
-                            <dt className="font-bold text-foreground">쓰기 경계</dt>
+                            <dt className="font-bold text-foreground">진행 상태</dt>
                             <dd className="text-muted-foreground">{getKnowledgeExecutionLabel(currentIntent)}</dd>
                           </div>
                           <div>
-                            <dt className="font-bold text-foreground">충돌 정책</dt>
+                            <dt className="font-bold text-foreground">충돌 검사</dt>
                             <dd className="text-muted-foreground">{getKnowledgeConflictLabel(currentIntent)}</dd>
                           </div>
                           <div>
-                            <dt className="font-bold text-foreground">감사 근거</dt>
-                            <dd className="text-muted-foreground">기록됨</dd>
+                            <dt className="font-bold text-foreground">활동 기록</dt>
+                            <dd className="text-muted-foreground">저장됨</dd>
                           </div>
                           <div>
                             <dt className="font-bold text-foreground">재시도 상태</dt>
@@ -684,19 +684,19 @@ export function TasksLayout() {
 
           {ticketStatus === 'empty' ? (
             <p className="mt-4 rounded-lg border border-dashed border-border bg-background/70 p-3 text-sm text-muted-foreground">
-              메일 상세에서 실행 항목을 만들면 원본 연결 티켓으로 표시됩니다.
+              메일 상세에서 실행 항목을 만들면 원본 연결 항목으로 표시됩니다.
             </p>
           ) : null}
 
           {ticketStatus === 'auth' ? (
             <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
-              작업 API는 서명 세션이 있을 때만 읽습니다. 공개 identity header는 사용하지 않습니다.
+              작업 목록을 불러오려면 로그인이 필요합니다. 로그인한 뒤 이 화면을 다시 열어 주세요.
             </p>
           ) : null}
 
           {ticketStatus === 'error' ? (
             <p className="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-900">
-              작업 API를 불러오지 못했습니다. 서버 상태를 확인한 뒤 다시 시도합니다.
+              작업 목록을 불러오지 못했습니다. 잠시 후 새로고침해 주세요.
             </p>
           ) : null}
         </section>
@@ -749,7 +749,7 @@ export function TasksLayout() {
                 <p className="text-xs text-muted-foreground font-semibold mb-1">담당자</p>
                 <div className="flex items-center gap-2">
                   <div className="size-6 rounded-full bg-primary/10 text-primary grid place-items-center"><User className="size-3" /></div>
-                  <span className="text-sm font-bold">서명 세션 사용자</span>
+                  <span className="text-sm font-bold">내 계정</span>
                 </div>
               </div>
               <div>

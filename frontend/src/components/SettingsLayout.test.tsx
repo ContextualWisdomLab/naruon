@@ -356,7 +356,7 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("IMAP 서버 역할 금지");
     expect(container.textContent).toContain("MX 호스트 역할 금지");
     expect(container.textContent).toContain("Connector 상태와 APM 신호");
-    expect(container.textContent).toContain("감사 근거 기록됨");
+    expect(container.textContent).toContain("활동 기록 저장됨");
     expect(container.textContent).toContain("연결됨");
     expect(container.textContent).toContain("OTel endpoint");
     expect(container.textContent).toContain("최근 connector 신호");
@@ -465,7 +465,7 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("Client");
     expect(container.textContent).toContain("설정됨");
     expect(container.textContent).toContain("등록됨");
-    expect(container.textContent).toContain("서명된 세션 연결됨 · 조직 스코프");
+    expect(container.textContent).toContain("로그인됨 · 조직 범위");
     expect(container.textContent).not.toContain("https://login.example.com/realms/naruon");
     expect(container.textContent).not.toContain("naruon-web");
     expect(container.textContent).not.toContain("alice / org-acme / workspace-org-acme");
@@ -549,14 +549,14 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("앱 설정 완료, 사용자 consent 대기");
     expect(container.textContent).toContain("원본 연결 준비 상태");
     expect(container.textContent).toContain("Fastmail 일정 원본 1");
-    expect(container.textContent).toContain("WebDAV 저장소 1");
+    expect(container.textContent).toContain("문서 저장소 1");
     expect(container.textContent).not.toContain("caldav_src_fastmail_primary");
     expect(container.textContent).not.toContain("webdav_src_primary");
     expect(container.textContent).not.toContain("WebDAV source webdav_src_primary");
     expect(container.textContent).not.toContain("https://files.example.com/dav");
     expect(container.textContent).not.toContain("files@example.com");
-    expect(container.textContent).toContain("쓰기 의도 가능");
-    expect(container.textContent).toContain("충돌 검사용 ETag 준비");
+    expect(container.textContent).toContain("쓰기 가능");
+    expect(container.textContent).toContain("변경 충돌 검사 준비");
     expect(container.textContent).not.toContain("etag-caldav-primary");
     expect(container.textContent).toContain("저장된 secret 유지");
     expect(container.textContent).toContain("Naruon은 메일함 용량이나 SMTP/IMAP 서버를 제공하지 않습니다");

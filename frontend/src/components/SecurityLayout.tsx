@@ -124,7 +124,7 @@ const permissionDraftOptions = [
   {
     value: 'deny_workspace_write',
     label: '워크스페이스 밖 쓰기 차단',
-    description: '서명 세션의 워크스페이스 밖 리소스 쓰기를 deny 결과로 저장합니다.',
+    description: '내 워크스페이스 밖 자원에 대한 쓰기 요청은 차단 결과로 기록합니다.',
     result: '워크스페이스 차단 - 외부 쓰기 실행 안 함',
     resourceType: 'webdav_repository',
   },
@@ -137,8 +137,8 @@ const permissionDraftOptions = [
   },
   {
     value: 'deny_missing_consent',
-    label: '동의 없는 CalDAV 쓰기 차단',
-    description: '필수 provider write consent가 없는 CalDAV 쓰기를 deny 결과로 저장합니다.',
+    label: '동의 없는 일정 쓰기 차단',
+    description: '필요한 쓰기 동의가 없는 일정 반영은 차단 결과로 기록합니다.',
     result: '동의 차단 - 외부 쓰기 실행 안 함',
     resourceType: 'caldav_source',
   },
@@ -167,15 +167,15 @@ function reasonLabel(reason: string) {
 function sourceTypeLabel(sourceType: GovernanceSource['source_type'] | string) {
   switch (sourceType) {
     case 'caldav_source':
-      return 'CalDAV 일정 원본';
+      return '캘린더 연결 원본';
     case 'carddav_source':
-      return 'CardDAV 연락처 원본';
+      return '연락처 연결 원본';
     case 'data_export':
       return '데이터 내보내기';
     case 'webdav_repository':
-      return 'WebDAV 저장소';
+      return '문서 저장소';
     case 'provider_secret':
-      return '제공자 secret';
+      return '제공자 인증정보';
     case 'llm_provider':
       return 'LLM 제공자';
     default:
@@ -219,17 +219,17 @@ function roleLabel(role: string) {
     case 'member':
       return '멤버';
     default:
-      return '서명 세션 사용자';
+      return '로그인 사용자';
   }
 }
 
 function evidenceLabel(evidenceLabelValue: string) {
-  if (/webdav/i.test(evidenceLabelValue)) return 'WebDAV 원본 근거';
+  if (/webdav/i.test(evidenceLabelValue)) return '문서 저장소 근거';
   if (/calendar/i.test(evidenceLabelValue)) return '일정 원본 근거';
   if (/policy|access_policy/i.test(evidenceLabelValue)) return '정책 엔진 근거';
-  if (/auth|session/i.test(evidenceLabelValue)) return '서명 세션 근거';
+  if (/auth|session/i.test(evidenceLabelValue)) return '계정 확인 근거';
   if (/llm|provider/i.test(evidenceLabelValue)) return '제공자 설정 근거';
-  if (/connector|runner/i.test(evidenceLabelValue)) return 'connector 관측 근거';
+  if (/connector|runner/i.test(evidenceLabelValue)) return '연동 상태 관측 근거';
   return '서버 근거';
 }
 
@@ -273,14 +273,14 @@ function exposureLabel(exposure: ExternalShareReview['exposure_level']) {
 
 function shareReviewLabel(review: ExternalShareReview) {
   if (/writeback boundary/i.test(review.review_label)) {
-    return `${sourceTypeLabel(review.source_type)} 쓰기 경계`;
+    return `${sourceTypeLabel(review.source_type)} 쓰기 검토`;
   }
   return review.review_label;
 }
 
 function policyStepLabel(step: PolicyOrderStep) {
-  if (/signed session/i.test(step.display_name)) return '서명 세션 식별';
-  if (/organization and workspace/i.test(step.display_name)) return '조직과 워크스페이스 스코프';
+  if (/signed session/i.test(step.display_name)) return '로그인 상태 확인';
+  if (/organization and workspace/i.test(step.display_name)) return '조직·워크스페이스 범위 확인';
   if (/data-region/i.test(step.display_name)) return '데이터 리전 차단';
   if (/consent/i.test(step.display_name)) return '동의와 원본 기능 차단';
   if (/owner|delegated/i.test(step.display_name)) return '소유자 또는 위임 관리자 경계';
@@ -289,8 +289,8 @@ function policyStepLabel(step: PolicyOrderStep) {
 }
 
 function decisionResourceLabel(decision: PolicyDecisionSummary) {
-  if (/webdav/i.test(decision.resource_label)) return 'WebDAV 저장소';
-  if (/provider secret/i.test(decision.resource_label)) return '교차 조직 제공자 secret';
+  if (/webdav/i.test(decision.resource_label)) return '문서 저장소';
+  if (/provider secret/i.test(decision.resource_label)) return '교차 조직 제공자 인증정보';
   return decision.resource_label;
 }
 
@@ -321,7 +321,7 @@ function ErrorPanel({ message }: { message: string }) {
   void message;
   return (
     <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-      서명 세션 보안 표면을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+      보안 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
     </div>
   );
 }
@@ -329,7 +329,7 @@ function ErrorPanel({ message }: { message: string }) {
 function EmptyState({ label }: { label: string }) {
   return (
     <div role="status" aria-live="polite" className="rounded-lg border border-dashed border-border bg-background p-5 text-sm text-muted-foreground">
-      현재 signed-session 스코프에서 확인된 {label}{subjectParticle(label)} 없습니다.
+      지금 로그인한 계정 범위에서 확인된 {label}{subjectParticle(label)} 없습니다.
     </div>
   );
 }
@@ -462,9 +462,9 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-        <h2 className="text-base font-bold">원본 연결 RBAC / ABAC</h2>
+        <h2 className="text-base font-bold">원본 연결 접근 권한</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              WebDAV, CalDAV, CardDAV source registry를 signed-session 스코프로 판정합니다.
+              연결된 문서·캘린더·연락처 원본에 대한 접근 권한을 로그인한 사용자와 조직 범위로 판정합니다.
             </p>
           </div>
           <span className="rounded-md bg-secondary px-2 py-1 text-xs font-bold text-muted-foreground">
@@ -557,7 +557,7 @@ function AccessTab({ data }: { data: SecurityAccessSurface }) {
           <div>
             <h2 className="text-base font-bold">권한 편집</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              signed-session 스코프에서 외부 쓰기 권한 초안과 deny 결과를 저장합니다.
+              외부 쓰기 권한 초안과 차단 결과를 저장합니다.
             </p>
           </div>
           <span className="rounded-md bg-secondary px-2 py-1 text-xs font-bold text-muted-foreground">
@@ -993,13 +993,13 @@ export function SecurityLayout() {
               <div className="flex items-center gap-2 text-sm font-bold">
                 <Share2 className="size-4 text-primary" /> 원본 소유권
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">WebDAV/CalDAV 원본은 고객 시스템이며 Naruon은 용량 제공자가 아닙니다.</p>
+              <p className="mt-1 text-xs text-muted-foreground">연결된 문서·캘린더 원본은 고객의 시스템이며 Naruon이 용량을 제공하지 않습니다.</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 text-sm font-bold">
-                <Lock className="size-4 text-primary" /> 서명 세션 전용
+                <Lock className="size-4 text-primary" /> 로그인 계정 전용
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">브라우저는 bearer session으로만 보안 API를 호출합니다.</p>
+              <p className="mt-1 text-xs text-muted-foreground">보안 정보는 로그인한 계정으로만 확인할 수 있습니다.</p>
             </div>
           </div>
           {content}

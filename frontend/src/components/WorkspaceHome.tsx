@@ -114,11 +114,11 @@ function getCalendarSourceLabel(index: number) {
 function getCalendarProtocolLabel(protocol: string | undefined) {
   switch (protocol) {
     case 'caldav':
-      return 'CalDAV 원본';
+      return '캘린더 연결 원본';
     case 'carddav':
-      return 'CardDAV 원본';
+      return '연락처 연결 원본';
     case 'webdav':
-      return 'WebDAV 원본';
+      return '문서 저장소 원본';
     default:
       return '원본 계정';
   }
@@ -138,7 +138,7 @@ function getCalendarCapabilityLabel(capability: string) {
 }
 
 function getCalendarConflictLabel(source: CalendarWritebackSource) {
-  return source.etag ? '충돌 토큰 있음' : '충돌 토큰 대기';
+  return source.etag ? '변경 충돌 검사 준비됨' : '변경 충돌 검사 정보 대기';
 }
 
 function buildCompletionRate(tasks: TaskItem[]) {
@@ -256,8 +256,8 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
     { title: '받은 메일', value: loading ? '-' : emails.length.toString(), diff: unreadCount > 0 ? `+${unreadCount}` : '-', diffText: '안 읽음', icon: Inbox, color: 'text-primary' },
     { title: '답변 대기', value: loading ? '-' : pendingReplyCount.toString(), diff: pendingReplyCount > 0 ? `${pendingReplyCount}건` : '-', diffText: '보낸 메일', icon: Send, color: 'text-rose-500' },
     { title: '일정 원본', value: sourceEvidenceError ? '오류' : sourceEvidenceLoading ? '-' : calendarSources.length.toString(), diff: sourceEvidenceError ? '확인 필요' : sourceEvidenceLoading ? '-' : `${writableCalendarSourceCount}개`, diffText: sourceEvidenceError ? '원본 확인' : '반영 가능', icon: CalendarDays, color: sourceEvidenceError ? 'text-red-500' : 'text-blue-500' },
-    { title: '대기 작업', value: loading ? '-' : pendingTasks.length.toString(), diff: '-', diffText: 'source-linked', icon: CheckCircle2, color: 'text-green-500' },
-    { title: '프로젝트 원본', value: sourceEvidenceError ? '오류' : sourceEvidenceLoading ? '-' : projectFolders.length.toString(), diff: sourceEvidenceError ? '확인 필요' : sourceEvidenceLoading ? '-' : `${projectFolders.length}개`, diffText: 'WebDAV 폴더', icon: Network, color: sourceEvidenceError ? 'text-red-500' : 'text-purple-500' },
+    { title: '대기 작업', value: loading ? '-' : pendingTasks.length.toString(), diff: '-', diffText: '실행 대기', icon: CheckCircle2, color: 'text-green-500' },
+    { title: '프로젝트 원본', value: sourceEvidenceError ? '오류' : sourceEvidenceLoading ? '-' : projectFolders.length.toString(), diff: sourceEvidenceError ? '확인 필요' : sourceEvidenceLoading ? '-' : `${projectFolders.length}개`, diffText: '프로젝트 폴더', icon: Network, color: sourceEvidenceError ? 'text-red-500' : 'text-purple-500' },
     { title: '작업 완료율', value: loading ? '-' : `${taskCompletionRate}%`, diff: loading ? '-' : `${completedTaskCount}/${tasks.length}`, diffText: '완료', icon: CheckCircle2, color: 'text-emerald-500' },
   ]), [
     calendarSources.length,

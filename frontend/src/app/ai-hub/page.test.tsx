@@ -258,7 +258,7 @@ describe('AIHubPage', () => {
       root?.render(<AIHubPage />);
     });
 
-    expect(container.textContent).toContain('AI 허브 원본 근거를 불러오는 중입니다.');
+    expect(container.textContent).toContain('AI 허브 정보를 불러오는 중입니다.');
 
     await act(async () => {
       resolveFetch(jsonResponse(aiHubSurface));
@@ -332,7 +332,7 @@ describe('AIHubPage', () => {
     await flushAsyncWork();
 
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'AI 허브 원본 근거를 불러오지 못했습니다.',
+      'AI 허브 정보를 불러오지 못했습니다.',
     );
     expect(container.textContent).toContain('다시 시도');
     expect(consoleError).toHaveBeenCalled();

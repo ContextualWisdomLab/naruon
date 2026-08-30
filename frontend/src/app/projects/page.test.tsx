@@ -142,8 +142,8 @@ describe("ProjectsPage", () => {
     expect(container.textContent).not.toContain("Rival Project");
     expect(container.textContent).not.toContain("webdav_folder_roadmap");
     expect(container.textContent).not.toContain("/Projects/Naruon_Roadmap_2026");
-    expect(container.textContent).toContain("외부 저장소 쓰기는 별도 승인 전까지 실행하지 않습니다");
-    expect(container.textContent).toContain("WebDAV 폴더 근거");
+    expect(container.textContent).toContain("폴더 파일 변경은 별도 승인 전까지 진행하지 않습니다");
+    expect(container.textContent).toContain("프로젝트 폴더 근거");
     expect(container.textContent).toContain("리소스 배정 검토 회의");
     expect(container.textContent).toContain("스레드 근거 연결됨");
     expect(container.textContent).not.toContain("thread-q2");
@@ -163,7 +163,7 @@ describe("ProjectsPage", () => {
     expect(saveButton).toBeDefined();
 
     await act(async () => {
-      setNativeValue(evidenceNote!, "이사회 승인 근거와 WebDAV 경계를 함께 검토합니다.");
+      setNativeValue(evidenceNote!, "이사회 승인 근거와 프로젝트 폴더 범위를 함께 검토합니다.");
       evidenceNote!.dispatchEvent(new Event("input", { bubbles: true }));
       setNativeValue(evidenceSource!, "document");
       evidenceSource!.dispatchEvent(new Event("change", { bubbles: true }));
@@ -174,7 +174,7 @@ describe("ProjectsPage", () => {
       saveButton!.click();
     });
     expect(container.textContent).toContain("프로젝트 근거가 저장되었습니다: 문서 근거");
-    expect(container.textContent).toContain("이사회 승인 근거와 WebDAV 경계를 함께 검토합니다.");
+    expect(container.textContent).toContain("이사회 승인 근거와 프로젝트 폴더 범위를 함께 검토합니다.");
   });
 
   it("renders the semantic project graph command center with paragraph citations", async () => {
@@ -408,8 +408,8 @@ describe("ProjectsPage", () => {
     expect(container.textContent).toContain("프로젝트 관계 맥락");
     expect(container.textContent).toContain("Traceability Map");
     expect(container.textContent).toContain("Evidence Inspector");
-    expect(container.textContent).toContain("문단 citation 경계 확인됨");
-    expect(container.textContent).toContain("문단 KG 근거");
+    expect(container.textContent).toContain("문단 출처까지 확인됨");
+    expect(container.textContent).toContain("문단 출처 근거");
     expect(container.textContent).toContain("카드 승인 실패 재시도 안내");
     expect(container.textContent).toContain("결제 화면은 카드 승인 실패");
     expect(container.textContent).toContain("1 citations");
@@ -475,6 +475,59 @@ describe("ProjectsPage", () => {
     expect(container.textContent).not.toContain("correction-alpha-1");
   });
 
+  it("hides paragraph-source labels when a semantic candidate has no segment evidence", async () => {
+    const evidencelessCandidate = {
+      candidate_uid: "project_candidate:no-segments",
+      project_uid: "project_candidate:no-segments",
+      title: "Project: No Segment Evidence",
+      status_code: "needs_review",
+      score: 0.4,
+      object_count: 2,
+      requirement_count: 1,
+      issue_count: 1,
+      milestone_count: 0,
+      deliverable_count: 0,
+      participant_count: 0,
+      source_segment_count: 0,
+      representative_object_uids: [],
+      citation_bundle: [],
+      updated_at: "2026-07-02T00:00:00Z",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/auth/session") {
+        return jsonResponse({
+          authenticated: true,
+          claims: { userId: "alice", organizationId: "org-acme" },
+        });
+      }
+      if (path === "/api/webdav/folders") return jsonResponse([]);
+      if (path === "/api/tasks") return jsonResponse([]);
+      if (path === "/api/projects/candidates") {
+        return jsonResponse({ candidates: [evidencelessCandidate] });
+      }
+      return jsonResponse({}, false, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<ProjectsPage />);
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("Project: No Segment Evidence");
+    expect(container.textContent).toContain("원본 근거");
+    expect(container.textContent).toContain("실행 항목 기준");
+    expect(container.textContent).not.toContain("문단 출처 근거");
+    expect(container.textContent).not.toContain("문단 출처까지 확인됨");
+  });
+
   it("renders an actionable fallback when project evidence fails", async () => {
     vi.stubGlobal("fetch", vi.fn(() => jsonResponse({ detail: "failed" }, false, 500)));
 
@@ -487,11 +540,11 @@ describe("ProjectsPage", () => {
     });
     await flushAsyncWork();
 
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain("프로젝트 근거를 불러오지 못했습니다");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("프로젝트 정보를 불러오지 못했습니다");
     expect(
       Array.from(container.querySelectorAll('a[href="/data"]')).some((link) => link.textContent?.includes("원본 연결") || link.textContent?.includes("새 프로젝트")),
     ).toBe(true);
-    expect(container.textContent).toContain("원본 연결 작업 대기열");
+    expect(container.textContent).toContain("연결 대기 작업 모음");
   });
 
   it("renders an actionable empty state when a project has no linked tasks", async () => {
@@ -533,9 +586,9 @@ describe("ProjectsPage", () => {
 
     expect(container.textContent).toContain("Evidence Empty Project");
     expect(container.textContent).toContain("연결된 실행 항목이 아직 없습니다.");
-    expect(container.textContent).toContain("작업 API에 프로젝트와 연결된 메일, 문서, 스레드 근거");
+    expect(container.textContent).toContain("메일, 문서, 스레드를 실행 항목으로 연결하면 이 목록에 표시됩니다");
     expect(container.querySelector('[role="status"]')?.textContent).toContain("연결된 실행 항목");
     expect(Array.from(container.querySelectorAll('a[href="/tasks"]')).some((link) => link.textContent?.includes("작업 보드 열기"))).toBe(true);
-    expect(Array.from(container.querySelectorAll('a[href="/search"]')).some((link) => link.textContent?.includes("관련 근거 찾기"))).toBe(true);
+    expect(Array.from(container.querySelectorAll('a[href="/search"]')).some((link) => link.textContent?.includes("관련 자료 찾기"))).toBe(true);
   });
 });

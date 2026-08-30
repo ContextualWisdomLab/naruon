@@ -538,7 +538,8 @@ describe("SearchPage", () => {
     expect(card).not.toBeNull();
     expect(card?.textContent).toContain("Q2 출시는 5월 셋째 주로 조정되었습니다.");
     expect(card?.textContent).toContain("근거: Q2 출시 계획 및 우선순위 조정");
-    expect(card?.textContent).toContain("OpenAI (gpt-test)");
+    expect(card?.textContent).toContain("출처가 확인된 답변입니다.");
+    expect(card?.textContent).not.toContain("OpenAI (gpt-test)");
 
     const answerCall = fetchMock.mock.calls.find(([input]) =>
       String(input).endsWith("/api/search/answer"),

@@ -23,6 +23,7 @@ import {
   DataQualitySurfaceResponse,
   EmailFileImportResponse,
   DataDocumentActionResponse,
+  DataDocumentActionKey,
   duplicateImportCandidates
 } from './data-layout/types';
 import {
@@ -66,6 +67,7 @@ export function DataLayout() {
   const [emailImportFiles, setEmailImportFiles] = useState<File[]>([]);
   const [documentActionStatus, setDocumentActionStatus] = useState<DocumentActionStatus>('idle');
   const [documentActionResult, setDocumentActionResult] = useState<DataDocumentActionResponse | null>(null);
+  const [lastDocumentAction, setLastDocumentAction] = useState<DataDocumentActionKey>('upload');
   const [documentUploadFiles, setDocumentUploadFiles] = useState<File[]>([]);
   const [dataSurfaceStatus, setDataSurfaceStatus] = useState<DataSurfaceStatus>('loading');
   const [dataQualitySurface, setDataQualitySurface] = useState<DataQualitySurfaceResponse | null>(null);
@@ -248,6 +250,7 @@ export function DataLayout() {
         return;
       }
       const documentContent = await file.text();
+      setLastDocumentAction('upload');
       const result = await apiClient.post<DataDocumentActionResponse>(
         '/api/data/documents',
         {
@@ -286,6 +289,7 @@ export function DataLayout() {
 
     setDocumentActionStatus('loading');
     setDocumentActionResult(null);
+    setLastDocumentAction(action);
     try {
       const result = await apiClient.post<DataDocumentActionResponse>(
         `/api/data/documents/${encodeURIComponent(asset.asset_key)}/${action}`,
@@ -444,6 +448,7 @@ export function DataLayout() {
               documentUploadFiles={documentUploadFiles}
               documentActionStatus={documentActionStatus}
               documentActionResult={documentActionResult}
+              lastDocumentAction={lastDocumentAction}
               webdavAccountStatus={webdavAccountStatus}
               webdavAccounts={webdavAccounts}
               webdavAccountMap={webdavAccountMap}
