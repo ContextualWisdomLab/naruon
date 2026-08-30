@@ -1094,8 +1094,7 @@ def test_execute_url_extractor():
     assert data["status"] == "success"
     urls = data["result"]["urls"]
     assert len(urls) == 2
-    assert len(urls[0]) > 5
-    assert len(urls[1]) > 5
+    assert set(urls) == {"https://example.com", "www.google.com"}
 
 
 def test_execute_pii_redactor():
