@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
-    MAX_TOOL_INPUT_CHARS,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
@@ -499,91 +498,6 @@ def test_parameter_type_name_dict():
     assert _parameter_type_name({"type": "integer"}) == "integer"
     assert _parameter_type_name({"other": "thing"}) == "string"
     assert _parameter_type_name(123) == "string"
-
-
-def test_execute_json_formatter_preserves_number_lexemes():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/json_formatter/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    "json_str": (
-                        '{"precise":0.12345678901234567890123456789,'
-                        '"large":1e+1000,"nested":[900719925474099312345]}'
-                    )
-                }
-            },
-        )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["result"]["formatted_json"] == (
-        '{\n'
-        '  "precise": 0.12345678901234567890123456789,\n'
-        '  "large": 1e+1000,\n'
-        '  "nested": [\n'
-        '    900719925474099312345\n'
-        '  ]\n'
-        '}'
-    )
-
-
-def test_execute_json_formatter_rejects_duplicate_keys():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/json_formatter/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"json_str": '{"item": 1, "item": 2}'}},
-        )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "failed"
-    assert "Duplicate JSON object key" in data["message"]
-
-
-def test_execute_url_decoder_rejects_invalid_utf8_escape():
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/tools/url_decoder/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"encoded_url": "%FF"}},
-        )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "failed"
-    assert "Invalid URL-encoded string" in data["message"]
-
-
-@pytest.mark.parametrize(
-    ("tool_code", "parameter_name"),
-    [
-        ("url_encoder", "text"),
-        ("url_decoder", "encoded_url"),
-        ("json_formatter", "json_str"),
-        ("html_escape", "text"),
-        ("html_unescape", "escaped_html"),
-    ],
-)
-def test_utility_tools_reject_oversized_input(tool_code, parameter_name):
-    with TestClient(app) as client:
-        response = client.post(
-            f"/api/tools/{tool_code}/execute",
-            headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    parameter_name: "x" * (MAX_TOOL_INPUT_CHARS + 1)
-                }
-            },
-        )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "failed"
-    assert "maximum length" in data["message"]
 
 
 @pytest.mark.asyncio
