@@ -21,6 +21,11 @@ import {
 import { toMailBodyText, toMailDisplayText } from "@/lib/mail-text";
 import { toConfidencePercent } from "@/lib/confidence";
 import {
+  calendarWritebackBlockedSummaries,
+  calendarWritebackConflictMessage,
+  calendarWritebackConflictState,
+} from "@/lib/calendar-writeback-conflict";
+import {
   bucketTextLength,
   createProductEventId,
   recordProductEvent,
@@ -57,6 +62,8 @@ interface CalendarWritebackIntentResponse {
   runner_request_id?: string | null;
   provider_status?: number | null;
   error_code?: string | null;
+  requires_if_match?: boolean;
+  if_match?: string | null;
   provenance: {
     source_provider?: string;
   };
@@ -438,13 +445,27 @@ export const EmailDetail = memo(function EmailDetail({ emailId, actionCommand = 
         ),
       );
       if (!isCurrentEmail()) return;
-      setSyncStatus({ type: 'success', message: `${intents.length}개 일정 반영 의도를 선택한 원본 계정에 요청했습니다.` });
+      const conflictState = calendarWritebackConflictState(intents);
+      const blockedSummaries = calendarWritebackBlockedSummaries(intents, actionItems);
+      setSyncStatus({
+        type: conflictState === "conflict" ? "error" : "success",
+        message: calendarWritebackConflictMessage(
+          conflictState,
+          intents.length,
+          blockedSummaries,
+        ),
+      });
+      setEmail((current) => (
+        current
+          ? { ...current, schedule_conflict: conflictState === "conflict" }
+          : current
+      ));
       recordProductEvent("calendar_reflected", {
         surface: "mail_detail",
         calendar_candidate_id: `mail-calendar:${actionEmailId ?? "unknown"}`,
         calendar_event_id: intents[0]?.target_source_id ?? null,
         thread_id: email ? getThreadEventId(email) : null,
-        conflict_state: "none",
+        conflict_state: conflictState,
         provider_write_executed: intents.some((intent) => Boolean(intent.provider_write_executed)),
       });
       recordProductEvent("latency_guardrail_recorded", {
