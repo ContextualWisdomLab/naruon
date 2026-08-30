@@ -177,6 +177,15 @@ Strix work still running. PR #1470 has a successful current check rollup and
 one exact-head bot approval, but still lacks the second qualifying approval.
 None of these observations authorizes a bypass merge.
 
+**Exact-head refresh (2026-08-30):** Naruon PR #1467 is now at
+`c3841c1d260530c3016a6815f3dc2650587f8a7e`. Its utility boundary preserves
+JSON number lexemes, rejects duplicate keys and invalid URL UTF-8, bounds all
+five utility inputs, and the console submits user-entered parameters. The
+review threads for these findings are resolved; hosted Checks are re-running,
+the pull request is `MERGEABLE` but `BLOCKED`, and `REVIEW_REQUIRED` remains
+because no qualifying approval exists. This is current-head evidence only and
+does not claim a protected merge.
+
 The owning upstream sidecar `Seongho-Bae/newsdom-api` PR #682 remains at
 `585bb4e0fb719ab6a576cf46d1ef12b77872557b`. Its bounded 64 MiB source and
 boundary tests are present, while its only failed hosted check is the
