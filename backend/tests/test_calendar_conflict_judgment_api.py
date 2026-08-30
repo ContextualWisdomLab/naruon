@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import datetime
+import json
 
 import httpx
 import pytest
+from fastapi.exceptions import RequestValidationError
 
 import api.calendar_conflicts as calendar_conflicts_api
 from db.session import get_db
@@ -345,6 +347,40 @@ async def test_correct_judgment_rejects_incoherent_status_and_decision(
     assert response.status_code == 422
     assert response.json()["error_code"] == "calendar_correction_incoherent"
     assert calls == []
+
+
+def test_request_validation_error_response_dispatches_by_type_not_wording():
+    """The error_code mapper must key off errors()[i]["type"], never ["msg"].
+
+    Constructs a RequestValidationError whose message text does not contain
+    any of the phrases the mapper used to substring-match on -- proving the
+    dispatch is now driven entirely by the stable ``type`` a
+    PydanticCustomError carries, independent of how either error is worded.
+    """
+    exc = RequestValidationError(
+        [
+            {
+                "type": "calendar_correction_incoherent",
+                "msg": "this message says nothing about decision codes at all",
+                "loc": ("body",),
+            }
+        ]
+    )
+
+    response = calendar_conflicts_api._request_validation_error_response(exc)
+
+    assert response.status_code == 422
+    assert json.loads(response.body)["error_code"] == "calendar_correction_incoherent"
+
+
+def test_request_validation_error_response_falls_back_for_unrecognized_types():
+    exc = RequestValidationError(
+        [{"type": "value_error", "msg": "some other failure", "loc": ("body",)}]
+    )
+
+    response = calendar_conflicts_api._request_validation_error_response(exc)
+
+    assert json.loads(response.body)["error_code"] == "calendar_request_invalid"
 
 
 @pytest.mark.asyncio

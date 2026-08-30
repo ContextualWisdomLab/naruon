@@ -194,8 +194,19 @@ def _is_genuine_content_type_mismatch(
     magic bytes are supposed to match ZIP's. Only a ZIP-sniffed payload
     declared as something outside that family (or any other sniff/declared
     disagreement) is a genuine disguise.
+
+    A ``parse_content_type`` still equal to one of ``_GENERIC_CONTENT_TYPES``
+    after ``_parse_content_type_for`` ran is not a mismatch either: that
+    family is MIME's own "no more specific type available" placeholder, not
+    a positive claim, so there is nothing for the sniffed bytes to disagree
+    with -- an ordinary PNG/PDF/ZIP sent this way was never disguised, only
+    undeclared. This does not apply once a generic declaration resolves to
+    something specific via a recognized filename extension (that *is* a
+    real claim by the time it reaches here).
     """
     if sniffed_content_type is None or sniffed_content_type == parse_content_type:
+        return False
+    if parse_content_type in _GENERIC_CONTENT_TYPES:
         return False
     if sniffed_content_type == "application/zip" and _is_zip_container_content_type(
         parse_content_type

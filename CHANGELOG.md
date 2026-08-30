@@ -1,4 +1,23 @@
 ## [Unreleased]
+- (Devin review 반영, G-15/AttachmentReparseWorker) naruon#1486에 도착한 3건을 실제로 고쳤습니다:
+  (1) 🟡 generic content_type(`application/octet-stream` 등, 확장자로도 해석 안 되는 경우)로
+  선언된 첨부파일이 알려진 매직 바이트로 sniff되기만 하면 영원히 quarantine되던 문제 —
+  `_is_genuine_content_type_mismatch`가 이제 `parse_content_type`이 여전히 generic 상태면
+  (확장자로 구체적인 타입으로 해석된 경우는 제외) 불일치로 취급하지 않습니다. sender가 아무 것도
+  구체적으로 주장하지 않은 첨부파일은 애초에 반박할 "선언"이 없었으므로 quarantine 대상이 아닙니다.
+  (2) 🟡 `AttachmentReparseWorker._sweep_attachments`에서 한 첨부파일 처리 실패 시 `rollback()`이
+  같은 세션에 이미 로드된 나머지 행들을 전부 expire시켜, 후속 항목의 동기 속성 읽기가 실패하며
+  배치 전체가 굶주리던 문제 — 매 항목을 벌크 로드된 객체 대신 `session.get()`으로 매번 새로
+  가져오도록 변경해 이 클래스의 버그 전체를 근본적으로 회피합니다. (3) 🔍 `calendar_conflicts.py`의
+  `_request_validation_error_response`가 correction error_code를 영어 메시지 부분 문자열로
+  선택하던 문제(저장소 관례 위반: "routes must not derive... from message substrings") —
+  `CalendarConflictCorrectionIncoherentError`에 `CalendarConflictUnsupportedValueError`와
+  동일한 패턴의 안정적 `error_code` 속성을 추가하고, 두 Pydantic model_validator 모두 일반
+  `ValueError` 대신 `PydanticCustomError(error_code, message)`를 raise하도록 변경해
+  `RequestValidationError.errors()[i]["type"]`이 메시지 문구와 무관한 안정적 식별자를 갖게
+  했습니다 — 매퍼는 이제 `type`으로만 분기합니다("must reject before calling apply_correction"
+  동작은 그대로 유지). 검증: 신규 테스트 10개, 전체 백엔드 스위트 1874 passed/33 skipped
+  (기존 1864), ruff clean.
 - **(G-15 두 번째 슬라이스) `reparse_pending`을 실제로 소비하는 `AttachmentReparseWorker`**를
   추가했습니다(`services/attachment_reparse_worker.py`, `NewsdomRecognitionWorker`와 동일한
   jittered-loop + PostgreSQL advisory-lock lease + starvation-free cursor 구조로 `main.py`

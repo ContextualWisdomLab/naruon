@@ -34,8 +34,21 @@ class CalendarConflictJudgmentNotFoundError(ValueError):
     """Raised when a judgment_uid does not resolve inside the caller's own scope."""
 
 
+CORRECTION_INCOHERENT_ERROR_CODE = "calendar_correction_incoherent"
+
+
 class CalendarConflictCorrectionIncoherentError(ValueError):
-    """Raised when a correction's status_code and decision_code disagree."""
+    """Raised when a correction's status_code and decision_code disagree.
+
+    Carries a stable ``error_code`` (mirroring
+    ``CalendarConflictUnsupportedValueError``'s pattern below) so a caller
+    can map this to a deterministic response without parsing ``str(exc)``.
+    """
+
+    def __init__(self, message: str) -> None:
+        """Create a coherence failure with the shared, stable error_code."""
+        super().__init__(message)
+        self.error_code = CORRECTION_INCOHERENT_ERROR_CODE
 
 
 class CalendarConflictUnsupportedValueError(ValueError):

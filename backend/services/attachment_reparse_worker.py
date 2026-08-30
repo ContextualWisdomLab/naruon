@@ -236,20 +236,31 @@ class AttachmentReparseWorker:
         rows = await self._load_reparse_pending_attachments(session)
         if rows:
             self._attachment_cursor = rows[-1].id
-        for attachment in rows:
+        for attachment_id in [attachment.id for attachment in rows]:
             try:
+                # Re-fetch fresh rather than reusing the bulk-loaded instance:
+                # AsyncSession.rollback() expires every object already loaded
+                # in this session, and process_reparse_pending_attachment
+                # reads attachment attributes synchronously -- a stale,
+                # expired instance from an earlier item's failure would raise
+                # on that read instead of just isolating the one failure.
+                # Fetching fresh here sidesteps that whole class of bug
+                # regardless of exactly when SQLAlchemy decides to expire.
+                attachment = await session.get(Attachment, attachment_id)
+                if attachment is None:
+                    continue
                 result = process_reparse_pending_attachment(attachment=attachment)
                 await session.commit()
                 logger.info(
                     "Attachment %s reparse result: %s",
-                    attachment.id,
+                    attachment_id,
                     result,
                 )
             except Exception:
                 await session.rollback()
                 logger.error(
                     "Attachment %s reparse raised.",
-                    getattr(attachment, "id", "?"),
+                    attachment_id,
                     exc_info=True,
                 )
 

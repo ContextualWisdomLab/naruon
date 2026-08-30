@@ -129,8 +129,23 @@ class _RowsResult:
 
 
 class _SequenceSession:
-    def __init__(self, row_batches):
+    """A fake session whose ``get`` always returns a fresh, healthy instance.
+
+    Mirrors the real ``AttachmentReparseWorker._sweep_attachments`` contract:
+    the bulk-loaded rows only supply ids and the cursor; every actual
+    processing target is re-fetched via ``get`` by id, exactly like a real
+    ``AsyncSession`` would after an earlier item's rollback expired the
+    bulk-loaded instances. ``by_id`` lets a test register a *different*
+    object than the bulk-loaded one to prove that re-fetch is what the sweep
+    actually uses.
+    """
+
+    def __init__(self, row_batches, *, by_id=None):
         self._row_batches = list(row_batches)
+        self._by_id = dict(by_id or {})
+        for batch in self._row_batches:
+            for attachment in batch:
+                self._by_id.setdefault(attachment.id, attachment)
         self.statements = []
         self.commit_count = 0
         self.rollback_count = 0
@@ -138,6 +153,9 @@ class _SequenceSession:
     async def execute(self, statement):
         self.statements.append(statement)
         return _RowsResult(self._row_batches.pop(0))
+
+    async def get(self, _model, attachment_id):
+        return self._by_id.get(attachment_id)
 
     async def commit(self):
         self.commit_count += 1
@@ -254,6 +272,90 @@ async def test_sweep_rolls_back_one_item_failure_and_continues_isolation(monkeyp
     await worker._sweep_attachments(session)
 
     assert session.commit_count == 0
+    assert session.rollback_count == 1
+
+
+class _ExpiredAttachment:
+    """Stands in for an ORM instance ``AsyncSession.rollback()`` expired.
+
+    Any attribute read raises, exactly like touching an expired async-mapped
+    instance outside an active await/greenlet context would in real
+    SQLAlchemy -- proving the sweep never touches this bulk-loaded object
+    for its *own* processing once it has already failed and been rolled
+    back once.
+    """
+
+    id = 1
+
+    def __getattr__(self, _name):
+        raise AssertionError(
+            "must not read attributes off the stale bulk-loaded instance"
+        )
+
+
+@pytest.mark.asyncio
+async def test_sweep_never_processes_the_bulk_loaded_instance_directly():
+    poisoned_first = _ExpiredAttachment()
+    fresh_first = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=1,
+    )
+    second = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=2,
+    )
+    # The bulk query "sees" the poisoned stand-in for id 1 (as a real
+    # AsyncSession would after some earlier rollback expired it), but `get`
+    # returns the real, healthy row -- proving the sweep re-fetches instead
+    # of processing the bulk-loaded object directly.
+    session = _SequenceSession(
+        [[poisoned_first, second]], by_id={1: fresh_first, 2: second}
+    )
+
+    worker = AttachmentReparseWorker()
+    await worker._sweep_attachments(session)
+
+    assert fresh_first.parse_status == _QUARANTINED_STATUS
+    assert second.parse_status == _QUARANTINED_STATUS
+    assert session.commit_count == 2
+    assert session.rollback_count == 0
+
+
+@pytest.mark.asyncio
+async def test_sweep_isolates_one_items_failure_from_the_next_items_refetch(
+    monkeypatch,
+):
+    first = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=1,
+    )
+    second = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=2,
+    )
+    session = _SequenceSession([[first, second]])
+
+    real_process = attachment_reparse_worker_module.process_reparse_pending_attachment
+
+    def process_and_fail_only_the_first(*, attachment):
+        if attachment.id == 1:
+            raise RuntimeError("classification blew up")
+        return real_process(attachment=attachment)
+
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "process_reparse_pending_attachment",
+        process_and_fail_only_the_first,
+    )
+    worker = AttachmentReparseWorker()
+    await worker._sweep_attachments(session)
+
+    assert second.parse_status == _QUARANTINED_STATUS
+    assert session.commit_count == 1
     assert session.rollback_count == 1
 
 

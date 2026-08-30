@@ -396,6 +396,53 @@ def test_matching_declared_and_sniffed_binary_type_is_not_quarantined():
     assert result.parse_status == "pdf_dom_recognition_pending"
 
 
+@pytest.mark.parametrize(
+    ("content_type", "filename"),
+    [
+        ("application/octet-stream", "photo.bin"),
+        ("binary/octet-stream", "photo"),
+        ("application/x-binary", "photo.dat"),
+        (None, "photo"),
+        ("", "photo"),
+    ],
+)
+def test_generic_content_type_with_no_recognized_extension_is_not_quarantined(
+    content_type, filename
+):
+    """A generic MIME type is not a claim, so recognized bytes cannot disagree with it.
+
+    ``application/octet-stream`` (and its variants) is MIME's own "no more
+    specific type available" placeholder, never a positive assertion about
+    content -- a sender who sends an ordinary PNG/PDF/ZIP this way hasn't
+    disguised anything, and quarantining it forever (with no declared-type
+    fix ever able to clear it, since the sender already sent the only type
+    they were going to send) defeats attachments no one lied about.
+    """
+    raw = b"\x89PNG\r\n\x1a\n" + b"real png bytes"
+    result = parse_email_attachment(
+        filename=filename, content_type=content_type, raw_content=raw
+    )
+
+    assert result.parse_status != "content_type_mismatch_quarantined"
+
+
+def test_generic_content_type_resolved_via_extension_still_detects_mismatch():
+    """A generic type that resolves to something specific via extension keeps quarantining.
+
+    Once ``_parse_content_type_for`` resolves a generic declaration to a
+    real claim via a recognized extension (here ``.pdf``), that *is* a
+    specific assertion the sniffed bytes can genuinely disagree with -- the
+    generic-type carve-out must not swallow this case.
+    """
+    raw = b"\x89PNG\r\n\x1a\n" + b"real png bytes"
+    result = parse_email_attachment(
+        filename="invoice.pdf", content_type="application/octet-stream", raw_content=raw
+    )
+
+    assert result.parse_status == "content_type_mismatch_quarantined"
+    assert result.parse_error_code == "content_type_mismatch_quarantined"
+
+
 def test_safe_filename_handles_windows_path_traversal():
     assert _safe_filename("..\\..\\upload.txt") == "upload.txt"
     assert _safe_filename("C:\\mail\\report.pdf") == "report.pdf"
