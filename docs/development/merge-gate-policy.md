@@ -44,6 +44,9 @@ awaited by default.
   only; raw CLI diagnostics stay in the workflow run log. Inside Actions the
   gate runs with a pinned system PATH so earlier steps cannot influence tool
   resolution via GITHUB_PATH.
+- The trusted-base metadata gate validates the repository identity before
+  constructing any GitHub API path and rejects malformed values without
+  invoking `gh`; PR numbers remain positive decimal identifiers.
 - Authoritative `Review skipped` evidence counts only when the same check
   output carries no blocking warning/failure language alongside it.
 - `reviewDecision=CHANGES_REQUESTED` is a blocker until requested changes are

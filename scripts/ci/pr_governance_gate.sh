@@ -23,8 +23,17 @@ if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-OWNER="${GITHUB_REPOSITORY%/*}"
-REPO="${GITHUB_REPOSITORY#*/}"
+REPOSITORY_OWNER="${GITHUB_REPOSITORY%/*}"
+REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
+if ! [[ "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
+  || [[ "$REPOSITORY_OWNER" == "." || "$REPOSITORY_OWNER" == ".." \
+    || "$REPOSITORY_NAME" == "." || "$REPOSITORY_NAME" == ".." ]]; then
+  printf 'Repository identity is invalid; refusing to evaluate.\n'
+  exit 1
+fi
+
+OWNER="$REPOSITORY_OWNER"
+REPO="$REPOSITORY_NAME"
 BLOCKERS=()
 WAITING=()
 PR_CHECKS_ERROR_FILE="$(mktemp)"
@@ -341,6 +350,10 @@ CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potent
 CODERABBIT_ISSUE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|actionable comments?|changes requested|request changes'
 CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|changes requested|request changes'
 CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
+# A current-head approval notice may contain the generic phrase "blocking
+# issues" as part of its promise to review later. Only explicit singular
+# findings, pre-merge warnings, or change requests make the notice substantive.
+CODERABBIT_APPROVAL_NOTICE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(warning|failure|failed)|(^|[^[:alpha:]])(failure|failed|warning)([[:space:]]*:|[^[:alpha:]])|blocking (issue|finding)([^[:alpha:]]|$)|potential issue[[:space:]]*:|changes requested|request changes|actionable comments?'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 COMMIT_STATUS_JSON='{"statuses":[]}'
 if ! COMMIT_STATUS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status" 2>"$COMMIT_STATUS_ERROR_FILE")"; then
@@ -435,19 +448,49 @@ else
     --arg head_sha "$HEAD_SHA" \
     --arg pattern "$CODERABBIT_ISSUE_BLOCKING_PATTERN" \
     --arg substantive_pattern "$CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN" \
-    --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" '
+    --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" \
+    --arg approval_notice_blocking_pattern "$CODERABBIT_APPROVAL_NOTICE_BLOCKING_PATTERN" '
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
       | select(
           (.body // "") as $body
           | ($body | split("<details>")[0]) as $summary
-          | ($body | test($pattern; "i"))
+          | ($body | test($pattern; "i")) as $general_blocking
+          | ($body | test("approval_notice_start"; "i")) as $has_approval_start
+          | ($body | test("approval_notice_end"; "i")) as $has_approval_end
+          | ($body | split("<!-- approval_notice_start -->")) as $approval_start_parts
+          | ($body | split("<!-- approval_notice_end -->")) as $approval_end_parts
+          | (($approval_start_parts | length) == 2 and ($approval_end_parts | length) == 2) as $single_approval_pair
+          | (if $single_approval_pair
+             then ($approval_start_parts[1] | split("<!-- approval_notice_end -->"))
+             else []
+             end) as $approval_content_parts
+          | (($approval_content_parts | length) == 2) as $ordered_approval_pair
+          | (if $ordered_approval_pair
+             then ($approval_content_parts[0] | gsub("^[[:space:]]+|[[:space:]]+$"; ""))
+             else ""
+             end) as $approval_notice
+          | (($has_approval_start or $has_approval_end)
+             and $single_approval_pair
+             and $ordered_approval_pair
+             and (($approval_notice | gsub("[[:space:]]"; "")) | length > 0)) as $approval_notice_well_formed
+          | ($approval_notice_well_formed
+             and ($approval_notice | test("(^|[^A-Za-z0-9_-])\"?headCommitId\"?[[:space:]]*:[[:space:]]*\"?" + $head_sha + "(\"|[[:space:]]|$)"; "i"))) as $current_approval_notice
+          | (if ($has_approval_start or $has_approval_end) then
+               if $current_approval_notice
+               then ($approval_notice | test($approval_notice_blocking_pattern; "i"))
+               else true
+               end
+             else $general_blocking end)
             and (
               (($body | test($no_actionable_pattern; "i")) | not)
               or ($summary | test($substantive_pattern; "i"))
             )
-        )
-      | select((.body // "") | contains($head_sha))]
+            and (
+              ($body | contains($head_sha))
+              or (($has_approval_start or $has_approval_end) and ($approval_notice_well_formed | not))
+            )
+        )]
     | length'
   )"
   if [ "$CODERABBIT_ISSUE_BLOCKERS" != "0" ]; then

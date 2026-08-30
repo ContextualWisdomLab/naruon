@@ -1,4 +1,5 @@
 ## [Unreleased]
+- PR governance의 CodeRabbit approval notice는 정확한 `headCommitId` 필드만 current-head 증거로 인정하며, `previous-headCommitId` 같은 접두 필드 오인식을 차단합니다. malformed·whitespace-only notice와 현재 head가 아닌 notice는 fail-closed blocker로 유지하고 회귀 fixture로 검증합니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
@@ -34,6 +35,8 @@
 
 ### 보안 패치 (CodeQL extended current-head)
 
+- PR governance now rejects malformed repository identities before any GitHub
+  API call, with a regression fixture covering shell-metacharacter input.
 - `cryptography`를 `50.0.0`으로 갱신해 공격자 제공 PKCS#7 EnvelopedData 복호화 결과의 오류·타이밍 차이로 발생하는 Bleichenbacher oracle(`CVE-2026-69247`, `GHSA-g6cj-pr64-35w5`)을 제거하고, backend·uv lock·hash lock·Strix CI 의존성 증거를 같은 버전으로 동기화했습니다. Strix 잠금은 `google-cloud-aiplatform==1.160.0`의 `<7` 제약을 위반하던 `protobuf==7.35.1`을 이미 검증된 `6.33.6`으로 복구해 다시 해석·설치 가능하게 했습니다.
 - CodeQL `extended` 기본 설정이 current `develop`에서 확인한 Critical 8건·High 21건·Medium 1건을 코드 경계에서 제거합니다. 서버 요청은 검증된 loopback/HTTPS origin, 동일 OIDC issuer origin, 허용 API 경로·쿼리만 재구성하고 redirect를 자동 추종하지 않으며, 공개 IPv6 authority를 보존합니다. UI smoke는 고정 Node/Next 실행 파일과 인자, localhost:3001 allowlist, private `mkdtemp` artifact 디렉터리 및 containment 검사만 사용합니다.
 - OIDC token endpoint는 운영 환경에서 서버 전용 `OIDC_ALLOWED_HOSTS` 정확 호스트 allowlist를 필수로 적용합니다. hostname의 모든 DNS 결과가 공인 주소인지 검증한 뒤 해당 주소 집합을 native HTTP(S) 연결의 `lookup`에 고정하고, 원래 issuer hostname은 Host/TLS SNI로 유지해 사설 주소 해석과 DNS rebinding 사이의 TOCTOU를 차단합니다. 실패 로그는 입력 URL·token 대신 고정된 configuration/DNS·transport/response/backend-verification reason code만 남깁니다.
