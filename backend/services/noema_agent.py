@@ -477,8 +477,20 @@ async def tool_check_calendar_conflict(
     except CalendarPolicyValidationError as exc:
         return {"status": "error", "error_code": exc.error_code, "reason": str(exc)}
 
+    existing = existing or []
+    if len(existing) > _MAX_EXISTING_COMMITMENTS:
+        # Silently truncating here would let a conflict past the boundary go
+        # undetected and return "available" for a commitment that actually
+        # double-books -- fail closed instead, exactly like the REST
+        # endpoint's own MAX_EXISTING_COMMITMENTS bound.
+        return {
+            "status": "error",
+            "error_code": "calendar_existing_batch_exceeded",
+            "reason": "existing evidence exceeds the bounded commitment batch",
+        }
+
     parsed_existing: list[CalendarCommitment] = []
-    for row in (existing or [])[:_MAX_EXISTING_COMMITMENTS]:
+    for row in existing:
         try:
             parsed_existing.append(
                 _parse_commitment(

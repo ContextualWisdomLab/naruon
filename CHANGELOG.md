@@ -14,6 +14,10 @@
   구성한 자체 LLM provider로 동작하는 워크스페이스 전반의 범용 어시스턴트입니다.
   검증: `PYTHONPATH=. python -m pytest backend/tests/test_noema_agent.py -q`
   (21 passed), 전체 백엔드 스위트 `python -m pytest -q` (1808 passed, 32 skipped).
+- (Devin review 반영) `check_calendar_conflict`가 `existing`이 500건 상한을 넘으면 조용히
+  잘라내지 않고 `calendar_existing_batch_exceeded` 오류로 fail closed하도록 수정했습니다.
+  상한 이후에 실존하는 충돌이 잘려나가 `available`로 오판되는 것을 막습니다(REST
+  엔드포인트의 동일 상한 처리와 일치). 검증: `test_noema_agent.py` 22 passed.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 

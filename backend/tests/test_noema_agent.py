@@ -394,6 +394,26 @@ async def test_check_calendar_conflict_skips_malformed_existing_rows():
 
 
 @pytest.mark.asyncio
+async def test_check_calendar_conflict_rejects_batch_over_the_bound_instead_of_truncating():
+    """Silently truncating past _MAX_EXISTING_COMMITMENTS could hide a real conflict."""
+    session = _QueueSession([])
+    oversized = [
+        _commitment_row(f"row-{i}", "2026-03-01T09:00:00+00:00", "2026-03-01T09:30:00+00:00", "confirmed")
+        for i in range(noema_agent._MAX_EXISTING_COMMITMENTS + 1)
+    ]
+    result = await tool_check_calendar_conflict(
+        _deps(session),
+        proposed_commitment_id="new-1",
+        proposed_start_at="2026-03-01T10:00:00+00:00",
+        proposed_end_at="2026-03-01T11:00:00+00:00",
+        proposed_status="confirmed",
+        existing=oversized,
+    )
+    assert result["status"] == "error"
+    assert result["error_code"] == "calendar_existing_batch_exceeded"
+
+
+@pytest.mark.asyncio
 async def test_check_calendar_conflict_rejects_invalid_proposed_status():
     session = _QueueSession([])
     result = await tool_check_calendar_conflict(
