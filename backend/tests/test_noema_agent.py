@@ -26,6 +26,7 @@ from services.noema_agent import (
     NoemaAgentDeps,
     build_noema_agent,
     run_noema_agent,
+    tool_check_calendar_conflict,
     tool_content_graph_query,
     tool_dispatch_writeback,
     tool_list_tasks,
@@ -291,6 +292,122 @@ async def test_writeback_rejects_unknown_action():
     assert result["status"] == "error"
 
 
+# --------------------------------------------------------------------------- #
+# Calendar conflict check: same deterministic policy as /api/calendar/conflicts
+# --------------------------------------------------------------------------- #
+
+
+def _commitment_row(commitment_id, start_at, end_at, status):
+    return {
+        "commitment_id": commitment_id,
+        "start_at": start_at,
+        "end_at": end_at,
+        "status": status,
+    }
+
+
+@pytest.mark.asyncio
+async def test_check_calendar_conflict_available_when_no_overlap():
+    session = _QueueSession([])
+    result = await tool_check_calendar_conflict(
+        _deps(session),
+        proposed_commitment_id="new-1",
+        proposed_start_at="2026-03-01T10:00:00+00:00",
+        proposed_end_at="2026-03-01T11:00:00+00:00",
+        proposed_status="confirmed",
+        existing=[
+            _commitment_row(
+                "other-1",
+                "2026-03-01T12:00:00+00:00",
+                "2026-03-01T13:00:00+00:00",
+                "confirmed",
+            )
+        ],
+    )
+    assert result["status"] == "ok"
+    assert result["decision_code"] == "available"
+    assert result["conflicts"] == []
+
+
+@pytest.mark.asyncio
+async def test_check_calendar_conflict_blocked_on_equal_priority_overlap():
+    session = _QueueSession([])
+    result = await tool_check_calendar_conflict(
+        _deps(session),
+        proposed_commitment_id="new-1",
+        proposed_start_at="2026-03-01T10:00:00+00:00",
+        proposed_end_at="2026-03-01T11:00:00+00:00",
+        proposed_status="confirmed",
+        existing=[
+            _commitment_row(
+                "other-1",
+                "2026-03-01T10:30:00+00:00",
+                "2026-03-01T11:30:00+00:00",
+                "confirmed",
+            )
+        ],
+    )
+    assert result["status"] == "ok"
+    assert result["decision_code"] == "blocked"
+    assert result["conflicts"][0]["commitment_id"] == "other-1"
+
+
+@pytest.mark.asyncio
+async def test_check_calendar_conflict_review_required_on_lower_priority_overlap():
+    session = _QueueSession([])
+    result = await tool_check_calendar_conflict(
+        _deps(session),
+        proposed_commitment_id="new-1",
+        proposed_start_at="2026-03-01T10:00:00+00:00",
+        proposed_end_at="2026-03-01T11:00:00+00:00",
+        proposed_status="confirmed",
+        existing=[
+            _commitment_row(
+                "other-1",
+                "2026-03-01T10:30:00+00:00",
+                "2026-03-01T11:30:00+00:00",
+                "tentative",
+            )
+        ],
+    )
+    assert result["status"] == "ok"
+    assert result["decision_code"] == "review_required"
+
+
+@pytest.mark.asyncio
+async def test_check_calendar_conflict_skips_malformed_existing_rows():
+    session = _QueueSession([])
+    result = await tool_check_calendar_conflict(
+        _deps(session),
+        proposed_commitment_id="new-1",
+        proposed_start_at="2026-03-01T10:00:00+00:00",
+        proposed_end_at="2026-03-01T11:00:00+00:00",
+        proposed_status="confirmed",
+        existing=[
+            {"commitment_id": "bad-1"},  # missing start_at/end_at/status
+            _commitment_row("bad-2", "not-a-timestamp", "also-not-one", "confirmed"),
+        ],
+    )
+    # Malformed rows are skipped, not raised — the good proposal still evaluates.
+    assert result["status"] == "ok"
+    assert result["decision_code"] == "available"
+
+
+@pytest.mark.asyncio
+async def test_check_calendar_conflict_rejects_invalid_proposed_status():
+    session = _QueueSession([])
+    result = await tool_check_calendar_conflict(
+        _deps(session),
+        proposed_commitment_id="new-1",
+        proposed_start_at="2026-03-01T10:00:00+00:00",
+        proposed_end_at="2026-03-01T11:00:00+00:00",
+        proposed_status="banana",
+        existing=[],
+    )
+    assert result["status"] == "error"
+    assert result["error_code"] == "calendar_status_unsupported"
+
+
 def test_tool_specs_cover_declared_capabilities():
     capabilities = {spec["capability"] for spec in NOEMA_TOOL_SPECS}
     assert {
@@ -300,6 +417,7 @@ def test_tool_specs_cover_declared_capabilities():
         "tasks.read",
         "tasks.update",
         "calendar.writeback",
+        "calendar.conflict_check",
     } <= capabilities
 
 

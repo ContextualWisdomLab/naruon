@@ -1,4 +1,19 @@
 ## [Unreleased]
+- Noema general agent(`services/noema_agent.py`)에 `check_calendar_conflict` 도구를
+  추가했습니다. `/api/calendar/conflicts/evaluate`와 동일한 상태 가중 결정론적
+  정책(`evaluate_calendar_conflicts`)을 그대로 재사용해 Noema의 일정 충돌 판단이
+  고객용 API와 절대 어긋나지 않습니다. 회의 제안/변경 메일을 다룰 때 이미 알고
+  있는 commitment(메일·태스크에서 파악한 일정)와 대조해 `available` /
+  `review_required` / `blocked`을 판단하도록 시스템 프롬프트에도 반영했습니다.
+  Naruon은 공급자 캘린더 이벤트를 서버에 저장하지 않으므로 이 도구는 provider를
+  직접 조회하지 않고, 호출자가 제시한 commitment만 평가합니다. 잘못된 형식의
+  기존 commitment 행은 건너뛰고 전체 판단을 막지 않습니다. `.github`의
+  중앙 리뷰 에이전트(Noema OIDC 브로커)와 이름은 같지만 서로 다른 개별
+  에이전트임을 `registered_agents.json`/`task_agent_mapping.json`에 명확히
+  했습니다: Noema는 `.github`에서는 CI 리뷰 에이전트, naruon에서는 테넌트가
+  구성한 자체 LLM provider로 동작하는 워크스페이스 전반의 범용 어시스턴트입니다.
+  검증: `PYTHONPATH=. python -m pytest backend/tests/test_noema_agent.py -q`
+  (21 passed), 전체 백엔드 스위트 `python -m pytest -q` (1808 passed, 32 skipped).
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 

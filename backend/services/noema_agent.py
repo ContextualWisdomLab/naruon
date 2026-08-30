@@ -8,6 +8,10 @@ small set of tools that plug into the existing service and runner seams:
 
 * **read/search mail** and **content-graph queries** are owner-scoped SQL reads.
 * **task actions** update ``TicketTask`` rows and are audit-logged.
+* **calendar conflict check** reuses the same deterministic, status-weighted
+  policy the ``/api/calendar/conflicts/evaluate`` endpoint applies
+  (:mod:`services.calendar_conflict_policy`), so Noema's judgment about a
+  double-booking risk never diverges from the customer-facing API.
 * **writeback** is dispatched to the self-hosted runner (the ``write_caldav`` /
   ``write_webdav`` actions handled by :class:`SelfHostedConnector`), preserving
   naruon's opt-in-writeback and audit-logged contract.
@@ -34,6 +38,11 @@ from db.models import (
     Email,
     KnowledgeGraphEdgeRecord,
     TicketTask,
+)
+from services.calendar_conflict_policy import (
+    CalendarCommitment,
+    CalendarPolicyValidationError,
+    evaluate_calendar_conflicts,
 )
 from services.llm_provider_selection import (
     RuntimeLLMProvider,
@@ -71,6 +80,10 @@ WRITEBACK_ACTIONS = frozenset({"write_caldav", "write_webdav"})
 _MAX_MAIL_RESULTS = 20
 _MAX_CONTENT_NODES = 40
 _SNIPPET_LENGTH = 280
+# Mirrors MAX_EXISTING_COMMITMENTS in api/calendar_conflicts.py — the same
+# bounded-batch policy applies whether evidence arrives via the REST endpoint
+# or through this tool.
+_MAX_EXISTING_COMMITMENTS = 500
 
 RunnerDispatcher = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -409,6 +422,94 @@ async def _default_dispatcher(
     )
 
 
+def _parse_commitment(
+    commitment_id: str, start_at: str, end_at: str, status: str
+) -> CalendarCommitment:
+    """Parse ISO 8601 timestamps into a validated :class:`CalendarCommitment`.
+
+    Raises :class:`CalendarPolicyValidationError` — the same typed failure
+    :mod:`services.calendar_conflict_policy` itself raises — on a malformed
+    timestamp, so callers only need to catch one exception type.
+    """
+    try:
+        parsed_start = datetime.datetime.fromisoformat((start_at or "").strip())
+        parsed_end = datetime.datetime.fromisoformat((end_at or "").strip())
+    except (TypeError, ValueError) as exc:
+        raise CalendarPolicyValidationError(
+            "calendar_timestamp_timezone_required",
+            "start_at/end_at must be ISO 8601 timestamps with a UTC offset",
+        ) from exc
+    return CalendarCommitment(
+        commitment_id=commitment_id,
+        start_at=parsed_start,
+        end_at=parsed_end,
+        status=status,  # type: ignore[arg-type]  # validated by __post_init__
+    )
+
+
+async def tool_check_calendar_conflict(
+    deps: NoemaAgentDeps,
+    proposed_commitment_id: str,
+    proposed_start_at: str,
+    proposed_end_at: str,
+    proposed_status: str,
+    existing: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Evaluate whether a proposed commitment double-books an existing one.
+
+    Applies the exact same deterministic, status-weighted policy
+    (:func:`services.calendar_conflict_policy.evaluate_calendar_conflicts`) the
+    ``/api/calendar/conflicts/evaluate`` endpoint uses, so this never gives the
+    LLM a second, divergent notion of "conflict". All timestamps are ISO 8601
+    strings with an explicit UTC offset. Naruon does not persist provider
+    calendar events server-side, so ``existing`` is whatever commitments the
+    caller (typically the LLM, after reading mail/task evidence earlier in the
+    same run) already knows about — this tool never fetches a provider
+    calendar itself. A malformed ``existing`` row is skipped rather than
+    raised, so one bad entry cannot block judgment on the rest; the proposed
+    commitment itself is validated strictly and reported as a typed error.
+    """
+    deps.tool_calls.append("check_calendar_conflict")
+    try:
+        proposed = _parse_commitment(
+            proposed_commitment_id, proposed_start_at, proposed_end_at, proposed_status
+        )
+    except CalendarPolicyValidationError as exc:
+        return {"status": "error", "error_code": exc.error_code, "reason": str(exc)}
+
+    parsed_existing: list[CalendarCommitment] = []
+    for row in (existing or [])[:_MAX_EXISTING_COMMITMENTS]:
+        try:
+            parsed_existing.append(
+                _parse_commitment(
+                    str(row.get("commitment_id", "")),
+                    str(row.get("start_at", "")),
+                    str(row.get("end_at", "")),
+                    str(row.get("status", "")),
+                )
+            )
+        except (CalendarPolicyValidationError, AttributeError, TypeError):
+            continue
+
+    decision = evaluate_calendar_conflicts(proposed, parsed_existing)
+    return {
+        "status": "ok",
+        "decision_code": decision.decision_code,
+        "reason_code": decision.reason_code,
+        "recommended_action": decision.recommended_action,
+        "policy_version": decision.policy_version,
+        "conflicts": [
+            {
+                "commitment_id": conflict.commitment_id,
+                "start_at": conflict.start_at.isoformat(),
+                "end_at": conflict.end_at.isoformat(),
+                "status": conflict.status,
+            }
+            for conflict in decision.conflicts
+        ],
+    }
+
+
 # Introspectable catalog of the tools the agent exposes. Used for wiring tests
 # and for documenting the agent's surface without importing pydantic-ai.
 NOEMA_TOOL_SPECS: tuple[dict[str, Any], ...] = (
@@ -426,6 +527,11 @@ NOEMA_TOOL_SPECS: tuple[dict[str, Any], ...] = (
         "capability": "tasks.update",
     },
     {
+        "name": "check_calendar_conflict",
+        "impl": tool_check_calendar_conflict,
+        "capability": "calendar.conflict_check",
+    },
+    {
         "name": "dispatch_writeback",
         "impl": tool_dispatch_writeback,
         "capability": "calendar.writeback",
@@ -435,10 +541,14 @@ NOEMA_TOOL_SPECS: tuple[dict[str, Any], ...] = (
 SYSTEM_PROMPT = (
     "You are Noema, the general assistant for a naruon email workspace. "
     "Use the provided tools to read and search the owner's mail, inspect the "
-    "content graph of an email, and manage tasks. Only change task status or "
-    "dispatch a writeback when the user clearly asks for it. Writebacks target "
-    "the customer's own systems and require opt-in; if a writeback is skipped, "
-    "explain that it must be enabled. Be concise and cite message ids you used."
+    "content graph of an email, and manage tasks. When a message proposes or "
+    "moves a meeting, use check_calendar_conflict against commitments you "
+    "already know about from mail/tasks before telling the user it is safe to "
+    "accept — never judge a scheduling conflict yourself without it. Only "
+    "change task status or dispatch a writeback when the user clearly asks "
+    "for it. Writebacks target the customer's own systems and require opt-in; "
+    "if a writeback is skipped, explain that it must be enabled. Be concise "
+    "and cite message ids you used."
 )
 
 
@@ -533,6 +643,32 @@ async def build_noema_agent(
     ) -> dict[str, Any]:
         """Update the status of an owned task (audit-logged)."""
         return await tool_update_task_status(ctx.deps, task_uid, status)
+
+    @agent.tool
+    async def check_calendar_conflict(
+        ctx: RunContext[NoemaAgentDeps],
+        proposed_commitment_id: str,
+        proposed_start_at: str,
+        proposed_end_at: str,
+        proposed_status: str,
+        existing: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        """Check a proposed meeting time against known commitments for a conflict.
+
+        Timestamps are ISO 8601 with a UTC offset; ``proposed_status`` and each
+        row's ``status`` in ``existing`` are one of confirmed/tentative/desired/
+        cancelled. ``existing`` rows come from commitments already surfaced in
+        this conversation (e.g. via search_mail/read_mail), not a live provider
+        fetch.
+        """
+        return await tool_check_calendar_conflict(
+            ctx.deps,
+            proposed_commitment_id,
+            proposed_start_at,
+            proposed_end_at,
+            proposed_status,
+            existing,
+        )
 
     @agent.tool
     async def dispatch_writeback(
