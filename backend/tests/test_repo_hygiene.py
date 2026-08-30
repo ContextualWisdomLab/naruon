@@ -208,6 +208,23 @@ def test_compose_externalizes_postgres_credentials():
     assert '$${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env before running Docker Compose}' in compose
 
 
+def test_optional_batch_overlay_is_local_only_and_hardened():
+    batch_overlay = (REPO_ROOT / "docker-compose.pg-llm-batch.yml").read_text()
+
+    assert "POSTGRES_USER: pgllm" not in batch_overlay
+    assert "POSTGRES_PASSWORD: pgllm" not in batch_overlay
+    assert "postgresql://pgllm:pgllm@" not in batch_overlay
+    assert "PG_LLM_BATCH_POSTGRES_USER:?" in batch_overlay
+    assert "PG_LLM_BATCH_POSTGRES_PASSWORD:?" in batch_overlay
+    assert "POSTGRES_DB: ${PG_LLM_BATCH_POSTGRES_DB:-pgllm}" in batch_overlay
+    assert '127.0.0.1:5442:5432' in batch_overlay
+    assert "no-new-privileges:true" in batch_overlay
+    assert "read_only: true" in batch_overlay
+    assert "- /run/postgresql" in batch_overlay
+    assert 'PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h 127.0.0.1' in batch_overlay
+    assert 'pg_llm_batch_health_check()' in batch_overlay
+
+
 def test_compose_allows_only_the_local_ollama_provider_host():
     local_compose = (REPO_ROOT / "docker-compose.yml").read_text()
     live_compose = (REPO_ROOT / "docker-compose.live-e2e.yml").read_text()
