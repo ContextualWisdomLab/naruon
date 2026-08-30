@@ -7,6 +7,7 @@ from services.attachment_parser import (
     MAX_ATTACHMENT_PARSE_SOURCE_BYTES,
     MAX_ATTACHMENT_PARSE_SOURCE_CHARS,
     decode_deferred_attachment_payload,
+    decode_quarantined_attachment_payload,
     get_attachment_parser_manifest,
     parse_email_attachment,
 )
@@ -256,6 +257,27 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
     oversized = base64.b64encode(b"%PDF-1.7").decode("ascii")
     with pytest.raises(ValueError, match="size limit"):
         decode_deferred_attachment_payload(oversized)
+
+
+def test_quarantined_payload_decoder_round_trips_any_sniffed_type():
+    raw = b"\x89PNG\r\n\x1a\n" + b"real png bytes, not a pdf"
+    encoded = base64.b64encode(raw).decode("ascii")
+
+    assert decode_quarantined_attachment_payload(encoded) == raw
+
+
+def test_quarantined_payload_decoder_rejects_bad_base64_and_oversized_payloads(
+    monkeypatch,
+):
+    with pytest.raises(ValueError, match="not valid base64"):
+        decode_quarantined_attachment_payload("not@@base64!!")
+
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 5
+    )
+    oversized = base64.b64encode(b"more than five bytes").decode("ascii")
+    with pytest.raises(ValueError, match="size limit"):
+        decode_quarantined_attachment_payload(oversized)
 
 
 def test_declared_pdf_with_real_png_bytes_is_quarantined():

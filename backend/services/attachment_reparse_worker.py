@@ -1,0 +1,292 @@
+"""Background worker glue for re-evaluating quarantined attachments.
+
+``POST /api/data/attachments/{attachment_uid}/reparse-intent`` moves a
+``content_type_mismatch_quarantined`` attachment to ``reparse_pending``,
+retaining its raw bytes (base64) but performing no synchronous re-parse (see
+``docs/adr/0005-attachment-content-type-quarantine.md``). This worker sweeps
+``reparse_pending`` rows and replays the exact same classification pipeline
+(:func:`services.attachment_parser.parse_email_attachment`) against those
+retained bytes and the attachment's original declared ``content_type`` -- so
+a fix to that pipeline (e.g. the OOXML/ODF/EPUB/JAR false-positive
+carve-out) is automatically picked up on the next reparse pass with no
+bespoke logic here. An attachment whose disagreement was genuine simply
+lands back in the quarantine status; nothing here decides that on its own.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import random
+
+from sqlalchemy import bindparam, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from db.models import Attachment
+from db.session import AsyncSessionLocal
+from services.attachment_parser import (
+    AttachmentParseResult,
+    decode_quarantined_attachment_payload,
+    parse_email_attachment,
+)
+
+logger = logging.getLogger(__name__)
+_sysrand = random.SystemRandom()
+
+DEFAULT_ATTACHMENT_REPARSE_INTERVAL_SECONDS = 60
+DEFAULT_ATTACHMENT_REPARSE_BATCH_LIMIT = 10
+ATTACHMENT_REPARSE_SWEEP_LOCK_NAMESPACE = "naruon-attachment-reparse-sweep"
+MAX_STARTUP_JITTER_SECONDS = 30
+
+# Mirrors api.data.ATTACHMENT_REPARSE_PENDING_STATUS. Duplicated as a literal
+# (not imported) to avoid a services -> api import: api already imports from
+# services, and this worker has no other reason to depend on the router module.
+ATTACHMENT_REPARSE_PENDING_STATUS = "reparse_pending"
+# A retained payload that is not valid base64 cannot become valid on a later
+# sweep -- a terminal, non-retryable data problem, not a transient one.
+ATTACHMENT_REPARSE_PAYLOAD_INVALID_STATUS = "reparse_payload_invalid"
+
+# Per-item processing outcome for the one case this worker can never turn
+# into a fresh AttachmentParseResult. Every other outcome is reported as the
+# resulting parse_status itself (e.g. "parsed", the quarantine status again,
+# "unsupported_content_type") so a caller sees exactly what classification
+# decided, not a coarse success/failure flag.
+RESULT_DECODE_FAILED = "decode_failed"
+
+_SWEEP_LOCK_PARAMS = {
+    "namespace_key": ATTACHMENT_REPARSE_SWEEP_LOCK_NAMESPACE,
+    "sweep_key": "sweep",
+}
+
+
+def apply_reparsed_result(*, attachment: Attachment, result: AttachmentParseResult) -> None:
+    """Land a fresh classification result onto an existing attachment row.
+
+    ``filename`` and ``content_type`` are not overwritten: they are the
+    attachment's identity and the sender's original declaration, neither of
+    which a reparse pass should silently rewrite (``parse_email_attachment``
+    only ever normalizes them for a *new* row, and the retained
+    ``attachment.content_type`` is what is fed back in as its input here).
+    """
+    attachment.content = result.content
+    attachment.parse_content_type = result.parse_content_type
+    attachment.parser_key = result.parser_key
+    attachment.parse_status = result.parse_status
+    attachment.parse_error_code = result.parse_error_code
+
+
+def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
+    """Re-evaluate one ``reparse_pending`` attachment in place.
+
+    Returns the resulting ``parse_status`` on a successful re-evaluation
+    (``"parsed"``, the quarantine status again, or any other terminal status
+    ``parse_email_attachment`` can return), or ``RESULT_DECODE_FAILED`` when
+    the retained payload itself is not valid base64 -- moved to a dedicated
+    failure status so the sweep does not retry it forever.
+    """
+    try:
+        raw_content = decode_quarantined_attachment_payload(attachment.content)
+    except ValueError as exc:
+        attachment.parse_status = ATTACHMENT_REPARSE_PAYLOAD_INVALID_STATUS
+        attachment.parse_error_code = ATTACHMENT_REPARSE_PAYLOAD_INVALID_STATUS
+        logger.warning(
+            "Attachment %s reparse rejected: %s",
+            getattr(attachment, "id", "?"),
+            exc,
+        )
+        return RESULT_DECODE_FAILED
+
+    result = parse_email_attachment(
+        filename=attachment.filename,
+        content_type=attachment.content_type,
+        raw_content=raw_content,
+    )
+    apply_reparsed_result(attachment=attachment, result=result)
+    return result.parse_status
+
+
+def _session_uses_postgresql(session: AsyncSession) -> bool:
+    """Return whether advisory-lock SQL is supported by the session bind."""
+    try:
+        bind = session.get_bind()
+    except Exception:
+        return False
+    return getattr(getattr(bind, "dialect", None), "name", None) == "postgresql"
+
+
+async def _try_acquire_sweep_lease(session: AsyncSession) -> bool | None:
+    """Become the sweep leader for this cycle (None when not PostgreSQL)."""
+    if not _session_uses_postgresql(session):
+        return None
+    acquired = await session.scalar(
+        select(
+            func.pg_try_advisory_lock(
+                func.hashtext(bindparam("namespace_key")),
+                func.hashtext(bindparam("sweep_key")),
+            )
+        ),
+        _SWEEP_LOCK_PARAMS,
+    )
+    return bool(acquired)
+
+
+async def _release_sweep_lease(session: AsyncSession) -> None:
+    """Release the PostgreSQL advisory lock for a reparse sweep."""
+    await session.scalar(
+        select(
+            func.pg_advisory_unlock(
+                func.hashtext(bindparam("namespace_key")),
+                func.hashtext(bindparam("sweep_key")),
+            )
+        ),
+        _SWEEP_LOCK_PARAMS,
+    )
+
+
+class AttachmentReparseWorker:
+    """Periodically re-evaluate ``reparse_pending`` attachments.
+
+    Mirrors :class:`services.newsdom_worker.NewsdomRecognitionWorker`: a
+    jittered periodic loop, a PostgreSQL advisory-lock lease so only one
+    replica sweeps per cycle, per-item error isolation, and a starvation-free
+    cursor. Unlike that worker, re-evaluation never depends on an external
+    provider being configured, so there is no "left pending, retry later"
+    outcome here -- every row is fully resolved (to a parsed status, back to
+    quarantine, or to the dedicated payload-invalid failure) on its very
+    first sweep.
+    """
+
+    def __init__(
+        self,
+        *,
+        interval_seconds: int = DEFAULT_ATTACHMENT_REPARSE_INTERVAL_SECONDS,
+        batch_limit: int = DEFAULT_ATTACHMENT_REPARSE_BATCH_LIMIT,
+    ):
+        """Configure the sweep cadence and batch size."""
+        self.interval_seconds = interval_seconds
+        self.batch_limit = batch_limit
+        self._task: asyncio.Task | None = None
+        self._is_running = False
+        self._attachment_cursor: int | None = None
+
+    async def start(self) -> None:
+        """Start the reparse loop once."""
+        if self._is_running:
+            logger.warning("AttachmentReparseWorker is already running.")
+            return
+        self._is_running = True
+        self._task = asyncio.create_task(self._run_loop())
+        logger.info("AttachmentReparseWorker started.")
+
+    async def stop(self) -> None:
+        """Cancel and await the active reparse loop."""
+        if not self._is_running:
+            return
+        self._is_running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                logger.debug("AttachmentReparseWorker cancellation acknowledged.")
+        logger.info("AttachmentReparseWorker stopped.")
+
+    async def _run_loop(self) -> None:
+        """Run jittered reparse sweeps until stopped."""
+        try:
+            await asyncio.sleep(
+                _sysrand.uniform(
+                    0, min(self.interval_seconds / 10, MAX_STARTUP_JITTER_SECONDS)
+                )
+            )
+        except asyncio.CancelledError:
+            return
+
+        while self._is_running:
+            try:
+                await self._sweep()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.error("Error in AttachmentReparseWorker loop.", exc_info=True)
+            if self._is_running:
+                try:
+                    await asyncio.sleep(self.interval_seconds)
+                except asyncio.CancelledError:
+                    break
+
+    async def _sweep(self) -> None:
+        """Process one leased reparse sweep."""
+        async with AsyncSessionLocal() as session:
+            lease = await _try_acquire_sweep_lease(session)
+            if lease is False:
+                logger.debug(
+                    "Attachment reparse sweep skipped: another replica holds "
+                    "the lease."
+                )
+                return
+            try:
+                await self._sweep_attachments(session)
+            finally:
+                if lease is True:
+                    await _release_sweep_lease(session)
+
+    async def _sweep_attachments(self, session: AsyncSession) -> None:
+        """Process a bounded, starvation-free batch of reparse-pending rows."""
+        rows = await self._load_reparse_pending_attachments(session)
+        if rows:
+            self._attachment_cursor = rows[-1].id
+        for attachment in rows:
+            try:
+                result = process_reparse_pending_attachment(attachment=attachment)
+                await session.commit()
+                logger.info(
+                    "Attachment %s reparse result: %s",
+                    attachment.id,
+                    result,
+                )
+            except Exception:
+                await session.rollback()
+                logger.error(
+                    "Attachment %s reparse raised.",
+                    getattr(attachment, "id", "?"),
+                    exc_info=True,
+                )
+
+    def _reparse_pending_statement(self, after_id: int | None):
+        """Build the next deterministic reparse-pending batch query."""
+        statement = select(Attachment).where(
+            Attachment.parse_status == ATTACHMENT_REPARSE_PENDING_STATUS
+        )
+        if after_id is not None:
+            statement = statement.where(Attachment.id > after_id)
+        return statement.order_by(Attachment.id).limit(self.batch_limit)
+
+    async def _load_reparse_pending_attachments(
+        self, session: AsyncSession
+    ) -> list[Attachment]:
+        """Load after the last attempted row, wrapping at the table tail.
+
+        Every row this worker touches is fully resolved on its first sweep
+        (see the class docstring), so wrapping only matters when a batch
+        landed exactly on the cursor's row -- it still keeps the cursor
+        logic identical to the NewsDOM worker's, rather than a subtly
+        different variant for one fewer edge case.
+        """
+        rows = (
+            (
+                await session.execute(
+                    self._reparse_pending_statement(self._attachment_cursor)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not rows and self._attachment_cursor is not None:
+            self._attachment_cursor = None
+            rows = (
+                (await session.execute(self._reparse_pending_statement(None)))
+                .scalars()
+                .all()
+            )
+        return rows

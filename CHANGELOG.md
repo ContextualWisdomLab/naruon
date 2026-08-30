@@ -1,4 +1,17 @@
 ## [Unreleased]
+- **(G-15 두 번째 슬라이스) `reparse_pending`을 실제로 소비하는 `AttachmentReparseWorker`**를
+  추가했습니다(`services/attachment_reparse_worker.py`, `NewsdomRecognitionWorker`와 동일한
+  jittered-loop + PostgreSQL advisory-lock lease + starvation-free cursor 구조로 `main.py`
+  lifespan에 배선). 매 스윕마다 `reparse_pending` 첨부파일을 보존된 원본 바이트 + 원래 선언된
+  `content_type`으로 `parse_email_attachment`를 다시 호출해 재평가합니다 — sniff된 타입을
+  신뢰하는 별도 로직을 두지 않고 동일한 분류 파이프라인에 같은 질문을 다시 던지는 방식이라,
+  향후 그 파이프라인에 생기는 어떤 수정(예: 이미 반영된 OOXML 오탐 수정)도 자동으로 적용됩니다.
+  재평가 결과 더 이상 불일치가 아니면 정상 분류로, 여전히 실재하는 불일치면 다시 quarantine
+  상태로 돌아갑니다. 보존된 payload가 유효한 base64가 아닌 경우(재시도해도 고쳐지지 않는 문제)만
+  새 terminal 상태 `reparse_payload_invalid`로 분류합니다. `services/attachment_parser.py`에
+  PDF 전용이 아닌 범용 base64 디코더 `decode_quarantined_attachment_payload`를 추가했습니다.
+  ADR-0005의 "no consumer yet" 서술을 갱신했습니다. 검증: 신규 테스트 19개(worker 15개 + parser
+  디코더 4개) 추가, 전체 백엔드 스위트 1864 passed/33 skipped, ruff clean.
 - **(G-15 첫 슬라이스) 첨부파일 content-type 불일치 quarantine + `attachment_uid` + reparse-intent
   API**를 추가했습니다. `services/attachment_parser.py`가 이제 첨부파일의 실제 바이트를 알려진
   매직 바이트 시그니처(PDF/PNG/JPEG/GIF/ZIP)로 스니핑하고, sniff된 타입이 선언된(또는 확장자로

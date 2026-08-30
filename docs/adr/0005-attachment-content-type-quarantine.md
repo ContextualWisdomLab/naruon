@@ -118,11 +118,9 @@ that is the point to re-evaluate a dedicated library against this policy.
 - Operators/future tooling can address a specific attachment directly via
   `attachment_uid` for the first time; nothing else changes about how
   attachments are listed or displayed in aggregate.
-- `reparse_pending` is a new terminal-looking status with no consumer yet;
-  a future worker slice (mirroring `services/newsdom_worker.py`) is required
-  before a quarantined-then-reparsed attachment actually gets re-evaluated.
-  Until then, `reparse_pending` simply means "queued for a pass that does not
-  exist yet" — this is recorded honestly rather than implied to be automatic.
+- `reparse_pending` is consumed by `services/attachment_reparse_worker.py`
+  (see Revisions below) — a `reparse-intent` call now leads to an actual
+  re-evaluation on the next sweep, not an indefinite queue with no consumer.
 - **Known, pre-existing, tracked limitation surfaced by this slice, not
   introduced by it:** `_get_scoped_attachment` (and every other attachment/email
   query in `api/data.py`) scopes by `user_id`/`organization_id` only, because
@@ -157,6 +155,19 @@ than reversing the original decision:
   every other oversized attachment in this parser already gets — so
   reparse-intent (which only accepts the quarantine status) can never be
   requested for a row it has nothing left to act on.
+- **The reparse-intent follow-up worker, deliberately deferred at first, now
+  ships.** `services/attachment_reparse_worker.py` (`AttachmentReparseWorker`,
+  wired into `main.py`'s lifespan next to `NewsdomRecognitionWorker`, same
+  jittered-loop + PostgreSQL advisory-lock-lease + starvation-free-cursor
+  shape) sweeps `reparse_pending` rows and replays
+  `parse_email_attachment` against the retained bytes and the attachment's
+  original declared `content_type` — deliberately *not* the sniffed type,
+  so the worker carries no bespoke "which type do I trust" logic of its own;
+  it only re-asks the same classification pipeline the same question, and
+  automatically benefits from any future fix to that pipeline (exactly as
+  the OOXML fix above already would have, had it existed first). A retained
+  payload that fails to decode (not valid base64) moves to a new terminal
+  `reparse_payload_invalid` status rather than being swept forever.
 
 ## References (APA 7th)
 

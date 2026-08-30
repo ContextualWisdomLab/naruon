@@ -438,6 +438,25 @@ def decode_deferred_attachment_payload(content: str | None) -> bytes:
     return payload
 
 
+def decode_quarantined_attachment_payload(content: str | None) -> bytes:
+    """Decode the base64 payload retained on a reparse-pending attachment.
+
+    Raises ``ValueError`` when the stored payload is not valid base64, so the
+    reparse worker can record a terminal failure instead of crashing. Unlike
+    ``decode_deferred_attachment_payload`` (PDF-only, used by the NewsDOM
+    worker), a quarantined attachment's sniffed type can be any of the
+    magic-byte families this module recognizes, so no single-format check
+    narrows this one.
+    """
+    try:
+        payload = base64.b64decode((content or "").encode("ascii"), validate=True)
+    except (binascii.Error, UnicodeEncodeError, ValueError) as exc:
+        raise ValueError("Quarantined attachment payload is not valid base64") from exc
+    if len(payload) > MAX_ATTACHMENT_PARSE_SOURCE_BYTES:
+        raise ValueError("Quarantined attachment payload exceeds the parse size limit")
+    return payload
+
+
 def _coerce_text(raw_content: Any) -> str:
     """Coerce arbitrary attachment content to NUL-free text."""
     if raw_content is None:
