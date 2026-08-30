@@ -111,14 +111,84 @@ def test_main_delegates_to_absolute_verifier_without_shell_env_or_input_read(
     assert not (tmp_path / "must-not-exist").exists()
 
 
-@pytest.mark.parametrize("schema_version", [4, 5])
+@pytest.mark.parametrize("schema_version", [7, 8])
 def test_main_accepts_current_disksage_schema_versions(tmp_path, capsys, schema_version):
     payload = _success_payload()
     payload["schema_version"] = schema_version
+    payload.update(
+        {
+            "pre_copy_evidence_met": None,
+            "icloud_native_status_observed": None,
+            "icloud_native_sync_state": None,
+            "icloud_native_status_timed_out": None,
+        }
+    )
     verifier = _json_verifier(tmp_path / "verifier", payload, 0)
 
     assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 0
     assert json.loads(capsys.readouterr().out) == payload
+
+
+def test_main_rejects_native_summary_fields_on_legacy_schema_six(tmp_path, capsys):
+    payload = _success_payload()
+    payload["schema_version"] = 6
+    payload.update(
+        {
+            "pre_copy_evidence_met": None,
+            "icloud_native_status_observed": None,
+            "icloud_native_sync_state": None,
+            "icloud_native_status_timed_out": None,
+        }
+    )
+    verifier = _json_verifier(tmp_path / "verifier", payload, 0)
+
+    assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 70
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-protocol-invalid",
+    }
+
+
+def test_main_accepts_bounded_native_status_summary(tmp_path, capsys):
+    payload = _success_payload()
+    payload["schema_version"] = 8
+    payload.update(
+        {
+            "pre_copy_evidence_met": False,
+            "icloud_native_status_observed": True,
+            "icloud_native_sync_state": "needs-sync-down|idle",
+            "icloud_native_status_timed_out": False,
+        }
+    )
+    verifier = _json_verifier(tmp_path / "verifier", payload, 0)
+
+    assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+
+
+def test_main_rejects_unbounded_native_status_summary(tmp_path, capsys):
+    payload = _success_payload()
+    payload["schema_version"] = 8
+    payload["icloud_native_sync_state"] = "sensitive status "
+    verifier = _json_verifier(tmp_path / "verifier", payload, 0)
+
+    assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 70
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-protocol-invalid",
+    }
+
+
+def test_main_rejects_missing_current_native_summary(tmp_path, capsys):
+    payload = _success_payload()
+    payload["schema_version"] = 7
+    verifier = _json_verifier(tmp_path / "verifier", payload, 0)
+
+    assert handoff.main(_handoff_args(verifier, tmp_path / "readiness.json")) == 70
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": False,
+        "error_code": "disksage-verifier-protocol-invalid",
+    }
 
 
 @pytest.mark.parametrize("exit_code", [64, 65])

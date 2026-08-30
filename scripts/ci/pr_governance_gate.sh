@@ -340,6 +340,7 @@ fi
 CODERABBIT_BLOCKING_PATTERN='pre[- ]merge|blocking|failure|failed|warning|potential issue|actionable comment|actionable comments'
 CODERABBIT_ISSUE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|actionable comments?|changes requested|request changes'
 CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN='pre[- ]merge[^\n]*(blocking|failure|failed|warning|potential issue)|blocking (issue|finding)|potential issue|changes requested|request changes'
+CODERABBIT_ISSUE_RATE_LIMIT_PATTERN='review limit reached|rate limited'
 CODERABBIT_NO_ACTIONABLE_PATTERN='no actionable comments? (were )?generated'
 CHECK_RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")"
 COMMIT_STATUS_JSON='{"statuses":[]}'
@@ -435,6 +436,7 @@ else
     --arg head_sha "$HEAD_SHA" \
     --arg pattern "$CODERABBIT_ISSUE_BLOCKING_PATTERN" \
     --arg substantive_pattern "$CODERABBIT_ISSUE_SUBSTANTIVE_BLOCKING_PATTERN" \
+    --arg rate_limit_pattern "$CODERABBIT_ISSUE_RATE_LIMIT_PATTERN" \
     --arg no_actionable_pattern "$CODERABBIT_NO_ACTIONABLE_PATTERN" '
     [.[][]
       | select((.user.login // "") | test("'"$REVIEW_BOT_LOGIN_PATTERN"'"; "i"))
@@ -445,6 +447,10 @@ else
             and (
               (($body | test($no_actionable_pattern; "i")) | not)
               or ($summary | test($substantive_pattern; "i"))
+            )
+            and (
+              (($body | test($rate_limit_pattern; "i")) | not)
+              or ($body | test($substantive_pattern; "i"))
             )
         )
       | select((.body // "") | contains($head_sha))]

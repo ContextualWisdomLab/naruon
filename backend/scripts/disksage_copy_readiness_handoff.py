@@ -47,8 +47,21 @@ SUCCESS_FIELDS = frozenset(
         "raw_metadata_values_included",
         "cloud_write_executed",
         "source_eviction_authorized",
+        "pre_copy_evidence_met",
+        "icloud_native_status_observed",
+        "icloud_native_sync_state",
+        "icloud_native_status_timed_out",
     }
 )
+NATIVE_SUMMARY_FIELDS = frozenset(
+    {
+        "pre_copy_evidence_met",
+        "icloud_native_status_observed",
+        "icloud_native_sync_state",
+        "icloud_native_status_timed_out",
+    }
+)
+LEGACY_SUCCESS_FIELDS = SUCCESS_FIELDS - NATIVE_SUMMARY_FIELDS
 FAILURE_FIELDS = frozenset({"ok", "error_code"})
 FALSE_CLAIM_FIELDS = (
     "local_paths_included",
@@ -61,11 +74,13 @@ PROVIDERS = frozenset({"icloud", "onedrive", "google-drive"})
 READINESS_STATES = frozenset(
     {"no-candidates", "blocked", "partially-ready", "ready-without-new-review"}
 )
-# DiskSage schema v5 adds path-free provider-global-sync evidence while retaining the same
-# success contract consumed by this handoff. Keep v3/v4 readable for already-issued evidence
-# records; newer envelopes must be added here deliberately and tested.
-SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4, 5})
+# DiskSage schema v5+ retains this path-free success contract while adding evidence fields to
+# the signed envelope. Schemas v7-v8 add bounded provider evidence and explicit iCloud File
+# Provider admission blockers without changing this handoff's path-free success shape. Schema
+# v6 remains a legacy envelope so independently deployed producers and consumers stay compatible.
+SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4, 5, 6, 7, 8})
 ERROR_CODE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+NATIVE_STATUS_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9|_.-]{1,128}")
 
 
 class HandoffError(Exception):
@@ -329,6 +344,20 @@ def _is_lower_hex_64(value: object) -> bool:
     )
 
 
+def _is_optional_bool(value: object) -> bool:
+    """Return whether a verifier summary field is either null or a JSON boolean."""
+
+    return value is None or type(value) is bool
+
+
+def _is_optional_native_status_token(value: object) -> bool:
+    """Return whether an optional native status token is bounded and non-sensitive."""
+
+    return value is None or (
+        type(value) is str and NATIVE_STATUS_TOKEN_PATTERN.fullmatch(value) is not None
+    )
+
+
 def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     """Build a JSON object while rejecting every duplicate member name."""
 
@@ -353,9 +382,15 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
         raise HandoffError("disksage-verifier-protocol-invalid")
 
     if result.returncode == 0:
+        schema_version = payload.get("schema_version")
+        expected_success_fields = (
+            SUCCESS_FIELDS
+            if type(schema_version) is int and schema_version >= 7
+            else LEGACY_SUCCESS_FIELDS
+        )
         valid = (
             not result.stderr
-            and frozenset(payload) == SUCCESS_FIELDS
+            and frozenset(payload) == expected_success_fields
             and payload.get("ok") is True
             and payload.get("schema_kind") == "disksage.naruon.cloud-copy-readiness"
             and type(payload.get("schema_version")) is int
@@ -368,6 +403,10 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
             and payload["candidate_bytes"] >= 0
             and _is_lower_hex_64(payload.get("readiness_fingerprint_sha256"))
             and all(payload.get(field) is False for field in FALSE_CLAIM_FIELDS)
+            and _is_optional_bool(payload.get("pre_copy_evidence_met"))
+            and _is_optional_bool(payload.get("icloud_native_status_observed"))
+            and _is_optional_native_status_token(payload.get("icloud_native_sync_state"))
+            and _is_optional_bool(payload.get("icloud_native_status_timed_out"))
         )
     elif result.returncode in (64, 65):
         error_code = payload.get("error_code")
