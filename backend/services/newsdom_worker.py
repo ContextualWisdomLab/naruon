@@ -31,6 +31,11 @@ from db.models import (
 from db.session import AsyncSessionLocal
 from services.attachment_parser import decode_deferred_attachment_payload
 from services.content_graph import ParseResult
+from services.document_object_storage import (
+    DocumentObjectStorageError,
+    load_pending_pdf_document_bytes,
+    mark_document_payload_consumed,
+)
 from services.newsdom_client import (
     NewsdomConfigurationError,
     NewsdomRequestError,
@@ -277,11 +282,10 @@ async def process_pending_document(
     request_fn: ParseRequestFn = request_pdf_dom,
 ) -> str:
     """Recognize one pending workspace-document PDF, or record a safe outcome."""
-    from api.data import decode_pending_pdf_document_bytes
-
+    source_uses_object_storage = not bool(document.document_content)
     try:
-        pdf_bytes = decode_pending_pdf_document_bytes(document)
-    except ValueError as exc:
+        pdf_bytes = await load_pending_pdf_document_bytes(session, document)
+    except (ValueError, DocumentObjectStorageError) as exc:
         document.document_status = PDF_DOM_RECOGNITION_FAILED_STATUS
         logger.warning(
             "NewsDOM document %s rejected before recognition: %s",
@@ -323,6 +327,12 @@ async def process_pending_document(
             exc,
         )
         return RESULT_FAILED
+
+    # Keep parsed document state and object-lifecycle state in the same
+    # transaction. The enclosing sweep commits both changes together; an
+    # unexpected lifecycle failure propagates so the sweep rolls the item back.
+    if source_uses_object_storage:
+        await mark_document_payload_consumed(session, document.document_id)
     return RESULT_RECOGNIZED
 
 

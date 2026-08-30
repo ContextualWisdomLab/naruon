@@ -17,6 +17,7 @@ from api.runner_config import router as runner_config_router
 from api.tenant_config import router as tenant_config_router
 from api.runtime_config import router as runtime_config_router
 from api.llm_providers import router as llm_providers_router
+from api.object_storage_providers import router as object_storage_providers_router
 from api.prompts import router as prompts_router
 from api.tasks import router as tasks_router
 from api.tools import router as tools_router
@@ -29,14 +30,20 @@ from api.accounts import router as accounts_router
 from api.webdav import router as webdav_router
 from api.security import router as security_router
 from api.data import router as data_router
+from api.document_storage import (
+    remove_legacy_pdf_upload_route,
+    router as document_storage_router,
+)
 from api.ai_hub import router as ai_hub_router
 from api.projects import router as projects_router
 from api.session import router as auth_session_router
 from core.config import canonical_origin, settings
 from core.telemetry import setup_telemetry
 from core.version import get_release_version
+from services.document_object_cleanup import DocumentObjectCleanupWorker
 from services.imap_worker import ImapSyncWorker
 from services.newsdom_worker import NewsdomRecognitionWorker
+from services.object_storage_orphan_cleanup import ObjectStorageOrphanCleanupWorker
 from services.pop3_worker import Pop3SyncWorker
 from services.provider_writeback_retry_service import ProviderWritebackRetryWorker
 from services.reply_sla_scheduler import ReplySlaScheduler
@@ -46,6 +53,8 @@ imap_worker = ImapSyncWorker()
 pop3_worker = Pop3SyncWorker()
 reply_sla_scheduler = ReplySlaScheduler()
 newsdom_recognition_worker = NewsdomRecognitionWorker()
+document_object_cleanup_worker = DocumentObjectCleanupWorker()
+object_storage_orphan_cleanup_worker = ObjectStorageOrphanCleanupWorker()
 provider_writeback_retry_worker = ProviderWritebackRetryWorker(
     runner_manager.dispatch_command,
 )
@@ -63,10 +72,14 @@ async def lifespan(app: FastAPI):
         await pop3_worker.start()
         await reply_sla_scheduler.start()
         await newsdom_recognition_worker.start()
+        await document_object_cleanup_worker.start()
+        await object_storage_orphan_cleanup_worker.start()
         await provider_writeback_retry_worker.start()
     yield
     if not DISABLE_WORKERS:
         await provider_writeback_retry_worker.stop()
+        await object_storage_orphan_cleanup_worker.stop()
+        await document_object_cleanup_worker.stop()
         await newsdom_recognition_worker.stop()
         await reply_sla_scheduler.stop()
         await pop3_worker.stop()
@@ -128,9 +141,13 @@ def _origin_from_referer(header_value: str | None) -> str | None:
 
 
 def _is_trusted_browser_origin(origin: str | None) -> bool:
-    if origin is None:
-        return True
-    return origin in set(settings.ALLOWED_CORS_ORIGINS_LIST)
+    """Return whether explicit browser origin evidence matches the allowlist.
+
+    ``None`` is intentionally untrusted. Headerless non-browser API clients are
+    handled separately by the middleware because bearer authentication is sent
+    explicitly rather than ambiently by the browser.
+    """
+    return origin is not None and origin in set(settings.ALLOWED_CORS_ORIGINS_LIST)
 
 
 def _requires_browser_origin_check(request: Request) -> bool:
@@ -152,29 +169,30 @@ async def reject_cross_site_state_changing_api_requests(request: Request, call_n
 
         raw_origin = request.headers.get("origin")
         origin = _normalized_origin(raw_origin)
-        if raw_origin is not None and origin is None:
-            return JSONResponse(
-                status_code=403,
-                content={"error_code": "csrf_origin_rejected"},
-            )
-        if not _is_trusted_browser_origin(origin):
-            return JSONResponse(
-                status_code=403,
-                content={"error_code": "csrf_origin_rejected"},
-            )
-
-        if origin is None:
+        if raw_origin is not None:
+            if origin is None or not _is_trusted_browser_origin(origin):
+                return JSONResponse(
+                    status_code=403,
+                    content={"error_code": "csrf_origin_rejected"},
+                )
+        else:
             raw_referer = request.headers.get("referer")
             referer_origin = _origin_from_referer(raw_referer)
-            if raw_referer is not None and referer_origin is None:
+            if raw_referer is not None:
+                if referer_origin is None or not _is_trusted_browser_origin(
+                    referer_origin
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"error_code": "csrf_referer_rejected"},
+                    )
+            elif fetch_site:
+                # Fetch Metadata is browser-supplied evidence. A browser request
+                # that advertises a fetch site but supplies neither Origin nor
+                # Referer must fail closed rather than treating absence as trust.
                 return JSONResponse(
                     status_code=403,
-                    content={"error_code": "csrf_referer_rejected"},
-                )
-            if not _is_trusted_browser_origin(referer_origin):
-                return JSONResponse(
-                    status_code=403,
-                    content={"error_code": "csrf_referer_rejected"},
+                    content={"error_code": "csrf_origin_rejected"},
                 )
 
     return await call_next(request)
@@ -215,6 +233,11 @@ app.add_middleware(
     allow_headers=["Accept", "Content-Type", "Authorization"],
 )
 
+# The broad data router still contains the legacy inline-PDF function for
+# compatibility with direct callers. Runtime composition removes only that one
+# route and registers the S3-aware document-storage boundary instead.
+remove_legacy_pdf_upload_route(data_router)
+
 app.include_router(search_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(llm_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(calendar_router, dependencies=PRIVATE_API_DEPENDENCIES)
@@ -225,6 +248,10 @@ app.include_router(runner_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(tenant_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(runtime_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(llm_providers_router, dependencies=PRIVATE_API_DEPENDENCIES)
+app.include_router(
+    object_storage_providers_router,
+    dependencies=PRIVATE_API_DEPENDENCIES,
+)
 app.include_router(prompts_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(tasks_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(tools_router, dependencies=PRIVATE_API_DEPENDENCIES)
@@ -235,6 +262,7 @@ app.include_router(dav_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(accounts_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(webdav_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(security_router, dependencies=PRIVATE_API_DEPENDENCIES)
+app.include_router(document_storage_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(data_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(ai_hub_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(projects_router, dependencies=PRIVATE_API_DEPENDENCIES)

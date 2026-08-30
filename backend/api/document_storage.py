@@ -1,0 +1,313 @@
+"""S3-aware workspace PDF persistence and deletion routes.
+
+The broader data router remains responsible for data-quality and document
+workflow surfaces. This module owns only the raw-PDF persistence boundary so
+object-storage policy can evolve independently without duplicating tenant or
+workflow authority.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api import data as data_api
+from api.auth import AuthContext, get_auth_context
+from api.data import DataDocumentActionResponse, _document_response, _safe_display_text
+from db.document_object_record import DocumentObjectRecord
+from db.models import Document
+from db.object_storage_cleanup_record import ObjectStorageCleanupRecord
+from db.session import get_db
+from services.document_object_storage import (
+    DocumentObjectStorageError,
+    DocumentStorageRuntimeConfig,
+    DocumentUploadTooLargeError,
+    DocumentUploadValidationError,
+    StoredDocumentPayload,
+    delete_configured_document_payload,
+    delete_document_object_record,
+    inspect_pdf_upload,
+    resolve_document_object_runtime_config,
+    resolve_document_storage_runtime_config,
+    store_configured_pdf_upload,
+)
+from services.newsdom_pdf_recognition import PDF_DOM_RECOGNITION_PENDING_STATUS
+from services.object_storage_orphan_cleanup import (
+    cancel_matching_object_storage_cleanup,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/data", tags=["data"])
+PDF_UPLOAD_ROUTE_PATH = "/api/data/documents/pdf-dom-recognition"
+
+
+def remove_legacy_pdf_upload_route(data_router: APIRouter) -> bool:
+    """Remove the legacy inline-PDF route from a data router exactly once.
+
+    ``api.data`` still carries the backward-compatible implementation for direct
+    callers and old unit tests. Runtime composition removes that route before
+    registering this S3-aware replacement, preventing duplicate FastAPI routes
+    while keeping the rest of the large data surface unchanged.
+    """
+    matching_routes = [
+        route
+        for route in data_router.routes
+        if getattr(route, "path", None) == PDF_UPLOAD_ROUTE_PATH
+        and "POST" in (getattr(route, "methods", set()) or set())
+    ]
+    if len(matching_routes) > 1:
+        raise RuntimeError("Multiple legacy PDF upload routes are registered")
+    if not matching_routes:
+        return False
+    data_router.routes.remove(matching_routes[0])
+    return True
+
+
+async def _persist_failed_compensation_orphan(
+    db: AsyncSession,
+    stored: StoredDocumentPayload,
+    runtime_config: DocumentStorageRuntimeConfig,
+    organization_id: str | None,
+) -> None:
+    """Persist one explicit cleanup locator after remote compensation fails.
+
+    This is a second transaction after the failed document transaction has been
+    rolled back. It never lists the bucket and stores only the provider-bound
+    locator plus the integrity evidence already known from the successful PUT.
+    """
+    if (
+        stored.s3_object is None
+        or runtime_config.object_storage_provider_id is None
+        or not organization_id
+    ):
+        logger.error(
+            "Document object compensation orphan could not be queued because "
+            "provider scope metadata is incomplete"
+        )
+        return
+
+    orphan = ObjectStorageCleanupRecord(
+        object_storage_provider_id=runtime_config.object_storage_provider_id,
+        organization_id=organization_id,
+        bucket_name=stored.s3_object.bucket_name,
+        object_key=stored.s3_object.object_key,
+        content_type=stored.s3_object.content_type,
+        content_length=stored.s3_object.content_length,
+        checksum_sha256=stored.s3_object.checksum_sha256,
+        cleanup_reason="metadata_commit_compensation_failed",
+        cleanup_status="pending",
+        attempt_count=0,
+    )
+    db.add(orphan)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.error(
+            "Document object compensation orphan could not be persisted for retry",
+            exc_info=True,
+        )
+
+
+async def _compensate_failed_metadata_commit(
+    db: AsyncSession,
+    stored: StoredDocumentPayload,
+    runtime_config: DocumentStorageRuntimeConfig,
+    organization_id: str | None,
+) -> None:
+    """Delete a just-written object or durably queue its failed compensation."""
+    try:
+        await delete_configured_document_payload(
+            stored,
+            runtime_config=runtime_config,
+        )
+    except DocumentObjectStorageError:
+        logger.error(
+            "Document object compensation failed after metadata commit failure",
+            exc_info=True,
+        )
+        await _persist_failed_compensation_orphan(
+            db,
+            stored,
+            runtime_config,
+            organization_id,
+        )
+
+
+@router.post(
+    "/documents/pdf-dom-recognition",
+    response_model=DataDocumentActionResponse,
+)
+async def upload_document_for_pdf_dom_recognition(
+    file: UploadFile = File(...),
+    document_name: str | None = Form(None),
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataDocumentActionResponse:
+    """Persist a bounded PDF and queue NewsDOM recognition safely.
+
+    Upload validation and hashing use bounded reads over FastAPI's spooled
+    ``UploadFile``. The database backend preserves the legacy base64 contract;
+    the S3 backend resolves encrypted organization credentials, rewinds and
+    streams the spool directly to a signed PUT, and stores only normalized
+    locator and integrity metadata in PostgreSQL.
+    """
+    upload_limit_bytes = data_api._MAX_PDF_DOM_UPLOAD_BYTES
+    try:
+        validated_upload = await inspect_pdf_upload(
+            file,
+            max_bytes=upload_limit_bytes,
+        )
+    except DocumentUploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail="PDF upload is too large.") from exc
+    except DocumentUploadValidationError as exc:
+        raise HTTPException(
+            status_code=415,
+            detail="Only application/pdf uploads are supported for DOM recognition.",
+        ) from exc
+
+    document_id = f"doc_{uuid.uuid4().hex}"
+    try:
+        runtime_config = await resolve_document_storage_runtime_config(
+            db,
+            auth_context.organization_id,
+        )
+        stored_payload = await store_configured_pdf_upload(
+            upload=file,
+            validated_upload=validated_upload,
+            document_id=document_id,
+            organization_id=auth_context.organization_id,
+            workspace_id=auth_context.workspace_id,
+            runtime_config=runtime_config,
+        )
+    except DocumentObjectStorageError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Configured document storage is unavailable.",
+        ) from exc
+
+    document = Document(
+        document_id=document_id,
+        workspace_id=auth_context.workspace_id,
+        organization_id=auth_context.organization_id,
+        document_name=_safe_display_text(
+            document_name or file.filename,
+            "workspace document",
+        ),
+        document_type="pdf",
+        document_content=stored_payload.document_content,
+        document_status=PDF_DOM_RECOGNITION_PENDING_STATUS,
+    )
+    object_record: DocumentObjectRecord | None = stored_payload.to_object_record(
+        document_id
+    )
+
+    try:
+        db.add(document)
+        if object_record is not None:
+            db.add(object_record)
+            if (
+                stored_payload.s3_object is not None
+                and runtime_config.object_storage_provider_id is not None
+            ):
+                await cancel_matching_object_storage_cleanup(
+                    db,
+                    object_storage_provider_id=(
+                        runtime_config.object_storage_provider_id
+                    ),
+                    stored_object=stored_payload.s3_object,
+                )
+        await db.commit()
+        await db.refresh(document)
+    except Exception:
+        await db.rollback()
+        await _compensate_failed_metadata_commit(
+            db,
+            stored_payload,
+            runtime_config,
+            auth_context.organization_id,
+        )
+        raise
+
+    return _document_response(
+        document,
+        audit_event="data.document.pdf_dom_recognition_upload",
+        message=(
+            "PDF stored in the configured document backend pending NewsDOM DOM "
+            "recognition; no downstream provider write executed."
+        ),
+    )
+
+
+@router.delete(
+    "/documents/{document_id}",
+    response_model=DataDocumentActionResponse,
+)
+async def delete_workspace_document(
+    document_id: str,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataDocumentActionResponse:
+    """Delete one workspace-scoped document and its raw S3 source when present.
+
+    Authorization is established from the signed workspace before object metadata
+    is read. For S3-backed documents, the retained provider reference is resolved
+    and remote deletion happens first; the owning relational row is deleted only
+    after that succeeds. Inline-database documents have no object row and are
+    removed relationally.
+    """
+    document = await data_api._get_workspace_document(
+        db,
+        auth_context,
+        document_id,
+    )
+    object_record = await db.scalar(
+        select(DocumentObjectRecord).where(
+            DocumentObjectRecord.document_id == document.document_id
+        )
+    )
+
+    if object_record is not None:
+        try:
+            runtime_config = await resolve_document_object_runtime_config(
+                db,
+                document,
+                object_record,
+            )
+            await delete_document_object_record(
+                object_record,
+                runtime_config=runtime_config,
+            )
+        except DocumentObjectStorageError as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Configured document storage is unavailable.",
+            ) from exc
+
+    response = DataDocumentActionResponse(
+        document_id=document.document_id,
+        workspace_id=document.workspace_id,
+        document_name=document.document_name,
+        document_type=document.document_type,
+        document_status="deleted",
+        content_chars=0,
+        provider_write_executed=False,
+        provenance="server-authoritative",
+        audit_event="data.document.deleted",
+        message=(
+            "Document deleted from this workspace. Upload a new copy if you need "
+            "to process it again."
+        ),
+    )
+    try:
+        await db.delete(document)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    return response
