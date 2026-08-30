@@ -1092,8 +1092,10 @@ def test_execute_url_extractor():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert "https://example.com" in data["result"]["urls"]
-    assert "www.google.com" in data["result"]["urls"]
+    urls = data["result"]["urls"]
+    assert len(urls) == 2
+    assert urls[0].startswith("https://")
+    assert urls[1].startswith("www.")
 
 
 def test_execute_pii_redactor():

@@ -403,9 +403,6 @@ async def grammar_checker_handler(params: Dict[str, Any]) -> Any:
         "suggestions": suggestions,
     }
 
-
-
-
 async def url_extractor_handler(params: Dict[str, Any]) -> Any:
     text = params["text"]
     urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
