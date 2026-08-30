@@ -1,4 +1,3 @@
-import logging
 from typing import Any, Dict, List
 
 from sqlalchemy import select
@@ -7,103 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.models import Email, ProjectFolder, TicketTask, WebdavAccount
 from services.knowledge_extractor import SELF_SENT_KNOWLEDGE_SOURCE
 
-logger = logging.getLogger(__name__)
-
 
 def safe_webdav_source_label(source_id: str | None) -> str:
+    """Return an operator-safe label that exposes only the opaque source ID."""
     if not source_id:
         return "WebDAV source"
     return f"WebDAV source {source_id}"
 
 
-async def sync_webdav_folders(session, user_id: str, organization_id: str | None):
-    """
-    Fetch folder structures for all WebDAV accounts of the user.
-    """
-    from urllib.parse import urlsplit
-
-    from core.url_validation import _reject_unsafe_ip_literal
-
-    logger.info(f"Syncing WebDAV folders for user {user_id}")
-    organization_filter = (
-        WebdavAccount.organization_id == organization_id
-        if organization_id is not None
-        else WebdavAccount.organization_id.is_(None)
-    )
-    stmt = select(WebdavAccount.server_url, WebdavAccount.source_uid).where(
-        WebdavAccount.user_id == user_id, organization_filter
-    )
-    res = await session.execute(stmt)
-    accounts = res.all()
-    for server_url, source_uid in accounts:
-        try:
-            if server_url:
-                parsed = urlsplit(server_url)
-                if parsed.scheme != "https":
-                    raise ValueError("WebDAV server_url must use HTTPS")
-                if not parsed.hostname:
-                    raise ValueError("WebDAV server_url must include a hostname")
-                _reject_unsafe_ip_literal("WebDAV server_url", parsed.hostname)
-        except ValueError as exc:
-            logger.warning(
-                "Invalid WebDAV server URL for source %s: %s",
-                source_uid or "unknown",
-                exc,
-            )
-            continue
-
-        logger.info(
-            "Fetched folder structures for WebDAV source %s",
-            source_uid or "unknown",
-        )
-    return True
-
-
 class WebDavService:
-    def __init__(self):
-        self._mock_accounts = {
-            "demo_user": [
-                {
-                    "source_id": "webdav_src_demo_primary",
-                    "server_url": "https://webdav.naruon.net",
-                    "username": "demo_user",
-                    "display_label": "WebDAV source webdav_src_demo_primary",
-                    "writeback_enabled": True,
-                    "etag": "etag-webdav-demo-primary",
-                }
-            ]
-        }
-        self._mock_folders = {
-            "demo_user": [
-                {
-                    "folder_uid": "webdav_folder_demo_roadmap",
-                    "project_name": "Naruon Roadmap 2026",
-                    "webdav_path": "/Projects/Naruon_Roadmap_2026",
-                    "owner_user_id": "demo_user",
-                    "organization_id": None,
-                },
-                {
-                    "folder_uid": "webdav_folder_demo_marketing",
-                    "project_name": "Marketing Assets",
-                    "webdav_path": "/Projects/Marketing_Assets",
-                    "owner_user_id": "demo_user",
-                    "organization_id": None,
-                },
-            ]
-        }
-
-    def get_connected_accounts(self, user_id: str) -> List[Dict[str, Any]]:
-        """
-        Fetch connected WebDAV accounts for a user.
-        In a real implementation, this queries the database.
-        """
-        return self._mock_accounts.get(user_id, [])
-
-    def get_project_folders(self, user_id: str) -> List[Dict[str, Any]]:
-        """
-        Fetch the list of project folders structured by AI.
-        """
-        return self._mock_folders.get(user_id, [])
+    """Resolve tenant-scoped WebDAV discovery and signed writeback intents."""
 
     async def get_connected_accounts_from_db(
         self,
@@ -112,6 +24,7 @@ class WebDavService:
         organization_id: str | None = None,
         workspace_id: str | None = None,
     ) -> List[Dict[str, Any]]:
+        """Return database-authoritative WebDAV account capabilities for a scope."""
         scope_filters = [
             WebdavAccount.user_id == user_id,
             WebdavAccount.organization_id == organization_id
@@ -143,6 +56,7 @@ class WebDavService:
         organization_id: str | None,
         folder_uid: str | None = None,
     ) -> List[Dict[str, Any]]:
+        """Return tenant-scoped project folders from the persisted registry."""
         stmt = select(ProjectFolder).where(
             ProjectFolder.user_id == user_id,
             ProjectFolder.organization_id == organization_id
@@ -163,28 +77,6 @@ class WebDavService:
             for folder in result.scalars().all()
         ]
 
-    def sync_attachments_to_folder(self, email_id: str, project_name: str) -> bool:
-        """
-        Organizes an email's attachments into the specified WebDAV project folder.
-        """
-        logger.info(
-            f"Syncing attachments from email {email_id} to project {project_name}"
-        )
-        # Mock implementation: in reality, this would download from storage and upload via webdavclient3
-        return True
-
-    def determine_webdav_writeback_intent(
-        self, user_id: str, target_source_id: str | None = None
-    ) -> Dict[str, Any]:
-        """
-        Server-authoritative WebDAV writeback source selection.
-        """
-        accounts = self.get_connected_accounts(user_id)
-        return self.determine_webdav_writeback_intent_from_accounts(
-            accounts,
-            target_source_id=target_source_id,
-        )
-
     async def determine_webdav_writeback_intent_from_db(
         self,
         session: AsyncSession,
@@ -193,6 +85,7 @@ class WebDavService:
         workspace_id: str | None = None,
         target_source_id: str | None = None,
     ) -> Dict[str, Any]:
+        """Select a writable persisted account without executing provider writes."""
         accounts = await self.get_connected_accounts_from_db(
             session, user_id, organization_id, workspace_id
         )
@@ -210,6 +103,7 @@ class WebDavService:
         source_task_id: str,
         target_source_id: str | None = None,
     ) -> Dict[str, Any]:
+        """Create a provenance-bound intent for materializing self-sent knowledge."""
         task_result = await session.execute(
             select(TicketTask, Email.message_id)
             .outerjoin(
@@ -278,6 +172,7 @@ class WebDavService:
         accounts: List[Dict[str, Any]],
         target_source_id: str | None = None,
     ) -> Dict[str, Any]:
+        """Select one write-enabled account from a server-authoritative inventory."""
         writable_accounts = {
             account["source_id"]: account
             for account in accounts

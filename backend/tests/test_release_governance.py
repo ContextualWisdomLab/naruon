@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import importlib.util
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -55,14 +56,18 @@ def assert_dockerfile_stage_from(dockerfile: str, image: str, stage_alias: str) 
 
 def first_dockerfile_base_reference(dockerfile: str) -> str:
     """Return the first exact tag-and-digest Dockerfile base reference."""
-    first_from = re.search(r"^FROM (?P<declaration>.+)$", dockerfile, flags=re.MULTILINE)
+    first_from = re.search(
+        r"^FROM (?P<declaration>.+)$", dockerfile, flags=re.MULTILINE
+    )
     assert first_from is not None, "Dockerfile must declare a base image"
     match = re.fullmatch(
         r"(?P<reference>[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+"
         r"@sha256:[0-9a-f]{64})(?: AS [A-Za-z0-9._-]+)?",
         first_from.group("declaration"),
     )
-    assert match is not None, "Dockerfile first stage must use an exact tag-and-digest pin"
+    assert match is not None, (
+        "Dockerfile first stage must use an exact tag-and-digest pin"
+    )
     return match.group("reference")
 
 
@@ -227,6 +232,96 @@ def test_strix_ci_requirements_use_security_quality_clean_pins() -> None:
     assert "python-multipart==0.0.32" in strix_ci_requirements
 
 
+def test_cryptography_runtime_pins_are_bleichenbacher_oracle_fixed() -> None:
+    """Require every governed Python surface to use the first oracle-safe release."""
+    backend_requirements = read_repo_text("backend/requirements.txt")
+    backend_project_text = read_repo_text("backend/pyproject.toml")
+    backend_project = tomllib.loads(backend_project_text)
+    backend_lock = tomllib.loads(read_repo_text("backend/uv.lock"))
+    backend_hashes = read_repo_text("backend/requirements-hashes.txt")
+    strix_requirements = read_repo_text("requirements-strix-ci.txt")
+    strix_hashes = read_repo_text("requirements-strix-ci-hashes.txt")
+
+    def pins(text: str, package: str) -> list[str]:
+        return re.findall(rf"(?m)^{re.escape(package)}==[^\s\\]+", text)
+
+    for governed_text in (
+        backend_requirements,
+        backend_hashes,
+        strix_requirements,
+        strix_hashes,
+    ):
+        assert pins(governed_text, "cryptography") == ["cryptography==50.0.0"]
+    assert [
+        dependency
+        for dependency in backend_project["project"]["dependencies"]
+        if dependency.startswith("cryptography")
+    ] == ["cryptography==50.0.0"]
+    cryptography_versions = {
+        package["version"]
+        for package in backend_lock["package"]
+        if package["name"] == "cryptography"
+    }
+    assert cryptography_versions == {"50.0.0"}
+    assert pins(strix_requirements, "protobuf") == ["protobuf==6.33.6"]
+    assert pins(strix_hashes, "protobuf") == ["protobuf==6.33.6"]
+
+
+def test_frontend_postcss_lock_is_cve_2026_69153_fixed() -> None:
+    """Keep every manifest and lock surface on the first currently governed fix."""
+    frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
+    frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+
+    assert frontend_package["devDependencies"]["postcss"] == "8.5.24"
+    assert frontend_package["overrides"]["postcss"] == "8.5.24"
+    assert frontend_package["resolutions"]["postcss"] == "8.5.24"
+    assert frontend_workspace["overrides"]["postcss"] == "8.5.24"
+    assert frontend_lock["overrides"]["postcss"] == "8.5.24"
+    assert frontend_lock["importers"]["."]["devDependencies"]["postcss"] == {
+        "specifier": "8.5.24",
+        "version": "8.5.24",
+    }
+
+    for section in ("packages", "snapshots"):
+        postcss_keys = [
+            package
+            for package in frontend_lock[section]
+            if package.startswith("postcss@")
+        ]
+        assert postcss_keys == ["postcss@8.5.24"]
+
+
+def test_frontend_tooling_lock_uses_current_audit_fixed_transitive_versions() -> None:
+    """Keep newly disclosed audit fixes aligned across manifest and pnpm lock."""
+    frontend_package = json.loads(read_repo_text("frontend/package.json"))
+    frontend_workspace = yaml.safe_load(read_repo_text("frontend/pnpm-workspace.yaml"))
+    frontend_lock = yaml.safe_load(read_repo_text("frontend/pnpm-lock.yaml"))
+
+    assert frontend_package["devDependencies"]["jsdom"] == "^30.0.1"
+    for dependency, expected_version in (
+        ("brace-expansion", "5.0.9"),
+        ("nanoid", "5.1.16"),
+        ("undici", "8.9.0"),
+    ):
+        assert frontend_package["overrides"][dependency] == expected_version
+        assert frontend_package["resolutions"][dependency] == expected_version
+        assert frontend_workspace["overrides"][dependency] == expected_version
+        assert frontend_lock["overrides"][dependency] == expected_version
+
+        for section in ("packages", "snapshots"):
+            locked_keys = [
+                package
+                for package in frontend_lock[section]
+                if package.startswith(f"{dependency}@")
+            ]
+            assert locked_keys == [f"{dependency}@{expected_version}"]
+
+    assert [
+        package for package in frontend_lock["packages"] if package.startswith("jsdom@")
+    ] == ["jsdom@30.0.1"]
+
+
 def test_changelog_follows_keep_a_changelog_for_initial_korean_release() -> None:
     changelog = read_repo_text("CHANGELOG.md")
 
@@ -271,6 +366,24 @@ def test_github_actions_are_pinned_to_exact_sha() -> None:
 
     assert unpinned_major_refs == [], "\n".join(unpinned_major_refs)
     assert missing_version_comments == [], "\n".join(missing_version_comments)
+
+
+def test_github_workflows_never_push_repository_source_branches() -> None:
+    """Keep branch publication in reviewed clients, not ephemeral Actions jobs."""
+    governed_workflows = sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(
+        WORKFLOW_DIR.glob("*.yaml")
+    )
+    source_publishers: list[str] = []
+
+    for workflow_path in governed_workflows:
+        workflow = workflow_path.read_text(encoding="utf-8")
+        if "contents: write" in workflow and "git push" in workflow:
+            source_publishers.append(workflow_path.relative_to(REPO_ROOT).as_posix())
+
+    assert source_publishers == [], (
+        "GitHub workflows must not commit or push repository source branches: "
+        + ", ".join(source_publishers)
+    )
 
 
 def test_github_workflows_do_not_define_duplicate_top_level_keys() -> None:
@@ -353,7 +466,9 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
     # Ensure that Python object instantiation tags (like !!python/object) are safely
     # rejected rather than executed.
     with pytest.raises(yaml.constructor.ConstructorError):
-        yaml.load("!!python/object/apply:os.system ['echo pwned']", Loader=UniqueKeyLoader)  # nosec B506
+        yaml.load(
+            "!!python/object/apply:os.system ['echo pwned']", Loader=UniqueKeyLoader
+        )  # nosec B506
     # Ensure normal valid YAML loading still works
     assert yaml.load("a: 1\nb: 2", Loader=UniqueKeyLoader) == {"a": 1, "b": 2}  # nosec B506
     # Ensure the duplicate key prevention still works
@@ -725,8 +840,14 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     assert "Platform:[[:space:]]+${platform}[[:space:]]*$" in workflow
     assert "Pinned Ollama manifest is missing %s" in workflow
     assert "linux/amd64 linux/arm64" in workflow
-    assert "sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061" not in workflow
-    assert "sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1" not in workflow
+    assert (
+        "sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061"
+        not in workflow
+    )
+    assert (
+        "sha256:191ef878ecb351d68b78219593de18bd8942afd59af59f29960dc4b24805a3f1"
+        not in workflow
+    )
     assert "sbom: false" in workflow
     assert workflow.count("sbom: true") == 1
     assert "type=semver" in workflow
