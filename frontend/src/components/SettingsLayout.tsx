@@ -1102,7 +1102,7 @@ export function SettingsLayout() {
 
                 <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
                   <div className="flex items-center gap-3 border-b border-border pb-4">
-                    <div className="rounded-xl bg-purple-100 p-2.5"><Network className="size-5 text-purple-700" /></div>
+                    <div className="rounded-xl bg-purple-100 p-2.5"><Network className="size-5 text-purple-700" aria-hidden="true" /></div>
                     <div>
                       <h3 className="font-bold text-lg">임베딩 모델 지정</h3>
                       <p className="text-sm text-muted-foreground mt-1">벡터 스토어 및 RAG 구축을 위한 기본 임베딩 모델을 선택합니다.</p>
@@ -1443,7 +1443,7 @@ export function SettingsLayout() {
                       title={runnerRotating ? "등록 토큰을 회전 중입니다" : "등록 토큰을 회전합니다"}
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} aria-hidden="true" />
                       {runnerRotating ? '회전 중' : '등록 토큰 회전'}
                     </button>
                   </div>
@@ -1499,7 +1499,7 @@ export function SettingsLayout() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="flex items-center gap-2 font-bold text-lg">
-                        <Activity className="size-5 text-teal-600" />
+                        <Activity className="size-5 text-teal-600" aria-hidden="true" />
                         Connector 상태와 APM 신호
                       </h3>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -1606,7 +1606,7 @@ export function SettingsLayout() {
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Shield className="size-5 text-blue-500" />
+                        <Shield className="size-5 text-blue-500" aria-hidden="true" />
                         <h3 className="font-bold text-lg">OIDC 인증 세션</h3>
                       </div>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -1664,7 +1664,7 @@ export function SettingsLayout() {
                     <p className="text-sm text-muted-foreground">OpenTelemetry 기반의 APM, 트래픽 메트릭 및 시스템 자원 모니터링을 확인합니다.</p>
                   </a>
                   <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
-                    <Shield className="size-8 text-blue-500 mb-2" />
+                    <Shield className="size-8 text-blue-500 mb-2" aria-hidden="true" />
                     <h3 className="font-bold text-lg">Keycloak 관리 콘솔</h3>
                     <p className="text-sm text-muted-foreground">OIDC 프로바이더, SSO 인증, 역할 기반 접근 제어(RBAC)를 구성합니다.</p>
                   </a>
@@ -1674,7 +1674,7 @@ export function SettingsLayout() {
                     <p className="text-sm text-muted-foreground">분산 아키텍처 환경의 컨테이너 로그 및 어플리케이션 에러 로그를 검색합니다.</p>
                   </a>
                   <a href="http://localhost:3200" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
-                    <RefreshCw className="size-8 text-teal-500 mb-2" />
+                    <RefreshCw className="size-8 text-teal-500 mb-2" aria-hidden="true" />
                     <h3 className="font-bold text-lg">Tempo 분산 추적</h3>
                     <p className="text-sm text-muted-foreground">FastAPI의 엔드포인트 지연율 및 MSA 구성요소 간의 호출 트레이스를 시각화합니다.</p>
                   </a>
