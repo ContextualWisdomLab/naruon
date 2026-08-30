@@ -28,6 +28,7 @@ from services.calendar_conflict_judgment_service import (
     list_judgments,
 )
 from services.calendar_conflict_policy import (
+    MAX_EXISTING_COMMITMENTS,
     CalendarCommitment,
     CalendarConflictDecision,
     CalendarPolicyValidationError,
@@ -35,7 +36,6 @@ from services.calendar_conflict_policy import (
     evaluate_calendar_conflicts,
 )
 
-MAX_EXISTING_COMMITMENTS = 500
 MAX_PROPOSED_ICS_CHARS = 65_536
 MAX_EXISTING_ICS_CHARS = 262_144
 POLICY_VALIDATION_HTTP_STATUS = 422

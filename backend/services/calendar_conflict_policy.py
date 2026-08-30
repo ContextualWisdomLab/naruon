@@ -34,6 +34,12 @@ PolicyValidationCode = Literal[
     "calendar_proposed_source_missing",
 ]
 
+# The bounded existing-commitment batch size every caller enforces: the REST
+# endpoint (api/calendar_conflicts.py), the Noema agent tool
+# (services/noema_agent.py), and any future caller. A single shared constant
+# so the two enforcement points cannot silently drift apart.
+MAX_EXISTING_COMMITMENTS = 500
+
 _STATUS_PRIORITY: dict[str, int] = {
     "desired": 1,
     "tentative": 2,

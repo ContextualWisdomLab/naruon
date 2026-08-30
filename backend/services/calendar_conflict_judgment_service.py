@@ -13,6 +13,11 @@ from services.calendar_conflict_policy import CalendarConflictDecision
 
 ALLOWED_DECISION_CODES = frozenset({"available", "blocked", "review_required"})
 ALLOWED_STATUS_CODES = frozenset({"proposed", "confirmed", "overridden", "dismissed"})
+# A human correction that changes decision_code always replaces reason_code
+# and recommended_action together, so a caller can never observe a decision
+# paired with a reason/action that describes a different decision.
+CORRECTED_DECISION_REASON_CODE = "corrected_by_human_review"
+_MAX_JUDGMENTS_PER_LIST = 200
 
 
 class CalendarConflictJudgmentNotFoundError(ValueError):
@@ -87,6 +92,7 @@ async def list_judgments(
         select(CalendarConflictJudgment)
         .where(*filters)
         .order_by(CalendarConflictJudgment.created_at.desc())
+        .limit(_MAX_JUDGMENTS_PER_LIST)
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
@@ -98,12 +104,19 @@ async def _get_scoped_judgment(
     judgment_uid: str,
     user_id: str,
     organization_id: str | None,
+    for_update: bool = False,
 ) -> CalendarConflictJudgment:
     stmt = select(CalendarConflictJudgment).where(
         CalendarConflictJudgment.judgment_uid == judgment_uid,
         CalendarConflictJudgment.user_id == user_id,
         _organization_filter(organization_id),
     )
+    if for_update:
+        # Serialize concurrent corrections to the same judgment: without this,
+        # two concurrent apply_correction calls can both read the same prior
+        # state, both record a "before" snapshot that matches, and race on
+        # which correction's decision/status the row ends up with.
+        stmt = stmt.with_for_update()
     result = await db.execute(stmt)
     judgment = result.scalar_one_or_none()
     if judgment is None:
@@ -116,6 +129,8 @@ async def _get_scoped_judgment(
 def _judgment_snapshot(judgment: CalendarConflictJudgment) -> dict[str, Any]:
     return {
         "decision_code": judgment.decision_code,
+        "reason_code": judgment.reason_code,
+        "recommended_action": judgment.recommended_action,
         "status_code": judgment.status_code,
     }
 
@@ -143,10 +158,20 @@ async def apply_correction(
         judgment_uid=judgment_uid,
         user_id=user_id,
         organization_id=organization_id,
+        for_update=True,
     )
     before_json = _judgment_snapshot(judgment)
     if decision_code is not None:
+        # Replace reason_code/recommended_action together with decision_code
+        # so a later read can never pair a corrected decision with the
+        # original decision's now-stale reason and instruction. The original
+        # values are never lost -- they are exactly what before_json above
+        # already captured.
         judgment.decision_code = decision_code
+        judgment.reason_code = CORRECTED_DECISION_REASON_CODE
+        judgment.recommended_action = (
+            rationale or "A human reviewer corrected this decision."
+        )
     judgment.status_code = status_code
     judgment.updated_at = _utcnow()
     after_json = _judgment_snapshot(judgment)

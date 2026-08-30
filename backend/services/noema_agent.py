@@ -40,6 +40,7 @@ from db.models import (
     TicketTask,
 )
 from services.calendar_conflict_policy import (
+    MAX_EXISTING_COMMITMENTS,
     CalendarCommitment,
     CalendarPolicyValidationError,
     evaluate_calendar_conflicts,
@@ -80,10 +81,6 @@ WRITEBACK_ACTIONS = frozenset({"write_caldav", "write_webdav"})
 _MAX_MAIL_RESULTS = 20
 _MAX_CONTENT_NODES = 40
 _SNIPPET_LENGTH = 280
-# Mirrors MAX_EXISTING_COMMITMENTS in api/calendar_conflicts.py — the same
-# bounded-batch policy applies whether evidence arrives via the REST endpoint
-# or through this tool.
-_MAX_EXISTING_COMMITMENTS = 500
 
 RunnerDispatcher = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -478,7 +475,7 @@ async def tool_check_calendar_conflict(
         return {"status": "error", "error_code": exc.error_code, "reason": str(exc)}
 
     existing = existing or []
-    if len(existing) > _MAX_EXISTING_COMMITMENTS:
+    if len(existing) > MAX_EXISTING_COMMITMENTS:
         # Silently truncating here would let a conflict past the boundary go
         # undetected and return "available" for a commitment that actually
         # double-books -- fail closed instead, exactly like the REST

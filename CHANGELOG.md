@@ -14,6 +14,24 @@
   구성한 자체 LLM provider로 동작하는 워크스페이스 전반의 범용 어시스턴트입니다.
   검증: `PYTHONPATH=. python -m pytest backend/tests/test_noema_agent.py -q`
   (21 passed), 전체 백엔드 스위트 `python -m pytest -q` (1808 passed, 32 skipped).
+- (Devin review 반영, G-06 증분) `calendar_conflict_judgment_service.py`에 대한 5건의 지적을
+  반영했습니다: (1) `apply_correction`이 대상 judgment 행을 `SELECT ... FOR UPDATE`로 잠가
+  동시 정정 요청이 같은 이전 상태를 읽고 감사 기록이 서로를 덮어쓰는 경쟁을 막습니다. (2)
+  정정이 `decision_code`를 바꿀 때 `reason_code`/`recommended_action`도 함께
+  `corrected_by_human_review`/정정 rationale로 교체해, "available인데 재조정을
+  안내"하는 것처럼 서로 다른 결정의 필드가 섞인 응답이 나오지 않게 했습니다(원본 값은
+  before_json 감사 흔적에 그대로 남습니다). (3) `list_judgments`에 200건 상한을 추가해
+  장기 계정의 무제한 조회를 막았습니다. (4) `noema_agent.py`의
+  `_MAX_EXISTING_COMMITMENTS`(500)를 `api/calendar_conflicts.py`의 동일 상수와 별도로
+  들고 있어 서로 어긋날 수 있었던 문제를, 두 곳 모두
+  `services/calendar_conflict_policy.py`의 공유 상수
+  `MAX_EXISTING_COMMITMENTS`를 참조하도록 고쳐 근본적으로 막았습니다. (5)
+  `tests/test_calendar_conflict_judgment_api.py`의 `api.calendar_conflicts` 이중 import
+  스타일(`import` + `from ... import`)을 단일 `import ... as` 형태로 정리했습니다.
+  PostgreSQL 트랜잭션을 직접 구동하는 실 DB 동시성 테스트는 이 세션에 PostgreSQL 접근이
+  없어 추가하지 못했습니다 — `test_project_graph_api.py`의 기존 Postgres-스킵 스모크
+  테스트와 동일한 한계이며, PR 코멘트로 남겼습니다. 검증: 신규/변경 테스트 4개 추가(총
+  12 passed), 전체 백엔드 스위트 1825 passed/32 skipped, ruff clean.
 - G-06(킬러 워크플로: thread/sender ontology → temporal commitment/conflict →
   human correction) 증분: `evaluate_calendar_conflicts` 결정을
   `calendar_conflict_judgments` 테이블에 판단(judgment)으로 저장하고, 사람이

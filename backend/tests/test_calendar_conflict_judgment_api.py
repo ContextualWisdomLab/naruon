@@ -8,7 +8,6 @@ import httpx
 import pytest
 
 import api.calendar_conflicts as calendar_conflicts_api
-from api.calendar_conflicts import CalendarConflictJudgmentNotFoundError
 from db.session import get_db
 from main import app
 
@@ -258,7 +257,7 @@ async def test_correct_judgment_404s_when_outside_caller_scope(
     """A judgment_uid outside the caller's own scope must never leak as a 500 or a silent no-op."""
 
     async def fake_apply_correction(session, **kwargs):
-        raise CalendarConflictJudgmentNotFoundError(
+        raise calendar_conflicts_api.CalendarConflictJudgmentNotFoundError(
             "Calendar conflict judgment is outside the requested scope"
         )
 

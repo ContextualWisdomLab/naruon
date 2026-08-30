@@ -6,11 +6,75 @@ import datetime
 
 import pytest
 
+from db.models import CalendarConflictJudgment
 from services.calendar_conflict_judgment_service import (
+    CORRECTED_DECISION_REASON_CODE,
+    _MAX_JUDGMENTS_PER_LIST,
     _conflicts_to_json,
     apply_correction,
+    list_judgments,
 )
 from services.calendar_conflict_policy import CalendarCommitment, CalendarConflictDecision
+
+
+class _FakeScalars:
+    """The `.scalars()` half of a fake result, for list-style queries."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
+class _FakeResult:
+    """A scalar-result stand-in that never touches a real database."""
+
+    def __init__(self, row):
+        self._row = row
+
+    def scalar_one_or_none(self):
+        return self._row
+
+    def scalars(self):
+        rows = [] if self._row is None else [self._row]
+        return _FakeScalars(rows)
+
+
+class _RecordingSession:
+    """Captures every statement passed to execute() instead of running it."""
+
+    def __init__(self, row=None):
+        self._row = row
+        self.captured_statements: list[object] = []
+
+    async def execute(self, stmt):
+        self.captured_statements.append(stmt)
+        return _FakeResult(self._row)
+
+    async def flush(self) -> None:
+        """No-op: this fake never talks to a real database."""
+
+    def add(self, obj) -> None:
+        """No-op: this fake never talks to a real database."""
+
+
+def _judgment(**overrides) -> CalendarConflictJudgment:
+    defaults = {
+        "user_id": "user-1",
+        "organization_id": None,
+        "proposed_commitment_id": "proposal-1",
+        "source_thread_id": "thread-1",
+        "source_message_id": None,
+        "decision_code": "review_required",
+        "reason_code": "lower_priority_conflict_requires_explicit_resolution",
+        "recommended_action": "Ask the proposer to confirm or reschedule.",
+        "policy_version": "status-weighted-v1",
+        "conflicts_json": [],
+        "status_code": "proposed",
+    }
+    defaults.update(overrides)
+    return CalendarConflictJudgment(**defaults)
 
 
 def _decision() -> CalendarConflictDecision:
@@ -74,3 +138,88 @@ async def test_apply_correction_rejects_unsupported_decision_code() -> None:
             status_code="confirmed",
             rationale=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_apply_correction_locks_the_judgment_row() -> None:
+    """Concurrent corrections must never read the same unlocked row."""
+    session = _RecordingSession(row=_judgment())
+
+    await apply_correction(
+        session,
+        judgment_uid="conflict_judgment_test",
+        user_id="user-1",
+        organization_id=None,
+        actor_user_id="reviewer",
+        correction_action="override_decision",
+        decision_code="available",
+        status_code="overridden",
+        rationale="Confirmed with the proposer directly.",
+    )
+
+    assert len(session.captured_statements) == 1
+    assert "FOR UPDATE" in str(session.captured_statements[0])
+
+
+@pytest.mark.asyncio
+async def test_apply_correction_overriding_decision_keeps_reason_and_action_coherent() -> None:
+    """A corrected decision must never be paired with the old decision's reason/action."""
+    judgment = _judgment()
+    session = _RecordingSession(row=judgment)
+
+    correction = await apply_correction(
+        session,
+        judgment_uid="conflict_judgment_test",
+        user_id="user-1",
+        organization_id=None,
+        actor_user_id="reviewer",
+        correction_action="override_decision",
+        decision_code="available",
+        status_code="overridden",
+        rationale="Confirmed with the proposer directly.",
+    )
+
+    assert judgment.decision_code == "available"
+    assert judgment.reason_code == CORRECTED_DECISION_REASON_CODE
+    assert judgment.recommended_action == "Confirmed with the proposer directly."
+    # The original decision's reason/action are never lost -- they are in before_json.
+    assert correction.before_json["reason_code"] == "lower_priority_conflict_requires_explicit_resolution"
+    assert correction.after_json["reason_code"] == CORRECTED_DECISION_REASON_CODE
+    assert correction.after_json["recommended_action"] == "Confirmed with the proposer directly."
+
+
+@pytest.mark.asyncio
+async def test_apply_correction_confirming_without_decision_change_keeps_original_reason() -> None:
+    """Confirming a judgment as-is must not fabricate a new reason/action."""
+    judgment = _judgment()
+    session = _RecordingSession(row=judgment)
+
+    await apply_correction(
+        session,
+        judgment_uid="conflict_judgment_test",
+        user_id="user-1",
+        organization_id=None,
+        actor_user_id="reviewer",
+        correction_action="confirm_decision",
+        decision_code=None,
+        status_code="confirmed",
+        rationale=None,
+    )
+
+    assert judgment.decision_code == "review_required"
+    assert judgment.reason_code == "lower_priority_conflict_requires_explicit_resolution"
+    assert judgment.recommended_action == "Ask the proposer to confirm or reschedule."
+    assert judgment.status_code == "confirmed"
+
+
+@pytest.mark.asyncio
+async def test_list_judgments_bounds_the_result_set() -> None:
+    """An unbounded list query could grow without limit for a long-lived account."""
+    session = _RecordingSession()
+
+    await list_judgments(session, user_id="user-1", organization_id=None)
+
+    assert len(session.captured_statements) == 1
+    assert f"LIMIT {_MAX_JUDGMENTS_PER_LIST}" in str(
+        session.captured_statements[0].compile(compile_kwargs={"literal_binds": True})
+    )
