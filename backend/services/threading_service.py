@@ -12,6 +12,8 @@ import hashlib
 # Impact: Eliminates redundant inline compilation/caching overhead during repetitive
 # email header processing, yielding a measurable speedup when handling long reference lists.
 REFERENCE_PATTERN = re.compile(r"<([^>]+)>")
+BARE_MESSAGE_ID_PATTERN = re.compile(r"^[^<>\s@]+@[^<>\s@]+$")
+
 
 def generate_email_fingerprint(
     subject: str | None,
@@ -55,14 +57,21 @@ def extract_reference_ids(value: str | None) -> list[str]:
     (section 3.6.4) as ``1*msg-id`` -- one or more angle-bracketed Message-IDs,
     each optionally surrounded by CFWS -- so this extractor applies to either
     header. Ids are canonicalized with :func:`normalize_message_id` and
-    de-duplicated while preserving header order.
+    de-duplicated while preserving header order. For compatibility with
+    non-conforming senders that omit angle brackets, the fallback accepts only
+    unambiguous bare ``id-left@id-right`` tokens; arbitrary prose is ignored so
+    malformed References text cannot become synthetic ancestry.
     """
     if not value:
         return []
 
     refs = REFERENCE_PATTERN.findall(str(value))
     if not refs:
-        refs = str(value).split()
+        refs = [
+            token
+            for token in str(value).split()
+            if BARE_MESSAGE_ID_PATTERN.fullmatch(token)
+        ]
 
     normalized_refs: list[str] = []
     # Optimization: Use a set for O(1) membership checks to avoid O(n^2) scaling on long reference lists
@@ -123,21 +132,14 @@ async def assign_thread_id(
     Determine the thread_id for a new email based on in_reply_to and references.
     If no existing match is found, generate a new thread_id.
     """
-    # In-Reply-To (RFC 5322 section 3.6.4) is 1*msg-id, exactly like References,
-    # and each id may be wrapped in CFWS. Parse it with the same multi-id
-    # extractor rather than treating the whole header as one opaque Message-ID,
-    # so a reply that names several parents -- or a single id trailed by a
-    # comment -- still threads onto an existing ancestor instead of splitting off.
+    # RFC 5322 section 3.6.4 permits both headers to contain Message-IDs, but
+    # RFC 5256 REFERENCES threading gives a valid References chain precedence
+    # and consults In-Reply-To only when References has no valid Message-ID.
+    # Preserve the existing multi-parent In-Reply-To behavior for that fallback
+    # lane while preventing a conflicting parent from overriding valid ancestry.
     in_reply_to_ids = extract_reference_ids(email_data.get("in_reply_to"))
     references = extract_reference_ids(email_data.get("references"))
-
-    existing_candidates = []
-    # Optimization: Use a set for O(1) membership checks to prevent O(n^2) deduplication of candidates
-    seen = set()
-    for candidate in (*in_reply_to_ids, *references):
-        if candidate not in seen:
-            seen.add(candidate)
-            existing_candidates.append(candidate)
+    existing_candidates = references if references else in_reply_to_ids
 
     if existing_candidates:
         thread_ids_by_message_id = await _find_existing_thread_ids(
