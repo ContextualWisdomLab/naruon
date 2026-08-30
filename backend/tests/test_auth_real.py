@@ -946,14 +946,14 @@ def test_oidc_jwks_client_fetches_from_validated_pinned_address(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_signed_bearer_session_with_oidc(monkeypatch):
+async def test_keyverse_oidc_session_with_verified_claims(monkeypatch):
     import jwt
 
     previous_issuer_url = settings.OIDC_ISSUER_URL
     previous_client_id = settings.OIDC_CLIENT_ID
     previous_secret = settings.AUTH_SESSION_HMAC_SECRET
-    settings.OIDC_ISSUER_URL = "https://login.example.test/realms/naruon"
-    settings.OIDC_CLIENT_ID = "naruon-api"
+    settings.OIDC_ISSUER_URL = "https://keyverse.example.test/realms/cwl"
+    settings.OIDC_CLIENT_ID = "naruon-web"
     settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
 
     class MockKey:
@@ -970,14 +970,15 @@ async def test_signed_bearer_session_with_oidc(monkeypatch):
         decode_algorithms.append(list(kwargs["algorithms"]))
         decode_options.append(dict(kwargs["options"]))
         return {
-            "iss": "https://login.example.test/realms/naruon",
-            "aud": "naruon-api",
+            "iss": "https://keyverse.example.test/realms/cwl",
+            "aud": "naruon-web",
             "sub": "alice",
             "role": "member",
             "org": "org-acme",
             "groups": ["group-1", "group-2"],
             "workspace": "workspace-org-acme",
             "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
             "_session_verifier": "hmac",
         }
 
@@ -1000,8 +1001,55 @@ async def test_signed_bearer_session_with_oidc(monkeypatch):
     assert context.session_verifier == "oidc"
     assert decode_algorithms == [["RS256"]]
     assert decode_options == [
-        {"require": ("exp", "iss", "aud"), "verify_signature": True}
+        {"require": ("exp", "iss", "aud", "iat"), "verify_signature": True}
     ]
+
+
+@pytest.mark.asyncio
+async def test_keyverse_oidc_session_rejects_missing_issued_at(monkeypatch):
+    import jwt
+
+    previous_issuer_url = settings.OIDC_ISSUER_URL
+    previous_client_id = settings.OIDC_CLIENT_ID
+    previous_secret = settings.AUTH_SESSION_HMAC_SECRET
+    settings.OIDC_ISSUER_URL = "https://keyverse.example.test/realms/cwl"
+    settings.OIDC_CLIENT_ID = "naruon-web"
+    settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
+
+    class MockKey:
+        key_id = "keyverse-key"
+        key = "public_key"
+
+    monkeypatch.setattr("api.auth.jwks_client", object())
+    monkeypatch.setattr("api.auth._cached_oidc_signing_keys", (MockKey(),))
+
+    def mock_jwt_decode(*args, **kwargs):
+        return {
+            "iss": "https://keyverse.example.test/realms/cwl",
+            "aud": "naruon-web",
+            "sub": "alice",
+            "role": "member",
+            "org": "org-acme",
+            "groups": ["group-1"],
+            "workspace": "workspace-org-acme",
+            "exp": int(time.time()) + 300,
+        }
+
+    monkeypatch.setattr(jwt, "decode", mock_jwt_decode)
+    token = _signed_session_token(
+        _valid_session_payload(),
+        header={"alg": "RS256", "typ": "JWT", "kid": "keyverse-key"},
+    )
+
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await get_auth_context(authorization=f"Bearer {token}")
+    finally:
+        settings.OIDC_ISSUER_URL = previous_issuer_url
+        settings.OIDC_CLIENT_ID = previous_client_id
+        settings.AUTH_SESSION_HMAC_SECRET = previous_secret
+
+    assert exc.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -1032,6 +1080,7 @@ async def test_oidc_session_accepts_tuple_audience(monkeypatch):
             "groups": ["group-1", "group-2"],
             "workspace": "workspace-org-acme",
             "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
         }
 
     monkeypatch.setattr(jwt, "decode", mock_jwt_decode)

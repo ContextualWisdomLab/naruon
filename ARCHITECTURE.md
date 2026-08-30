@@ -269,9 +269,12 @@ compact session tokens whose protected header pins `alg=HS256` and whose
 `header.payload` signing input is signed by the configured
 `AUTH_SESSION_HMAC_SECRET`; missing, weak, malformed, legacy two-segment,
 wrong-algorithm, tampered, expired, or public fixture-secret tokens fail closed
-with 401. The signed session envelope must carry explicit identity, role,
-organization/group, and workspace claims, so user ids such as `admin` do not
-imply elevated privileges.
+with 401. OIDC tokens additionally require a verified `iat` NumericDate, exact
+configured issuer equality, and a verified audience claim containing the
+configured OIDC client ID (including multi-valued audiences) before their tenant
+and role claims are used. The signed session envelope must carry explicit
+identity, role, organization/group, and workspace claims, so user ids such as
+`admin` do not imply elevated privileges.
 Endpoint tests use FastAPI dependency overrides for fixture identity only through
 explicit opt-in pytest fixtures, while a full Keycloak/Casdoor/OIDC provider and
 audited mailbox-owner migration remain required before production multi-user
@@ -292,8 +295,9 @@ provider endpoints additionally require an operator-owned egress allowlist so an
 organization admin cannot point LLM traffic at localhost, private networks, or
 cloud metadata services.
 
-The browser API client reads `naruon_session_token` from local storage and sends
-it as the bearer session on signed routes. It does not synthesize or forward
+The browser API client uses the HttpOnly `naruon_session` cookie through the
+same-origin `/api/*` proxy, which sends the verified bearer session on signed
+routes. It does not read browser-readable bearer tokens or synthesize/forward
 public identity headers such as `X-User-Id`, `X-Organization-Id`, `X-Group-Id`,
 `X-Group-Ids`, `X-User-Role`, or `X-Dev-Auth-Token`; any local development
 identity-header flow is limited to explicit unsigned/test harness paths and is

@@ -5,15 +5,19 @@
 - `backend/api/auth.py` no longer accepts public `X-User-*`,
   `X-Organization-*`, `X-Group-*`, or `X-Dev-Auth-Token` headers as runtime
   authentication material.
-- Runtime authentication accepts only `Authorization: Bearer` compact session
-  envelopes whose protected header pins `alg=HS256` and whose `header.payload`
-  signing input is signed with HMAC-SHA256 by the configured
-  `AUTH_SESSION_HMAC_SECRET`. The secret must be explicitly configured,
-  high-entropy generated material, and at least 32 bytes. Settings fail at
-  startup in every runtime mode when this secret is missing, too short, or an
-  obvious repeated placeholder or known public fixture value; runtime
-  verification still fails closed with `401 Authentication required` when an
-  already-loaded configured value becomes absent, weak, or public.
+- Runtime authentication accepts `Authorization: Bearer` compact sessions through
+  two fail-closed verification modes. The internal HMAC session envelope pins its
+  protected header to `alg=HS256` and signs the `header.payload` input with
+  HMAC-SHA256 by the configured `AUTH_SESSION_HMAC_SECRET`. When OIDC is
+  configured, the same bearer boundary also accepts OIDC sessions only after the
+  configured issuer, client audience membership, JOSE header constraints, JWKS
+  signature, `iat`, `exp`, and required tenant/role claims are verified as
+  described below. The HMAC secret must be explicitly configured, high-entropy
+  generated material, and at least 32 bytes. Settings fail at startup in every
+  runtime mode when this secret is missing, too short, or an obvious repeated
+  placeholder or known public fixture value; runtime HMAC verification still
+  fails closed with `401 Authentication required` when an already-loaded
+  configured value becomes absent, weak, or public.
 - The signed session payload is versioned and must include
   `iss=naruon-control-plane`, `aud=naruon-api`, `sub`, explicit `role`,
   `workspace`, `exp`, and organization/group scope claims. Tampered, expired,
@@ -29,6 +33,17 @@
 - Endpoint tests that need fixture identity use explicit FastAPI dependency
   overrides in `backend/tests/conftest.py`; those test overrides are not the
   production auth path.
+- Failed HTTP bearer verification is bounded twice: an exact-token SHA-256
+  bucket and a coarser SHA-256 bucket derived only from the server-observed ASGI
+  `request.client.host`. Application code ignores `Forwarded` and
+  `X-Forwarded-For` when selecting this abuse-control scope. The peer budget is
+  intentionally looser than the exact-token budget because one reverse proxy or
+  NAT address can represent many legitimate users; both key families share the
+  existing bounded-capacity, expiring in-memory store. A successful bearer
+  verification clears only its exact-token bucket and does not reset the coarse
+  peer budget. Direct non-HTTP `build_auth_context()` calls retain only the
+  exact-token budget. See `docs/doctoring/http-session-throttling.md` for the
+  threat, proxy/NAT, reset, bounded-memory, and standards rationale.
 - `backend/db/models.py` stores OAuth/OpenAI secret fields through an
   `EncryptedString` type backed by Fernet.
 - `backend/db/models.py` no longer contains a fallback Fernet key or SHA256
@@ -121,9 +136,20 @@
   private-address resolution and DNS-rebinding bypasses. Development HTTP is
   limited to exact `localhost`, `127.0.0.1`, or `::1` loopback endpoints.
 - Browser-side OIDC support does not mint local roles. The IdP token must still
-  satisfy the backend's signed claim contract: verified issuer/audience, subject,
-  explicit non-platform role, organization, groups, workspace, expiry, and no
-  unsupported critical headers.
+  satisfy the backend's signed claim contract: verified issuer equality, a
+  verified audience claim containing the configured OIDC client ID (including
+  multi-valued audiences), subject, `iat` and `exp` NumericDate values, explicit
+  non-platform role, organization, groups, workspace, and no unsupported
+  critical headers. OpenID Connect Core 1.0 requires exact issuer validation and
+  requires the relying party's client identifier to be present in `aud`; RFC
+  7519 defines `iat` and `exp` as NumericDate claims and the registered JWT claim
+  semantics. The formal OIDC analysis by Fett, Küsters, and Schmitz (2017)
+  demonstrates why relying parties must validate issuer/audience and protocol
+  bindings rather than treating token fields in isolation as sufficient trust.
+- For a Keyverse deployment, configure the exact Keyverse issuer and JWKS URL,
+  the reviewed `naruon-web` audience, and the operator-owned OIDC host allowlist
+  together. The verified `org`, `workspace`, and `role` claims are inputs to
+  Naruon's deny-first ABAC/RBAC policy; their presence alone never grants access.
 
 ## Keycloak/Casdoor decision path
 
@@ -135,6 +161,24 @@
 - Either option must preserve Naruon's signed claim contract: explicit subject,
   organization, group/workspace, role, delegation, expiry, and provider/source
   ownership claims are required before production multi-user access is claimed.
+
+## References
+
+Fett, D., Küsters, R., & Schmitz, G. (2017). The web SSO standard OpenID Connect:
+In-depth formal security analysis and security guidelines. *2017 IEEE 30th
+Computer Security Foundations Symposium (CSF)*, 189–202.
+https://doi.org/10.1109/CSF.2017.20
+
+Jones, M., Bradley, J., & Sakimura, N. (2015). *JSON Web Token (JWT)* (RFC
+7519). Internet Engineering Task Force. https://doi.org/10.17487/RFC7519
+
+National Institute of Standards and Technology. (2025). *Digital identity
+guidelines: Authentication and authenticator management (NIST Special
+Publication 800-63B-4).* U.S. Department of Commerce.
+https://doi.org/10.6028/NIST.SP.800-63B-4
+
+OpenID Foundation. (2014). *OpenID Connect Core 1.0 incorporating errata set 1*.
+https://openid.net/specs/openid-connect-core-1_0.html
 
 ## 다음 결정
 
