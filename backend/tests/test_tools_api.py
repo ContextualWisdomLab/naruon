@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -519,8 +517,33 @@ async def test_text_analyzer_tool_success():
     assert result["word_count"] == 6
 
 
-@pytest.mark.asyncio
-async def test_uuid_v4_generator_tool_success():
+def test_url_encoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world/test"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["encoded_text"] == "hello%20world%2Ftest"
+
+
+def test_url_decoder_tool_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"encoded_text": "hello%20world%2Ftest"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["decoded_text"] == "hello world/test"
+
+
+def test_uuid_v4_generator_tool_success():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/uuid_v4_generator/execute",
