@@ -4,6 +4,7 @@ import base64
 import binascii
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote
 from typing import Any
 
 from .text_safety import strip_html_markup
@@ -266,12 +267,21 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 
 def _safe_filename(filename: str | None) -> str:
     """Return a basename-only attachment display filename."""
-    display_filename = strip_html_markup(_sanitize_nul(filename or "attachment"))
+    display_filename = _sanitize_nul(filename or "attachment")
+
+    # Bounded recursive unquote and markup stripping to handle bypasses
+    for _ in range(10):
+        decoded = strip_html_markup(unquote(display_filename))
+        if decoded == display_filename:
+            break
+        display_filename = decoded
+    if strip_html_markup(unquote(display_filename)) != display_filename:
+        return "attachment"
+
     display_filename = Path(display_filename.replace('\\', '/')).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"
     return display_filename
-
 
 def _coerce_deferred_payload_bytes(raw_content: Any) -> bytes:
     """Return the exact byte payload retained for deferred recognition."""
