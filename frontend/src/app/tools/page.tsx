@@ -125,30 +125,41 @@ export default function ToolsPage() {
     setRefreshNonce((value) => value + 1);
   };
 
+  const toolsMap = useMemo(() => {
+    const map = new Map<string, ToolInfo>();
+    for (const tool of tools) {
+      if (!map.has(tool.code)) {
+        map.set(tool.code, tool);
+      }
+    }
+    return map;
+  }, [tools]);
+
+  const uniqueTools = useMemo(() => Array.from(toolsMap.values()), [toolsMap]);
+
   const summaryCards = useMemo(() => {
-    const activeCount = tools.filter((tool) => tool.is_active !== false).length;
-    const categoryCount = new Set(tools.map((tool) => tool.category)).size;
-    const parameterizedCount = tools.filter((tool) => Object.keys(tool.parameters ?? {}).length > 0).length;
+    const activeCount = uniqueTools.filter((tool) => tool.is_active !== false).length;
+    const categoryCount = new Set(uniqueTools.map((tool) => tool.category)).size;
+    const parameterizedCount = uniqueTools.filter((tool) => Object.keys(tool.parameters ?? {}).length > 0).length;
     return [
-      { label: "등록 도구", value: tools.length.toLocaleString(), detail: "워크스페이스 실행 대상", icon: Wrench },
+      { label: "등록 도구", value: uniqueTools.length.toLocaleString(), detail: "워크스페이스 실행 대상", icon: Wrench },
       { label: "활성 도구", value: activeCount.toLocaleString(), detail: "즉시 실행 가능", icon: Power },
       { label: "카테고리", value: categoryCount.toLocaleString(), detail: "운영 분류 기준", icon: SlidersHorizontal },
       { label: "파라미터 계약", value: parameterizedCount.toLocaleString(), detail: "입력 스키마 보유", icon: CheckCircle2 },
     ];
-  }, [tools]);
+  }, [uniqueTools]);
 
   const handleExecute = async (code: string) => {
     setExecuting(prev => ({ ...prev, [code]: true }));
     try {
-      const tool = tools.find((item) => item.code === code);
+      const tool = toolsMap.get(code);
       const params = tool ? buildDefaultParameters(tool) : {};
       const response = await apiClient.post<ExecuteResponse>(`/api/tools/${code}/execute`, { parameters: params });
       setResults(prev => ({ ...prev, [code]: response }));
-    } catch (error: unknown) {
-      const err = error as { message?: string };
+    } catch {
       setResults(prev => ({
         ...prev,
-        [code]: { status: "failed", result: null, message: err.message || "실행 중 오류가 발생했습니다." }
+        [code]: { status: "failed", result: null, message: "실행 중 오류가 발생했습니다." }
       }));
     } finally {
       setExecuting(prev => ({ ...prev, [code]: false }));
@@ -234,7 +245,7 @@ export default function ToolsPage() {
           </Card>
         ) : (
           <section aria-label="도구 실행 카드" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {tools.map((tool) => (
+            {uniqueTools.map((tool) => (
               <Card key={tool.code} className={cn(tool.is_active === false && "opacity-70")}>
                 <CardHeader>
                   <div className="flex min-w-0 items-start justify-between gap-3">
