@@ -328,7 +328,7 @@ export function DashboardLayout({
     <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary focus:shadow-lg focus:outline-none focus:ring-3 focus:ring-ring/40"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary focus:shadow-lg focus:outline-none focus:ring-3 focus:ring-ring/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
         Skip to main content
       </a>
@@ -455,7 +455,7 @@ export function DashboardLayout({
           popoverTarget="mobile-workspace-menu"
           popoverTargetAction="hide"
           onClick={closeMobileWorkspaceMenu}
-          className="fixed inset-0 z-[70] bg-slate-950/75 backdrop-blur-sm xl:hidden"
+          className="fixed inset-0 z-[70] bg-slate-950/75 backdrop-blur-sm xl:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         />
       ) : null}
 

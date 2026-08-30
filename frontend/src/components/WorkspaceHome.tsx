@@ -570,7 +570,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
                     {mail.unread && <span className="size-2 rounded-full bg-primary" />}
                   </div>
                   <div className="flex gap-2 ml-2">
-                    <a href={`/mail?id=${encodeURIComponent(mail.id)}`} className="rounded bg-primary/10 px-2 py-1 text-xs font-bold text-primary hover:bg-primary/20">열기</a>
+                    <a href={`/mail?id=${encodeURIComponent(mail.id)}`} className="rounded bg-primary/10 px-2 py-1 text-xs font-bold text-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">열기</a>
                   </div>
                 </div>
               ))}

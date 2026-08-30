@@ -1043,7 +1043,7 @@ export function SettingsLayout() {
                         <label htmlFor="commercial-api-key" className="text-sm font-bold text-muted-foreground">API Key</label>
                         <input id="commercial-api-key" ref={commercialApiKeyInputRef} type="password" onChange={() => setModelProviderStatus(null)} placeholder="저장 시에만 전송" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                       </div>
-                      <button type="submit" disabled={commercialModelSaving || modelProvidersLoading} aria-busy={commercialModelSaving || modelProvidersLoading} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60">
+                      <button type="submit" disabled={commercialModelSaving || modelProvidersLoading} aria-busy={commercialModelSaving || modelProvidersLoading} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                         {commercialModelSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
                         {commercialModelSaving ? '등록 중' : '상용 모델 추가'}
                       </button>
@@ -1092,7 +1092,7 @@ export function SettingsLayout() {
                         <label htmlFor="local-api-key" className="text-sm font-bold text-muted-foreground">로컬 API 키 대체값</label>
                         <input id="local-api-key" ref={localApiKeyInputRef} type="password" onChange={() => setModelProviderStatus(null)} placeholder="필요한 경우에만 입력" className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
                       </div>
-                      <button type="submit" disabled={localModelSaving || modelProvidersLoading} aria-busy={localModelSaving || modelProvidersLoading} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">
+                      <button type="submit" disabled={localModelSaving || modelProvidersLoading} aria-busy={localModelSaving || modelProvidersLoading} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                         {localModelSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Cpu className="size-4" aria-hidden="true" />}
                         {localModelSaving ? '등록 중' : 'Gemma4 로컬 모델 등록'}
                       </button>
@@ -1159,7 +1159,7 @@ export function SettingsLayout() {
                       onClick={handleEmbeddingModelSave}
                       disabled={!selectedEmbeddingProvider || embeddingSaving}
                       aria-busy={embeddingSaving}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       {embeddingSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Network className="size-4" aria-hidden="true" />}
                       {embeddingSaving ? '저장 중' : '임베딩 모델 저장'}
@@ -1305,7 +1305,7 @@ export function SettingsLayout() {
                       aria-disabled={accountSaving || !accountReady}
                       aria-busy={accountSaving}
                       title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                       {accountSaving ? '저장 중' : '계정 설정 저장'}
@@ -1441,7 +1441,7 @@ export function SettingsLayout() {
                       aria-disabled={runnerRotating}
                       aria-busy={runnerRotating}
                       title={runnerRotating ? "등록 토큰을 회전 중입니다" : "등록 토큰을 회전합니다"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
                       <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} />
                       {runnerRotating ? '회전 중' : '등록 토큰 회전'}
@@ -1619,7 +1619,7 @@ export function SettingsLayout() {
                         onClick={handleOidcLogin}
                         disabled={!oidcBrowserConfig}
                         title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
                         OIDC 로그인
                       </button>
@@ -1628,7 +1628,7 @@ export function SettingsLayout() {
                         onClick={handleOidcLogout}
                         disabled={!oidcSessionClaims.userId}
                         title={!oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
                         로그아웃
                       </button>
@@ -1658,22 +1658,22 @@ export function SettingsLayout() {
                 </section>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                  <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
+                  <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                     <Monitor className="size-8 text-orange-500 mb-2" />
                     <h3 className="font-bold text-lg">Grafana 대시보드</h3>
                     <p className="text-sm text-muted-foreground">OpenTelemetry 기반의 APM, 트래픽 메트릭 및 시스템 자원 모니터링을 확인합니다.</p>
                   </a>
-                  <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
+                  <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                     <Shield className="size-8 text-blue-500 mb-2" />
                     <h3 className="font-bold text-lg">Keycloak 관리 콘솔</h3>
                     <p className="text-sm text-muted-foreground">OIDC 프로바이더, SSO 인증, 역할 기반 접근 제어(RBAC)를 구성합니다.</p>
                   </a>
-                  <a href="http://localhost:3100" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
+                  <a href="http://localhost:3100" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                     <AlertCircle className="size-8 text-slate-500 mb-2" />
                     <h3 className="font-bold text-lg">Loki 로그 서버</h3>
                     <p className="text-sm text-muted-foreground">분산 아키텍처 환경의 컨테이너 로그 및 어플리케이션 에러 로그를 검색합니다.</p>
                   </a>
-                  <a href="http://localhost:3200" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors">
+                  <a href="http://localhost:3200" target="_blank" rel="noopener noreferrer" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-6 shadow-sm hover:border-primary/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                     <RefreshCw className="size-8 text-teal-500 mb-2" />
                     <h3 className="font-bold text-lg">Tempo 분산 추적</h3>
                     <p className="text-sm text-muted-foreground">FastAPI의 엔드포인트 지연율 및 MSA 구성요소 간의 호출 트레이스를 시각화합니다.</p>

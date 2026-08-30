@@ -472,7 +472,7 @@ export function TasksLayout() {
               <option value="low">낮음</option>
             </select>
           </label>
-          <a href="/mail" className="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90">
+          <a href="/mail" className="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <Plus className="size-4" /> 메일에서 작업 생성
           </a>
         </div>
@@ -717,7 +717,7 @@ export function TasksLayout() {
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 현재 작업 API는 담당자/위임자 필드를 반환하지 않습니다. 위임 정보가 서버에서 원본 근거로 제공되면 이 목록에 표시합니다.
               </p>
-              <a href="/search" className="mt-4 inline-flex rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90">
+              <a href="/search" className="mt-4 inline-flex rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                 관련 메일 찾기
               </a>
             </div>
@@ -741,7 +741,7 @@ export function TasksLayout() {
                 </div>
                 <h2 className="text-2xl font-bold">{safeTaskTitle(task.title)}</h2>
               </div>
-              <a href="/mail" className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:bg-primary/90">관련 메일 열기</a>
+              <a href="/mail" className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">관련 메일 열기</a>
             </div>
             
             <div className="grid grid-cols-3 gap-6 mb-6">
