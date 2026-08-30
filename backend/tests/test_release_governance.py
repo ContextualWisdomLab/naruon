@@ -375,7 +375,7 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
 
 def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
-        "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
+        "step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0"
     )
     # Governance/security workflows (codeql, dependency-review, scorecard,
     # trivy) are centralized in the org-level ContextualWisdomLab/.github
@@ -686,7 +686,7 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     )
     assert (
         workflow.count(
-            "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0"
+            "docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0"
         )
         == 2
     )
