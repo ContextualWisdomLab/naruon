@@ -18,6 +18,8 @@ import {
   UniqueThreadStatus,
   EmailImportStatus,
   DocumentActionStatus,
+  ActiveDocumentAction,
+  DocumentOperation,
   DataSurfaceStatus,
   DataEvidenceSnapshotResponse,
   DataQualitySurfaceResponse,
@@ -65,6 +67,7 @@ export function DataLayout() {
   const [emailImportResult, setEmailImportResult] = useState<EmailFileImportResponse | null>(null);
   const [emailImportFiles, setEmailImportFiles] = useState<File[]>([]);
   const [documentActionStatus, setDocumentActionStatus] = useState<DocumentActionStatus>('idle');
+  const [activeDocumentAction, setActiveDocumentAction] = useState<ActiveDocumentAction | null>(null);
   const [documentActionResult, setDocumentActionResult] = useState<DataDocumentActionResponse | null>(null);
   const [documentUploadFiles, setDocumentUploadFiles] = useState<File[]>([]);
   const [dataSurfaceStatus, setDataSurfaceStatus] = useState<DataSurfaceStatus>('loading');
@@ -239,14 +242,16 @@ export function DataLayout() {
       return;
     }
 
+    const documentType = getDocumentTypeForFile(file);
+    if (!isTextDocumentUploadType(documentType)) {
+      setDocumentActionStatus('error');
+      return;
+    }
+
+    setActiveDocumentAction('upload');
     setDocumentActionStatus('loading');
     setDocumentActionResult(null);
     try {
-      const documentType = getDocumentTypeForFile(file);
-      if (!isTextDocumentUploadType(documentType)) {
-        setDocumentActionStatus('error');
-        return;
-      }
       const documentContent = await file.text();
       const result = await apiClient.post<DataDocumentActionResponse>(
         '/api/data/documents',
@@ -263,11 +268,13 @@ export function DataLayout() {
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
+    } finally {
+      setActiveDocumentAction(null);
     }
   }, [documentUploadFiles, loadDataQualitySurface]);
 
   const requestDocumentAction = useCallback(async (
-    action: 'reparse' | 'embedding-regeneration-intent' | 'hwp-conversion-intent' | 'webdav-materialization-intent',
+    action: DocumentOperation,
   ) => {
     const asset = dataQualitySurface?.repository_assets.find((candidate) => (
       candidate.asset_key === selectedRepositoryAssetKey
@@ -284,6 +291,7 @@ export function DataLayout() {
       return;
     }
 
+    setActiveDocumentAction(action);
     setDocumentActionStatus('loading');
     setDocumentActionResult(null);
     try {
@@ -300,6 +308,8 @@ export function DataLayout() {
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
+    } finally {
+      setActiveDocumentAction(null);
     }
   }, [
     dataQualitySurface,
@@ -441,6 +451,7 @@ export function DataLayout() {
               handleDocumentFileChange={handleDocumentFileChange}
               requestDocumentUpload={requestDocumentUpload}
               isDocumentActionLoading={isDocumentActionLoading}
+              activeDocumentAction={activeDocumentAction}
               documentUploadFiles={documentUploadFiles}
               documentActionStatus={documentActionStatus}
               documentActionResult={documentActionResult}
