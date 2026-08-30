@@ -1,0 +1,27 @@
+MIME-Version: 1.0
+From: sender@naruon.test
+To: member@naruon.test
+Subject: Slice 3 admission fixture
+Date: Mon, 17 Aug 2026 12:00:00 +0000
+Content-Type: multipart/related; boundary="rel-bound"; type="text/html"
+
+--rel-bound
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+<html><body><p>Two identical inline scans</p></body></html>
+--rel-bound
+Content-Type: image/png
+Content-ID: <scan-one@naruon.test>
+Content-Disposition: inline
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAACAAAAAYCAIAAAAUMWhjAAAAJElEQVR42mM4EaBBU8QwasGoBaMWjFowasGoBaMWjFowNCwAAOj5wC7XMt9ZAAAAAElFTkSuQmCC
+--rel-bound
+Content-Type: image/png
+Content-ID: <scan-two@naruon.test>
+Content-Disposition: inline
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAACAAAAAYCAIAAAAUMWhjAAAAJElEQVR42mM4EaBBU8QwasGoBaMWjFowasGoBaMWjFowNCwAAOj5wC7XMt9ZAAAAAElFTkSuQmCC
+--rel-bound--
