@@ -3,6 +3,12 @@
 The tools console is an interactive boundary: it submits the values entered by
 the user for each registered parameter. Empty string values are intentional;
 the console does not submit a canned sample value.
+Successful executions display the returned `result`; failure responses display
+their error message.
+
+When the catalog is refreshed, only values whose parameter names and types
+still match the refreshed schema are retained. Removed parameters and values
+incompatible with a changed type are replaced with that type's default.
 
 The five text utilities enforce a 100,000-character input limit at the shared
 tool-parameter validation boundary. The JSON formatter preserves the original
@@ -33,3 +39,10 @@ OWASP Foundation. (n.d.). *Input validation cheat sheet*. Retrieved August 30,
 2026, from
 https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
 
+## Verification commands
+
+```text
+DISABLE_BACKGROUND_WORKERS=1 PYTHONWARNINGS=error pytest -q tests/test_tools_api.py
+corepack pnpm@11.5.3 --dir frontend exec vitest run
+corepack pnpm@11.5.3 --dir frontend exec playwright test tests/e2e/dashboard-branding.spec.ts -g "submits edited utility-console parameters" --project=desktop
+```

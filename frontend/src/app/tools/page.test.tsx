@@ -135,7 +135,7 @@ describe("ToolsPage", () => {
               name: "테스트 도구",
               description: "설명",
               category: "카테고리",
-              parameters: { thread_id: "string", limit: "number" },
+              parameters: { thread_id: "string", limit: "integer" },
             },
           ]);
         }
@@ -166,7 +166,11 @@ describe("ToolsPage", () => {
     const threadInput = container.querySelector(
       'textarea[data-tool-parameter="test_tool.thread_id"]',
     ) as HTMLTextAreaElement | null;
+    const limitInput = container.querySelector(
+      'input[data-tool-parameter="test_tool.limit"]',
+    ) as HTMLInputElement | null;
     expect(threadInput).not.toBeNull();
+    expect(limitInput).not.toBeNull();
 
     act(() => {
       if (!threadInput) throw new Error("Thread input was not rendered.");
@@ -176,6 +180,12 @@ describe("ToolsPage", () => {
       )?.set;
       setNativeValue?.call(threadInput, "user-provided content");
       threadInput.dispatchEvent(new Event("input", { bubbles: true }));
+      const setNativeNumberValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setNativeNumberValue?.call(limitInput, "1.5");
+      limitInput?.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
     act(() => {
@@ -184,9 +194,66 @@ describe("ToolsPage", () => {
     await flushAsyncWork();
 
     expect(executeCalled).toBe(true);
-    expect(executeBody).toEqual({ parameters: { thread_id: "user-provided content", limit: 0 } });
+    expect(executeBody).toEqual({ parameters: { thread_id: "user-provided content", limit: 1.5 } });
     expect(container.textContent).toContain("성공");
-    expect(container.textContent).toContain("Success message");
+    expect(container.textContent).toContain("Execution OK");
+    expect(container.textContent).not.toContain("Success message");
+  });
+
+  it("rebuilds parameter values when the tool schema is refreshed", async () => {
+    let catalogRequestCount = 0;
+    let executeBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        if (url.includes("/api/tools") && !url.includes("execute")) {
+          catalogRequestCount += 1;
+          return jsonResponse([
+            {
+              code: "test_tool",
+              name: "테스트 도구",
+              description: "설명",
+              category: "카테고리",
+              parameters:
+                catalogRequestCount === 1
+                  ? { removed: "string", changed: "string" }
+                  : { changed: { type: "number" }, fresh: "string" },
+            },
+          ]);
+        }
+        if (url.includes("/api/tools/test_tool/execute")) {
+          executeBody = JSON.parse(String(init?.body));
+          return jsonResponse({ status: "success", result: "Execution OK" });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(<ToolsPage />);
+    });
+    await flushAsyncWork();
+
+    const refreshButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("새로고침"),
+    );
+    expect(refreshButton).not.toBeUndefined();
+    act(() => {
+      refreshButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    const executeButton = container.querySelector('button[data-tool-execute="test_tool"]');
+    act(() => {
+      executeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    expect(executeBody).toEqual({ parameters: { changed: 0, fresh: "" } });
   });
 
   it("shows error when tool execution fails", async () => {

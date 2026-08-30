@@ -72,14 +72,6 @@ function defaultParameterValue(descriptor: unknown) {
   }
 }
 
-function parameterType(descriptor: unknown) {
-  if (typeof descriptor === "string") return descriptor.toLowerCase();
-  if (descriptor && typeof descriptor === "object" && "type" in descriptor) {
-    return String((descriptor as { type?: unknown }).type ?? "string").toLowerCase();
-  }
-  return "string";
-}
-
 function parameterInputValue(value: unknown, type: string) {
   if (type === "array" || type === "object") return JSON.stringify(value);
   if (type === "boolean") return Boolean(value);
@@ -91,7 +83,7 @@ function parameterValueFromInput(value: string, type: string) {
     case "number":
       return value === "" ? "" : Number(value);
     case "integer":
-      return value === "" ? "" : Number.parseInt(value, 10);
+      return value === "" ? "" : Number(value);
     case "boolean":
       return value === "true";
     case "array":
@@ -107,7 +99,47 @@ function parameterValueFromInput(value: string, type: string) {
 }
 
 function parameterTypeLabel(descriptor: unknown) {
-  return parameterType(descriptor);
+  if (typeof descriptor === "string") return descriptor;
+  if (descriptor && typeof descriptor === "object" && "type" in descriptor) {
+    return String((descriptor as { type?: unknown }).type ?? "string");
+  }
+  return "string";
+}
+
+function parameterType(descriptor: unknown) {
+  return parameterTypeLabel(descriptor).toLowerCase();
+}
+
+function parameterValueMatchesType(value: unknown, descriptor: unknown) {
+  switch (parameterType(descriptor)) {
+    case "string":
+      return typeof value === "string";
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "array":
+      return Array.isArray(value);
+    case "object":
+      return value !== null && typeof value === "object" && !Array.isArray(value);
+    default:
+      return true;
+  }
+}
+
+function buildParameterValues(
+  tool: ToolInfo,
+  currentValues: Record<string, unknown> = {},
+) {
+  const parameters = tool.parameters ?? {};
+  const retainedValues = Object.fromEntries(
+    Object.entries(currentValues).filter(([key, value]) => (
+      key in parameters && parameterValueMatchesType(value, parameters[key])
+    )),
+  );
+  return { ...buildDefaultParameters(tool), ...retainedValues };
 }
 
 function resultTone(status: string) {
@@ -121,7 +153,12 @@ function resultLabel(status: string) {
 }
 
 function resultMessage(response: ExecuteResponse) {
-  return response.message || JSON.stringify(response.result);
+  if (response.status === "success") {
+    return typeof response.result === "string"
+      ? response.result
+      : JSON.stringify(response.result) ?? "실행 결과가 없습니다.";
+  }
+  return response.message || JSON.stringify(response.result) || "실행 결과가 없습니다.";
 }
 
 export default function ToolsPage() {
@@ -143,7 +180,7 @@ export default function ToolsPage() {
             Object.fromEntries(
               data.map((tool) => [
                 tool.code,
-                { ...buildDefaultParameters(tool), ...currentValues[tool.code] },
+                buildParameterValues(tool, currentValues[tool.code]),
               ]),
             ),
           );

@@ -10,6 +10,7 @@ import urllib.parse
 import uuid
 from collections import Counter
 from collections.abc import Callable
+from json.scanner import py_make_scanner
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -828,6 +829,16 @@ registry.register(
 )
 
 
+class _RawJSONString:
+    """Hold a validated JSON string's original lexical representation."""
+
+    __slots__ = ("text", "value")
+
+    def __init__(self, text: str, value: str):
+        self.text = text
+        self.value = value
+
+
 class _RawJSONNumber:
     """Hold a validated JSON number's original lexical representation."""
 
@@ -837,26 +848,119 @@ class _RawJSONNumber:
         self.text = text
 
 
+class _RawJSONObject:
+    """Hold object members so their key token spellings remain available."""
+
+    __slots__ = ("pairs",)
+
+    def __init__(self, pairs: list[tuple[Any, Any]]):
+        self.pairs = pairs
+
+
+def _parse_raw_json_string(
+    source: str, end: int, strict: bool = True
+) -> tuple[_RawJSONString, int]:
+    value, end_index = json.decoder.scanstring(source, end, strict)
+    return _RawJSONString(source[end - 1 : end_index], value), end_index
+
+
+def _parse_raw_json_object(
+    source_and_end: tuple[str, int],
+    strict: bool,
+    scan_once: Callable[[str, int], tuple[Any, int]],
+    object_hook: Callable[[dict[str, Any]], Any] | None,
+    object_pairs_hook: Callable[[list[tuple[Any, Any]]], Any] | None,
+    memo: dict[str, Any] | None = None,
+) -> tuple[Any, int]:
+    """Parse an object while retaining each key's original string token."""
+    source, end = source_and_end
+    pairs: list[tuple[Any, Any]] = []
+    next_char = source[end : end + 1]
+    if next_char in json.decoder.WHITESPACE_STR:
+        end = json.decoder.WHITESPACE.match(source, end).end()
+        next_char = source[end : end + 1]
+    if next_char == "}":
+        result = object_pairs_hook(pairs) if object_pairs_hook else {}
+        return result, end + 1
+    if next_char != '"':
+        raise json.decoder.JSONDecodeError(
+            "Expecting property name enclosed in double quotes", source, end
+        )
+
+    while True:
+        key, end = _parse_raw_json_string(source, end + 1, strict)
+        if source[end : end + 1] != ":":
+            end = json.decoder.WHITESPACE.match(source, end).end()
+            if source[end : end + 1] != ":":
+                raise json.decoder.JSONDecodeError(
+                    "Expecting ':' delimiter", source, end
+                )
+        end += 1
+        if source[end : end + 1] in json.decoder.WHITESPACE_STR:
+            end = json.decoder.WHITESPACE.match(source, end).end()
+        try:
+            value, end = scan_once(source, end)
+        except StopIteration as exc:
+            raise json.decoder.JSONDecodeError(
+                "Expecting value", source, exc.value
+            ) from None
+        pairs.append((key, value))
+        next_char = source[end : end + 1]
+        if next_char in json.decoder.WHITESPACE_STR:
+            end = json.decoder.WHITESPACE.match(source, end).end()
+            next_char = source[end : end + 1]
+        if next_char == "}":
+            break
+        if next_char != ",":
+            raise json.decoder.JSONDecodeError(
+                "Expecting ',' delimiter", source, end
+            )
+        end += 1
+        end = json.decoder.WHITESPACE.match(source, end).end()
+        if source[end : end + 1] != '"':
+            raise json.decoder.JSONDecodeError(
+                "Expecting property name enclosed in double quotes", source, end
+            )
+    if object_pairs_hook:
+        return object_pairs_hook(pairs), end + 1
+    result = {key.value if isinstance(key, _RawJSONString) else key: value for key, value in pairs}
+    return object_hook(result) if object_hook else result, end + 1
+
+
 def _reject_non_standard_json_number(value: str) -> None:
     """Reject JavaScript numeric extensions that are not valid JSON."""
     raise ValueError(f"Non-standard JSON number: {value}")
 
 
-def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+def _reject_duplicate_json_keys(pairs: list[tuple[Any, Any]]) -> _RawJSONObject:
     """Reject duplicate object keys instead of silently discarding data."""
-    result: dict[str, Any] = {}
+    seen: set[str] = set()
+    result: list[tuple[Any, Any]] = []
     for key, value in pairs:
-        if key in result:
-            raise ValueError(f"Duplicate JSON object key: {key}")
-        result[key] = value
-    return result
+        key_value = key.value if isinstance(key, _RawJSONString) else str(key)
+        if key_value in seen:
+            raise ValueError(f"Duplicate JSON object key: {key_value}")
+        seen.add(key_value)
+        result.append((key, value))
+    return _RawJSONObject(result)
 
 
 def _format_json_value(value: Any, level: int = 0) -> str:
     """Pretty-print parsed JSON while preserving raw number tokens."""
     indent = "  "
+    if isinstance(value, _RawJSONString):
+        return value.text
     if isinstance(value, _RawJSONNumber):
         return value.text
+    if isinstance(value, _RawJSONObject):
+        if not value.pairs:
+            return "{}"
+        entries = [
+            f"{indent * (level + 1)}{_format_json_value(key)}: "
+            f"{_format_json_value(item, level + 1)}"
+            for key, item in value.pairs
+        ]
+        return "{\n" + ",\n".join(entries) + f"\n{indent * level}}}"
     if isinstance(value, dict):
         if not value:
             return "{}"
@@ -881,13 +985,16 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
     """Format JSON, preserving numbers and rejecting duplicate keys."""
     json_str = params.get("json_str") or ""
     try:
-        parsed = json.loads(
-            json_str,
+        decoder = json.JSONDecoder(
             parse_constant=_reject_non_standard_json_number,
             parse_int=_RawJSONNumber,
             parse_float=_RawJSONNumber,
             object_pairs_hook=_reject_duplicate_json_keys,
         )
+        decoder.parse_object = _parse_raw_json_object
+        decoder.parse_string = _parse_raw_json_string
+        decoder.scan_once = py_make_scanner(decoder)
+        parsed = decoder.decode(json_str)
         return {"formatted_json": _format_json_value(parsed)}
     except (RecursionError, TypeError, ValueError) as e:
         raise ValueError(f"Invalid JSON string: {e}")

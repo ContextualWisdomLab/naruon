@@ -530,6 +530,29 @@ def test_execute_json_formatter_preserves_number_lexemes():
     )
 
 
+def test_execute_json_formatter_preserves_string_lexemes():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "json_str": r'{"escaped":"\u003c\/","key\u002dname":"\u000a"}'
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["formatted_json"] == (
+        "{\n"
+        '  "escaped": "\\u003c\\/",\n'
+        '  "key\\u002dname": "\\u000a"\n'
+        "}"
+    )
+
+
 def test_execute_json_formatter_rejects_duplicate_keys():
     with TestClient(app) as client:
         response = client.post(
