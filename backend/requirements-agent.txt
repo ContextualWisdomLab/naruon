@@ -1,8 +1,9 @@
 # Optional dependencies for the Noema general agent (services/noema_agent.py).
 #
-# Pydantic-AI is MIT licensed and builds on the OpenAI-compatible provider layer
-# already used by naruon (openai, httpx, pydantic). Installing this enables the
-# agent; without it, services/noema_agent.py degrades to a structured no-op.
+# Pydantic-AI is MIT licensed and builds on the OpenAI-compatible
+# contextual-orchestrator gateway (openai, httpx, pydantic). Installing this
+# enables the agent; without it, services/noema_agent.py degrades to a
+# structured no-op. Model selection stays in the orchestrator.
 #
 # Kept in a small hash-pinned optional set so the core runtime lock remains
 # focused while CI can still run the real agent build-path test deterministically.

@@ -5,7 +5,7 @@
     "framework": "pydantic-ai",
     "framework_license": "MIT",
     "entrypoint": "services.noema_agent:run_noema_agent",
-    "description": "General-purpose assistant that reasons over the naruon workspace (mail, content graph, tasks) on the tenant's configured LLM provider and dispatches opt-in, audit-logged writebacks through the self-hosted runner.",
+    "description": "General-purpose assistant that reasons over the naruon workspace (mail, content graph, tasks) through the contextual-orchestrator gateway and dispatches opt-in, audit-logged writebacks through the self-hosted runner. naruon does not pick a tenant chat model, hold upstream provider keys, or sequentially fail over models.",
     "capabilities": [
       "mail.search",
       "mail.read",
@@ -14,7 +14,9 @@
       "tasks.update",
       "calendar.writeback"
     ],
-    "provider_source": "runtime_llm_provider",
+    "provider_source": "contextual-orchestrator",
+    "model_alias": "contextual-orchestrator",
+    "sequential_failover": false,
     "writeback": {
       "opt_in": true,
       "audit_logged": true

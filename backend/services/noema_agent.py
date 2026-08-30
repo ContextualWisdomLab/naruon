@@ -1,10 +1,16 @@
 """Noema general agent.
 
-A general-purpose `Pydantic-AI <https://ai.pydantic.dev>`_ (MIT) agent that
-reasons over the naruon workspace. It runs on the tenant's configured LLM
-provider — resolved through :func:`resolve_runtime_llm_provider` from the
-Fernet-encrypted provider records, never from ``os.getenv`` — and it is given a
-small set of tools that plug into the existing service and runner seams:
+An in-process `Pydantic-AI <https://ai.pydantic.dev>`_ (MIT) agent that naruon
+keeps as the existing tool surface (mail, content graph, tasks, opt-in writeback).
+LLM calls go only to the contextual-orchestrator gateway: dedicated inference
+token + HTTPS ``/v1`` base URL from the Fernet tenant KV, and the single model
+alias ``contextual-orchestrator``. naruon does not resolve a tenant LLM
+provider record, does not pick a tenant chat-model name, does not hold
+upstream provider keys at request time, and does not sequentially fail over
+to the next model. Catalog mappings stay catalog-only; this module does not
+dispatch Decision Points or ``mail.triage``.
+
+Tools stay owner-scoped:
 
 * **read/search mail** and **content-graph queries** are owner-scoped SQL reads.
 * **task actions** update ``TicketTask`` rows and are audit-logged.
@@ -13,9 +19,9 @@ small set of tools that plug into the existing service and runner seams:
   naruon's opt-in-writeback and audit-logged contract.
 
 Pydantic-AI is an *optional* runtime dependency (installed via
-``backend/requirements-agent.txt``). When it — or a usable LLM provider — is not
-available the agent degrades gracefully: it returns a structured no-op notice
-instead of raising, so the surrounding request path stays healthy.
+``backend/requirements-agent.txt``). When it — or the orchestrator gateway — is
+not available the agent degrades gracefully: it returns a structured no-op
+notice instead of raising, so the surrounding request path stays healthy.
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
 
+from openai import AsyncOpenAI
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,11 +42,12 @@ from db.models import (
     KnowledgeGraphEdgeRecord,
     TicketTask,
 )
-from services.llm_provider_selection import (
-    RuntimeLLMProvider,
-    resolve_runtime_llm_provider,
-)
 from services.llm_provider_urls import build_llm_provider_http_client
+from services.orchestrator_gateway import (
+    ORCHESTRATOR_MODEL_ALIAS,
+    OrchestratorGateway,
+    resolve_orchestrator_gateway,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from pydantic_ai import Agent
@@ -100,6 +108,8 @@ class NoemaAgentResult:
     output: str = ""
     notice: str | None = None
     provider_name: str | None = None
+    model_alias: str | None = None
+    error_code: str | None = None
     tool_calls: tuple[str, ...] = ()
 
     @property
@@ -434,11 +444,13 @@ NOEMA_TOOL_SPECS: tuple[dict[str, Any], ...] = (
 
 SYSTEM_PROMPT = (
     "You are Noema, the general assistant for a naruon email workspace. "
-    "Use the provided tools to read and search the owner's mail, inspect the "
-    "content graph of an email, and manage tasks. Only change task status or "
-    "dispatch a writeback when the user clearly asks for it. Writebacks target "
-    "the customer's own systems and require opt-in; if a writeback is skipped, "
-    "explain that it must be enabled. Be concise and cite message ids you used."
+    "Do not try alternate models or providers; contextual-orchestrator "
+    "selects the model. Use the provided tools to read and search the "
+    "owner's mail, inspect the content graph of an email, and manage tasks. "
+    "Only change task status or dispatch a writeback when the user clearly "
+    "asks for it. Writebacks target the customer's own systems and require "
+    "opt-in; if a writeback is skipped, explain that it must be enabled. "
+    "Be concise and cite message ids you used."
 )
 
 
@@ -462,15 +474,24 @@ def _load_pydantic_ai() -> Any | None:
     }
 
 
+async def _aclose_http_client(http_client: Any) -> None:
+    closer = getattr(http_client, "aclose", None)
+    if closer is None:
+        return
+    await closer()
+
+
 async def build_noema_agent(
-    provider: RuntimeLLMProvider,
+    gateway: OrchestratorGateway,
 ) -> tuple["Agent | None", Callable[[], Awaitable[None]]]:
-    """Build the pydantic-ai agent for a resolved provider.
+    """Build the pydantic-ai agent for the orchestrator gateway.
 
     Returns ``(agent, closer)``. ``agent`` is ``None`` when pydantic-ai is not
-    installed; ``closer`` always closes any opened HTTP client.
+    installed; ``closer`` always closes any opened HTTP client. The model name
+    is always :data:`ORCHESTRATOR_MODEL_ALIAS` — never a sequential list.
+    A rejected or missing gateway URL raises ``ValueError`` with
+    ``orchestrator_gateway_unavailable`` and never constructs ``AsyncOpenAI``.
     """
-    from openai import AsyncOpenAI
 
     async def _noop_closer() -> None:
         return None
@@ -479,11 +500,19 @@ async def build_noema_agent(
     if modules is None:
         return None, _noop_closer
 
-    validated_base_url, http_client = await build_llm_provider_http_client(
-        provider.base_url
-    )
+    try:
+        validated_base_url, http_client = await build_llm_provider_http_client(
+            gateway.base_url
+        )
+    except ValueError as exc:
+        raise ValueError("orchestrator_gateway_unavailable") from exc
+
+    if not validated_base_url:
+        await _aclose_http_client(http_client)
+        raise ValueError("orchestrator_gateway_unavailable")
+
     openai_client = AsyncOpenAI(
-        api_key=provider.api_key,
+        api_key=gateway.inference_token,
         base_url=validated_base_url,
         http_client=http_client,
     )
@@ -492,7 +521,7 @@ async def build_noema_agent(
         await openai_client.close()
 
     model = modules["OpenAIChatModel"](
-        provider.chat_model,
+        gateway.model_alias,
         provider=modules["OpenAIProvider"](openai_client=openai_client),
     )
     agent = modules["Agent"](
@@ -560,25 +589,37 @@ async def run_noema_agent(
     writeback_enabled: bool = False,
     dispatcher: RunnerDispatcher | None = None,
 ) -> NoemaAgentResult:
-    """Run the Noema general agent, degrading gracefully when unavailable.
+    """Run the Noema decision agent, degrading gracefully when unavailable.
 
     This is the entrypoint referenced by ``registered_agents.json``.
     """
-    provider = await resolve_runtime_llm_provider(
+    gateway = await resolve_orchestrator_gateway(
         session, user_id=user_id, organization_id=organization_id
     )
-    if provider is None:
+    if gateway is None:
         return NoemaAgentResult(
             status="unavailable",
-            notice="No LLM provider is configured for this workspace.",
+            notice="The contextual-orchestrator gateway is not configured.",
+            error_code="orchestrator_gateway_unavailable",
         )
 
-    agent, closer = await build_noema_agent(provider)
+    try:
+        agent, closer = await build_noema_agent(gateway)
+    except ValueError:
+        return NoemaAgentResult(
+            status="unavailable",
+            notice="The contextual-orchestrator gateway is not configured.",
+            provider_name=ORCHESTRATOR_MODEL_ALIAS,
+            model_alias=gateway.model_alias,
+            error_code="orchestrator_gateway_unavailable",
+        )
     if agent is None:
         return NoemaAgentResult(
             status="unavailable",
             notice="The pydantic-ai runtime is not installed; agent is disabled.",
-            provider_name=provider.provider_name,
+            provider_name=ORCHESTRATOR_MODEL_ALIAS,
+            model_alias=gateway.model_alias,
+            error_code="noema_runtime_unavailable",
         )
 
     deps = NoemaAgentDeps(
@@ -594,7 +635,8 @@ async def run_noema_agent(
         return NoemaAgentResult(
             status="ok",
             output=str(getattr(result, "output", "")),
-            provider_name=provider.provider_name,
+            provider_name=ORCHESTRATOR_MODEL_ALIAS,
+            model_alias=gateway.model_alias,
             tool_calls=tuple(deps.tool_calls),
         )
     except Exception as exc:  # noqa: BLE001 - degrade gracefully, never propagate
@@ -602,7 +644,9 @@ async def run_noema_agent(
         return NoemaAgentResult(
             status="error",
             notice="The agent run could not be completed.",
-            provider_name=provider.provider_name,
+            provider_name=ORCHESTRATOR_MODEL_ALIAS,
+            model_alias=gateway.model_alias,
+            error_code="noema_run_failed",
             tool_calls=tuple(deps.tool_calls),
         )
     finally:

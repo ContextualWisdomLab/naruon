@@ -178,6 +178,19 @@ syntax, no userinfo/query or fragment, exact host membership in
 Missing allowlist configuration fails closed; the default provider path should
 leave `base_url` unset.
 
+## Noema LLM routing
+
+Noema remains the in-process general agent (`registered_agents.json` →
+`services.noema_agent:run_noema_agent`) with the existing owner-scoped
+tools and opt-in writeback surface. Its LLM calls go only to
+**contextual-orchestrator**: dedicated Fernet-KV inference token, HTTPS
+base URL ending in `/v1`, and the single model alias
+`contextual-orchestrator`. Catalog mappings (`mail.triage`, and the rest)
+are catalog-only; they are not a live Decision Points dispatcher. naruon
+does not hold upstream provider keys at request time and does not
+sequentially fail over models. Design:
+[`docs/architecture/noema-decision-agent.md`](docs/architecture/noema-decision-agent.md).
+
 ## Batch embedding routing boundary
 
 Bulk, latency-tolerant embedding work (email import, backfills) does not call a

@@ -1362,6 +1362,16 @@ class TenantConfig(Base):
     batch_attribution_group: Mapped[str | None] = mapped_column(String, nullable=True)
     batch_attribution_company: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Dedicated contextual-orchestrator inference gateway for in-process Noema
+    # judgments. Token is EncryptedString (Fernet KV); URL is SSRF-guarded at
+    # call time. Upstream provider keys stay in the orchestrator KV.
+    noema_orchestrator_base_url: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    noema_orchestrator_token: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
+
     def __repr__(self) -> str:
         return (
             f"<TenantConfig(id={self.id}, user_id='{self.user_id}', "

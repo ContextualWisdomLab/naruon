@@ -65,6 +65,35 @@ in this repo.
   add further `os.getenv` secret reads, and migrate toward the KV pattern as it
   is adopted.
 
+### Noema LLM routing (orchestrator-only)
+
+- **Noema's LLM path is contextual-orchestrator only.**
+  `services.noema_agent:run_noema_agent` must not call
+  `resolve_runtime_llm_provider`, must not pick a tenant `OpenAIChatModel` /
+  `gpt-4o`, and must not copy draft email-writing clients that require a
+  tenant `model_profile_id`. Send the single model alias
+  `contextual-orchestrator` to a dedicated gateway inference token + HTTPS
+  `/v1` base URL from the Fernet tenant KV (`noema_orchestrator_token`,
+  `noema_orchestrator_base_url`). Catalog files
+  (`registered_agents.json` `provider_source=contextual-orchestrator`,
+  `task_agent_mapping.json`) stay catalog-only; do not wire Decision Points
+  or `mail.triage` dispatchers in the same slice.
+- **Do not sequentially fail over** to the next agent or model inside naruon
+  or Noema. Do not copy OpenCode sidecar model lists. Never use
+  `COPILOT_GITHUB_TOKEN` or GitHub Models for Noema.
+- **Upstream provider keys stay in the orchestrator KV**, not in naruon at
+  request time: `NVIDIA_NIM_API_KEY`, `NVIDIA_NIM_API_KEY_SUB`,
+  `BYTEZ_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`. List prices for
+  free-but-priced models are stored in the orchestrator, not here. Do not
+  reimplement the orchestrator catalog in this repo. Keep the existing
+  owner-scoped tools and opt-in writeback surface.
+
+- Noema gateway setup uses the signed `GET`/`PUT /api/noema-gateway` route.
+  It is scoped to the authenticated `(user_id, organization_id)` pair, stores
+  the token through `EncryptedString`, returns only `has_token` readiness, and
+  records generic audit events. Do not add target-user or mailbox credential
+  fields to this route without a separate membership/delegation ADR.
+
 ### This repo's role in the ecosystem
 
 - **This repo (naruon) is the ECOSYSTEM HUB:** email/PIM that DOM-decomposes

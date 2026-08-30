@@ -423,6 +423,16 @@ def test_schema_backfill_adds_tenant_config_columns_and_indexes(monkeypatch):
         for statement in statements
     )
     assert any(
+        "alter table tenant_configs add column if not exists "
+        "noema_orchestrator_base_url" in statement
+        for statement in statements
+    )
+    assert any(
+        "alter table tenant_configs add column if not exists "
+        "noema_orchestrator_token" in statement
+        for statement in statements
+    )
+    assert any(
         "alter table tenant_configs add column if not exists organization_id"
         in statement
         for statement in statements

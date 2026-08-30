@@ -1,13 +1,15 @@
 """Fast, mocked tests for the Noema general agent.
 
-These cover three seams without needing a live LLM or a database:
+These cover the seams without needing a live LLM or a database:
 
 * tool wiring (mail read/search, content-graph, task actions, writeback)
-* configuration resolved from the DB provider layer (not ``os.getenv``)
-* graceful degradation when the provider or pydantic-ai runtime is absent
+* LLM calls go only to the contextual-orchestrator gateway (KV token, not env)
+* no sequential model list / provider-key failover
+* graceful degradation when the gateway or pydantic-ai runtime is absent
 """
 
 import datetime
+from pathlib import Path
 
 import pytest
 
@@ -16,11 +18,9 @@ from db.models import (
     ContentNodeRecord,
     Email,
     KnowledgeGraphEdgeRecord,
-    LLMProvider,
     TicketTask,
 )
 from services import noema_agent
-from services.llm_provider_selection import RuntimeLLMProvider
 from services.noema_agent import (
     NOEMA_TOOL_SPECS,
     NoemaAgentDeps,
@@ -32,6 +32,10 @@ from services.noema_agent import (
     tool_read_mail,
     tool_search_mail,
     tool_update_task_status,
+)
+from services.orchestrator_gateway import (
+    ORCHESTRATOR_MODEL_ALIAS,
+    OrchestratorGateway,
 )
 
 UTC = datetime.timezone.utc
@@ -304,48 +308,23 @@ def test_tool_specs_cover_declared_capabilities():
 
 
 # --------------------------------------------------------------------------- #
-# Config-from-DB + graceful degradation
+# Orchestrator gateway + graceful degradation
 # --------------------------------------------------------------------------- #
 
 
-class _ProviderScalars:
-    def __init__(self, items):
-        self._items = items
-
-    def first(self):
-        return self._items[0] if self._items else None
-
-
-class _ProviderResult:
-    def __init__(self, providers):
-        self._providers = providers
-
-    def scalars(self):
-        return _ProviderScalars(self._providers)
-
-    def scalar_one_or_none(self):
-        return None
-
-
-class _ProviderSession:
-    """Minimal session that satisfies resolve_runtime_llm_provider."""
-
-    def __init__(self, providers):
-        self._providers = providers
-
-    async def execute(self, statement):
-        text = str(statement).lower()
-        if "llm_providers" in text:
-            return _ProviderResult(self._providers)
-        return _ProviderResult([])
+def _gateway() -> OrchestratorGateway:
+    return OrchestratorGateway(
+        inference_token="naruon-orch-inference-token",
+        base_url="https://orchestrator.example/v1",
+    )
 
 
 @pytest.mark.asyncio
-async def test_run_agent_unavailable_without_provider(monkeypatch):
-    async def _no_provider(*args, **kwargs):
+async def test_run_agent_unavailable_without_orchestrator_gateway(monkeypatch):
+    async def _no_gateway(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(noema_agent, "resolve_runtime_llm_provider", _no_provider)
+    monkeypatch.setattr(noema_agent, "resolve_orchestrator_gateway", _no_gateway)
     result = await run_noema_agent(
         _QueueSession([]),
         user_id="user-1",
@@ -354,53 +333,180 @@ async def test_run_agent_unavailable_without_provider(monkeypatch):
         prompt="hello",
     )
     assert result.status == "unavailable"
+    assert result.error_code == "orchestrator_gateway_unavailable"
     assert result.provider_name is None
+    assert result.model_alias is None
 
 
 @pytest.mark.asyncio
-async def test_run_agent_uses_db_provider_and_degrades_without_runtime(monkeypatch):
-    provider = LLMProvider(
-        id=7,
-        user_id="user-1",
-        organization_id="org-1",
-        name="Local Gemma",
-        provider_type="ollama",
-        base_url="http://ollama:11434/v1",
-        model_identifier="gemma",
-        embedding_model="embeddinggemma",
-        api_key=None,
-        is_active=True,
-        updated_at=datetime.datetime.now(UTC),
-    )
-    # Simulate the pydantic-ai runtime being absent: the config still resolves
-    # from the DB provider, and the agent degrades to a notice.
+async def test_run_agent_uses_orchestrator_gateway_and_degrades_without_runtime(
+    monkeypatch,
+):
+    async def _gateway_from_kv(*args, **kwargs):
+        return _gateway()
+
+    monkeypatch.setattr(noema_agent, "resolve_orchestrator_gateway", _gateway_from_kv)
     monkeypatch.setattr(noema_agent, "_load_pydantic_ai", lambda: None)
 
     result = await run_noema_agent(
-        _ProviderSession([provider]),
+        _QueueSession([]),
         user_id="user-1",
         organization_id="org-1",
         workspace_id="workspace-org-1",
         prompt="hello",
     )
     assert result.status == "unavailable"
-    # Proves the provider name came from the DB record, not os.getenv.
-    assert result.provider_name is not None
+    assert result.provider_name == ORCHESTRATOR_MODEL_ALIAS
+    assert result.model_alias == ORCHESTRATOR_MODEL_ALIAS
     assert "pydantic-ai" in (result.notice or "")
+
+
+@pytest.mark.asyncio
+async def test_run_agent_uses_single_orchestrator_alias(monkeypatch):
+    captured: dict[str, object] = {}
+
+    async def _gateway_from_kv(*args, **kwargs):
+        return _gateway()
+
+    async def _fake_build(gateway):
+        captured["gateway"] = gateway
+
+        class _Agent:
+            async def run(self, prompt, deps):
+                captured["prompt"] = prompt
+                return type("Result", (), {"output": "Hold the reply until Friday."})()
+
+        async def _closer() -> None:
+            return None
+
+        return _Agent(), _closer
+
+    monkeypatch.setattr(noema_agent, "resolve_orchestrator_gateway", _gateway_from_kv)
+    monkeypatch.setattr(noema_agent, "build_noema_agent", _fake_build)
+
+    result = await run_noema_agent(
+        _QueueSession([]),
+        user_id="user-1",
+        organization_id="org-1",
+        workspace_id="workspace-org-1",
+        prompt="Should I reply today?",
+    )
+    assert result.status == "ok"
+    assert result.output == "Hold the reply until Friday."
+    assert result.model_alias == "contextual-orchestrator"
+    assert result.error_code is None
+    gateway = captured["gateway"]
+    assert isinstance(gateway, OrchestratorGateway)
+    assert gateway.model_alias == "contextual-orchestrator"
+    assert gateway.model_candidates == ()
+    assert gateway.inference_token == "naruon-orch-inference-token"
+    assert gateway.base_url == "https://orchestrator.example/v1"
+
+
+@pytest.mark.asyncio
+async def test_build_agent_targets_orchestrator_alias_only(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeOpenAI:
+        def __init__(self, api_key, base_url, http_client=None):
+            captured["api_key"] = api_key
+            captured["base_url"] = base_url
+
+        async def close(self):
+            return None
+
+    class _FakeChatModel:
+        def __init__(self, model_name, provider=None):
+            captured["model_name"] = model_name
+            captured["provider"] = provider
+
+    class _FakeProvider:
+        def __init__(self, openai_client=None):
+            captured["openai_client"] = openai_client
+
+    class _FakeAgent:
+        def __init__(self, model, deps_type=None, system_prompt=None):
+            captured["system_prompt"] = system_prompt
+            self.tools = []
+
+        def tool(self, fn):
+            self.tools.append(fn.__name__)
+            return fn
+
+    async def _fake_http_client(base_url):
+        captured["validated_base_url"] = base_url
+        return base_url, object()
+
+    monkeypatch.setattr(noema_agent, "_load_pydantic_ai", lambda: {
+        "Agent": _FakeAgent,
+        "RunContext": object,
+        "OpenAIChatModel": _FakeChatModel,
+        "OpenAIProvider": _FakeProvider,
+    })
+    monkeypatch.setattr(noema_agent, "AsyncOpenAI", _FakeOpenAI)
+    monkeypatch.setattr(noema_agent, "build_llm_provider_http_client", _fake_http_client)
+
+    agent, closer = await build_noema_agent(_gateway())
+    assert agent is not None
+    assert captured["api_key"] == "naruon-orch-inference-token"
+    assert captured["base_url"] == "https://orchestrator.example/v1"
+    assert captured["model_name"] == "contextual-orchestrator"
+    assert captured["model_name"] != "gpt-4o"
+    assert "chat_model" not in captured
+    await closer()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_mode", ["rejected", "missing"])
+async def test_run_agent_fails_closed_for_invalid_gateway_client(
+    monkeypatch, failure_mode
+):
+    class _FakeClient:
+        def __init__(self):
+            self.closed = False
+
+        async def aclose(self):
+            self.closed = True
+
+    client = _FakeClient()
+
+    async def _gateway_from_kv(*args, **kwargs):
+        return _gateway()
+
+    async def _invalid_http_client(base_url):
+        if failure_mode == "rejected":
+            raise ValueError("rejected")
+        return None, client
+
+    monkeypatch.setattr(noema_agent, "resolve_orchestrator_gateway", _gateway_from_kv)
+    monkeypatch.setattr(noema_agent, "_load_pydantic_ai", lambda: {})
+    monkeypatch.setattr(
+        noema_agent, "build_llm_provider_http_client", _invalid_http_client
+    )
+    monkeypatch.setattr(
+        noema_agent,
+        "AsyncOpenAI",
+        lambda **kwargs: pytest.fail("rejected gateway must not build AsyncOpenAI"),
+    )
+
+    result = await run_noema_agent(
+        _QueueSession([]),
+        user_id="user-1",
+        organization_id="org-1",
+        workspace_id="workspace-org-1",
+        prompt="hello",
+    )
+
+    assert result.status == "unavailable"
+    assert result.error_code == "orchestrator_gateway_unavailable"
+    assert result.model_alias == ORCHESTRATOR_MODEL_ALIAS
+    assert client.closed is (failure_mode == "missing")
 
 
 @pytest.mark.asyncio
 async def test_build_agent_returns_none_without_runtime(monkeypatch):
     monkeypatch.setattr(noema_agent, "_load_pydantic_ai", lambda: None)
-    provider = RuntimeLLMProvider(
-        api_key="sk-test",
-        base_url=None,
-        chat_model="gpt-4o",
-        embedding_model="text-embedding-3-small",
-        provider_name="OpenAI",
-        provider_source="tenant_config",
-    )
-    agent, closer = await build_noema_agent(provider)
+    agent, closer = await build_noema_agent(_gateway())
     assert agent is None
     await closer()  # no-op closer must be awaitable
 
@@ -411,7 +517,7 @@ async def test_build_agent_returns_none_without_runtime(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_agent_runs_tools_with_test_model():
+async def test_agent_runs_tools_with_test_model(monkeypatch):
     # This is the ONLY test that exercises the real pydantic-ai build path
     # (imports OpenAIChatModel, constructs the Agent, registers the tools and
     # their RunContext-typed schemas). It is skipped only when pydantic-ai is
@@ -421,15 +527,11 @@ async def test_agent_runs_tools_with_test_model():
     from pydantic_ai import Agent as PydanticAgent
     from pydantic_ai.models.test import TestModel
 
-    provider = RuntimeLLMProvider(
-        api_key="sk-test",
-        base_url=None,
-        chat_model="gpt-4o",
-        embedding_model="text-embedding-3-small",
-        provider_name="OpenAI",
-        provider_source="tenant_config",
-    )
-    agent, closer = await build_noema_agent(provider)
+    async def _fake_http_client(base_url):
+        return base_url, None
+
+    monkeypatch.setattr(noema_agent, "build_llm_provider_http_client", _fake_http_client)
+    agent, closer = await build_noema_agent(_gateway())
     # A real Agent must be built — not the graceful-degradation None.
     assert agent is not None
     assert isinstance(agent, PydanticAgent)
@@ -448,3 +550,23 @@ async def test_agent_runs_tools_with_test_model():
     expected_tools = {spec["name"] for spec in NOEMA_TOOL_SPECS}
     assert expected_tools <= set(deps.tool_calls)
     assert getattr(result, "output", None) is not None
+
+
+def test_noema_agent_source_does_not_import_tenant_llm_provider():
+    """Unique slice: Noema's LLM client is orchestrator-only.
+
+    ``resolve_runtime_llm_provider`` remains for search / chat / embeddings.
+    This file must not import that resolver or ``llm_provider_selection``.
+    """
+    source = Path(noema_agent.__file__).read_text(encoding="utf-8")
+    assert "llm_provider_selection" not in source
+    assert "resolve_runtime_llm_provider" not in source
+    assert "RuntimeLLMProvider" not in source
+    assert "model_profile_id" not in source
+    assert "contextual_orchestrator_client" not in source
+    assert "gpt-4o" not in source
+    assert "from services.orchestrator_gateway import" in source
+    assert "run_noema_decision" not in source
+    assert "COPILOT_GITHUB_TOKEN" not in source
+    assert "models.github.ai" not in source
+    assert "api.githubcopilot.com" not in source

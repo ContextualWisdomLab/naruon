@@ -452,3 +452,19 @@ def test_merge_revision_reconciles_newsdom_document_and_carddav_heads():
     assert "op.create_table(" not in revision_text
     assert "op.add_column(" not in revision_text
     assert "op.drop_column(" not in revision_text
+
+
+def test_noema_orchestrator_gateway_has_incremental_revision():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    revision_path = versions_dir / "0018_noema_orch_gateway.py"
+    assert revision_path.exists()
+    revision_text = revision_path.read_text()
+
+    assert 'revision = "0018_noema_orch_gateway"' in revision_text
+    assert 'down_revision = "0017_merge_newsdom_carddav_heads"' in revision_text
+    assert '"noema_orchestrator_base_url"' in revision_text
+    assert '"noema_orchestrator_token"' in revision_text
+    assert "op.add_column(" in revision_text
+    assert "op.drop_column(" in revision_text
+    assert "sa.text(" not in revision_text
+    assert "has_table" in revision_text
