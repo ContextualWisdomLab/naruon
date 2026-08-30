@@ -175,6 +175,55 @@ describe("ToolsPage", () => {
     expect(container.textContent).toContain("Success message");
   });
 
+  it("uses the first tool definition when duplicate codes are returned", async () => {
+    let executeBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        if (url.includes("/api/tools") && !url.includes("execute")) {
+          return jsonResponse([
+            {
+              code: "duplicate_tool",
+              name: "첫 번째 도구 정의",
+              description: "첫 번째 입력 계약",
+              category: "테스트",
+              parameters: { source: "string" },
+            },
+            {
+              code: "duplicate_tool",
+              name: "두 번째 도구 정의",
+              description: "두 번째 입력 계약",
+              category: "테스트",
+              parameters: { source: "number" },
+            },
+          ]);
+        }
+        if (url.includes("/api/tools/duplicate_tool/execute")) {
+          executeBody = JSON.parse(String(init?.body));
+          return jsonResponse({ status: "success", result: "첫 번째 계약으로 실행" });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root?.render(<ToolsPage />);
+    });
+    await flushAsyncWork();
+
+    const buttons = container.querySelectorAll('button[data-tool-execute="duplicate_tool"]');
+    expect(buttons).toHaveLength(2);
+    act(() => {
+      buttons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsyncWork();
+
+    expect(executeBody).toEqual({ parameters: { source: "test_value" } });
+  });
+
   it("shows error when tool execution fails", async () => {
     vi.stubGlobal(
       "fetch",

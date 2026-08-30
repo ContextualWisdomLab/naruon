@@ -137,10 +137,18 @@ export default function ToolsPage() {
     ];
   }, [tools]);
 
+  const toolsMap = useMemo(() => {
+    const map = new Map<string, ToolInfo>();
+    for (const tool of tools) {
+      if (!map.has(tool.code)) map.set(tool.code, tool);
+    }
+    return map;
+  }, [tools]);
+
   const handleExecute = async (code: string) => {
     setExecuting(prev => ({ ...prev, [code]: true }));
     try {
-      const tool = tools.find((item) => item.code === code);
+      const tool = toolsMap.get(code);
       const params = tool ? buildDefaultParameters(tool) : {};
       const response = await apiClient.post<ExecuteResponse>(`/api/tools/${code}/execute`, { parameters: params });
       setResults(prev => ({ ...prev, [code]: response }));
@@ -234,8 +242,8 @@ export default function ToolsPage() {
           </Card>
         ) : (
           <section aria-label="도구 실행 카드" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {tools.map((tool) => (
-              <Card key={tool.code} className={cn(tool.is_active === false && "opacity-70")}>
+            {tools.map((tool, index) => (
+              <Card key={`${tool.code}-${index}`} className={cn(tool.is_active === false && "opacity-70")}>
                 <CardHeader>
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">

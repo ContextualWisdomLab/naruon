@@ -186,8 +186,16 @@ type PromptSettings = {
   outputFormat: string;
 };
 
+const MODEL_LABEL_MAP = (() => {
+  const map = new Map<string, string>();
+  for (const model of MODEL_OPTIONS) {
+    if (!map.has(model.value)) map.set(model.value, model.label);
+  }
+  return map;
+})();
+
 function getModelLabel(modelValue: string) {
-  return MODEL_OPTIONS.find((model) => model.value === modelValue)?.label ?? modelValue;
+  return MODEL_LABEL_MAP.get(modelValue) ?? modelValue;
 }
 
 export default function PromptStudioPage() {
