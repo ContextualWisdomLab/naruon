@@ -1434,6 +1434,7 @@ class CalendarConflictJudgment(Base):
             "ix_calendar_conflict_judgments_scope_thread",
             "user_id",
             "organization_id",
+            "workspace_id",
             "source_thread_id",
         ),
     )
@@ -1446,6 +1447,7 @@ class CalendarConflictJudgment(Base):
     )
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     proposed_commitment_id: Mapped[str] = mapped_column(String(256), nullable=False)
     source_thread_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     source_message_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
@@ -1505,6 +1507,7 @@ class CalendarConflictCorrection(Base):
     )
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     actor_user_id: Mapped[str] = mapped_column(String, nullable=False)
     correction_action: Mapped[str] = mapped_column(String(64), nullable=False)
     before_json: Mapped[dict[str, object]] = mapped_column(

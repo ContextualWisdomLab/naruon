@@ -129,6 +129,7 @@ async def test_create_judgment_persists_decision_and_returns_it(
     assert captured["session"] is dummy_session
     assert captured["user_id"] == "reviewer"
     assert captured["organization_id"] == "org-acme"
+    assert captured["workspace_id"] == "workspace-org-acme"
     assert captured["proposed_commitment_id"] == "proposal-1"
     assert captured["source_thread_id"] == "thread-1"
     assert captured["source_message_id"] == "<msg-1@example.com>"
@@ -200,8 +201,68 @@ async def test_list_judgments_scopes_by_source_thread_id(
     assert response.status_code == 200
     assert captured["user_id"] == "reviewer"
     assert captured["organization_id"] == "org-acme"
+    assert captured["workspace_id"] == "workspace-org-acme"
     assert captured["source_thread_id"] == "thread-1"
     assert response.json()[0]["judgment_uid"] == "conflict_judgment_test"
+
+
+@pytest.mark.asyncio
+async def test_get_judgment_returns_it_by_uid(
+    dev_auth_dependency_overrides,
+    monkeypatch,
+):
+    """A single judgment must be fetchable by uid regardless of list ordering."""
+    captured = {}
+
+    async def fake_get_judgment(session, **kwargs):
+        captured.update(kwargs)
+        return _FakeJudgment()
+
+    async def override_get_db():
+        yield _DummySession()
+
+    monkeypatch.setattr(calendar_conflicts_api, "get_judgment", fake_get_judgment)
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with _client(user_id="reviewer", organization_id="org-acme") as client:
+            response = await client.get(
+                "/api/calendar/conflicts/judgments/conflict_judgment_test"
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    assert captured["judgment_uid"] == "conflict_judgment_test"
+    assert captured["user_id"] == "reviewer"
+    assert captured["organization_id"] == "org-acme"
+    assert captured["workspace_id"] == "workspace-org-acme"
+    assert response.json()["judgment_uid"] == "conflict_judgment_test"
+
+
+@pytest.mark.asyncio
+async def test_get_judgment_404s_when_outside_caller_scope(
+    dev_auth_dependency_overrides,
+    monkeypatch,
+):
+    """A judgment_uid outside the caller's own scope must 404, not leak another scope's data."""
+
+    async def fake_get_judgment(session, **kwargs):
+        raise calendar_conflicts_api.CalendarConflictJudgmentNotFoundError(
+            "Calendar conflict judgment is outside the requested scope"
+        )
+
+    async def override_get_db():
+        yield _DummySession()
+
+    monkeypatch.setattr(calendar_conflicts_api, "get_judgment", fake_get_judgment)
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with _client(user_id="reviewer") as client:
+            response = await client.get("/api/calendar/conflicts/judgments/not-mine")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -241,12 +302,49 @@ async def test_correct_judgment_returns_audit_trail_and_commits(
     assert dummy_session.committed is True
     assert captured["judgment_uid"] == "conflict_judgment_test"
     assert captured["actor_user_id"] == "reviewer"
+    assert captured["organization_id"] == "org-acme"
+    assert captured["workspace_id"] == "workspace-org-acme"
     assert captured["decision_code"] == "available"
     assert captured["status_code"] == "overridden"
 
     body = response.json()
     assert body["correction_uid"] == "conflict_correction_test"
     assert body["after_json"]["status_code"] == "overridden"
+
+
+@pytest.mark.asyncio
+async def test_correct_judgment_rejects_incoherent_status_and_decision(
+    dev_auth_dependency_overrides,
+    monkeypatch,
+):
+    """Confirming a judgment while also changing its decision must fail closed at the request layer."""
+    calls = []
+
+    async def fake_apply_correction(session, **kwargs):
+        calls.append(kwargs)
+        return _FakeCorrection()
+
+    async def override_get_db():
+        yield _DummySession()
+
+    monkeypatch.setattr(calendar_conflicts_api, "apply_correction", fake_apply_correction)
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with _client(user_id="reviewer") as client:
+            response = await client.post(
+                "/api/calendar/conflicts/judgments/conflict_judgment_test/corrections",
+                json={
+                    "correction_action": "confirm_decision",
+                    "decision_code": "available",
+                    "status_code": "confirmed",
+                },
+            )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "calendar_correction_incoherent"
+    assert calls == []
 
 
 @pytest.mark.asyncio
@@ -270,7 +368,11 @@ async def test_correct_judgment_404s_when_outside_caller_scope(
         async with _client(user_id="reviewer") as client:
             response = await client.post(
                 "/api/calendar/conflicts/judgments/not-mine/corrections",
-                json={"correction_action": "override_decision", "status_code": "overridden"},
+                json={
+                    "correction_action": "override_decision",
+                    "decision_code": "available",
+                    "status_code": "overridden",
+                },
             )
     finally:
         app.dependency_overrides.pop(get_db, None)

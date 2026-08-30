@@ -1,4 +1,30 @@
 ## [Unreleased]
+- (Devin review 반영, 2차) `calendar_conflict_judgment_service.py`/API에 대한 6건의 추가
+  지적을 반영했습니다: (1) **[보안, 최우선]** judgment/correction 테이블과 조회·정정 쿼리에
+  `workspace_id`를 추가했습니다 — 이전에는 `user_id`+`organization_id`만으로 범위를 제한했는데,
+  `AuthContext.workspace_id`는 세션 토큰의 독립 claim이라(테스트 스텁만 편의상 user_id/org에서
+  파생) 동일 user_id/organization_id가 서로 다른 workspace를 오갈 수 있어 워크스페이스 경계를
+  넘어 판단을 열람·정정할 수 있었습니다. 신설 `project_graph` 모듈의 기존 workspace_id 스코핑
+  관례를 그대로 따랐습니다(Alembic `0018`은 아직 어떤 DB에도 적용되지 않은 이번 PR 자체
+  마이그레이션이라 새 마이그레이션 대신 직접 수정). (2) `list_judgments`의 200건 상한 이후로
+  접근 불가능해지는 문제를, 전체 페이지네이션 대신 `GET
+  /api/calendar/conflicts/judgments/{judgment_uid}` 단건 조회 엔드포인트로 해소했습니다(judgment_uid를
+  아는 호출자는 언제나 개별 조회 가능). (3) `decision_code`를 바꾸는 정정이 그 rationale을
+  `recommended_action`으로 그대로 저장해 사람이 남긴 "왜 바꿨는지" 설명이 향후 스케줄링 안내처럼
+  보이던 문제를, `calendar_conflict_policy.py`에 새로 추가한 `default_recommended_action()`(정책
+  자체의 decision_code→recommended_action 단일 소스, `evaluate_calendar_conflicts`도 이제 이걸
+  재사용)로 대체해 고쳤습니다 — rationale은 correction 감사 기록에만 남습니다. (4)
+  `status_code`(confirm/override/dismiss)와 `decision_code`가 서로 모순되는 조합(override인데
+  새 decision 없음, confirm/dismiss인데 decision을 바꾸려 함)을 API 요청 모델의
+  model_validator와 `apply_correction` 양쪽에서(비-HTTP 호출자 대비) 거부하도록
+  `validate_correction_coherence()`를 추가했습니다. (5) `calendar_conflict_ics.py`의 ICS
+  파서가 별도로 하드코딩했던 500건 상한을 `MAX_EXISTING_COMMITMENTS` 공유 상수로 통합했습니다.
+  (6) Noema 도구(`check_calendar_conflict`)가 malformed 행을 건너뛴 개수를
+  `skipped_existing_count`로 응답에 포함해, "정상적으로 available"과 "증거를 일부 버리고
+  available"을 구분할 수 있게 했습니다. 검증: 신규 테스트 다수 추가, 전체 백엔드 스위트
+  1835 passed/32 skipped(무관한 process-group 타이밍 테스트 1건이 전체 스위트 동시 실행에서만
+  간헐적으로 실패했으나 단독 실행 시 통과 확인, 이번 변경과 무관), ruff clean, `alembic heads`
+  단일 head 유지.
 - Noema general agent(`services/noema_agent.py`)에 `check_calendar_conflict` 도구를
   추가했습니다. `/api/calendar/conflicts/evaluate`와 동일한 상태 가중 결정론적
   정책(`evaluate_calendar_conflicts`)을 그대로 재사용해 Noema의 일정 충돌 판단이

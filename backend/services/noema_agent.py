@@ -487,6 +487,7 @@ async def tool_check_calendar_conflict(
         }
 
     parsed_existing: list[CalendarCommitment] = []
+    skipped_existing_count = 0
     for row in existing:
         try:
             parsed_existing.append(
@@ -498,6 +499,7 @@ async def tool_check_calendar_conflict(
                 )
             )
         except (CalendarPolicyValidationError, AttributeError, TypeError):
+            skipped_existing_count += 1
             continue
 
     decision = evaluate_calendar_conflicts(proposed, parsed_existing)
@@ -516,6 +518,10 @@ async def tool_check_calendar_conflict(
             }
             for conflict in decision.conflicts
         ],
+        # Malformed existing rows are skipped (see docstring), not raised --
+        # disclose how many so the caller can tell a clean "available" from
+        # one computed after silently dropping evidence.
+        "skipped_existing_count": skipped_existing_count,
     }
 
 

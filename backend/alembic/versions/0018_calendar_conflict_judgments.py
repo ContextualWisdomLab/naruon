@@ -26,6 +26,7 @@ def upgrade() -> None:
             sa.Column("judgment_uid", sa.String(length=96), nullable=False),
             sa.Column("user_id", sa.String(), nullable=False),
             sa.Column("organization_id", sa.String(), nullable=True),
+            sa.Column("workspace_id", sa.String(), nullable=False),
             sa.Column("proposed_commitment_id", sa.String(length=256), nullable=False),
             sa.Column("source_thread_id", sa.String(), nullable=True),
             sa.Column("source_message_id", sa.String(), nullable=True),
@@ -51,6 +52,7 @@ def upgrade() -> None:
             sa.Column("calendar_conflict_judgment_id", sa.Integer(), nullable=False),
             sa.Column("user_id", sa.String(), nullable=False),
             sa.Column("organization_id", sa.String(), nullable=True),
+            sa.Column("workspace_id", sa.String(), nullable=False),
             sa.Column("actor_user_id", sa.String(), nullable=False),
             sa.Column("correction_action", sa.String(length=64), nullable=False),
             sa.Column("before_json", sa.JSON(), nullable=False),
@@ -95,7 +97,7 @@ def _calendar_conflict_indexes() -> dict[str, list[tuple[str, list[str]]]]:
         _JUDGMENT_TABLE: [
             (
                 "ix_calendar_conflict_judgments_scope_thread",
-                ["user_id", "organization_id", "source_thread_id"],
+                ["user_id", "organization_id", "workspace_id", "source_thread_id"],
             ),
         ],
         _CORRECTION_TABLE: [

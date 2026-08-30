@@ -327,6 +327,7 @@ async def test_check_calendar_conflict_available_when_no_overlap():
     assert result["status"] == "ok"
     assert result["decision_code"] == "available"
     assert result["conflicts"] == []
+    assert result["skipped_existing_count"] == 0
 
 
 @pytest.mark.asyncio
@@ -391,6 +392,7 @@ async def test_check_calendar_conflict_skips_malformed_existing_rows():
     # Malformed rows are skipped, not raised — the good proposal still evaluates.
     assert result["status"] == "ok"
     assert result["decision_code"] == "available"
+    assert result["skipped_existing_count"] == 2
 
 
 @pytest.mark.asyncio

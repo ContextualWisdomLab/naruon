@@ -22,10 +22,13 @@ from services.calendar_conflict_ics import (
     parse_proposed_calendar_commitment_from_ics,
 )
 from services.calendar_conflict_judgment_service import (
+    CalendarConflictCorrectionIncoherentError,
     CalendarConflictJudgmentNotFoundError,
     apply_correction,
     create_judgment,
+    get_judgment,
     list_judgments,
+    validate_correction_coherence,
 )
 from services.calendar_conflict_policy import (
     MAX_EXISTING_COMMITMENTS,
@@ -44,6 +47,7 @@ POLICY_VALIDATION_HTTP_STATUS = 422
 SOURCE_IDENTIFIER_PATTERN = r"^[\w\.\-\+@_<>]+$"
 REQUEST_INVALID_ERROR_CODE = "calendar_request_invalid"
 PROPOSED_SOURCE_REQUIRED_DETAIL = "Provide exactly one of proposed or proposed_ics"
+CORRECTION_INCOHERENT_ERROR_CODE = "calendar_correction_incoherent"
 
 
 class CalendarConflictAPIRoute(APIRoute):
@@ -136,6 +140,16 @@ def _request_validation_error_response(exc: RequestValidationError) -> JSONRespo
         error = CalendarConflictErrorResponse(
             error_code="calendar_proposed_source_missing",
             detail=PROPOSED_SOURCE_REQUIRED_DETAIL,
+        )
+    elif any(
+        "requires a replacement decision_code" in message
+        or "must not change decision_code" in message
+        for message in messages
+    ):
+        error = CalendarConflictErrorResponse(
+            error_code=CORRECTION_INCOHERENT_ERROR_CODE,
+            detail="status_code and decision_code disagree about whether the "
+            "decision changed",
         )
     else:
         error = CalendarConflictErrorResponse(
@@ -264,6 +278,22 @@ class CalendarConflictCorrectionRequest(BaseModel):
     status_code: Literal["confirmed", "overridden", "dismissed"]
     rationale: str | None = Field(default=None, max_length=2000)
 
+    @model_validator(mode="after")
+    def require_coherent_status_and_decision(self) -> Self:
+        """Reject a status_code/decision_code pair the service would also reject.
+
+        Checked here too (not only in apply_correction) so a mismatched
+        request fails fast with a specific error_code instead of a 500 or a
+        generic one from the service-layer ValueError.
+        """
+        try:
+            validate_correction_coherence(
+                status_code=self.status_code, decision_code=self.decision_code
+            )
+        except CalendarConflictCorrectionIncoherentError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
 
 class CalendarConflictCorrectionResponse(BaseModel):
     """The recorded before/after audit trail for one correction."""
@@ -333,6 +363,7 @@ async def create_calendar_conflict_judgment(
         db,
         user_id=auth_ctx.user_id,
         organization_id=auth_ctx.organization_id,
+        workspace_id=auth_ctx.workspace_id,
         proposed_commitment_id=proposed.commitment_id,
         source_thread_id=request.source_thread_id,
         source_message_id=request.source_message_id,
@@ -358,9 +389,33 @@ async def list_calendar_conflict_judgments(
         db,
         user_id=auth_ctx.user_id,
         organization_id=auth_ctx.organization_id,
+        workspace_id=auth_ctx.workspace_id,
         source_thread_id=source_thread_id,
     )
     return [_judgment_response(judgment) for judgment in judgments]
+
+
+@router.get(
+    "/judgments/{judgment_uid}",
+    response_model=CalendarConflictJudgmentResponse,
+)
+async def get_calendar_conflict_judgment(
+    judgment_uid: str,
+    auth_ctx: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> CalendarConflictJudgmentResponse:
+    """Fetch one judgment by uid, even if it has fallen out of the list bound."""
+    try:
+        judgment = await get_judgment(
+            db,
+            judgment_uid=judgment_uid,
+            user_id=auth_ctx.user_id,
+            organization_id=auth_ctx.organization_id,
+            workspace_id=auth_ctx.workspace_id,
+        )
+    except CalendarConflictJudgmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _judgment_response(judgment)
 
 
 @router.post(
@@ -380,6 +435,7 @@ async def correct_calendar_conflict_judgment(
             judgment_uid=judgment_uid,
             user_id=auth_ctx.user_id,
             organization_id=auth_ctx.organization_id,
+            workspace_id=auth_ctx.workspace_id,
             actor_user_id=auth_ctx.user_id,
             correction_action=request.correction_action,
             decision_code=request.decision_code,

@@ -10,11 +10,18 @@ from db.models import CalendarConflictJudgment
 from services.calendar_conflict_judgment_service import (
     CORRECTED_DECISION_REASON_CODE,
     _MAX_JUDGMENTS_PER_LIST,
+    CalendarConflictCorrectionIncoherentError,
     _conflicts_to_json,
     apply_correction,
+    get_judgment,
     list_judgments,
+    validate_correction_coherence,
 )
-from services.calendar_conflict_policy import CalendarCommitment, CalendarConflictDecision
+from services.calendar_conflict_policy import (
+    CalendarCommitment,
+    CalendarConflictDecision,
+    default_recommended_action,
+)
 
 
 class _FakeScalars:
@@ -63,6 +70,7 @@ def _judgment(**overrides) -> CalendarConflictJudgment:
     defaults = {
         "user_id": "user-1",
         "organization_id": None,
+        "workspace_id": "workspace-1",
         "proposed_commitment_id": "proposal-1",
         "source_thread_id": "thread-1",
         "source_message_id": None,
@@ -106,6 +114,28 @@ def test_conflicts_to_json_serializes_iso_timestamps_and_status() -> None:
     ]
 
 
+def test_validate_correction_coherence_requires_decision_for_override() -> None:
+    """An override with no replacement decision is meaningless."""
+    with pytest.raises(CalendarConflictCorrectionIncoherentError, match="requires a replacement"):
+        validate_correction_coherence(status_code="overridden", decision_code=None)
+
+
+@pytest.mark.parametrize("status_code", ["proposed", "confirmed", "dismissed"])
+def test_validate_correction_coherence_forbids_decision_change_without_override(
+    status_code: str,
+) -> None:
+    """Confirming or dismissing must never silently swap the decision."""
+    with pytest.raises(CalendarConflictCorrectionIncoherentError, match="must not change"):
+        validate_correction_coherence(status_code=status_code, decision_code="available")
+
+
+def test_validate_correction_coherence_accepts_matching_pairs() -> None:
+    """The two coherent shapes (override+decision, confirm/dismiss with none) pass."""
+    validate_correction_coherence(status_code="overridden", decision_code="available")
+    validate_correction_coherence(status_code="confirmed", decision_code=None)
+    validate_correction_coherence(status_code="dismissed", decision_code=None)
+
+
 @pytest.mark.asyncio
 async def test_apply_correction_rejects_unsupported_status_code() -> None:
     """A bogus status_code must fail closed before any database lookup runs."""
@@ -115,6 +145,7 @@ async def test_apply_correction_rejects_unsupported_status_code() -> None:
             judgment_uid="conflict_judgment_test",
             user_id="user-1",
             organization_id=None,
+            workspace_id="workspace-1",
             actor_user_id="user-1",
             correction_action="override",
             decision_code=None,
@@ -132,9 +163,28 @@ async def test_apply_correction_rejects_unsupported_decision_code() -> None:
             judgment_uid="conflict_judgment_test",
             user_id="user-1",
             organization_id=None,
+            workspace_id="workspace-1",
             actor_user_id="user-1",
             correction_action="override",
             decision_code="not_a_real_decision",
+            status_code="confirmed",
+            rationale=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_apply_correction_rejects_incoherent_status_and_decision() -> None:
+    """A confirm/dismiss that also tries to change the decision must fail closed."""
+    with pytest.raises(CalendarConflictCorrectionIncoherentError):
+        await apply_correction(
+            object(),
+            judgment_uid="conflict_judgment_test",
+            user_id="user-1",
+            organization_id=None,
+            workspace_id="workspace-1",
+            actor_user_id="user-1",
+            correction_action="confirm_decision",
+            decision_code="available",
             status_code="confirmed",
             rationale=None,
         )
@@ -150,6 +200,7 @@ async def test_apply_correction_locks_the_judgment_row() -> None:
         judgment_uid="conflict_judgment_test",
         user_id="user-1",
         organization_id=None,
+        workspace_id="workspace-1",
         actor_user_id="reviewer",
         correction_action="override_decision",
         decision_code="available",
@@ -158,7 +209,9 @@ async def test_apply_correction_locks_the_judgment_row() -> None:
     )
 
     assert len(session.captured_statements) == 1
-    assert "FOR UPDATE" in str(session.captured_statements[0])
+    compiled = str(session.captured_statements[0])
+    assert "FOR UPDATE" in compiled
+    assert "workspace_id" in compiled
 
 
 @pytest.mark.asyncio
@@ -172,6 +225,7 @@ async def test_apply_correction_overriding_decision_keeps_reason_and_action_cohe
         judgment_uid="conflict_judgment_test",
         user_id="user-1",
         organization_id=None,
+        workspace_id="workspace-1",
         actor_user_id="reviewer",
         correction_action="override_decision",
         decision_code="available",
@@ -181,11 +235,16 @@ async def test_apply_correction_overriding_decision_keeps_reason_and_action_cohe
 
     assert judgment.decision_code == "available"
     assert judgment.reason_code == CORRECTED_DECISION_REASON_CODE
-    assert judgment.recommended_action == "Confirmed with the proposer directly."
+    # recommended_action is restated from the policy's own canonical mapping,
+    # never from rationale -- rationale is an explanation, not scheduling advice.
+    assert judgment.recommended_action == default_recommended_action("available")
+    assert judgment.recommended_action != "Confirmed with the proposer directly."
+    # The rationale itself is preserved, just not as recommended_action.
+    assert correction.rationale == "Confirmed with the proposer directly."
     # The original decision's reason/action are never lost -- they are in before_json.
     assert correction.before_json["reason_code"] == "lower_priority_conflict_requires_explicit_resolution"
     assert correction.after_json["reason_code"] == CORRECTED_DECISION_REASON_CODE
-    assert correction.after_json["recommended_action"] == "Confirmed with the proposer directly."
+    assert correction.after_json["recommended_action"] == default_recommended_action("available")
 
 
 @pytest.mark.asyncio
@@ -199,6 +258,7 @@ async def test_apply_correction_confirming_without_decision_change_keeps_origina
         judgment_uid="conflict_judgment_test",
         user_id="user-1",
         organization_id=None,
+        workspace_id="workspace-1",
         actor_user_id="reviewer",
         correction_action="confirm_decision",
         decision_code=None,
@@ -213,13 +273,36 @@ async def test_apply_correction_confirming_without_decision_change_keeps_origina
 
 
 @pytest.mark.asyncio
-async def test_list_judgments_bounds_the_result_set() -> None:
+async def test_list_judgments_bounds_the_result_set_and_scopes_by_workspace() -> None:
     """An unbounded list query could grow without limit for a long-lived account."""
     session = _RecordingSession()
 
-    await list_judgments(session, user_id="user-1", organization_id=None)
+    await list_judgments(
+        session, user_id="user-1", organization_id=None, workspace_id="workspace-1"
+    )
 
     assert len(session.captured_statements) == 1
-    assert f"LIMIT {_MAX_JUDGMENTS_PER_LIST}" in str(
+    compiled = str(
         session.captured_statements[0].compile(compile_kwargs={"literal_binds": True})
     )
+    assert f"LIMIT {_MAX_JUDGMENTS_PER_LIST}" in compiled
+    assert "workspace_id" in compiled
+
+
+@pytest.mark.asyncio
+async def test_get_judgment_reaches_a_row_outside_the_list_bound() -> None:
+    """A judgment past the 200-row list window must still be individually reachable."""
+    judgment = _judgment()
+    session = _RecordingSession(row=judgment)
+
+    fetched = await get_judgment(
+        session,
+        judgment_uid="conflict_judgment_test",
+        user_id="user-1",
+        organization_id=None,
+        workspace_id="workspace-1",
+    )
+
+    assert fetched is judgment
+    assert len(session.captured_statements) == 1
+    assert "workspace_id" in str(session.captured_statements[0])
