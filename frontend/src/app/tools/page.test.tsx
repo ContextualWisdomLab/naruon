@@ -163,6 +163,20 @@ describe("ToolsPage", () => {
 
     const button = container.querySelector('button[data-tool-execute="test_tool"]');
     expect(button).not.toBeNull();
+    const threadInput = container.querySelector(
+      'textarea[data-tool-parameter="test_tool.thread_id"]',
+    ) as HTMLTextAreaElement | null;
+    expect(threadInput).not.toBeNull();
+
+    act(() => {
+      if (!threadInput) throw new Error("Thread input was not rendered.");
+      const setNativeValue = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )?.set;
+      setNativeValue?.call(threadInput, "user-provided content");
+      threadInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
 
     act(() => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -170,7 +184,7 @@ describe("ToolsPage", () => {
     await flushAsyncWork();
 
     expect(executeCalled).toBe(true);
-    expect(executeBody).toEqual({ parameters: { thread_id: "test_value", limit: 0 } });
+    expect(executeBody).toEqual({ parameters: { thread_id: "user-provided content", limit: 0 } });
     expect(container.textContent).toContain("성공");
     expect(container.textContent).toContain("Success message");
   });
