@@ -1,4 +1,26 @@
 ## [Unreleased]
+- (G-15 follow-up, 근본 수정) `services/newsdom_worker.py`가
+  `AttachmentReparseWorker`와 똑같은 두 결함을 그대로 갖고 있던 것을 고쳤습니다 —
+  ADR-0005 Revisions와 gap-baseline에 추적 기록해 둔 바로 그 후속 후보입니다. (1) 🔴
+  PostgreSQL advisory lease를 매 항목 `commit()`/`rollback()`이 커넥션을 풀로
+  반환하는 동일한 `AsyncSession`으로 획득·해제해, 해제가 lock을 잡았던 것과 다른
+  물리 커넥션에서 실행되어 lease가 영구히 묶일 수 있던 문제 — 스윕 전체 동안 여는
+  전용 `AsyncConnection` 하나로만 획득·해제하도록 재설계했습니다
+  (`_engine_uses_postgresql()`/`_try_acquire_sweep_lease`/`_release_sweep_lease`가
+  이제 세션이 아니라 커넥션을 받습니다). (2) 🔴 첨부파일/문서 두 스윕 모두 배치의
+  마지막 행으로 커서를 처리 *전에* 미리 전진시켜, 처리 중 예외로 pending 상태 그대로
+  남은 행이 커서 아래로 떨어져 전방 큐가 완전히 비워질 때까지 다시 선택되지 못하던
+  동일한 starvation 버그 — 첫 실패 행 바로 앞까지만 전진하도록 고쳤습니다. 문서
+  커서는 `Document.document_id`가 정수가 아닌 문자열 기본키라 "실패 id - 1" 같은
+  산술이 불가능해서, 실패 이전에 실제로 커밋된 마지막 행의 id를 추적하는 방식으로
+  구현했습니다(연속된 정수 키에서는 기존 방식과 동일한 결과, 비연속/문자열 키에서도
+  올바름). 두 스윕 모두 처리 전 각 행을 id로 다시 가져오도록도 바꿨습니다(기존
+  bulk-loaded 인스턴스를 재사용하지 않음) — `AsyncSession.rollback()`이 이전 항목의
+  실패 이후 세션에 이미 로드된 모든 객체를 expire시키므로, 이전에 로드된 인스턴스의
+  속성을 읽으면 그 실패를 격리하는 대신 새로운 에러가 나기 때문입니다(같은 코드베이스의
+  `AttachmentReparseWorker`가 이미 검증·적용한 패턴을 그대로 따랐습니다). 검증: 신규
+  테스트 6개(lease 커넥션 전환 1 + 커서 캡 2 + stale-instance 재현 방지 2 + 논-postgres
+  엔진 분기 1), 전체 백엔드 스위트 1879 passed/33 skipped(기존 1875), ruff clean.
 - (Devin/코드품질 봇 review 반영, G-15/캘린더 충돌) naruon#1486에 도착한 3건을 추가로 고쳤습니다:
   (1) 🟡 Alembic `0019_attachment_uid`의 `downgrade()`가 항상 `op.drop_index`만 호출했는데,
   `Base.metadata.create_all()`로 새로 부트스트랩된 DB(로컬/개발 전용 경로)에서는

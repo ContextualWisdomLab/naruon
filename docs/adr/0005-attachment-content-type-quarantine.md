@@ -185,11 +185,25 @@ than reversing the original decision:
   unlock is a silent no-op that leaves the lease stuck until that connection
   is later recycled or closed, silently halting every replica's sweep. The
   lease is now acquired and released on one dedicated connection held open
-  for the whole sweep instead. `services/newsdom_worker.py` shares the same
-  acquire/release-through-the-per-item-session shape and is believed to carry
-  the same latent lease-connection risk; fixing it is out of scope here (its
-  own pre-existing, already-shipped code, not touched by this PR) and is
-  tracked in `docs/product-technical-gap-baseline.md`.
+  for the whole sweep instead.
+- **`services/newsdom_worker.py` carried the same two gaps, now fixed to
+  match.** It shared `AttachmentReparseWorker`'s acquire/release-through-the-
+  per-item-session lease shape and its pre-processing cursor advance, on
+  both its attachment and document sweeps. `NewsdomRecognitionWorker` now
+  acquires/releases the advisory lock on one dedicated connection opened for
+  the whole sweep (`_engine_uses_postgresql()` / `_try_acquire_sweep_lease`
+  / `_release_sweep_lease` now take a connection, not a session), and each
+  sweep caps its cursor at the point of the first failure instead of the
+  batch's last row. The document cursor is a string primary key
+  (`Document.document_id`, no `id - 1` to fall back on), so that sweep
+  tracks the last row actually confirmed resolved before a failure rather
+  than subtracting from the failed row's id — equivalent to the integer
+  case for a contiguous key, and correct for a non-contiguous one. Both
+  sweeps also re-fetch each row fresh by id before processing (mirroring
+  `AttachmentReparseWorker`), since `AsyncSession.rollback()` after an
+  earlier item's failure expires every object already loaded in that
+  session, and a stale, expired bulk-loaded instance's attribute read would
+  raise instead of just isolating that earlier failure.
 
 ## References (APA 7th)
 
