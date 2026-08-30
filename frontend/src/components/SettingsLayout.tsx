@@ -5,9 +5,41 @@ import { apiClient } from '@/lib/api-client';
 import type { SessionClaims } from '@/lib/session-cookie';
 import { clearOidcSession, getOidcBrowserConfig, startOidcLogin } from '@/lib/oidc-session';
 import { useWorkspaceStartupView, setWorkspaceStartupView } from '@/lib/workspace-preferences';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import React, { useEffect, useRef, useState, type RefObject } from 'react';
 
 export type SettingsTab = '워크스페이스' | '멤버' | 'AI 모델' | '연결 계정' | '알림' | '자동화' | '결제' | '개발자';
+
+function AccessibleDisabledButton({
+  disabled,
+  title,
+  children,
+  onClick,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { title: string }) {
+  const id = React.useId();
+  return (
+    <>
+      <button
+        {...props}
+        aria-disabled={disabled ? true : props['aria-disabled']}
+        aria-describedby={disabled ? `desc-${id}` : undefined}
+        title={title}
+        className={`${props.className ?? ''} ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
+        onClick={(event) => {
+          if (disabled) {
+            event.preventDefault();
+            return;
+          }
+          onClick?.(event);
+        }}
+      >
+        {children}
+      </button>
+      {disabled ? <span id={`desc-${id}`} className="sr-only">{title}</span> : null}
+    </>
+  );
+}
+
 const EMPTY_SESSION_CLAIMS: SessionClaims = {
   userId: null,
   organizationId: null,
@@ -540,6 +572,15 @@ export function SettingsLayout() {
   const activeModelProvider = modelProviders.find((provider) => provider.is_active) ?? modelProviders[0] ?? null;
   const selectedEmbeddingProvider = modelProviders.find((provider) => provider.id === selectedEmbeddingProviderId) ?? activeModelProvider;
   const accountReady = !accountLoading && !accountError && accountConfig !== null;
+  const accountActionTitle = accountSaving
+    ? "저장 중입니다"
+    : accountLoading
+      ? "계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요."
+      : accountError
+        ? "계정 설정을 불러오지 못했습니다. 다시 시도하세요."
+        : !accountReady
+          ? "계정 설정이 준비되지 않았습니다"
+          : "계정 설정 저장";
   const oauthAppConfigured = Boolean(
     accountConfig?.oauth_client_id
       && accountConfig?.oauth_redirect_uri
@@ -610,7 +651,7 @@ export function SettingsLayout() {
 
   const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!accountReady) return;
+    if (accountSaving || !accountReady) return;
     setAccountSaving(true);
     setAccountError(null);
     setAccountStatus(null);
@@ -1299,17 +1340,17 @@ export function SettingsLayout() {
                         빈 secret 입력은 기존 저장값을 유지합니다. 실제 연결과 외부 쓰기는 서버 검증과 self-hosted connector 정책을 통과한 뒤 별도 실행됩니다.
                       </p>
                     </div>
-                    <button
+                    <AccessibleDisabledButton
                       type="submit"
                       disabled={accountSaving || !accountReady}
                       aria-disabled={accountSaving || !accountReady}
                       aria-busy={accountSaving}
-                      title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      title={accountActionTitle}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:opacity-60"
                     >
                       {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                       {accountSaving ? '저장 중' : '계정 설정 저장'}
-                    </button>
+                    </AccessibleDisabledButton>
                   </div>
 
                   <div className="mt-6 grid gap-5">
@@ -1434,18 +1475,18 @@ export function SettingsLayout() {
                         <dd className="mt-1 break-all font-mono text-sm text-foreground">{runnerConfig?.fingerprint ?? '기록 없음'}</dd>
                       </div>
                     </dl>
-                    <button
+                    <AccessibleDisabledButton
                       type="button"
                       onClick={handleRunnerTokenRotate}
                       disabled={runnerRotating}
                       aria-disabled={runnerRotating}
                       aria-busy={runnerRotating}
                       title={runnerRotating ? "등록 토큰을 회전 중입니다" : "등록 토큰을 회전합니다"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:opacity-60"
                     >
                       <RefreshCw className={`size-4 ${runnerRotating ? 'animate-spin' : ''}`} />
                       {runnerRotating ? '회전 중' : '등록 토큰 회전'}
-                    </button>
+                    </AccessibleDisabledButton>
                   </div>
                   {runnerRotateError ? (
                     <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{runnerRotateError}</p>
@@ -1614,24 +1655,24 @@ export function SettingsLayout() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button
+                      <AccessibleDisabledButton
                         type="button"
                         onClick={handleOidcLogin}
                         disabled={!oidcBrowserConfig}
                         title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
                       >
                         OIDC 로그인
-                      </button>
-                      <button
+                      </AccessibleDisabledButton>
+                      <AccessibleDisabledButton
                         type="button"
                         onClick={handleOidcLogout}
                         disabled={!oidcSessionClaims.userId}
                         title={!oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:opacity-50"
                       >
                         로그아웃
-                      </button>
+                      </AccessibleDisabledButton>
                     </div>
                   </div>
                   {oidcActionError ? (
