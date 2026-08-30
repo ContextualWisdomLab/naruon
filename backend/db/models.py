@@ -877,8 +877,16 @@ Index(
 
 class Attachment(Base):
     __tablename__ = "email_attachments"
+    __table_args__ = (
+        UniqueConstraint("attachment_uid", name="uq_email_attachments_uid"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    attachment_uid: Mapped[str] = mapped_column(
+        String(96),
+        default=lambda: f"attachment_{uuid.uuid4().hex}",
+        nullable=False,
+    )
     email_id: Mapped[int] = mapped_column(ForeignKey("email_records.id"))
     filename: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)

@@ -18,6 +18,18 @@ _GENERIC_CONTENT_TYPES = {
 MAX_ATTACHMENT_PARSE_SOURCE_CHARS = 1_000_000
 MAX_ATTACHMENT_PARSE_SOURCE_BYTES = 20 * 1024 * 1024
 MAX_ATTACHMENT_FILENAME_DECODE_ROUNDS = 3
+CONTENT_TYPE_MISMATCH_QUARANTINED_STATUS = "content_type_mismatch_quarantined"
+# Magic-byte signatures for content whose real type is cheaply verifiable from
+# its first bytes, independent of whatever content_type/filename the sender
+# claimed. Order matters: checked in sequence, first match wins.
+_MAGIC_BYTE_SIGNATURES: tuple[tuple[bytes, str], ...] = (
+    (b"%PDF-", "application/pdf"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"PK\x03\x04", "application/zip"),
+)
 
 
 @dataclass(frozen=True)
@@ -140,6 +152,48 @@ def get_attachment_parser_manifest() -> list[AttachmentParserDescriptor]:
     return list(_PARSER_MANIFEST)
 
 
+def _sniff_content_type(raw_content: Any) -> str | None:
+    """Return the MIME type implied by known magic bytes, or None if unrecognized.
+
+    Only content families with a cheap, reliable byte signature are covered
+    (see ``_MAGIC_BYTE_SIGNATURES``) -- text formats have no such signature and
+    are intentionally left unsniffed.
+    """
+    payload = _coerce_deferred_payload_bytes(raw_content)
+    for signature, sniffed_content_type in _MAGIC_BYTE_SIGNATURES:
+        if payload.startswith(signature):
+            return sniffed_content_type
+    return None
+
+
+def _quarantine_result(
+    *,
+    safe_filename: str,
+    normalized_content_type: str,
+    sniffed_content_type: str,
+    raw_content: Any,
+) -> AttachmentParseResult:
+    quarantined_payload = _coerce_deferred_payload_bytes(raw_content)
+    retained_content = (
+        _encode_deferred_payload(quarantined_payload)
+        if len(quarantined_payload) <= MAX_ATTACHMENT_PARSE_SOURCE_BYTES
+        else ""
+    )
+    return AttachmentParseResult(
+        filename=safe_filename,
+        content=retained_content,
+        content_type=normalized_content_type,
+        parse_content="",
+        # parse_content_type carries what the bytes actually are here (not
+        # what was declared/resolved) so a caller can compare content_type
+        # (declared) against parse_content_type (sniffed) to see the mismatch.
+        parse_content_type=sniffed_content_type,
+        parser_key=_parser_key_for(sniffed_content_type, "parsed"),
+        parse_status=CONTENT_TYPE_MISMATCH_QUARANTINED_STATUS,
+        parse_error_code=CONTENT_TYPE_MISMATCH_QUARANTINED_STATUS,
+    )
+
+
 def parse_email_attachment(
     *,
     filename: str | None,
@@ -153,6 +207,20 @@ def parse_email_attachment(
         safe_filename,
         normalized_content_type,
     )
+
+    # A recognized signature that disagrees with the declared/resolved type
+    # is a stronger, independent signal than anything below (size limits,
+    # PDF-specific magic-byte validation, supported-type lookup) -- a mislabeled
+    # or disguised attachment must never reach those paths and get silently
+    # parsed or classified under the wrong type.
+    sniffed_content_type = _sniff_content_type(raw_content)
+    if sniffed_content_type is not None and sniffed_content_type != parse_content_type:
+        return _quarantine_result(
+            safe_filename=safe_filename,
+            normalized_content_type=normalized_content_type,
+            sniffed_content_type=sniffed_content_type,
+            raw_content=raw_content,
+        )
 
     deferred_descriptor = _DEFERRED_DESCRIPTORS_BY_CONTENT_TYPE.get(parse_content_type)
     if deferred_descriptor is not None:

@@ -1,4 +1,19 @@
 ## [Unreleased]
+- **(G-15 첫 슬라이스) 첨부파일 content-type 불일치 quarantine + `attachment_uid` + reparse-intent
+  API**를 추가했습니다. `services/attachment_parser.py`가 이제 첨부파일의 실제 바이트를 알려진
+  매직 바이트 시그니처(PDF/PNG/JPEG/GIF/ZIP)로 스니핑하고, sniff된 타입이 선언된(또는 확장자로
+  추론된) content_type과 다르면 파싱/보류/unsupported 분류 대신 `parse_status =
+  parse_error_code = "content_type_mismatch_quarantined"`으로 격리합니다 — 선언된 타입은
+  `content_type`에, 실제 타입은 기존 `parse_content_type` 컬럼에 남겨 새 컬럼 없이 두 값을
+  비교하는 것만으로 불일치를 알 수 있게 했고, 원본 바이트는 base64로 보존합니다(기존 deferred-PDF와
+  동일한 `MAX_ATTACHMENT_PARSE_SOURCE_BYTES` 상한 적용). `Attachment`에 다른 신규 엔티티들과
+  동일한 컨벤션의 `attachment_uid` 오파크 id를 추가했습니다(Alembic `0019_attachment_uid`,
+  기존 행 백필 포함). `POST /api/data/attachments/{attachment_uid}/reparse-intent`가
+  quarantine된 첨부파일을 `reparse_pending`으로 전환하는 intent를 기록합니다(다른 `-intent`
+  엔드포인트와 동일하게 실제 재파싱은 아직 없는 별도 워커 슬라이스로 미룸). 설계 근거는
+  `docs/adr/0005-attachment-content-type-quarantine.md` 참고. 검증: 신규 테스트 8개
+  (파서 5개 + API 3개) 추가, 전체 백엔드 스위트 1842 passed/33 skipped, ruff clean,
+  `alembic heads`가 `0019_attachment_uid` 단일 head로 수렴.
 - (Devin review 반영, 3차) override가 judgment의 **현재** decision_code와 동일한 값을 다시
   제출하는 경우, `apply_correction`이 실제로 값이 바뀔 때만 `reason_code`/`recommended_action`을
   교체하도록 고쳤습니다 — 이전에는 "override"라는 이유만으로 실제 변경이 없어도 원래

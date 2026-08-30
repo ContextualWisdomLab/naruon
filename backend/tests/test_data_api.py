@@ -59,6 +59,7 @@ class MockAsyncSession:
     def __init__(self, results):
         self.results = results
         self.documents: list[Document] = []
+        self.attachments: list[Attachment] = []
         self.queries = []
         self.execute_calls = 0
 
@@ -66,6 +67,41 @@ class MockAsyncSession:
         self.queries.append(query)
         rendered_query = str(query)
         rendered_query_lower = rendered_query.lower()
+        if "where email_attachments.attachment_uid = " in rendered_query_lower:
+            compiled = query.compile()
+            params = compiled.params
+            attachment_uid = next(
+                (
+                    value
+                    for key, value in params.items()
+                    if key.startswith("attachment_uid")
+                ),
+                None,
+            )
+            user_id = next(
+                (value for key, value in params.items() if key.startswith("user_id")),
+                None,
+            )
+            organization_id = next(
+                (
+                    value
+                    for key, value in params.items()
+                    if key.startswith("organization_id")
+                ),
+                None,
+            )
+            rows = [
+                attachment
+                for attachment in self.attachments
+                if attachment.attachment_uid == attachment_uid
+                and (user_id is None or attachment.email.user_id == user_id)
+                and (
+                    attachment.email.organization_id == organization_id
+                    if organization_id is not None
+                    else attachment.email.organization_id is None
+                )
+            ]
+            return MockResult(rows[0] if rows else None)
         if (
             "webdav_accounts.source_uid" in rendered_query_lower
             and "webdav_accounts.account_id" not in rendered_query_lower
@@ -2638,6 +2674,86 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
 
     assert rival_response.status_code == 404
     assert "doc_rival" not in rival_response.text
+
+
+def test_data_attachment_reparse_intent_transitions_quarantined_to_pending(mock_db):
+    owned_email = _email("<owned-quarantine@example.com>", thread_id="thread-owned")
+    attachment = _attachment("invoice.pdf", "")
+    attachment.attachment_uid = "attachment_owned"
+    attachment.content_type = "application/pdf"
+    attachment.parse_content_type = "image/png"
+    attachment.parse_status = "content_type_mismatch_quarantined"
+    attachment.parse_error_code = "content_type_mismatch_quarantined"
+    attachment.email = owned_email
+    mock_db.attachments.append(attachment)
+
+    token = _signed_session_token(_valid_session_payload(sub="owner"))
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/attachments/attachment_owned/reparse-intent"
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["attachment_uid"] == "attachment_owned"
+    assert data["parse_status"] == "reparse_pending"
+    assert data["parse_error_code"] is None
+    assert data["provider_write_executed"] is False
+    assert data["audit_event"] == "data.attachment.reparse_intent"
+    assert attachment.parse_status == "reparse_pending"
+    assert attachment.parse_error_code is None
+
+
+def test_data_attachment_reparse_intent_rejects_non_quarantined_status(mock_db):
+    owned_email = _email("<owned-parsed@example.com>", thread_id="thread-owned")
+    attachment = _attachment("notes.txt", "already parsed content")
+    attachment.attachment_uid = "attachment_parsed"
+    attachment.parse_status = "parsed"
+    attachment.email = owned_email
+    mock_db.attachments.append(attachment)
+
+    token = _signed_session_token(_valid_session_payload(sub="owner"))
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/attachments/attachment_parsed/reparse-intent"
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 422, response.text
+    assert attachment.parse_status == "parsed"
+
+
+def test_data_attachment_reparse_intent_is_scoped_to_caller(mock_db):
+    rival_email = _email(
+        "<rival-quarantine@example.com>", thread_id="thread-rival"
+    )
+    rival_email.user_id = "rival-owner"
+    rival_attachment = _attachment("payload.pdf", "")
+    rival_attachment.attachment_uid = "attachment_rival"
+    rival_attachment.parse_status = "content_type_mismatch_quarantined"
+    rival_attachment.email = rival_email
+    mock_db.attachments.append(rival_attachment)
+
+    token = _signed_session_token(_valid_session_payload(sub="owner"))
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/attachments/attachment_rival/reparse-intent"
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 404
+    assert "attachment_rival" not in response.text
+    assert rival_attachment.parse_status == "content_type_mismatch_quarantined"
 
 
 def test_data_document_webdav_materialization_executes_source_backed_write(

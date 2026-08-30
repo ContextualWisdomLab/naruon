@@ -258,6 +258,65 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
         decode_deferred_attachment_payload(oversized)
 
 
+def test_declared_pdf_with_real_png_bytes_is_quarantined():
+    raw = b"\x89PNG\r\n\x1a\n" + b"rest of a real png payload"
+    result = parse_email_attachment(
+        filename="invoice.pdf",
+        content_type="application/pdf",
+        raw_content=raw,
+    )
+
+    assert result.content_type == "application/pdf"
+    assert result.parse_content_type == "image/png"
+    assert result.parse_content == ""
+    assert result.parse_status == "content_type_mismatch_quarantined"
+    assert result.parse_error_code == "content_type_mismatch_quarantined"
+    assert base64.b64decode(result.content) == raw
+
+
+def test_declared_text_plain_with_real_zip_bytes_is_quarantined():
+    raw = b"PK\x03\x04" + b"fake zip body"
+    result = parse_email_attachment(
+        filename="notes.txt",
+        content_type="text/plain",
+        raw_content=raw,
+    )
+
+    assert result.content_type == "text/plain"
+    assert result.parse_content_type == "application/zip"
+    assert result.parser_key == "unsupported_binary"
+    assert result.parse_status == "content_type_mismatch_quarantined"
+    assert result.parse_error_code == "content_type_mismatch_quarantined"
+    assert base64.b64decode(result.content) == raw
+
+
+def test_oversized_quarantine_payload_is_not_retained(monkeypatch):
+    monkeypatch.setattr(
+        "services.attachment_parser.MAX_ATTACHMENT_PARSE_SOURCE_BYTES", 10
+    )
+    raw = b"\x89PNG\r\n\x1a\n" + b"A" * 20
+
+    result = parse_email_attachment(
+        filename="picture.pdf",
+        content_type="application/pdf",
+        raw_content=raw,
+    )
+
+    assert result.parse_status == "content_type_mismatch_quarantined"
+    assert result.content == ""
+
+
+def test_matching_declared_and_sniffed_binary_type_is_not_quarantined():
+    """A real PDF declared as a PDF must go through the normal deferred path."""
+    result = parse_email_attachment(
+        filename="contract.pdf",
+        content_type="application/pdf",
+        raw_content=b"%PDF-1.7 real payload",
+    )
+
+    assert result.parse_status == "pdf_dom_recognition_pending"
+
+
 def test_safe_filename_handles_windows_path_traversal():
     assert _safe_filename("..\\..\\upload.txt") == "upload.txt"
     assert _safe_filename("C:\\mail\\report.pdf") == "report.pdf"

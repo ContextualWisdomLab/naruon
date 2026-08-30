@@ -1,0 +1,134 @@
+# ADR-0005: Quarantine attachments whose bytes disagree with their declared type
+
+**Status:** Accepted (Naruon-local attachment ingestion policy)
+**Date:** 2026-08-30
+**Decision owner:** Naruon maintainers
+**Scope:** Naruon's email-attachment parsing boundary
+(`services/attachment_parser.py`, `db.models.Attachment`,
+`POST /api/data/attachments/{attachment_uid}/reparse-intent`). This ADR does
+not introduce a general-purpose file-type detection library, a virus/malware
+scanner, or automatic remediation of quarantined content.
+
+## Context
+
+`parse_email_attachment` classifies an attachment purely from the sender-
+supplied `content_type` header (falling back to the filename extension for
+generic/missing values). Nothing previously verified that the attachment's
+actual bytes matched that claim. A sender — malicious or simply
+misconfigured — can label arbitrary binary content (an executable, an image,
+an archive) with any `content_type`/extension, and Naruon would either try to
+parse it as if it truly were that type, defer it for heavy recognition, or
+silently record it as an unsupported binary — three outcomes, none of which
+tell an operator or a future worker that the content lied about what it is.
+
+Every other product-facing entity added recently (`TicketTask`,
+`CalendarConflictJudgment`, `Document`) exposes an opaque `*_uid` id; `email_attachments`
+was the one remaining entity addressable only by its internal sequential
+integer id, so it could not be the target of a public, addressable retry
+action.
+
+## Decision
+
+1. `services/attachment_parser.py` sniffs the attachment's real bytes against
+   a small table of cheap, well-known magic-byte signatures (PDF, PNG, JPEG,
+   GIF, ZIP). Text formats have no reliable magic bytes and are not sniffed.
+2. When sniffing recognizes a signature that disagrees with the declared or
+   extension-resolved type, the attachment is quarantined rather than parsed,
+   deferred, or classified as a plain unsupported binary:
+   `parse_status = parse_error_code = "content_type_mismatch_quarantined"`.
+   The declared type stays in `content_type`; the sniffed (actual) type is
+   recorded in `parse_content_type`, so comparing the two columns on a
+   quarantined row shows the mismatch directly — no new column is introduced
+   for this. The raw bytes are retained (base64, bounded by the same
+   `MAX_ATTACHMENT_PARSE_SOURCE_BYTES` used for deferred PDF payloads) so a
+   later pass has something to act on, unlike the existing failure statuses
+   (`unsupported_content_type`, `parse_size_limit_exceeded`,
+   `invalid_pdf_payload`) which discard content.
+3. `Attachment` gains an `attachment_uid` opaque id (Alembic `0019`,
+   backfilled for any pre-existing rows), following the same
+   `<entity>_<uuid4 hex>` convention as `CalendarConflictJudgment.judgment_uid`
+   and `TicketTask.task_uid`.
+4. `POST /api/data/attachments/{attachment_uid}/reparse-intent` lets a caller
+   scoped to the attachment's parent email (via the existing
+   `_email_scope_filter` join, since `Attachment` carries no
+   `workspace_id`/`user_id` of its own) record that a quarantined attachment
+   should be re-evaluated: it transitions `parse_status` from
+   `content_type_mismatch_quarantined` to `reparse_pending` and clears
+   `parse_error_code`. Calling it on any other status is rejected
+   (`422`). Matching the `hwp-conversion-intent`/`pdf-dom-recognition-intent`
+   pattern already established for `Document`, this endpoint only records
+   intent — it does not itself re-parse. A worker that consumes
+   `reparse_pending` is intentionally out of scope for this slice, exactly as
+   the NewsDOM PDF worker was a separate follow-up to the original deferred-PDF
+   decision.
+
+## Alternatives rejected
+
+### Reject mismatched attachments outright at ingestion
+
+Rejected: a genuinely legitimate attachment can carry a wrong `content_type`
+header for reasons having nothing to do with intent (a misconfigured mail
+client, a lossy import path). Outright rejection would silently drop customer
+data the same way an unbounded parse failure would; quarantining preserves the
+evidence and gives an explicit, auditable path back to normal handling.
+
+### Add a dedicated `quarantine_status` column
+
+Rejected: every other status-like concept in this codebase
+(`Attachment.parse_status`, `Document.document_status`,
+`CalendarConflictJudgment.status_code`) is a plain string column with no
+separate state table or DB enum. Quarantine is one more value of the existing
+`parse_status`/`parse_error_code` columns, not a new state dimension.
+
+### Store the sniffed type in a new column
+
+Rejected: `parse_content_type` already means "the MIME type this attachment
+was or would be handled as." Repurposing it for the sniffed type on a
+quarantined row keeps that meaning intact (it is still "what this attachment
+actually is") while `content_type` keeps its existing meaning ("what the
+sender declared"), without adding new schema surface for a single derived
+field.
+
+### Synchronously re-parse from the reparse-intent endpoint
+
+Rejected for scope and consistency: no endpoint in this file performs heavy
+synchronous work from an `-intent` route today — `hwp-conversion-intent` and
+`pdf-dom-recognition-intent` both just flip a status and leave the actual
+work to a background worker. Doing real work here would also require
+deciding, synchronously, whether the reparse should trust the sender's
+original claim or the sniffed type — a decision better made by a dedicated
+worker pass than inline in a request handler.
+
+### Use a general-purpose file-type detection library (e.g. `python-magic`)
+
+Rejected for this slice per the Ponytail-adjacent discipline this org applies
+before adding a dependency: the org has only ever needed to distinguish a
+handful of binary families (currently just PDF, and this ADR's image/zip
+additions) from what a sender declares. A half-dozen fixed magic-byte
+prefixes checked in Python cover that need with no new dependency, no native
+extension, and no supply-chain surface. If a much broader sniffing need
+arises later (arbitrary container/archive formats, deep content inspection),
+that is the point to re-evaluate a dedicated library against this policy.
+
+## Consequences
+
+- A sender cannot get Naruon to treat disguised binary content as its false
+  label by declaring a convenient `content_type` — the actual bytes decide
+  when a recognized signature is present.
+- Operators/future tooling can address a specific attachment directly via
+  `attachment_uid` for the first time; nothing else changes about how
+  attachments are listed or displayed in aggregate.
+- `reparse_pending` is a new terminal-looking status with no consumer yet;
+  a future worker slice (mirroring `services/newsdom_worker.py`) is required
+  before a quarantined-then-reparsed attachment actually gets re-evaluated.
+  Until then, `reparse_pending` simply means "queued for a pass that does not
+  exist yet" — this is recorded honestly rather than implied to be automatic.
+
+## References (APA 7th)
+
+Freed, N., & Borenstein, N. (1996). *Multipurpose Internet Mail Extensions
+(MIME) Part Two: Media Types* (RFC 2046). RFC Editor.
+https://doi.org/10.17487/RFC2046
+RFC 2046 is the standard this ADR's "declared type" (the `Content-Type`
+header on a MIME body part) refers to; it does not itself specify or require
+content-sniffing, which is the gap this ADR addresses.
