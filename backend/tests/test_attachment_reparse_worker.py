@@ -341,7 +341,7 @@ class _ExpiredAttachment:
     id = 1
 
     def __getattr__(self, _name):
-        raise AssertionError(
+        raise AttributeError(
             "must not read attributes off the stale bulk-loaded instance"
         )
 

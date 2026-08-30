@@ -321,6 +321,12 @@ async def test_list_judgments_bounds_the_result_set_and_scopes_by_workspace() ->
     )
     assert f"LIMIT {_MAX_JUDGMENTS_PER_LIST}" in compiled
     assert "workspace_id" in compiled
+    # created_at alone is not a unique key: two judgments created in the same
+    # instant could otherwise reorder across the 200-row boundary between
+    # calls. calendar_conflict_judgment_id (a monotonic primary key) breaks
+    # the tie deterministically.
+    assert "ORDER BY calendar_conflict_judgments.created_at DESC, " in compiled
+    assert "calendar_conflict_judgments.calendar_conflict_judgment_id DESC" in compiled
 
 
 @pytest.mark.asyncio

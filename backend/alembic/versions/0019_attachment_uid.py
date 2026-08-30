@@ -70,7 +70,26 @@ def downgrade() -> None:
     if not inspector.has_table(_ATTACHMENT_TABLE):
         return
 
-    op.drop_index(_ATTACHMENT_UID_INDEX, table_name=_ATTACHMENT_TABLE, if_exists=True)
+    # A database built by alembic upgrade carries _ATTACHMENT_UID_INDEX as a
+    # plain unique index (this file's own upgrade() uses op.create_index), but
+    # one bootstrapped fresh via Base.metadata.create_all() (db/models.py's
+    # Attachment declares the same name as a table-level UniqueConstraint)
+    # carries a constraint-owned index of the identical name instead --
+    # PostgreSQL rejects a bare DROP INDEX on that shape ("cannot drop index
+    # ... because constraint ... requires it"), so the two shapes need
+    # different drop statements rather than one op.drop_index() for both.
+    unique_constraint_names = {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints(_ATTACHMENT_TABLE)
+    }
+    if _ATTACHMENT_UID_INDEX in unique_constraint_names:
+        op.drop_constraint(
+            _ATTACHMENT_UID_INDEX, _ATTACHMENT_TABLE, type_="unique"
+        )
+    else:
+        op.drop_index(
+            _ATTACHMENT_UID_INDEX, table_name=_ATTACHMENT_TABLE, if_exists=True
+        )
     existing_columns = {
         column["name"] for column in inspector.get_columns(_ATTACHMENT_TABLE)
     }

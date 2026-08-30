@@ -157,7 +157,10 @@ async def list_judgments(
     stmt = (
         select(CalendarConflictJudgment)
         .where(*filters)
-        .order_by(CalendarConflictJudgment.created_at.desc())
+        .order_by(
+            CalendarConflictJudgment.created_at.desc(),
+            CalendarConflictJudgment.calendar_conflict_judgment_id.desc(),
+        )
         .limit(_MAX_JUDGMENTS_PER_LIST)
     )
     result = await db.execute(stmt)

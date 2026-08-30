@@ -1,4 +1,24 @@
 ## [Unreleased]
+- (Devin/코드품질 봇 review 반영, G-15/캘린더 충돌) naruon#1486에 도착한 3건을 추가로 고쳤습니다:
+  (1) 🟡 Alembic `0019_attachment_uid`의 `downgrade()`가 항상 `op.drop_index`만 호출했는데,
+  `Base.metadata.create_all()`로 새로 부트스트랩된 DB(로컬/개발 전용 경로)에서는
+  `attachment_uid`의 유일성이 (동일한 이름 `uq_email_attachments_uid`의) 테이블 수준
+  `UniqueConstraint`로 만들어져 있어 PostgreSQL이 `DROP INDEX`를 거부하는 문제 —
+  이제 `inspector.get_unique_constraints()`로 두 형태를 구분해 제약 형태면
+  `op.drop_constraint(..., type_="unique")`를, 인덱스 형태면 기존 `op.drop_index`를
+  사용합니다(이 저장소에 Postgres 기반 마이그레이션 테스트 하네스가 없어 실행 검증은
+  불가 — "PostgreSQL persistence remains unverified" 스레드와 동일한 기존 repo 전역
+  한계). (2) 🔍 `list_judgments`가 `created_at`만으로 정렬해, 동일 타임스탬프를 가진
+  두 judgment가 200행 경계 근처에서 호출마다 순서가 바뀔 수 있던 문제 — 단조 증가
+  primary key `calendar_conflict_judgment_id`를 2차 정렬 키로 추가해 결정적으로
+  만들었습니다. (3) 📝 코드 품질 지적 — 테스트 전용 스텁 `_ExpiredAttachment.__getattr__`가
+  `AssertionError`를 raise하던 것을 던 던더 메서드 관례에 맞게 `AttributeError`로
+  교체했습니다(테스트 동작은 동일). `correction_action`이 고정 vocabulary 없이 자유
+  텍스트라는 지적은 회신만 남겼습니다 — `services/project_graph`의 동일 컬럼이 이미
+  같은 패턴(자유 텍스트, `String(64)`)을 쓰고 있어 이 PR이 새로 도입한 설계가 아니라
+  기존 컨벤션을 그대로 따른 것이며, vocabulary를 강제하려면 두 기능을 함께 바꿔야 하는
+  더 큰 범위의 결정이라 이 PR 단독으로 다루지 않았습니다. 검증: 신규/수정 테스트 2개,
+  전체 백엔드 스위트 1875 passed/33 skipped, ruff clean.
 - (CodeRabbit review 반영, G-15/AttachmentReparseWorker) naruon#1486에 도착한 2건의 실제 정합성
   결함을 고쳤습니다: (1) 🔴 `_sweep_attachments`가 배치의 마지막 행 id로 커서를 배치 처리 *전에*
   미리 전진시켜, 처리 중 예외가 발생해 `reparse_pending` 상태 그대로 남은 행이 커서 아래로
