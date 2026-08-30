@@ -32,7 +32,7 @@ EXIT_USAGE = 64
 EXIT_VERIFIER_UNAVAILABLE = 66
 EXIT_EXECUTION_FAILED = 70
 
-SUCCESS_FIELDS = frozenset(
+BASE_SUCCESS_FIELDS = frozenset(
     {
         "ok",
         "schema_kind",
@@ -49,6 +49,14 @@ SUCCESS_FIELDS = frozenset(
         "source_eviction_authorized",
     }
 )
+NATIVE_STATUS_FIELDS = frozenset(
+    {
+        "icloud_native_status_observed",
+        "icloud_native_sync_state",
+        "icloud_native_status_timed_out",
+    }
+)
+SUCCESS_FIELDS = BASE_SUCCESS_FIELDS | NATIVE_STATUS_FIELDS
 FAILURE_FIELDS = frozenset({"ok", "error_code"})
 FALSE_CLAIM_FIELDS = (
     "local_paths_included",
@@ -61,11 +69,12 @@ PROVIDERS = frozenset({"icloud", "onedrive", "google-drive"})
 READINESS_STATES = frozenset(
     {"no-candidates", "blocked", "partially-ready", "ready-without-new-review"}
 )
-# DiskSage schema v5 adds path-free provider-global-sync evidence while retaining the same
-# success contract consumed by this handoff. Keep v3/v4 readable for already-issued evidence
+# DiskSage schema v6 is the current path-free provider-global-sync envelope and retains the same
+# success contract consumed by this handoff. Keep v3-v5 readable for already-issued evidence
 # records; newer envelopes must be added here deliberately and tested.
-SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4, 5})
+SUPPORTED_READINESS_SCHEMA_VERSIONS = frozenset({3, 4, 5, 6})
 ERROR_CODE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+NATIVE_STATUS_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9|_.-]{1,128}")
 
 
 class HandoffError(Exception):
@@ -353,9 +362,15 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
         raise HandoffError("disksage-verifier-protocol-invalid")
 
     if result.returncode == 0:
+        schema_version = payload.get("schema_version")
+        fields_valid = (
+            frozenset(payload) == SUCCESS_FIELDS
+            if schema_version == 6
+            else frozenset(payload) in (BASE_SUCCESS_FIELDS, SUCCESS_FIELDS)
+        )
         valid = (
             not result.stderr
-            and frozenset(payload) == SUCCESS_FIELDS
+            and fields_valid
             and payload.get("ok") is True
             and payload.get("schema_kind") == "disksage.naruon.cloud-copy-readiness"
             and type(payload.get("schema_version")) is int
@@ -368,6 +383,33 @@ def _decode_protocol(result: VerifierResult) -> dict[str, object]:
             and payload["candidate_bytes"] >= 0
             and _is_lower_hex_64(payload.get("readiness_fingerprint_sha256"))
             and all(payload.get(field) is False for field in FALSE_CLAIM_FIELDS)
+            and (
+                frozenset(payload) == BASE_SUCCESS_FIELDS
+                or (
+                    type(payload.get("icloud_native_status_observed")) is bool
+                    or payload.get("icloud_native_status_observed") is None
+                )
+            )
+            and (
+                frozenset(payload) == BASE_SUCCESS_FIELDS
+                or (
+                    type(payload.get("icloud_native_status_timed_out")) is bool
+                    or payload.get("icloud_native_status_timed_out") is None
+                )
+            )
+            and (
+                frozenset(payload) == BASE_SUCCESS_FIELDS
+                or (
+                    payload.get("icloud_native_sync_state") is None
+                    or (
+                        type(payload.get("icloud_native_sync_state")) is str
+                        and NATIVE_STATUS_TOKEN_PATTERN.fullmatch(
+                            payload["icloud_native_sync_state"]
+                        )
+                        is not None
+                    )
+                )
+            )
         )
     elif result.returncode in (64, 65):
         error_code = payload.get("error_code")

@@ -7,6 +7,7 @@ import uuid
 from cryptography.fernet import Fernet, InvalidToken
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -23,7 +24,11 @@ from sqlalchemy.orm import declarative_base, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
 from core.config import settings
-from core.runtime_secrets import EncryptionKeyRing, build_encryption_keyring
+from core.runtime_secrets import (
+    EncryptionKeyMissingError,
+    EncryptionKeyRing,
+    build_encryption_keyring,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +38,7 @@ FERNET_VALUE_PREFIX = "fernet:v1:"
 
 def _validated_fernet_key() -> bytes:
     if settings.ENCRYPTION_KEY is None:
-        raise RuntimeError(
+        raise EncryptionKeyMissingError(
             "ENCRYPTION_KEY is required. Refusing to encrypt without a configured key."
         )
 
@@ -1099,6 +1104,108 @@ class KnowledgeGraphEdgeRecord(Base):
         "ContentSegmentRecord",
         back_populates="incoming_edges",
         foreign_keys=[target_segment_id],
+    )
+
+
+class DiskSageFileLineageRecord(Base):
+    """Encrypted DiskSage provenance scoped to the authenticated workspace."""
+
+    __tablename__ = "disksage_file_lineage_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "workspace_id",
+            "lineage_fingerprint",
+            name="uq_disksage_lineage_workspace_fingerprint",
+        ),
+        Index(
+            "ix_disksage_lineage_scope_time",
+            "user_id",
+            "workspace_id",
+            "created_at",
+        ),
+        Index("ix_disksage_lineage_ontology_class", "workspace_id", "ontology_class"),
+    )
+
+    lineage_record_uid: Mapped[str] = mapped_column(String(96), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    lineage_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    envelope_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_kind: Mapped[str] = mapped_column(String(96), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    archive_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    raw_content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    raw_content_blake3: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ontology_class: Mapped[str] = mapped_column(String(256), nullable=False)
+    ontology_relation_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    ontology_predicates: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    provider_name: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_sync_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    provider_sync_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unknown", server_default="unknown"
+    )
+    # Source paths and metadata evidence are intentionally not queryable plaintext.
+    envelope_json_encrypted: Mapped[str] = mapped_column(
+        EncryptedString, nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+
+class DiskSageOrganizationLineageRecord(Base):
+    """Encrypted, path-free local organization lineage scoped to a workspace."""
+
+    __tablename__ = "disksage_organization_lineage_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "workspace_id",
+            "batch_fingerprint_sha256",
+            name="uq_disksage_org_lineage_workspace_fingerprint",
+        ),
+        Index(
+            "ix_disksage_org_lineage_scope_time",
+            "user_id",
+            "workspace_id",
+            "created_at",
+        ),
+    )
+
+    organization_lineage_record_uid: Mapped[str] = mapped_column(
+        String(96), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True
+    )
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    batch_fingerprint_sha256: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    envelope_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    ontology_classes: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    envelope_json_encrypted: Mapped[str] = mapped_column(
+        EncryptedString, nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
     )
 
 
