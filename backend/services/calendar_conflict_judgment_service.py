@@ -225,7 +225,7 @@ async def apply_correction(
         for_update=True,
     )
     before_json = _judgment_snapshot(judgment)
-    if decision_code is not None:
+    if decision_code is not None and decision_code != judgment.decision_code:
         # Replace reason_code/recommended_action together with decision_code
         # so a later read can never pair a corrected decision with the
         # original decision's now-stale reason and instruction. The original
@@ -234,6 +234,11 @@ async def apply_correction(
         # own canonical mapping, never from rationale: rationale explains why
         # a human overrode the decision, it is not forward-looking scheduling
         # guidance, and the two must never be conflated.
+        #
+        # Gated on an actual change (not just decision_code is not None): an
+        # "override" that repeats the judgment's current decision is a no-op
+        # on the decision itself, and must not wipe out the original,
+        # still-accurate reason_code/recommended_action for no real reason.
         judgment.decision_code = decision_code
         judgment.reason_code = CORRECTED_DECISION_REASON_CODE
         judgment.recommended_action = default_recommended_action(decision_code)

@@ -273,6 +273,31 @@ async def test_apply_correction_confirming_without_decision_change_keeps_origina
 
 
 @pytest.mark.asyncio
+async def test_apply_correction_override_repeating_current_decision_keeps_original_reason() -> None:
+    """An override that repeats the current decision must not erase the original reason."""
+    judgment = _judgment()
+    session = _RecordingSession(row=judgment)
+
+    await apply_correction(
+        session,
+        judgment_uid="conflict_judgment_test",
+        user_id="user-1",
+        organization_id=None,
+        workspace_id="workspace-1",
+        actor_user_id="reviewer",
+        correction_action="override_decision",
+        decision_code="review_required",  # same as the judgment's current decision
+        status_code="overridden",
+        rationale=None,
+    )
+
+    assert judgment.decision_code == "review_required"
+    assert judgment.reason_code == "lower_priority_conflict_requires_explicit_resolution"
+    assert judgment.recommended_action == "Ask the proposer to confirm or reschedule."
+    assert judgment.status_code == "overridden"
+
+
+@pytest.mark.asyncio
 async def test_list_judgments_bounds_the_result_set_and_scopes_by_workspace() -> None:
     """An unbounded list query could grow without limit for a long-lived account."""
     session = _RecordingSession()

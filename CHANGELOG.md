@@ -1,4 +1,15 @@
 ## [Unreleased]
+- (Devin review 반영, 3차) override가 judgment의 **현재** decision_code와 동일한 값을 다시
+  제출하는 경우, `apply_correction`이 실제로 값이 바뀔 때만 `reason_code`/`recommended_action`을
+  교체하도록 고쳤습니다 — 이전에는 "override"라는 이유만으로 실제 변경이 없어도 원래
+  정확했던 이유/안내 문구를 불필요하게 지워버렸습니다. 또한 `docs/doctoring/status-weighted-calendar-conflicts.md`가
+  "No database objects or migrations are introduced"라고 여전히 stateless하다고 서술하던
+  부분을 갱신했습니다 — judgment/correction 영속화 슬라이스가 실제로 Alembic
+  `0018_calendar_conflict_judgments`로 테이블 2개를 도입했으므로, shipped boundary·rollback
+  순서(judgments/corrections는 실제 고객 데이터가 쌓이면 downgrade가 파괴적임)·verification
+  evidence(workspace 격리, row lock, coherence 검증, `default_recommended_action` 단일 소스)를
+  반영했습니다. `/evaluate` 자체는 여전히 완전히 무상태입니다. 검증: 신규 테스트 1개 추가,
+  전체 백엔드 스위트 1836 passed/32 skipped, ruff clean.
 - (Devin review 반영, 2차) `calendar_conflict_judgment_service.py`/API에 대한 6건의 추가
   지적을 반영했습니다: (1) **[보안, 최우선]** judgment/correction 테이블과 조회·정정 쿼리에
   `workspace_id`를 추가했습니다 — 이전에는 `user_id`+`organization_id`만으로 범위를 제한했는데,
