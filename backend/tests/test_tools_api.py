@@ -1078,6 +1078,41 @@ def test_execute_grammar_checker():
     assert data["result"]["errors_found"] == 3
 
 
+def test_execute_url_extractor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Check out https://example.com and www.google.com for more info."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "https://example.com" in data["result"]["urls"]
+    assert "www.google.com" in data["result"]["urls"]
+
+
+def test_execute_pii_redactor():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/pii_redactor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Contact me at test@example.com or 010-1234-5678."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["redacted_text"] == "Contact me at [EMAIL] or [PHONE]."
+
+
 @pytest.mark.asyncio
 async def test_mock_handler():
     from api.tools import mock_handler
