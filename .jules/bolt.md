@@ -26,3 +26,21 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - Replaced O(N) Fallback Array Lookup with Mandatory Map
+
+**Learning:** When generating derived UI state that requires joining edges to nodes by ID in large network graphs, falling back to `array.find()` within `describeEdge` operations introduces an unnecessary $O(N)$ linear scan per edge. Even if this path is ostensibly an edge case, it complicates dependency chains (e.g. keeping `nodes` in a `useMemo` dependency array for strings only dependent on a Map).
+**Action:** When a constant-time `Map` structure for lookups (`nodeMap`) is constructed for a component, strictly pass and mandate the `Map` in all downstream formatting functions rather than leaving the mapping argument optional and falling back to a `.find()` scan. This ensures $O(1)$ scaling without unexpected performance regressions or over-eager memoization cache busts.
+
+## 2026-08-25 - Preserve origin-integrity security evidence during scoped optimizations
+
+**Learning:** A NetworkGraph optimization is scoped to the graph component and its
+direct tests. Deleting unrelated URL/loopback validators, their regression tests,
+the RFC doctoring record, or the CHANGELOG evidence weakens a security contract and
+is not an optimization.
+
+**Action:** Before committing a Bolt optimization, abort if the diff changes
+`backend/core/local_http.py`, `backend/core/url_validation.py`,
+`backend/tests/test_local_http.py`, `backend/tests/test_url_validation.py`,
+`docs/doctoring/local-http-origin-port-validation.md`, or the security contract
+entry in `CHANGELOG.md`. Keep explicit-port validation and its 45 regression cases
+intact; validate the scoped diff and tests before publishing.
