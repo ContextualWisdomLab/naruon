@@ -126,6 +126,7 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
     assert kwargs["is_read"] is False
     assert args[3] == "org-imap"
     assert kwargs["owner_addresses"] == ["imap-user@example.com"]
+    assert kwargs["source_content"] == raw_message
 
     session.commit.assert_awaited_once()
     session.rollback.assert_not_awaited()
@@ -173,7 +174,7 @@ def test_flags_indicate_seen_parses_seen_flag():
     no_flags = ("OK", [(b"1 (RFC822 {%d}" % len(raw), raw)])
 
     assert flags_indicate_seen(seen[1]) is True
-    assert flags_indicate_seen(unseen[1]) is False   # other flags, but not \Seen
+    assert flags_indicate_seen(unseen[1]) is False  # other flags, but not \Seen
     assert flags_indicate_seen(no_flags[1]) is False  # no FLAGS section -> unread
     assert flags_indicate_seen([]) is False
     assert flags_indicate_seen(None) is False
