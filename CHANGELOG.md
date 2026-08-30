@@ -1,4 +1,22 @@
 ## [Unreleased]
+- (CodeRabbit review 반영, G-15/AttachmentReparseWorker) naruon#1486에 도착한 2건의 실제 정합성
+  결함을 고쳤습니다: (1) 🔴 `_sweep_attachments`가 배치의 마지막 행 id로 커서를 배치 처리 *전에*
+  미리 전진시켜, 처리 중 예외가 발생해 `reparse_pending` 상태 그대로 남은 행이 커서 아래로
+  떨어져 — `id > cursor` 필터 때문에 — 전방 큐가 완전히 비워질 때까지(지속적인 reparse-intent
+  트래픽 하에서는 무한정) 다시 선택되지 못하고 굶주리던 문제. 커서를 이제 배치 내 "첫 실패
+  행 바로 앞"까지만 전진시켜(실패 이후 행들은 이미 처리됐어도 `parse_status` 필터가 걸러주므로
+  무해) 실패한 행이 다음 스윕에서 반드시 재선택되도록 했습니다. (2) 🔴 PostgreSQL advisory
+  lease를 매 항목 `commit()`/`rollback()`을 호출하는 동일한 `AsyncSession`으로 획득·해제하던
+  문제 — `AsyncSession.commit()`은 매 호출마다 커넥션을 풀로 반환하므로(SQLAlchemy의 통상
+  "connectionless execution" 동작), lease 해제가 실제로 lock을 잡았던 것과 *다른* 물리
+  커넥션에서 실행될 수 있었습니다. PostgreSQL advisory lock은 획득한 backend 세션에 묶이므로,
+  불일치하는 unlock은 조용한 no-op이 되어 그 커넥션이 나중에 재활용/종료될 때까지 lease가
+  묶인 채로 남아 모든 replica의 스윕을 조용히 멈추게 할 수 있었습니다 — 이제 스윕 전체 동안
+  열어두는 전용 커넥션 하나에서만 획득·해제합니다. `services/newsdom_worker.py`도 동일한
+  구조를 공유해 같은 잠재 결함을 가진 것으로 추정되나, 이 PR이 건드리지 않은 기존 코드라 이번
+  수정 범위 밖입니다 — ADR-0005 Revisions 및 gap-baseline에 추적 기록. 검증: 신규 테스트
+  1개(커서 캡 회귀) + 기존 lease 테스트 재구성, 전체 백엔드 스위트 1875 passed/33 skipped
+  (기존 1874), ruff clean.
 - (Devin review 반영, G-15/AttachmentReparseWorker) naruon#1486에 도착한 3건을 실제로 고쳤습니다:
   (1) 🟡 generic content_type(`application/octet-stream` 등, 확장자로도 해석 안 되는 경우)로
   선언된 첨부파일이 알려진 매직 바이트로 sniff되기만 하면 영원히 quarantine되던 문제 —

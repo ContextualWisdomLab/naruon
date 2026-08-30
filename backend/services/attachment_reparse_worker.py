@@ -20,10 +20,10 @@ import logging
 import random
 
 from sqlalchemy import bindparam, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from db.models import Attachment
-from db.session import AsyncSessionLocal
+from db.session import AsyncSessionLocal, engine
 from services.attachment_parser import (
     AttachmentParseResult,
     decode_quarantined_attachment_payload,
@@ -105,20 +105,26 @@ def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
     return result.parse_status
 
 
-def _session_uses_postgresql(session: AsyncSession) -> bool:
-    """Return whether advisory-lock SQL is supported by the session bind."""
-    try:
-        bind = session.get_bind()
-    except Exception:
-        return False
-    return getattr(getattr(bind, "dialect", None), "name", None) == "postgresql"
+def _engine_uses_postgresql() -> bool:
+    """Return whether advisory-lock SQL is supported by the configured engine."""
+    return engine.dialect.name == "postgresql"
 
 
-async def _try_acquire_sweep_lease(session: AsyncSession) -> bool | None:
-    """Become the sweep leader for this cycle (None when not PostgreSQL)."""
-    if not _session_uses_postgresql(session):
-        return None
-    acquired = await session.scalar(
+async def _try_acquire_sweep_lease(connection: AsyncConnection) -> bool:
+    """Become the sweep leader for this cycle on this dedicated connection.
+
+    Takes an ``AsyncConnection`` rather than the per-item ``AsyncSession``
+    deliberately: ``AsyncSession.commit()``/``rollback()`` release their
+    underlying connection back to the pool on every call (SQLAlchemy's normal
+    "connectionless execution" behavior), so acquiring the lock through that
+    session risks releasing it -- or never releasing it -- from a *different*
+    physical backend connection than the one PostgreSQL actually granted the
+    advisory lock to. Advisory locks are scoped to the acquiring backend
+    session, so a mismatched unlock is a silent no-op and the lock stays held
+    (blocking every replica's sweep) until the stray connection is eventually
+    recycled or closed.
+    """
+    acquired = await connection.scalar(
         select(
             func.pg_try_advisory_lock(
                 func.hashtext(bindparam("namespace_key")),
@@ -130,9 +136,9 @@ async def _try_acquire_sweep_lease(session: AsyncSession) -> bool | None:
     return bool(acquired)
 
 
-async def _release_sweep_lease(session: AsyncSession) -> None:
-    """Release the PostgreSQL advisory lock for a reparse sweep."""
-    await session.scalar(
+async def _release_sweep_lease(connection: AsyncConnection) -> None:
+    """Release the PostgreSQL advisory lock on the connection that holds it."""
+    await connection.scalar(
         select(
             func.pg_advisory_unlock(
                 func.hashtext(bindparam("namespace_key")),
@@ -216,26 +222,49 @@ class AttachmentReparseWorker:
                     break
 
     async def _sweep(self) -> None:
-        """Process one leased reparse sweep."""
-        async with AsyncSessionLocal() as session:
-            lease = await _try_acquire_sweep_lease(session)
-            if lease is False:
+        """Process one leased reparse sweep.
+
+        The advisory lock (when the engine supports it) is acquired and
+        released on one dedicated connection held open for the whole sweep --
+        never through the per-item ``AsyncSession`` used by
+        ``_sweep_attachments``. See ``_try_acquire_sweep_lease`` for why that
+        distinction matters.
+        """
+        if not _engine_uses_postgresql():
+            async with AsyncSessionLocal() as session:
+                await self._sweep_attachments(session)
+            return
+        async with engine.connect() as lock_connection:
+            if not await _try_acquire_sweep_lease(lock_connection):
                 logger.debug(
                     "Attachment reparse sweep skipped: another replica holds "
                     "the lease."
                 )
                 return
             try:
-                await self._sweep_attachments(session)
+                async with AsyncSessionLocal() as session:
+                    await self._sweep_attachments(session)
             finally:
-                if lease is True:
-                    await _release_sweep_lease(session)
+                await _release_sweep_lease(lock_connection)
 
     async def _sweep_attachments(self, session: AsyncSession) -> None:
-        """Process a bounded, starvation-free batch of reparse-pending rows."""
+        """Process a bounded, starvation-free batch of reparse-pending rows.
+
+        The cursor only advances past a row once it is confirmed resolved
+        (its status actually left ``reparse_pending``, whether to a parsed
+        state or back to quarantine). A row whose processing raised keeps its
+        ``reparse_pending`` status untouched, so if the cursor advanced past
+        it anyway it would never be reselected by
+        ``_load_reparse_pending_attachments``'s ``id > cursor`` filter until
+        the whole forward queue happens to drain to empty -- silent,
+        indefinite starvation of that one row under continuous inbound
+        reparse-intent traffic. Capping the cursor at the first failure keeps
+        that row (and, harmlessly, any already-resolved rows after it that
+        the ``parse_status`` filter will simply skip) in range for the next
+        sweep.
+        """
         rows = await self._load_reparse_pending_attachments(session)
-        if rows:
-            self._attachment_cursor = rows[-1].id
+        first_failed_id = None
         for attachment_id in [attachment.id for attachment in rows]:
             try:
                 # Re-fetch fresh rather than reusing the bulk-loaded instance:
@@ -263,6 +292,12 @@ class AttachmentReparseWorker:
                     attachment_id,
                     exc_info=True,
                 )
+                if first_failed_id is None:
+                    first_failed_id = attachment_id
+        if rows:
+            self._attachment_cursor = (
+                first_failed_id - 1 if first_failed_id is not None else rows[-1].id
+            )
 
     def _reparse_pending_statement(self, after_id: int | None):
         """Build the next deterministic reparse-pending batch query."""

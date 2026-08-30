@@ -175,20 +175,73 @@ class _AsyncSessionContext:
         return False
 
 
-class _LeaseSession:
-    def __init__(self, *, dialect_name="postgresql", scalar_result=True):
-        self.bind = SimpleNamespace(
-            dialect=SimpleNamespace(name=dialect_name),
-        )
+class _LeaseConnection:
+    def __init__(self, *, scalar_result=True):
         self.scalar_result = scalar_result
         self.scalar_calls = []
-
-    def get_bind(self):
-        return self.bind
 
     async def scalar(self, statement, params):
         self.scalar_calls.append((statement, params))
         return self.scalar_result
+
+
+class _FakeEngine:
+    def __init__(self, *, dialect_name="postgresql", connection=None):
+        self.dialect = SimpleNamespace(name=dialect_name)
+        self._connection = connection
+
+    def connect(self):
+        return _LeaseConnectionContext(self._connection)
+
+
+@pytest.mark.asyncio
+async def test_sweep_caps_the_cursor_at_the_first_failure_not_the_last_row(
+    monkeypatch,
+):
+    # Reproduces the starvation CodeRabbit flagged: if the cursor advanced to
+    # rows[-1].id unconditionally, a mid-batch failure would be skipped by
+    # every future sweep (its id falls below the cursor) until the whole
+    # forward queue happened to drain to empty.
+    first = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=1,
+    )
+    second = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=2,
+    )
+    third = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"png",
+        attachment_id=3,
+    )
+    session = _SequenceSession([[first, second, third]])
+
+    real_process = attachment_reparse_worker_module.process_reparse_pending_attachment
+
+    def fail_only_the_middle_item(*, attachment):
+        if attachment.id == 2:
+            raise RuntimeError("classification blew up")
+        return real_process(attachment=attachment)
+
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "process_reparse_pending_attachment",
+        fail_only_the_middle_item,
+    )
+    worker = AttachmentReparseWorker()
+    await worker._sweep_attachments(session)
+
+    # The cursor stops just before the failed row (id 2), not at the batch's
+    # last row (id 3), so the next sweep's "id > cursor" filter still
+    # reselects the still-pending row 2.
+    assert worker._attachment_cursor == 1
+    assert first.parse_status == _QUARANTINED_STATUS
+    assert third.parse_status == _QUARANTINED_STATUS
+    assert session.commit_count == 2
+    assert session.rollback_count == 1
 
 
 @pytest.mark.asyncio
@@ -360,59 +413,102 @@ async def test_sweep_isolates_one_items_failure_from_the_next_items_refetch(
 
 
 @pytest.mark.asyncio
-async def test_postgresql_lease_helpers_and_non_postgresql_fallback():
-    postgres = _LeaseSession(scalar_result=1)
-    sqlite = _LeaseSession(dialect_name="sqlite")
+async def test_postgresql_lease_helpers_and_non_postgresql_fallback(monkeypatch):
+    postgres_connection = _LeaseConnection(scalar_result=1)
 
     assert (
-        await attachment_reparse_worker_module._try_acquire_sweep_lease(postgres)
+        await attachment_reparse_worker_module._try_acquire_sweep_lease(
+            postgres_connection
+        )
         is True
     )
     assert (
-        postgres.scalar_calls[0][1]
+        postgres_connection.scalar_calls[0][1]
         == attachment_reparse_worker_module._SWEEP_LOCK_PARAMS
     )
-    await attachment_reparse_worker_module._release_sweep_lease(postgres)
-    assert len(postgres.scalar_calls) == 2
-    assert (
-        await attachment_reparse_worker_module._try_acquire_sweep_lease(sqlite) is None
-    )
+    await attachment_reparse_worker_module._release_sweep_lease(postgres_connection)
+    assert len(postgres_connection.scalar_calls) == 2
 
-    class BrokenBindSession:
-        def get_bind(self):
-            raise RuntimeError("no bind")
-
-    assert (
-        attachment_reparse_worker_module._session_uses_postgresql(BrokenBindSession())
-        is False
+    monkeypatch.setattr(
+        attachment_reparse_worker_module, "engine", _FakeEngine(dialect_name="sqlite")
     )
+    assert attachment_reparse_worker_module._engine_uses_postgresql() is False
+
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "engine",
+        _FakeEngine(dialect_name="postgresql"),
+    )
+    assert attachment_reparse_worker_module._engine_uses_postgresql() is True
+
+
+class _LeaseConnectionContext:
+    def __init__(self, connection):
+        self.connection = connection
+
+    async def __aenter__(self):
+        return self.connection
+
+    async def __aexit__(self, *_args):
+        return False
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("lease", "expected_sweeps", "expected_releases"),
-    [(False, 0, 0), (None, 1, 0), (True, 1, 1)],
-)
-async def test_worker_sweep_honors_lease_outcome(
-    monkeypatch, lease, expected_sweeps, expected_releases
-):
+async def test_worker_sweep_skips_locking_when_engine_is_not_postgresql(monkeypatch):
     session = object()
     calls = []
-    releases = []
     worker = AttachmentReparseWorker()
 
+    monkeypatch.setattr(
+        attachment_reparse_worker_module, "engine", _FakeEngine(dialect_name="sqlite")
+    )
     monkeypatch.setattr(
         attachment_reparse_worker_module,
         "AsyncSessionLocal",
         lambda: _AsyncSessionContext(session),
     )
 
-    async def acquire(actual_session):
-        assert actual_session is session
+    async def sweep_attachments(actual_session):
+        calls.append(actual_session)
+
+    monkeypatch.setattr(worker, "_sweep_attachments", sweep_attachments)
+
+    await worker._sweep()
+
+    assert calls == [session]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("lease", "expected_sweeps", "expected_releases"),
+    [(False, 0, 0), (True, 1, 1)],
+)
+async def test_worker_sweep_honors_lease_outcome(
+    monkeypatch, lease, expected_sweeps, expected_releases
+):
+    session = object()
+    lock_connection = object()
+    calls = []
+    releases = []
+    worker = AttachmentReparseWorker()
+
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "engine",
+        _FakeEngine(dialect_name="postgresql", connection=lock_connection),
+    )
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "AsyncSessionLocal",
+        lambda: _AsyncSessionContext(session),
+    )
+
+    async def acquire(actual_connection):
+        assert actual_connection is lock_connection
         return lease
 
-    async def release(actual_session):
-        releases.append(actual_session)
+    async def release(actual_connection):
+        releases.append(actual_connection)
 
     async def sweep_attachments(actual_session):
         calls.append(("attachments", actual_session))

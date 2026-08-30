@@ -58,9 +58,10 @@ action.
    (`422`). Matching the `hwp-conversion-intent`/`pdf-dom-recognition-intent`
    pattern already established for `Document`, this endpoint only records
    intent — it does not itself re-parse. A worker that consumes
-   `reparse_pending` is intentionally out of scope for this slice, exactly as
-   the NewsDOM PDF worker was a separate follow-up to the original deferred-PDF
-   decision.
+   `reparse_pending` was intentionally out of scope for this slice at initial
+   authorship, exactly as the NewsDOM PDF worker was a separate follow-up to
+   the original deferred-PDF decision — **revised below**: that worker now
+   ships in this same PR, after review (see Revisions).
 
 ## Alternatives rejected
 
@@ -168,6 +169,27 @@ than reversing the original decision:
   the OOXML fix above already would have, had it existed first). A retained
   payload that fails to decode (not valid base64) moves to a new terminal
   `reparse_payload_invalid` status rather than being swept forever.
+- **Two correctness gaps in the worker itself, found on review of the above.**
+  (1) The sweep cursor advanced to the batch's last row before any item in it
+  was actually processed, so a row whose processing raised an exception (and
+  therefore kept its `reparse_pending` status) fell below the cursor and would
+  never be reselected until the whole forward queue drained to empty — silent,
+  indefinite starvation under continuous reparse-intent traffic. The cursor
+  now caps at the row just before the first failure in a batch, keeping that
+  row in range for the next sweep. (2) The PostgreSQL advisory lease was
+  acquired and released through the same `AsyncSession` used for each item's
+  `commit()`/`rollback()`; since `AsyncSession.commit()` returns its
+  connection to the pool on every call, the lease's release could run on a
+  *different* physical backend connection than the one that acquired it —
+  advisory locks are scoped to the acquiring backend session, so a mismatched
+  unlock is a silent no-op that leaves the lease stuck until that connection
+  is later recycled or closed, silently halting every replica's sweep. The
+  lease is now acquired and released on one dedicated connection held open
+  for the whole sweep instead. `services/newsdom_worker.py` shares the same
+  acquire/release-through-the-per-item-session shape and is believed to carry
+  the same latent lease-connection risk; fixing it is out of scope here (its
+  own pre-existing, already-shipped code, not touched by this PR) and is
+  tracked in `docs/product-technical-gap-baseline.md`.
 
 ## References (APA 7th)
 
