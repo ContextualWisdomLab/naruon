@@ -1,8 +1,8 @@
 import base64
 import hashlib
+import html
 import inspect
 import json
-import html
 import logging
 import re
 import unicodedata
@@ -27,6 +27,7 @@ router = APIRouter(prefix="/api", tags=["tools"])
 logger = logging.getLogger(__name__)
 ToolHandler = Callable[[Dict[str, Any]], Any]
 MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
+MAX_TOOL_INPUT_CHARS = 100_000
 
 
 def _tool_code_fingerprint(code: str) -> str:
@@ -182,6 +183,11 @@ class ToolRegistry:
             expected_type = _parameter_type_name(descriptor)
             if not _parameter_matches_type(value, expected_type):
                 raise ValueError("Invalid tool parameter type")
+            max_length = _parameter_max_length(descriptor)
+            if expected_type == "string" and max_length is not None and len(value) > max_length:
+                raise ValueError(
+                    f"Tool parameter exceeds maximum length of {max_length} characters"
+                )
             validated[key] = value
         return validated
 
@@ -479,6 +485,15 @@ def _parameter_type_name(descriptor: Any) -> str:
     if isinstance(descriptor, dict):
         return str(descriptor.get("type", "string")).lower()
     return "string"
+
+
+def _parameter_max_length(descriptor: Any) -> int | None:
+    if not isinstance(descriptor, dict):
+        return None
+    max_length = descriptor.get("max_length")
+    if isinstance(max_length, int) and not isinstance(max_length, bool) and max_length >= 0:
+        return max_length
+    return None
 
 
 def _parameter_matches_type(value: Any, expected_type: str) -> bool:
@@ -783,15 +798,20 @@ registry.register(
         name="URL 인코더 (URL Encoder)",
         description="일반 텍스트를 URL 인코딩합니다.",
         category="유틸리티",
-        parameters={"text": "string"},
+        parameters={"text": {"type": "string", "max_length": MAX_TOOL_INPUT_CHARS}},
     ),
     url_encoder_handler,
 )
 
 
 async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Decode URL escapes without silently replacing invalid UTF-8 bytes."""
     encoded_url = params.get("encoded_url") or ""
-    return {"decoded_url": urllib.parse.unquote(encoded_url)}
+    try:
+        decoded_url = urllib.parse.unquote(encoded_url, errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"Invalid URL-encoded string: {exc}") from exc
+    return {"decoded_url": decoded_url}
 
 
 registry.register(
@@ -800,10 +820,21 @@ registry.register(
         name="URL 디코더 (URL Decoder)",
         description="URL 인코딩된 문자열을 디코딩합니다.",
         category="유틸리티",
-        parameters={"encoded_url": "string"},
+        parameters={
+            "encoded_url": {"type": "string", "max_length": MAX_TOOL_INPUT_CHARS}
+        },
     ),
     url_decoder_handler,
 )
+
+
+class _RawJSONNumber:
+    """Hold a validated JSON number's original lexical representation."""
+
+    __slots__ = ("text",)
+
+    def __init__(self, text: str):
+        self.text = text
 
 
 def _reject_non_standard_json_number(value: str) -> None:
@@ -811,22 +842,54 @@ def _reject_non_standard_json_number(value: str) -> None:
     raise ValueError(f"Non-standard JSON number: {value}")
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate object keys instead of silently discarding data."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def _format_json_value(value: Any, level: int = 0) -> str:
+    """Pretty-print parsed JSON while preserving raw number tokens."""
+    indent = "  "
+    if isinstance(value, _RawJSONNumber):
+        return value.text
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        entries = [
+            f"{indent * (level + 1)}{json.dumps(key, ensure_ascii=False)}: "
+            f"{_format_json_value(item, level + 1)}"
+            for key, item in value.items()
+        ]
+        return "{\n" + ",\n".join(entries) + f"\n{indent * level}}}"
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        entries = [
+            f"{indent * (level + 1)}{_format_json_value(item, level + 1)}"
+            for item in value
+        ]
+        return "[\n" + ",\n".join(entries) + f"\n{indent * level}]"
+    return json.dumps(value, ensure_ascii=False, allow_nan=False)
+
+
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Format JSON, preserving numbers and rejecting duplicate keys."""
     json_str = params.get("json_str") or ""
     try:
         parsed = json.loads(
             json_str,
             parse_constant=_reject_non_standard_json_number,
+            parse_int=_RawJSONNumber,
+            parse_float=_RawJSONNumber,
+            object_pairs_hook=_reject_duplicate_json_keys,
         )
-        return {
-            "formatted_json": json.dumps(
-                parsed,
-                indent=2,
-                ensure_ascii=False,
-                allow_nan=False,
-            )
-        }
-    except (TypeError, ValueError) as e:
+        return {"formatted_json": _format_json_value(parsed)}
+    except (RecursionError, TypeError, ValueError) as e:
         raise ValueError(f"Invalid JSON string: {e}")
 
 
@@ -834,9 +897,9 @@ registry.register(
     ToolInfo(
         code="json_formatter",
         name="JSON 포매터 (JSON Formatter)",
-        description="JSON 문자열을 보기 좋게 들여쓰기하여 포매팅합니다.",
+        description="JSON 문자열을 보기 좋게 포매팅하고 중복 키와 비표준 숫자를 거부합니다.",
         category="유틸리티",
-        parameters={"json_str": "string"},
+        parameters={"json_str": {"type": "string", "max_length": MAX_TOOL_INPUT_CHARS}},
     ),
     json_formatter_handler,
 )
@@ -853,7 +916,7 @@ registry.register(
         name="HTML 이스케이프 (HTML Escape)",
         description="텍스트 내 특수 문자를 HTML 안전 문자열로 변환합니다.",
         category="유틸리티",
-        parameters={"text": "string"},
+        parameters={"text": {"type": "string", "max_length": MAX_TOOL_INPUT_CHARS}},
     ),
     html_escape_handler,
 )
@@ -870,7 +933,9 @@ registry.register(
         name="HTML 언이스케이프 (HTML Unescape)",
         description="HTML 이스케이프된 문자열을 복원합니다.",
         category="유틸리티",
-        parameters={"escaped_html": "string"},
+        parameters={
+            "escaped_html": {"type": "string", "max_length": MAX_TOOL_INPUT_CHARS}
+        },
     ),
     html_unescape_handler,
 )
