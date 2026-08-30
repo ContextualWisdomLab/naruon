@@ -16,16 +16,10 @@ def test_loopback_origin_is_canonicalized() -> None:
         port=18080,
     )
     assert validate_loopback_http_origin("http://localhost") == LocalHTTPOrigin(
-        origin="http://localhost",
-        scheme="http",
-        hostname="localhost",
-        port=80,
+        origin="http://localhost", scheme="http", hostname="localhost", port=80
     )
     assert validate_loopback_http_origin("https://127.0.0.1:443/") == LocalHTTPOrigin(
-        origin="https://127.0.0.1",
-        scheme="https",
-        hostname="127.0.0.1",
-        port=443,
+        origin="https://127.0.0.1", scheme="https", hostname="127.0.0.1", port=443
     )
 
 
@@ -44,13 +38,7 @@ def test_loopback_origin_normalizes_malformed_parser_errors(value: str) -> None:
         validate_loopback_http_origin(value)
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
-        "http://localhost:80\x00/",
-        "http://\nlocalhost/",
-    ],
-)
+@pytest.mark.parametrize("value", ["http://localhost:80\x00/", "http://\nlocalhost/"])
 def test_loopback_origin_rejects_control_characters(value: str) -> None:
     with pytest.raises(LocalHTTPValidationError, match="control characters"):
         validate_loopback_http_origin(value)
@@ -64,7 +52,7 @@ def test_loopback_origin_rejects_control_characters(value: str) -> None:
         "http://localhost/path",
         "http://localhost/?query=1",
         "http://localhost/#frag",
-        "http:///",  # No hostname
+        "http:///",
     ],
 )
 def test_loopback_origin_rejects_invalid_components(value: str) -> None:

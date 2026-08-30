@@ -19,6 +19,7 @@ vi.mock("lucide-react", () => ({
   User: () => <svg aria-hidden="true" />,
   UserRoundCheck: () => <svg aria-hidden="true" />,
   Plus: () => <svg aria-hidden="true" />,
+  Loader2: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
 

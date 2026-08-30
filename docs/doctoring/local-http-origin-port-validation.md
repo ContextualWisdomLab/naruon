@@ -16,18 +16,7 @@ RFC 6335 defines the Service Name and Transport Protocol Port Number Registry an
 
 ## Verification contract
 
-Regression tests must keep these cases distinct:
-
-- `http://localhost` and `https://localhost` use their scheme defaults;
-- explicit supported ports are preserved;
-- explicit `:0` is rejected instead of defaulted;
-- negative, out-of-range, and non-numeric ports fail closed;
-- IPv4/IPv6 loopback canonicalization remains stable;
-- userinfo, path/query/fragment material outside the origin contract, controls, and non-allowlisted hosts remain rejected.
-
-## Rollback
-
-If a future runtime genuinely needs port zero as a sentinel, introduce a separate typed configuration field or explicit sentinel contract. Do not reintroduce truthiness-based defaulting in URI parsing, because that again conflates an explicit authority with absence.
+Regression tests keep scheme defaults, explicit supported ports, explicit `:0`, range errors, malformed ports, loopback canonicalization, userinfo, path/query/fragment, controls, and non-allowlisted hosts distinct.
 
 ## References (APA 7th)
 

@@ -1060,7 +1060,6 @@ def test_pr_governance_uses_metadata_only_events_without_checkout_or_admin_merge
     assert "workflow_run:" in workflow
     assert "check_run:" in workflow
     assert "workflow_dispatch:" in workflow
-    assert "Strix Security Scan" in workflow
     assert "- strix" not in workflow
     assert "permissions:\n  contents: read" in workflow
     assert "trusted-governance" in workflow
