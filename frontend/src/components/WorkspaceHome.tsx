@@ -160,13 +160,6 @@ function useDashboardData() {
 
   useEffect(() => {
     let cancelled = false;
-    let pendingRequests = 2;
-    const finishRequest = () => {
-      pendingRequests -= 1;
-      if (pendingRequests === 0 && !cancelled) {
-        setLoading(false);
-      }
-    };
 
     Promise.all([
       apiClient.get<{ emails: EmailItem[] }>('/api/emails'),
@@ -174,9 +167,12 @@ function useDashboardData() {
       apiClient.get<TaskItem[]>('/api/tasks'),
     ]).then(([emailRes, pendingReplyRes, tasksRes]) => {
       if (cancelled) return;
-      setEmails(Array.isArray(emailRes.emails) ? emailRes.emails : []);
-      setPendingReplies(Array.isArray(pendingReplyRes.emails) ? pendingReplyRes.emails : []);
-      setTasks(Array.isArray(tasksRes) ? tasksRes : []);
+      if (!Array.isArray(emailRes.emails) || !Array.isArray(pendingReplyRes.emails) || !Array.isArray(tasksRes)) {
+        throw new Error('Invalid dashboard data response');
+      }
+      setEmails(emailRes.emails);
+      setPendingReplies(pendingReplyRes.emails);
+      setTasks(tasksRes);
       setDashboardDataStatus('ready');
     }).catch(() => {
       if (cancelled) return;
@@ -184,7 +180,9 @@ function useDashboardData() {
       setPendingReplies([]);
       setTasks([]);
       setDashboardDataStatus('unavailable');
-    }).finally(finishRequest);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
 
     Promise.all([
       apiClient.get<CalendarWritebackSource[]>('/api/calendar/writeback-sources'),
@@ -199,7 +197,7 @@ function useDashboardData() {
       setCalendarSources([]);
       setProjectFolders([]);
       setSourceEvidenceStatus('error');
-    }).finally(finishRequest);
+    });
 
     return () => {
       cancelled = true;

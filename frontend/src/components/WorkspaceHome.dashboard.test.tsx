@@ -812,4 +812,84 @@ describe("WorkspaceHome Today dashboard", () => {
     expect(container.textContent).not.toContain("수신된 메일이 없습니다.");
     expect(container.textContent).not.toContain("대기 작업이 없습니다.");
   });
+
+  it.each([
+    ["mail", "/api/emails", { emails: "not-an-array" }, "수신된 메일이 없습니다."],
+    ["pending-reply", "/api/emails/pending-replies?limit=3", { emails: null }, "답변 대기 중인 보낸 메일이 없습니다."],
+    ["task", "/api/tasks", { tasks: "not-an-array" }, "대기 작업이 없습니다."],
+  ])("fails closed for a malformed %s response", async (_name, malformedUrl, malformedResponse, falseEmptyState) => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(malformedUrl)) {
+        return Promise.resolve({ ok: true, json: async () => malformedResponse });
+      }
+      if (url.endsWith("/api/emails")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/tasks")) {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      const sourceEvidenceResponse = emptySourceEvidenceResponse(url);
+      if (sourceEvidenceResponse) return sourceEvidenceResponse;
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => Boolean(container?.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]')));
+
+    expect(container.textContent).toContain("대시보드 데이터를 불러올 수 없습니다.");
+    expect(container.textContent).not.toContain(falseEmptyState);
+  });
+
+  it("renders core data as unavailable while source evidence remains pending", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails")) return Promise.reject(new Error("mail backend unavailable"));
+      if (url.endsWith("/api/emails/pending-replies?limit=3")) {
+        return Promise.resolve({ ok: true, json: async () => ({ emails: [] }) });
+      }
+      if (url.endsWith("/api/tasks")) return Promise.resolve({ ok: true, json: async () => [] });
+      if (url.endsWith("/api/calendar/writeback-sources") || url.endsWith("/api/webdav/folders")) {
+        return new Promise(() => undefined);
+      }
+      const calendarCandidateResponse = emptyCalendarCandidateSearchResponse(url);
+      if (calendarCandidateResponse) return calendarCandidateResponse;
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => Boolean(container?.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]')));
+
+    expect(container.textContent).toContain("메일 데이터를 확인할 수 없습니다.");
+    expect(container.textContent).not.toContain("메일을 불러오는 중...");
+    expect(container.textContent).not.toContain("답변 대기 메일을 불러오는 중...");
+    expect(container.textContent).not.toContain("작업을 불러오는 중...");
+  });
 });
