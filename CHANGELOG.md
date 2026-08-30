@@ -14,6 +14,24 @@
   구성한 자체 LLM provider로 동작하는 워크스페이스 전반의 범용 어시스턴트입니다.
   검증: `PYTHONPATH=. python -m pytest backend/tests/test_noema_agent.py -q`
   (21 passed), 전체 백엔드 스위트 `python -m pytest -q` (1808 passed, 32 skipped).
+- G-06(킬러 워크플로: thread/sender ontology → temporal commitment/conflict →
+  human correction) 증분: `evaluate_calendar_conflicts` 결정을
+  `calendar_conflict_judgments` 테이블에 판단(judgment)으로 저장하고, 사람이
+  그 판단을 정정(correction)할 수 있는 API를 추가했습니다. `POST
+  /api/calendar/conflicts/judgments`는 기존 `/evaluate`와 동일한 정책을
+  평가한 뒤 `judgment_uid`로 결과를 영속화하고(발신 스레드/메시지 id를
+  선택적으로 함께 기록), `GET /api/calendar/conflicts/judgments`는
+  스레드별로 목록을 조회하며, `POST
+  /api/calendar/conflicts/judgments/{judgment_uid}/corrections`는
+  `project_graph_corrections`와 동일한 before/after JSON 감사 흔적 패턴으로
+  사람의 override/confirm/dismiss를 기록합니다(`status_code`:
+  proposed→confirmed/overridden/dismissed). `evaluate_calendar_conflicts`
+  자체의 순수 계산 계약은 바뀌지 않았고, `/evaluate`는 여전히 상태를 저장하지
+  않습니다. 새 테이블은 Alembic
+  `0018_calendar_conflict_judgments`에서 구조화 op으로 추가했습니다. 검증:
+  `python -m pytest backend/tests/test_calendar_conflict_judgment_service.py
+  backend/tests/test_calendar_conflict_judgment_api.py -q` (8 passed), 전체
+  백엔드 스위트 `python -m pytest -q` (1821 passed, 32 skipped).
 - (Devin review 반영) `check_calendar_conflict`가 `existing`이 500건 상한을 넘으면 조용히
   잘라내지 않고 `calendar_existing_batch_exceeded` 오류로 fail closed하도록 수정했습니다.
   상한 이후에 실존하는 충돌이 잘려나가 `available`로 오판되는 것을 막습니다(REST

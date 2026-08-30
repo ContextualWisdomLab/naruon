@@ -1422,6 +1422,110 @@ class SenderRelationship(Base):
     )
 
 
+class CalendarConflictJudgment(Base):
+    """A persisted `evaluate_calendar_conflicts` decision, correctable by a human."""
+
+    __tablename__ = "calendar_conflict_judgments"
+    __table_args__ = (
+        UniqueConstraint(
+            "judgment_uid", name="uq_calendar_conflict_judgments_uid"
+        ),
+        Index(
+            "ix_calendar_conflict_judgments_scope_thread",
+            "user_id",
+            "organization_id",
+            "source_thread_id",
+        ),
+    )
+
+    calendar_conflict_judgment_id: Mapped[int] = mapped_column(primary_key=True)
+    judgment_uid: Mapped[str] = mapped_column(
+        String(96),
+        default=lambda: f"conflict_judgment_{uuid.uuid4().hex}",
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    proposed_commitment_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    source_thread_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    source_message_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    decision_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    recommended_action: Mapped[str] = mapped_column(Text, nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    conflicts_json: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    status_code: Mapped[str] = mapped_column(
+        String(32), default="proposed", nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    corrections: Mapped[list["CalendarConflictCorrection"]] = relationship(
+        "CalendarConflictCorrection",
+        back_populates="judgment",
+    )
+
+
+class CalendarConflictCorrection(Base):
+    """A human override/confirmation of one `CalendarConflictJudgment`."""
+
+    __tablename__ = "calendar_conflict_corrections"
+    __table_args__ = (
+        UniqueConstraint(
+            "correction_uid", name="uq_calendar_conflict_corrections_uid"
+        ),
+        Index(
+            "ix_calendar_conflict_corrections_judgment",
+            "calendar_conflict_judgment_id",
+        ),
+    )
+
+    calendar_conflict_correction_id: Mapped[int] = mapped_column(primary_key=True)
+    correction_uid: Mapped[str] = mapped_column(
+        String(96),
+        default=lambda: f"conflict_correction_{uuid.uuid4().hex}",
+        nullable=False,
+    )
+    calendar_conflict_judgment_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "calendar_conflict_judgments.calendar_conflict_judgment_id"
+        ),
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    organization_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    actor_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    correction_action: Mapped[str] = mapped_column(String(64), nullable=False)
+    before_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    after_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    judgment: Mapped["CalendarConflictJudgment"] = relationship(
+        "CalendarConflictJudgment",
+        back_populates="corrections",
+    )
+
+
 class CaldavAccount(Base):
     __tablename__ = "caldav_accounts"
 
