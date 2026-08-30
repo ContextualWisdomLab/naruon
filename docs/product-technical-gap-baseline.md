@@ -178,7 +178,7 @@ one exact-head bot approval, but still lacks the second qualifying approval.
 None of these observations authorizes a bypass merge.
 
 **Exact-head refresh (2026-08-30):** Naruon PR #1467 is now at
-`c3841c1d260530c3016a6815f3dc2650587f8a7e`. Its utility boundary preserves
+`3afd57c94f5dcf9978f10636906d1f7d4d34f79c`. Its utility boundary preserves
 JSON number lexemes, rejects duplicate keys and invalid URL UTF-8, bounds all
 five utility inputs, and the console submits user-entered parameters. The
 review threads for these findings are resolved; hosted Checks are re-running,
