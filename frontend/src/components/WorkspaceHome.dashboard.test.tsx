@@ -787,4 +787,29 @@ describe("WorkspaceHome Today dashboard", () => {
     expect(container.textContent).toContain("일정 원본 목록 응답을 확인할 수 없습니다.");
     expect(container.textContent).not.toContain("연결된 일정 원본이 없습니다.");
   });
+
+  it("shows an actionable unavailable state instead of false empty dashboard data", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("backend unavailable"))));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<WorkspaceHome forcedStartupView="dashboard" />);
+    });
+    await waitForCondition(() => Boolean(container?.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]')));
+
+    const alert = container.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]');
+    expect(alert?.textContent).toContain("대시보드 데이터를 불러올 수 없습니다.");
+    expect(alert?.textContent).toContain("백엔드 연결을 확인한 후 다시 시도하세요.");
+    expect(container.querySelector('button[aria-label="대시보드 데이터 다시 시도"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("수신된 메일이 없습니다.");
+    expect(container.textContent).not.toContain("대기 작업이 없습니다.");
+  });
 });

@@ -164,6 +164,19 @@ test('renders Today dashboard pending reply lane with signed API headers', async
   await page.screenshot({ path: testInfo.outputPath('today-pending-replies-mobile-scroll.png'), fullPage: false });
 });
 
+test('shows an actionable dashboard state when the backend is unavailable', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1024 });
+  await page.route('**/api/**', (route) => route.abort());
+
+  await page.goto('/');
+
+  const alert = page.getByRole('alert', { name: '대시보드 데이터 상태' });
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText('대시보드 데이터를 불러올 수 없습니다.');
+  await expect(alert).toContainText('백엔드 연결을 확인한 후 다시 시도하세요.');
+  await expect(alert.getByRole('button', { name: '대시보드 데이터 다시 시도' })).toBeVisible();
+});
+
 test('keeps the short mobile AI quick action menu inside the viewport with scrollable actions', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await mockDashboardApi(page);
