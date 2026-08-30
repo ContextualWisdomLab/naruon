@@ -1,4 +1,9 @@
+import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import sqlalchemy as sa
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -402,6 +407,7 @@ def test_alembic_migration_graph_has_a_single_head():
         "revision (down_revision tuple of the heads) so `alembic upgrade head` "
         "is unambiguous"
     )
+    assert "0019_merge_read_state_ownership" in heads
 
 
 def test_merge_revision_reconciles_email_read_state_branch():
@@ -420,6 +426,235 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.create_table(" not in revision_text
     assert "op.add_column(" not in revision_text
     assert "op.drop_column(" not in revision_text
+
+
+def _load_email_read_state_revision():
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0018_email_read_state_ownership.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "email_read_state_revision", revision_path
+    )
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+    return revision
+
+
+class _MigrationInspector:
+    def __init__(self, email_columns, *, ownership_table=False):
+        self.email_columns = email_columns
+        self.ownership_table = ownership_table
+
+    def has_table(self, table_name):
+        if table_name == "email_records":
+            return True
+        if table_name == "email_read_state_ownership":
+            return self.ownership_table
+        raise AssertionError(table_name)
+
+    def get_columns(self, table_name):
+        assert table_name == "email_records"
+        return self.email_columns
+
+
+class _MigrationConnection:
+    def __init__(self, *, ownership_record=False):
+        self.ownership_record = ownership_record
+
+    def execute(self, _statement):
+        return SimpleNamespace(
+            first=lambda: ("owned",) if self.ownership_record else None
+        )
+
+
+def _migration_operations(monkeypatch, revision, inspector, connection):
+    calls = []
+    operations = SimpleNamespace(
+        get_bind=lambda: connection,
+        add_column=lambda *args: calls.append(("add_column", args)),
+        create_table=lambda *args: calls.append(("create_table", args)),
+        bulk_insert=lambda *args: calls.append(("bulk_insert", args)),
+        drop_column=lambda *args: calls.append(("drop_column", args)),
+        drop_table=lambda *args: calls.append(("drop_table", args)),
+    )
+    monkeypatch.setattr(revision, "op", operations)
+    monkeypatch.setattr(revision.sa, "inspect", lambda _connection: inspector)
+    return calls
+
+
+def test_email_read_state_revision_adds_and_records_column_ownership(monkeypatch):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector([{"name": "id"}])
+    connection = _MigrationConnection()
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    revision.upgrade()
+
+    assert [name for name, _args in calls] == [
+        "add_column",
+        "create_table",
+        "bulk_insert",
+    ]
+    assert calls[0][1][0] == "email_records"
+    assert calls[0][1][1].name == "is_read"
+    assert calls[0][1][1].nullable is False
+
+
+def test_email_read_state_revision_preserves_compatible_pre_existing_column(
+    monkeypatch,
+):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector(
+        [{"name": "id"}, {"name": "is_read", "type": sa.Boolean(), "nullable": False}]
+    )
+    connection = _MigrationConnection()
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    revision.upgrade()
+
+    assert [name for name, _args in calls] == ["create_table"]
+
+
+def test_email_read_state_revision_rejects_incompatible_pre_existing_column(
+    monkeypatch,
+):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector(
+        [{"name": "id"}, {"name": "is_read", "type": sa.String(), "nullable": True}]
+    )
+    connection = _MigrationConnection()
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    with pytest.raises(RuntimeError, match="pre-existing"):
+        revision.upgrade()
+
+    assert calls == []
+
+
+def test_email_read_state_revision_downgrade_only_removes_owned_column(monkeypatch):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector(
+        [{"name": "id"}, {"name": "is_read"}], ownership_table=True
+    )
+    connection = _MigrationConnection(ownership_record=True)
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    revision.downgrade()
+
+    assert [name for name, _args in calls] == ["drop_column", "drop_table"]
+    assert calls[0][1] == ("email_records", "is_read")
+
+
+def test_email_read_state_revision_downgrade_preserves_unowned_column(monkeypatch):
+    revision = _load_email_read_state_revision()
+    inspector = _MigrationInspector(
+        [{"name": "id"}, {"name": "is_read"}], ownership_table=True
+    )
+    connection = _MigrationConnection()
+    calls = _migration_operations(monkeypatch, revision, inspector, connection)
+
+    revision.downgrade()
+
+    assert [name for name, _args in calls] == ["drop_table"]
+
+
+def test_email_read_state_revision_uses_canonical_email_records_table():
+    revision_text = (
+        BACKEND_ROOT / "alembic" / "versions" / "0018_email_read_state_ownership.py"
+    ).read_text()
+
+    assert '_EMAIL_TABLE = "email_records"' in revision_text
+    assert "inspector.get_columns(_EMAIL_TABLE)" in revision_text
+    assert "op.add_column(" in revision_text
+    assert "_EMAIL_TABLE," in revision_text
+
+
+def test_published_read_state_revision_targets_published_emails_table(monkeypatch):
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    )
+    spec = importlib.util.spec_from_file_location("published_read_state", revision_path)
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+    calls = []
+    operations = SimpleNamespace(
+        add_column=lambda *args: calls.append(("add_column", args)),
+        drop_column=lambda *args: calls.append(("drop_column", args)),
+    )
+    monkeypatch.setattr(revision, "op", operations)
+
+    revision.upgrade()
+    revision.downgrade()
+
+    assert calls[0][0] == "add_column"
+    assert calls[0][1][0] == "emails"
+    assert calls[0][1][1].name == "is_read"
+    assert calls[-1] == ("drop_column", ("emails", "is_read"))
+
+
+def test_read_state_follow_up_revision_is_after_published_revision():
+    revision_path = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "0018_email_read_state_ownership.py"
+    )
+    revision_text = revision_path.read_text()
+
+    assert revision_path.exists()
+    assert 'revision = "0018_email_read_state_ownership"' in revision_text
+    assert 'down_revision = "0011_email_read_state"' in revision_text
+    assert "_OWNERSHIP_KEY" in revision_text
+
+
+def test_read_state_follow_up_merge_reconciles_current_graph():
+    revision_path = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "0019_merge_email_read_state_ownership.py"
+    )
+    revision_text = revision_path.read_text()
+
+    assert revision_path.exists()
+    assert 'revision = "0019_merge_read_state_ownership"' in revision_text
+    assert "down_revision = (" in revision_text
+    assert '"0017_merge_newsdom_carddav_heads"' in revision_text
+    assert '"0018_email_read_state_ownership"' in revision_text
+    assert "op.create_table(" not in revision_text
+
+
+def test_read_state_follow_up_merge_executes_without_schema_operations(monkeypatch):
+    revision_path = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "0019_merge_email_read_state_ownership.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "merge_email_read_state_ownership", revision_path
+    )
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+
+    calls = []
+
+    class _OperationRecorder:
+        def __getattr__(self, operation_name):
+            def record(*args, **kwargs):
+                calls.append((operation_name, args, kwargs))
+
+            return record
+
+    monkeypatch.setattr(revision, "op", _OperationRecorder(), raising=False)
+
+    revision.upgrade()
+    revision.downgrade()
+
+    assert calls == []
 
 
 def test_merge_revision_reconciles_newsdom_provider_branch():
