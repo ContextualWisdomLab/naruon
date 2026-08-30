@@ -112,9 +112,7 @@ def test_get_tool_not_found():
     assert response.json() == {"detail": "Tool not found"}
 
 
-@pytest.mark.parametrize(
-    "tool_code", ["email_categorizer", "meeting_agenda_generator"]
-)
+@pytest.mark.parametrize("tool_code", ["email_categorizer", "meeting_agenda_generator"])
 def test_registry_omits_lexical_pseudo_topic_tools(tool_code):
     assert registry.get(tool_code) is None
 
@@ -541,6 +539,121 @@ async def test_uuid_v4_generator_tool_success():
     generated_uuid = result["uuid"]
     parsed_uuid = uuid.UUID(generated_uuid)
     assert parsed_uuid.version == 4
+
+
+@pytest.mark.asyncio
+async def test_url_encoder_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_encoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello world/test"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["encoded_url"] == "hello%20world%2Ftest"
+
+
+@pytest.mark.asyncio
+async def test_url_decoder_success():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_decoder/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"encoded_url": "hello%20world%2Ftest"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["decoded_url"] == "hello world/test"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_code, parameter_name",
+    [
+        ("url_encoder", "text"),
+        ("url_decoder", "encoded_url"),
+        ("hash_generator", "text"),
+    ],
+)
+async def test_utility_tools_reject_oversized_input(tool_code, parameter_name):
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/tools/{tool_code}/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {parameter_name: "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "failed",
+        "result": None,
+        "message": (
+            f"Utility text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        ),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "algorithm, expected_hash",
+    [
+        ("md5", "5d41402abc4b2a76b9719d911017c592"),
+        ("sha1", "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"),
+        ("sha256", "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"),
+        (
+            "sha512",
+            "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043",
+        ),
+    ],
+)
+async def test_hash_generator_success(algorithm, expected_hash):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": algorithm}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["hash"] == expected_hash
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_invalid_algorithm():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "invalid_algo"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["result"] is None
+    assert "Unsupported hash algorithm" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_hash_generator_omitted_algorithm():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello"}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    # Should default to sha256
+    assert (
+        data["result"]["hash"]
+        == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
 
 
 @pytest.mark.asyncio
