@@ -50,6 +50,7 @@ vi.mock("lucide-react", () => ({
   RefreshCw: () => <svg aria-hidden="true" />,
   Info: () => <svg aria-hidden="true" />,
   Loader2: () => <svg aria-hidden="true" />,
+  Paperclip: () => <svg aria-hidden="true" />,
   X: () => <svg aria-hidden="true" />,
 }));
 
@@ -242,6 +243,88 @@ describe("EmailDetail", () => {
     expect(container.textContent).not.toContain("alert(1)");
     expect(container.textContent).not.toContain("alert(2)");
     expect(container.textContent).not.toContain("alert(3)");
+  });
+
+  it("renders source-backed attachment metadata safely", async () => {
+    const email = {
+      id: 24,
+      message_id: "<optional-fields@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Optional fields",
+      date: "2026-05-17T10:00:00Z",
+      body: "Review the attached document.",
+      attachments: [
+        {
+          filename: "<img src=x>brief.pdf",
+          content_type: "application/pdf",
+          parse_status: "pdf_dom_recognition_pending",
+        },
+      ],
+    };
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/24")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "정상 맥락 종합", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={24} />);
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("brief.pdf");
+    expect(container.textContent).toContain("application/pdf");
+    expect(container.textContent).toContain("분석 중");
+    expect(container.textContent).not.toContain("<script>");
+    expect(container.textContent).not.toContain("<img");
+    expect(container.querySelector("script")).toBeNull();
+  });
+
+  it("uses a format label when an attachment has no MIME type", async () => {
+    const email = {
+      id: 25,
+      message_id: "<unknown-format@example.com>",
+      thread_id: null,
+      sender: "sender@example.com",
+      recipients: "user@example.com",
+      subject: "Unknown attachment format",
+      date: "2026-05-17T10:00:00Z",
+      body: "Review the attached file.",
+      attachments: [{ filename: "notes.bin", content_type: "", parse_status: "unparsed" }],
+    };
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/emails/25")) return Promise.resolve(jsonResponse(email));
+      if (url.endsWith("/api/llm/summarize")) {
+        return Promise.resolve(jsonResponse({ summary: "정상 맥락 종합", action_items: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<EmailDetail emailId={25} />);
+    });
+    await flushAsyncWork();
+
+    expect(container.textContent).toContain("notes.bin");
+    expect(container.textContent).toContain("알 수 없는 형식");
+    expect(container.textContent).toContain("분석 상태 확인 필요");
+    expect(container.textContent).not.toContain("notes.bin첨부파일");
   });
 
   it("keeps the latest conversation when an older thread request resolves late", async () => {
