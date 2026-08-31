@@ -441,6 +441,18 @@ def _translate_identity_records(
             maps[collection].get(value, value) for value in record[field]
         )
 
+    def replace_project_endpoint(
+        record: dict[str, object], field: str, object_field: str
+    ) -> None:
+        value = record[field]
+        if record[object_field] is not None:
+            record[field] = maps["project_objects"].get(value, value)
+        elif isinstance(value, str) and value.startswith("segment:"):
+            segment_uid = value.removeprefix("segment:")
+            record[field] = "segment:" + maps["content_segments"].get(
+                segment_uid, segment_uid
+            )
+
     def translate_metadata(value: object) -> object:
         if isinstance(value, dict):
             translated_mapping = {
@@ -480,13 +492,10 @@ def _translate_identity_records(
         record["attributes_json"] = translate_metadata(record["attributes_json"])
     for record in translated["project_edges"]:
         replace(record, "edge_uid", "project_edges")
-        for field in (
-            "source_uid",
-            "target_uid",
-            "source_object_uid",
-            "target_object_uid",
-        ):
-            replace(record, field, "project_objects")
+        replace_project_endpoint(record, "source_uid", "source_object_uid")
+        replace_project_endpoint(record, "target_uid", "target_object_uid")
+        replace(record, "source_object_uid", "project_objects")
+        replace(record, "target_object_uid", "project_objects")
         replace(record, "primary_content_segment_uid", "content_segments")
         replace_list(record, "source_segment_uids", "content_segments")
     for record in translated["corrections"]:

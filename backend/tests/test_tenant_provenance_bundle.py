@@ -1926,29 +1926,63 @@ async def test_import_rejects_cross_email_project_references_before_flush(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
-async def test_import_allows_edge_with_one_nullable_object_endpoint(
+async def test_import_round_trip_remaps_nullable_segment_evidence_endpoint(
     provenance_sessionmaker,
 ):
     token = uuid.uuid4().hex[:12]
     source_scope = _scope(f"nullable-source-{token}")
-    target_scope = _scope(f"nullable-target-{token}")
+    target_scope = TenantProvenanceScope(
+        user_id=source_scope.user_id,
+        organization_id=source_scope.organization_id,
+        workspace_id=f"nullable-target-workspace-{token}",
+    )
+    portable_segment_uid = f"segment-{token}"
     async with provenance_sessionmaker() as session:
         await _seed_provenance_closure(session, scope=source_scope, token=token)
-    async with provenance_sessionmaker() as session:
-        records = parse_provenance_archive(
-            await export_tenant_provenance(session, source_scope)
+        source_edge = await session.scalar(
+            select(ProjectGraphEdgeRecord).where(
+                ProjectGraphEdgeRecord.workspace_id == source_scope.workspace_id
+            )
         )
-    records["project_edges"][0]["source_object_uid"] = None
-    records["project_edges"][0]["source_uid"] = f"segment-{token}"
+        source_edge.source_object_id = None
+        source_edge.source_uid = f"segment:{portable_segment_uid}"
+        await session.commit()
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
 
     async with provenance_sessionmaker() as session:
         receipt = await import_tenant_provenance(
             session,
             target_scope,
-            build_provenance_archive(records),
+            archive,
+        )
+        target_edge = await session.scalar(
+            select(ProjectGraphEdgeRecord).where(
+                ProjectGraphEdgeRecord.workspace_id == target_scope.workspace_id
+            )
+        )
+        segment_mapping = await session.scalar(
+            select(ProvenanceIdentityMapping).where(
+                ProvenanceIdentityMapping.target_workspace_id
+                == target_scope.workspace_id,
+                ProvenanceIdentityMapping.entity_kind == "content_segments",
+                ProvenanceIdentityMapping.portable_uid == portable_segment_uid,
+            )
+        )
+        target_source_uid = target_edge.source_uid
+        target_source_object_id = target_edge.source_object_id
+    async with provenance_sessionmaker() as session:
+        reexported = parse_provenance_archive(
+            await export_tenant_provenance(session, target_scope)
         )
 
     assert receipt.created["project_edges"] == 1
+    assert target_source_object_id is None
+    assert target_source_uid == f"segment:{segment_mapping.target_database_uid}"
+    assert reexported["project_edges"][0]["source_object_uid"] is None
+    assert reexported["project_edges"][0]["source_uid"] == (
+        f"segment:{portable_segment_uid}"
+    )
 
 
 @pytest.mark.asyncio
