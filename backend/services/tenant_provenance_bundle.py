@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import math
+import re
 import stat
 import struct
 import zipfile
@@ -107,6 +108,10 @@ _FORBIDDEN_METADATA_KEYS = frozenset(
 )
 _SENSITIVE_METADATA_TOKENS = frozenset(
     {"credential", "credentials", "password", "secret", "secrets", "token"}
+)
+_METADATA_KEY_TOKEN_PATTERN = re.compile(
+    r"[A-Z]+(?=[A-Z][a-z]|[0-9]|[^A-Za-z0-9]|$)"
+    r"|[A-Z]?[a-z]+|[A-Z]+|[0-9]+"
 )
 _RECORD_KEYS = {
     "emails": frozenset(
@@ -288,8 +293,10 @@ def _validate_json_value(value: object, depth: int = 0) -> None:
 
 
 def _metadata_key_is_forbidden(key: str) -> bool:
-    normalized_key = key.lower().replace("-", "_").replace(" ", "_")
-    tokens = tuple(token for token in normalized_key.split("_") if token)
+    tokens = tuple(
+        match.group(0).lower() for match in _METADATA_KEY_TOKEN_PATTERN.finditer(key)
+    )
+    normalized_key = "_".join(tokens)
     token_set = frozenset(tokens)
     token_pairs = set(zip(tokens, tokens[1:]))
     return (

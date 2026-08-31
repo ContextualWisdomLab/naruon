@@ -1431,6 +1431,14 @@ async def test_production_correction_float_round_trip(provenance_sessionmaker):
         ("mail_credentials_blob", "credential-material"),
         ("backup_provider_endpoint_url", "https://provider.example/v1"),
         ("legacy_attachment_id", 123),
+        ("smtpPassword", "password-material"),
+        ("backupApiKey", "key-material"),
+        ("providerAuthToken", "token-material"),
+        ("provider.endpoint.url", "https://provider.example/v1"),
+        ("legacyAttachmentId", 123),
+        ("smtp/password", "password-material"),
+        ("APIKey", "key-material"),
+        ("OAuthToken", "token-material"),
     ),
 )
 @pytest.mark.asyncio
@@ -1473,6 +1481,14 @@ async def test_export_rejects_nested_sensitive_metadata(
         ("mail_credentials_blob", "credential-material"),
         ("backup_provider_endpoint_url", "https://provider.example/v1"),
         ("legacy_attachment_id", 456),
+        ("smtpPassword", "password-material"),
+        ("backupApiKey", "key-material"),
+        ("providerAuthToken", "token-material"),
+        ("provider.endpoint.url", "https://provider.example/v1"),
+        ("legacyAttachmentId", 456),
+        ("smtp/password", "password-material"),
+        ("APIKey", "key-material"),
+        ("OAuthToken", "token-material"),
     ),
 )
 @pytest.mark.asyncio
