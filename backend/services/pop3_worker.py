@@ -57,16 +57,18 @@ class Pop3SyncWorker:
 
     async def _sync(self):
         async with AsyncSessionLocal() as session:
-            result = await session.execute(select(TenantConfig).where(TenantConfig.pop3_server.isnot(None)))
+            result = await session.execute(
+                select(TenantConfig).where(TenantConfig.pop3_server.isnot(None))
+            )
             configs = result.scalars().all()
-            
+
         semaphore = asyncio.Semaphore(10)
         tasks = []
         for config in configs:
             if not config.pop3_server or not config.pop3_port:
                 continue
             tasks.append(self._sync_tenant(config, semaphore))
-            
+
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -109,6 +111,12 @@ class Pop3SyncWorker:
 
         imported_count = 0
         owner_addresses = [config.pop3_username] if config.pop3_username else None
+        workspace_id = getattr(config, "workspace_id", "")
+        if not workspace_id:
+            logger.info(
+                "Skipping POP3 sync because an authoritative workspace is unavailable"
+            )
+            return 0
         async with AsyncSessionLocal() as session:
             try:
                 for raw_message in messages:
@@ -125,6 +133,7 @@ class Pop3SyncWorker:
                         email_data,
                         config.user_id,
                         config.organization_id,
+                        workspace_id=workspace_id,
                         owner_addresses=owner_addresses,
                     )
                     imported_count += 1
@@ -195,7 +204,5 @@ class Pop3SyncWorker:
 
     def _bytes_line(self, line: bytes | str) -> bytes:
         return (
-            line
-            if isinstance(line, bytes)
-            else line.encode("utf-8", errors="replace")
+            line if isinstance(line, bytes) else line.encode("utf-8", errors="replace")
         )

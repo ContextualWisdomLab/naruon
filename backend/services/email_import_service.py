@@ -223,8 +223,7 @@ async def _find_existing_email(
     message_lookup_values = {message_id, f"<{message_id}>"}
     result = await session.execute(
         select(Email).where(
-            *Email.owner_filters(user_id, organization_id),
-            Email.workspace_id == workspace_id,
+            *Email.owner_filters(user_id, organization_id, workspace_id),
             or_(
                 Email.message_id.in_(message_lookup_values),
                 Email.fingerprint == fingerprint,
@@ -235,11 +234,15 @@ async def _find_existing_email(
 
 
 async def _owner_email_import_count(
-    session: AsyncSession, *, user_id: str, organization_id: str
+    session: AsyncSession,
+    *,
+    user_id: str,
+    organization_id: str,
+    workspace_id: str,
 ) -> int:
     count = await session.scalar(
         select(func.count(Email.id)).where(
-            *Email.owner_filters(user_id, organization_id)
+            *Email.owner_filters(user_id, organization_id, workspace_id)
         )
     )
     return int(count or 0)
@@ -891,6 +894,7 @@ async def _import_single_eml(
         parsed,
         user_id=user_id,
         organization_id=organization_id,
+        workspace_id=resolved_workspace_id,
     )
 
     attachment_payloads, fitted_embeddings = await _extract_and_generate_embeddings(
@@ -1184,7 +1188,10 @@ async def import_email_uploads(
     try:
         result = EmailImportResult()
         existing_email_count = await _owner_email_import_count(
-            session, user_id=user_id, organization_id=organization_id
+            session,
+            user_id=user_id,
+            organization_id=organization_id,
+            workspace_id=resolved_workspace_id,
         )
         remaining_quota = MAX_IMPORT_EMAILS_PER_OWNER - existing_email_count
         if remaining_quota <= 0:

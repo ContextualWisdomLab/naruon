@@ -21,8 +21,10 @@ def _email_table_stub() -> sa.TableClause:
     return sa.table(
         _EMAIL_TABLE,
         sa.column("id", sa.Integer()),
+        sa.column("user_id", sa.String()),
         sa.column("organization_id", sa.String()),
         sa.column("workspace_id", sa.String()),
+        sa.column("message_id", sa.String()),
     )
 
 
@@ -67,9 +69,16 @@ def upgrade() -> None:
         constraint["name"]
         for constraint in inspector.get_unique_constraints(_EMAIL_TABLE)
     }
+    unique_indexes = {
+        index["name"]
+        for index in inspector.get_indexes(_EMAIL_TABLE)
+        if index.get("unique")
+    }
     if _OLD_EMAIL_IDENTITY in existing_constraints:
         op.drop_constraint(_OLD_EMAIL_IDENTITY, _EMAIL_TABLE, type_="unique")
-    if _EMAIL_WORKSPACE_IDENTITY not in existing_constraints:
+    elif _OLD_EMAIL_IDENTITY in unique_indexes:
+        op.drop_index(_OLD_EMAIL_IDENTITY, table_name=_EMAIL_TABLE)
+    if _EMAIL_WORKSPACE_IDENTITY not in existing_constraints | unique_indexes:
         op.create_unique_constraint(
             _EMAIL_WORKSPACE_IDENTITY,
             _EMAIL_TABLE,
@@ -83,6 +92,27 @@ def downgrade() -> None:
     if not inspector.has_table(_EMAIL_TABLE):
         return
 
+    emails = _email_table_stub()
+    duplicate_identity = connection.execute(
+        sa.select(
+            emails.c.user_id,
+            emails.c.organization_id,
+            emails.c.message_id,
+        )
+        .group_by(
+            emails.c.user_id,
+            emails.c.organization_id,
+            emails.c.message_id,
+        )
+        .having(sa.func.count() > 1)
+        .limit(1)
+    ).first()
+    if duplicate_identity is not None:
+        raise RuntimeError(
+            "Cannot downgrade email workspace identity while duplicate owner/message "
+            "rows exist across workspaces"
+        )
+
     existing_indexes = {index["name"] for index in inspector.get_indexes(_EMAIL_TABLE)}
     if _EMAIL_WORKSPACE_INDEX in existing_indexes:
         op.drop_index(_EMAIL_WORKSPACE_INDEX, table_name=_EMAIL_TABLE, if_exists=True)
@@ -91,9 +121,16 @@ def downgrade() -> None:
         constraint["name"]
         for constraint in inspector.get_unique_constraints(_EMAIL_TABLE)
     }
+    unique_indexes = {
+        index["name"]
+        for index in inspector.get_indexes(_EMAIL_TABLE)
+        if index.get("unique")
+    }
     if _EMAIL_WORKSPACE_IDENTITY in existing_constraints:
         op.drop_constraint(_EMAIL_WORKSPACE_IDENTITY, _EMAIL_TABLE, type_="unique")
-    if _OLD_EMAIL_IDENTITY not in existing_constraints:
+    elif _EMAIL_WORKSPACE_IDENTITY in unique_indexes:
+        op.drop_index(_EMAIL_WORKSPACE_IDENTITY, table_name=_EMAIL_TABLE)
+    if _OLD_EMAIL_IDENTITY not in existing_constraints | unique_indexes:
         op.create_unique_constraint(
             _OLD_EMAIL_IDENTITY,
             _EMAIL_TABLE,

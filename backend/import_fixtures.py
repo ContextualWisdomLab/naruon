@@ -18,6 +18,9 @@ from sqlalchemy import select
 EMBEDDING_DIMENSION = STORAGE_EMBEDDING_DIMENSION
 IMPORT_USER_ID = os.environ.get("NARUON_IMPORT_USER_ID", "default")
 IMPORT_ORGANIZATION_ID = os.environ.get("NARUON_IMPORT_ORGANIZATION_ID", "default")
+IMPORT_WORKSPACE_ID = os.environ.get(
+    "NARUON_IMPORT_WORKSPACE_ID", f"workspace-{IMPORT_ORGANIZATION_ID}"
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -64,6 +67,7 @@ async def import_eml_file(session, eml_file: Path) -> bool:
         parsed,
         user_id=IMPORT_USER_ID,
         organization_id=IMPORT_ORGANIZATION_ID,
+        workspace_id=IMPORT_WORKSPACE_ID,
     )
 
     email_obj = Email(
@@ -99,7 +103,9 @@ async def import_eml_file(session, eml_file: Path) -> bool:
                 )
             )
         except Exception as e:
-            logger.error(f"Failed to generate embedding for attachment {att['filename']}: {e}")
+            logger.error(
+                f"Failed to generate embedding for attachment {att['filename']}: {e}"
+            )
 
     session.add(email_obj)
     try:

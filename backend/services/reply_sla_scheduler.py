@@ -4,7 +4,7 @@ import random
 
 from sqlalchemy import bindparam, func, or_, select
 
-from db.models import TenantConfig
+from db.models import Email, TenantConfig
 from db.session import AsyncSessionLocal
 from services.reply_sla_escalation_service import create_reply_sla_escalation_tasks
 
@@ -158,14 +158,24 @@ class ReplySlaScheduler:
 
         for config in configs:
             try:
-                await create_reply_sla_escalation_tasks(
-                    session,
-                    user_id=config.user_id,
-                    organization_id=config.organization_id,
-                    overdue_hours=self.overdue_hours,
-                    limit=self.limit,
-                    tenant_config=config,
+                workspace_ids = await session.scalars(
+                    select(Email.workspace_id)
+                    .where(
+                        Email.user_id == config.user_id,
+                        Email.organization_id == config.organization_id,
+                    )
+                    .distinct()
                 )
+                for workspace_id in workspace_ids:
+                    await create_reply_sla_escalation_tasks(
+                        session,
+                        user_id=config.user_id,
+                        organization_id=config.organization_id,
+                        workspace_id=workspace_id,
+                        overdue_hours=self.overdue_hours,
+                        limit=self.limit,
+                        tenant_config=config,
+                    )
             except Exception:
                 logger.error(
                     "Overdue reply follow-up failed for configured owner %s.",

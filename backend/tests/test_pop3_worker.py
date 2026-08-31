@@ -98,6 +98,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
         pop3_username="pop3-user@example.com",
         pop3_password="pop3-secret",
     )
+    config.workspace_id = "workspace-pop3"
     raw_message = (
         b"Message-ID: <pop3-1@example.com>\r\n"
         b"From: Sender <sender@example.com>\r\n"
@@ -132,7 +133,12 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
     session = FakeSession()
 
     async def fake_process_fetched_email(
-        db_session, email_data, user_id, organization_id, owner_addresses=None
+        db_session,
+        email_data,
+        user_id,
+        organization_id,
+        workspace_id,
+        owner_addresses=None,
     ):
         imported.append(
             {
@@ -140,6 +146,7 @@ async def test_pop3_worker_imports_retrieved_messages(monkeypatch):
                 "email_data": email_data,
                 "user_id": user_id,
                 "organization_id": organization_id,
+                "workspace_id": workspace_id,
                 "owner_addresses": owner_addresses,
             }
         )

@@ -1,4 +1,10 @@
 ## [Unreleased]
+- **Superseding workspace-scope correction:** historical bullets below that call
+  `Email.owner_filters()` workspace scoping deferred are no longer current.
+  The helper now requires `workspace_id`, and every production caller supplies
+  an authoritative workspace without a silent default. Background mailbox
+  processing fails closed when its owner-scoped account cannot be tied to an
+  unambiguous persisted workspace.
 - **Noema workspace/calendar identity hardening:** mail and content-graph tools now
   include the independently signed `workspace_id` in SQL scope; signed workspace
   identifiers are no longer derived from organization identifiers; email message
