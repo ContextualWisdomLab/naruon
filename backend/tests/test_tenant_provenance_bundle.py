@@ -2104,6 +2104,69 @@ async def test_import_is_idempotent_for_exact_target_records(provenance_sessionm
     assert second.skipped == first.created
 
 
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_cross_workspace_retry_uses_mappings_after_source_graph_deletion(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"deleted-source-{token}")
+    target_scope = TenantProvenanceScope(
+        user_id=source_scope.user_id,
+        organization_id=source_scope.organization_id,
+        workspace_id=f"retained-target-{token}",
+    )
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    async with provenance_sessionmaker() as session:
+        first = await import_tenant_provenance(session, target_scope, archive)
+    async with provenance_sessionmaker() as session:
+        await session.execute(
+            delete(ProjectGraphCorrectionRecord).where(
+                ProjectGraphCorrectionRecord.workspace_id == source_scope.workspace_id
+            )
+        )
+        await session.execute(
+            delete(ProjectGraphEdgeRecord).where(
+                ProjectGraphEdgeRecord.workspace_id == source_scope.workspace_id
+            )
+        )
+        await session.execute(
+            delete(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.workspace_id == source_scope.workspace_id
+            )
+        )
+        await session.commit()
+    async with provenance_sessionmaker() as session:
+        second = await import_tenant_provenance(session, target_scope, archive)
+        target_counts = (
+            await session.scalar(
+                select(func.count()).select_from(ProjectGraphObjectRecord).where(
+                    ProjectGraphObjectRecord.workspace_id == target_scope.workspace_id
+                )
+            ),
+            await session.scalar(
+                select(func.count()).select_from(ProjectGraphEdgeRecord).where(
+                    ProjectGraphEdgeRecord.workspace_id == target_scope.workspace_id
+                )
+            ),
+            await session.scalar(
+                select(func.count()).select_from(ProjectGraphCorrectionRecord).where(
+                    ProjectGraphCorrectionRecord.workspace_id == target_scope.workspace_id
+                )
+            ),
+        )
+
+    assert sum(first.created.values()) > 0
+    assert sum(second.created.values()) == 0
+    assert sum(second.skipped.values()) == sum(first.created.values()) + sum(
+        first.skipped.values()
+    )
+    assert target_counts == (2, 1, 1)
+
+
 @pytest.mark.parametrize("citation_owner", ("object", "edge", "correction"))
 @pytest.mark.asyncio
 @pytest.mark.postgres

@@ -2034,6 +2034,54 @@ async def _prepare_identity_import(
     if same_scope:
         return copy.deepcopy(records), []
 
+    forward_maps = {collection: {} for collection in _REMAPPED_COLLECTIONS}
+    for collection in _REMAPPED_COLLECTIONS:
+        for record in records[collection]:
+            portable_uid = record[_UID_KEYS[collection]]
+            forward_maps[collection][portable_uid] = _target_database_uid(
+                scope, source_scope, collection, portable_uid
+            )
+    expected_mapping_keys = {
+        (collection, portable_uid)
+        for collection, collection_map in forward_maps.items()
+        for portable_uid in collection_map
+    }
+    organization_filter = (
+        ProvenanceIdentityMapping.target_organization_id == scope.organization_id
+        if scope.organization_id is not None
+        else ProvenanceIdentityMapping.target_organization_id.is_(None)
+    )
+    scoped_mapping_rows = list(
+        (
+            await session.scalars(
+                select(ProvenanceIdentityMapping).where(
+                    ProvenanceIdentityMapping.target_user_id == scope.user_id,
+                    organization_filter,
+                    ProvenanceIdentityMapping.target_workspace_id == scope.workspace_id,
+                    ProvenanceIdentityMapping.source_user_uid
+                    == source_scope["user_uid"],
+                    ProvenanceIdentityMapping.source_organization_uid
+                    == source_scope["organization_uid"],
+                    ProvenanceIdentityMapping.source_workspace_uid
+                    == source_scope["workspace_uid"],
+                    ProvenanceIdentityMapping.entity_kind.in_(_REMAPPED_COLLECTIONS),
+                )
+            )
+        ).all()
+    )
+    scoped_mappings = {
+        (row.entity_kind, row.portable_uid): row
+        for row in scoped_mapping_rows
+        if (row.entity_kind, row.portable_uid) in expected_mapping_keys
+    }
+    if scoped_mappings:
+        if set(scoped_mappings) != expected_mapping_keys:
+            _fail()
+        for (collection, portable_uid), row in scoped_mappings.items():
+            if row.target_database_uid != forward_maps[collection][portable_uid]:
+                _fail()
+        return _translate_identity_records(records, forward_maps), []
+
     scoped_collisions: list[Any] = []
     for model, column, collection in (
         (
@@ -2076,13 +2124,6 @@ async def _prepare_identity_import(
     ):
         _fail()
 
-    forward_maps = {collection: {} for collection in _REMAPPED_COLLECTIONS}
-    for collection in _REMAPPED_COLLECTIONS:
-        for record in records[collection]:
-            portable_uid = record[_UID_KEYS[collection]]
-            forward_maps[collection][portable_uid] = _target_database_uid(
-                scope, source_scope, collection, portable_uid
-            )
     target_uids = {
         database_uid
         for collection_map in forward_maps.values()
