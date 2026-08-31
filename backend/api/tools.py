@@ -769,14 +769,38 @@ registry.register(
 )
 
 
-_URL_PATTERN = re.compile(r"https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[a-zA-Z0-9_.-]*[a-zA-Z0-9_/-])?")
+_URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+
+
+def _trim_url_candidate(candidate: str) -> str:
+    """Remove unmatched closing delimiters without altering valid URL punctuation."""
+    for opener, closer in (("(", ")"), ("[", "]"), ("{", "}")):
+        while candidate.endswith(closer) and candidate.count(closer) > candidate.count(
+            opener
+        ):
+            candidate = candidate[:-1]
+    return candidate
 
 async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
-    text = params.get("text") or ""
-    urls = _URL_PATTERN.findall(text)
-    # Remove duplicates while preserving order
-    unique_urls = list(dict.fromkeys(urls))
-    return {"urls": unique_urls}
+    text = params["text"]
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
+    urls: list[str] = []
+    seen: set[str] = set()
+    for match in _URL_PATTERN.finditer(text):
+        candidate = _trim_url_candidate(match.group())
+        try:
+            parsed = urllib.parse.urlsplit(candidate)
+            _ = parsed.port  # validate a declared port without requiring one
+            valid = parsed.hostname is not None
+        except ValueError:
+            valid = False
+        if valid and candidate not in seen:
+            seen.add(candidate)
+            urls.append(candidate)
+    return {"urls": urls}
 
 
 registry.register(

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("AUTH_SESSION_HMAC_SECRET", secrets.token_urlsafe(48))
 
 from api.tools import (
+    ANALYSIS_TEXT_MAX_CHARS,
     MAX_TOOL_FAILURE_MESSAGE_CHARS,
     ExecuteRequest,
     ToolInfo,
@@ -382,7 +383,10 @@ async def test_execute_tool_handler_error():
 
 
 def test_execute_url_extractor():
-    text = "Here is a link to https://example.com/test_page and another http://foo.com/bar. Also https://example.com/test_page again."
+    text = (
+        "URLs: https://example.com:8443/foo/bar?q=a%20b#section "
+        "(http://foo.com?next=/a) https://example.com:8443/foo/bar?q=a%20b#section."
+    )
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/url_extractor/execute",
@@ -392,7 +396,42 @@ def test_execute_url_extractor():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["result"]["urls"] == ["https://example.com/test_page", "http://foo.com/bar"]
+    assert data["result"]["urls"] == [
+        "https://example.com:8443/foo/bar?q=a%20b#section",
+        "http://foo.com?next=/a",
+        "https://example.com:8443/foo/bar?q=a%20b#section.",
+    ]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/a,b,",
+        "https://example.com?q=what?",
+        "https://example.com#frag!",
+    ),
+)
+def test_execute_url_extractor_preserves_valid_terminal_punctuation(url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": url}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+def test_execute_url_extractor_rejects_oversized_text():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
 
 
 @pytest.mark.asyncio
