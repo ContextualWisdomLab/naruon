@@ -14,6 +14,13 @@ down_revision = "0019_attachment_uid"
 _EMAIL_TABLE = "email_records"
 _EMAIL_WORKSPACE_INDEX = "ix_email_records_workspace_id"
 _OLD_EMAIL_IDENTITY = "uq_emails_owner_message_id"
+# backend/scripts/bootstrap_db.py's dev-compat path predates this migration
+# and creates the owner-only identity under a different name and as a plain
+# index rather than a named unique constraint; a database bootstrapped before
+# that script's own fix landed and later migrated via Alembic needs this
+# shape recognized too, or it keeps the stricter, non-workspace-scoped
+# identity forever.
+_BOOTSTRAP_OLD_EMAIL_IDENTITY = "uq_email_records_owner_message_id"
 _EMAIL_WORKSPACE_IDENTITY = "uq_emails_workspace_message"
 
 
@@ -78,6 +85,12 @@ def upgrade() -> None:
         op.drop_constraint(_OLD_EMAIL_IDENTITY, _EMAIL_TABLE, type_="unique")
     elif _OLD_EMAIL_IDENTITY in unique_indexes:
         op.drop_index(_OLD_EMAIL_IDENTITY, table_name=_EMAIL_TABLE)
+    if _BOOTSTRAP_OLD_EMAIL_IDENTITY in unique_indexes:
+        op.drop_index(_BOOTSTRAP_OLD_EMAIL_IDENTITY, table_name=_EMAIL_TABLE)
+    if _BOOTSTRAP_OLD_EMAIL_IDENTITY in existing_constraints:
+        op.drop_constraint(
+            _BOOTSTRAP_OLD_EMAIL_IDENTITY, _EMAIL_TABLE, type_="unique"
+        )
     if _EMAIL_WORKSPACE_IDENTITY not in existing_constraints | unique_indexes:
         op.create_unique_constraint(
             _EMAIL_WORKSPACE_IDENTITY,

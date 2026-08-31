@@ -1,6 +1,7 @@
 import pytest
 import datetime
 from unittest.mock import patch, AsyncMock
+from sqlalchemy.dialects import postgresql
 from scripts.import_fixtures import process_zip_file
 import import_fixtures
 import scripts.import_fixtures as scripts_import_fixtures
@@ -66,6 +67,62 @@ async def test_process_zip_file_batch_insert_includes_workspace_id():
         f"workspace-{scripts_import_fixtures.IMPORT_ORGANIZATION_ID}"
         if scripts_import_fixtures.IMPORT_ORGANIZATION_ID
         else f"workspace-{scripts_import_fixtures.IMPORT_USER_ID}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_zip_file_upsert_targets_workspace_scoped_identity():
+    # Alembic 0020_email_workspace_scope drops the 3-column
+    # uq_emails_owner_message_id constraint and replaces it with the 4-column
+    # uq_emails_workspace_message (user_id, organization_id, workspace_id,
+    # message_id). An ON CONFLICT target that still names only the old
+    # 3-column shape matches no constraint on a real PostgreSQL database and
+    # PostgreSQL rejects the statement outright -- every nonempty ZIP import
+    # would fail. SQLite (this test's default) is lenient about this, which is
+    # exactly why the mismatch survived undetected; compile against the
+    # PostgreSQL dialect to actually exercise the constraint-matching rule.
+    captured_statement = {}
+
+    class _RecordingSession:
+        async def scalar(self, *args, **kwargs):
+            return None
+
+        async def execute(self, statement, batch_values=None):
+            captured_statement["statement"] = statement
+
+        async def commit(self):
+            pass
+
+    email_data = {
+        "message_id": "msg-1",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": ["recipient@example.com"],
+        "subject": "Subject",
+        "in_reply_to": None,
+        "references": None,
+        "date": datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+        "body": "body text",
+    }
+
+    with (
+        patch("scripts.import_fixtures.extract_backup_async") as mock_extract,
+        patch("scripts.import_fixtures.parse_eml", return_value=email_data),
+        patch("scripts.import_fixtures.chunk_text", return_value=[]),
+        patch(
+            "scripts.import_fixtures.assign_thread_id",
+            new=AsyncMock(return_value="thread-1"),
+        ),
+    ):
+        mock_extract.return_value = ["fixture.eml"]
+        await process_zip_file("dummy.zip", _RecordingSession())
+
+    compiled = str(
+        captured_statement["statement"].compile(dialect=postgresql.dialect())
+    )
+    assert (
+        "ON CONFLICT (user_id, organization_id, workspace_id, message_id)"
+        in compiled
     )
 
 

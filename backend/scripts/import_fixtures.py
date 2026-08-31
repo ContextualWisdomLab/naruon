@@ -108,6 +108,11 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession):
         if batch_values:
             stmt = insert(Email)
             stmt = stmt.on_conflict_do_update(
+                # Alembic 0020_email_workspace_scope replaced the 3-column
+                # uq_emails_owner_message_id constraint with the 4-column
+                # uq_emails_workspace_message; an ON CONFLICT target that still
+                # names only the old 3-column shape matches no constraint on a
+                # real PostgreSQL database and the insert is rejected outright.
                 index_elements=[
                     "user_id",
                     "organization_id",

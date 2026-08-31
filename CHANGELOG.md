@@ -5,6 +5,38 @@
   an authoritative workspace without a silent default. Background mailbox
   processing fails closed when its owner-scoped account cannot be tied to an
   unambiguous persisted workspace.
+- **(Devin 리뷰 대응) Alembic 마이그레이션 `0020_email_workspace_scope`가 `bootstrap_db.py`가
+  만든 owner-only 고유 식별자를 인식하지 못하던 문제를 고쳤습니다.** 이 마이그레이션은
+  `get_unique_constraints()`로 `uq_emails_owner_message_id`(Alembic 자체 명명)만 확인했는데,
+  `bootstrap_db.py`(이 PR 이전 코드)는 같은 개념을 다른 이름(`uq_email_records_owner_message_id`)의
+  **plain index**로 만들었습니다 — 이름도 다르고 종류도 달라 마이그레이션이 절대 찾을 수 없는
+  상태였습니다. 과거에 `bootstrap_db.py`로 초기화된 뒤 Alembic으로 전환된 DB는 이 3열 고유
+  인덱스가 영구히 남아, workspace 간 동일 `message_id` 중복을 계속 차단합니다. 마이그레이션이
+  이제 `get_indexes()`로도 확인하고, constraint/index 두 형태 모두 대비해 제거합니다. 새 테스트
+  `test_email_workspace_migration_also_drops_bootstrap_created_owner_only_index`.
+  검증: 전체 백엔드 스위트 1891 passed/33 skipped, ruff clean.
+- **(Devin 리뷰 대응, `b778fb69` 이후) 두 스크립트가 `uq_emails_workspace_message`(4열:
+  `user_id`, `organization_id`, `workspace_id`, `message_id`)로 교체된 email 고유성
+  계약을 따라가지 못하고 있던 문제를 고쳤습니다.**
+  - `backend/scripts/import_fixtures.py::process_zip_file`의
+    `on_conflict_do_update`가 여전히 옛 3열 `uq_emails_owner_message_id` 대상을
+    가리키고 있었습니다 — 실제 PostgreSQL에서는 `ON CONFLICT` 대상이 기존 고유
+    제약과 정확히 일치해야 하므로, 이 상태로는 비어 있지 않은 ZIP을 임포트할
+    때마다 커밋이 거부됩니다(테스트가 기본으로 쓰는 SQLite는 이 불일치를 허용해
+    로컬에서는 발견되지 않았습니다). `index_elements`를 4열로 갱신했습니다.
+    새 테스트 `test_process_zip_file_upsert_targets_workspace_scoped_identity`는
+    PostgreSQL dialect로 직접 컴파일해 `ON CONFLICT` 절 자체를 검증합니다.
+  - `backend/scripts/bootstrap_db.py`(Alembic을 쓰지 않는 로컬/개발용 호환 경로)가
+    `_get_validation_and_final_indexes_statements`에서 만든 옛 3열 고유 인덱스
+    `uq_email_records_owner_message_id`를 한 번도 제거하지 않아, workspace_id를
+    백필한 뒤에도 같은 사용자/조직의 두 서로 다른 workspace가 동일
+    `message_id`를 가질 수 없는 더 엄격한 제약이 남아 있었습니다 — Alembic이
+    관리하는 스키마와 조용히 어긋나는 상태였습니다. workspace_id를 NOT NULL로
+    만든 직후 옛 인덱스/제약을(둘 다 대비해) 제거하고, 동일한 4열 워크스페이스
+    스코프 고유 인덱스(`uq_email_records_workspace_message_id`)를 새로 만들도록
+    고쳤습니다. 새 테스트
+    `test_schema_backfill_replaces_owner_only_email_uniqueness_with_workspace_scope`.
+  - 검증: 전체 백엔드 스위트 1890 passed/33 skipped, ruff clean.
 - **Noema workspace/calendar identity hardening:** mail and content-graph tools now
   include the independently signed `workspace_id` in SQL scope; signed workspace
   identifiers are no longer derived from organization identifiers; email message
