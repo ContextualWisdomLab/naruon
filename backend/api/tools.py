@@ -797,10 +797,13 @@ async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
     seen: set[str] = set()
     for match in _URL_PATTERN.finditer(text):
         wrapper_start = match.start()
+        while wrapper_start and text[wrapper_start - 1].isspace():
+            wrapper_start -= 1
+        wrapper_end = wrapper_start
         while wrapper_start and text[wrapper_start - 1] in "([{":
             wrapper_start -= 1
         candidate = _trim_url_candidate(
-            match.group(), text[wrapper_start : match.start()]
+            match.group(), text[wrapper_start:wrapper_end]
         )
         try:
             parsed = urllib.parse.urlsplit(candidate)

@@ -452,6 +452,29 @@ def test_execute_url_extractor_handles_punctuated_nested_wrappers(text, url):
     assert response.json()["result"]["urls"] == [url]
 
 
+def test_execute_url_extractor_handles_spaced_nested_wrappers():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "([  https://example.com/path])."}},
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/path"]
+
+
+def test_execute_url_extractor_does_not_borrow_distant_wrapper():
+    url = "https://example.com/path)."
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(see {url}"}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
 @pytest.mark.parametrize(
     "url",
     (
