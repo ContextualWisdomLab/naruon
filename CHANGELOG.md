@@ -1,4 +1,14 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응) Alembic 마이그레이션 `0020_email_workspace_scope`가 `bootstrap_db.py`가
+  만든 owner-only 고유 식별자를 인식하지 못하던 문제를 고쳤습니다.** 이 마이그레이션은
+  `get_unique_constraints()`로 `uq_emails_owner_message_id`(Alembic 자체 명명)만 확인했는데,
+  `bootstrap_db.py`(이 PR 이전 코드)는 같은 개념을 다른 이름(`uq_email_records_owner_message_id`)의
+  **plain index**로 만들었습니다 — 이름도 다르고 종류도 달라 마이그레이션이 절대 찾을 수 없는
+  상태였습니다. 과거에 `bootstrap_db.py`로 초기화된 뒤 Alembic으로 전환된 DB는 이 3열 고유
+  인덱스가 영구히 남아, workspace 간 동일 `message_id` 중복을 계속 차단합니다. 마이그레이션이
+  이제 `get_indexes()`로도 확인하고, constraint/index 두 형태 모두 대비해 제거합니다. 새 테스트
+  `test_email_workspace_migration_also_drops_bootstrap_created_owner_only_index`.
+  검증: 전체 백엔드 스위트 1891 passed/33 skipped, ruff clean.
 - **(Devin 리뷰 대응, `b778fb69` 이후) 두 스크립트가 `uq_emails_workspace_message`(4열:
   `user_id`, `organization_id`, `workspace_id`, `message_id`)로 교체된 email 고유성
   계약을 따라가지 못하고 있던 문제를 고쳤습니다.**

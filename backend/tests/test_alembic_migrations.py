@@ -51,6 +51,25 @@ def test_email_workspace_migration_replaces_owner_only_identity_constraint():
     assert "sa.text(" not in revision_text
 
 
+def test_email_workspace_migration_also_drops_bootstrap_created_owner_only_index():
+    """backend/scripts/bootstrap_db.py's owner-only identity predates this
+    migration's own uq_emails_owner_message_id and uses a different name
+    (uq_email_records_owner_message_id) and a different catalog shape (a
+    plain index, not a named unique constraint). A database that was
+    bootstrap-initialized before bootstrap_db.py's own fix landed and is
+    later migrated via Alembic would keep that stricter 3-column identity
+    forever -- this migration's own get_unique_constraints()-only check can
+    never see it (wrong name, and get_unique_constraints never returns plain
+    indexes at all)."""
+    revision_text = (
+        BACKEND_ROOT / "alembic" / "versions" / "0020_email_workspace_scope.py"
+    ).read_text()
+
+    assert '"uq_email_records_owner_message_id"' in revision_text
+    assert "get_indexes(" in revision_text
+    assert "op.drop_index(" in revision_text
+
+
 def test_provider_writeback_retry_queue_has_incremental_revision():
     versions_dir = BACKEND_ROOT / "alembic" / "versions"
     revision_path = versions_dir / "0002_provider_writeback_retry_queue.py"
