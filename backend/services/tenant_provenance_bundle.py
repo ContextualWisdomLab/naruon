@@ -1199,13 +1199,22 @@ async def export_tenant_provenance(
     cited_segments = list(
         (
             await session.scalars(
-                select(ContentSegmentRecord).where(
+                select(ContentSegmentRecord)
+                .join(Email, ContentSegmentRecord.email_id == Email.id)
+                .where(
                     (ContentSegmentRecord.content_segment_uid.in_(cited_segment_uids))
-                    | (ContentSegmentRecord.content_segment_id.in_(primary_segment_ids))
+                    | (ContentSegmentRecord.content_segment_id.in_(primary_segment_ids)),
+                    *_scope_filters(Email, scope, workspace=False),
                 )
             )
         ).all()
     )
+    if not cited_segment_uids.issubset(
+        {segment.content_segment_uid for segment in cited_segments}
+    ) or not primary_segment_ids.issubset(
+        {segment.content_segment_id for segment in cited_segments}
+    ):
+        _fail()
     email_ids = {record.email_id for record in project_objects} | {
         segment.email_id for segment in cited_segments
     }

@@ -2372,3 +2372,64 @@ async def test_export_excludes_separate_user_and_organization_scope(
         selected["email_uid"]
     }
     assert rival["email_uid"] not in json.dumps(records)
+
+
+@pytest.mark.parametrize(
+    "reference_field",
+    (
+        "object_source",
+        "object_primary",
+        "edge_source",
+        "edge_primary",
+        "correction_source",
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_export_rejects_cross_tenant_segment_references_before_email_closure(
+    provenance_sessionmaker,
+    reference_field,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(f"selected-{token}")
+    foreign_scope = _scope(f"foreign-{token}")
+    async with provenance_sessionmaker() as session:
+        selected = await _seed_provenance_closure(
+            session, scope=scope, token=f"selected-{token}"
+        )
+        foreign = await _seed_provenance_closure(
+            session, scope=foreign_scope, token=f"foreign-{token}"
+        )
+        foreign_segment = await session.scalar(
+            select(ContentSegmentRecord).where(
+                ContentSegmentRecord.email_id == foreign["email_id"]
+            )
+        )
+        if reference_field.startswith("object_"):
+            record = await session.scalar(
+                select(ProjectGraphObjectRecord).where(
+                    ProjectGraphObjectRecord.project_graph_object_id
+                    == selected["project_object_id"]
+                )
+            )
+        elif reference_field.startswith("edge_"):
+            record = await session.scalar(
+                select(ProjectGraphEdgeRecord).where(
+                    ProjectGraphEdgeRecord.workspace_id == scope.workspace_id
+                )
+            )
+        else:
+            record = await session.scalar(
+                select(ProjectGraphCorrectionRecord).where(
+                    ProjectGraphCorrectionRecord.workspace_id == scope.workspace_id
+                )
+            )
+        if reference_field.endswith("_primary"):
+            record.primary_content_segment_id = foreign_segment.content_segment_id
+        else:
+            record.source_segment_uids = [foreign_segment.content_segment_uid]
+        await session.commit()
+
+    async with provenance_sessionmaker() as session:
+        with pytest.raises(ProvenanceArchiveError):
+            await export_tenant_provenance(session, scope)
