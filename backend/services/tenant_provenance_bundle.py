@@ -670,6 +670,39 @@ def _attachment_core(attachment: Attachment, email_uid: str) -> dict[str, object
     }
 
 
+def _attachment_payload_core(record: Mapping[str, object]) -> bytes:
+    return _canonical_json(
+        {key: value for key, value in record.items() if key != "attachment_uid"}
+    )
+
+
+def _attachment_uid(canonical: bytes, occurrence: int) -> str:
+    return (
+        "attachment-"
+        + hashlib.sha256(canonical + b":" + str(occurrence).encode("ascii")).hexdigest()
+    )
+
+
+def _attachments_in_occurrence_order(
+    records: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    groups: dict[bytes, list[dict[str, object]]] = {}
+    for record in records:
+        groups.setdefault(_attachment_payload_core(record), []).append(record)
+    ordered: list[dict[str, object]] = []
+    for canonical, group in sorted(groups.items()):
+        occurrences = {
+            _attachment_uid(canonical, occurrence): occurrence
+            for occurrence in range(1, len(group) + 1)
+        }
+        if set(occurrences) != {record["attachment_uid"] for record in group}:
+            _fail()
+        ordered.extend(
+            sorted(group, key=lambda record: occurrences[record["attachment_uid"]])
+        )
+    return ordered
+
+
 def _is_admitted_attachment(attachment: Attachment) -> bool:
     return (
         attachment.parse_status == "parsed"
@@ -698,12 +731,7 @@ def _attachment_records(
         core = _attachment_core(attachment, email_uids[attachment.email_id])
         canonical = _canonical_json(core)
         occurrence[canonical] = occurrence.get(canonical, 0) + 1
-        uid = (
-            "attachment-"
-            + hashlib.sha256(
-                canonical + b":" + str(occurrence[canonical]).encode("ascii")
-            ).hexdigest()
-        )
+        uid = _attachment_uid(canonical, occurrence[canonical])
         uid_by_id[attachment.id] = uid
         records.append({"attachment_uid": uid, **core})
     return sorted(records, key=lambda item: item["attachment_uid"]), uid_by_id
@@ -866,7 +894,48 @@ async def export_tenant_provenance(
             )
         ).all()
     )
-    email_ids = {record.email_id for record in project_objects}
+    project_edges = list(
+        (
+            await session.scalars(
+                select(ProjectGraphEdgeRecord)
+                .where(*_scope_filters(ProjectGraphEdgeRecord, scope, workspace=True))
+                .order_by(ProjectGraphEdgeRecord.edge_uid)
+            )
+        ).all()
+    )
+    corrections = list(
+        (
+            await session.scalars(
+                select(ProjectGraphCorrectionRecord)
+                .where(
+                    *_scope_filters(ProjectGraphCorrectionRecord, scope, workspace=True)
+                )
+                .order_by(ProjectGraphCorrectionRecord.correction_uid)
+            )
+        ).all()
+    )
+    cited_segment_uids = {
+        segment_uid
+        for record in (*project_objects, *project_edges, *corrections)
+        for segment_uid in record.source_segment_uids
+    }
+    primary_segment_ids = {
+        record.primary_content_segment_id
+        for record in (*project_objects, *project_edges)
+    }
+    cited_segments = list(
+        (
+            await session.scalars(
+                select(ContentSegmentRecord).where(
+                    (ContentSegmentRecord.content_segment_uid.in_(cited_segment_uids))
+                    | (ContentSegmentRecord.content_segment_id.in_(primary_segment_ids))
+                )
+            )
+        ).all()
+    )
+    email_ids = {record.email_id for record in project_objects} | {
+        segment.email_id for segment in cited_segments
+    }
     emails = list(
         (
             await session.scalars(
@@ -902,27 +971,6 @@ async def export_tenant_provenance(
     structural_edges = await descendants(
         KnowledgeGraphEdgeRecord, KnowledgeGraphEdgeRecord.edge_uid
     )
-    project_edges = list(
-        (
-            await session.scalars(
-                select(ProjectGraphEdgeRecord)
-                .where(*_scope_filters(ProjectGraphEdgeRecord, scope, workspace=True))
-                .order_by(ProjectGraphEdgeRecord.edge_uid)
-            )
-        ).all()
-    )
-    corrections = list(
-        (
-            await session.scalars(
-                select(ProjectGraphCorrectionRecord)
-                .where(
-                    *_scope_filters(ProjectGraphCorrectionRecord, scope, workspace=True)
-                )
-                .order_by(ProjectGraphCorrectionRecord.correction_uid)
-            )
-        ).all()
-    )
-
     attachment_records, attachment_uids = _attachment_records(attachments, email_uids)
     node_uids = {node.content_node_id: node.content_node_uid for node in nodes}
     segment_uids = {
@@ -1241,22 +1289,7 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         record["attachment_uid"]: record["email_uid"]
         for record in collections["attachments"]
     }
-    attachment_groups: dict[bytes, list[str]] = {}
-    for record in collections["attachments"]:
-        canonical = _canonical_json(
-            {key: value for key, value in record.items() if key != "attachment_uid"}
-        )
-        attachment_groups.setdefault(canonical, []).append(record["attachment_uid"])
-    for canonical, actual_uids in attachment_groups.items():
-        expected_uids = {
-            "attachment-"
-            + hashlib.sha256(
-                canonical + b":" + str(occurrence).encode("ascii")
-            ).hexdigest()
-            for occurrence in range(1, len(actual_uids) + 1)
-        }
-        if set(actual_uids) != expected_uids:
-            _fail()
+    _attachments_in_occurrence_order(collections["attachments"])
     node_email = {
         record["content_node_uid"]: record["email_uid"]
         for record in collections["content_nodes"]
@@ -1553,7 +1586,7 @@ async def _insert_records(
         created["emails"] += 1
     await session.flush()
 
-    for record in records["attachments"]:
+    for record in _attachments_in_occurrence_order(records["attachments"]):
         uid = record["attachment_uid"]
         if uid in models["attachments"]:
             continue

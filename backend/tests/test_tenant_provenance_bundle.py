@@ -766,6 +766,66 @@ async def _delete_exported_closure(session, records: dict[str, object]) -> None:
     await session.commit()
 
 
+async def _add_duplicate_text_attachments(
+    session,
+    *,
+    email_uid: str,
+    token: str,
+    count: int = 5,
+) -> None:
+    email = await session.scalar(select(Email).where(Email.message_id == email_uid))
+    now = datetime.datetime(2026, 8, 31, 12, 0, tzinfo=datetime.timezone.utc)
+    for index in range(1, count + 1):
+        attachment = Attachment(
+            email=email,
+            filename="evidence.txt",
+            content="Parser-confirmed attachment evidence",
+            content_type="text/plain",
+            parse_status="parsed",
+            parse_content_type="text/plain",
+            parser_key="plain_text",
+            embedding=[0.25] * 1536,
+        )
+        session.add(attachment)
+        await session.flush()
+        node = ContentNodeRecord(
+            content_node_uid=f"duplicate-node-{index}-{token}",
+            email=email,
+            attachment=attachment,
+            source_kind="attachment",
+            source_record_uid=f"duplicate-source-{index}-{token}",
+            parent_node_uid=None,
+            node_kind="document",
+            node_path=f"/document[{index + 1}]",
+            ordinal_index=index + 1,
+            display_label=f"Evidence {index}",
+            safe_text_content=f"Duplicate evidence {index}",
+            content_hash=f"duplicate-node-hash-{index}-{token}",
+            created_at=now,
+        )
+        session.add(node)
+        await session.flush()
+        session.add(
+            ContentSegmentRecord(
+                content_segment_uid=f"duplicate-segment-{index}-{token}",
+                email=email,
+                attachment=attachment,
+                content_node=node,
+                source_kind="attachment",
+                source_record_uid=f"duplicate-source-{index}-{token}",
+                segment_kind="paragraph",
+                segment_path=f"/document[{index + 1}]/paragraph[1]",
+                ordinal_index=index + 1,
+                heading_path=f"Evidence {index}",
+                safe_text_content=f"Duplicate evidence {index}",
+                content_hash=f"duplicate-segment-hash-{index}-{token}",
+                word_count=3,
+                created_at=now,
+            )
+        )
+    await session.commit()
+
+
 def _scope(token: str) -> TenantProvenanceScope:
     return TenantProvenanceScope(
         user_id=f"user-{token}",
@@ -1026,3 +1086,124 @@ async def test_import_is_idempotent_for_exact_target_records(provenance_sessionm
     assert sum(first.skipped.values()) == 0
     assert sum(second.created.values()) == 0
     assert second.skipped == first.created
+
+
+@pytest.mark.parametrize("citation_owner", ("object", "edge", "correction"))
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_export_includes_cross_email_citation_source_closure(
+    provenance_sessionmaker,
+    citation_owner,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(f"source-{token}")
+    cited_scope = TenantProvenanceScope(
+        user_id=scope.user_id,
+        organization_id=scope.organization_id,
+        workspace_id=f"cited-workspace-{token}",
+    )
+    async with provenance_sessionmaker() as session:
+        source = await _seed_provenance_closure(session, scope=scope, token=token)
+        cited = await _seed_provenance_closure(
+            session,
+            scope=cited_scope,
+            token=f"cited-{token}",
+        )
+        cited_segment_uid = f"segment-cited-{token}"
+        if citation_owner == "object":
+            record = await session.scalar(
+                select(ProjectGraphObjectRecord).where(
+                    ProjectGraphObjectRecord.object_uid == source["object_uids"][0]
+                )
+            )
+        elif citation_owner == "edge":
+            record = await session.scalar(
+                select(ProjectGraphEdgeRecord).where(
+                    ProjectGraphEdgeRecord.edge_uid == f"project-edge-{token}"
+                )
+            )
+        else:
+            record = await session.scalar(
+                select(ProjectGraphCorrectionRecord).where(
+                    ProjectGraphCorrectionRecord.correction_uid == f"correction-{token}"
+                )
+            )
+        record.source_segment_uids = sorted(
+            [*record.source_segment_uids, cited_segment_uid]
+        )
+        await session.commit()
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, scope)
+        )
+
+    assert {record["email_uid"] for record in records["emails"]} == {
+        source["email_uid"],
+        cited["email_uid"],
+    }
+    assert cited_segment_uid in {
+        record["content_segment_uid"] for record in records["content_segments"]
+    }
+    assert f"node-cited-{token}" in {
+        record["content_node_uid"] for record in records["content_nodes"]
+    }
+    assert any(
+        record["email_uid"] == cited["email_uid"] for record in records["attachments"]
+    )
+    assert f"project-object-source-cited-{token}" not in {
+        record["object_uid"] for record in records["project_objects"]
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_duplicate_canonical_attachments_keep_node_and_segment_identity(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        source = await _seed_provenance_closure(
+            session, scope=source_scope, token=token
+        )
+        await _add_duplicate_text_attachments(
+            session,
+            email_uid=source["email_uid"],
+            token=token,
+        )
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    source_records = parse_provenance_archive(archive)
+    source_node_attachments = {
+        record["content_node_uid"]: record["attachment_uid"]
+        for record in source_records["content_nodes"]
+        if record["content_node_uid"].startswith("duplicate-node-")
+    }
+    source_segment_attachments = {
+        record["content_segment_uid"]: record["attachment_uid"]
+        for record in source_records["content_segments"]
+        if record["content_segment_uid"].startswith("duplicate-segment-")
+    }
+    assert list(source_node_attachments.values()) != sorted(
+        source_node_attachments.values()
+    )
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, source_records)
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_scope, archive)
+    async with provenance_sessionmaker() as session:
+        restored = parse_provenance_archive(
+            await export_tenant_provenance(session, target_scope)
+        )
+
+    assert {
+        record["content_node_uid"]: record["attachment_uid"]
+        for record in restored["content_nodes"]
+        if record["content_node_uid"].startswith("duplicate-node-")
+    } == source_node_attachments
+    assert {
+        record["content_segment_uid"]: record["attachment_uid"]
+        for record in restored["content_segments"]
+        if record["content_segment_uid"].startswith("duplicate-segment-")
+    } == source_segment_attachments
