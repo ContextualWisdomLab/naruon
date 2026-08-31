@@ -1,4 +1,7 @@
 ## [Unreleased]
+- **(코드 품질 리뷰 대응) `test_calendar_correction_rationale_upgrade_renames_legacy_column`의
+  불필요한 lambda(`lambda: object()`)를 이름 있는 로컬 함수(`_fake_bind`)로 교체했습니다.**
+  검증: 전체 백엔드 스위트 1899 passed/36 skipped, ruff clean.
 - **(Devin 리뷰 대응, 🔍 analysis) `calendar_conflict_corrections.rationale` 컬럼명을
   2단어 snake_case 컨벤션에 맞춰 `correction_rationale`로 변경했습니다.** (`db/models.py`,
   `alembic/versions/0018_calendar_conflict_judgments.py`,

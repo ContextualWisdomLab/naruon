@@ -139,7 +139,10 @@ def test_calendar_correction_rationale_upgrade_renames_legacy_column(monkeypatch
         def get_columns(_table_name):
             return [{"name": "rationale"}]
 
-    monkeypatch.setattr(module.op, "get_bind", lambda: object())
+    def _fake_bind():
+        return object()
+
+    monkeypatch.setattr(module.op, "get_bind", _fake_bind)
     monkeypatch.setattr(module.sa, "inspect", lambda _connection: Inspector())
     monkeypatch.setattr(
         module.op,
