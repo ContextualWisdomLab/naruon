@@ -22,7 +22,9 @@ PostgreSQL/pgvector, pytest.
   binary documents, provider URLs or tokens, or legacy audit details.
 - Source scope and target authority come from the signed session.
 - Validate the bounded archive and reference graph before mutation.
-- Add no dependency and no persistence table.
+- Add no dependency. The coexistence-safe implementation adds one internal
+  portable-to-database identity mapping table; its multi-word sequential key
+  `provenance_identity_id` is never serialized or exposed through the API.
 - Treat warning-class output as failure.
 
 ---

@@ -2,16 +2,20 @@ import copy
 import asyncio
 import datetime
 import hashlib
+import importlib.util
 import io
 import json
 import struct
 import uuid
 import warnings
 import zipfile
+from pathlib import Path
 
 import asyncpg
 import pytest
 import pytest_asyncio
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -1321,6 +1325,41 @@ async def test_concurrent_identical_same_database_imports_are_idempotent():
                 )
                 await session.delete(email)
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_final_migration_upgrade_is_safe_after_fresh_metadata_bootstrap(
+    provenance_sessionmaker,
+):
+    revision_path = (
+        Path(__file__).parents[1]
+        / "alembic"
+        / "versions"
+        / "0018_provenance_identity_mappings.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "provenance_identity_revision", revision_path
+    )
+    assert spec is not None and spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+    original_op = revision.op
+
+    def run_upgrade(sync_connection):
+        revision.op = Operations(MigrationContext.configure(sync_connection))
+        revision.upgrade()
+        revision.upgrade()
+        assert sync_connection.dialect.has_table(
+            sync_connection, "provenance_identity_mappings"
+        )
+
+    try:
+        async with provenance_sessionmaker() as session:
+            connection = await session.connection()
+            await connection.run_sync(run_upgrade)
+    finally:
+        revision.op = original_op
 
 
 @pytest.mark.parametrize(

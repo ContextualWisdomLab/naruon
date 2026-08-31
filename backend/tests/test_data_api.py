@@ -444,6 +444,49 @@ def test_provenance_bundle_endpoints_reject_hmac_workspace_claims_before_service
     }
 
 
+@pytest.mark.parametrize("session_verifier", ["server", "override"])
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/data/provenance-bundle"),
+        ("post", "/api/data/provenance-bundle/import"),
+    ],
+)
+def test_provenance_bundle_endpoints_reject_non_oidc_contexts_before_service(
+    session_verifier, method, path, mock_db, monkeypatch
+):
+    async def forbidden_service(*args, **kwargs):
+        raise AssertionError("provenance service must not run")
+
+    monkeypatch.setattr(data_api, "export_tenant_provenance", forbidden_service)
+    monkeypatch.setattr(data_api, "import_tenant_provenance", forbidden_service)
+    client, original_overrides = _with_authoritative_auth(
+        mock_db,
+        AuthContext(
+            user_id="unverified-user",
+            role="member",
+            organization_id="unverified-org",
+            group_ids=(),
+            workspace_id="unverified-workspace",
+            session_verifier=session_verifier,
+        ),
+    )
+    try:
+        response = client.request(
+            method.upper(),
+            path,
+            content=b"attacker archive" if method == "post" else b"",
+        )
+    finally:
+        client.close()
+        _restore_authoritative_overrides(original_overrides)
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Authoritative workspace membership is required for provenance bundles"
+    }
+
+
 def test_provenance_bundle_download_uses_signed_scope_and_zip_response(
     mock_db, monkeypatch
 ):
@@ -498,6 +541,7 @@ def test_provenance_bundle_download_returns_fixed_safe_archive_error(
             organization_id="org-acme",
             group_ids=(),
             workspace_id="workspace-org-acme",
+            session_verifier="oidc",
         ),
     )
     try:
@@ -534,7 +578,7 @@ def test_provenance_bundle_import_rewrites_target_scope_from_signed_session(
             organization_id="target-org",
             group_ids=(),
             workspace_id="target-workspace",
-            session_verifier="server",
+            session_verifier="oidc",
         ),
     )
     try:
@@ -580,6 +624,7 @@ def test_provenance_bundle_import_rejects_oversize_before_service_mutation(
             organization_id="org-acme",
             group_ids=("group-data",),
             workspace_id="workspace-org-acme",
+            session_verifier="oidc",
         ),
     )
     try:
@@ -613,6 +658,7 @@ def test_provenance_bundle_import_returns_fixed_safe_archive_errors(
             organization_id="org-acme",
             group_ids=("group-data",),
             workspace_id="workspace-org-acme",
+            session_verifier="oidc",
         ),
     )
     try:

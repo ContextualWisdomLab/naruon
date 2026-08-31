@@ -3177,7 +3177,7 @@ def _provenance_scope(auth_context: AuthContext) -> TenantProvenanceScope:
 
 
 def _require_authoritative_provenance_scope(auth_context: AuthContext) -> None:
-    if auth_context.session_verifier == "hmac":
+    if auth_context.session_verifier != "oidc":
         raise HTTPException(
             status_code=403,
             detail="Authoritative workspace membership is required for provenance bundles",

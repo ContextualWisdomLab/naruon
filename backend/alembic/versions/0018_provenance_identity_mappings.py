@@ -8,11 +8,14 @@ revision = "0018_provenance_identity"
 down_revision = "0017_merge_newsdom_carddav_heads"
 branch_labels = None
 depends_on = None
+_MAPPING_TABLE = "provenance_identity_mappings"
 
 
 def upgrade() -> None:
-    op.create_table(
-        "provenance_identity_mappings",
+    inspector = sa.inspect(op.get_bind())
+    if not inspector.has_table(_MAPPING_TABLE):
+        op.create_table(
+            _MAPPING_TABLE,
         sa.Column("provenance_identity_id", sa.Integer(), primary_key=True),
         sa.Column("target_user_id", sa.String(), nullable=False),
         sa.Column("target_organization_id", sa.String(), nullable=False),
@@ -39,17 +42,21 @@ def upgrade() -> None:
             "target_database_uid",
             name="uq_provenance_identity_target_uid",
         ),
-    )
+        )
     op.create_index(
         "ix_provenance_identity_target_scope",
-        "provenance_identity_mappings",
+        _MAPPING_TABLE,
         ["target_user_id", "target_organization_id", "target_workspace_id"],
+        if_not_exists=True,
     )
 
 
 def downgrade() -> None:
+    if not sa.inspect(op.get_bind()).has_table(_MAPPING_TABLE):
+        return
     op.drop_index(
         "ix_provenance_identity_target_scope",
-        table_name="provenance_identity_mappings",
+        table_name=_MAPPING_TABLE,
+        if_exists=True,
     )
-    op.drop_table("provenance_identity_mappings")
+    op.drop_table(_MAPPING_TABLE)
