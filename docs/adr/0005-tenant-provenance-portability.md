@@ -27,7 +27,8 @@ to the exact workspace and includes only their cited source records.
 2. Use stable logical UIDs in the payload. Never serialize or restore sequential
    database primary keys. Import resolves new keys in foreign-key order.
 3. Canonical JSON uses UTF-8, no BOM, no insignificant whitespace, sorted object
-   keys, and pre-sorted set-like arrays. SHA-512 manifests cover exact bytes.
+   keys, pre-sorted set-like arrays, and canonical UTC `Z` email and correction
+   timestamps. SHA-512 manifests cover exact bytes.
 4. Reject unsafe or colliding ZIP paths, unlisted files, checksum mismatch,
    unsupported profiles, dangling references, scope mismatch, duplicate logical
    UIDs, and non-finite numbers before mutation.

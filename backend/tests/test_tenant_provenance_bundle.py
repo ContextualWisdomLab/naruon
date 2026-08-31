@@ -1740,6 +1740,60 @@ async def test_import_rejects_confidence_outside_unit_interval_before_flush(
 
 
 @pytest.mark.parametrize(
+    ("collection", "timestamp_field"),
+    (("emails", "date"), ("corrections", "created_at")),
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_rejects_equivalent_offset_timestamps_before_flush_on_retry(
+    provenance_sessionmaker,
+    monkeypatch,
+    collection,
+    timestamp_field,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"timestamp-source-{token}")
+    target_scope = _scope(f"timestamp-target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    valid_archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_scope, valid_archive)
+
+    offset_records = copy.deepcopy(records)
+    utc_timestamp = datetime.datetime.fromisoformat(
+        offset_records[collection][0][timestamp_field]
+    )
+    offset_records[collection][0][timestamp_field] = utc_timestamp.astimezone(
+        datetime.timezone(datetime.timedelta(hours=9))
+    ).isoformat()
+    offset_archive = build_provenance_archive(offset_records)
+
+    async with provenance_sessionmaker() as session:
+        flush_count = 0
+        original_flush = session.flush
+
+        async def counting_flush(*args, **kwargs):
+            nonlocal flush_count
+            flush_count += 1
+            return await original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", counting_flush)
+        for _ in range(2):
+            with pytest.raises(ProvenanceArchiveError):
+                await import_tenant_provenance(
+                    session,
+                    target_scope,
+                    offset_archive,
+                )
+        assert flush_count == 0
+
+
+@pytest.mark.parametrize(
     "reference_field",
     (
         "object_source",

@@ -878,7 +878,7 @@ def _parse_datetime(value: object) -> datetime:
         parsed = datetime.fromisoformat(text_value)
     except ValueError as exc:
         raise ProvenanceArchiveError("Invalid provenance archive") from exc
-    if parsed.tzinfo is None:
+    if parsed.tzinfo is None or _utc_text(parsed) != text_value:
         _fail()
     return parsed
 
