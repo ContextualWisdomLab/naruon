@@ -219,6 +219,12 @@ def test_backend_runtime_toolchain_uses_image_scan_clean_security_pins() -> None
     assert "opentelemetry-instrumentation-fastapi==0.65b0" in requirements
 
 
+def test_backend_pytest_does_not_load_unused_langsmith_plugin() -> None:
+    pytest_config = read_repo_text("backend/pytest.ini")
+
+    assert "addopts = -p no:langsmith_plugin" in pytest_config
+
+
 def test_strix_ci_requirements_use_security_quality_clean_pins() -> None:
     strix_ci_requirements = read_repo_text("requirements-strix-ci.txt")
 
