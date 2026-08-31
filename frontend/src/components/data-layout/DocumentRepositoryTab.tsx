@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { type ChangeEvent } from 'react';
+import React, { useState, type ChangeEvent } from 'react';
 import { HardDrive, Upload, Loader2, FileText, FolderOpen, Database, RefreshCw, CheckCircle2, Server } from 'lucide-react';
 import { toSafeReactText } from '@/lib/safe-text';
 import {
@@ -110,13 +110,16 @@ export function DocumentRepositoryTab({
   requestUniqueThreadIntent,
   isUniqueThreadLoading,
 }: DocumentRepositoryTabProps) {
-
-
-
+  const [webdavWriteConfirmationKey, setWebdavWriteConfirmationKey] = useState<string | null>(null);
 
   const selectedRepositoryAsset = repositoryAssets.find((asset) => asset.asset_key === selectedRepositoryAssetKey)
     ?? repositoryAssets[0]
     ?? null;
+  const selectedWebdavAccountIndex = webdavAccounts.findIndex((account) => account.source_id === selectedWebdavAccount?.source_id);
+  const selectedWebdavAccountLabel = selectedWebdavAccount
+    ? getWebdavAccountLabel(selectedWebdavAccount, Math.max(selectedWebdavAccountIndex, 0))
+    : '선택된 WebDAV 저장소';
+  const currentWebdavWriteConfirmationKey = `${selectedRepositoryAsset?.asset_key ?? ''}:${selectedWebdavAccount?.source_id ?? ''}`;
 return (
 <div className="space-y-6">
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -208,8 +211,11 @@ return (
                       {documentActionStatus === 'idle' && documentUploadFiles.length === 0 && '텍스트, Markdown, HWP 원본을 워크스페이스 문서 근거로 저장합니다.'}
                       {documentActionStatus === 'idle' && documentUploadFiles.length > 0 && `${documentUploadFiles[0]?.name ?? '문서'} 선택됨`}
                       {documentActionStatus === 'loading' && '문서 작업을 처리하는 중입니다.'}
-                      {documentActionStatus === 'auth' && <span className="font-bold text-red-700">signed session이 필요합니다. 공개 identity header로는 문서 작업을 실행할 수 없습니다.</span>}
-                      {documentActionStatus === 'error' && <span className="font-bold text-red-700">문서 작업에 실패했습니다.</span>}
+                      {documentActionStatus === 'auth' && <span className="font-bold text-red-700">로그인이 만료되었습니다. 다시 로그인한 후 재시도하세요.</span>}
+                      {documentActionStatus === 'conflict' && <span className="font-bold text-amber-700">문서 처리가 아직 끝나지 않았습니다. 처리가 완료된 후 재시도하세요.</span>}
+                      {documentActionStatus === 'invalid' && <span className="font-bold text-amber-700">쓸 수 있는 문서 내용 또는 WebDAV 저장소를 확인한 후 재시도하세요.</span>}
+                      {documentActionStatus === 'connector_error' && <span className="font-bold text-red-700">WebDAV 쓰기를 완료하지 못했습니다. 연결 상태를 확인한 후 재시도하거나 관리자에게 문의하세요.</span>}
+                      {documentActionStatus === 'error' && <span className="font-bold text-red-700">문서 작업을 완료하지 못했습니다. 잠시 후 재시도하세요.</span>}
                       {documentActionStatus === 'success' && documentActionResult && (
                         <span className="text-foreground">
                           {toSafeReactText(documentActionResult.document_name)} · {toSafeReactText(documentActionResult.message)} · {getWriteBoundaryLabel(documentActionResult.provider_write_executed)}
@@ -376,6 +382,7 @@ return (
                     </span>
                   </div>
                   {selectedWorkspaceDocument && (
+                    <>
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <button
                         type="button"
@@ -389,7 +396,7 @@ return (
                         ) : (
                           <RefreshCw className="size-4" />
                         )}
-                        {documentActionPendingAction === 'reparse' ? '실행 중' : '재파싱 실행'}
+                        {documentActionPendingAction === 'reparse' ? '상태 변경 중' : '파싱 완료로 표시'}
                       </button>
                       <button
                         type="button"
@@ -403,7 +410,7 @@ return (
                         ) : (
                           <Database className="size-4" />
                         )}
-                        {documentActionPendingAction === 'embedding-regeneration-intent' ? '생성 중' : '임베딩 재생성 의도'}
+                        {documentActionPendingAction === 'embedding-regeneration-intent' ? '요청 등록 중' : '임베딩 재생성 요청 등록'}
                       </button>
                       <button
                         type="button"
@@ -417,11 +424,11 @@ return (
                         ) : (
                           <FileText className="size-4" />
                         )}
-                        {documentActionPendingAction === 'hwp-conversion-intent' ? '생성 중' : 'HWP 변환 의도'}
+                        {documentActionPendingAction === 'hwp-conversion-intent' ? '요청 등록 중' : 'HWP 변환 요청 등록'}
                       </button>
                       <button
                         type="button"
-                        onClick={() => void requestDocumentAction('webdav-materialization-intent')}
+                        onClick={() => setWebdavWriteConfirmationKey(currentWebdavWriteConfirmationKey)}
                         disabled={documentActionPendingAction !== null || !selectedWebdavAccount || selectedWorkspaceDocument.state_code !== 'ready'}
                         aria-busy={documentActionPendingAction === 'webdav-materialization-intent'}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
@@ -431,9 +438,29 @@ return (
                         ) : (
                           <Server className="size-4" />
                         )}
-                        {documentActionPendingAction === 'webdav-materialization-intent' ? '요청 중' : 'WebDAV 문서 실행 요청'}
+                        {documentActionPendingAction === 'webdav-materialization-intent' ? 'WebDAV에 쓰는 중' : '고객 WebDAV에 문서 쓰기'}
                       </button>
                     </div>
+                    {webdavWriteConfirmationKey === currentWebdavWriteConfirmationKey && documentActionPendingAction === null ? (
+                      <div role="alertdialog" aria-labelledby="webdav-write-confirmation-title" aria-describedby="webdav-write-confirmation-description" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                        <p id="webdav-write-confirmation-title" className="font-bold">고객 WebDAV에 문서를 쓰시겠습니까?</p>
+                        <p id="webdav-write-confirmation-description" className="mt-1 text-sm leading-6">
+                          {selectedWebdavAccountLabel}에 현재 문서를 기록합니다. 기존 파일이 있으면 충돌 조건을 확인하며, 이 작업은 고객 원본 저장소를 변경합니다.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => setWebdavWriteConfirmationKey(null)} className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold">취소</button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWebdavWriteConfirmationKey(null);
+                              void requestDocumentAction('webdav-materialization-intent');
+                            }}
+                            className="min-h-10 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground"
+                          >WebDAV 쓰기 확인</button>
+                        </div>
+                      </div>
+                    ) : null}
+                    </>
                   )}
                   <dl className="mt-5 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
                     <div>

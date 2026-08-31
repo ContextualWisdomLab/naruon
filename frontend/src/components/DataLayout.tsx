@@ -306,13 +306,25 @@ export function DataLayout() {
       );
       setDocumentActionResult(result);
       setDocumentActionPendingAction(null);
+      if (action === 'webdav-materialization-intent' && !result.provider_write_executed) {
+        setDocumentActionStatus('connector_error');
+        return;
+      }
       setDocumentActionStatus('success');
       setDataSurfaceStatus('loading');
       await loadDataQualitySurface();
     } catch (error: unknown) {
       const status = getApiErrorStatus(error);
       setDocumentActionPendingAction(null);
-      setDocumentActionStatus(status === 401 || status === 403 ? 'auth' : 'error');
+      setDocumentActionStatus(
+        status === 401 || status === 403
+          ? 'auth'
+          : status === 409
+            ? 'conflict'
+            : status === 422
+              ? 'invalid'
+              : 'error',
+      );
     }
   }, [
     dataQualitySurface,
