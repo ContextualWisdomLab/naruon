@@ -482,6 +482,28 @@ def test_schema_backfill_replaces_owner_only_email_uniqueness_with_workspace_sco
     # only after workspace_id is backfilled and non-null.
     assert workspace_not_null < drop_constraint_index
     assert drop_index_index != new_create_index
+
+    # uq_emails_owner_message_id is the DIFFERENT owner-only identity name
+    # Alembic's own ORM metadata (and 0020_email_workspace_scope.py) used
+    # before workspace scoping -- a database provisioned via
+    # Base.metadata.create_all() (0001_initial_control_plane.py) before the
+    # workspace-scoped model landed carries this name, not the bootstrap
+    # script's own uq_email_records_owner_message_id. Bootstrap must drop
+    # both legacy names (constraint and index forms) or such a database
+    # keeps the stricter 3-column identity forever.
+    drop_alembic_constraint_index = next(
+        i
+        for i, statement in enumerate(statements)
+        if "alter table email_records drop constraint if exists "
+        "uq_emails_owner_message_id" in statement
+    )
+    drop_alembic_index_index = next(
+        i
+        for i, statement in enumerate(statements)
+        if statement == "drop index if exists uq_emails_owner_message_id"
+    )
+    assert workspace_not_null < drop_alembic_constraint_index
+    assert drop_alembic_index_index != new_create_index
     assert workspace_not_null < new_create_index
 
 

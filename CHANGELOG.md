@@ -1,4 +1,34 @@
 ## [Unreleased]
+- **(CodeRabbit 리뷰 대응, 🟠 major) 이메일 임포트가 project graph projection을 요청한
+  workspace와 다른 workspace에 저장하던 문제를 고쳤습니다.** `_persist_project_graph_projection`이
+  호출자가 이미 해석한 `resolved_workspace_id`를 쓰지 않고 자기 자신이 다시
+  `f"workspace-{organization_id}"`로 재계산했습니다 — 명시적으로 다른 workspace를 지정한
+  임포트에서는 Email 행은 요청된 workspace에 저장되지만, 거기서 파생된 project graph 객체는
+  기본 workspace로 잘못 들어갔습니다. `workspace_id`를 필수 인자로 받아 호출자가 넘긴 값을
+  그대로 사용하도록 수정(`services/email_import_service.py`). 새 테스트
+  `test_persist_project_graph_projection_uses_the_resolved_workspace_id` — 수정 전 코드가
+  `workspace_id` 키워드 인자 자체를 받지 않아 실제 `TypeError`로 RED 확인. 기존
+  `tests/test_project_graph_import_wiring.py`의 5개 테스트도 새 계약(호출자가 workspace_id를
+  이미 해석해 넘김)에 맞춰 갱신.
+- **(CodeRabbit 리뷰 대응, 🟡 minor) `import_fixtures.py`의 중복 확인 쿼리가 workspace로
+  스코프되지 않던 문제를 고쳤습니다.** email 고유 식별자가 이제 4열
+  (`user_id`, `organization_id`, `workspace_id`, `message_id`)인데, 중복 검사 쿼리는 여전히
+  3열(`message_id`, `user_id`, `organization_id`)만 확인했습니다 — workspace B로의 임포트가
+  workspace A의 행을 "이미 존재함"으로 잘못 판단해 정당한 재임포트를 건너뛸 수 있었습니다.
+  `Email.workspace_id == IMPORT_WORKSPACE_ID`를 쿼리에 추가. 기존 테스트
+  `test_root_importer_duplicate_check_is_scoped_to_owner`에 WHERE절 전용 검증(단순
+  `in query_text` 방식은 `select(Email)`이 workspace_id 컬럼을 SELECT 목록에 항상 포함하므로
+  실제로는 아무것도 증명하지 못함을 확인 후 WHERE절만 분리해 검사하도록 강화)을 추가해 실제
+  RED를 먼저 확인.
+- **(CodeRabbit 리뷰 대응, 🟡 minor) `bootstrap_db.py`가 Alembic ORM 메타데이터 쪽의 legacy
+  owner-only 식별자(`uq_emails_owner_message_id`)를 인식하지 못하던 문제를 고쳤습니다.**
+  기존 코드는 bootstrap 자체가 만드는 이름(`uq_email_records_owner_message_id`)만 드롭했는데,
+  `0001_initial_control_plane.py`의 `Base.metadata.create_all()`로 workspace 스코핑 이전에
+  초기화된 DB는 ORM이 만든 다른 이름(`uq_emails_owner_message_id`, Alembic
+  `0020_email_workspace_scope.py`의 `_OLD_EMAIL_IDENTITY`와 동일)을 갖고 있어 영구히 3열
+  제약이 남을 수 있었습니다. 두 legacy 이름 모두(제약·인덱스 형태 포함) 드롭하도록 수정.
+  기존 테스트에 이 두 번째 legacy 이름에 대한 동일한 검증을 추가해 실제 RED 확인.
+  이 배치 전체 검증: 전체 백엔드 스위트 1900 passed/36 skipped, ruff clean.
 - **(코드 품질 리뷰 대응) `test_calendar_correction_rationale_upgrade_renames_legacy_column`의
   불필요한 lambda(`lambda: object()`)를 이름 있는 로컬 함수(`_fake_bind`)로 교체했습니다.**
   검증: 전체 백엔드 스위트 1899 passed/36 skipped, ruff clean.

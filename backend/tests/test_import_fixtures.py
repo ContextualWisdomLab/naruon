@@ -230,9 +230,17 @@ async def test_root_importer_duplicate_check_is_scoped_to_owner(tmp_path):
 
     assert imported is True
     query_text = str(session.queries[0]).lower()
-    assert "email_records.message_id" in query_text
-    assert "email_records.user_id" in query_text
-    assert "email_records.organization_id" in query_text
+    where_clause = query_text.partition("where ")[2]
+    assert "email_records.message_id = :message_id_1" in where_clause
+    assert "email_records.user_id = :user_id_1" in where_clause
+    assert "email_records.organization_id = :organization_id_1" in where_clause
+    # Email's identity is scoped by workspace_id too (uq_emails_workspace_message);
+    # omitting it from the WHERE clause (workspace_id is always in the SELECT
+    # list simply because select(Email) selects every column, so checking for
+    # its bare presence in the whole query proves nothing) would let a
+    # duplicate lookup in one workspace find -- and wrongly skip re-importing
+    # -- a row that only exists in another one.
+    assert "email_records.workspace_id = :workspace_id_1" in where_clause
     mock_assign.assert_awaited_once_with(
         session,
         parsed,

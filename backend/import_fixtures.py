@@ -49,6 +49,7 @@ async def import_eml_file(session, eml_file: Path) -> bool:
             Email.message_id == parsed["message_id"],
             Email.user_id == IMPORT_USER_ID,
             Email.organization_id == IMPORT_ORGANIZATION_ID,
+            Email.workspace_id == IMPORT_WORKSPACE_ID,
         )
     )
     if existing.scalar_one_or_none():

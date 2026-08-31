@@ -349,6 +349,19 @@ def _get_update_email_workspace_statements() -> list[Executable]:
             "DROP CONSTRAINT IF EXISTS uq_email_records_owner_message_id"
         ),
         text("DROP INDEX IF EXISTS uq_email_records_owner_message_id"),
+        # uq_emails_owner_message_id is the DIFFERENT owner-only identity name
+        # Alembic's own ORM metadata (and 0020_email_workspace_scope.py, as
+        # _OLD_EMAIL_IDENTITY) used before workspace scoping. A database
+        # provisioned via Base.metadata.create_all()
+        # (0001_initial_control_plane.py) before the workspace-scoped model
+        # landed carries this name instead of the bootstrap-specific one
+        # above -- drop it too, or such a database keeps the stricter
+        # 3-column identity forever.
+        text(
+            "ALTER TABLE email_records "
+            "DROP CONSTRAINT IF EXISTS uq_emails_owner_message_id"
+        ),
+        text("DROP INDEX IF EXISTS uq_emails_owner_message_id"),
         text(
             "CREATE UNIQUE INDEX IF NOT EXISTS "
             "uq_emails_workspace_message "

@@ -815,14 +815,17 @@ async def _persist_project_graph_projection(
     *,
     user_id: str,
     organization_id: str,
+    workspace_id: str,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
 ) -> None:
     """Best-effort projection of imported content segments into the project graph.
 
     Runs after the email is already committed. Flag-gated and defensive: any
-    failure is logged and rolled back so it never fails the email import. The
-    workspace scope mirrors the convention enforced by the project graph
-    repository (``workspace-<organization_id>``).
+    failure is logged and rolled back so it never fails the email import.
+    ``workspace_id`` must be the same resolved workspace the imported email
+    itself was stored under -- recomputing a default here would put the
+    email and its derived project-graph objects in different workspaces
+    whenever the caller resolved a non-default one.
     """
     if not source_segments:
         return
@@ -832,11 +835,6 @@ async def _persist_project_graph_projection(
         )
         if not extraction.objects:
             return
-        workspace_id = (
-            f"workspace-{organization_id}"
-            if organization_id
-            else f"workspace-{user_id}"
-        )
         await persist_project_graph_projection(
             session,
             extraction=extraction,
@@ -950,6 +948,7 @@ async def _import_single_eml(
         project_source_segments,
         user_id=user_id,
         organization_id=organization_id,
+        workspace_id=resolved_workspace_id,
         embedding_provider=embedding_provider,
     )
 

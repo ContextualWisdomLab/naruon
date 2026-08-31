@@ -829,3 +829,49 @@ async def test_generate_import_embeddings_recovers_valid_items_after_batch_failu
     assert embeddings[2] == [0.75] * (EMBEDDING_DIMENSION // 2) + [0.0] * (
         EMBEDDING_DIMENSION // 2
     )
+
+
+@pytest.mark.asyncio
+async def test_persist_project_graph_projection_uses_the_resolved_workspace_id():
+    # _persist_project_graph_projection recomputed its own workspace_id
+    # (f"workspace-{organization_id}") instead of taking the caller's already
+    # -resolved workspace_id -- so a non-default import workspace put the
+    # Email row in one workspace and its derived project-graph objects in a
+    # different one.
+    class _FakeExtraction:
+        objects = ["placeholder-object"]
+
+    captured = {}
+
+    class _FakeSession:
+        async def commit(self):
+            pass
+
+        async def rollback(self):
+            pass
+
+    async def fake_extract(*args, **kwargs):
+        return _FakeExtraction()
+
+    async def fake_persist(session, *, extraction, user_id, organization_id, workspace_id):
+        captured["workspace_id"] = workspace_id
+
+    with (
+        patch.object(
+            email_import_module,
+            "_extract_project_semantics_for_import",
+            fake_extract,
+        ),
+        patch.object(
+            email_import_module, "persist_project_graph_projection", fake_persist
+        ),
+    ):
+        await email_import_module._persist_project_graph_projection(
+            _FakeSession(),
+            ["segment"],
+            user_id="user-1",
+            organization_id="org-1",
+            workspace_id="workspace-custom",
+        )
+
+    assert captured["workspace_id"] == "workspace-custom"
