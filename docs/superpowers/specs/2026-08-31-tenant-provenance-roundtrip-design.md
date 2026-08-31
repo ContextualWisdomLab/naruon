@@ -78,9 +78,13 @@ Email and Attachment rows are owner-and-organization sources without workspace
 scope, so a same-owner transfer reuses identical rows. If the source graph still
 exists in the same database, the importer records a scoped portable-to-database
 identity mapping and deterministically remaps every graph UID and typed graph
-reference. Export reverses that mapping, preserving the portable archive bytes.
+reference, including recognized UID keys nested in object and correction
+metadata. Arbitrary strings are never value-matched or rewritten. Export
+reverses that mapping, preserving the portable archive bytes.
 The source-user component stored in the archive is a one-way digest rather than
-an account identifier.
+an account identifier and must be exactly a lowercase SHA-256 hex digest.
+Concurrent imports of the same source-to-target scope are serialized with a
+PostgreSQL transaction advisory lock; other scopes remain independent.
 
 ## API
 

@@ -1,4 +1,5 @@
 import copy
+import asyncio
 import datetime
 import hashlib
 import io
@@ -52,7 +53,7 @@ RECORDS = {
     "schema_version": 1,
     "bundle_uid": "bundle-01HZZ",
     "source_scope": {
-        "user_uid": "user-source-01",
+        "user_uid": "0" * 64,
         "organization_uid": "org-01",
         "workspace_uid": "ws-01",
     },
@@ -1019,6 +1020,36 @@ async def test_same_database_cross_workspace_import_keeps_portable_identity(
         source = await _seed_provenance_closure(
             session, scope=source_scope, token=token
         )
+        source_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.object_uid == source["object_uids"][0]
+            )
+        )
+        source_correction = await session.scalar(
+            select(ProjectGraphCorrectionRecord).where(
+                ProjectGraphCorrectionRecord.workspace_id == source_scope.workspace_id
+            )
+        )
+        portable_object_uid = source["object_uids"][0]
+        portable_segment_uid = f"segment-{token}"
+        source_object.attributes_json = {
+            "nested": [
+                {
+                    "source_object_uid": portable_object_uid,
+                    "source_segment_uids": [portable_segment_uid],
+                    "plain_text": portable_object_uid,
+                }
+            ]
+        }
+        source_correction.before_json = {
+            "object_uid": portable_object_uid,
+            "source_segment_uid": portable_segment_uid,
+        }
+        source_correction.after_json = {
+            "target_object_uid": portable_object_uid,
+            "primary_segment_uid": portable_segment_uid,
+        }
+        await session.commit()
     async with provenance_sessionmaker() as session:
         source_archive = await export_tenant_provenance(session, source_scope)
     source_records = parse_provenance_archive(source_archive)
@@ -1073,6 +1104,12 @@ async def test_same_database_cross_workspace_import_keeps_portable_identity(
                     )
                 )
             ).all()
+        )
+        target_segment = await session.scalar(
+            select(ContentSegmentRecord).where(
+                ContentSegmentRecord.content_segment_uid
+                == target_edge.source_segment_uids[0]
+            )
         )
 
     assert first.created == {
@@ -1147,6 +1184,143 @@ async def test_same_database_cross_workspace_import_keeps_portable_identity(
         for record in target_objects
     )
     assert target_correction.source_segment_uids == target_edge.source_segment_uids
+    target_object = next(
+        record
+        for record in target_objects
+        if record.object_uid == target_edge.source_uid
+    )
+    nested_metadata = target_object.attributes_json["nested"][0]
+    assert nested_metadata["source_object_uid"] == target_object.object_uid
+    assert nested_metadata["source_segment_uids"] == [
+        target_segment.content_segment_uid
+    ]
+    assert nested_metadata["plain_text"] == portable_object_uid
+    assert target_correction.before_json == {
+        "object_uid": target_object.object_uid,
+        "source_segment_uid": target_segment.content_segment_uid,
+    }
+    assert target_correction.after_json == {
+        "target_object_uid": target_object.object_uid,
+        "primary_segment_uid": target_segment.content_segment_uid,
+    }
+
+
+@pytest.mark.parametrize(
+    "source_user_uid",
+    ("a" * 63, "A" * 64, "g" * 64, "0" * 65),
+)
+@pytest.mark.asyncio
+async def test_import_rejects_invalid_source_user_uid_before_transaction(
+    source_user_uid,
+):
+    records = copy.deepcopy(RECORDS)
+    records["source_scope"]["user_uid"] = source_user_uid
+    archive = build_provenance_archive(records)
+    flush_count = 0
+
+    class NoTransactionSession:
+        def begin(self):
+            raise AssertionError("transaction must not start")
+
+        async def flush(self):
+            nonlocal flush_count
+            flush_count += 1
+
+    with pytest.raises(ProvenanceArchiveError):
+        await import_tenant_provenance(
+            NoTransactionSession(),
+            TenantProvenanceScope("target-user", "target-org", "target-workspace"),
+            archive,
+        )
+    assert flush_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_concurrent_identical_same_database_imports_are_idempotent():
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"concurrent-source-{token}")
+    target_scope = TenantProvenanceScope(
+        user_id=source_scope.user_id,
+        organization_id=source_scope.organization_id,
+        workspace_id=f"concurrent-target-{token}",
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with session_factory() as session:
+            await _seed_provenance_closure(session, scope=source_scope, token=token)
+        async with session_factory() as session:
+            archive = await export_tenant_provenance(session, source_scope)
+
+        async def run_import():
+            async with session_factory() as session:
+                return await import_tenant_provenance(session, target_scope, archive)
+
+        first, second = await asyncio.gather(run_import(), run_import())
+        created_totals = sorted(
+            (sum(first.created.values()), sum(second.created.values()))
+        )
+        assert created_totals == [0, 7]
+        assert sorted((sum(first.skipped.values()), sum(second.skipped.values()))) == [
+            2,
+            9,
+        ]
+    finally:
+        async with session_factory.begin() as session:
+            email = await session.scalar(
+                select(Email).where(Email.message_id == f"<{token}@example.com>")
+            )
+            if email is not None:
+                await session.execute(
+                    delete(ProjectGraphCorrectionRecord).where(
+                        ProjectGraphCorrectionRecord.workspace_id.in_(
+                            [source_scope.workspace_id, target_scope.workspace_id]
+                        )
+                    )
+                )
+                await session.execute(
+                    delete(ProjectGraphEdgeRecord).where(
+                        ProjectGraphEdgeRecord.workspace_id.in_(
+                            [source_scope.workspace_id, target_scope.workspace_id]
+                        )
+                    )
+                )
+                await session.execute(
+                    delete(ProjectGraphObjectRecord).where(
+                        ProjectGraphObjectRecord.workspace_id.in_(
+                            [source_scope.workspace_id, target_scope.workspace_id]
+                        )
+                    )
+                )
+                await session.execute(
+                    delete(ProvenanceIdentityMapping).where(
+                        ProvenanceIdentityMapping.target_workspace_id
+                        == target_scope.workspace_id
+                    )
+                )
+                await session.execute(
+                    delete(KnowledgeGraphEdgeRecord).where(
+                        KnowledgeGraphEdgeRecord.email_id == email.id
+                    )
+                )
+                await session.execute(
+                    delete(ContentSegmentRecord).where(
+                        ContentSegmentRecord.email_id == email.id
+                    )
+                )
+                await session.execute(
+                    delete(ContentNodeRecord).where(
+                        ContentNodeRecord.email_id == email.id
+                    )
+                )
+                await session.execute(
+                    delete(Attachment).where(Attachment.email_id == email.id)
+                )
+                await session.delete(email)
+        await engine.dispose()
 
 
 @pytest.mark.parametrize(

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import DataError, IntegrityError, StatementError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,6 +89,22 @@ _UID_PREFIXES = {
     "project_edges": "tpe-",
     "corrections": "tpc-",
 }
+_TYPED_METADATA_UIDS = {
+    "object_uid": "project_objects",
+    "source_object_uid": "project_objects",
+    "target_object_uid": "project_objects",
+    "content_node_uid": "content_nodes",
+    "parent_node_uid": "content_nodes",
+    "source_node_uid": "content_nodes",
+    "target_node_uid": "content_nodes",
+    "content_segment_uid": "content_segments",
+    "segment_uid": "content_segments",
+    "source_segment_uid": "content_segments",
+    "target_segment_uid": "content_segments",
+    "primary_segment_uid": "content_segments",
+    "primary_content_segment_uid": "content_segments",
+}
+_TYPED_METADATA_UID_LISTS = {"source_segment_uids": "content_segments"}
 _TEXTUAL_PARSER_KEYS = frozenset(
     {"plain_text", "html", "markdown", "json", "csv", "xml", "calendar", "pdf"}
 )
@@ -421,6 +437,26 @@ def _translate_identity_records(
             maps[collection].get(value, value) for value in record[field]
         )
 
+    def translate_metadata(value: object) -> object:
+        if isinstance(value, dict):
+            translated_mapping = {
+                key: translate_metadata(item) for key, item in value.items()
+            }
+            for key, collection in _TYPED_METADATA_UIDS.items():
+                item = translated_mapping.get(key)
+                if isinstance(item, str):
+                    translated_mapping[key] = maps[collection].get(item, item)
+            for key, collection in _TYPED_METADATA_UID_LISTS.items():
+                item = translated_mapping.get(key)
+                if isinstance(item, list) and all(isinstance(uid, str) for uid in item):
+                    translated_mapping[key] = [
+                        maps[collection].get(uid, uid) for uid in item
+                    ]
+            return translated_mapping
+        if isinstance(value, list):
+            return [translate_metadata(item) for item in value]
+        return value
+
     for record in translated["content_nodes"]:
         replace(record, "content_node_uid", "content_nodes")
         replace(record, "parent_node_uid", "content_nodes")
@@ -437,6 +473,7 @@ def _translate_identity_records(
         replace(record, "object_uid", "project_objects")
         replace(record, "primary_content_segment_uid", "content_segments")
         replace_list(record, "source_segment_uids", "content_segments")
+        record["attributes_json"] = translate_metadata(record["attributes_json"])
     for record in translated["project_edges"]:
         replace(record, "edge_uid", "project_edges")
         for field in (
@@ -452,6 +489,8 @@ def _translate_identity_records(
         replace(record, "correction_uid", "corrections")
         replace(record, "object_uid", "project_objects")
         replace_list(record, "source_segment_uids", "content_segments")
+        record["before_json"] = translate_metadata(record["before_json"])
+        record["after_json"] = translate_metadata(record["after_json"])
     for collection in _REMAPPED_COLLECTIONS:
         translated[collection].sort(key=lambda record: record[_UID_KEYS[collection]])
     return translated
@@ -1663,7 +1702,12 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         "workspace_uid",
     }:
         _fail()
-    _safe_identifier(source_scope.get("user_uid"))
+    source_user_uid = source_scope.get("user_uid")
+    if (
+        not isinstance(source_user_uid, str)
+        or re.fullmatch(r"[0-9a-f]{64}", source_user_uid) is None
+    ):
+        _fail()
     _safe_identifier(source_scope.get("organization_uid"))
     _safe_identifier(source_scope.get("workspace_uid"))
     activity = records.get("export_activity")
@@ -2391,6 +2435,23 @@ async def import_tenant_provenance(
     created = {collection: 0 for collection in _COLLECTIONS}
     try:
         async with session.begin():
+            bind = session.get_bind()
+            if getattr(getattr(bind, "dialect", None), "name", None) == "postgresql":
+                lock_digest = hashlib.sha256(
+                    _canonical_json(
+                        {
+                            "namespace": "tenant-provenance-import-v1",
+                            "source_scope": records["source_scope"],
+                            "target_scope": {
+                                "user_uid": _source_user_uid(scope.user_id),
+                                "organization_uid": scope.organization_id,
+                                "workspace_uid": scope.workspace_id,
+                            },
+                        }
+                    )
+                ).digest()
+                lock_key = int.from_bytes(lock_digest[:8], "big", signed=True)
+                await session.execute(select(func.pg_advisory_xact_lock(lock_key)))
             database_records, identity_rows = await _prepare_identity_import(
                 session, scope, records
             )

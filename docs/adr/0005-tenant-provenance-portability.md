@@ -48,7 +48,11 @@ to the exact workspace and includes only their cited source records.
    Attachment rows. Globally unique graph UIDs are deterministically remapped
    only while the source graph coexists, using a target-scope plus source-scope
    identity table; export reverses the mapping to the stable portable UIDs. The
-   archive identifies the source user with a one-way digest.
+   archive identifies the source user with a validated lowercase SHA-256 digest.
+   Known typed UID keys nested in graph metadata are translated recursively,
+   while arbitrary string values remain unchanged. PostgreSQL serializes only
+   identical source-to-target import scopes with a transaction advisory lock so
+   concurrent retries remain idempotent.
 
 ## Alternatives rejected
 
