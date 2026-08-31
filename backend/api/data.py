@@ -7,7 +7,7 @@ import json
 import re
 from typing import Literal, NamedTuple
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.engine import Row
@@ -35,6 +35,13 @@ from services.newsdom_pdf_recognition import (
     PDF_DOM_RECOGNITION_PENDING_STATUS,
 )
 from services.ontology_service import ontology_service
+from services.tenant_provenance_bundle import (
+    ARCHIVE_MAX_BYTES,
+    ProvenanceArchiveError,
+    TenantProvenanceScope,
+    export_tenant_provenance,
+    import_tenant_provenance,
+)
 from services.webdav_service import webdav_service
 
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -45,6 +52,7 @@ DATA_VECTOR_DIMENSIONS = 1536
 # would let a caller stash a pending document the configured sidecar will always
 # reject while the base64 copy inflates the database.
 _MAX_PDF_DOM_UPLOAD_BYTES = 20 * 1024 * 1024
+_PROVENANCE_ARCHIVE_MAX_BYTES = ARCHIVE_MAX_BYTES
 ATTACHMENT_PARSE_BREAKDOWN_EVIDENCE_SOURCE = (
     "email_attachments.content_type, "
     "email_attachments.parse_content_type, "
@@ -3158,6 +3166,64 @@ def _quality_checks(
         _check_source_registry_coverage(source_count),
         _check_connector_signal_coverage(connector_event_count),
     ]
+
+
+def _provenance_scope(auth_context: AuthContext) -> TenantProvenanceScope:
+    return TenantProvenanceScope(
+        user_id=auth_context.user_id,
+        organization_id=auth_context.organization_id,
+        workspace_id=auth_context.workspace_id,
+    )
+
+
+async def _read_provenance_archive(request: Request) -> bytes:
+    archive = bytearray()
+    async for chunk in request.stream():
+        archive.extend(chunk)
+        if len(archive) > _PROVENANCE_ARCHIVE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Provenance archive too large")
+    return bytes(archive)
+
+
+@router.get("/provenance-bundle")
+async def download_provenance_bundle(
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        archive = await export_tenant_provenance(db, _provenance_scope(auth_context))
+    except ProvenanceArchiveError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid provenance archive"
+        ) from exc
+    return Response(
+        content=archive,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="naruon-provenance.zip"'},
+    )
+
+
+@router.post("/provenance-bundle/import")
+async def upload_provenance_bundle(
+    request: Request,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, object]:
+    archive = await _read_provenance_archive(request)
+    try:
+        receipt = await import_tenant_provenance(
+            db, _provenance_scope(auth_context), archive
+        )
+    except ProvenanceArchiveError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid provenance archive"
+        ) from exc
+    return {
+        "bundle_uid": receipt.bundle_uid,
+        "manifest_digest": receipt.manifest_digest,
+        "created": receipt.created,
+        "skipped": receipt.skipped,
+    }
 
 
 @router.post("/documents", response_model=DataDocumentActionResponse)
