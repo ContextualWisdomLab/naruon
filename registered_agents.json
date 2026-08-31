@@ -5,7 +5,7 @@
     "framework": "pydantic-ai",
     "framework_license": "MIT",
     "entrypoint": "services.noema_agent:run_noema_agent",
-    "description": "General-purpose assistant that reasons over the naruon workspace (mail, content graph, tasks, calendar) on the tenant's configured LLM provider, judges scheduling conflicts with the same deterministic policy as the calendar conflicts API, and dispatches opt-in, audit-logged writebacks through the self-hosted runner.",
+    "description": "General-purpose assistant that reasons over scoped naruon workspace mail, content graph, and tasks, refuses calendar availability claims until an authoritative provider read seam exists, and dispatches opt-in, audit-logged writebacks through the self-hosted runner.",
     "capabilities": [
       "mail.search",
       "mail.read",

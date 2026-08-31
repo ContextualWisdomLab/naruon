@@ -762,8 +762,9 @@ class Email(Base):
         UniqueConstraint(
             "user_id",
             "organization_id",
+            "workspace_id",
             "message_id",
-            name="uq_emails_owner_message_id",
+            name="uq_emails_workspace_message",
         ),
         Index(
             "ix_email_records_owner_date",

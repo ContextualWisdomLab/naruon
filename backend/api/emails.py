@@ -610,6 +610,7 @@ async def import_email_files(
             uploads=uploads,
             user_id=auth_context.user_id,
             organization_id=auth_context.organization_id,
+            workspace_id=auth_context.workspace_id,
             embedding_provider=embedding_provider,
         )
     except EmailImportQuotaExceeded as exc:

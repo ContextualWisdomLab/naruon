@@ -254,22 +254,17 @@ def test_build_auth_context_rejects_invalid_token():
     assert exc.value.status_code == 401
 
 
-def test_build_auth_context_rejects_workspace_claim_not_derived_from_org():
-    # The signed `workspace` claim is minted by an external control-plane
-    # token issuer outside this repository; nothing else here checks it
-    # against `org`. Every workspace_id-scoped authorization boundary
-    # (_email_scope_filter, _owner_scope_statement) trusts
-    # auth_context.workspace_id as if it always equals `workspace-{org}`, so
-    # a session with a divergent claim must be rejected rather than trusted.
+def test_build_auth_context_accepts_independently_signed_workspace_membership():
+    # Workspace ids are opaque membership identifiers signed by the verified
+    # session authority; they are not names derived from organization ids.
     settings.AUTH_SESSION_HMAC_SECRET = SecretStr(TEST_SESSION_HMAC_SECRET)
     token = _signed_session_token(
-        _valid_session_payload(org="org-acme", workspace="workspace-rival-org")
+        _valid_session_payload(org="org-acme", workspace="workspace-project-blue")
     )
 
-    with pytest.raises(HTTPException) as exc:
-        build_auth_context(authorization=f"Bearer {token}")
-
-    assert exc.value.status_code == 401
+    context = build_auth_context(authorization=f"Bearer {token}")
+    assert context.organization_id == "org-acme"
+    assert context.workspace_id == "workspace-project-blue"
 
 
 @pytest.mark.asyncio

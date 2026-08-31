@@ -1,4 +1,9 @@
 ## [Unreleased]
+- **Noema workspace/calendar identity hardening:** mail and content-graph tools now
+  include the independently signed `workspace_id` in SQL scope; signed workspace
+  identifiers are no longer derived from organization identifiers; email message
+  uniqueness includes workspace scope; and calendar conflict checks fail closed
+  until a scoped authoritative provider-calendar read seam exists.
 - **(Devin 리뷰 대응) ZIP 아카이브 픽스처 임포트(`backend/scripts/import_fixtures.py::process_zip_file`)가
   `Email.workspace_id`(NOT NULL) 없이 벌크 INSERT를 구성해 비어 있지 않은
   아카이브를 임포트할 때마다 커밋이 실패하던 문제를 고쳤습니다.** 같은 파일의

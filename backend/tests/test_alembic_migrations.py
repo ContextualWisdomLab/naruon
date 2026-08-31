@@ -35,6 +35,22 @@ def test_initial_alembic_revision_records_current_schema_path():
     assert "schema_backfill_sql" in revision_text
 
 
+def test_email_workspace_migration_replaces_owner_only_identity_constraint():
+    revision_text = (
+        BACKEND_ROOT / "alembic" / "versions" / "0020_email_workspace_scope.py"
+    ).read_text()
+
+    assert 'down_revision = "0019_attachment_uid"' in revision_text
+    assert '"uq_emails_owner_message_id"' in revision_text
+    assert '"uq_emails_workspace_message"' in revision_text
+    assert "op.drop_constraint(" in revision_text
+    assert "op.create_unique_constraint(" in revision_text
+    assert (
+        '["user_id", "organization_id", "workspace_id", "message_id"]' in revision_text
+    )
+    assert "sa.text(" not in revision_text
+
+
 def test_provider_writeback_retry_queue_has_incremental_revision():
     versions_dir = BACKEND_ROOT / "alembic" / "versions"
     revision_path = versions_dir / "0002_provider_writeback_retry_queue.py"

@@ -6,12 +6,10 @@ provider — resolved through :func:`resolve_runtime_llm_provider` from the
 Fernet-encrypted provider records, never from ``os.getenv`` — and it is given a
 small set of tools that plug into the existing service and runner seams:
 
-* **read/search mail** and **content-graph queries** are owner-scoped SQL reads.
+* **read/search mail** and **content-graph queries** are workspace-scoped SQL reads.
 * **task actions** update ``TicketTask`` rows and are audit-logged.
-* **calendar conflict check** reuses the same deterministic, status-weighted
-  policy the ``/api/calendar/conflicts/evaluate`` endpoint applies
-  (:mod:`services.calendar_conflict_policy`), so Noema's judgment about a
-  double-booking risk never diverges from the customer-facing API.
+* **calendar conflict check** validates the proposal but fails closed until a
+  scoped authoritative provider-calendar read seam exists.
 * **writeback** is dispatched to the self-hosted runner (the ``write_caldav`` /
   ``write_webdav`` actions handled by :class:`SelfHostedConnector`), preserving
   naruon's opt-in-writeback and audit-logged contract.
@@ -40,10 +38,8 @@ from db.models import (
     TicketTask,
 )
 from services.calendar_conflict_policy import (
-    MAX_EXISTING_COMMITMENTS,
     CalendarCommitment,
     CalendarPolicyValidationError,
-    evaluate_calendar_conflicts,
 )
 from services.llm_provider_selection import (
     RuntimeLLMProvider,
@@ -72,7 +68,9 @@ AGENT_ID = "noema-general-agent"
 
 # Task statuses the agent is allowed to set. Anything else is refused so the LLM
 # cannot write arbitrary status codes into the tenant's tickets.
-ALLOWED_TASK_STATUSES = frozenset({"open", "in_progress", "blocked", "done", "cancelled"})
+ALLOWED_TASK_STATUSES = frozenset(
+    {"open", "in_progress", "blocked", "done", "cancelled"}
+)
 
 # Runner actions the agent may dispatch. These are exactly the writeback actions
 # handled by SelfHostedConnector.
@@ -163,7 +161,10 @@ async def tool_search_mail(
     deps.tool_calls.append("search_mail")
     query = (query or "").strip()
     bounded = max(1, min(int(limit or 1), _MAX_MAIL_RESULTS))
-    statement = select(Email).where(*Email.owner_filters(deps.user_id, deps.organization_id))
+    statement = select(Email).where(
+        *Email.owner_filters(deps.user_id, deps.organization_id),
+        Email.workspace_id == deps.workspace_id,
+    )
     if query:
         pattern = f"%{query}%"
         statement = statement.where(
@@ -199,6 +200,7 @@ async def tool_read_mail(deps: NoemaAgentDeps, message_id: str) -> dict[str, Any
     statement = (
         select(Email)
         .where(*Email.owner_filters(deps.user_id, deps.organization_id))
+        .where(Email.workspace_id == deps.workspace_id)
         .where(Email.message_id == message_id)
         .limit(1)
     )
@@ -231,6 +233,7 @@ async def tool_content_graph_query(
     email_result = await deps.session.execute(
         select(Email.id)
         .where(*Email.owner_filters(deps.user_id, deps.organization_id))
+        .where(Email.workspace_id == deps.workspace_id)
         .where(Email.message_id == message_id)
         .limit(1)
     )
@@ -290,7 +293,9 @@ async def tool_list_tasks(
     status = (status or "").strip()
     if status:
         statement = statement.where(TicketTask.status == status)
-    statement = statement.order_by(TicketTask.updated_at.desc()).limit(_MAX_MAIL_RESULTS)
+    statement = statement.order_by(TicketTask.updated_at.desc()).limit(
+        _MAX_MAIL_RESULTS
+    )
     result = await deps.session.execute(statement)
     tasks = result.scalars().all()
     return [
@@ -386,16 +391,16 @@ async def tool_dispatch_writeback(
         "target_path": target_path,
         "content": content or "",
     }
-    dispatch_result = await dispatcher(
-        deps.organization_id, deps.workspace_id, command
-    )
+    dispatch_result = await dispatcher(deps.organization_id, deps.workspace_id, command)
     provider_write_executed = bool(
         isinstance(dispatch_result, dict)
         and dispatch_result.get("provider_write_executed", False)
     )
     await _record_audit(
         deps,
-        action="writeback_executed" if provider_write_executed else "writeback_dispatched",
+        action="writeback_executed"
+        if provider_write_executed
+        else "writeback_dispatched",
         resource_type="runner_writeback",
         resource_id=target_path,
         details=f"noema-agent {action} provider_write_executed={provider_write_executed}",
@@ -414,9 +419,7 @@ async def _default_dispatcher(
     """Resolve the live runner connection manager lazily to avoid import cycles."""
     from api.runner_ws import manager as runner_manager
 
-    return await runner_manager.dispatch_command(
-        organization_id, workspace_id, command
-    )
+    return await runner_manager.dispatch_command(organization_id, workspace_id, command)
 
 
 def _parse_commitment(
@@ -452,76 +455,26 @@ async def tool_check_calendar_conflict(
     proposed_status: str,
     existing: list[dict[str, str]],
 ) -> dict[str, Any]:
-    """Evaluate whether a proposed commitment double-books an existing one.
+    """Refuse to assert availability without authoritative calendar evidence.
 
-    Applies the exact same deterministic, status-weighted policy
-    (:func:`services.calendar_conflict_policy.evaluate_calendar_conflicts`) the
-    ``/api/calendar/conflicts/evaluate`` endpoint uses, so this never gives the
-    LLM a second, divergent notion of "conflict". All timestamps are ISO 8601
-    strings with an explicit UTC offset. Naruon does not persist provider
-    calendar events server-side, so ``existing`` is whatever commitments the
-    caller (typically the LLM, after reading mail/task evidence earlier in the
-    same run) already knows about — this tool never fetches a provider
-    calendar itself. A malformed ``existing`` row is skipped rather than
-    raised, so one bad entry cannot block judgment on the rest; the proposed
-    commitment itself is validated strictly and reported as a typed error.
+    Proposed timestamps still use the deterministic policy's validation
+    contract. Naruon currently exposes only an outbound CalDAV write seam; it has no
+    scoped inbound provider-calendar reader. ``existing`` is therefore
+    untrusted conversational evidence and cannot establish availability.
     """
     deps.tool_calls.append("check_calendar_conflict")
     try:
-        proposed = _parse_commitment(
+        _parse_commitment(
             proposed_commitment_id, proposed_start_at, proposed_end_at, proposed_status
         )
     except CalendarPolicyValidationError as exc:
         return {"status": "error", "error_code": exc.error_code, "reason": str(exc)}
 
-    existing = existing or []
-    if len(existing) > MAX_EXISTING_COMMITMENTS:
-        # Silently truncating here would let a conflict past the boundary go
-        # undetected and return "available" for a commitment that actually
-        # double-books -- fail closed instead, exactly like the REST
-        # endpoint's own MAX_EXISTING_COMMITMENTS bound.
-        return {
-            "status": "error",
-            "error_code": "calendar_existing_batch_exceeded",
-            "reason": "existing evidence exceeds the bounded commitment batch",
-        }
-
-    parsed_existing: list[CalendarCommitment] = []
-    skipped_existing_count = 0
-    for row in existing:
-        try:
-            parsed_existing.append(
-                _parse_commitment(
-                    str(row.get("commitment_id", "")),
-                    str(row.get("start_at", "")),
-                    str(row.get("end_at", "")),
-                    str(row.get("status", "")),
-                )
-            )
-        except (CalendarPolicyValidationError, AttributeError, TypeError):
-            skipped_existing_count += 1
-            continue
-
-    decision = evaluate_calendar_conflicts(proposed, parsed_existing)
     return {
-        "status": "ok",
-        "decision_code": decision.decision_code,
-        "reason_code": decision.reason_code,
-        "recommended_action": decision.recommended_action,
-        "policy_version": decision.policy_version,
-        "conflicts": [
-            {
-                "commitment_id": conflict.commitment_id,
-                "start_at": conflict.start_at.isoformat(),
-                "end_at": conflict.end_at.isoformat(),
-                "status": conflict.status,
-            }
-            for conflict in decision.conflicts
-        ],
-        # Malformed existing rows are skipped (see docstring), not raised --
-        # disclose how many so the caller can tell a clean "available" from
-        # one computed after silently dropping evidence.
-        "skipped_existing_count": skipped_existing_count,
+        "status": "error",
+        "error_code": "calendar_authoritative_evidence_unavailable",
+        "decision_code": "review_required",
+        "reason": "Authoritative scoped provider calendar evidence is unavailable",
     }
 
 
@@ -557,9 +510,8 @@ SYSTEM_PROMPT = (
     "You are Noema, the general assistant for a naruon email workspace. "
     "Use the provided tools to read and search the owner's mail, inspect the "
     "content graph of an email, and manage tasks. When a message proposes or "
-    "moves a meeting, use check_calendar_conflict against commitments you "
-    "already know about from mail/tasks before telling the user it is safe to "
-    "accept — never judge a scheduling conflict yourself without it. Only "
+    "moves a meeting, use check_calendar_conflict, but never claim a time is "
+    "available unless that tool has authoritative provider evidence. Only "
     "change task status or dispatch a writeback when the user clearly asks "
     "for it. Writebacks target the customer's own systems and require opt-in; "
     "if a writeback is skipped, explain that it must be enabled. Be concise "
@@ -572,6 +524,7 @@ def _load_pydantic_ai() -> Any | None:
     try:
         import pydantic_ai  # noqa: F401
         from pydantic_ai import Agent, RunContext
+
         # pydantic-ai 2.x renamed ``OpenAIModel`` to ``OpenAIChatModel``. Import
         # the current name; the old alias no longer exists on 2.x.
         from pydantic_ai.models.openai import OpenAIChatModel
@@ -634,7 +587,9 @@ async def build_noema_agent(
         return await tool_search_mail(ctx.deps, query, limit)
 
     @agent.tool
-    async def read_mail(ctx: RunContext[NoemaAgentDeps], message_id: str) -> dict[str, Any]:
+    async def read_mail(
+        ctx: RunContext[NoemaAgentDeps], message_id: str
+    ) -> dict[str, Any]:
         """Read the full body of a single owned email by message id."""
         return await tool_read_mail(ctx.deps, message_id)
 

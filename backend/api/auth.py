@@ -517,16 +517,10 @@ def _auth_context_from_session_payload(
     organization_id = _optional_string_claim(payload, "org")
     if organization_id is None:
         raise _authentication_error()
+    # Workspace membership is the independently signed claim produced by the
+    # verified session authority. Workspace identifiers are opaque and are not
+    # derived from organization display/identity values.
     workspace_id = _required_string_claim(payload, "workspace")
-    # The `workspace` claim is minted outside this repository by the external
-    # control-plane token issuer; nothing in the verifier above ties it to
-    # `org`. Every workspace_id-scoped authorization boundary
-    # (_email_scope_filter, _owner_scope_statement) trusts
-    # auth_context.workspace_id as an exact tenant match, so a claim that
-    # diverges from this app's own workspace-per-organization convention must
-    # be rejected rather than trusted verbatim.
-    if workspace_id != f"workspace-{organization_id}":
-        raise _authentication_error()
     return AuthContext(
         user_id=_required_string_claim(payload, "sub"),
         role=role,

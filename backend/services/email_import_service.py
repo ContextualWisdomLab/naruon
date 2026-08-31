@@ -216,6 +216,7 @@ async def _find_existing_email(
     *,
     user_id: str,
     organization_id: str,
+    workspace_id: str,
     message_id: str,
     fingerprint: str,
 ) -> Email | None:
@@ -223,6 +224,7 @@ async def _find_existing_email(
     result = await session.execute(
         select(Email).where(
             *Email.owner_filters(user_id, organization_id),
+            Email.workspace_id == workspace_id,
             or_(
                 Email.message_id.in_(message_lookup_values),
                 Email.fingerprint == fingerprint,
@@ -356,18 +358,13 @@ def _build_email_object(
     persisted_date: datetime.datetime,
     attachment_payloads: list[dict],
     fitted_embeddings: list[list[float]],
+    workspace_id: str | None = None,
 ) -> tuple[Email, int]:
+    resolved_workspace_id = workspace_id or f"workspace-{organization_id}"
     email_obj = Email(
         user_id=user_id,
         organization_id=organization_id,
-        # Mirrors the workspace_id convention already used elsewhere in this
-        # file and in services/project_graph/: workspace-<organization_id>,
-        # falling back to workspace-<user_id> for an org-less/personal scope.
-        workspace_id=(
-            f"workspace-{organization_id}"
-            if organization_id
-            else f"workspace-{user_id}"
-        ),
+        workspace_id=resolved_workspace_id,
         message_id=message_id,
         thread_id=thread_id,
         fingerprint=fingerprint,
@@ -850,9 +847,11 @@ async def _import_single_eml(
     display_filename: str,
     user_id: str,
     organization_id: str,
+    workspace_id: str | None = None,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
     batch_context: "EmailImportBatchContext | None" = None,
 ) -> EmailImportItemResult:
+    resolved_workspace_id = workspace_id or f"workspace-{organization_id}"
     try:
         content, parsed = await asyncio.to_thread(_read_and_parse_eml, eml_path)
     except EmailParseError as exc:
@@ -876,6 +875,7 @@ async def _import_single_eml(
         session,
         user_id=user_id,
         organization_id=organization_id,
+        workspace_id=resolved_workspace_id,
         message_id=message_id,
         fingerprint=fingerprint,
     )
@@ -901,6 +901,7 @@ async def _import_single_eml(
         parsed=parsed,
         user_id=user_id,
         organization_id=organization_id,
+        workspace_id=resolved_workspace_id,
         message_id=message_id,
         thread_id=thread_id,
         fingerprint=fingerprint,
@@ -1168,8 +1169,10 @@ async def import_email_uploads(
     uploads: list[EmailImportUpload],
     user_id: str,
     organization_id: str,
+    workspace_id: str | None = None,
     embedding_provider: EmailImportEmbeddingProvider | None = None,
 ) -> EmailImportResult:
+    resolved_workspace_id = workspace_id or f"workspace-{organization_id}"
     lock_acquired = await _acquire_owner_import_quota_lock(
         session, user_id=user_id, organization_id=organization_id
     )
@@ -1232,6 +1235,7 @@ async def import_email_uploads(
                         display_filename=display_filename,
                         user_id=user_id,
                         organization_id=organization_id,
+                        workspace_id=resolved_workspace_id,
                         embedding_provider=embedding_provider,
                         batch_context=batch_context,
                     )

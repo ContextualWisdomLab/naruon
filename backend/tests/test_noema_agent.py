@@ -69,10 +69,12 @@ class _QueueSession:
 
     def __init__(self, results=None):
         self._results = list(results or [])
+        self.statements = []
         self.added = []
         self.commits = 0
 
     async def execute(self, _statement):
+        self.statements.append(_statement)
         if not self._results:
             return _FakeResult()
         return self._results.pop(0)
@@ -122,12 +124,16 @@ async def test_search_mail_returns_owner_scoped_snippets():
     assert len(results) == 1
     assert results[0]["message_id"] == "msg-1"
     assert "budget" in results[0]["snippet"]
+    assert "email_records.workspace_id" in str(session.statements[0])
+    assert "workspace-org-1" in session.statements[0].compile().params.values()
 
 
 @pytest.mark.asyncio
 async def test_read_mail_missing_returns_not_found():
     session = _QueueSession([_FakeResult(items=[])])
     result = await tool_read_mail(_deps(session), "msg-404")
+    assert "email_records.workspace_id" in str(session.statements[0])
+    assert "workspace-org-1" in session.statements[0].compile().params.values()
     assert result["status"] == "not_found"
 
 
@@ -173,6 +179,8 @@ async def test_content_graph_query_returns_nodes_and_edges():
     assert result["status"] == "ok"
     assert result["nodes"][0]["uid"] == "node-1"
     assert result["edges"][0]["kind"] == "mentions"
+    assert "email_records.workspace_id" in str(session.statements[0])
+    assert "workspace-org-1" in session.statements[0].compile().params.values()
 
 
 @pytest.mark.asyncio
@@ -307,7 +315,7 @@ def _commitment_row(commitment_id, start_at, end_at, status):
 
 
 @pytest.mark.asyncio
-async def test_check_calendar_conflict_available_when_no_overlap():
+async def test_check_calendar_conflict_requires_authoritative_provider_evidence():
     session = _QueueSession([])
     result = await tool_check_calendar_conflict(
         _deps(session),
@@ -324,14 +332,13 @@ async def test_check_calendar_conflict_available_when_no_overlap():
             )
         ],
     )
-    assert result["status"] == "ok"
-    assert result["decision_code"] == "available"
-    assert result["conflicts"] == []
-    assert result["skipped_existing_count"] == 0
+    assert result["status"] == "error"
+    assert result["decision_code"] == "review_required"
+    assert result["error_code"] == "calendar_authoritative_evidence_unavailable"
 
 
 @pytest.mark.asyncio
-async def test_check_calendar_conflict_blocked_on_equal_priority_overlap():
+async def test_check_calendar_conflict_does_not_trust_conversational_overlap():
     session = _QueueSession([])
     result = await tool_check_calendar_conflict(
         _deps(session),
@@ -348,13 +355,12 @@ async def test_check_calendar_conflict_blocked_on_equal_priority_overlap():
             )
         ],
     )
-    assert result["status"] == "ok"
-    assert result["decision_code"] == "blocked"
-    assert result["conflicts"][0]["commitment_id"] == "other-1"
+    assert result["status"] == "error"
+    assert result["decision_code"] == "review_required"
 
 
 @pytest.mark.asyncio
-async def test_check_calendar_conflict_review_required_on_lower_priority_overlap():
+async def test_check_calendar_conflict_remains_review_required_without_provider_read():
     session = _QueueSession([])
     result = await tool_check_calendar_conflict(
         _deps(session),
@@ -371,12 +377,12 @@ async def test_check_calendar_conflict_review_required_on_lower_priority_overlap
             )
         ],
     )
-    assert result["status"] == "ok"
+    assert result["status"] == "error"
     assert result["decision_code"] == "review_required"
 
 
 @pytest.mark.asyncio
-async def test_check_calendar_conflict_skips_malformed_existing_rows():
+async def test_check_calendar_conflict_does_not_drop_malformed_rows_and_claim_available():
     session = _QueueSession([])
     result = await tool_check_calendar_conflict(
         _deps(session),
@@ -389,30 +395,25 @@ async def test_check_calendar_conflict_skips_malformed_existing_rows():
             _commitment_row("bad-2", "not-a-timestamp", "also-not-one", "confirmed"),
         ],
     )
-    # Malformed rows are skipped, not raised — the good proposal still evaluates.
-    assert result["status"] == "ok"
-    assert result["decision_code"] == "available"
-    assert result["skipped_existing_count"] == 2
+    assert result["status"] == "error"
+    assert result["decision_code"] == "review_required"
+    assert result["error_code"] == "calendar_authoritative_evidence_unavailable"
 
 
 @pytest.mark.asyncio
-async def test_check_calendar_conflict_rejects_batch_over_the_bound_instead_of_truncating():
-    """Silently truncating past MAX_EXISTING_COMMITMENTS could hide a real conflict."""
+async def test_check_calendar_conflict_rejects_even_empty_unverified_evidence():
+    """Conversational evidence cannot substitute for an authoritative read."""
     session = _QueueSession([])
-    oversized = [
-        _commitment_row(f"row-{i}", "2026-03-01T09:00:00+00:00", "2026-03-01T09:30:00+00:00", "confirmed")
-        for i in range(noema_agent.MAX_EXISTING_COMMITMENTS + 1)
-    ]
     result = await tool_check_calendar_conflict(
         _deps(session),
         proposed_commitment_id="new-1",
         proposed_start_at="2026-03-01T10:00:00+00:00",
         proposed_end_at="2026-03-01T11:00:00+00:00",
         proposed_status="confirmed",
-        existing=oversized,
+        existing=[],
     )
     assert result["status"] == "error"
-    assert result["error_code"] == "calendar_existing_batch_exceeded"
+    assert result["error_code"] == "calendar_authoritative_evidence_unavailable"
 
 
 @pytest.mark.asyncio

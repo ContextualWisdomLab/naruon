@@ -1,10 +1,11 @@
 import logging
 import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.schema import UniqueConstraint
 
 import services.email_import_service as email_import_module
 from services.exceptions import EmailParseError, EmbeddingGenerationError
@@ -16,6 +17,42 @@ from services.email_import_service import (
     MAX_EMBEDDING_CHUNKS_PER_WINDOW,
     _generate_import_embeddings,
 )
+from db.models import Email
+
+
+def test_email_identity_includes_workspace_scope():
+    constraint = next(
+        item
+        for item in Email.__table__.constraints
+        if isinstance(item, UniqueConstraint)
+        and item.name == "uq_emails_workspace_message"
+    )
+    assert tuple(column.name for column in constraint.columns) == (
+        "user_id",
+        "organization_id",
+        "workspace_id",
+        "message_id",
+    )
+
+
+@pytest.mark.asyncio
+async def test_duplicate_lookup_is_scoped_to_target_workspace():
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    session.execute.return_value = result
+
+    await email_import_module._find_existing_email(
+        session,
+        user_id="user-1",
+        organization_id="org-1",
+        workspace_id="workspace-blue",
+        message_id="message@example.com",
+        fingerprint="fingerprint-1",
+    )
+
+    statement = session.execute.await_args.args[0]
+    assert "email_records.workspace_id" in str(statement)
 
 
 def test_import_transport_ceiling_accepts_sources_over_20_mib():

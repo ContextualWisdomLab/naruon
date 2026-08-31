@@ -13,6 +13,8 @@ down_revision = "0019_attachment_uid"
 
 _EMAIL_TABLE = "email_records"
 _EMAIL_WORKSPACE_INDEX = "ix_email_records_workspace_id"
+_OLD_EMAIL_IDENTITY = "uq_emails_owner_message_id"
+_EMAIL_WORKSPACE_IDENTITY = "uq_emails_workspace_message"
 
 
 def _email_table_stub() -> sa.TableClause:
@@ -48,21 +50,30 @@ def upgrade() -> None:
         connection.execute(
             sa.update(emails)
             .where(emails.c.workspace_id.is_(None))
-            .values(
-                workspace_id=sa.func.concat("workspace-", emails.c.organization_id)
-            )
+            .values(workspace_id=sa.func.concat("workspace-", emails.c.organization_id))
         )
         op.alter_column(_EMAIL_TABLE, "workspace_id", nullable=False)
 
-    existing_indexes = {
-        index["name"] for index in inspector.get_indexes(_EMAIL_TABLE)
-    }
+    existing_indexes = {index["name"] for index in inspector.get_indexes(_EMAIL_TABLE)}
     if _EMAIL_WORKSPACE_INDEX not in existing_indexes:
         op.create_index(
             _EMAIL_WORKSPACE_INDEX,
             _EMAIL_TABLE,
             ["workspace_id"],
             if_not_exists=True,
+        )
+
+    existing_constraints = {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints(_EMAIL_TABLE)
+    }
+    if _OLD_EMAIL_IDENTITY in existing_constraints:
+        op.drop_constraint(_OLD_EMAIL_IDENTITY, _EMAIL_TABLE, type_="unique")
+    if _EMAIL_WORKSPACE_IDENTITY not in existing_constraints:
+        op.create_unique_constraint(
+            _EMAIL_WORKSPACE_IDENTITY,
+            _EMAIL_TABLE,
+            ["user_id", "organization_id", "workspace_id", "message_id"],
         )
 
 
@@ -72,12 +83,21 @@ def downgrade() -> None:
     if not inspector.has_table(_EMAIL_TABLE):
         return
 
-    existing_indexes = {
-        index["name"] for index in inspector.get_indexes(_EMAIL_TABLE)
-    }
+    existing_indexes = {index["name"] for index in inspector.get_indexes(_EMAIL_TABLE)}
     if _EMAIL_WORKSPACE_INDEX in existing_indexes:
-        op.drop_index(
-            _EMAIL_WORKSPACE_INDEX, table_name=_EMAIL_TABLE, if_exists=True
+        op.drop_index(_EMAIL_WORKSPACE_INDEX, table_name=_EMAIL_TABLE, if_exists=True)
+
+    existing_constraints = {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints(_EMAIL_TABLE)
+    }
+    if _EMAIL_WORKSPACE_IDENTITY in existing_constraints:
+        op.drop_constraint(_EMAIL_WORKSPACE_IDENTITY, _EMAIL_TABLE, type_="unique")
+    if _OLD_EMAIL_IDENTITY not in existing_constraints:
+        op.create_unique_constraint(
+            _OLD_EMAIL_IDENTITY,
+            _EMAIL_TABLE,
+            ["user_id", "organization_id", "message_id"],
         )
 
     existing_columns = {
