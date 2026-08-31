@@ -204,8 +204,18 @@ def test_parse_round_trips_records_and_verifies_ro_crate_metadata():
     assert "prov:SoftwareAgent" in nodes["#naruon"]["@type"]
 
 
-@pytest.mark.parametrize("date_published", ("not-a-date", "2026-02-30"))
-def test_build_rejects_non_iso_ro_crate_date_published(date_published):
+@pytest.mark.parametrize(
+    "date_published",
+    (
+        "not-a-date",
+        "2026-02-30",
+        "1980-01-01",
+        "1980-01-01T09:00:00+09:00",
+        "1980-01-01T00:00:00+00:00",
+        "1980-01-01T00:00:00.000000Z",
+    ),
+)
+def test_build_rejects_noncanonical_ro_crate_date_published(date_published):
     with pytest.raises(ProvenanceArchiveError):
         build_provenance_archive(
             {
@@ -215,6 +225,51 @@ def test_build_rejects_non_iso_ro_crate_date_published(date_published):
                     "date_published": date_published,
                 },
             }
+        )
+
+
+@pytest.mark.parametrize(
+    "date_published",
+    (
+        "1980-01-01",
+        "1980-01-01T09:00:00+09:00",
+        "1980-01-01T00:00:00+00:00",
+        "1980-01-01T00:00:00.000000Z",
+    ),
+)
+@pytest.mark.asyncio
+async def test_import_rejects_noncanonical_activity_timestamp_before_transaction(
+    date_published,
+):
+    valid_archive = build_provenance_archive(RECORDS)
+    with zipfile.ZipFile(io.BytesIO(valid_archive), "r") as archive:
+        entries = {info.filename: archive.read(info) for info in archive.infolist()}
+    records = copy.deepcopy(RECORDS)
+    records["export_activity"]["date_published"] = date_published
+    payload = _canonical_json(records)
+    crate = json.loads(entries["ro-crate-metadata.json"])
+    crate_nodes = {node["@id"]: node for node in crate["@graph"]}
+    crate_nodes["./"]["datePublished"] = date_published
+    crate_nodes["data/records.json"]["sha512"] = hashlib.sha512(payload).hexdigest()
+    entries["data/records.json"] = payload
+    entries["ro-crate-metadata.json"] = _canonical_json(crate)
+    invalid_archive = _archive_with_entries(_rebuild_manifests(entries))
+
+    class NoTransactionSession:
+        def in_transaction(self):
+            return False
+
+        def begin(self):
+            raise AssertionError("transaction must not start")
+
+        async def flush(self):
+            raise AssertionError("flush must not run")
+
+    with pytest.raises(ProvenanceArchiveError):
+        await import_tenant_provenance(
+            NoTransactionSession(),
+            TenantProvenanceScope("target-user", "target-org", "target-workspace"),
+            invalid_archive,
         )
 
 

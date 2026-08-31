@@ -13,7 +13,7 @@ import struct
 import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -524,14 +524,7 @@ def _safe_identifier(value: object) -> str:
 
 def _iso8601_date_or_datetime(value: object) -> str:
     date_published = _safe_identifier(value)
-    try:
-        date.fromisoformat(date_published)
-    except ValueError:
-        try:
-            datetime.fromisoformat(date_published)
-        except ValueError:
-            _fail()
-    return date_published
+    return _utc_text(_parse_datetime(date_published))
 
 
 def _bag_info(bundle_uid: str) -> bytes:
