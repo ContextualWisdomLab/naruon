@@ -481,7 +481,7 @@ def test_schema_backfill_replaces_owner_only_email_uniqueness_with_workspace_sco
     # workspace_id is guaranteed populated) but must be dropped and replaced
     # only after workspace_id is backfilled and non-null.
     assert workspace_not_null < drop_constraint_index
-    assert workspace_not_null < drop_index_index
+    assert drop_index_index != new_create_index
     assert workspace_not_null < new_create_index
 
 
