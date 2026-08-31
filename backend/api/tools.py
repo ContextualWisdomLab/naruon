@@ -769,6 +769,27 @@ registry.register(
 )
 
 
+_URL_PATTERN = re.compile(r"https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?(?<![.,!?])")
+
+async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
+    text = params.get("text") or ""
+    urls = _URL_PATTERN.findall(text)
+    # Remove duplicates while preserving order
+    unique_urls = list(dict.fromkeys(urls))
+    return {"urls": unique_urls}
+
+
+registry.register(
+    ToolInfo(
+        code="url_extractor",
+        name="URL 추출기 (URL Extractor)",
+        description="텍스트 본문에서 HTTP 및 HTTPS URL을 추출합니다.",
+        category="유틸리티",
+        parameters={"text": "string"},
+    ),
+    url_extractor_handler,
+)
+
 
 @router.get("/tools", response_model=list[ToolInfo])
 def get_tools() -> list[ToolInfo]:

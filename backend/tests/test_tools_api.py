@@ -381,6 +381,20 @@ async def test_execute_tool_handler_error():
     assert "Simulated error" in data["message"]
 
 
+def test_execute_url_extractor():
+    text = "Here is a link to https://example.com/test_page and another http://foo.bar. Also https://example.com/test_page again."
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": text}},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"]["urls"] == ["https://example.com/test_page", "http://foo.bar"]
+
+
 @pytest.mark.asyncio
 async def test_execute_tool_failure_log_does_not_include_user_controlled_lines(caplog):
     hostile_code = "error_tool\r\nforged_event=true"
