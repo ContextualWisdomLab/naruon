@@ -1324,7 +1324,6 @@ export function SettingsLayout() {
                     <div className="flex max-w-sm flex-col items-start gap-2 sm:items-end">
                       <button
                         type="submit"
-                        title={accountUnavailableReason ?? '계정 설정 저장'}
                         aria-disabled={accountSaving || !accountReady ? "true" : undefined}
                         aria-describedby={accountSaving || !accountReady ? "account-save-availability" : undefined}
                         aria-busy={accountSaving}
@@ -1652,7 +1651,6 @@ export function SettingsLayout() {
                       <div className="flex max-w-xs flex-col gap-2">
                         <button
                           type="button"
-                          title={oidcLoginUnavailableReason ?? 'OIDC 로그인'}
                           onClick={(e) => {
                             if (!oidcBrowserConfig) {
                               e.preventDefault();
@@ -1675,7 +1673,6 @@ export function SettingsLayout() {
                       <div className="flex max-w-xs flex-col gap-2">
                         <button
                           type="button"
-                          title={oidcLogoutUnavailableReason ?? '로그아웃'}
                           onClick={(e) => {
                             if (oidcSessionLoading || !oidcSessionClaims.userId) {
                               e.preventDefault();
