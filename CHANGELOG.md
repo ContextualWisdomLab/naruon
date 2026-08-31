@@ -1,4 +1,18 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🔴 critical) POP3 동기화가 매 실행마다 조용히 메일을 0건 임포트하던
+  버그를 고쳤습니다.** `TenantConfig`에는 애초에 `workspace_id` 컬럼이 없는데,
+  `Pop3SyncWorker._import_messages`는 `getattr(config, "workspace_id", "")`로 이를 읽어
+  항상 빈 문자열을 얻었고, 곧바로 `if not workspace_id: return 0` 가드에 걸려 실제로 받아온
+  POP3 메시지를 전부 버렸습니다(예외나 로그 없이 "0건 임포트"로만 보고). `ImapSyncWorker`가
+  이미 쓰고 있던, 소유자의 기존 임포트 메일이 속한 workspace를 역산하는
+  `resolve_unambiguous_workspace_id()`(0건/모호하면 fail-closed)를 `imap_worker.py`에서
+  공용 헬퍼로 추출해 `pop3_worker.py`에서도 재사용하도록 고쳤습니다. `_sync()`가 세션 안에서
+  테넌트별로 workspace를 미리 해석해 `_sync_tenant()`/`_import_messages()`로 전달하며, 해석
+  불가능한 테넌트는 건너뜁니다. 새 테스트 `test_resolve_unambiguous_workspace_id_*`(imap_worker),
+  `test_pop3_sync_resolves_workspace_from_existing_mail`,
+  `test_pop3_sync_skips_tenant_with_no_unambiguous_workspace`(pop3_worker) — 수정 전 코드로
+  실제 RED(TypeError: `_sync_tenant`가 여전히 2-인자 시그니처)를 먼저 확인했습니다. 검증: 전체
+  백엔드 스위트 1895 passed/35 skipped, ruff clean.
 - **Superseding workspace-scope correction:** historical bullets below that call
   `Email.owner_filters()` workspace scoping deferred are no longer current.
   The helper now requires `workspace_id`, and every production caller supplies

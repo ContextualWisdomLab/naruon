@@ -112,6 +112,34 @@ logger = logging.getLogger(__name__)
 MAX_IMAP_FETCH_MESSAGES = 10
 
 
+async def resolve_unambiguous_workspace_id(
+    session, user_id: str, organization_id: str | None
+) -> str | None:
+    """Resolve the single workspace an owner's already-imported mail belongs to.
+
+    Background mail sync (IMAP, POP3) has no signed session and therefore no
+    independently authoritative workspace claim to thread through -- the only
+    evidence available is whatever workspace this owner's mail has already
+    been imported under. Returns ``None`` (fail closed; the caller must skip
+    the sync) when zero or more than one distinct workspace is found, so a
+    first-run or genuinely multi-workspace mailbox is never guessed at.
+    """
+    workspace_ids = list(
+        await session.scalars(
+            select(Email.workspace_id)
+            .where(
+                Email.user_id == user_id,
+                Email.organization_id == organization_id,
+            )
+            .distinct()
+            .limit(2)
+        )
+    )
+    if len(workspace_ids) != 1:
+        return None
+    return workspace_ids[0]
+
+
 def flags_indicate_seen(fetch_data) -> bool:
     """True when an IMAP FETCH response's FLAGS envelope contains ``\\Seen``.
 
@@ -216,18 +244,10 @@ class ImapSyncWorker:
             ]
             configs = []
             for config in tenant_configs:
-                workspace_ids = list(
-                    await session.scalars(
-                        select(Email.workspace_id)
-                        .where(
-                            Email.user_id == config.user_id,
-                            Email.organization_id == config.organization_id,
-                        )
-                        .distinct()
-                        .limit(2)
-                    )
+                workspace_id = await resolve_unambiguous_workspace_id(
+                    session, config.user_id, config.organization_id
                 )
-                if len(workspace_ids) != 1:
+                if workspace_id is None:
                     logger.info(
                         "Skipping IMAP sync because an unambiguous workspace is unavailable"
                     )
@@ -236,7 +256,7 @@ class ImapSyncWorker:
                     ImapSyncConfig(
                         user_id=config.user_id,
                         organization_id=config.organization_id,
-                        workspace_id=workspace_ids[0],
+                        workspace_id=workspace_id,
                         imap_server=config.imap_server,
                         imap_port=config.imap_port,
                         imap_username=config.imap_username,

@@ -165,6 +165,53 @@ async def test_imap_worker_requires_credentials_without_sensitive_log_names(
     assert "imap-secret" not in caplog.text
 
 
+@pytest.mark.asyncio
+async def test_resolve_unambiguous_workspace_id_returns_the_sole_workspace():
+    from services.imap_worker import resolve_unambiguous_workspace_id
+
+    class FakeSession:
+        async def scalars(self, _statement):
+            class _Result:
+                def __iter__(self):
+                    return iter(["workspace-only"])
+
+            return _Result()
+
+    workspace_id = await resolve_unambiguous_workspace_id(
+        FakeSession(), "user-1", "org-1"
+    )
+    assert workspace_id == "workspace-only"
+
+
+@pytest.mark.asyncio
+async def test_resolve_unambiguous_workspace_id_fails_closed_when_absent_or_ambiguous():
+    from services.imap_worker import resolve_unambiguous_workspace_id
+
+    class FakeSession:
+        def __init__(self, rows):
+            self._rows = rows
+
+        async def scalars(self, _statement):
+            rows = self._rows
+
+            class _Result:
+                def __iter__(self):
+                    return iter(rows)
+
+            return _Result()
+
+    assert (
+        await resolve_unambiguous_workspace_id(FakeSession([]), "user-1", "org-1")
+        is None
+    )
+    assert (
+        await resolve_unambiguous_workspace_id(
+            FakeSession(["workspace-a", "workspace-b"]), "user-1", "org-1"
+        )
+        is None
+    )
+
+
 def test_flags_indicate_seen_parses_seen_flag():
     from services.imap_worker import flags_indicate_seen
 
