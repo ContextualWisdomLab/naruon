@@ -61,7 +61,7 @@ class _FakeCorrection:
             "correction_action": "override_decision",
             "before_json": {"decision_code": "review_required", "status_code": "proposed"},
             "after_json": {"decision_code": "available", "status_code": "overridden"},
-            "rationale": "Confirmed with the proposer directly.",
+            "correction_rationale": "Confirmed with the proposer directly.",
             "actor_user_id": "reviewer",
             "created_at": observed_at,
         }

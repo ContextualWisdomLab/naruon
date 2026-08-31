@@ -1,4 +1,17 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🔍 analysis) `calendar_conflict_corrections.rationale` 컬럼명을
+  2단어 snake_case 컨벤션에 맞춰 `correction_rationale`로 변경했습니다.** (`db/models.py`,
+  `alembic/versions/0018_calendar_conflict_judgments.py`,
+  `services/calendar_conflict_judgment_service.py`.) 동일한 "correction" 테이블 형태를 쓰는
+  기존 `project_graph_object_corrections.rationale`(이 PR 이전부터 존재, 동일한 단어 사용
+  선례)는 이 PR의 범위 밖이라 그대로 두었습니다 — 두 테이블이 당장 일치하지 않게 되는
+  대가보다, 이 PR이 새로 만드는 컬럼이 문서화된 신규 컬럼 명명 규칙(2단어 이상 snake_case)을
+  지키는 쪽을 택했습니다. API 응답 필드명(`rationale`)과 서비스 함수 파라미터명은 변경하지
+  않았습니다 — 규칙은 테이블/컬럼명에 관한 것이지 API 필드명이 아니며, 이미 이 기능은
+  아직 배포되지 않은 신규 기능이라 마이그레이션은 안전하게 컬럼명을 바꿀 수 있었습니다.
+  수정 전 실제 RED(`correction.rationale` → `correction.correction_rationale`로 테스트를
+  먼저 바꿔 `AttributeError` 확인) 후 고쳤습니다. 검증: 전체 백엔드 스위트 1897 passed/36
+  skipped, ruff clean.
 - **(Devin 리뷰 대응, 🟡) 소유자(owner)당 이메일 임포트 할당량이 workspace마다 곱절로
   늘어나던 문제를 고쳤습니다.** `MAX_IMPORT_EMAILS_PER_OWNER`(1000)와 이를 보호하는
   advisory lock(`_acquire_owner_import_quota_lock`)은 둘 다 `(user_id, organization_id)`

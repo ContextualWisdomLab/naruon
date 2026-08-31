@@ -1544,7 +1544,7 @@ class CalendarConflictCorrection(Base):
     after_json: Mapped[dict[str, object]] = mapped_column(
         JSON, default=dict, nullable=False
     )
-    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correction_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),

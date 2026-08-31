@@ -57,7 +57,7 @@ def upgrade() -> None:
             sa.Column("correction_action", sa.String(length=64), nullable=False),
             sa.Column("before_json", sa.JSON(), nullable=False),
             sa.Column("after_json", sa.JSON(), nullable=False),
-            sa.Column("rationale", sa.Text(), nullable=True),
+            sa.Column("correction_rationale", sa.Text(), nullable=True),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.ForeignKeyConstraint(
                 ["calendar_conflict_judgment_id"],

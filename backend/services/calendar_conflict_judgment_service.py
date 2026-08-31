@@ -295,7 +295,7 @@ async def apply_correction(
         correction_action=correction_action,
         before_json=before_json,
         after_json=after_json,
-        rationale=rationale,
+        correction_rationale=rationale,
     )
     db.add(correction)
     await db.flush()

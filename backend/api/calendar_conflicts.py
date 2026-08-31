@@ -489,7 +489,7 @@ async def correct_calendar_conflict_judgment(
         correction_action=correction.correction_action,
         before_json=correction.before_json,
         after_json=correction.after_json,
-        rationale=correction.rationale,
+        rationale=correction.correction_rationale,
         actor_user_id=correction.actor_user_id,
         created_at=correction.created_at,
     )

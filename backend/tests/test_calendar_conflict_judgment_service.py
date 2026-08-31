@@ -249,7 +249,7 @@ async def test_apply_correction_overriding_decision_keeps_reason_and_action_cohe
     assert judgment.recommended_action == default_recommended_action("available")
     assert judgment.recommended_action != "Confirmed with the proposer directly."
     # The rationale itself is preserved, just not as recommended_action.
-    assert correction.rationale == "Confirmed with the proposer directly."
+    assert correction.correction_rationale == "Confirmed with the proposer directly."
     # The original decision's reason/action are never lost -- they are in before_json.
     assert correction.before_json["reason_code"] == "lower_priority_conflict_requires_explicit_resolution"
     assert correction.after_json["reason_code"] == CORRECTED_DECISION_REASON_CODE
