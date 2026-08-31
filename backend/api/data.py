@@ -3176,12 +3176,32 @@ def _provenance_scope(auth_context: AuthContext) -> TenantProvenanceScope:
     )
 
 
+def _require_authoritative_provenance_scope(auth_context: AuthContext) -> None:
+    if auth_context.session_verifier == "hmac":
+        raise HTTPException(
+            status_code=403,
+            detail="Authoritative workspace membership is required for provenance bundles",
+        )
+
+
 async def _read_provenance_archive(request: Request) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        if not content_length.isdigit():
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        try:
+            declared_bytes = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Invalid Content-Length"
+            ) from exc
+        if declared_bytes > _PROVENANCE_ARCHIVE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Provenance archive too large")
     archive = bytearray()
     async for chunk in request.stream():
-        archive.extend(chunk)
-        if len(archive) > _PROVENANCE_ARCHIVE_MAX_BYTES:
+        if len(chunk) > _PROVENANCE_ARCHIVE_MAX_BYTES - len(archive):
             raise HTTPException(status_code=413, detail="Provenance archive too large")
+        archive.extend(chunk)
     return bytes(archive)
 
 
@@ -3190,6 +3210,7 @@ async def download_provenance_bundle(
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    _require_authoritative_provenance_scope(auth_context)
     try:
         archive = await export_tenant_provenance(db, _provenance_scope(auth_context))
     except ProvenanceArchiveError as exc:
@@ -3209,6 +3230,7 @@ async def upload_provenance_bundle(
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
+    _require_authoritative_provenance_scope(auth_context)
     archive = await _read_provenance_archive(request)
     try:
         receipt = await import_tenant_provenance(
