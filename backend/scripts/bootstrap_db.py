@@ -334,6 +334,27 @@ def _get_update_email_workspace_statements() -> list[Executable]:
             "CREATE INDEX IF NOT EXISTS ix_email_records_workspace_id "
             "ON email_records (workspace_id)"
         ),
+        # uq_email_records_owner_message_id (created earlier by validation,
+        # before workspace_id is guaranteed populated) is stricter than
+        # Alembic 0020's uq_emails_workspace_message: it forbids the same
+        # message_id from ever existing in two different workspaces of the
+        # same owner. Drop it now that workspace_id is backfilled and
+        # non-null, and replace it with the same workspace-scoped identity so
+        # a bootstrap-provisioned database doesn't silently diverge from the
+        # Alembic-managed schema it exists to mirror. Historical bootstrap
+        # runs always created this as a plain index (see
+        # _get_validation_and_final_indexes_statements), but a constraint
+        # drop is included too in case an even older schema shape used one.
+        text(
+            "ALTER TABLE email_records "
+            "DROP CONSTRAINT IF EXISTS uq_email_records_owner_message_id"
+        ),
+        text("DROP INDEX IF EXISTS uq_email_records_owner_message_id"),
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "uq_email_records_workspace_message_id "
+            "ON email_records (user_id, organization_id, workspace_id, message_id)"
+        ),
     ]
 
 
