@@ -166,15 +166,25 @@ test('renders Today dashboard pending reply lane with signed API headers', async
 
 test('shows an actionable dashboard state when the backend is unavailable', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1024 });
-  await page.route('**/api/**', (route) => route.abort());
+  let emailRequestCount = 0;
+  await page.route('**/api/**', (route) => {
+    if (new URL(route.request().url()).pathname === '/api/emails') emailRequestCount += 1;
+    return route.abort();
+  });
 
   await page.goto('/');
 
   const alert = page.getByRole('alert', { name: '대시보드 데이터 상태' });
   await expect(alert).toBeVisible();
   await expect(alert).toContainText('대시보드 데이터를 불러올 수 없습니다.');
-  await expect(alert).toContainText('백엔드 연결을 확인한 후 다시 시도하세요.');
-  await expect(alert.getByRole('button', { name: '대시보드 데이터 다시 시도' })).toBeVisible();
+  await expect(alert).toContainText('데이터 연결에 일시적인 문제가 있습니다. 잠시 후 다시 시도하세요.');
+  const retryButton = alert.getByRole('button', { name: '대시보드 데이터 다시 시도' });
+  await expect(retryButton).toBeVisible();
+
+  const requestsBeforeRetry = emailRequestCount;
+  await retryButton.click();
+  await expect.poll(() => emailRequestCount).toBeGreaterThan(requestsBeforeRetry);
+  await expect(page.getByRole('alert', { name: '대시보드 데이터 상태' })).toBeVisible();
 });
 
 test('keeps the short mobile AI quick action menu inside the viewport with scrollable actions', async ({ page }) => {

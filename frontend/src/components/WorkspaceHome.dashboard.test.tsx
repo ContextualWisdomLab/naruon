@@ -807,7 +807,7 @@ describe("WorkspaceHome Today dashboard", () => {
 
     const alert = container.querySelector('[role="alert"][aria-label="대시보드 데이터 상태"]');
     expect(alert?.textContent).toContain("대시보드 데이터를 불러올 수 없습니다.");
-    expect(alert?.textContent).toContain("백엔드 연결을 확인한 후 다시 시도하세요.");
+    expect(alert?.textContent).toContain("데이터 연결에 일시적인 문제가 있습니다. 잠시 후 다시 시도하세요.");
     expect(container.querySelector('button[aria-label="대시보드 데이터 다시 시도"]')).not.toBeNull();
     expect(container.textContent).not.toContain("수신된 메일이 없습니다.");
     expect(container.textContent).not.toContain("대기 작업이 없습니다.");

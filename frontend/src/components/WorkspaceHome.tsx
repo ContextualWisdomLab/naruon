@@ -352,7 +352,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
         {dashboardDataUnavailable ? (
           <div role="alert" aria-label="대시보드 데이터 상태" className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
             <h2 className="font-bold">대시보드 데이터를 불러올 수 없습니다.</h2>
-            <p className="mt-1 text-sm">백엔드 연결을 확인한 후 다시 시도하세요.</p>
+            <p className="mt-1 text-sm">데이터 연결에 일시적인 문제가 있습니다. 잠시 후 다시 시도하세요.</p>
             <button
               type="button"
               aria-label="대시보드 데이터 다시 시도"
