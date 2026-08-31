@@ -773,11 +773,11 @@ _URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 _PROSE_TRAILING_PUNCTUATION = ".,;:!?"
 
 
-def _trim_url_candidate(candidate: str) -> str:
-    """Remove unmatched closing delimiters without altering valid URL punctuation."""
+def _trim_url_candidate(candidate: str, wrapping_openers: str) -> str:
+    """Remove only closing delimiters proven by adjacent opening wrappers."""
     delimiters = (("(", ")"), ("[", "]"), ("{", "}"))
     excess = {
-        closer: max(0, candidate.count(closer) - candidate.count(opener))
+        closer: wrapping_openers.count(opener)
         for opener, closer in delimiters
     }
     without_prose = candidate.rstrip(_PROSE_TRAILING_PUNCTUATION)
@@ -796,7 +796,12 @@ async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
     urls: list[str] = []
     seen: set[str] = set()
     for match in _URL_PATTERN.finditer(text):
-        candidate = _trim_url_candidate(match.group())
+        wrapper_start = match.start()
+        while wrapper_start and text[wrapper_start - 1] in "([{":
+            wrapper_start -= 1
+        candidate = _trim_url_candidate(
+            match.group(), text[wrapper_start : match.start()]
+        )
         try:
             parsed = urllib.parse.urlsplit(candidate)
             _ = parsed.port  # validate a declared port without requiring one

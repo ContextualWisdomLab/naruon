@@ -452,12 +452,38 @@ def test_execute_url_extractor_handles_punctuated_nested_wrappers(text, url):
     assert response.json()["result"]["urls"] == [url]
 
 
-def test_execute_url_extractor_handles_many_unmatched_delimiters_linearly():
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/a).",
+        "https://example.com/a],",
+        "https://example.com/a}!",
+    ),
+)
+def test_execute_url_extractor_preserves_unwrapped_delimiter_suffixes(url):
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/url_extractor/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={"parameters": {"text": "https://example.com/" + ")" * 50_000}},
+            json={"parameters": {"text": url}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+def test_execute_url_extractor_handles_many_unmatched_delimiters_linearly():
+    wrapper_count = 25_000
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "(" * wrapper_count
+                    + "https://example.com/"
+                    + ")" * wrapper_count
+                }
+            },
         )
 
     assert response.json()["result"]["urls"] == ["https://example.com/"]
