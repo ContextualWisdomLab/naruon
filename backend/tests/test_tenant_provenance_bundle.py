@@ -17,7 +17,7 @@ import pytest_asyncio
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import delete, func, select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.config import settings
@@ -34,6 +34,7 @@ from db.models import (
     ProvenanceIdentityMapping,
 )
 from services.project_graph.repository import ProjectGraphRepository
+from services import tenant_provenance_bundle as provenance_service
 
 from services.tenant_provenance_bundle import (
     ARCHIVE_MAX_BYTES,
@@ -1006,6 +1007,76 @@ async def test_postgres_round_trip_preserves_stable_evidence_with_fresh_keys(
         "status_code": "accepted",
         "rank_value": 1,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_composes_with_transaction_started_by_prior_select(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"active-source-{token}")
+    target_scope = _scope(f"active-target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+
+    async with provenance_sessionmaker() as session:
+        await session.execute(select(func.count()).select_from(Email))
+        assert session.in_transaction()
+        receipt = await import_tenant_provenance(session, target_scope, archive)
+        assert sum(receipt.created.values()) == 9
+        assert await session.scalar(
+            select(func.count()).select_from(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.workspace_id == target_scope.workspace_id
+            )
+        ) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_active_transaction_import_failure_rolls_back_only_import_savepoint(
+    provenance_sessionmaker,
+    monkeypatch,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"rollback-source-{token}")
+    target_scope = _scope(f"rollback-target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+
+    original_insert = provenance_service._insert_records
+
+    async def fail_after_insert(*args, **kwargs):
+        await original_insert(*args, **kwargs)
+        raise IntegrityError("forced import failure", {}, RuntimeError())
+
+    monkeypatch.setattr(provenance_service, "_insert_records", fail_after_insert)
+    async with provenance_sessionmaker() as session:
+        baseline_count = await session.scalar(select(func.count()).select_from(Email))
+        assert session.in_transaction()
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, archive)
+        assert session.in_transaction()
+        assert await session.scalar(select(func.count()).select_from(Email)) == baseline_count
+        assert await session.scalar(
+            select(func.count()).select_from(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.workspace_id == target_scope.workspace_id
+            )
+        ) == 0
 
 
 @pytest.mark.asyncio

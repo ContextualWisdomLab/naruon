@@ -2487,7 +2487,10 @@ async def import_tenant_provenance(
         _fail()
     created = {collection: 0 for collection in _COLLECTIONS}
     try:
-        async with session.begin():
+        transaction = (
+            session.begin_nested() if session.in_transaction() else session.begin()
+        )
+        async with transaction:
             bind = session.get_bind()
             if getattr(getattr(bind, "dialect", None), "name", None) == "postgresql":
                 lock_digest = hashlib.sha256(
