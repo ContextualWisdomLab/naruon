@@ -177,15 +177,6 @@ Strix work still running. PR #1470 has a successful current check rollup and
 one exact-head bot approval, but still lacks the second qualifying approval.
 None of these observations authorizes a bypass merge.
 
-**Exact-head refresh (2026-08-30):** Naruon PR #1467 is now at
-`3afd57c94f5dcf9978f10636906d1f7d4d34f79c`. Its utility boundary preserves
-JSON number lexemes through public stdlib hooks, rejects duplicate keys and invalid URL UTF-8, bounds all
-six utility inputs, and the console validates and submits user-entered parameters. The
-review threads for these findings are resolved; hosted Checks are re-running,
-the pull request is `MERGEABLE` but `BLOCKED`, and `REVIEW_REQUIRED` remains
-because no qualifying approval exists. This is current-head evidence only and
-does not claim a protected merge.
-
 The owning upstream sidecar `Seongho-Bae/newsdom-api` PR #682 remains at
 `585bb4e0fb719ab6a576cf46d1ef12b77872557b`. Its bounded 64 MiB source and
 boundary tests are present, while its only failed hosted check is the
@@ -417,7 +408,7 @@ and defines the inventory that must be completed before GA.
 | #1450 | stray scratch/debug cleanup | all source and security Checks passed; wait for the in-progress metadata gate and current-head independent review |
 | #1465 | scoped tenant archive import hardening | portability slice now rejects duplicate identities before writes and sanitizes archive-controlled display fields; retain the bounded slice-1 query cost and require current-head hosted evidence |
 | #1466 | origin-integrity URL validation | current head rejects explicit zero/out-of-range ports; keep the signed-session and SSRF contract tied to exact-head regression evidence |
-| #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON/hash utility surface; JSON uses public stdlib hooks, structured and integer console input fails closed, and the central Strix workflow trigger is preserved |
+| #1467 | utility-tool JSON and governance repair | deterministic URL/HTML/JSON utility surface; current head rejects non-standard JSON numbers and preserves the central Strix workflow trigger, while full smoke evidence still depends on #1468's schema fixture repair |
 | #1468 | PostgreSQL smoke fixture schema alignment | small root-cause test/data-contract repair for the current `email_records.is_read` requirement; merge before dependent smoke-test PRs after exact-head hosted evidence; the observed Naruon Strix run failed at the provider boundary (NVIDIA NIM 429/OpenAI 404), not in this source change |
 | #1443 | CodeRabbit approval-notice governance root | current source/test lane narrows approval-notice parsing to the exact current head and ignores pending-review prose while retaining explicit findings; the predecessor Strix provider failure is historical, while the current head requires fresh queued Checks and a qualifying independent approval |
 | #1448 | stacked governance regression coverage | merged normally into #1443's stack branch at `62a0d645…`; parent gate logic plus multiline JSON, stale-head unrelated prose, mixed blocker, and explicit current-head finding fixtures passed locally; merge-result hosted Checks remain queued and are post-merge canary evidence |

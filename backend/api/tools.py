@@ -177,23 +177,14 @@ class ToolRegistry:
 
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
-            is_required = not (
-                isinstance(descriptor, dict) and descriptor.get("required") is False
-            )
             if key not in params:
-                if is_required:
-                    raise ValueError("Missing required tool parameter")
-                continue
+                raise ValueError("Missing required tool parameter")
             value = params[key]
             expected_type = _parameter_type_name(descriptor)
             if not _parameter_matches_type(value, expected_type):
                 raise ValueError("Invalid tool parameter type")
             max_length = _parameter_max_length(descriptor)
-            if (
-                expected_type == "string"
-                and max_length is not None
-                and len(value) > max_length
-            ):
+            if expected_type == "string" and max_length is not None and len(value) > max_length:
                 raise ValueError(
                     f"Tool parameter exceeds maximum length of {max_length} characters"
                 )
@@ -500,11 +491,7 @@ def _parameter_max_length(descriptor: Any) -> int | None:
     if not isinstance(descriptor, dict):
         return None
     max_length = descriptor.get("max_length")
-    if (
-        isinstance(max_length, int)
-        and not isinstance(max_length, bool)
-        and max_length >= 0
-    ):
+    if isinstance(max_length, int) and not isinstance(max_length, bool) and max_length >= 0:
         return max_length
     return None
 
@@ -850,30 +837,19 @@ class _RawJSONNumber:
         self.text = text
 
 
-class _RawJSONObject:
-    """Hold object members so their key token spellings remain available."""
-
-    __slots__ = ("pairs",)
-
-    def __init__(self, pairs: list[tuple[Any, Any]]):
-        self.pairs = pairs
-
-
 def _reject_non_standard_json_number(value: str) -> None:
     """Reject JavaScript numeric extensions that are not valid JSON."""
     raise ValueError(f"Non-standard JSON number: {value}")
 
 
-def _reject_duplicate_json_keys(pairs: list[tuple[Any, Any]]) -> _RawJSONObject:
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """Reject duplicate object keys instead of silently discarding data."""
-    seen: set[str] = set()
-    result: list[tuple[Any, Any]] = []
+    result: dict[str, Any] = {}
     for key, value in pairs:
-        if key in seen:
+        if key in result:
             raise ValueError(f"Duplicate JSON object key: {key}")
-        seen.add(key)
-        result.append((key, value))
-    return _RawJSONObject(result)
+        result[key] = value
+    return result
 
 
 def _format_json_value(value: Any, level: int = 0) -> str:
@@ -881,15 +857,6 @@ def _format_json_value(value: Any, level: int = 0) -> str:
     indent = "  "
     if isinstance(value, _RawJSONNumber):
         return value.text
-    if isinstance(value, _RawJSONObject):
-        if not value.pairs:
-            return "{}"
-        entries = [
-            f"{indent * (level + 1)}{json.dumps(key, ensure_ascii=False)}: "
-            f"{_format_json_value(item, level + 1)}"
-            for key, item in value.pairs
-        ]
-        return "{\n" + ",\n".join(entries) + f"\n{indent * level}}}"
     if isinstance(value, dict):
         if not value:
             return "{}"
@@ -971,43 +938,6 @@ registry.register(
         },
     ),
     html_unescape_handler,
-)
-
-
-async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
-    """Generate a display checksum using an explicitly supported algorithm."""
-    text = params["text"]
-    algorithm = params.get("algorithm", "sha256").lower()
-    encoded_text = text.encode("utf-8")
-    if algorithm == "md5":
-        digest = hashlib.md5(encoded_text, usedforsecurity=False)  # nosemgrep
-    elif algorithm == "sha1":
-        digest = hashlib.sha1(encoded_text, usedforsecurity=False)  # nosemgrep
-    elif algorithm == "sha256":
-        digest = hashlib.sha256(encoded_text)
-    elif algorithm == "sha512":
-        digest = hashlib.sha512(encoded_text)
-    else:
-        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
-    return {"hash": digest.hexdigest()}
-
-
-registry.register(
-    ToolInfo(
-        code="hash_generator",
-        name="해시 생성기 (Hash Generator)",
-        description="텍스트 체크섬을 생성합니다. 기본 알고리즘은 SHA-256입니다.",
-        category="유틸리티",
-        parameters={
-            "text": {"type": "string", "max_length": MAX_TOOL_INPUT_CHARS},
-            "algorithm": {
-                "type": "string",
-                "required": False,
-                "allowed_values": ["md5", "sha1", "sha256", "sha512"],
-            },
-        },
-    ),
-    hash_generator_handler,
 )
 
 
