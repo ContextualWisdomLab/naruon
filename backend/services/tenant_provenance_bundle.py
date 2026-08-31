@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import math
 import stat
 import zipfile
 from collections.abc import Mapping
@@ -17,6 +16,8 @@ ARCHIVE_MAX_ENTRIES = 64
 ENTRY_MAX_BYTES = 32 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 100
 JSON_MAX_DEPTH = 64
+JSON_SAFE_INTEGER_MAX = 2**53 - 1
+_MAX_IDENTIFIER_LENGTH = 256
 _FIXED_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 _PAYLOAD_NAME = "data/records.json"
 _EXPECTED_ENTRIES = frozenset(
@@ -42,12 +43,14 @@ def _fail() -> None:
 def _validate_json_value(value: object, depth: int = 0) -> None:
     if depth > JSON_MAX_DEPTH:
         _fail()
-    if value is None or isinstance(value, (str, bool, int)):
+    if value is None or isinstance(value, (str, bool)):
         return
-    if isinstance(value, float):
-        if not math.isfinite(value):
+    if type(value) is int:
+        if not -JSON_SAFE_INTEGER_MAX <= value <= JSON_SAFE_INTEGER_MAX:
             _fail()
         return
+    if isinstance(value, float):
+        _fail()
     if isinstance(value, list):
         for item in value:
             _validate_json_value(item, depth + 1)
@@ -55,6 +58,8 @@ def _validate_json_value(value: object, depth: int = 0) -> None:
     if isinstance(value, Mapping):
         for key, item in value.items():
             if not isinstance(key, str):
+                _fail()
+            if not key.isascii():
                 _fail()
             _validate_json_value(item, depth + 1)
         return
@@ -76,14 +81,25 @@ def _canonical_json(value: object) -> bytes:
 
 
 def _records_bundle_uid(records: Mapping[str, object]) -> str:
-    if records.get("profile") != "naruon-tenant-provenance/v1" or records.get(
-        "schema_version"
-    ) != 1:
+    schema_version = records.get("schema_version")
+    if (
+        records.get("profile") != "naruon-tenant-provenance/v1"
+        or type(schema_version) is not int
+        or schema_version != 1
+    ):
         _fail()
-    bundle_uid = records.get("bundle_uid")
-    if not isinstance(bundle_uid, str) or not bundle_uid:
+    return _safe_identifier(records.get("bundle_uid"))
+
+
+def _safe_identifier(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > _MAX_IDENTIFIER_LENGTH
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
         _fail()
-    return bundle_uid
+    return value
 
 
 def _bag_info(bundle_uid: str) -> bytes:
@@ -96,16 +112,27 @@ def _bag_info(bundle_uid: str) -> bytes:
 
 def _ro_crate(records: Mapping[str, object], payload_digest: str) -> bytes:
     activity = records.get("export_activity")
-    activity_uid = activity.get("activity_uid") if isinstance(activity, Mapping) else None
-    if not isinstance(activity_uid, str) or not activity_uid:
+    if not isinstance(activity, Mapping):
         _fail()
+    activity_uid = _safe_identifier(activity.get("activity_uid"))
+    date_published = _safe_identifier(activity.get("date_published"))
     crate = {
-        "@context": "https://w3id.org/ro/crate/1.3/context",
+        "@context": [
+            "https://w3id.org/ro/crate/1.3/context",
+            {"prov": "http://www.w3.org/ns/prov#"},
+        ],
         "@graph": [
+            {
+                "@id": "ro-crate-metadata.json",
+                "@type": "CreativeWork",
+                "about": {"@id": "./"},
+                "conformsTo": {"@id": "https://w3id.org/ro/crate/1.3"},
+            },
             {
                 "@id": "./",
                 "@type": "Dataset",
                 "conformsTo": "naruon-tenant-provenance/v1",
+                "datePublished": date_published,
                 "hasPart": {"@id": _PAYLOAD_NAME},
                 "name": "Naruon tenant provenance bundle",
             },
@@ -117,13 +144,15 @@ def _ro_crate(records: Mapping[str, object], payload_digest: str) -> bytes:
             },
             {
                 "@id": f"#{activity_uid}",
-                "@type": "CreateAction",
+                "@type": ["CreateAction", "prov:Activity"],
                 "instrument": {"@id": "#naruon"},
                 "object": {"@id": _PAYLOAD_NAME},
+                "prov:used": {"@id": "./"},
+                "prov:wasAssociatedWith": {"@id": "#naruon"},
             },
             {
                 "@id": "#naruon",
-                "@type": "SoftwareApplication",
+                "@type": ["SoftwareApplication", "prov:SoftwareAgent"],
                 "name": "Naruon",
             },
         ],
@@ -145,7 +174,9 @@ def _archive_entries(records: Mapping[str, object]) -> dict[str, bytes]:
         "bagit.txt": b"BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8\n",
         "bag-info.txt": _bag_info(bundle_uid),
         _PAYLOAD_NAME: payload,
-        "ro-crate-metadata.json": _ro_crate(records, hashlib.sha512(payload).hexdigest()),
+        "ro-crate-metadata.json": _ro_crate(
+            records, hashlib.sha512(payload).hexdigest()
+        ),
     }
     entries["manifest-sha512.txt"] = _manifest(entries, (_PAYLOAD_NAME,))
     entries["tagmanifest-sha512.txt"] = _manifest(
@@ -158,8 +189,16 @@ def _archive_entries(records: Mapping[str, object]) -> dict[str, bytes]:
 def _zip_info(name: str) -> zipfile.ZipInfo:
     info = zipfile.ZipInfo(name, date_time=_FIXED_TIMESTAMP)
     info.create_system = 3
+    info.create_version = 20
+    info.extract_version = 20
+    info.reserved = 0
+    info.flag_bits = 0
+    info.volume = 0
+    info.internal_attr = 0
     info.external_attr = (stat.S_IFREG | 0o644) << 16
     info.compress_type = zipfile.ZIP_DEFLATED
+    info.extra = b""
+    info.comment = b""
     return info
 
 
@@ -169,12 +208,20 @@ def build_provenance_archive(records: Mapping[str, object]) -> bytes:
         _fail()
     entries = _archive_entries(records)
     output = io.BytesIO()
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+    with zipfile.ZipFile(
+        output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+    ) as archive:
         for name in sorted(entries):
-            archive.writestr(_zip_info(name), entries[name], compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+            archive.writestr(
+                _zip_info(name),
+                entries[name],
+                compress_type=zipfile.ZIP_DEFLATED,
+                compresslevel=9,
+            )
     archive_bytes = output.getvalue()
     if len(archive_bytes) > ARCHIVE_MAX_BYTES:
         _fail()
+    parse_provenance_archive(archive_bytes)
     return archive_bytes
 
 
@@ -194,10 +241,30 @@ def _is_unsafe_member(info: zipfile.ZipInfo) -> bool:
     )
 
 
+def _has_fixed_metadata(info: zipfile.ZipInfo) -> bool:
+    return (
+        info.date_time == _FIXED_TIMESTAMP
+        and info.create_system == 3
+        and info.create_version == 20
+        and info.extract_version == 20
+        and info.reserved == 0
+        and info.flag_bits == 0
+        and info.volume == 0
+        and info.internal_attr == 0
+        and info.external_attr == (stat.S_IFREG | 0o644) << 16
+        and info.compress_type == zipfile.ZIP_DEFLATED
+        and info.extra == b""
+        and info.comment == b""
+    )
+
+
 def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
     if info.file_size > ENTRY_MAX_BYTES:
         _fail()
-    if info.file_size and (not info.compress_size or info.file_size / info.compress_size > MAX_COMPRESSION_RATIO):
+    if info.file_size and (
+        not info.compress_size
+        or info.file_size / info.compress_size > MAX_COMPRESSION_RATIO
+    ):
         _fail()
     data = bytearray()
     try:
@@ -240,20 +307,20 @@ def _parse_records(data: bytes) -> dict[str, object]:
 
 def parse_provenance_archive(archive_bytes: bytes) -> dict[str, object]:
     """Validate a bounded fixed envelope and return its canonical record payload."""
-    if not isinstance(archive_bytes, (bytes, bytearray)) or len(archive_bytes) > ARCHIVE_MAX_BYTES:
+    if (
+        not isinstance(archive_bytes, (bytes, bytearray))
+        or len(archive_bytes) > ARCHIVE_MAX_BYTES
+    ):
         _fail()
     try:
         with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as archive:
             infos = archive.infolist()
             if (
-                len(infos) > ARCHIVE_MAX_ENTRIES
+                archive.comment
+                or len(infos) > ARCHIVE_MAX_ENTRIES
                 or sum(info.file_size for info in infos) > ARCHIVE_MAX_BYTES
                 or any(
-                    _is_unsafe_member(info)
-                    or info.date_time != _FIXED_TIMESTAMP
-                    or info.create_system != 3
-                    or (info.external_attr >> 16) & 0o777 != 0o644
-                    or info.compress_type != zipfile.ZIP_DEFLATED
+                    _is_unsafe_member(info) or not _has_fixed_metadata(info)
                     for info in infos
                 )
             ):
