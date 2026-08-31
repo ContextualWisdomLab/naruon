@@ -472,6 +472,38 @@ def test_build_reply_counts_stmt_scopes_and_groups_by_thread_key():
     assert "group by coalesce(nullif(btrim(btrim(email_records.thread_id)" in sql
 
 
+def test_lexical_attachment_statement_excludes_non_parsed_attachments():
+    # Quarantined (content_type_mismatch_quarantined) and deferred-recognition
+    # (pdf_dom_recognition_pending) attachments store a base64-encoded raw
+    # payload in `content`, not parsed text -- hybrid search must not surface
+    # that payload as if it were a genuine content match.
+    from db.models import Email
+    from services.hybrid_retrieval.retrieval_channels import (
+        build_lexical_attachment_statement,
+    )
+
+    owner_filters = Email.owner_filters("user1", "org1", "workspace-a")
+
+    stmt = build_lexical_attachment_statement("hello", owner_filters, 20)
+    sql = str(stmt).lower()
+
+    assert "email_attachments.parse_status" in sql
+
+
+def test_dense_attachment_statement_excludes_non_parsed_attachments():
+    from db.models import Email
+    from services.hybrid_retrieval.retrieval_channels import (
+        build_dense_attachment_statement,
+    )
+
+    owner_filters = Email.owner_filters("user1", "org1", "workspace-a")
+
+    stmt = build_dense_attachment_statement([0.1] * 1536, owner_filters, 20)
+    sql = str(stmt).lower()
+
+    assert "email_attachments.parse_status" in sql
+
+
 def _make_fusion_settings(**overrides):
     return FusionSettings(**overrides)
 

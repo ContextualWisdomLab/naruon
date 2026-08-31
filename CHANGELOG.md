@@ -1,4 +1,17 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🔍 analysis) hybrid 검색이 quarantine/deferred-recognition 상태의
+  첨부파일 base64 원본 payload를 정상 파싱된 콘텐츠처럼 검색 결과에 노출하던 문제를
+  고쳤습니다.** `content_type_mismatch_quarantined`(이 PR에서 새로 추가된 상태)와
+  기존 `pdf_dom_recognition_pending` 등 "parsed"가 아닌 모든 상태는 `Attachment.content`에
+  실제 파싱된 텍스트 대신 base64 인코딩된 원본 바이트 또는 빈 문자열을 저장하는데,
+  `build_lexical_attachment_statement`/`build_dense_attachment_statement`는 이를 필터링하지
+  않고 그대로 검색 대상에 포함시켰습니다(동일 파일의 `project_graph_object` 채널은 이미
+  `_EXCLUDED_PROJECT_OBJECT_STATUS_CODES`로 유사한 필터링을 하고 있었음). 두 statement 모두
+  `Attachment.parse_status == "parsed"` 조건을 추가. 새 테스트
+  `test_lexical_attachment_statement_excludes_non_parsed_attachments`/
+  `test_dense_attachment_statement_excludes_non_parsed_attachments`로 진짜 RED
+  확인(`assert "email_attachments.parse_status" in sql`이 수정 전 실패) 후 GREEN.
+  전체 백엔드 스위트 1902 passed/36 skipped, ruff clean.
 - **(CodeRabbit 리뷰 대응, 🟠 major) 이메일 임포트가 project graph projection을 요청한
   workspace와 다른 workspace에 저장하던 문제를 고쳤습니다.** `_persist_project_graph_projection`이
   호출자가 이미 해석한 `resolved_workspace_id`를 쓰지 않고 자기 자신이 다시
