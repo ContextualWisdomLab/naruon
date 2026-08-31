@@ -2562,22 +2562,25 @@ async def import_tenant_provenance(
         async with transaction:
             bind = session.get_bind()
             if getattr(getattr(bind, "dialect", None), "name", None) == "postgresql":
-                lock_digest = hashlib.sha256(
-                    _canonical_json(
-                        {
-                            "namespace": "tenant-provenance-import-v2",
-                            "target_owner": {
-                                "user_uid": _source_user_uid(scope.user_id),
-                                "organization_uid": scope.organization_id,
-                            },
-                            "email_uids": sorted(
-                                record["email_uid"] for record in records["emails"]
-                            ),
-                        }
+                for email_uid in sorted(
+                    record["email_uid"] for record in records["emails"]
+                ):
+                    lock_digest = hashlib.sha256(
+                        _canonical_json(
+                            {
+                                "namespace": "tenant-provenance-email-import-v1",
+                                "target_owner": {
+                                    "user_uid": _source_user_uid(scope.user_id),
+                                    "organization_uid": scope.organization_id,
+                                },
+                                "email_uid": email_uid,
+                            }
+                        )
+                    ).digest()
+                    lock_key = int.from_bytes(lock_digest[:8], "big", signed=True)
+                    await session.execute(
+                        select(func.pg_advisory_xact_lock(lock_key))
                     )
-                ).digest()
-                lock_key = int.from_bytes(lock_digest[:8], "big", signed=True)
-                await session.execute(select(func.pg_advisory_xact_lock(lock_key)))
             database_records, identity_rows = await _prepare_identity_import(
                 session, scope, records
             )

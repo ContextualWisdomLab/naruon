@@ -1480,10 +1480,12 @@ async def test_concurrent_imports_across_workspaces_reuse_owner_email():
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     token = uuid.uuid4().hex[:12]
     source_scope = _scope(f"parallel-workspaces-source-{token}")
+    target_user_id = f"parallel-target-user-{token}"
+    target_organization_id = f"parallel-target-org-{token}"
     target_scopes = tuple(
         TenantProvenanceScope(
-            user_id=source_scope.user_id,
-            organization_id=source_scope.organization_id,
+            user_id=target_user_id,
+            organization_id=target_organization_id,
             workspace_id=f"parallel-workspace-{index}-{token}",
         )
         for index in range(2)
@@ -1492,65 +1494,117 @@ async def test_concurrent_imports_across_workspaces_reuse_owner_email():
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         async with session_factory() as session:
-            await _seed_provenance_closure(session, scope=source_scope, token=token)
-        async with session_factory() as session:
-            archive = await export_tenant_provenance(session, source_scope)
+            archive = await _two_email_rooted_archive(
+                session, scope=source_scope, token=token
+            )
+        first_records = parse_provenance_archive(archive)
+        second_records = copy.deepcopy(first_records)
+        shared_email_uid, distinct_email_uid = sorted(
+            record["email_uid"] for record in first_records["emails"]
+        )
+        replacement_email_uid = f"<partial-distinct-{token}@example.com>"
 
-        async def run_import(target_scope):
+        def replace_email_uid(value):
+            if isinstance(value, dict):
+                return {key: replace_email_uid(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [replace_email_uid(item) for item in value]
+            return replacement_email_uid if value == distinct_email_uid else value
+
+        second_records = replace_email_uid(second_records)
+        attachment_uid_replacements = {}
+        for attachment in second_records["attachments"]:
+            if attachment["email_uid"] != replacement_email_uid:
+                continue
+            canonical = provenance_service._attachment_payload_core(attachment)
+            attachment_uid_replacements[attachment["attachment_uid"]] = (
+                provenance_service._attachment_uid(canonical, 1)
+            )
+
+        def replace_attachment_uid(value):
+            if isinstance(value, dict):
+                return {
+                    key: replace_attachment_uid(item) for key, item in value.items()
+                }
+            if isinstance(value, list):
+                return [replace_attachment_uid(item) for item in value]
+            if isinstance(value, str) and value.startswith("attachment:"):
+                attachment_uid = value.removeprefix("attachment:")
+                return "attachment:" + attachment_uid_replacements.get(
+                    attachment_uid, attachment_uid
+                )
+            return attachment_uid_replacements.get(value, value)
+
+        second_records = replace_attachment_uid(second_records)
+        uid_keys = {
+            "emails": "email_uid",
+            "attachments": "attachment_uid",
+            **provenance_service._UID_KEYS,
+        }
+        for collection, uid_key in uid_keys.items():
+            second_records[collection].sort(key=lambda record: record[uid_key])
+        second_archive = build_provenance_archive(second_records)
+
+        async def run_import(target_scope, target_archive):
             async with session_factory() as session:
-                return await import_tenant_provenance(session, target_scope, archive)
+                return await import_tenant_provenance(
+                    session, target_scope, target_archive
+                )
 
         receipts = await asyncio.gather(
-            *(run_import(target_scope) for target_scope in target_scopes)
+            run_import(target_scopes[0], archive),
+            run_import(target_scopes[1], second_archive),
         )
-        assert all(sum(receipt.created.values()) == 7 for receipt in receipts)
+        assert all(sum(receipt.created.values()) > 0 for receipt in receipts)
         async with session_factory() as session:
             assert (
                 await session.scalar(
                     select(func.count())
                     .select_from(Email)
                     .where(
-                        Email.user_id == source_scope.user_id,
-                        Email.organization_id == source_scope.organization_id,
-                        Email.message_id == f"<{token}@example.com>",
+                        Email.user_id == target_user_id,
+                        Email.organization_id == target_organization_id,
+                        Email.message_id == shared_email_uid,
                     )
                 )
                 == 1
             )
     finally:
         async with session_factory.begin() as session:
-            email = await session.scalar(
-                select(Email).where(
-                    Email.user_id == source_scope.user_id,
-                    Email.organization_id == source_scope.organization_id,
-                    Email.message_id == f"<{token}@example.com>",
+            workspace_ids = [
+                source_scope.workspace_id,
+                *(scope.workspace_id for scope in target_scopes),
+            ]
+            await session.execute(
+                delete(ProjectGraphCorrectionRecord).where(
+                    ProjectGraphCorrectionRecord.workspace_id.in_(workspace_ids)
                 )
             )
-            if email is not None:
-                workspace_ids = [
-                    source_scope.workspace_id,
-                    *(scope.workspace_id for scope in target_scopes),
-                ]
-                await session.execute(
-                    delete(ProjectGraphCorrectionRecord).where(
-                        ProjectGraphCorrectionRecord.workspace_id.in_(workspace_ids)
-                    )
+            await session.execute(
+                delete(ProjectGraphEdgeRecord).where(
+                    ProjectGraphEdgeRecord.workspace_id.in_(workspace_ids)
                 )
-                await session.execute(
-                    delete(ProjectGraphEdgeRecord).where(
-                        ProjectGraphEdgeRecord.workspace_id.in_(workspace_ids)
-                    )
+            )
+            await session.execute(
+                delete(ProjectGraphObjectRecord).where(
+                    ProjectGraphObjectRecord.workspace_id.in_(workspace_ids)
                 )
-                await session.execute(
-                    delete(ProjectGraphObjectRecord).where(
-                        ProjectGraphObjectRecord.workspace_id.in_(workspace_ids)
-                    )
+            )
+            await session.execute(
+                delete(ProvenanceIdentityMapping).where(
+                    ProvenanceIdentityMapping.target_workspace_id.in_(workspace_ids)
                 )
-                await session.execute(
-                    delete(ProvenanceIdentityMapping).where(
-                        ProvenanceIdentityMapping.target_workspace_id.in_(workspace_ids)
+            )
+            emails = list(
+                (
+                    await session.scalars(
+                        select(Email).where(
+                            Email.user_id.in_([source_scope.user_id, target_user_id])
+                        )
                     )
-                )
+                ).all()
+            )
+            for email in emails:
                 await session.execute(
                     delete(KnowledgeGraphEdgeRecord).where(
                         KnowledgeGraphEdgeRecord.email_id == email.id
