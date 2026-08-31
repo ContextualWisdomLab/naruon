@@ -238,11 +238,21 @@ async def _owner_email_import_count(
     *,
     user_id: str,
     organization_id: str,
-    workspace_id: str,
 ) -> int:
+    # Owner-wide on purpose: MAX_IMPORT_EMAILS_PER_OWNER and the advisory
+    # quota lock this feeds are both scoped to (user_id, organization_id)
+    # only, not to a single workspace -- Email.owner_filters() additionally
+    # requires workspace_id, which would let each workspace the same owner
+    # imports through grant another full allowance.
+    organization_filter = (
+        Email.organization_id == organization_id
+        if organization_id is not None
+        else Email.organization_id.is_(None)
+    )
     count = await session.scalar(
         select(func.count(Email.id)).where(
-            *Email.owner_filters(user_id, organization_id, workspace_id)
+            Email.user_id == user_id,
+            organization_filter,
         )
     )
     return int(count or 0)
@@ -1191,7 +1201,6 @@ async def import_email_uploads(
             session,
             user_id=user_id,
             organization_id=organization_id,
-            workspace_id=resolved_workspace_id,
         )
         remaining_quota = MAX_IMPORT_EMAILS_PER_OWNER - existing_email_count
         if remaining_quota <= 0:

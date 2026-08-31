@@ -1,4 +1,30 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🟡) 소유자(owner)당 이메일 임포트 할당량이 workspace마다 곱절로
+  늘어나던 문제를 고쳤습니다.** `MAX_IMPORT_EMAILS_PER_OWNER`(1000)와 이를 보호하는
+  advisory lock(`_acquire_owner_import_quota_lock`)은 둘 다 `(user_id, organization_id)`
+  단위(owner 전체)로 스코프되어 있었는데, 실제 사용량을 세는
+  `_owner_email_import_count`는 `Email.owner_filters()`를 그대로 재사용해
+  `workspace_id`까지 필터링했습니다 — 같은 owner가 서로 다른 workspace로 임포트할
+  때마다 각 workspace가 독립적으로 새 1000건 한도를 받는 결과가 됩니다. 카운트 쿼리를
+  `user_id`/`organization_id`만으로 스코프하도록 고쳐 lock의 스코프와 일치시켰습니다
+  (조회/중복확인 등 다른 경로의 workspace 스코핑은 그대로 유지). 새 테스트
+  `test_owner_import_quota_count_is_not_scoped_to_a_single_workspace`(`backend/tests/test_emails_api.py`)
+  — 수정 전 코드에서 카운트 쿼리 SQL 텍스트에 `workspace_id`가 실제로 포함됨을 먼저
+  확인했습니다(mock 세션은 실제 필터링을 하지 않으므로 SQL 텍스트 자체를 검증). 검증:
+  전체 백엔드 스위트 1897 passed/35 skipped, ruff clean.
+- **(Devin 리뷰 대응, 🔍 analysis) Calendar conflict judgment 영속화 경로에 실제
+  PostgreSQL 스모크 커버리지가 없던 문제를 보강했습니다.** `test_calendar_conflict_judgment_api.py`의
+  기존 테스트는 전부 mock 세션(`_DummySession`, fake judgment/correction)만 사용해,
+  `apply_correction`의 `with_for_update()` row lock과 감사(audit) 스냅샷 영속화가 실제
+  PostgreSQL 연결로 한 번도 검증된 적이 없었습니다. 새 테스트
+  `test_calendar_conflict_judgment_lifecycle_real_postgres_smoke`(`pytest.mark.postgres`)는
+  `create_judgment` → `apply_correction`(실제 row lock) → `list_judgments` 전체 흐름을
+  실제 PostgreSQL 커넥션으로 실행하고 영속/정렬/감사 스냅샷을 검증합니다. `Base.metadata.create_all()`
+  대신 필요한 두 테이블(`calendar_conflict_judgments`, `calendar_conflict_corrections`)만
+  생성하도록 스코프했습니다 — pgvector가 설치되지 않은 환경에서 무관한
+  `email_records`(vector 컬럼 포함) 생성까지 시도해 skip이 아니라 진짜 실패로 이어지는
+  것을 로컬 PostgreSQL 16으로 재현·회피했습니다. 검증: 로컬 PostgreSQL 기동 시 새 테스트
+  실제 통과 확인, 이후 중지 후 전체 스위트 1897 passed/36 skipped(기존 35+신규 1), ruff clean.
 - **(Devin 리뷰 대응, 🟡) `import_fixtures.py`가 커스텀 `NARUON_IMPORT_WORKSPACE_ID`를
   무시하던 문제를 고쳤습니다.** `import_eml_file`은 스레드 배정(`assign_thread_id`)에는
   `IMPORT_WORKSPACE_ID`(env var 반영)를 넘기면서도, 실제로 저장하는 `Email` 행의

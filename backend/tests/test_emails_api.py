@@ -247,6 +247,21 @@ class PostgresImportRecordingSession(ImportRecordingSession):
         return _PostgresBind()
 
 
+class ScalarQueryCapturingImportSession(PostgresImportRecordingSession):
+    def __init__(
+        self,
+        items,
+        tenant_config=_DEFAULT_TENANT_CONFIG,
+        llm_providers=None,
+    ):
+        super().__init__(items, tenant_config=tenant_config, llm_providers=llm_providers)
+        self.scalar_queries = []
+
+    async def scalar(self, query):
+        self.scalar_queries.append(query)
+        return await super().scalar(query)
+
+
 def compiled_query_text(query) -> str:
     return str(query).lower()
 
@@ -1397,6 +1412,65 @@ async def test_import_email_files_rejects_oversized_archive_before_partial_commi
     assert response.json()["detail"] == "email_import_quota_exceeded"
     assert session.added == []
     assert session.commit_count == 0
+
+
+@pytest.mark.asyncio
+async def test_owner_import_quota_count_is_not_scoped_to_a_single_workspace(
+    client: AsyncClient, monkeypatch
+):
+    # MAX_IMPORT_EMAILS_PER_OWNER and the advisory quota lock are both scoped
+    # to (user_id, organization_id) only -- an owner-wide allowance, not a
+    # per-workspace one. If the count query underneath it additionally filters
+    # by workspace_id, an owner importing through N distinct workspaces gets
+    # N times the intended allowance instead of one shared 1000-email cap.
+    from db.session import get_db
+
+    existing_email = Email(
+        id=91,
+        user_id="testuser",
+        organization_id="org-acme",
+        workspace_id="workspace-other",
+        message_id="<existing-other-workspace@example.com>",
+        thread_id="existing-thread-other",
+        sender="partner@example.com",
+        recipients="user@example.com",
+        subject="Existing in another workspace",
+        date=datetime.datetime(2026, 6, 11, 10, 0, tzinfo=datetime.timezone.utc),
+        body="Existing body",
+        embedding=[0.0] * 1536,
+    )
+    session = ScalarQueryCapturingImportSession([existing_email])
+    previous_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: session
+    try:
+        await client.post(
+            "/api/emails/import-files",
+            files=[
+                (
+                    "files",
+                    (
+                        "quota-cross-workspace.eml",
+                        _sample_eml_bytes(message_id="<quota-cross-workspace@example.com>"),
+                        "message/rfc822",
+                    ),
+                )
+            ],
+            headers={"X-Organization-Id": "org-acme"},
+        )
+    finally:
+        if previous_db_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_db_override
+
+    quota_queries = [
+        query
+        for query in session.scalar_queries
+        if "count(" in compiled_query_text(query) and "email_records" in compiled_query_text(query)
+    ]
+    assert quota_queries
+    assert_query_is_owner_scoped(quota_queries[-1])
+    assert "workspace_id" not in compiled_query_text(quota_queries[-1])
 
 
 @pytest.mark.asyncio

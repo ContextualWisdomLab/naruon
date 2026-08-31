@@ -414,3 +414,127 @@ async def test_correct_judgment_404s_when_outside_caller_scope(
         app.dependency_overrides.pop(get_db, None)
 
     assert response.status_code == 404
+
+
+@pytest.mark.postgres
+@pytest.mark.asyncio
+async def test_calendar_conflict_judgment_lifecycle_real_postgres_smoke():
+    """Every test above drives a fully mocked session or _DummySession --
+    apply_correction's with_for_update() row lock and the audit-snapshot
+    persistence it protects have never round-tripped through a real
+    PostgreSQL connection. Prove create_judgment -> apply_correction ->
+    list_judgments actually persists and locks against a live database."""
+    from asyncpg.exceptions import InvalidAuthorizationSpecificationError
+    from asyncpg.exceptions import InvalidPasswordError
+    from sqlalchemy import delete, text
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from core.config import settings
+    from db.models import Base, CalendarConflictCorrection, CalendarConflictJudgment
+    from services.calendar_conflict_judgment_service import (
+        apply_correction,
+        create_judgment,
+        list_judgments,
+    )
+    from services.calendar_conflict_policy import CalendarConflictDecision
+
+    smoke_tables = [
+        CalendarConflictJudgment.__table__,
+        CalendarConflictCorrection.__table__,
+    ]
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+            # Scoped to just these two tables (neither has a vector column) --
+            # Base.metadata.create_all() would also try to create
+            # email_records, which needs the pgvector extension and is
+            # unrelated to what this smoke test exercises.
+            await conn.run_sync(
+                lambda sync_conn: Base.metadata.create_all(
+                    sync_conn, tables=smoke_tables
+                )
+            )
+    except (
+        InvalidAuthorizationSpecificationError,
+        InvalidPasswordError,
+        OperationalError,
+        OSError,
+    ) as exc:
+        await engine.dispose()
+        pytest.skip(f"PostgreSQL smoke database unavailable: {exc}")
+
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    user_id = "calendar-judgment-smoke-user"
+    organization_id = "calendar-judgment-smoke-org"
+    workspace_id = "workspace-calendar-judgment-smoke"
+
+    async def cleanup_seed_rows():
+        async with Session() as session:
+            await session.execute(
+                delete(CalendarConflictCorrection).where(
+                    CalendarConflictCorrection.user_id == user_id
+                )
+            )
+            await session.execute(
+                delete(CalendarConflictJudgment).where(
+                    CalendarConflictJudgment.user_id == user_id
+                )
+            )
+            await session.commit()
+
+    await cleanup_seed_rows()
+    try:
+        decision = CalendarConflictDecision(
+            decision_code="review_required",
+            reason_code="lower_priority_conflict_requires_explicit_resolution",
+            conflicts=(),
+            recommended_action="Ask the proposer to confirm or reschedule.",
+        )
+        async with Session() as session:
+            judgment = await create_judgment(
+                session,
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                proposed_commitment_id="proposal-smoke-1",
+                source_thread_id="thread-smoke-1",
+                source_message_id="<smoke-1@example.com>",
+                decision=decision,
+            )
+            await session.commit()
+            judgment_uid = judgment.judgment_uid
+
+        async with Session() as session:
+            correction = await apply_correction(
+                session,
+                judgment_uid=judgment_uid,
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                actor_user_id="smoke-reviewer",
+                correction_action="override_decision",
+                decision_code="available",
+                status_code="overridden",
+                rationale="Confirmed directly with the proposer.",
+            )
+            await session.commit()
+
+        async with Session() as session:
+            judgments = await list_judgments(
+                session,
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+            )
+    finally:
+        await cleanup_seed_rows()
+        await engine.dispose()
+
+    assert len(judgments) == 1
+    assert judgments[0].judgment_uid == judgment_uid
+    assert judgments[0].decision_code == "available"
+    assert judgments[0].status_code == "overridden"
+    assert correction.before_json["decision_code"] == "review_required"
+    assert correction.after_json["decision_code"] == "available"
