@@ -513,11 +513,6 @@ def _get_validation_and_final_indexes_statements() -> list[Executable]:
         ),
         text("ALTER TABLE llm_providers ALTER COLUMN user_id SET NOT NULL"),
         text("ALTER TABLE llm_providers ALTER COLUMN organization_id SET NOT NULL"),
-        text("DROP INDEX IF EXISTS uq_email_records_owner_message_id"),
-        text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_emails_workspace_message "
-            "ON email_records (user_id, organization_id, workspace_id, message_id)"
-        ),
         text(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_llm_providers_org_name "
             "ON llm_providers (organization_id, name)"
