@@ -627,6 +627,23 @@ async def provenance_sessionmaker():
         await engine.dispose()
 
 
+async def _require_direct_postgres(engine) -> None:
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+
+
 async def _seed_provenance_closure(
     session,
     *,
@@ -1080,6 +1097,37 @@ async def test_postgres_round_trip_preserves_stable_evidence_with_fresh_keys(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_export_rejects_oversized_stored_text_before_descendant_orm_load(
+    provenance_sessionmaker,
+    monkeypatch,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(f"oversized-export-{token}")
+    async with provenance_sessionmaker() as session:
+        seeded = await _seed_provenance_closure(session, scope=scope, token=token)
+        attachment = await session.get(Attachment, seeded["attachment_id"])
+        attachment.content = "x" * (ENTRY_MAX_BYTES + 1)
+        await session.commit()
+
+    async with provenance_sessionmaker() as session:
+        original_scalars = session.scalars
+
+        async def reject_attachment_orm_load(statement, *args, **kwargs):
+            entities = {
+                description.get("entity")
+                for description in statement.column_descriptions
+            }
+            if Attachment in entities:
+                raise AssertionError("oversized attachment ORM row was materialized")
+            return await original_scalars(statement, *args, **kwargs)
+
+        monkeypatch.setattr(session, "scalars", reject_attachment_orm_load)
+        with pytest.raises(ProvenanceArchiveError):
+            await export_tenant_provenance(session, scope)
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_import_composes_with_transaction_started_by_prior_select(
     provenance_sessionmaker,
 ):
@@ -1466,6 +1514,7 @@ async def test_import_rejects_invalid_source_user_uid_before_transaction(
 @pytest.mark.postgres
 async def test_concurrent_identical_same_database_imports_are_idempotent():
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    await _require_direct_postgres(engine)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     token = uuid.uuid4().hex[:12]
     source_scope = _scope(f"concurrent-source-{token}")
@@ -1554,6 +1603,7 @@ async def test_concurrent_identical_same_database_imports_are_idempotent():
 @pytest.mark.postgres
 async def test_concurrent_imports_across_workspaces_reuse_owner_email():
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    await _require_direct_postgres(engine)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     token = uuid.uuid4().hex[:12]
     source_scope = _scope(f"parallel-workspaces-source-{token}")

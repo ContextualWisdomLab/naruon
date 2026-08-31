@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Text, cast, func, select
 from sqlalchemy.exc import DataError, IntegrityError, StatementError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,58 @@ _PAYLOAD_NAME = "data/records.json"
 _LOCAL_FILE_SIGNATURE = b"PK\x03\x04"
 _EOCD_SIGNATURE = b"PK\x05\x06"
 _EOCD_SIZE = 22
+
+_EXPORT_TEXT_COLUMNS = {
+    Email: (
+        Email.message_id,
+        Email.thread_id,
+        Email.fingerprint,
+        Email.sender,
+        Email.reply_to,
+        Email.recipients,
+        Email.subject,
+        Email.in_reply_to,
+        Email.references,
+        Email.body,
+    ),
+    Attachment: (
+        Attachment.filename,
+        Attachment.content,
+        Attachment.content_type,
+        Attachment.parse_status,
+        Attachment.parse_content_type,
+        Attachment.parser_key,
+        Attachment.parse_error_code,
+    ),
+    ContentNodeRecord: (
+        ContentNodeRecord.source_record_uid,
+        ContentNodeRecord.parent_node_uid,
+        ContentNodeRecord.display_label,
+        ContentNodeRecord.safe_text_content,
+    ),
+    ContentSegmentRecord: (
+        ContentSegmentRecord.source_record_uid,
+        ContentSegmentRecord.heading_path,
+        ContentSegmentRecord.safe_text_content,
+    ),
+    KnowledgeGraphEdgeRecord: (
+        KnowledgeGraphEdgeRecord.source_record_uid,
+        KnowledgeGraphEdgeRecord.edge_path,
+    ),
+    ProjectGraphObjectRecord: (
+        ProjectGraphObjectRecord.title,
+        ProjectGraphObjectRecord.summary,
+        ProjectGraphObjectRecord.source_segment_uids,
+        ProjectGraphObjectRecord.attributes_json,
+    ),
+    ProjectGraphEdgeRecord: (ProjectGraphEdgeRecord.source_segment_uids,),
+    ProjectGraphCorrectionRecord: (
+        ProjectGraphCorrectionRecord.before_json,
+        ProjectGraphCorrectionRecord.after_json,
+        ProjectGraphCorrectionRecord.rationale,
+        ProjectGraphCorrectionRecord.source_segment_uids,
+    ),
+}
 _EXPECTED_ENTRIES = frozenset(
     {
         "bagit.txt",
@@ -920,6 +972,35 @@ def _scope_filters(model: Any, scope: TenantProvenanceScope, *, workspace: bool)
     return filters
 
 
+async def _preflight_export_rows(
+    session: AsyncSession,
+    model: Any,
+    filters: tuple[Any, ...] | list[Any],
+    consumed_bytes: int,
+) -> int:
+    bind = session.get_bind()
+    if getattr(getattr(bind, "dialect", None), "name", None) != "postgresql":
+        return consumed_bytes
+    text_bytes = sum(
+        (
+            func.coalesce(func.octet_length(cast(column, Text)), 0)
+            for column in _EXPORT_TEXT_COLUMNS[model]
+        ),
+        start=0,
+    )
+    row_bytes = func.pg_column_size(model.__table__.table_valued()) + text_bytes
+    stored_bytes = int(
+        await session.scalar(
+            select(func.coalesce(func.sum(row_bytes), 0)).where(*filters)
+        )
+        or 0
+    )
+    total_bytes = consumed_bytes + stored_bytes
+    if total_bytes > ENTRY_MAX_BYTES:
+        _fail()
+    return total_bytes
+
+
 def _utc_text(value: datetime) -> str:
     if value.tzinfo is None:
         _fail()
@@ -1212,6 +1293,18 @@ async def export_tenant_provenance(
 ) -> bytes:
     """Export the exact signed-scope project-evidence closure."""
     _validate_scope(scope)
+    consumed_bytes = 0
+    for model in (
+        ProjectGraphObjectRecord,
+        ProjectGraphEdgeRecord,
+        ProjectGraphCorrectionRecord,
+    ):
+        consumed_bytes = await _preflight_export_rows(
+            session,
+            model,
+            _scope_filters(model, scope, workspace=True),
+            consumed_bytes,
+        )
     project_objects = list(
         (
             await session.scalars(
@@ -1257,16 +1350,26 @@ async def export_tenant_provenance(
         record.primary_content_segment_id
         for record in (*project_objects, *project_edges)
     }
+    cited_size_filters = (
+        (ContentSegmentRecord.content_segment_uid.in_(cited_segment_uids))
+        | (ContentSegmentRecord.content_segment_id.in_(primary_segment_ids)),
+    )
+    cited_segment_filters = (
+        *cited_size_filters,
+        *_scope_filters(Email, scope, workspace=False),
+    )
+    consumed_bytes = await _preflight_export_rows(
+        session,
+        ContentSegmentRecord,
+        cited_size_filters,
+        consumed_bytes,
+    )
     cited_segments = list(
         (
             await session.scalars(
                 select(ContentSegmentRecord)
                 .join(Email, ContentSegmentRecord.email_id == Email.id)
-                .where(
-                    (ContentSegmentRecord.content_segment_uid.in_(cited_segment_uids))
-                    | (ContentSegmentRecord.content_segment_id.in_(primary_segment_ids)),
-                    *_scope_filters(Email, scope, workspace=False),
-                )
+                .where(*cited_segment_filters)
             )
         ).all()
     )
@@ -1328,14 +1431,18 @@ async def export_tenant_provenance(
     email_ids = {record.email_id for record in project_objects} | {
         segment.email_id for segment in cited_segments
     }
+    email_filters = (
+        Email.id.in_(email_ids),
+        *_scope_filters(Email, scope, workspace=False),
+    )
+    consumed_bytes = await _preflight_export_rows(
+        session, Email, email_filters, consumed_bytes
+    )
     emails = list(
         (
             await session.scalars(
                 select(Email)
-                .where(
-                    Email.id.in_(email_ids),
-                    *_scope_filters(Email, scope, workspace=False),
-                )
+                .where(*email_filters)
                 .order_by(Email.message_id)
             )
         ).all()
@@ -1345,11 +1452,16 @@ async def export_tenant_provenance(
     email_uids = {email.id: email.message_id for email in emails}
 
     async def descendants(model: Any, order_column: Any) -> list[Any]:
+        nonlocal consumed_bytes
+        descendant_filters = (model.email_id.in_(email_ids),)
+        consumed_bytes = await _preflight_export_rows(
+            session, model, descendant_filters, consumed_bytes
+        )
         return list(
             (
                 await session.scalars(
                     select(model)
-                    .where(model.email_id.in_(email_ids))
+                    .where(*descendant_filters)
                     .order_by(order_column)
                 )
             ).all()
