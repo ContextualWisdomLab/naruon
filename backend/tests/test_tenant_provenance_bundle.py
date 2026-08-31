@@ -1773,6 +1773,10 @@ async def test_recognized_pdf_omits_integer_keys_and_round_trips_graph_reference
         project_object.attributes_json = {
             "source_record_uid": legacy_source_uid,
             "source_object_uid": project_object.object_uid,
+            "nested": {
+                "attachment_uid": legacy_source_uid,
+                "free_text": legacy_source_uid,
+            },
         }
         await session.commit()
     async with provenance_sessionmaker() as session:
@@ -1782,7 +1786,7 @@ async def test_recognized_pdf_omits_integer_keys_and_round_trips_graph_reference
     portable_source_uid = f"attachment:{attachment_uid}"
     serialized = json.dumps(records, sort_keys=True)
 
-    assert legacy_source_uid not in serialized
+    assert serialized.count(legacy_source_uid) == 1
     assert {
         records["content_nodes"][0]["source_record_uid"],
         records["content_segments"][0]["source_record_uid"],
@@ -1792,6 +1796,10 @@ async def test_recognized_pdf_omits_integer_keys_and_round_trips_graph_reference
         records["project_objects"][0]["attributes_json"]["source_record_uid"]
         == portable_source_uid
     )
+    assert records["project_objects"][0]["attributes_json"]["nested"] == {
+        "attachment_uid": portable_source_uid,
+        "free_text": legacy_source_uid,
+    }
 
     async with provenance_sessionmaker() as session:
         await _delete_exported_closure(session, records)
@@ -1810,6 +1818,10 @@ async def test_recognized_pdf_omits_integer_keys_and_round_trips_graph_reference
     assert restored_node.source_record_uid == portable_source_uid
     assert restored["content_nodes"][0]["attachment_uid"] == attachment_uid
     assert restored["content_nodes"][0]["source_record_uid"] == portable_source_uid
+    assert restored["project_objects"][0]["attributes_json"]["nested"] == {
+        "attachment_uid": portable_source_uid,
+        "free_text": legacy_source_uid,
+    }
 
 
 @pytest.mark.asyncio

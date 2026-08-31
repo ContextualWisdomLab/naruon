@@ -105,6 +105,9 @@ _TYPED_METADATA_UIDS = {
     "primary_content_segment_uid": "content_segments",
 }
 _TYPED_METADATA_UID_LISTS = {"source_segment_uids": "content_segments"}
+_TYPED_METADATA_ATTACHMENT_REFERENCES = frozenset(
+    {"attachment_uid", "source_record_uid"}
+)
 _TEXTUAL_PARSER_KEYS = frozenset(
     {"plain_text", "html", "markdown", "json", "csv", "xml", "calendar", "pdf"}
 )
@@ -369,15 +372,16 @@ def _validate_safe_metadata(value: object, depth: int = 0) -> None:
 def _portable_metadata(
     value: object, attachment_references: Mapping[str, str]
 ) -> object:
-    if isinstance(value, str):
-        return attachment_references.get(value, value)
     if isinstance(value, list):
         return [_portable_metadata(item, attachment_references) for item in value]
     if isinstance(value, Mapping):
-        return {
-            key: _portable_metadata(item, attachment_references)
-            for key, item in value.items()
-        }
+        portable = {}
+        for key, item in value.items():
+            if key in _TYPED_METADATA_ATTACHMENT_REFERENCES and isinstance(item, str):
+                portable[key] = attachment_references.get(item, item)
+            else:
+                portable[key] = _portable_metadata(item, attachment_references)
+        return portable
     return value
 
 
