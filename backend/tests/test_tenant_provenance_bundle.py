@@ -1685,6 +1685,109 @@ async def test_import_rejects_confidence_outside_unit_interval_before_flush(
         assert flush_count == 0
 
 
+@pytest.mark.parametrize(
+    "reference_field",
+    (
+        "object_source",
+        "object_primary",
+        "edge_source",
+        "edge_primary",
+        "correction_source",
+        "edge_without_object_anchors",
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_rejects_cross_email_project_references_before_flush(
+    provenance_sessionmaker,
+    monkeypatch,
+    reference_field,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"citation-source-{token}")
+    target_scope = _scope(f"citation-target-{token}")
+    async with provenance_sessionmaker() as session:
+        archive = await _two_email_rooted_archive(
+            session,
+            scope=source_scope,
+            token=token,
+        )
+    records = parse_provenance_archive(archive)
+    object_email = {
+        record["object_uid"]: record["email_uid"]
+        for record in records["project_objects"]
+    }
+    segment_email = {
+        record["content_segment_uid"]: record["email_uid"]
+        for record in records["content_segments"]
+    }
+    if reference_field.startswith("object_"):
+        record = records["project_objects"][0]
+        anchor_email_uid = record["email_uid"]
+    elif reference_field.startswith("edge_"):
+        record = records["project_edges"][0]
+        anchor_email_uid = object_email[
+            record["source_object_uid"] or record["target_object_uid"]
+        ]
+    else:
+        record = records["corrections"][0]
+        anchor_email_uid = object_email[record["object_uid"]]
+    foreign_segment_uid = next(
+        segment_uid
+        for segment_uid, email_uid in segment_email.items()
+        if email_uid != anchor_email_uid
+    )
+    if reference_field == "edge_without_object_anchors":
+        record["source_object_uid"] = None
+        record["target_object_uid"] = None
+    elif reference_field.endswith("_primary"):
+        record["primary_content_segment_uid"] = foreign_segment_uid
+    else:
+        record["source_segment_uids"] = [foreign_segment_uid]
+    invalid_archive = build_provenance_archive(records)
+
+    async with provenance_sessionmaker() as session:
+        flush_count = 0
+        original_flush = session.flush
+
+        async def counting_flush(*args, **kwargs):
+            nonlocal flush_count
+            flush_count += 1
+            return await original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", counting_flush)
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, invalid_archive)
+        assert flush_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_allows_edge_with_one_nullable_object_endpoint(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"nullable-source-{token}")
+    target_scope = _scope(f"nullable-target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    records["project_edges"][0]["source_object_uid"] = None
+    records["project_edges"][0]["source_uid"] = f"segment-{token}"
+
+    async with provenance_sessionmaker() as session:
+        receipt = await import_tenant_provenance(
+            session,
+            target_scope,
+            build_provenance_archive(records),
+        )
+
+    assert receipt.created["project_edges"] == 1
+
+
 @pytest.mark.asyncio
 @pytest.mark.postgres
 async def test_confidence_unit_interval_boundaries_round_trip(

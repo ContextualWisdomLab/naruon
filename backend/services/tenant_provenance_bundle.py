@@ -1853,6 +1853,10 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         record["content_segment_uid"]: record["attachment_uid"]
         for record in collections["content_segments"]
     }
+    object_email = {
+        record["object_uid"]: record["email_uid"]
+        for record in collections["project_objects"]
+    }
 
     def require_reference(value: object, available: set[str]) -> None:
         if value is not None and value not in available:
@@ -1937,9 +1941,24 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
             _fail()
         for segment_uid in record["source_segment_uids"]:
             require_reference(segment_uid, segment_uids)
+            if segment_email[segment_uid] != record["email_uid"]:
+                _fail()
     for record in collections["project_edges"]:
         require_reference(record["source_object_uid"], object_uids)
         require_reference(record["target_object_uid"], object_uids)
+        endpoint_uids = {
+            endpoint_uid
+            for endpoint_uid in (
+                record["source_object_uid"],
+                record["target_object_uid"],
+            )
+            if endpoint_uid is not None
+        }
+        if not endpoint_uids:
+            _fail()
+        endpoint_email_uids = {
+            object_email[endpoint_uid] for endpoint_uid in endpoint_uids
+        }
         if (
             record["source_object_uid"] is not None
             and record["source_uid"] != record["source_object_uid"]
@@ -1951,12 +1970,21 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         ):
             _fail()
         require_reference(record["primary_content_segment_uid"], segment_uids)
+        if (
+            segment_email[record["primary_content_segment_uid"]]
+            not in endpoint_email_uids
+        ):
+            _fail()
         for segment_uid in record["source_segment_uids"]:
             require_reference(segment_uid, segment_uids)
+            if segment_email[segment_uid] not in endpoint_email_uids:
+                _fail()
     for record in collections["corrections"]:
         require_reference(record["object_uid"], object_uids)
         for segment_uid in record["source_segment_uids"]:
             require_reference(segment_uid, segment_uids)
+            if segment_email[segment_uid] != object_email[record["object_uid"]]:
+                _fail()
 
     rooted_email_uids = {
         record["email_uid"] for record in collections["project_objects"]
