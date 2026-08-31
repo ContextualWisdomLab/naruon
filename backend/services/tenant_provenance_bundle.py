@@ -426,6 +426,15 @@ def _canonical_json(value: object) -> bytes:
         raise ProvenanceArchiveError("Invalid provenance archive") from exc
 
 
+def _segment_endpoint_uid(value: object) -> str:
+    if not isinstance(value, str) or not value.startswith("segment:"):
+        _fail()
+    segment_uid = value.removeprefix("segment:")
+    if not segment_uid:
+        _fail()
+    return segment_uid
+
+
 def _translate_identity_records(
     records: Mapping[str, object], maps: Mapping[str, Mapping[str, str]]
 ) -> dict[str, object]:
@@ -446,12 +455,16 @@ def _translate_identity_records(
     ) -> None:
         value = record[field]
         if record[object_field] is not None:
-            record[field] = maps["project_objects"].get(value, value)
-        elif isinstance(value, str) and value.startswith("segment:"):
-            segment_uid = value.removeprefix("segment:")
-            record[field] = "segment:" + maps["content_segments"].get(
-                segment_uid, segment_uid
-            )
+            mapped_uid = maps["project_objects"].get(value)
+            if mapped_uid is None:
+                _fail()
+            record[field] = mapped_uid
+            return
+        segment_uid = _segment_endpoint_uid(value)
+        mapped_uid = maps["content_segments"].get(segment_uid)
+        if mapped_uid is None:
+            _fail()
+        record[field] = f"segment:{mapped_uid}"
 
     def translate_metadata(value: object) -> object:
         if isinstance(value, dict):
@@ -1194,6 +1207,13 @@ async def export_tenant_provenance(
         for record in (*project_objects, *project_edges, *corrections)
         for segment_uid in record.source_segment_uids
     }
+    for record in project_edges:
+        for endpoint_uid, endpoint_object_id in (
+            (record.source_uid, record.source_object_id),
+            (record.target_uid, record.target_object_id),
+        ):
+            if endpoint_object_id is None:
+                cited_segment_uids.add(_segment_endpoint_uid(endpoint_uid))
     primary_segment_ids = {
         record.primary_content_segment_id
         for record in (*project_objects, *project_edges)
@@ -1244,6 +1264,14 @@ async def export_tenant_provenance(
         if not endpoint_objects:
             _fail()
         endpoint_email_ids = {endpoint.email_id for endpoint in endpoint_objects}
+        for endpoint_uid, endpoint_object_id in (
+            (record.source_uid, record.source_object_id),
+            (record.target_uid, record.target_object_id),
+        ):
+            if endpoint_object_id is None:
+                segment_uid = _segment_endpoint_uid(endpoint_uid)
+                if segments_by_uid[segment_uid].email_id not in endpoint_email_ids:
+                    _fail()
         if segments_by_id[
             record.primary_content_segment_id
         ].email_id not in endpoint_email_ids or any(
@@ -1961,16 +1989,18 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         endpoint_email_uids = {
             object_email[endpoint_uid] for endpoint_uid in endpoint_uids
         }
-        if (
-            record["source_object_uid"] is not None
-            and record["source_uid"] != record["source_object_uid"]
+        for field, object_field in (
+            ("source_uid", "source_object_uid"),
+            ("target_uid", "target_object_uid"),
         ):
-            _fail()
-        if (
-            record["target_object_uid"] is not None
-            and record["target_uid"] != record["target_object_uid"]
-        ):
-            _fail()
+            if record[object_field] is not None:
+                if record[field] != record[object_field]:
+                    _fail()
+                continue
+            segment_uid = _segment_endpoint_uid(record[field])
+            require_reference(segment_uid, segment_uids)
+            if segment_email[segment_uid] not in endpoint_email_uids:
+                _fail()
         require_reference(record["primary_content_segment_uid"], segment_uids)
         if (
             segment_email[record["primary_content_segment_uid"]]

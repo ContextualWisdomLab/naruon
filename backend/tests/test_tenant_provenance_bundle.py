@@ -1985,6 +1985,64 @@ async def test_import_round_trip_remaps_nullable_segment_evidence_endpoint(
     )
 
 
+@pytest.mark.parametrize("endpoint", ("source", "target"))
+@pytest.mark.parametrize(
+    "invalid_kind", ("empty", "bare", "unknown", "object_uid", "cross_email")
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_rejects_invalid_nullable_segment_endpoint_before_flush(
+    provenance_sessionmaker,
+    monkeypatch,
+    endpoint,
+    invalid_kind,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"nullable-invalid-source-{token}")
+    target_scope = _scope(f"nullable-invalid-target-{token}")
+    async with provenance_sessionmaker() as session:
+        archive = await _two_email_rooted_archive(
+            session, scope=source_scope, token=token
+        )
+    records = parse_provenance_archive(archive)
+    edge = records["project_edges"][0]
+    anchor_object_uid = edge[f"{'target' if endpoint == 'source' else 'source'}_object_uid"]
+    object_email = {
+        record["object_uid"]: record["email_uid"]
+        for record in records["project_objects"]
+    }
+    anchor_email_uid = object_email[anchor_object_uid]
+    cross_email_segment_uid = next(
+        record["content_segment_uid"]
+        for record in records["content_segments"]
+        if record["email_uid"] != anchor_email_uid
+    )
+    invalid_values = {
+        "empty": "segment:",
+        "bare": edge["source_segment_uids"][0],
+        "unknown": f"segment:unknown-{token}",
+        "object_uid": edge["source_object_uid"],
+        "cross_email": f"segment:{cross_email_segment_uid}",
+    }
+    edge[f"{endpoint}_object_uid"] = None
+    edge[f"{endpoint}_uid"] = invalid_values[invalid_kind]
+    invalid_archive = build_provenance_archive(records)
+
+    async with provenance_sessionmaker() as session:
+        flush_count = 0
+        original_flush = session.flush
+
+        async def counting_flush(*args, **kwargs):
+            nonlocal flush_count
+            flush_count += 1
+            return await original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", counting_flush)
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, invalid_archive)
+        assert flush_count == 0
+
+
 @pytest.mark.asyncio
 @pytest.mark.postgres
 async def test_confidence_unit_interval_boundaries_round_trip(
@@ -2756,11 +2814,16 @@ async def test_cross_field_conflict_rejected_before_flush(
         for record in records["attachments"]
         if record["email_uid"] != source_email_uid
     )
+    source_project_object = next(
+        record
+        for record in records["project_objects"]
+        if record["email_uid"] == source_email_uid
+    )
     same_email_attachment_uid = next(
         record["attachment_uid"]
         for record in records["attachments"]
         if record["email_uid"] == source_email_uid
-        and record["attachment_uid"] != records["project_objects"][0]["attachment_uid"]
+        and record["attachment_uid"] != source_project_object["attachment_uid"]
     )
     if conflict_kind == "structural_attachment_email":
         source_structural_edge = next(
@@ -2770,9 +2833,9 @@ async def test_cross_field_conflict_rejected_before_flush(
         )
         source_structural_edge["attachment_uid"] = foreign_attachment_uid
     elif conflict_kind == "object_attachment_email":
-        records["project_objects"][0]["attachment_uid"] = foreign_attachment_uid
+        source_project_object["attachment_uid"] = foreign_attachment_uid
     elif conflict_kind == "object_attachment_primary":
-        records["project_objects"][0]["attachment_uid"] = same_email_attachment_uid
+        source_project_object["attachment_uid"] = same_email_attachment_uid
     elif conflict_kind == "edge_source_endpoint":
         records["project_edges"][0]["source_uid"] = "mismatched-logical-endpoint"
     else:
@@ -2896,7 +2959,7 @@ async def test_export_allows_segment_evidence_edge_with_nullable_source_object(
                 ProjectGraphEdgeRecord.workspace_id == scope.workspace_id
             )
         )
-        edge.source_uid = f"segment-{token}"
+        edge.source_uid = f"segment:segment-{token}"
         edge.source_object_id = None
         await session.commit()
 
@@ -2906,7 +2969,7 @@ async def test_export_allows_segment_evidence_edge_with_nullable_source_object(
         )
 
     exported_edge = records["project_edges"][0]
-    assert exported_edge["source_uid"] == f"segment-{token}"
+    assert exported_edge["source_uid"] == f"segment:segment-{token}"
     assert exported_edge["source_object_uid"] is None
     assert exported_edge["target_object_uid"] in selected["object_uids"]
 
@@ -2923,6 +2986,8 @@ async def test_export_allows_segment_evidence_edge_with_nullable_source_object(
         "edge_target_object",
         "correction_object",
         "edge_without_object_anchors",
+        "edge_source_segment_endpoint",
+        "edge_target_segment_endpoint",
     ),
 )
 @pytest.mark.asyncio
@@ -2969,7 +3034,13 @@ async def test_export_rejects_cross_workspace_segment_references_before_email_cl
                     ProjectGraphCorrectionRecord.workspace_id == scope.workspace_id
                 )
             )
-        if reference_field == "edge_without_object_anchors":
+        if reference_field == "edge_source_segment_endpoint":
+            record.source_object_id = None
+            record.source_uid = f"segment:{foreign_segment.content_segment_uid}"
+        elif reference_field == "edge_target_segment_endpoint":
+            record.target_object_id = None
+            record.target_uid = f"segment:{foreign_segment.content_segment_uid}"
+        elif reference_field == "edge_without_object_anchors":
             record.source_object_id = None
             record.target_object_id = None
         elif reference_field == "edge_source_object":
