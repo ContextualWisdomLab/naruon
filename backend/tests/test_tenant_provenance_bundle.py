@@ -1475,6 +1475,106 @@ async def test_concurrent_identical_same_database_imports_are_idempotent():
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_concurrent_imports_across_workspaces_reuse_owner_email():
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"parallel-workspaces-source-{token}")
+    target_scopes = tuple(
+        TenantProvenanceScope(
+            user_id=source_scope.user_id,
+            organization_id=source_scope.organization_id,
+            workspace_id=f"parallel-workspace-{index}-{token}",
+        )
+        for index in range(2)
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with session_factory() as session:
+            await _seed_provenance_closure(session, scope=source_scope, token=token)
+        async with session_factory() as session:
+            archive = await export_tenant_provenance(session, source_scope)
+
+        async def run_import(target_scope):
+            async with session_factory() as session:
+                return await import_tenant_provenance(session, target_scope, archive)
+
+        receipts = await asyncio.gather(
+            *(run_import(target_scope) for target_scope in target_scopes)
+        )
+        assert all(sum(receipt.created.values()) == 7 for receipt in receipts)
+        async with session_factory() as session:
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(Email)
+                    .where(
+                        Email.user_id == source_scope.user_id,
+                        Email.organization_id == source_scope.organization_id,
+                        Email.message_id == f"<{token}@example.com>",
+                    )
+                )
+                == 1
+            )
+    finally:
+        async with session_factory.begin() as session:
+            email = await session.scalar(
+                select(Email).where(
+                    Email.user_id == source_scope.user_id,
+                    Email.organization_id == source_scope.organization_id,
+                    Email.message_id == f"<{token}@example.com>",
+                )
+            )
+            if email is not None:
+                workspace_ids = [
+                    source_scope.workspace_id,
+                    *(scope.workspace_id for scope in target_scopes),
+                ]
+                await session.execute(
+                    delete(ProjectGraphCorrectionRecord).where(
+                        ProjectGraphCorrectionRecord.workspace_id.in_(workspace_ids)
+                    )
+                )
+                await session.execute(
+                    delete(ProjectGraphEdgeRecord).where(
+                        ProjectGraphEdgeRecord.workspace_id.in_(workspace_ids)
+                    )
+                )
+                await session.execute(
+                    delete(ProjectGraphObjectRecord).where(
+                        ProjectGraphObjectRecord.workspace_id.in_(workspace_ids)
+                    )
+                )
+                await session.execute(
+                    delete(ProvenanceIdentityMapping).where(
+                        ProvenanceIdentityMapping.target_workspace_id.in_(workspace_ids)
+                    )
+                )
+                await session.execute(
+                    delete(KnowledgeGraphEdgeRecord).where(
+                        KnowledgeGraphEdgeRecord.email_id == email.id
+                    )
+                )
+                await session.execute(
+                    delete(ContentSegmentRecord).where(
+                        ContentSegmentRecord.email_id == email.id
+                    )
+                )
+                await session.execute(
+                    delete(ContentNodeRecord).where(
+                        ContentNodeRecord.email_id == email.id
+                    )
+                )
+                await session.execute(
+                    delete(Attachment).where(Attachment.email_id == email.id)
+                )
+                await session.delete(email)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_final_migration_upgrade_is_safe_after_fresh_metadata_bootstrap(
     provenance_sessionmaker,
 ):

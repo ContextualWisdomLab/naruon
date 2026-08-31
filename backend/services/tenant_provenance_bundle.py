@@ -2537,13 +2537,14 @@ async def import_tenant_provenance(
                 lock_digest = hashlib.sha256(
                     _canonical_json(
                         {
-                            "namespace": "tenant-provenance-import-v1",
-                            "source_scope": records["source_scope"],
-                            "target_scope": {
+                            "namespace": "tenant-provenance-import-v2",
+                            "target_owner": {
                                 "user_uid": _source_user_uid(scope.user_id),
                                 "organization_uid": scope.organization_id,
-                                "workspace_uid": scope.workspace_id,
                             },
+                            "email_uids": sorted(
+                                record["email_uid"] for record in records["emails"]
+                            ),
                         }
                     )
                 ).digest()
