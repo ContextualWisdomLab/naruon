@@ -403,47 +403,6 @@ async def grammar_checker_handler(params: Dict[str, Any]) -> Any:
         "suggestions": suggestions,
     }
 
-async def url_extractor_handler(params: Dict[str, Any]) -> Any:
-    text = params["text"]
-    urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)
-    return {"urls": urls}
-
-
-registry.register(
-    ToolInfo(
-        code="url_extractor",
-        name="URL 추출기 (URL Extractor)",
-        description="텍스트 본문에서 모든 URL을 추출합니다.",
-        category="이메일 분석",
-        parameters={"text": "string"},
-    ),
-    url_extractor_handler,
-)
-
-
-async def pii_redactor_handler(params: Dict[str, Any]) -> Any:
-    text = params["text"]
-
-    # Mask emails
-    redacted_text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL]', text)
-
-    # Mask phone numbers (simple pattern for various formats like 010-1234-5678, +82 10 1234 5678, etc)
-    redacted_text = re.sub(r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,3}\)?[-.\s]?\d{3,4}[-.\s]?\d{4}', '[PHONE]', redacted_text)
-
-    return {"redacted_text": redacted_text}
-
-
-registry.register(
-    ToolInfo(
-        code="pii_redactor",
-        name="개인정보 마스킹 (PII Redactor)",
-        description="텍스트 본문에서 이메일 주소와 전화번호 등 개인정보를 마스킹 처리합니다.",
-        category="보안",
-        parameters={"text": "string"},
-    ),
-    pii_redactor_handler,
-)
-
 
 def is_safe_webhook_url(url: str) -> bool:
     try:
