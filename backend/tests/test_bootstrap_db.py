@@ -766,16 +766,23 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
                 text("DELETE FROM email_records WHERE user_id = :user_id"),
                 {"user_id": smoke_user_id},
             )
+            await conn.execute(
+                text(
+                    "CREATE TEMP TABLE emails ("
+                    "user_id varchar, organization_id varchar, date timestamptz"
+                    ") ON COMMIT DROP"
+                )
+            )
             email_result = await conn.execute(
                 text("""
-                    INSERT INTO email_records (
-                        user_id, organization_id, message_id, sender, recipients,
-                        subject, "date", body
-                    )
-                    VALUES (
-                        :user_id, :organization_id, :message_id, :sender,
-                        :recipients, :subject, now(), :body
-                    )
+                        INSERT INTO email_records (
+                            user_id, organization_id, message_id, sender, recipients,
+                            subject, "date", body, is_read
+                        )
+                        VALUES (
+                            :user_id, :organization_id, :message_id, :sender,
+                            :recipients, :subject, now(), :body, false
+                        )
                     RETURNING id
                     """),
                 {
