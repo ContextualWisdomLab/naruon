@@ -478,6 +478,25 @@ def test_execute_url_extractor_does_not_borrow_distant_wrapper():
 @pytest.mark.parametrize(
     "url",
     (
+        "https://example.com/a(b)",
+        "https://example.com/a[b]",
+        "https://example.com/a{b}",
+    ),
+)
+def test_execute_url_extractor_preserves_balanced_url_delimiters(url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(\n{url}"}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
         "https://example.com/a).",
         "https://example.com/a],",
         "https://example.com/a}!",

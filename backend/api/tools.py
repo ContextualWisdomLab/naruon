@@ -777,7 +777,10 @@ def _trim_url_candidate(candidate: str, wrapping_openers: str) -> str:
     """Remove only closing delimiters proven by adjacent opening wrappers."""
     delimiters = (("(", ")"), ("[", "]"), ("{", "}"))
     excess = {
-        closer: wrapping_openers.count(opener)
+        closer: min(
+            wrapping_openers.count(opener),
+            max(0, candidate.count(closer) - candidate.count(opener)),
+        )
         for opener, closer in delimiters
     }
     without_prose = candidate.rstrip(_PROSE_TRAILING_PUNCTUATION)
