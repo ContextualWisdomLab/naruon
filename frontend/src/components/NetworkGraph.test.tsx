@@ -123,22 +123,19 @@ describe("NetworkGraph", () => {
     await flushAsyncWork();
 
     const mountedContainer = getMountedContainer();
-    const wrapper = mountedContainer.querySelector('span[tabindex="0"]');
-    const button = mountedContainer.querySelector('button[disabled]');
-    const descriptionId = wrapper?.getAttribute("aria-describedby");
+    const buttons = Array.from(mountedContainer.querySelectorAll("button"));
+    const button = buttons.find((button) => button.textContent === "첫 관계 보기");
+    const descriptionId = button?.getAttribute("aria-describedby");
 
-    expect(wrapper).toBeInstanceOf(HTMLSpanElement);
-    expect(wrapper?.className).toContain("cursor-not-allowed");
-    expect(wrapper?.getAttribute("title")).toBe("표시할 관계 데이터가 없습니다.");
-    expect(wrapper?.className).toContain("focus-visible:ring-2");
+    expect(button).toBeInstanceOf(HTMLButtonElement);
+    expect(button?.getAttribute("aria-disabled")).toBe("true");
+    expect(button?.getAttribute("title")).toBe("표시할 관계 데이터가 없습니다.");
+    expect(button?.className).toContain("aria-disabled:cursor-not-allowed");
+    expect(button?.className).toContain("aria-disabled:opacity-50");
     expect(descriptionId).toBeTruthy();
     expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(
       "표시할 관계 데이터가 없습니다.",
     );
-    expect(button).toBeInstanceOf(HTMLButtonElement);
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button?.className).toContain("disabled:cursor-not-allowed");
-    expect(button?.className).toContain("pointer-events-none");
   });
 
   it("announces graph loading failures as a polite alert", async () => {
