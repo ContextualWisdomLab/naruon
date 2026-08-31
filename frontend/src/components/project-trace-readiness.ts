@@ -152,8 +152,16 @@ export function buildAutomationBrief(groupedObjects: ProjectTraceObjectGroups): 
     };
   });
   const readyDomainCount = domains.filter((domain) => domain.count > 0).length;
-  const reportReadyCount = domains.find((domain) => domain.key === 'report')!.count;
-  const wikiReadyCount = domains.find((domain) => domain.key === 'wiki')!.count;
+  // ⚡ Bolt: Single pass iteration replaces multiple O(N) Array.find calls
+  let reportReadyCount = 0;
+  let wikiReadyCount = 0;
+  for (const domain of domains) {
+    if (domain.key === 'report') {
+      reportReadyCount = domain.count;
+    } else if (domain.key === 'wiki') {
+      wikiReadyCount = domain.count;
+    }
+  }
   return {
     domains,
     readyDomainCount,
@@ -267,9 +275,19 @@ export function buildProjectControlReadinessLayer(groupedObjects: ProjectTraceOb
   });
   const readyItemCount = items.filter((item) => item.count > 0 && item.citationCount > 0).length;
   const missingEvidenceCount = items.length - readyItemCount;
-  const acceptanceReady = items.find((item) => item.key === 'acceptance')?.count ? 1 : 0;
-  const actionReady = items.find((item) => item.key === 'ownerAction')?.count ? 1 : 0;
-  const scopeReady = items.find((item) => item.key === 'scope')?.count ? 1 : 0;
+  // ⚡ Bolt: Single pass iteration replaces multiple O(N) Array.find calls
+  let acceptanceReady = 0;
+  let actionReady = 0;
+  let scopeReady = 0;
+  for (const item of items) {
+    if (item.key === 'acceptance' && item.count) {
+      acceptanceReady = 1;
+    } else if (item.key === 'ownerAction' && item.count) {
+      actionReady = 1;
+    } else if (item.key === 'scope' && item.count) {
+      scopeReady = 1;
+    }
+  }
   const riskReady = groupedObjects.has('issue') ? 1 : 0;
   return {
     items,
