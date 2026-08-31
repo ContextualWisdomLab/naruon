@@ -502,6 +502,7 @@ describe("SettingsLayout", () => {
   });
 
   it("announces session loading before enabling logout", async () => {
+    oidcMocks.getOidcBrowserConfig.mockReturnValue(null);
     const defaultFetch = vi.mocked(fetch);
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/auth/session") {
@@ -528,10 +529,18 @@ describe("SettingsLayout", () => {
     });
 
     const logoutButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "로그아웃");
+    const loginButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "OIDC 로그인");
+    const loginReason = container.querySelector('#oidc-login-availability');
+    expect(loginButton?.getAttribute("aria-disabled")).toBe("true");
+    expect(loginReason?.className).not.toContain("sr-only");
+    expect(loginReason?.textContent).toBe("OIDC 로그인을 사용하려면 관리자에게 OIDC 설정을 요청하세요.");
     expect(logoutButton?.getAttribute("aria-disabled")).toBe("true");
-    expect(logoutButton?.getAttribute("title")).toBe("로그인 세션을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
     expect(logoutButton?.getAttribute("aria-describedby")).toBe("oidc-logout-availability");
-    expect(container.textContent).toContain("로그인 세션을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+    const logoutReason = container.querySelector('#oidc-logout-availability');
+    expect(logoutReason?.className).not.toContain("sr-only");
+    expect(logoutReason?.textContent).toBe("로그인 세션을 확인하는 중입니다. 잠시만 기다려 주세요.");
+    logoutButton?.focus();
+    expect(document.activeElement).toBe(logoutButton);
 
     await act(async () => {
       logoutButton?.click();
@@ -667,9 +676,10 @@ describe("SettingsLayout", () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
-    expect(saveButton?.getAttribute("title")).toBe("계정 설정을 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요.");
     expect(saveButton?.getAttribute("aria-describedby")).toBe("account-save-availability");
-    expect(container.textContent).toContain("계정 설정을 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요.");
+    const accountReason = container.querySelector('#account-save-availability');
+    expect(accountReason?.className).not.toContain("sr-only");
+    expect(accountReason?.textContent).toBe("계정 설정을 불러오지 못했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요.");
     expect(container.textContent).not.toContain("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
   });
 
@@ -701,7 +711,7 @@ describe("SettingsLayout", () => {
     const updatedSaveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
     expect(container.textContent).toContain("API request failed");
     expect(updatedSaveButton?.getAttribute("aria-disabled")).toBeNull();
-    expect(updatedSaveButton?.getAttribute("title")).toBe("계정 설정 저장");
+    expect(updatedSaveButton?.getAttribute("aria-describedby")).toBeNull();
   });
 
   it("loads and saves AI model registry entries without public identity headers or secret replay", async () => {

@@ -108,7 +108,7 @@ describe("NetworkGraph", () => {
     expect(Network).not.toHaveBeenCalled();
   });
 
-  it("describes the unavailable first-relationship action programmatically", async () => {
+  it("keeps the unavailable first-relationship reason visible and the guarded action focusable", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
         jsonResponse({
@@ -123,22 +123,22 @@ describe("NetworkGraph", () => {
     await flushAsyncWork();
 
     const mountedContainer = getMountedContainer();
-    const wrapper = mountedContainer.querySelector('span[tabindex="0"]');
-    const button = mountedContainer.querySelector('button[disabled]');
-    const descriptionId = wrapper?.getAttribute("aria-describedby");
+    const button = mountedContainer.querySelector('button[aria-disabled="true"]');
+    const descriptionId = button?.getAttribute("aria-describedby");
 
-    expect(wrapper).toBeInstanceOf(HTMLSpanElement);
-    expect(wrapper?.className).toContain("cursor-not-allowed");
-    expect(wrapper?.getAttribute("title")).toBe("표시할 관계 데이터가 없습니다.");
-    expect(wrapper?.className).toContain("focus-visible:ring-2");
-    expect(descriptionId).toBeTruthy();
-    expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(
-      "표시할 관계 데이터가 없습니다.",
-    );
     expect(button).toBeInstanceOf(HTMLButtonElement);
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button?.className).toContain("disabled:cursor-not-allowed");
-    expect(button?.className).toContain("pointer-events-none");
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(button?.className).toContain("aria-disabled:cursor-not-allowed");
+    expect(button?.className).toContain("focus-visible:ring-2");
+    expect(descriptionId).toBeTruthy();
+    const reason = document.getElementById(descriptionId ?? "");
+    expect(reason?.className).not.toContain("sr-only");
+    expect(reason?.textContent).toBe("연결된 관계가 생기면 첫 관계를 확인할 수 있습니다.");
+
+    (button as HTMLButtonElement).focus();
+    expect(document.activeElement).toBe(button);
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(mountedContainer.textContent).not.toContain("첫 관계를 선택했습니다.");
   });
 
   it("announces graph loading failures as a polite alert", async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -337,8 +337,11 @@ export default function NetworkGraph() {
     networkRef.current?.fit?.({ nodes: [node.id], animation: false });
   };
 
-  const handleSelectFirstRelationship = () => {
-    if (!firstEdge) return;
+  const handleSelectFirstRelationship = (event: MouseEvent<HTMLButtonElement>) => {
+    if (!firstEdge) {
+      event.preventDefault();
+      return;
+    }
     selectRelationship(firstEdge, '첫 관계를 선택했습니다.');
   };
 
@@ -405,30 +408,22 @@ export default function NetworkGraph() {
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <span
-            tabIndex={!firstEdge ? 0 : undefined}
-            aria-describedby={!firstEdge ? unavailableRelationshipDescriptionId : undefined}
-            title={!firstEdge ? "표시할 관계 데이터가 없습니다." : undefined}
-            className={
-              !firstEdge
-                ? "cursor-not-allowed rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                : undefined
-            }
-          >
-            {!firstEdge && (
-              <span id={unavailableRelationshipDescriptionId} className="sr-only">
-                표시할 관계 데이터가 없습니다.
-              </span>
-            )}
+          <div className="flex max-w-xs flex-col items-start gap-2">
             <button
               type="button"
               onClick={handleSelectFirstRelationship}
-              disabled={!firstEdge}
-              className={`rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ${!firstEdge ? "pointer-events-none" : ""}`}
+              aria-disabled={!firstEdge}
+              aria-describedby={!firstEdge ? unavailableRelationshipDescriptionId : undefined}
+              className="rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
             >
               첫 관계 보기
             </button>
-          </span>
+            {!firstEdge && (
+              <p id={unavailableRelationshipDescriptionId} className="text-xs font-semibold leading-5 text-muted-foreground">
+                연결된 관계가 생기면 첫 관계를 확인할 수 있습니다.
+              </p>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleZoomGraph}
