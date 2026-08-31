@@ -286,7 +286,7 @@ export default function NetworkGraph() {
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
-    // ⚡ Bolt: Use a bounded for...of loop to prevent O(N) intermediate array allocation when slicing a Map
+    // ⚡ Bolt: Using a bounded for...of loop prevents O(N) intermediate array allocation when slicing a Map
     const options = [];
     let index = 0;
     for (const edge of edgeMap.values()) {
@@ -302,7 +302,7 @@ export default function NetworkGraph() {
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
-    // ⚡ Bolt: Use a bounded for...of loop to prevent O(N) intermediate array allocation when slicing a Map
+    // ⚡ Bolt: Using a bounded for...of loop prevents O(N) intermediate array allocation when slicing a Map
     const options = [];
     let count = 0;
     for (const node of nodeInstanceMap.values()) {

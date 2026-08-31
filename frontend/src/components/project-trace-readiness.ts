@@ -152,7 +152,7 @@ export function buildAutomationBrief(groupedObjects: ProjectTraceObjectGroups): 
     };
   });
   const readyDomainCount = domains.filter((domain) => domain.count > 0).length;
-  // ⚡ Bolt: Single pass iteration replaces multiple O(N) Array.find calls
+  // ⚡ Bolt: Single pass iteration replaces multiple O(N) Array.find calls to optimize lookups
   let reportReadyCount = 0;
   let wikiReadyCount = 0;
   for (const domain of domains) {
@@ -275,7 +275,7 @@ export function buildProjectControlReadinessLayer(groupedObjects: ProjectTraceOb
   });
   const readyItemCount = items.filter((item) => item.count > 0 && item.citationCount > 0).length;
   const missingEvidenceCount = items.length - readyItemCount;
-  // ⚡ Bolt: Single pass iteration replaces multiple O(N) Array.find calls
+  // ⚡ Bolt: Single pass iteration replaces multiple O(N) Array.find calls to optimize lookups
   let acceptanceReady = 0;
   let actionReady = 0;
   let scopeReady = 0;
