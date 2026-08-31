@@ -1425,6 +1425,12 @@ async def test_production_correction_float_round_trip(provenance_sessionmaker):
         ("provider_url", "https://provider.example/v1"),
         ("access_token", "token-material"),
         ("email_id", 123),
+        ("smtp_password", "password-material"),
+        ("backup_api_key", "key-material"),
+        ("provider_auth_token", "token-material"),
+        ("mail_credentials_blob", "credential-material"),
+        ("backup_provider_endpoint_url", "https://provider.example/v1"),
+        ("legacy_attachment_id", 123),
     ),
 )
 @pytest.mark.asyncio
@@ -1461,6 +1467,12 @@ async def test_export_rejects_nested_sensitive_metadata(
         ("provider_endpoint", "https://provider.example/v1"),
         ("refresh_token", "token-material"),
         ("attachment_id", 456),
+        ("smtp_password", "password-material"),
+        ("backup_api_key", "key-material"),
+        ("provider_auth_token", "token-material"),
+        ("mail_credentials_blob", "credential-material"),
+        ("backup_provider_endpoint_url", "https://provider.example/v1"),
+        ("legacy_attachment_id", 456),
     ),
 )
 @pytest.mark.asyncio
@@ -1501,6 +1513,54 @@ async def test_import_rejects_nested_sensitive_metadata_before_flush(
         with pytest.raises(ProvenanceArchiveError):
             await import_tenant_provenance(session, target_scope, archive)
         assert flush_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_nested_benign_metadata_and_stable_uids_round_trip(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    allowed_metadata = {
+        "confidence": 0.73,
+        "source_object_uid": f"project-object-source-{token}",
+        "source_segment_uids": [f"segment-{token}"],
+        "tokenization_strategy": "bounded",
+        "passwordless_mode": "enabled",
+        "credentialed_source": "oidc",
+        "secretary_note": "benign domain text",
+        "identifier_kind": "stable",
+    }
+    async with provenance_sessionmaker() as session:
+        source = await _seed_provenance_closure(
+            session, scope=source_scope, token=token
+        )
+        project_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.object_uid == source["object_uids"][0]
+            )
+        )
+        project_object.attributes_json = allowed_metadata
+        await session.commit()
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_scope, archive)
+    async with provenance_sessionmaker() as session:
+        restored = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.object_uid == source["object_uids"][0]
+            )
+        )
+
+    assert restored.attributes_json == allowed_metadata
 
 
 @pytest.mark.asyncio

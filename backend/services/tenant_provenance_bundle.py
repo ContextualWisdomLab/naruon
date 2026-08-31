@@ -105,6 +105,9 @@ _FORBIDDEN_METADATA_KEYS = frozenset(
         "token",
     }
 )
+_SENSITIVE_METADATA_TOKENS = frozenset(
+    {"credential", "credentials", "password", "secret", "secrets", "token"}
+)
 _RECORD_KEYS = {
     "emails": frozenset(
         {
@@ -284,6 +287,21 @@ def _validate_json_value(value: object, depth: int = 0) -> None:
     _fail()
 
 
+def _metadata_key_is_forbidden(key: str) -> bool:
+    normalized_key = key.lower().replace("-", "_").replace(" ", "_")
+    tokens = tuple(token for token in normalized_key.split("_") if token)
+    token_set = frozenset(tokens)
+    token_pairs = set(zip(tokens, tokens[1:]))
+    return (
+        normalized_key in _FORBIDDEN_METADATA_KEYS
+        or bool(token_set & _SENSITIVE_METADATA_TOKENS)
+        or ("api", "key") in token_pairs
+        or ("provider" in token_set and bool({"endpoint", "url", "uri"} & token_set))
+        or (bool(tokens) and tokens[-1] == "id")
+        or (bool({"database", "db"} & token_set) and bool({"id", "key"} & token_set))
+    )
+
+
 def _validate_safe_metadata(value: object, depth: int = 0) -> None:
     if depth > JSON_MAX_DEPTH:
         _fail()
@@ -291,8 +309,7 @@ def _validate_safe_metadata(value: object, depth: int = 0) -> None:
         for key, item in value.items():
             if not isinstance(key, str):
                 _fail()
-            normalized_key = key.lower().replace("-", "_").replace(" ", "_")
-            if normalized_key in _FORBIDDEN_METADATA_KEYS:
+            if _metadata_key_is_forbidden(key):
                 _fail()
             _validate_safe_metadata(item, depth + 1)
     elif isinstance(value, list):
