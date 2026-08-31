@@ -1,4 +1,4 @@
-FROM node:26-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503
+FROM node:26-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146
 
 ARG OCI_IMAGE_CREATED=""
 ARG OCI_IMAGE_AUTHORS="Seongho Bae"
@@ -12,8 +12,8 @@ ARG OCI_IMAGE_LICENSES="LicenseRef-Naruon-Proprietary"
 ARG OCI_IMAGE_REF_NAME=""
 ARG OCI_IMAGE_TITLE="naruon frontend"
 ARG OCI_IMAGE_DESCRIPTION="Naruon Next.js frontend runtime image"
-ARG OCI_IMAGE_BASE_DIGEST="sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503"
-ARG OCI_IMAGE_BASE_NAME="docker.io/library/node:26-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503"
+ARG OCI_IMAGE_BASE_DIGEST="sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146"
+ARG OCI_IMAGE_BASE_NAME="docker.io/library/node:26-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146"
 
 # Defaults keep local builds provenance-complete. The release workflow derives
 # and overrides both values from this file's exact FROM line, while repository
