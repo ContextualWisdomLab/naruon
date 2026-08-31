@@ -1,11 +1,32 @@
+import copy
+import datetime
 import hashlib
 import io
 import json
 import struct
+import uuid
 import warnings
 import zipfile
 
+import asyncpg
 import pytest
+import pytest_asyncio
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from core.config import settings
+from db.models import (
+    Attachment,
+    Base,
+    ContentNodeRecord,
+    ContentSegmentRecord,
+    Email,
+    KnowledgeGraphEdgeRecord,
+    ProjectGraphCorrectionRecord,
+    ProjectGraphEdgeRecord,
+    ProjectGraphObjectRecord,
+)
 
 from services.tenant_provenance_bundle import (
     ARCHIVE_MAX_BYTES,
@@ -13,9 +34,13 @@ from services.tenant_provenance_bundle import (
     ENTRY_MAX_BYTES,
     JSON_SAFE_INTEGER_MAX,
     MAX_COMPRESSION_RATIO,
+    ImportReceipt,
     ProvenanceArchiveError,
+    TenantProvenanceScope,
     _within_archive_bounds,
     build_provenance_archive,
+    export_tenant_provenance,
+    import_tenant_provenance,
     parse_provenance_archive,
 )
 
@@ -474,3 +499,530 @@ def test_parse_rejects_entry_count_and_compression_ratio(monkeypatch):
     entries["data/records.json"] = records
     with pytest.raises(ProvenanceArchiveError):
         parse_provenance_archive(_archive_with_entries(_rebuild_manifests(entries)))
+
+
+@pytest_asyncio.fixture
+async def provenance_sessionmaker():
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(text("SELECT 1"))
+            await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await connection.run_sync(Base.metadata.create_all)
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                yield async_sessionmaker(
+                    bind=connection,
+                    expire_on_commit=False,
+                    join_transaction_mode="create_savepoint",
+                )
+            finally:
+                if transaction.is_active:
+                    await transaction.rollback()
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        pytest.skip("PostgreSQL smoke path unavailable")
+    finally:
+        await engine.dispose()
+
+
+async def _seed_provenance_closure(
+    session,
+    *,
+    scope: TenantProvenanceScope,
+    token: str,
+) -> dict[str, object]:
+    now = datetime.datetime(2026, 8, 31, 12, 0, tzinfo=datetime.timezone.utc)
+    email = Email(
+        user_id=scope.user_id,
+        organization_id=scope.organization_id,
+        message_id=f"<{token}@example.com>",
+        thread_id=f"thread-{token}",
+        fingerprint=f"sha256:{token}",
+        sender="source@example.com",
+        reply_to="reply@example.com",
+        recipients="owner@example.com",
+        subject=f"Evidence {token}",
+        in_reply_to=None,
+        references=None,
+        date=now,
+        body="Grounded source evidence",
+        is_read=False,
+        embedding=[0.125] * 1536,
+    )
+    session.add(email)
+    await session.flush()
+
+    attachment = Attachment(
+        email=email,
+        filename="evidence.txt",
+        content="Parser-confirmed attachment evidence",
+        content_type="text/plain",
+        parse_status="parsed",
+        parse_content_type="text/plain",
+        parser_key="plain_text",
+        embedding=[0.25] * 1536,
+    )
+    binary_attachment = Attachment(
+        email=email,
+        filename="source.pdf",
+        content="binary-payload-must-not-export",
+        content_type="application/pdf",
+        parse_status="pdf_dom_recognition_pending",
+        parse_content_type="application/pdf",
+        parser_key="pdf",
+        embedding=[0.5] * 1536,
+    )
+    session.add_all([attachment, binary_attachment])
+    await session.flush()
+
+    node = ContentNodeRecord(
+        content_node_uid=f"node-{token}",
+        email=email,
+        attachment=attachment,
+        source_kind="attachment",
+        source_record_uid=f"attachment-source-{token}",
+        parent_node_uid=None,
+        node_kind="document",
+        node_path="/document[1]",
+        ordinal_index=1,
+        display_label="Evidence",
+        safe_text_content="Parser-confirmed attachment evidence",
+        content_hash=f"nodehash-{token}",
+        created_at=now,
+    )
+    session.add(node)
+    await session.flush()
+
+    segment = ContentSegmentRecord(
+        content_segment_uid=f"segment-{token}",
+        email=email,
+        attachment=attachment,
+        content_node=node,
+        source_kind="attachment",
+        source_record_uid=f"attachment-source-{token}",
+        segment_kind="paragraph",
+        segment_path="/document[1]/paragraph[1]",
+        ordinal_index=1,
+        heading_path="Evidence",
+        safe_text_content="Parser-confirmed attachment evidence",
+        content_hash=f"segmenthash-{token}",
+        word_count=3,
+        created_at=now,
+    )
+    session.add(segment)
+    await session.flush()
+
+    structural_edge = KnowledgeGraphEdgeRecord(
+        edge_uid=f"structural-edge-{token}",
+        email=email,
+        attachment=attachment,
+        source_node=node,
+        target_segment=segment,
+        source_kind="attachment",
+        source_record_uid=f"attachment-source-{token}",
+        edge_kind="contains",
+        edge_path="/document[1]->/document[1]/paragraph[1]",
+        ordinal_index=1,
+        created_at=now,
+    )
+    source_object = ProjectGraphObjectRecord(
+        object_uid=f"project-object-source-{token}",
+        user_id=scope.user_id,
+        organization_id=scope.organization_id,
+        workspace_id=scope.workspace_id,
+        email=email,
+        attachment=attachment,
+        primary_content_segment=segment,
+        object_type="requirement",
+        title="Portable requirement",
+        summary="Grounded requirement",
+        status_code="accepted",
+        confidence=0.91,
+        source_segment_uids=[segment.content_segment_uid],
+        attributes_json={"rank_value": 1, "source_label": "mail"},
+        extractor_name="test-extractor",
+        extractor_version="1",
+        created_at=now,
+        updated_at=now,
+    )
+    target_object = ProjectGraphObjectRecord(
+        object_uid=f"project-object-target-{token}",
+        user_id=scope.user_id,
+        organization_id=scope.organization_id,
+        workspace_id=scope.workspace_id,
+        email=email,
+        attachment=attachment,
+        primary_content_segment=segment,
+        object_type="decision",
+        title="Portable decision",
+        summary="Grounded decision",
+        status_code="accepted",
+        confidence=0.87,
+        source_segment_uids=[segment.content_segment_uid],
+        attributes_json={"decision_state": "approved"},
+        extractor_name="test-extractor",
+        extractor_version="1",
+        created_at=now,
+        updated_at=now,
+    )
+    session.add_all([structural_edge, source_object, target_object])
+    await session.flush()
+
+    project_edge = ProjectGraphEdgeRecord(
+        edge_uid=f"project-edge-{token}",
+        user_id=scope.user_id,
+        organization_id=scope.organization_id,
+        workspace_id=scope.workspace_id,
+        source_uid=source_object.object_uid,
+        target_uid=target_object.object_uid,
+        edge_type="supports",
+        confidence=0.89,
+        source_segment_uids=[segment.content_segment_uid],
+        source_object=source_object,
+        target_object=target_object,
+        primary_content_segment=segment,
+        created_at=now,
+    )
+    correction = ProjectGraphCorrectionRecord(
+        correction_uid=f"correction-{token}",
+        project_object=source_object,
+        user_id=scope.user_id,
+        organization_id=scope.organization_id,
+        workspace_id=scope.workspace_id,
+        actor_user_id=scope.user_id,
+        correction_action="accept",
+        before_json={"status_code": "candidate", "rank_value": 0},
+        after_json={"status_code": "accepted", "rank_value": 1},
+        rationale="Verified against source",
+        source_segment_uids=[segment.content_segment_uid],
+        created_at=now,
+    )
+    session.add_all([project_edge, correction])
+    await session.commit()
+    return {
+        "email_id": email.id,
+        "attachment_id": attachment.id,
+        "node_id": node.content_node_id,
+        "segment_id": segment.content_segment_id,
+        "project_object_id": source_object.project_graph_object_id,
+        "email_uid": email.message_id,
+        "object_uids": [source_object.object_uid, target_object.object_uid],
+    }
+
+
+async def _delete_exported_closure(session, records: dict[str, object]) -> None:
+    emails = records["emails"]
+    email_uids = [record["email_uid"] for record in emails]
+    email_ids = list(
+        (
+            await session.scalars(
+                select(Email.id).where(Email.message_id.in_(email_uids))
+            )
+        ).all()
+    )
+    await session.execute(
+        delete(ProjectGraphCorrectionRecord).where(
+            ProjectGraphCorrectionRecord.correction_uid.in_(
+                [record["correction_uid"] for record in records["corrections"]]
+            )
+        )
+    )
+    await session.execute(
+        delete(ProjectGraphEdgeRecord).where(
+            ProjectGraphEdgeRecord.edge_uid.in_(
+                [record["edge_uid"] for record in records["project_edges"]]
+            )
+        )
+    )
+    await session.execute(
+        delete(ProjectGraphObjectRecord).where(
+            ProjectGraphObjectRecord.object_uid.in_(
+                [record["object_uid"] for record in records["project_objects"]]
+            )
+        )
+    )
+    await session.execute(
+        delete(KnowledgeGraphEdgeRecord).where(
+            KnowledgeGraphEdgeRecord.email_id.in_(email_ids)
+        )
+    )
+    await session.execute(
+        delete(ContentSegmentRecord).where(ContentSegmentRecord.email_id.in_(email_ids))
+    )
+    await session.execute(
+        delete(ContentNodeRecord).where(ContentNodeRecord.email_id.in_(email_ids))
+    )
+    await session.execute(delete(Attachment).where(Attachment.email_id.in_(email_ids)))
+    await session.execute(delete(Email).where(Email.id.in_(email_ids)))
+    await session.commit()
+
+
+def _scope(token: str) -> TenantProvenanceScope:
+    return TenantProvenanceScope(
+        user_id=f"user-{token}",
+        organization_id=f"org-{token}",
+        workspace_id=f"workspace-{token}",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_postgres_round_trip_preserves_stable_evidence_with_fresh_keys(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        source_keys = await _seed_provenance_closure(
+            session, scope=source_scope, token=token
+        )
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    source_records = parse_provenance_archive(archive)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, source_records)
+    async with provenance_sessionmaker() as session:
+        receipt = await import_tenant_provenance(session, target_scope, archive)
+
+    assert isinstance(receipt, ImportReceipt)
+    assert receipt.created == {
+        "emails": 1,
+        "attachments": 1,
+        "content_nodes": 1,
+        "content_segments": 1,
+        "structural_edges": 1,
+        "project_objects": 2,
+        "project_edges": 1,
+        "corrections": 1,
+    }
+    async with provenance_sessionmaker() as session:
+        restored_archive = await export_tenant_provenance(session, target_scope)
+        restored_email = await session.scalar(
+            select(Email).where(Email.message_id == source_keys["email_uid"])
+        )
+        restored_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.object_uid == source_keys["object_uids"][0]
+            )
+        )
+        restored_correction = await session.scalar(
+            select(ProjectGraphCorrectionRecord).where(
+                ProjectGraphCorrectionRecord.correction_uid == f"correction-{token}"
+            )
+        )
+        restored_attachment = await session.scalar(
+            select(Attachment).where(Attachment.email_id == restored_email.id)
+        )
+        restored_node = await session.scalar(
+            select(ContentNodeRecord).where(
+                ContentNodeRecord.content_node_uid == f"node-{token}"
+            )
+        )
+        restored_segment = await session.scalar(
+            select(ContentSegmentRecord).where(
+                ContentSegmentRecord.content_segment_uid == f"segment-{token}"
+            )
+        )
+    restored_records = parse_provenance_archive(restored_archive)
+    for collection in (
+        "emails",
+        "attachments",
+        "content_nodes",
+        "content_segments",
+        "structural_edges",
+        "project_objects",
+        "project_edges",
+        "corrections",
+    ):
+        assert restored_records[collection] == source_records[collection]
+    assert restored_email.id != source_keys["email_id"]
+    assert restored_attachment.id != source_keys["attachment_id"]
+    assert restored_node.content_node_id != source_keys["node_id"]
+    assert restored_segment.content_segment_id != source_keys["segment_id"]
+    assert restored_email.user_id == target_scope.user_id
+    assert restored_email.organization_id == target_scope.organization_id
+    assert restored_object.project_graph_object_id != source_keys["project_object_id"]
+    assert restored_object.user_id == target_scope.user_id
+    assert restored_object.organization_id == target_scope.organization_id
+    assert restored_object.workspace_id == target_scope.workspace_id
+    assert restored_correction.actor_user_id == target_scope.user_id
+    assert restored_correction.before_json == {
+        "status_code": "candidate",
+        "rank_value": 0,
+    }
+    assert restored_correction.after_json == {
+        "status_code": "accepted",
+        "rank_value": 1,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_export_is_exact_workspace_scoped(provenance_sessionmaker):
+    token = uuid.uuid4().hex[:12]
+    shared_scope = _scope(f"shared-{token}")
+    other_scope = TenantProvenanceScope(
+        user_id=shared_scope.user_id,
+        organization_id=shared_scope.organization_id,
+        workspace_id=f"other-workspace-{token}",
+    )
+    async with provenance_sessionmaker() as session:
+        expected = await _seed_provenance_closure(
+            session, scope=shared_scope, token=f"selected-{token}"
+        )
+        excluded = await _seed_provenance_closure(
+            session, scope=other_scope, token=f"excluded-{token}"
+        )
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, shared_scope)
+        )
+
+    assert [record["email_uid"] for record in records["emails"]] == [
+        expected["email_uid"]
+    ]
+    assert excluded["email_uid"] not in json.dumps(records)
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_dangling_reference_rolls_back_without_mutation(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        source_archive = await export_tenant_provenance(session, source_scope)
+    records = copy.deepcopy(parse_provenance_archive(source_archive))
+    records["project_objects"][0]["source_segment_uids"] = ["missing-segment"]
+    invalid_archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, invalid_archive)
+    async with provenance_sessionmaker() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Email)
+                .where(
+                    *Email.owner_filters(
+                        target_scope.user_id, target_scope.organization_id
+                    )
+                )
+            )
+            == 0
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_late_conflict_fails_before_creating_email(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    records = parse_provenance_archive(archive)
+    imported_email_uid = records["emails"][0]["email_uid"]
+    conflict_uid = records["project_objects"][0]["object_uid"]
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+        target_seed = await _seed_provenance_closure(
+            session, scope=target_scope, token=f"conflict-{token}"
+        )
+        existing = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.object_uid == target_seed["object_uids"][0]
+            )
+        )
+        existing.object_uid = conflict_uid
+        existing.title = "Conflicting target record"
+        await session.commit()
+
+    async with provenance_sessionmaker() as session:
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, archive)
+    async with provenance_sessionmaker() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Email)
+                .where(Email.message_id == imported_email_uid)
+            )
+            == 0
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_export_admits_only_parser_confirmed_text_and_omits_sensitive_fields(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(token)
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=scope, token=token)
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, scope)
+    records = parse_provenance_archive(archive)
+    serialized = json.dumps(records, sort_keys=True)
+
+    assert [record["filename"] for record in records["attachments"]] == ["evidence.txt"]
+    assert "binary-payload-must-not-export" not in serialized
+    for forbidden in (
+        "embedding",
+        "credential",
+        "secret",
+        "api_key",
+        "provider_url",
+        "token",
+        "email_id",
+        "attachment_id",
+        "content_node_id",
+        "content_segment_id",
+        "project_graph_object_id",
+    ):
+        assert forbidden not in serialized
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_is_idempotent_for_exact_target_records(provenance_sessionmaker):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    records = parse_provenance_archive(archive)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        first = await import_tenant_provenance(session, target_scope, archive)
+    async with provenance_sessionmaker() as session:
+        second = await import_tenant_provenance(session, target_scope, archive)
+
+    assert sum(first.created.values()) == 9
+    assert sum(first.skipped.values()) == 0
+    assert sum(second.created.values()) == 0
+    assert second.skipped == first.created
