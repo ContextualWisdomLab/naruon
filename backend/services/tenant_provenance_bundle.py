@@ -65,6 +65,46 @@ _COLLECTIONS = (
 _TEXTUAL_PARSER_KEYS = frozenset(
     {"plain_text", "html", "markdown", "json", "csv", "xml", "calendar", "pdf"}
 )
+_FORBIDDEN_METADATA_KEYS = frozenset(
+    {
+        "access_token",
+        "api_key",
+        "api_secret",
+        "attachment_id",
+        "auth_token",
+        "base_url",
+        "bearer_token",
+        "client_secret",
+        "connection_string",
+        "content_node_id",
+        "content_segment_id",
+        "credential",
+        "credentials",
+        "credentials_encrypted",
+        "database_id",
+        "database_url",
+        "db_id",
+        "dsn",
+        "email_id",
+        "id",
+        "knowledge_graph_edge_id",
+        "openai_api_key",
+        "password",
+        "primary_key",
+        "private_key",
+        "project_graph_correction_id",
+        "project_graph_edge_id",
+        "project_graph_object_id",
+        "provider_base_url",
+        "provider_endpoint",
+        "provider_url",
+        "refresh_token",
+        "row_id",
+        "secret",
+        "secrets",
+        "token",
+    }
+)
 _RECORD_KEYS = {
     "emails": frozenset(
         {
@@ -226,7 +266,9 @@ def _validate_json_value(value: object, depth: int = 0) -> None:
             _fail()
         return
     if isinstance(value, float):
-        _fail()
+        if not math.isfinite(value):
+            _fail()
+        return
     if isinstance(value, list):
         for item in value:
             _validate_json_value(item, depth + 1)
@@ -240,6 +282,37 @@ def _validate_json_value(value: object, depth: int = 0) -> None:
             _validate_json_value(item, depth + 1)
         return
     _fail()
+
+
+def _validate_safe_metadata(value: object, depth: int = 0) -> None:
+    if depth > JSON_MAX_DEPTH:
+        _fail()
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                _fail()
+            normalized_key = key.lower().replace("-", "_").replace(" ", "_")
+            if normalized_key in _FORBIDDEN_METADATA_KEYS:
+                _fail()
+            _validate_safe_metadata(item, depth + 1)
+    elif isinstance(value, list):
+        for item in value:
+            _validate_safe_metadata(item, depth + 1)
+
+
+def _portable_metadata(
+    value: object, attachment_references: Mapping[str, str]
+) -> object:
+    if isinstance(value, str):
+        return attachment_references.get(value, value)
+    if isinstance(value, list):
+        return [_portable_metadata(item, attachment_references) for item in value]
+    if isinstance(value, Mapping):
+        return {
+            key: _portable_metadata(item, attachment_references)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _canonical_json(value: object) -> bytes:
@@ -754,6 +827,19 @@ def _email_record(email: Email) -> dict[str, object]:
     }
 
 
+def _portable_source_record_uid(
+    source_record_uid: str,
+    attachment_id: int | None,
+    attachment_uids: Mapping[int, str],
+) -> str:
+    if attachment_id is None:
+        return source_record_uid
+    attachment_uid = attachment_uids.get(attachment_id)
+    if attachment_uid is None:
+        _fail()
+    return f"attachment:{attachment_uid}"
+
+
 def _node_record(
     node: ContentNodeRecord,
     email_uids: Mapping[int, str],
@@ -764,7 +850,9 @@ def _node_record(
         "email_uid": email_uids[node.email_id],
         "attachment_uid": attachment_uids.get(node.attachment_id),
         "source_kind": node.source_kind,
-        "source_record_uid": node.source_record_uid,
+        "source_record_uid": _portable_source_record_uid(
+            node.source_record_uid, node.attachment_id, attachment_uids
+        ),
         "parent_node_uid": node.parent_node_uid,
         "node_kind": node.node_kind,
         "node_path": node.node_path,
@@ -787,7 +875,9 @@ def _segment_record(
         "attachment_uid": attachment_uids.get(segment.attachment_id),
         "content_node_uid": node_uids[segment.content_node_id],
         "source_kind": segment.source_kind,
-        "source_record_uid": segment.source_record_uid,
+        "source_record_uid": _portable_source_record_uid(
+            segment.source_record_uid, segment.attachment_id, attachment_uids
+        ),
         "segment_kind": segment.segment_kind,
         "segment_path": segment.segment_path,
         "ordinal_index": segment.ordinal_index,
@@ -814,7 +904,9 @@ def _structural_edge_record(
         "source_segment_uid": segment_uids.get(edge.source_segment_id),
         "target_segment_uid": segment_uids.get(edge.target_segment_id),
         "source_kind": edge.source_kind,
-        "source_record_uid": edge.source_record_uid,
+        "source_record_uid": _portable_source_record_uid(
+            edge.source_record_uid, edge.attachment_id, attachment_uids
+        ),
         "edge_kind": edge.edge_kind,
         "edge_path": edge.edge_path,
         "ordinal_index": edge.ordinal_index,
@@ -826,7 +918,12 @@ def _project_object_record(
     email_uids: Mapping[int, str],
     attachment_uids: Mapping[int, str],
     segment_uids: Mapping[int, str],
+    attachment_references: Mapping[str, str],
 ) -> dict[str, object]:
+    attributes_json = _portable_metadata(
+        project_object.attributes_json, attachment_references
+    )
+    _validate_safe_metadata(attributes_json)
     return {
         "object_uid": project_object.object_uid,
         "email_uid": email_uids[project_object.email_id],
@@ -840,7 +937,7 @@ def _project_object_record(
         "status_code": project_object.status_code,
         "confidence": _confidence(project_object.confidence),
         "source_segment_uids": sorted(project_object.source_segment_uids),
-        "attributes_json": project_object.attributes_json,
+        "attributes_json": attributes_json,
         "extractor_name": project_object.extractor_name,
         "extractor_version": project_object.extractor_version,
     }
@@ -867,13 +964,18 @@ def _project_edge_record(
 def _correction_record(
     correction: ProjectGraphCorrectionRecord,
     object_uids: Mapping[int, str],
+    attachment_references: Mapping[str, str],
 ) -> dict[str, object]:
+    before_json = _portable_metadata(correction.before_json, attachment_references)
+    after_json = _portable_metadata(correction.after_json, attachment_references)
+    _validate_safe_metadata(before_json)
+    _validate_safe_metadata(after_json)
     return {
         "correction_uid": correction.correction_uid,
         "object_uid": object_uids[correction.project_graph_object_id],
         "correction_action": correction.correction_action,
-        "before_json": correction.before_json,
-        "after_json": correction.after_json,
+        "before_json": before_json,
+        "after_json": after_json,
         "rationale": correction.rationale,
         "source_segment_uids": sorted(correction.source_segment_uids),
         "created_at": _utc_text(correction.created_at),
@@ -972,6 +1074,10 @@ async def export_tenant_provenance(
         KnowledgeGraphEdgeRecord, KnowledgeGraphEdgeRecord.edge_uid
     )
     attachment_records, attachment_uids = _attachment_records(attachments, email_uids)
+    attachment_references = {
+        f"attachment-{attachment_id}": f"attachment:{attachment_uid}"
+        for attachment_id, attachment_uid in attachment_uids.items()
+    }
     node_uids = {node.content_node_id: node.content_node_uid for node in nodes}
     segment_uids = {
         segment.content_segment_id: segment.content_segment_uid for segment in segments
@@ -1002,7 +1108,11 @@ async def export_tenant_provenance(
         ],
         "project_objects": [
             _project_object_record(
-                project_object, email_uids, attachment_uids, segment_uids
+                project_object,
+                email_uids,
+                attachment_uids,
+                segment_uids,
+                attachment_references,
             )
             for project_object in project_objects
         ],
@@ -1011,7 +1121,8 @@ async def export_tenant_provenance(
             for edge in project_edges
         ],
         "corrections": [
-            _correction_record(correction, object_uids) for correction in corrections
+            _correction_record(correction, object_uids, attachment_references)
+            for correction in corrections
         ],
     }
     content_digest = hashlib.sha256(_canonical_json(payload)).hexdigest()
@@ -1054,6 +1165,19 @@ def _required_text(record: Mapping[str, object], key: str) -> str:
 def _optional_text(record: Mapping[str, object], key: str) -> str | None:
     value = record.get(key)
     if value is not None and not isinstance(value, str):
+        _fail()
+    return value
+
+
+def _bounded_text(
+    record: Mapping[str, object],
+    key: str,
+    maximum: int,
+    *,
+    optional: bool = False,
+) -> str | None:
+    value = _optional_text(record, key) if optional else _required_text(record, key)
+    if value is not None and len(value) > maximum:
         _fail()
     return value
 
@@ -1129,6 +1253,11 @@ def _validate_record_scalars(
         ):
             _required_text(attachment, key)
         _optional_text(attachment, "parse_error_code")
+        _bounded_text(attachment, "content_type", 120)
+        _bounded_text(attachment, "parse_status", 64)
+        _bounded_text(attachment, "parse_content_type", 120)
+        _bounded_text(attachment, "parser_key", 64)
+        _bounded_text(attachment, "parse_error_code", 120, optional=True)
         if (
             attachment["parse_status"] != "parsed"
             or attachment["parser_key"] not in _TEXTUAL_PARSER_KEYS
@@ -1150,6 +1279,14 @@ def _validate_record_scalars(
         ):
             _required_text(node, key)
         _optional_text(node, "display_label")
+        _bounded_text(node, "content_node_uid", 64)
+        _bounded_text(node, "source_kind", 64)
+        _bounded_text(node, "source_record_uid", 256)
+        _bounded_text(node, "parent_node_uid", 64, optional=True)
+        _bounded_text(node, "node_kind", 64)
+        _bounded_text(node, "node_path", 512)
+        _bounded_text(node, "display_label", 240, optional=True)
+        _bounded_text(node, "content_hash", 64)
         _integer(node, "ordinal_index")
 
     for segment in collections["content_segments"]:
@@ -1166,6 +1303,13 @@ def _validate_record_scalars(
         ):
             _required_text(segment, key)
         _optional_text(segment, "heading_path")
+        _bounded_text(segment, "content_segment_uid", 64)
+        _bounded_text(segment, "source_kind", 64)
+        _bounded_text(segment, "source_record_uid", 256)
+        _bounded_text(segment, "segment_kind", 64)
+        _bounded_text(segment, "segment_path", 512)
+        _bounded_text(segment, "heading_path", 512, optional=True)
+        _bounded_text(segment, "content_hash", 64)
         _integer(segment, "ordinal_index")
         _integer(segment, "word_count")
 
@@ -1182,6 +1326,11 @@ def _validate_record_scalars(
             _uid(edge, key, optional=True)
         for key in ("source_kind", "source_record_uid", "edge_kind", "edge_path"):
             _required_text(edge, key)
+        _bounded_text(edge, "edge_uid", 64)
+        _bounded_text(edge, "source_kind", 64)
+        _bounded_text(edge, "source_record_uid", 256)
+        _bounded_text(edge, "edge_kind", 64)
+        _bounded_text(edge, "edge_path", 512)
         _integer(edge, "ordinal_index")
 
     for project_object in collections["project_objects"]:
@@ -1201,10 +1350,17 @@ def _validate_record_scalars(
             "extractor_version",
         ):
             _required_text(project_object, key)
+        _bounded_text(project_object, "object_uid", 96)
+        _bounded_text(project_object, "object_type", 64)
+        _bounded_text(project_object, "title", 240)
+        _bounded_text(project_object, "status_code", 64)
+        _bounded_text(project_object, "extractor_name", 120)
+        _bounded_text(project_object, "extractor_version", 64)
         _parse_confidence(project_object.get("confidence"))
         _uid_list(project_object, "source_segment_uids")
         if not isinstance(project_object.get("attributes_json"), dict):
             _fail()
+        _validate_safe_metadata(project_object["attributes_json"])
 
     for edge in collections["project_edges"]:
         for key in (
@@ -1217,6 +1373,10 @@ def _validate_record_scalars(
         for key in ("source_object_uid", "target_object_uid"):
             _uid(edge, key, optional=True)
         _required_text(edge, "edge_type")
+        _bounded_text(edge, "edge_uid", 96)
+        _bounded_text(edge, "source_uid", 160)
+        _bounded_text(edge, "target_uid", 160)
+        _bounded_text(edge, "edge_type", 80)
         _parse_confidence(edge.get("confidence"))
         _uid_list(edge, "source_segment_uids")
 
@@ -1224,12 +1384,16 @@ def _validate_record_scalars(
         for key in ("correction_uid", "object_uid"):
             _uid(correction, key)
         _required_text(correction, "correction_action")
+        _bounded_text(correction, "correction_uid", 96)
+        _bounded_text(correction, "correction_action", 64)
         _optional_text(correction, "rationale")
         _uid_list(correction, "source_segment_uids")
         if not isinstance(correction.get("before_json"), dict) or not isinstance(
             correction.get("after_json"), dict
         ):
             _fail()
+        _validate_safe_metadata(correction["before_json"])
+        _validate_safe_metadata(correction["after_json"])
         _parse_datetime(correction.get("created_at"))
 
 
@@ -1298,6 +1462,10 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         record["content_segment_uid"]: record["email_uid"]
         for record in collections["content_segments"]
     }
+    segment_attachment = {
+        record["content_segment_uid"]: record["attachment_uid"]
+        for record in collections["content_segments"]
+    }
 
     def require_reference(value: object, available: set[str]) -> None:
         if value is not None and value not in available:
@@ -1313,6 +1481,11 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         if (
             record["attachment_uid"] is not None
             and attachment_email[record["attachment_uid"]] != email_uid
+        ):
+            _fail()
+        if (
+            record["attachment_uid"] is not None
+            and record["source_record_uid"] != f"attachment:{record['attachment_uid']}"
         ):
             _fail()
         if (
@@ -1332,10 +1505,25 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
             and attachment_email[record["attachment_uid"]] != email_uid
         ):
             _fail()
+        if (
+            record["attachment_uid"] is not None
+            and record["source_record_uid"] != f"attachment:{record['attachment_uid']}"
+        ):
+            _fail()
     for record in collections["structural_edges"]:
         email_uid = record["email_uid"]
         require_reference(email_uid, email_uids)
         require_reference(record["attachment_uid"], attachment_uids)
+        if (
+            record["attachment_uid"] is not None
+            and attachment_email[record["attachment_uid"]] != email_uid
+        ):
+            _fail()
+        if (
+            record["attachment_uid"] is not None
+            and record["source_record_uid"] != f"attachment:{record['attachment_uid']}"
+        ):
+            _fail()
         for key in ("source_node_uid", "target_node_uid"):
             require_reference(record[key], node_uids)
             if record[key] is not None and node_email[record[key]] != email_uid:
@@ -1350,11 +1538,31 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         require_reference(record["primary_content_segment_uid"], segment_uids)
         if segment_email[record["primary_content_segment_uid"]] != record["email_uid"]:
             _fail()
+        if (
+            record["attachment_uid"] is not None
+            and attachment_email[record["attachment_uid"]] != record["email_uid"]
+        ):
+            _fail()
+        if (
+            segment_attachment[record["primary_content_segment_uid"]]
+            != record["attachment_uid"]
+        ):
+            _fail()
         for segment_uid in record["source_segment_uids"]:
             require_reference(segment_uid, segment_uids)
     for record in collections["project_edges"]:
         require_reference(record["source_object_uid"], object_uids)
         require_reference(record["target_object_uid"], object_uids)
+        if (
+            record["source_object_uid"] is not None
+            and record["source_uid"] != record["source_object_uid"]
+        ):
+            _fail()
+        if (
+            record["target_object_uid"] is not None
+            and record["target_uid"] != record["target_object_uid"]
+        ):
+            _fail()
         require_reference(record["primary_content_segment_uid"], segment_uids)
         for segment_uid in record["source_segment_uids"]:
             require_reference(segment_uid, segment_uids)
@@ -1362,6 +1570,26 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
         require_reference(record["object_uid"], object_uids)
         for segment_uid in record["source_segment_uids"]:
             require_reference(segment_uid, segment_uids)
+
+    rooted_email_uids = {
+        record["email_uid"] for record in collections["project_objects"]
+    }
+    for record in collections["project_objects"]:
+        rooted_email_uids.add(segment_email[record["primary_content_segment_uid"]])
+        rooted_email_uids.update(
+            segment_email[segment_uid] for segment_uid in record["source_segment_uids"]
+        )
+    for record in collections["project_edges"]:
+        rooted_email_uids.add(segment_email[record["primary_content_segment_uid"]])
+        rooted_email_uids.update(
+            segment_email[segment_uid] for segment_uid in record["source_segment_uids"]
+        )
+    for record in collections["corrections"]:
+        rooted_email_uids.update(
+            segment_email[segment_uid] for segment_uid in record["source_segment_uids"]
+        )
+    if email_uids and rooted_email_uids != email_uids:
+        _fail()
 
 
 async def _matching_models(
@@ -1429,6 +1657,10 @@ async def _preflight_existing(
     attachment_records, attachment_uids = _attachment_records(
         attachment_rows, email_uids
     )
+    attachment_references = {
+        f"attachment-{attachment_id}": f"attachment:{attachment_uid}"
+        for attachment_id, attachment_uid in attachment_uids.items()
+    }
     attachments_by_id = {row.id: row for row in attachment_rows}
     models["attachments"] = {
         uid: attachments_by_id[attachment_id]
@@ -1515,7 +1747,13 @@ async def _preflight_existing(
             for uid, row in models["structural_edges"].items()
         }
         existing_serialized["project_objects"] = {
-            uid: _project_object_record(row, email_uids, attachment_uids, segment_uids)
+            uid: _project_object_record(
+                row,
+                email_uids,
+                attachment_uids,
+                segment_uids,
+                attachment_references,
+            )
             for uid, row in models["project_objects"].items()
         }
         existing_serialized["project_edges"] = {
@@ -1523,7 +1761,7 @@ async def _preflight_existing(
             for uid, row in models["project_edges"].items()
         }
         existing_serialized["corrections"] = {
-            uid: _correction_record(row, object_uids)
+            uid: _correction_record(row, object_uids, attachment_references)
             for uid, row in models["corrections"].items()
         }
     except KeyError:

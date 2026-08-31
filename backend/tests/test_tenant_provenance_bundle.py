@@ -27,6 +27,7 @@ from db.models import (
     ProjectGraphEdgeRecord,
     ProjectGraphObjectRecord,
 )
+from services.project_graph.repository import ProjectGraphRepository
 
 from services.tenant_provenance_bundle import (
     ARCHIVE_MAX_BYTES,
@@ -278,20 +279,24 @@ def test_parse_rejects_duplicate_json_keys_even_with_valid_manifests():
         parse_provenance_archive(_archive_with_entries(_rebuild_manifests(entries)))
 
 
-def test_build_rejects_non_finite_json_numbers():
-    records = {**RECORDS, "export_activity": {"score": float("nan")}}
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
+def test_build_rejects_non_finite_json_numbers(value):
+    records = {**RECORDS, "export_activity": {"score": value}}
 
     with pytest.raises(ProvenanceArchiveError):
         build_provenance_archive(records)
 
 
-@pytest.mark.parametrize(
-    "value",
-    (-0.0, 1e-7, 1.0, JSON_SAFE_INTEGER_MAX + 1),
-)
-def test_build_rejects_values_outside_the_stdlib_jcs_subset(value):
+def test_build_rejects_integer_outside_the_json_safe_range():
     with pytest.raises(ProvenanceArchiveError):
-        build_provenance_archive({**RECORDS, "unsupported": value})
+        build_provenance_archive({**RECORDS, "unsupported": JSON_SAFE_INTEGER_MAX + 1})
+
+
+@pytest.mark.parametrize("value", (-0.0, 1e-7, 1.0, 0.73))
+def test_build_round_trips_finite_json_floats(value):
+    records = {**RECORDS, "finite_value": value}
+
+    assert parse_provenance_archive(build_provenance_archive(records)) == records
 
 
 def test_build_rejects_non_ascii_object_keys():
@@ -826,6 +831,73 @@ async def _add_duplicate_text_attachments(
     await session.commit()
 
 
+async def _seed_email_graph_without_project_rows(
+    session,
+    *,
+    scope: TenantProvenanceScope,
+    token: str,
+) -> dict[str, object]:
+    seeded = await _seed_provenance_closure(session, scope=scope, token=token)
+    await session.execute(
+        delete(ProjectGraphCorrectionRecord).where(
+            ProjectGraphCorrectionRecord.workspace_id == scope.workspace_id,
+            ProjectGraphCorrectionRecord.correction_uid == f"correction-{token}",
+        )
+    )
+    await session.execute(
+        delete(ProjectGraphEdgeRecord).where(
+            ProjectGraphEdgeRecord.workspace_id == scope.workspace_id,
+            ProjectGraphEdgeRecord.edge_uid == f"project-edge-{token}",
+        )
+    )
+    await session.execute(
+        delete(ProjectGraphObjectRecord).where(
+            ProjectGraphObjectRecord.object_uid.in_(seeded["object_uids"])
+        )
+    )
+    await session.commit()
+    return seeded
+
+
+async def _two_email_rooted_archive(
+    session,
+    *,
+    scope: TenantProvenanceScope,
+    token: str,
+) -> bytes:
+    source = await _seed_provenance_closure(session, scope=scope, token=token)
+    cited = await _seed_email_graph_without_project_rows(
+        session,
+        scope=scope,
+        token=f"cited-{token}",
+    )
+    project_object = await session.scalar(
+        select(ProjectGraphObjectRecord).where(
+            ProjectGraphObjectRecord.object_uid == source["object_uids"][0]
+        )
+    )
+    project_object.source_segment_uids = sorted(
+        [*project_object.source_segment_uids, f"segment-cited-{token}"]
+    )
+    session.add(
+        Attachment(
+            email_id=source["email_id"],
+            filename="alternate-evidence.txt",
+            content="Alternate parser-confirmed attachment evidence",
+            content_type="text/plain",
+            parse_status="parsed",
+            parse_content_type="text/plain",
+            parser_key="plain_text",
+            embedding=None,
+        )
+    )
+    await session.commit()
+    archive = await export_tenant_provenance(session, scope)
+    records = parse_provenance_archive(archive)
+    assert cited["email_uid"] in {record["email_uid"] for record in records["emails"]}
+    return archive
+
+
 def _scope(token: str) -> TenantProvenanceScope:
     return TenantProvenanceScope(
         user_id=f"user-{token}",
@@ -1207,3 +1279,439 @@ async def test_duplicate_canonical_attachments_keep_node_and_segment_identity(
         for record in restored["content_segments"]
         if record["content_segment_uid"].startswith("duplicate-segment-")
     } == source_segment_attachments
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_recognized_pdf_omits_integer_keys_and_round_trips_graph_references(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        source = await _seed_provenance_closure(
+            session, scope=source_scope, token=token
+        )
+        attachment = await session.get(Attachment, source["attachment_id"])
+        attachment.content = "Recognized PDF evidence"
+        attachment.content_type = "application/pdf"
+        attachment.parse_status = "parsed"
+        attachment.parse_content_type = "application/pdf"
+        attachment.parser_key = "pdf"
+        legacy_source_uid = f"attachment-{attachment.id}"
+        node = await session.scalar(
+            select(ContentNodeRecord).where(
+                ContentNodeRecord.content_node_uid == f"node-{token}"
+            )
+        )
+        segment = await session.scalar(
+            select(ContentSegmentRecord).where(
+                ContentSegmentRecord.content_segment_uid == f"segment-{token}"
+            )
+        )
+        structural_edge = await session.scalar(
+            select(KnowledgeGraphEdgeRecord).where(
+                KnowledgeGraphEdgeRecord.edge_uid == f"structural-edge-{token}"
+            )
+        )
+        project_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.object_uid == source["object_uids"][0]
+            )
+        )
+        node.source_record_uid = legacy_source_uid
+        segment.source_record_uid = legacy_source_uid
+        structural_edge.source_record_uid = legacy_source_uid
+        project_object.attributes_json = {
+            "source_record_uid": legacy_source_uid,
+            "source_object_uid": project_object.object_uid,
+        }
+        await session.commit()
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    records = parse_provenance_archive(archive)
+    attachment_uid = records["attachments"][0]["attachment_uid"]
+    portable_source_uid = f"attachment:{attachment_uid}"
+    serialized = json.dumps(records, sort_keys=True)
+
+    assert legacy_source_uid not in serialized
+    assert {
+        records["content_nodes"][0]["source_record_uid"],
+        records["content_segments"][0]["source_record_uid"],
+        records["structural_edges"][0]["source_record_uid"],
+    } == {portable_source_uid}
+    assert (
+        records["project_objects"][0]["attributes_json"]["source_record_uid"]
+        == portable_source_uid
+    )
+
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_scope, archive)
+    async with provenance_sessionmaker() as session:
+        restored = parse_provenance_archive(
+            await export_tenant_provenance(session, target_scope)
+        )
+        restored_node = await session.scalar(
+            select(ContentNodeRecord).where(
+                ContentNodeRecord.content_node_uid == f"node-{token}"
+            )
+        )
+
+    assert restored_node.source_record_uid == portable_source_uid
+    assert restored["content_nodes"][0]["attachment_uid"] == attachment_uid
+    assert restored["content_nodes"][0]["source_record_uid"] == portable_source_uid
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_production_correction_float_round_trip(provenance_sessionmaker):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        source = await _seed_provenance_closure(
+            session, scope=source_scope, token=token
+        )
+        correction = await ProjectGraphRepository(session).apply_correction(
+            object_uid=source["object_uids"][0],
+            user_id=source_scope.user_id,
+            organization_id=source_scope.organization_id,
+            workspace_id=source_scope.workspace_id,
+            actor_user_id=source_scope.user_id,
+            correction_action="adjust_confidence",
+            after_json={"confidence": 0.73},
+            rationale="Production correction path",
+        )
+        correction_uid = correction.correction_uid
+        await session.commit()
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    records = parse_provenance_archive(archive)
+    correction_record = next(
+        record
+        for record in records["corrections"]
+        if record["correction_uid"] == correction_uid
+    )
+
+    assert correction_record["before_json"]["confidence"] == 0.91
+    assert correction_record["after_json"]["confidence"] == 0.73
+    assert isinstance(correction_record["before_json"]["confidence"], float)
+    assert isinstance(correction_record["after_json"]["confidence"], float)
+
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_scope, archive)
+    async with provenance_sessionmaker() as session:
+        restored = await session.scalar(
+            select(ProjectGraphCorrectionRecord).where(
+                ProjectGraphCorrectionRecord.correction_uid == correction_uid
+            )
+        )
+
+    assert restored.before_json["confidence"] == 0.91
+    assert restored.after_json["confidence"] == 0.73
+    assert isinstance(restored.before_json["confidence"], float)
+    assert isinstance(restored.after_json["confidence"], float)
+
+
+@pytest.mark.parametrize(
+    ("forbidden_key", "forbidden_value"),
+    (
+        ("api_key", "key-material"),
+        ("provider_url", "https://provider.example/v1"),
+        ("access_token", "token-material"),
+        ("email_id", 123),
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_export_rejects_nested_sensitive_metadata(
+    provenance_sessionmaker,
+    forbidden_key,
+    forbidden_value,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(token)
+    async with provenance_sessionmaker() as session:
+        source = await _seed_provenance_closure(session, scope=scope, token=token)
+        project_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.object_uid == source["object_uids"][0]
+            )
+        )
+        project_object.attributes_json = {
+            "source_object_uid": project_object.object_uid,
+            "source_segment_uids": [f"segment-{token}"],
+            "nested_metadata": {forbidden_key: forbidden_value},
+        }
+        await session.commit()
+    async with provenance_sessionmaker() as session:
+        with pytest.raises(ProvenanceArchiveError):
+            await export_tenant_provenance(session, scope)
+
+
+@pytest.mark.parametrize(
+    ("forbidden_key", "forbidden_value"),
+    (
+        ("client_secret", "secret-material"),
+        ("provider_endpoint", "https://provider.example/v1"),
+        ("refresh_token", "token-material"),
+        ("attachment_id", 456),
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_rejects_nested_sensitive_metadata_before_flush(
+    provenance_sessionmaker,
+    monkeypatch,
+    forbidden_key,
+    forbidden_value,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    records["corrections"][0]["after_json"] = {
+        "confidence": 1,
+        "source_object_uid": records["corrections"][0]["object_uid"],
+        "nested_metadata": {forbidden_key: forbidden_value},
+    }
+    archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        flush_count = 0
+        original_flush = session.flush
+
+        async def counting_flush(*args, **kwargs):
+            nonlocal flush_count
+            flush_count += 1
+            return await original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", counting_flush)
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, archive)
+        assert flush_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_unrooted_email_rejected_without_mutation_and_empty_allowed(
+    provenance_sessionmaker,
+    monkeypatch,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        rooted = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    unrooted = copy.deepcopy(rooted)
+    unrooted["project_objects"] = []
+    unrooted["project_edges"] = []
+    unrooted["corrections"] = []
+    unrooted_archive = build_provenance_archive(unrooted)
+    empty = copy.deepcopy(rooted)
+    for collection in (
+        "emails",
+        "attachments",
+        "content_nodes",
+        "content_segments",
+        "structural_edges",
+        "project_objects",
+        "project_edges",
+        "corrections",
+    ):
+        empty[collection] = []
+    empty_archive = build_provenance_archive(empty)
+
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, rooted)
+
+    async with provenance_sessionmaker() as session:
+        flush_count = 0
+        original_flush = session.flush
+
+        async def counting_flush(*args, **kwargs):
+            nonlocal flush_count
+            flush_count += 1
+            return await original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", counting_flush)
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, unrooted_archive)
+        assert flush_count == 0
+    async with provenance_sessionmaker() as session:
+        receipt = await import_tenant_provenance(session, target_scope, empty_archive)
+
+    assert sum(receipt.created.values()) == 0
+    assert sum(receipt.skipped.values()) == 0
+
+
+@pytest.mark.parametrize(
+    "conflict_kind",
+    (
+        "structural_attachment_email",
+        "object_attachment_email",
+        "object_attachment_primary",
+        "edge_source_endpoint",
+        "edge_target_endpoint",
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_cross_field_conflict_rejected_before_flush(
+    provenance_sessionmaker,
+    monkeypatch,
+    conflict_kind,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        archive = await _two_email_rooted_archive(
+            session, scope=source_scope, token=token
+        )
+    records = parse_provenance_archive(archive)
+    source_email_uid = f"<{token}@example.com>"
+    foreign_attachment_uid = next(
+        record["attachment_uid"]
+        for record in records["attachments"]
+        if record["email_uid"] != source_email_uid
+    )
+    same_email_attachment_uid = next(
+        record["attachment_uid"]
+        for record in records["attachments"]
+        if record["email_uid"] == source_email_uid
+        and record["attachment_uid"] != records["project_objects"][0]["attachment_uid"]
+    )
+    if conflict_kind == "structural_attachment_email":
+        source_structural_edge = next(
+            record
+            for record in records["structural_edges"]
+            if record["email_uid"] == source_email_uid
+        )
+        source_structural_edge["attachment_uid"] = foreign_attachment_uid
+    elif conflict_kind == "object_attachment_email":
+        records["project_objects"][0]["attachment_uid"] = foreign_attachment_uid
+    elif conflict_kind == "object_attachment_primary":
+        records["project_objects"][0]["attachment_uid"] = same_email_attachment_uid
+    elif conflict_kind == "edge_source_endpoint":
+        records["project_edges"][0]["source_uid"] = "mismatched-logical-endpoint"
+    else:
+        records["project_edges"][0]["target_uid"] = "mismatched-logical-endpoint"
+    invalid_archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        flush_count = 0
+        original_flush = session.flush
+
+        async def counting_flush(*args, **kwargs):
+            nonlocal flush_count
+            flush_count += 1
+            return await original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", counting_flush)
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, invalid_archive)
+        assert flush_count == 0
+
+
+@pytest.mark.parametrize("bound_kind", ("node_uid", "object_title", "edge_source"))
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_column_bound_preflight_rejects_before_flush(
+    provenance_sessionmaker,
+    monkeypatch,
+    bound_kind,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = _scope(f"target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    if bound_kind == "node_uid":
+        old_node_uid = records["content_nodes"][0]["content_node_uid"]
+        oversized_node_uid = "n" * 65
+        records["content_nodes"][0]["content_node_uid"] = oversized_node_uid
+        for segment in records["content_segments"]:
+            if segment["content_node_uid"] == old_node_uid:
+                segment["content_node_uid"] = oversized_node_uid
+        for edge in records["structural_edges"]:
+            if edge["source_node_uid"] == old_node_uid:
+                edge["source_node_uid"] = oversized_node_uid
+            if edge["target_node_uid"] == old_node_uid:
+                edge["target_node_uid"] = oversized_node_uid
+    elif bound_kind == "object_title":
+        records["project_objects"][0]["title"] = "t" * 241
+    else:
+        records["project_edges"][0]["source_uid"] = "s" * 161
+    invalid_archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        flush_count = 0
+        original_flush = session.flush
+
+        async def counting_flush(*args, **kwargs):
+            nonlocal flush_count
+            flush_count += 1
+            return await original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", counting_flush)
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, invalid_archive)
+        assert flush_count == 0
+
+
+@pytest.mark.parametrize("scope_dimension", ("user", "organization"))
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_export_excludes_separate_user_and_organization_scope(
+    provenance_sessionmaker,
+    scope_dimension,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(f"selected-{token}")
+    rival_scope = TenantProvenanceScope(
+        user_id=f"rival-user-{token}" if scope_dimension == "user" else scope.user_id,
+        organization_id=(
+            f"rival-org-{token}"
+            if scope_dimension == "organization"
+            else scope.organization_id
+        ),
+        workspace_id=scope.workspace_id,
+    )
+    async with provenance_sessionmaker() as session:
+        selected = await _seed_provenance_closure(
+            session, scope=scope, token=f"selected-{token}"
+        )
+        rival = await _seed_provenance_closure(
+            session, scope=rival_scope, token=f"rival-{token}"
+        )
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, scope)
+        )
+
+    assert {record["email_uid"] for record in records["emails"]} == {
+        selected["email_uid"]
+    }
+    assert rival["email_uid"] not in json.dumps(records)
