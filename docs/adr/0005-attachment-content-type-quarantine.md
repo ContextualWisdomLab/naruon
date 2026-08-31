@@ -122,19 +122,25 @@ that is the point to re-evaluate a dedicated library against this policy.
 - `reparse_pending` is consumed by `services/attachment_reparse_worker.py`
   (see Revisions below) — a `reparse-intent` call now leads to an actual
   re-evaluation on the next sweep, not an indefinite queue with no consumer.
-- **Known, pre-existing, tracked limitation surfaced by this slice, not
-  introduced by it:** `_get_scoped_attachment` (and every other attachment/email
-  query in `api/data.py`) scopes by `user_id`/`organization_id` only, because
-  `Email` itself carries no `workspace_id` column — unlike `Document`,
-  `CalendarConflictJudgment`, `CarddavAccount`, and every other workspace-scoped
-  entity added since that column existed. A session with the same
-  `user_id`/`organization_id` but a different signed `workspace_id` claim can
-  therefore read (pre-existing) and, as of this endpoint, mutate (new) another
-  workspace's attachments. Closing this properly means adding `workspace_id`
-  to `Email` (migration + backfill) and updating every existing email/attachment
-  query in `api/data.py` to filter by it — a repo-wide change far outside this
-  slice's scope, not something to patch narrowly for one new endpoint. Recorded
-  here rather than silently worked around; the fix belongs in its own PR.
+- **Fixed (see Revisions below): `_get_scoped_attachment` and every other
+  attachment/email query in `api/data.py` now scope by `workspace_id` too.**
+  `Email` gained a `workspace_id` column (Alembic `0020_email_workspace_scope`),
+  and `_email_scope_filter` enforces it unconditionally, matching the pattern
+  `_owner_scope_statement` already used for `Document`/`WebdavAccount`/
+  `ProjectFolder`. A session with the same `user_id`/`organization_id` but a
+  different signed `workspace_id` claim can no longer read or mutate another
+  workspace's attachments through this file's queries.
+- **Known, still-open, narrower-scoped limitation, tracked as a dedicated
+  follow-up:** `Email.owner_filters(user_id, organization_id)` — the
+  classmethod backing mail list/search/ontology/threading/Noema-agent email
+  reads across `api/emails.py`, `api/search.py`, `api/ontology.py`,
+  `services/noema_agent.py`, `services/threading_service.py`, and
+  `services/hybrid_retrieval/retrieval_channels.py` — has the identical
+  missing-`workspace_id` gap `_email_scope_filter` had, and was deliberately
+  left unfixed here: closing it means auditing and updating every one of
+  those call sites, a whole-app multi-tenancy change well outside scope for
+  a PR whose stated purpose is a calendar-conflict-check tool. Recorded here
+  rather than silently worked around; the fix belongs in its own dedicated PR.
 
 ## Revisions
 
@@ -204,6 +210,28 @@ than reversing the original decision:
   earlier item's failure expires every object already loaded in that
   session, and a stale, expired bulk-loaded instance's attribute read would
   raise instead of just isolating that earlier failure.
+- **Closed the cross-workspace gap this ADR's own Consequences section
+  recorded above, for this file's queries.** `Email` gained a `workspace_id`
+  column (Alembic `0020_email_workspace_scope`: add nullable, backfill every
+  existing row with `workspace-<organization_id>` — the same convention
+  already used by `services/email_import_service.py` and
+  `services/project_graph/`, since `Email.organization_id` is `NOT NULL` and
+  there is no FK from `Email` to any table that independently carries a real
+  `workspace_id` — then set `NOT NULL`). `_email_scope_filter` now applies
+  `Email.workspace_id == auth_context.workspace_id` unconditionally, mirroring
+  `_owner_scope_statement`'s existing pattern for `Document`/`WebdavAccount`/
+  `ProjectFolder`, so every caller of `_get_scoped_attachment` and the
+  quality-surface stats helpers picks up the workspace predicate for free
+  (they already unpack `*email_scope` into `.where()`). The three production
+  call sites that construct new `Email` rows
+  (`services/email_import_service.py`, `services/imap_worker.py`,
+  `import_fixtures.py`) now populate `workspace_id` the same way. New test:
+  `tests/test_data_api.py::test_data_attachment_reparse_intent_is_scoped_to_workspace`
+  (same-user/same-org, different-workspace denial — the exact case this ADR
+  flagged as unclosed). `Email.owner_filters()` — the separate classmethod
+  backing mail list/search/ontology/threading/Noema-agent reads — has the
+  identical gap and remains a deliberately separate, tracked follow-up (see
+  Consequences above); it was not touched here.
 
 ## References (APA 7th)
 

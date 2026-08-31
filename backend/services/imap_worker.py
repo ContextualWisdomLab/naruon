@@ -80,6 +80,13 @@ async def process_fetched_email(
     new_email = Email(
         user_id=user_id,
         organization_id=organization_id or None,
+        # Mirrors the workspace_id convention used across this codebase
+        # (services/email_import_service.py, services/project_graph/):
+        # workspace-<organization_id>, falling back to workspace-<user_id>
+        # for an org-less/personal scope.
+        workspace_id=(
+            f"workspace-{organization_id}" if organization_id else f"workspace-{user_id}"
+        ),
         message_id=email_data.get("message_id", ""),
         thread_id=thread_id,
         fingerprint=fingerprint,

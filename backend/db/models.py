@@ -787,6 +787,11 @@ class Email(Base):
     # ABAC filters must be enforced by SQL before email rows are returned.
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     organization_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    # Finest-grained scope: api/data.py's _email_scope_filter enforces this
+    # unconditionally (mirroring _owner_scope_statement's pattern for every
+    # other workspace_id-bearing model), so a same-user/same-organization
+    # session in a different workspace cannot read or mutate these rows.
+    workspace_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     message_id: Mapped[str] = mapped_column(String, index=True)
     thread_id: Mapped[str | None] = mapped_column(
         String, index=True, nullable=True

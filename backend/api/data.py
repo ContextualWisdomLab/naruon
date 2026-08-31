@@ -123,7 +123,7 @@ RepositoryType = Literal[
     "attachment_repository",
     "document_repository",
 ]
-EmailScopeFilter = tuple[ColumnElement[bool], ColumnElement[bool]]
+EmailScopeFilter = tuple[ColumnElement[bool], ColumnElement[bool], ColumnElement[bool]]
 AttachmentAssetRow = Row[tuple[Attachment, Email]]
 
 
@@ -2483,15 +2483,20 @@ def _owner_scope_statement(model, auth_context: AuthContext):
 
 
 def _email_scope_filter(auth_context: AuthContext) -> EmailScopeFilter:
+    # workspace_id is the finest-grained scope and is applied unconditionally,
+    # mirroring _owner_scope_statement's pattern for every other
+    # workspace_id-bearing model: even an organization admin is scoped to
+    # their own workspace, not every workspace in the organization.
+    workspace_filter = Email.workspace_id == auth_context.workspace_id
     if _can_read_org_scope(auth_context):
         organization_filter = Email.organization_id == auth_context.organization_id
-        return (organization_filter, organization_filter)
+        return (workspace_filter, organization_filter, organization_filter)
     organization_filter = (
         Email.organization_id == auth_context.organization_id
         if auth_context.organization_id is not None
         else Email.organization_id.is_(None)
     )
-    return (Email.user_id == auth_context.user_id, organization_filter)
+    return (workspace_filter, Email.user_id == auth_context.user_id, organization_filter)
 
 
 async def _scoped_rows(db: AsyncSession, statement):

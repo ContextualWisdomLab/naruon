@@ -90,6 +90,14 @@ class MockAsyncSession:
                 ),
                 None,
             )
+            workspace_id = next(
+                (
+                    value
+                    for key, value in params.items()
+                    if key.startswith("workspace_id")
+                ),
+                None,
+            )
             rows = [
                 attachment
                 for attachment in self.attachments
@@ -99,6 +107,10 @@ class MockAsyncSession:
                     attachment.email.organization_id == organization_id
                     if organization_id is not None
                     else attachment.email.organization_id is None
+                )
+                and (
+                    workspace_id is None
+                    or attachment.email.workspace_id == workspace_id
                 )
             ]
             return MockResult(rows[0] if rows else None)
@@ -225,10 +237,12 @@ def _email(
     *,
     thread_id: str | None,
     subject: str = "Data source package",
+    workspace_id: str = "workspace-org-acme",
 ) -> Email:
     return Email(
         user_id="owner",
         organization_id="org-acme",
+        workspace_id=workspace_id,
         message_id=message_id,
         thread_id=thread_id,
         fingerprint=f"sha256:{message_id}",
@@ -2511,6 +2525,7 @@ def test_member_data_quality_queries_are_owner_scoped(mock_db):
     assert "webdav_accounts.workspace_id = :workspace_id_1" in rendered_queries
     assert "project_folders.user_id = :user_id_1" in rendered_queries
     assert "email_records.user_id = :user_id_1" in rendered_queries
+    assert "email_records.workspace_id = :workspace_id_1" in rendered_queries
     assert "sender_relationships.user_id = :user_id_1" in rendered_queries
 
 
@@ -2754,6 +2769,40 @@ def test_data_attachment_reparse_intent_is_scoped_to_caller(mock_db):
     assert response.status_code == 404
     assert "attachment_rival" not in response.text
     assert rival_attachment.parse_status == "content_type_mismatch_quarantined"
+
+
+def test_data_attachment_reparse_intent_is_scoped_to_workspace(mock_db):
+    # Same user_id and organization_id as the caller, but a DIFFERENT
+    # workspace_id -- the IDOR class this same PR's new reparse-intent route
+    # would otherwise open: Email carried no workspace_id at all before this
+    # fix, so _email_scope_filter could only ever check user_id/organization_id.
+    other_workspace_email = _email(
+        "<other-workspace-quarantine@example.com>",
+        thread_id="thread-other-workspace",
+        workspace_id="workspace-rival",
+    )
+    other_workspace_attachment = _attachment("payload.pdf", "")
+    other_workspace_attachment.attachment_uid = "attachment_other_workspace"
+    other_workspace_attachment.parse_status = "content_type_mismatch_quarantined"
+    other_workspace_attachment.email = other_workspace_email
+    mock_db.attachments.append(other_workspace_attachment)
+
+    token = _signed_session_token(_valid_session_payload(sub="owner"))
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/attachments/attachment_other_workspace/reparse-intent"
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 404
+    assert "attachment_other_workspace" not in response.text
+    assert (
+        other_workspace_attachment.parse_status
+        == "content_type_mismatch_quarantined"
+    )
 
 
 def test_data_document_webdav_materialization_executes_source_backed_write(

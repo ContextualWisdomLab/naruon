@@ -360,6 +360,14 @@ def _build_email_object(
     email_obj = Email(
         user_id=user_id,
         organization_id=organization_id,
+        # Mirrors the workspace_id convention already used elsewhere in this
+        # file and in services/project_graph/: workspace-<organization_id>,
+        # falling back to workspace-<user_id> for an org-less/personal scope.
+        workspace_id=(
+            f"workspace-{organization_id}"
+            if organization_id
+            else f"workspace-{user_id}"
+        ),
         message_id=message_id,
         thread_id=thread_id,
         fingerprint=fingerprint,

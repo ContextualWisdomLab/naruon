@@ -1,4 +1,29 @@
 ## [Unreleased]
+- (보안, IDOR 근본 수정) `Email`이 `workspace_id`를 전혀 갖고 있지 않아
+  `_email_scope_filter`(및 이를 쓰는 `_get_scoped_attachment`/모든
+  quality-surface 통계 쿼리)가 `user_id`/`organization_id`로만 스코프돼,
+  동일 사용자·동일 조직이지만 `workspace_id`가 다른 세션이 다른 workspace의
+  이메일/첨부파일을 읽거나(기존) 이번 PR이 추가한
+  `POST /attachments/{attachment_uid}/reparse-intent`로 변경할(신규) 수
+  있던 문제를 고쳤습니다. `Email`에 `workspace_id` 컬럼을 추가하고(Alembic
+  `0020_email_workspace_scope`, 기존 행은 `workspace-<organization_id>`로
+  백필 — `organization_id`가 NOT NULL이고 `Email`이 실제 workspace_id를
+  가진 어떤 테이블과도 FK로 연결돼 있지 않아 조인 백필이 불가능함을 확인한
+  뒤, `services/email_import_service.py` 등에서 이미 쓰이던 동일 관례를
+  그대로 적용), `_email_scope_filter`가 `Document`/`WebdavAccount`/
+  `ProjectFolder`에 이미 쓰이던 `_owner_scope_statement`의 패턴과 동일하게
+  workspace 조건을 무조건 적용하도록 했습니다 — 호출부 14곳이 전부
+  `*email_scope`로 언패킹하므로 코드 변경 없이 자동으로 반영됩니다. 새
+  이메일을 만드는 프로덕션 경로 3곳(`email_import_service.py`,
+  `imap_worker.py`, `import_fixtures.py`)도 동일 관례로 workspace_id를
+  채우도록 갱신했습니다. 신규 테스트: 동일 사용자·동일 조직·다른 workspace
+  거부 케이스. **범위를 의도적으로 좁혔습니다**: 메일 목록/검색/온톨로지/
+  스레딩/Noema 에이전트가 쓰는 별도의 `Email.owner_filters()` classmethod도
+  동일한 결함을 갖고 있으나, 이를 고치려면 7개 이상 파일에 걸친 앱 전체
+  읽기 경로 변경이 필요해 이번 PR(캘린더 충돌 도구 추가)의 범위를 크게
+  벗어납니다 — ADR-0005 Consequences에 별도 후속 PR로 명시적으로 기록하고
+  이번에는 손대지 않았습니다. 검증: 신규/수정 테스트, 전체 백엔드 스위트
+  1880 passed/33 skipped, ruff clean.
 - (CodeRabbit review 반영) `AttachmentReparseWorker`/`NewsdomRecognitionWorker`
   둘 다 advisory lease를 잡는 전용 `AsyncConnection`에 `AUTOCOMMIT`
   isolation level을 설정하지 않고 있었습니다 — lock 획득 `SELECT`가 암묵적
