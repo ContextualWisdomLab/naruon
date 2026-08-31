@@ -422,6 +422,47 @@ def test_execute_url_extractor_preserves_valid_terminal_punctuation(url):
     assert response.json()["result"]["urls"] == [url]
 
 
+@pytest.mark.parametrize("suffix", (").", "),", ")!"))
+def test_execute_url_extractor_removes_wrapped_prose_delimiters(suffix):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": f"(https://example.com/path{suffix}"}},
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/path"]
+
+
+@pytest.mark.parametrize(
+    ("text", "url"),
+    (
+        ("(https://example.com/path!),", "https://example.com/path!"),
+        ("([https://example.com/path]).", "https://example.com/path"),
+    ),
+)
+def test_execute_url_extractor_handles_punctuated_nested_wrappers(text, url):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": text}},
+        )
+
+    assert response.json()["result"]["urls"] == [url]
+
+
+def test_execute_url_extractor_handles_many_unmatched_delimiters_linearly():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/url_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "https://example.com/" + ")" * 50_000}},
+        )
+
+    assert response.json()["result"]["urls"] == ["https://example.com/"]
+
+
 def test_execute_url_extractor_rejects_oversized_text():
     with TestClient(app) as client:
         response = client.post(

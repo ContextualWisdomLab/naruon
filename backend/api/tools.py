@@ -770,16 +770,22 @@ registry.register(
 
 
 _URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+_PROSE_TRAILING_PUNCTUATION = ".,;:!?"
 
 
 def _trim_url_candidate(candidate: str) -> str:
     """Remove unmatched closing delimiters without altering valid URL punctuation."""
-    for opener, closer in (("(", ")"), ("[", "]"), ("{", "}")):
-        while candidate.endswith(closer) and candidate.count(closer) > candidate.count(
-            opener
-        ):
-            candidate = candidate[:-1]
-    return candidate
+    delimiters = (("(", ")"), ("[", "]"), ("{", "}"))
+    excess = {
+        closer: max(0, candidate.count(closer) - candidate.count(opener))
+        for opener, closer in delimiters
+    }
+    without_prose = candidate.rstrip(_PROSE_TRAILING_PUNCTUATION)
+    end = len(without_prose)
+    while end and excess.get(without_prose[end - 1], 0):
+        excess[without_prose[end - 1]] -= 1
+        end -= 1
+    return without_prose[:end] if end < len(without_prose) else candidate
 
 async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
     text = params["text"]
