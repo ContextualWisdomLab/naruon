@@ -77,13 +77,19 @@ def upgrade() -> None:
     if _OLD_EMAIL_IDENTITY in existing_constraints:
         op.drop_constraint(_OLD_EMAIL_IDENTITY, _EMAIL_TABLE, type_="unique")
 
+    # get_indexes() also reports the backing index of a unique constraint
+    # under the same name (PostgreSQL implements a unique constraint via a
+    # unique index), so the constraint case must be checked -- and handled --
+    # first: DROP INDEX on a constraint's own backing index is rejected by
+    # PostgreSQL ("cannot drop index ... because constraint ... requires
+    # it"), which would abort this migration outright.
     existing_indexes = {index["name"] for index in inspector.get_indexes(_EMAIL_TABLE)}
-    if _BOOTSTRAP_OLD_EMAIL_IDENTITY in existing_indexes:
-        op.drop_index(_BOOTSTRAP_OLD_EMAIL_IDENTITY, table_name=_EMAIL_TABLE)
     if _BOOTSTRAP_OLD_EMAIL_IDENTITY in existing_constraints:
         op.drop_constraint(
             _BOOTSTRAP_OLD_EMAIL_IDENTITY, _EMAIL_TABLE, type_="unique"
         )
+    elif _BOOTSTRAP_OLD_EMAIL_IDENTITY in existing_indexes:
+        op.drop_index(_BOOTSTRAP_OLD_EMAIL_IDENTITY, table_name=_EMAIL_TABLE)
 
     if _EMAIL_WORKSPACE_IDENTITY not in existing_constraints:
         op.create_unique_constraint(

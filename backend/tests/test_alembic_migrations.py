@@ -1,7 +1,64 @@
+import importlib.util
 from pathlib import Path
+
+import asyncpg
+import pytest
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from core.config import settings
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_revision_module(revision_filename: str):
+    # Revision filenames start with a digit and aren't valid module names,
+    # so they can't be imported with a normal `import` statement.
+    path = BACKEND_ROOT / "alembic" / "versions" / revision_filename
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _setup_pre_0020_email_records(
+    sync_conn, *, legacy_identity_as_constraint: bool
+) -> None:
+    sync_conn.execute(text("DROP TABLE IF EXISTS email_records CASCADE"))
+    sync_conn.execute(
+        text(
+            "CREATE TABLE email_records ("
+            "id serial primary key, user_id varchar, "
+            "organization_id varchar, message_id varchar)"
+        )
+    )
+    if legacy_identity_as_constraint:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE email_records ADD CONSTRAINT "
+                "uq_email_records_owner_message_id "
+                "UNIQUE (user_id, organization_id, message_id)"
+            )
+        )
+    else:
+        sync_conn.execute(
+            text(
+                "CREATE UNIQUE INDEX uq_email_records_owner_message_id "
+                "ON email_records (user_id, organization_id, message_id)"
+            )
+        )
+
+
+def _run_0020_upgrade(sync_conn) -> None:
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    module = _load_revision_module("0020_email_workspace_scope.py")
+    context = MigrationContext.configure(sync_conn, opts={"target_metadata": None})
+    with Operations.context(context):
+        module.upgrade()
 
 
 def test_alembic_scaffold_exists_with_model_metadata_target():
@@ -68,6 +125,69 @@ def test_email_workspace_migration_also_drops_bootstrap_created_owner_only_index
     assert '"uq_email_records_owner_message_id"' in revision_text
     assert "get_indexes(" in revision_text
     assert "op.drop_index(" in revision_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+@pytest.mark.parametrize("legacy_identity_as_constraint", [True, False])
+async def test_email_workspace_migration_real_postgres_smoke(
+    legacy_identity_as_constraint,
+):
+    """inspector.get_indexes() also reports the backing index of a unique
+    constraint under the same name (PostgreSQL implements a unique
+    constraint via a unique index), so a check that only looks at
+    get_indexes() before get_unique_constraints() would try `DROP INDEX` on
+    a constraint's own backing index -- PostgreSQL rejects that outright
+    ("cannot drop index ... because constraint ... requires it"), aborting
+    the whole migration. bootstrap_db.py has only ever produced the legacy
+    identity as a plain index, but this proves the migration itself handles
+    either catalog shape without relying on that assumption."""
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with engine.begin() as conn:
+
+            def _setup(sync_conn):
+                _setup_pre_0020_email_records(
+                    sync_conn,
+                    legacy_identity_as_constraint=legacy_identity_as_constraint,
+                )
+
+            await conn.run_sync(_setup)
+            await conn.run_sync(_run_0020_upgrade)
+
+            def _inspect(sync_conn):
+                insp = inspect(sync_conn)
+                return (
+                    {i["name"] for i in insp.get_indexes("email_records")},
+                    {c["name"] for c in insp.get_unique_constraints("email_records")},
+                )
+
+            index_names, constraint_names = await conn.run_sync(_inspect)
+            await conn.run_sync(
+                lambda sync_conn: sync_conn.execute(
+                    text("DROP TABLE IF EXISTS email_records CASCADE")
+                )
+            )
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+    except Exception:
+        await engine.dispose()
+        raise
+    finally:
+        await engine.dispose()
+
+    assert "uq_email_records_owner_message_id" not in index_names
+    assert "uq_email_records_owner_message_id" not in constraint_names
+    assert "uq_emails_workspace_message" in constraint_names
 
 
 def test_provider_writeback_retry_queue_has_incremental_revision():

@@ -1,4 +1,17 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 직전 수정 자체의 회귀) `0020_email_workspace_scope`가 legacy identity를
+  CONSTRAINT로 잘못 `DROP INDEX`해 마이그레이션 전체를 중단시킬 수 있던 버그를 고쳤습니다.**
+  PostgreSQL은 UNIQUE CONSTRAINT를 내부적으로 동일 이름의 unique index로 구현하므로,
+  `inspector.get_indexes()`는 CONSTRAINT의 backing index도 함께 보고합니다. 직전 커밋은
+  `existing_indexes` 확인을 `existing_constraints` 확인보다 먼저 실행했는데, legacy identity가
+  실제로는 CONSTRAINT인 경우 `op.drop_index()`가 먼저 시도되어 PostgreSQL이
+  `cannot drop index ... because constraint ... requires it`로 거부 — 마이그레이션 전체가
+  중단됩니다(실제 로컬 PostgreSQL 16으로 재현·확인). CONSTRAINT 확인을 먼저 하도록(`elif`로
+  상호 배타화) 순서를 바꿨습니다. 새 실제-PostgreSQL 스모크 테스트
+  `test_email_workspace_migration_real_postgres_smoke`(constraint/plain-index 두 형태 모두
+  파라미터화, `pytest.mark.postgres`)가 수정 전 CONSTRAINT 케이스에서 정확히 이 에러로 실패함을
+  먼저 확인한 뒤 고쳤습니다. 검증: 전체 백엔드 스위트 1891 passed/35 skipped(postgres 없이),
+  로컬 PostgreSQL 16 기동 시 새 테스트 2건 모두 통과, ruff clean.
 - **(Devin 리뷰 대응) Alembic 마이그레이션 `0020_email_workspace_scope`가 `bootstrap_db.py`가
   만든 owner-only 고유 식별자를 인식하지 못하던 문제를 고쳤습니다.** 이 마이그레이션은
   `get_unique_constraints()`로 `uq_emails_owner_message_id`(Alembic 자체 명명)만 확인했는데,
