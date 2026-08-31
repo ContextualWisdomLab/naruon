@@ -86,6 +86,11 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession):
             batch_values.append(dict(
                 user_id=IMPORT_USER_ID,
                 organization_id=IMPORT_ORGANIZATION_ID,
+                workspace_id=(
+                    f"workspace-{IMPORT_ORGANIZATION_ID}"
+                    if IMPORT_ORGANIZATION_ID
+                    else f"workspace-{IMPORT_USER_ID}"
+                ),
                 message_id=email_data["message_id"],
                 sender=email_data["sender"],
                 reply_to=email_data.get("reply_to"),
@@ -113,6 +118,7 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession):
                     thread_id=stmt.excluded.thread_id,
                     user_id=stmt.excluded.user_id,
                     organization_id=stmt.excluded.organization_id,
+                    workspace_id=stmt.excluded.workspace_id,
                     date=stmt.excluded.date,
                     body=stmt.excluded.body,
                     embedding=stmt.excluded.embedding,

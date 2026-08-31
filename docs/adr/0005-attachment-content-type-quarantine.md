@@ -287,6 +287,26 @@ than reversing the original decision:
   there, so it must keep deriving) remains a reasonable DRY improvement,
   but it is a multi-call-site plumbing change with zero behavioral effect
   now, not a fix for this one's narrower scope.
+- **Correction: the "three production call sites" claim above missed a
+  fourth `Email`-inserting path, and Devin found it.** `backend/scripts/
+  import_fixtures.py::process_zip_file` builds its own bulk-insert
+  `batch_values` dict independently of `backend/import_fixtures.py`'s
+  `email_obj = Email(...)` construction (already fixed) — a genuinely
+  separate script, not the same call site under a confusing shared
+  filename. Since `Email.workspace_id` is `NOT NULL`, every nonempty
+  archive import through this path failed at commit. Fixed the same way
+  (`workspace-<organization_id>` convention, included in both the insert
+  values and the `on_conflict_do_update` set). New test:
+  `tests/test_import_fixtures.py::test_process_zip_file_batch_insert_includes_workspace_id`
+  (the existing `test_process_zip_file` only ever exercised the empty-zip
+  path, which never reaches the insert — why this was missed originally).
+  Devin also re-flagged `noema_agent.py`'s `tool_search_mail`/
+  `tool_read_mail`/`tool_content_graph_query` reading through
+  `Email.owner_filters()` without `workspace_id` — traced via `git blame`
+  to `b6cb4e6f` (2026-07-13, over a month before this PR): confirmed as
+  the identical, already-tracked `Email.owner_filters()` gap two
+  paragraphs above, not new exposure from this PR, so left deferred per
+  the same narrow-scope decision.
 
 ## References (APA 7th)
 

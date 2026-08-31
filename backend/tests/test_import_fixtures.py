@@ -3,6 +3,7 @@ import datetime
 from unittest.mock import patch, AsyncMock
 from scripts.import_fixtures import process_zip_file
 import import_fixtures
+import scripts.import_fixtures as scripts_import_fixtures
 
 
 @pytest.mark.asyncio
@@ -13,6 +14,59 @@ async def test_process_zip_file():
                 mock_extract.return_value = []
                 # Ensure it doesn't crash on an empty zip
                 await process_zip_file("dummy.zip", AsyncMock())
+
+
+@pytest.mark.asyncio
+async def test_process_zip_file_batch_insert_includes_workspace_id():
+    # Email.workspace_id is NOT NULL (0020_email_workspace_scope); this batch
+    # insert built its own values dict independently of the root importer's
+    # email_obj = Email(...) construction (already fixed) and was missed --
+    # any nonempty archive would fail at commit without it.
+    captured_batch_values = []
+
+    class _RecordingSession:
+        async def scalar(self, *args, **kwargs):
+            return None
+
+        async def execute(self, statement, batch_values=None):
+            if batch_values is not None:
+                captured_batch_values.extend(batch_values)
+
+        async def commit(self):
+            pass
+
+    email_data = {
+        "message_id": "msg-1",
+        "sender": "sender@example.com",
+        "reply_to": None,
+        "recipients": ["recipient@example.com"],
+        "subject": "Subject",
+        "in_reply_to": None,
+        "references": None,
+        "date": datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+        "body": "body text",
+    }
+
+    with (
+        patch("scripts.import_fixtures.extract_backup_async") as mock_extract,
+        patch("scripts.import_fixtures.parse_eml", return_value=email_data),
+        patch("scripts.import_fixtures.chunk_text", return_value=[]),
+        patch(
+            "scripts.import_fixtures.assign_thread_id",
+            new=AsyncMock(return_value="thread-1"),
+        ),
+    ):
+        mock_extract.return_value = ["fixture.eml"]
+        await process_zip_file("dummy.zip", _RecordingSession())
+
+    assert len(captured_batch_values) == 1
+    batch_row = captured_batch_values[0]
+    assert "workspace_id" in batch_row
+    assert batch_row["workspace_id"] == (
+        f"workspace-{scripts_import_fixtures.IMPORT_ORGANIZATION_ID}"
+        if scripts_import_fixtures.IMPORT_ORGANIZATION_ID
+        else f"workspace-{scripts_import_fixtures.IMPORT_USER_ID}"
+    )
 
 
 @pytest.mark.asyncio

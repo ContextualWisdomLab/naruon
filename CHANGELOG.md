@@ -1,4 +1,21 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응) ZIP 아카이브 픽스처 임포트(`backend/scripts/import_fixtures.py::process_zip_file`)가
+  `Email.workspace_id`(NOT NULL) 없이 벌크 INSERT를 구성해 비어 있지 않은
+  아카이브를 임포트할 때마다 커밋이 실패하던 문제를 고쳤습니다.** 같은 파일의
+  단일 EML 루트 임포터(`backend/import_fixtures.py`, 이전에 이미 수정함)와는
+  별도의 코드 경로였습니다. 동일한 `workspace-<organization_id>` 관례로
+  `batch_values`와 `on_conflict_do_update`의 `set_`에 `workspace_id`를
+  추가했습니다. 새 테스트
+  `test_process_zip_file_batch_insert_includes_workspace_id`(수정 전 실제
+  RED 확인).
+- **(Devin 리뷰 확인, 조치 없음) `backend/services/noema_agent.py`의
+  `tool_search_mail`/`tool_read_mail`/`tool_content_graph_query`가
+  `Email.owner_filters()`를 통해 `workspace_id` 없이 스코프되는 문제**는
+  검증 결과 이 PR이 새로 만든 노출이 아니라 `b6cb4e6f`(2026-07-13, 이 PR보다
+  한 달 이상 이전)부터 존재한, ADR-0005에 이미 별도 후속 작업으로 기록된
+  `Email.owner_filters()`의 동일한 사전 존재 격차였습니다. 세션 초반의
+  명시적 결정("이 PR의 신규 노출만 좁게 수정")에 따라 이번 PR에서 확장 수정하지
+  않았습니다.
 - **(Devin 리뷰 대응) `backend/scripts/bootstrap_db.py`에 이번 PR의 신규 컬럼 두 개가
   누락되어 있던 문제를 고쳤습니다.** `email_records.workspace_id`
   (`0020_email_workspace_scope`)와 `email_attachments.attachment_uid`
