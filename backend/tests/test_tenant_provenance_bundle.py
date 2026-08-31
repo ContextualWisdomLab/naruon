@@ -2419,6 +2419,35 @@ async def test_export_excludes_separate_user_and_organization_scope(
     assert rival["email_uid"] not in json.dumps(records)
 
 
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_export_allows_segment_evidence_edge_with_nullable_source_object(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(f"segment-edge-{token}")
+    async with provenance_sessionmaker() as session:
+        selected = await _seed_provenance_closure(session, scope=scope, token=token)
+        edge = await session.scalar(
+            select(ProjectGraphEdgeRecord).where(
+                ProjectGraphEdgeRecord.workspace_id == scope.workspace_id
+            )
+        )
+        edge.source_uid = f"segment-{token}"
+        edge.source_object_id = None
+        await session.commit()
+
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, scope)
+        )
+
+    exported_edge = records["project_edges"][0]
+    assert exported_edge["source_uid"] == f"segment-{token}"
+    assert exported_edge["source_object_uid"] is None
+    assert exported_edge["target_object_uid"] in selected["object_uids"]
+
+
 @pytest.mark.parametrize(
     "reference_field",
     (
@@ -2430,6 +2459,7 @@ async def test_export_excludes_separate_user_and_organization_scope(
         "edge_source_object",
         "edge_target_object",
         "correction_object",
+        "edge_without_object_anchors",
     ),
 )
 @pytest.mark.asyncio
@@ -2476,7 +2506,10 @@ async def test_export_rejects_cross_workspace_segment_references_before_email_cl
                     ProjectGraphCorrectionRecord.workspace_id == scope.workspace_id
                 )
             )
-        if reference_field == "edge_source_object":
+        if reference_field == "edge_without_object_anchors":
+            record.source_object_id = None
+            record.target_object_id = None
+        elif reference_field == "edge_source_object":
             record.source_object_id = foreign["project_object_id"]
         elif reference_field == "edge_target_object":
             record.target_object_id = foreign["project_object_id"]

@@ -1231,11 +1231,17 @@ async def export_tenant_provenance(
         ):
             _fail()
     for record in project_edges:
-        source_object = objects_by_id.get(record.source_object_id)
-        target_object = objects_by_id.get(record.target_object_id)
-        if source_object is None or target_object is None:
+        endpoint_objects = []
+        for endpoint_id in (record.source_object_id, record.target_object_id):
+            if endpoint_id is None:
+                continue
+            endpoint_object = objects_by_id.get(endpoint_id)
+            if endpoint_object is None:
+                _fail()
+            endpoint_objects.append(endpoint_object)
+        if not endpoint_objects:
             _fail()
-        endpoint_email_ids = {source_object.email_id, target_object.email_id}
+        endpoint_email_ids = {endpoint.email_id for endpoint in endpoint_objects}
         if segments_by_id[
             record.primary_content_segment_id
         ].email_id not in endpoint_email_ids or any(
