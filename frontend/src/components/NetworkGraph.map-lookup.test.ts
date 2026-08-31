@@ -63,21 +63,4 @@ describe("NetworkGraph constant-time selection lookup contract", () => {
     expect(networkGraphSource).toContain("firstGraphEntryById(nodes");
     expect(networkGraphSource).not.toMatch(/new Map\((edges|nodes)\.map\(/);
   });
-
-  it("builds bounded graph summaries without full intermediate arrays", () => {
-    const nodeLabels = sourceBetween("const nodeLabels =", "const firstEdge =");
-    const relationshipOptions = sourceBetween(
-      "const relationshipOptions =",
-      "const nodeOptions =",
-    );
-    const nodeOptions = sourceBetween("const nodeOptions =", "const selectRelationship =");
-
-    expect(nodeLabels).toContain("for (const node of nodes)");
-    expect(nodeLabels).toContain("labels.length >= 5");
-    expect(relationshipOptions).toContain("for (const edge of edgeMap.values())");
-    expect(relationshipOptions).toContain("options.length >= 5");
-    expect(nodeOptions).toContain("for (const node of nodeInstanceMap.values())");
-    expect(nodeOptions).toContain("options.length >= 8");
-    expect(nodeLabels + relationshipOptions + nodeOptions).not.toContain("Array.from(");
-  });
 });

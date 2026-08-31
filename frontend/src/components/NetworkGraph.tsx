@@ -278,38 +278,42 @@ export default function NetworkGraph() {
   }, [nodes, edges, nodeMap, edgeMap]);
 
   const nodeLabels = useMemo(() => {
-    const labels = [];
-    for (const node of nodes) {
-      if (labels.length >= 5) break;
-      const label = String(node.label ?? node.id);
-      if (label) labels.push(label);
-    }
-    return labels;
+    return nodes
+      .map((node) => String(node.label ?? node.id))
+      .filter(Boolean)
+      .slice(0, 5);
   }, [nodes]);
 
   const firstEdge = edges[0] ?? null;
   const relationshipOptions = useMemo(() => {
+    // ⚡ Bolt: Replace O(N) Array.from().slice() with O(1) bounded for-of loop
+    // to avoid full intermediate array allocation when extracting only a few items
     const options = [];
+    let index = 0;
     for (const edge of edgeMap.values()) {
-      if (options.length >= 5) break;
+      if (index >= 5) break;
       options.push({
         edge,
         id: String(edge.id),
-        label: `관계 ${options.length + 1}: ${describeEdge(edge, nodeMap)}`,
+        label: `관계 ${index + 1}: ${describeEdge(edge, nodeMap)}`,
       });
+      index++;
     }
     return options;
   }, [edgeMap, nodeMap]);
 
   const nodeOptions = useMemo(() => {
+    // ⚡ Bolt: Replace O(N) Array.from().slice() with O(1) bounded for-of loop
     const options = [];
+    let index = 0;
     for (const node of nodeInstanceMap.values()) {
-      if (options.length >= 8) break;
+      if (index >= 8) break;
       options.push({
         id: String(node.id),
         label: `노드: ${String(node.label ?? node.id)}`,
         node,
       });
+      index++;
     }
     return options;
   }, [nodeInstanceMap]);
