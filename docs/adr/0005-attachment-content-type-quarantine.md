@@ -313,6 +313,36 @@ than reversing the original decision:
   paragraphs above, not new exposure from this PR, so left deferred per
   the same narrow-scope decision.
 
+- **Correction (Devin Review, `6df8f44a`/`62b74a05` round): the "Fixed:
+  `_auth_context_from_session_payload` now rejects (`401`) any session whose
+  `workspace` claim is not exactly `workspace-<organization_id>`" entry above
+  no longer describes current code — flag it as historical, not current
+  behavior.** Commit `b778fb69` ("fix: enforce workspace-safe Noema
+  identity") removed that exact-match rejection entirely: workspace
+  membership is now treated purely as the independently signed opaque claim
+  the verified session authority produces, never derived from or validated
+  against `organization_id`. The rationale is the same class of correction
+  CodeRabbit pushed on this PR's `Email` legacy-backfill thread — assuming
+  every real deployment mints `workspace` as `workspace-<organization_id>`
+  was itself the wrong premise; a genuinely independent external token
+  issuer is free to mint an opaque value that doesn't derive from `org` at
+  all, and rejecting such a session outright would be a false-positive
+  authentication failure, not a security improvement. The referenced test
+  was renamed accordingly:
+  `tests/test_auth_real.py::test_build_auth_context_rejects_workspace_claim_not_derived_from_org`
+  is now
+  `test_build_auth_context_accepts_independently_signed_workspace_membership`,
+  and asserts the opposite outcome (a session with `org="org-acme"`,
+  `workspace="workspace-project-blue"` is accepted, not rejected). The two
+  existing tests noted above (`api/security.py`'s
+  `_require_authoritative_workspace_scope` test and the data-quality-surface
+  test) are unaffected by this reversal — their own updates only fixed an
+  org-inconsistent workspace value, not this specific rejection behavior.
+  This ADR's downstream claims about `auth_context.workspace_id` being "an
+  actually-enforced invariant" for every `workspace_id`-scoped table are
+  narrowed by this reversal to: the claim is *present and well-formed*, not
+  that it's provably derived from or consistent with `organization_id`.
+
 ## References (APA 7th)
 
 Freed, N., & Borenstein, N. (1996). *Multipurpose Internet Mail Extensions
