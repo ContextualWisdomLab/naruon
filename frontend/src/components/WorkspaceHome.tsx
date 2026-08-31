@@ -154,7 +154,6 @@ function useDashboardData() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [calendarSources, setCalendarSources] = useState<CalendarWritebackSource[]>([]);
   const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dashboardDataStatus, setDashboardDataStatus] = useState<DashboardDataStatus>('loading');
   const [sourceEvidenceStatus, setSourceEvidenceStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -180,8 +179,6 @@ function useDashboardData() {
       setPendingReplies([]);
       setTasks([]);
       setDashboardDataStatus('unavailable');
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
     });
 
     Promise.all([
@@ -204,7 +201,7 @@ function useDashboardData() {
     };
   }, []);
 
-  return { emails, pendingReplies, tasks, setTasks, calendarSources, projectFolders, loading, dashboardDataStatus, sourceEvidenceStatus };
+  return { emails, pendingReplies, tasks, setTasks, calendarSources, projectFolders, loading: dashboardDataStatus === 'loading', dashboardDataStatus, sourceEvidenceStatus };
 }
 
 function formatStartupDate(value: string) {
@@ -387,7 +384,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             <div className="flex gap-4">
               <div className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-600"><Send className="size-5" /></div>
               <div>
-                <p className="break-keep font-bold">답변 대기 {loading ? '-' : dashboardDataUnavailable ? '확인 필요' : `${pendingReplyCount}건`}</p>
+                <p className="break-keep font-bold">답변 대기 {dashboardDataUnavailable ? '확인 필요' : loading ? '-' : `${pendingReplyCount}건`}</p>
                 <p className="text-xs text-muted-foreground mt-1">{dashboardDataUnavailable ? '대시보드 데이터 연결을 확인할 수 없습니다.' : '보낸 메일 중 회신 확인이 필요한 항목입니다.'}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <a href="/mail?folder=sent" className="inline-flex text-xs font-semibold text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">보낸 메일 보기</a>
@@ -427,7 +424,7 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             <div className="flex gap-4 pt-4 md:pl-6 md:pt-0">
               <div className="grid size-10 shrink-0 place-items-center rounded-full bg-green-100 text-green-600"><CheckCircle2 className="size-5" /></div>
               <div>
-                <p className="break-keep font-bold">완료 가능 작업 {loading ? '-' : dashboardDataUnavailable ? '확인 필요' : `${pendingTasks.length}건`}</p>
+                <p className="break-keep font-bold">완료 가능 작업 {dashboardDataUnavailable ? '확인 필요' : loading ? '-' : `${pendingTasks.length}건`}</p>
                 <p className="text-xs text-muted-foreground mt-1">{dashboardDataUnavailable ? '대시보드 데이터 연결을 확인할 수 없습니다.' : '오늘 마감 전 완료해보세요.'}</p>
                 <a href="/tasks" className="mt-2 inline-flex rounded-sm text-xs font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">작업 바로가기</a>
               </div>
@@ -444,10 +441,10 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
             </div>
             <div className="space-y-3">
               <div className="text-xs font-bold text-muted-foreground">답변 대기 메일</div>
-              {loading ? (
-                <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 불러오는 중...</div>
-              ) : dashboardDataUnavailable ? (
+              {dashboardDataUnavailable ? (
                 <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 확인할 수 없습니다.</div>
+              ) : loading ? (
+                <div className="text-sm text-muted-foreground p-2">답변 대기 메일을 불러오는 중...</div>
               ) : pendingReplies.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">답변 대기 중인 보낸 메일이 없습니다.</div>
               ) : pendingReplies.map((reply) => {
@@ -475,10 +472,10 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
               <h2 className="text-base font-bold">대기 작업 {pendingTasks.length > 0 && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">{pendingTasks.length}건</span>}</h2>
             </div>
             <div className="space-y-3">
-              {loading ? (
-                <div className="text-sm text-muted-foreground p-2">작업을 불러오는 중...</div>
-              ) : dashboardDataUnavailable ? (
+              {dashboardDataUnavailable ? (
                 <div className="text-sm text-muted-foreground p-2">작업 데이터를 확인할 수 없습니다.</div>
+              ) : loading ? (
+                <div className="text-sm text-muted-foreground p-2">작업을 불러오는 중...</div>
               ) : pendingTasks.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">대기 작업이 없습니다.</div>
               ) : pendingTasks.slice(0, 3).map((task) => {
@@ -578,10 +575,10 @@ function StartupDashboard({ onOpenView }: { onOpenView: (view: WorkspaceStartupV
               <h2 className="text-base font-bold">최근 메일 {unreadCount > 0 && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">새 메일 {unreadCount}</span>}</h2>
             </div>
             <div className="space-y-3">
-              {loading ? (
-                <div className="text-sm text-muted-foreground p-2">메일을 불러오는 중...</div>
-              ) : dashboardDataUnavailable ? (
+              {dashboardDataUnavailable ? (
                 <div className="text-sm text-muted-foreground p-2">메일 데이터를 확인할 수 없습니다.</div>
+              ) : loading ? (
+                <div className="text-sm text-muted-foreground p-2">메일을 불러오는 중...</div>
               ) : emails.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-2">수신된 메일이 없습니다.</div>
               ) : emails.slice(0, 5).map((mail) => (

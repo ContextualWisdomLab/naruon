@@ -814,7 +814,9 @@ describe("WorkspaceHome Today dashboard", () => {
   });
 
   it.each([
+    ["mail missing emails", "/api/emails", {}, "수신된 메일이 없습니다."],
     ["mail", "/api/emails", { emails: "not-an-array" }, "수신된 메일이 없습니다."],
+    ["pending-reply missing emails", "/api/emails/pending-replies?limit=3", {}, "답변 대기 중인 보낸 메일이 없습니다."],
     ["pending-reply", "/api/emails/pending-replies?limit=3", { emails: null }, "답변 대기 중인 보낸 메일이 없습니다."],
     ["task", "/api/tasks", { tasks: "not-an-array" }, "대기 작업이 없습니다."],
   ])("fails closed for a malformed %s response", async (_name, malformedUrl, malformedResponse, falseEmptyState) => {
