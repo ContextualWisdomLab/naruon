@@ -407,15 +407,16 @@ async def test_build_agent_returns_none_without_runtime(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_build_agent_marks_gateway_model_as_zdr_only():
+async def test_build_agent_marks_explicit_gateway_provider_as_zdr_only():
     pytest.importorskip("pydantic_ai")
     provider = RuntimeLLMProvider(
         api_key="gateway-token",
         base_url=None,
-        chat_model="orchestrator/free",
-        embedding_model="orchestrator/free",
+        chat_model="gateway-free",
+        embedding_model="gateway-embedding",
         provider_name="Contextual Orchestrator",
         provider_source="llm_provider",
+        zdr_required=True,
     )
     agent, closer = await build_noema_agent(provider)
     try:
@@ -435,10 +436,11 @@ async def test_build_gateway_model_forwards_zdr_policy_to_openai_wire():
     provider = RuntimeLLMProvider(
         api_key="gateway-token",
         base_url=None,
-        chat_model="orchestrator/free",
-        embedding_model="orchestrator/free",
+        chat_model="gateway-free",
+        embedding_model="gateway-embedding",
         provider_name="Contextual Orchestrator",
         provider_source="llm_provider",
+        zdr_required=True,
     )
     agent, closer = await build_noema_agent(provider)
     try:
@@ -454,7 +456,7 @@ async def test_build_gateway_model_forwards_zdr_policy_to_openai_wire():
                     )
                 ],
                 created=0,
-                model="orchestrator/free",
+                model="gateway-free",
                 object="chat.completion",
             )
         )

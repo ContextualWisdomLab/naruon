@@ -14,7 +14,6 @@ from db.session import get_db
 from services.llm_provider_urls import build_llm_provider_http_client
 from services.llm_provider_selection import (
     resolve_runtime_llm_provider,
-    uses_contextual_orchestrator,
 )
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
@@ -231,5 +230,5 @@ async def test_prompt(
         system_message=_build_prompt_test_system_message(data.settings),
         # The resolved transport owns the policy. A preview model override is
         # only a model value and must never enable or disable ZDR by its name.
-        zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
+        zdr_only=runtime_provider.zdr_required,
     )

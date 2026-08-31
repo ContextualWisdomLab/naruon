@@ -122,8 +122,8 @@ async def test_client_serializes_to_exact_contract_request(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_client_forwards_false_zdr_policy(monkeypatch):
-    """The gateway option remains caller-controlled instead of being hardcoded."""
+async def test_explicit_false_cannot_disable_gateway_zdr_policy(monkeypatch):
+    """The scoped gateway transport owns policy, not a caller/model override."""
     session = FakeAsyncSession(_attributed_tenant_config())
     client = FakeAsyncClient(
         post_responses=[_contract_completed_response(len(CONTRACT["request"]["inputs"]))]
@@ -141,7 +141,7 @@ async def test_client_forwards_false_zdr_policy(monkeypatch):
     )
 
     assert result is not None
-    assert client.post_calls[0]["json"]["zdr_only"] is False
+    assert client.post_calls[0]["json"]["zdr_only"] is True
 
 
 @pytest.mark.asyncio

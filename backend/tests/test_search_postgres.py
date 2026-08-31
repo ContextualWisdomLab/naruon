@@ -426,6 +426,7 @@ async def test_dense_channel_fuses_with_lexical_channel(
         api_key = "stub-key"
         base_url = None
         embedding_model = "stub-embedding-model"
+        zdr_required = False
 
     with (
         patch(

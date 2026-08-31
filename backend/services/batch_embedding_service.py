@@ -15,10 +15,10 @@ Design constraints:
   and lets it own provider routing, load balancing and cost accounting. A local
   ``pg_llm_batch`` package remains only as an *offline-dev fallback*, gated behind
   "orchestrator unavailable" (see :func:`_run_local_engine_batch`).
-* **Graceful degradation.** If batching is disabled/unconfigured for the tenant,
-  the orchestrator is unreachable/misconfigured, and the local fallback is also
-  unavailable, every entry point returns ``None`` so the caller transparently
-  uses its existing per-item embedding path. naruon keeps working regardless.
+* **Fail-closed ZDR.** Disabled/unconfigured batching returns ``None`` for the
+  ordinary per-item path. Once a contextual-orchestrator transport is configured,
+  however, every request requires ZDR and an unavailable or partial batch raises
+  instead of retransmitting raw content through another external provider.
 * **SSRF-guarded, allowlisted egress.** The orchestrator base URL is validated
   and the HTTP client is built with :func:`build_llm_provider_http_client`,
   reusing the pinned-address transport (DNS-rebinding safe, redirects disabled,
@@ -48,7 +48,6 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import EmbeddingGenerationError
-from services.llm_provider_selection import uses_contextual_orchestrator
 from services.llm_provider_urls import build_llm_provider_http_client
 from services.tenant_config_scope import get_scoped_tenant_config
 
@@ -195,10 +194,9 @@ async def try_batch_import_embeddings(
     """Route bulk embeddings through the batch path, or ``None`` to fall back.
 
     On success returns one fitted vector per input text (original order). The
-    primary path submits to contextual-orchestrator; only if the orchestrator is
-    unconfigured or unavailable does it consider the local ``pg-llm-batch``
-    package fallback. A later partition failure returns a completed prefix plus
-    only the unfinished inputs so the caller does not resend successful work.
+    primary path submits to contextual-orchestrator. Configured orchestrator work
+    requires ZDR and fails closed if unavailable or partial; disabled/unconfigured
+    batching may use the ordinary per-item path.
     The run is recorded in ``llm_batch_jobs`` / ``llm_batch_items`` for
     observability.
     """
@@ -214,8 +212,11 @@ async def try_batch_import_embeddings(
         return None
 
     model = settings.model or embedding_provider.embedding_model
-    if zdr_only is None:
-        zdr_only = uses_contextual_orchestrator(model)
+    # Transport capability is authoritative. Model names are routing values and
+    # must never enable or disable the retention policy.
+    zdr_only = settings.has_orchestrator or embedding_provider.zdr_required or bool(
+        zdr_only
+    )
 
     if settings.has_orchestrator:
         result = await _run_orchestrator_batches(
@@ -229,10 +230,22 @@ async def try_batch_import_embeddings(
             zdr_only=zdr_only,
         )
         if result is not None:
+            if zdr_only and isinstance(result, BatchEmbeddingPartial):
+                raise EmbeddingGenerationError(
+                    "ZDR-required orchestrator batch did not complete"
+                )
             return result
+        if zdr_only:
+            raise EmbeddingGenerationError(
+                "ZDR-required orchestrator batch is unavailable"
+            )
         # Orchestrator unavailable/misconfigured — consider the local fallback.
 
     if settings.has_local_fallback:
+        if zdr_only and not embedding_provider.zdr_required:
+            raise EmbeddingGenerationError(
+                "ZDR-required batch work cannot use a non-ZDR local fallback"
+            )
         return await _run_local_engine_batch(
             session,
             texts,

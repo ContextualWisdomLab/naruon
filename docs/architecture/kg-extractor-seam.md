@@ -109,8 +109,10 @@ endpoint) instead of the raw provider. Constraints:
   `ExtractorUnavailableError` → deterministic fallback (fail closed).
 - The provider API key stays the tenant's Fernet-encrypted credential; only the
   routing target changes.
-- When the selected model is `orchestrator/*`, naruon sends the strict boolean
-  request policy `zdr_only=true`. contextual-orchestrator filters the
+- When the scoped provider is explicitly configured as
+  `provider_type=contextual_orchestrator`, or the `orchestrator` extractor
+  selector chooses its dedicated transport, naruon sends the strict boolean
+  request policy `zdr_only=true` independent of model names. contextual-orchestrator filters the
   caller-supplied/discovered model-group candidate array to members carrying
   verified ZDR evidence; it does not replace that array with a hard-coded model
   list. OpenRouter's public ZDR endpoint is evidence that may qualify matching

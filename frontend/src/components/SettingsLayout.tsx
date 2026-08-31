@@ -431,6 +431,8 @@ function getProviderTypeLabel(providerType: string) {
   switch (providerType.toLowerCase()) {
     case 'openai':
       return 'OpenAI 호환';
+    case 'contextual_orchestrator':
+      return 'Contextual Orchestrator (ZDR 필수)';
     case 'anthropic':
       return 'Anthropic';
     case 'gemini':
@@ -1017,6 +1019,7 @@ export function SettingsLayout() {
                         <label htmlFor="commercial-provider-type" className="text-sm font-bold text-muted-foreground">제공자</label>
                         <select id="commercial-provider-type" value={commercialModelForm.providerType} onChange={(event) => updateCommercialModelField('providerType', event.target.value)} className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary">
                           <option value="openai">OpenAI 호환</option>
+                          <option value="contextual_orchestrator">Contextual Orchestrator (ZDR 필수)</option>
                           <option value="anthropic">Anthropic</option>
                           <option value="gemini">Google Gemini</option>
                         </select>

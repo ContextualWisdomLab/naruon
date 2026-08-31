@@ -40,7 +40,6 @@ from services.embedding import (
     generate_embeddings,
 )
 from services.exceptions import ArchiveError, EmailParseError, EmbeddingGenerationError
-from services.llm_provider_selection import uses_contextual_orchestrator
 from services.project_graph import (
     ProjectSourceSegment,
     persist_project_graph_projection,
@@ -88,6 +87,7 @@ class EmailImportEmbeddingProvider:
     base_url: str | None
     embedding_model: str
     chat_model: str | None = None
+    zdr_required: bool = False
 
 
 @dataclass(frozen=True)
@@ -786,6 +786,7 @@ async def _extract_project_semantics_for_import(
         model=(embedding_provider.chat_model if embedding_provider else None)
         or settings.OPENAI_MODEL,
         orchestrator_base_url=settings.PROJECT_GRAPH_ORCHESTRATOR_BASE_URL,
+        zdr_required=embedding_provider.zdr_required if embedding_provider else False,
     )
     return await run_extraction(
         source_segments,
@@ -963,8 +964,8 @@ async def _generate_import_embeddings(
     if batch_context is not None and texts:
         # Bulk import embeddings are latency-tolerant: route them through
         # contextual-orchestrator first. A None result means batch is
-        # unconfigured/unavailable, so we transparently fall through to the
-        # existing per-request path below.
+        # unconfigured. A configured ZDR orchestrator fails closed before this
+        # function can retransmit raw content through another provider.
         batched = await try_batch_import_embeddings(
             batch_context.session,
             texts,
@@ -992,9 +993,11 @@ async def _generate_import_embeddings(
                     )
                 return [*batched.completed_vectors, *remainder]
             return batched
-    effective_zdr_only = uses_contextual_orchestrator(
-        embedding_provider.embedding_model
-    ) and (zdr_only is None or zdr_only)
+    if zdr_only is True and not embedding_provider.zdr_required:
+        raise EmbeddingGenerationError(
+            "ZDR-required embedding work cannot use a non-ZDR provider fallback"
+        )
+    effective_zdr_only = embedding_provider.zdr_required
     try:
         provider_embeddings = await generate_embeddings(
             texts,

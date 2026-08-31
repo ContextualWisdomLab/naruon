@@ -11,7 +11,6 @@ from core.exceptions import LLMServiceError
 from db.session import get_db
 from services.llm_provider_selection import (
     resolve_runtime_llm_provider,
-    uses_contextual_orchestrator,
 )
 from services.llm_service import (
     ExtractionResult,
@@ -107,7 +106,7 @@ async def summarize_endpoint(
             base_url=runtime_provider.base_url,
             provider_name=runtime_provider.provider_name,
             model=runtime_provider.chat_model,
-            zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
+            zdr_only=runtime_provider.zdr_required,
         )
     except LLMServiceError:
         raise HTTPException(
@@ -150,7 +149,7 @@ async def draft_endpoint(
             runtime_provider.api_key,
             base_url=runtime_provider.base_url,
             model=runtime_provider.chat_model,
-            zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
+            zdr_only=runtime_provider.zdr_required,
         )
         return {"draft": reply}
     except LLMServiceError:
@@ -194,7 +193,7 @@ async def translate_endpoint(
             runtime_provider.api_key,
             base_url=runtime_provider.base_url,
             model=runtime_provider.chat_model,
-            zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
+            zdr_only=runtime_provider.zdr_required,
         )
         return {"translation": translation}
     except LLMServiceError:

@@ -7,11 +7,8 @@ integration promises:
 * bulk import embeddings route through the **orchestrator batch API** (submit +
   retrieve) when a tenant has enabled + configured batching, and the job is
   recorded with the orchestrator's batch id and reported cost;
-* the path degrades gracefully (returns ``None`` so callers fall back to the
-  per-item path) when batching is disabled, the orchestrator base URL is
-  rejected by the SSRF/allowlist guard, or the orchestrator is unreachable;
-* the ``pg-llm-batch`` package is only used as an offline-dev fallback, gated
-  behind orchestrator-unavailable;
+* disabled batching returns ``None`` for the ordinary per-item path, while a
+  configured ZDR orchestrator fails closed if rejected, partial, or unreachable;
 * batch config (enablement, base URL, token, DSN) is read from the per-tenant
   Fernet-encrypted ``tenant_configs`` row, never from ``os.getenv``.
 """
@@ -29,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from db.models import LlmBatchItem, LlmBatchJob, TenantConfig
+from services.exceptions import EmbeddingGenerationError
 from services.email_import_service import (
     EmailImportBatchContext,
     EmailImportEmbeddingProvider,
@@ -379,7 +377,7 @@ def test_orchestrator_partitions_by_serialized_json_bytes():
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_preserves_completed_partitions_when_later_partition_fails(
+async def test_zdr_orchestrator_rejects_partial_result_without_external_fallback(
     monkeypatch,
 ):
     session = FakeAsyncSession(
@@ -401,19 +399,16 @@ async def test_orchestrator_preserves_completed_partitions_when_later_partition_
     )
     _patch_client(monkeypatch, client)
 
-    result = await batch_module.try_batch_import_embeddings(
-        session,
-        texts,
-        embedding_provider=PROVIDER,
-        user_id="user-1",
-        organization_id="org-acme",
-        dimension=8,
-    )
+    with pytest.raises(EmbeddingGenerationError, match="did not complete"):
+        await batch_module.try_batch_import_embeddings(
+            session,
+            texts,
+            embedding_provider=PROVIDER,
+            user_id="user-1",
+            organization_id="org-acme",
+            dimension=8,
+        )
 
-    assert isinstance(result, batch_module.BatchEmbeddingPartial)
-    assert len(result.completed_vectors) == batch_size
-    assert result.pending_texts == texts[batch_size:]
-    assert result.zdr_only is True
     assert client.post_calls[0]["json"]["zdr_only"] is True
     assert len(client.post_calls) == 2
 
@@ -422,16 +417,15 @@ async def test_orchestrator_preserves_completed_partitions_when_later_partition_
 async def test_orchestrator_falls_back_for_single_input_over_byte_budget():
     session = FakeAsyncSession(_orchestrator_tenant_config())
 
-    result = await batch_module.try_batch_import_embeddings(
-        session,
-        ["x" * (batch_module._ORCHESTRATOR_MAX_INPUT_BYTES + 1)],
-        embedding_provider=PROVIDER,
-        user_id="user-1",
-        organization_id="org-acme",
-        dimension=8,
-    )
-
-    assert result is None
+    with pytest.raises(EmbeddingGenerationError, match="unavailable"):
+        await batch_module.try_batch_import_embeddings(
+            session,
+            ["x" * (batch_module._ORCHESTRATOR_MAX_INPUT_BYTES + 1)],
+            embedding_provider=PROVIDER,
+            user_id="user-1",
+            organization_id="org-acme",
+            dimension=8,
+        )
     assert session.added == []
 
 
@@ -488,7 +482,6 @@ async def test_fall_back_when_batch_disabled(monkeypatch):
         user_id="user-1",
         organization_id="org-acme",
     )
-
     assert result is None
     build.assert_not_awaited()
     assert session.added == []
@@ -501,15 +494,14 @@ async def test_fall_back_when_orchestrator_base_url_rejected(monkeypatch):
     rejecting_client = FakeAsyncClient()
     _patch_client(monkeypatch, rejecting_client, normalized_url=None)
 
-    result = await batch_module.try_batch_import_embeddings(
-        session,
-        ["body"],
-        embedding_provider=PROVIDER,
-        user_id="user-1",
-        organization_id="org-acme",
-    )
-
-    assert result is None
+    with pytest.raises(EmbeddingGenerationError, match="unavailable"):
+        await batch_module.try_batch_import_embeddings(
+            session,
+            ["body"],
+            embedding_provider=PROVIDER,
+            user_id="user-1",
+            organization_id="org-acme",
+        )
     assert rejecting_client.closed is True
     assert session.added == []
 
@@ -520,15 +512,14 @@ async def test_fall_back_when_orchestrator_unreachable_no_local(monkeypatch):
     client = FakeAsyncClient(post_responses=[httpx.ConnectError("orchestrator down")])
     _patch_client(monkeypatch, client)
 
-    result = await batch_module.try_batch_import_embeddings(
-        session,
-        ["body"],
-        embedding_provider=PROVIDER,
-        user_id="user-1",
-        organization_id="org-acme",
-    )
-
-    assert result is None
+    with pytest.raises(EmbeddingGenerationError, match="unavailable"):
+        await batch_module.try_batch_import_embeddings(
+            session,
+            ["body"],
+            embedding_provider=PROVIDER,
+            user_id="user-1",
+            organization_id="org-acme",
+        )
     # No local DSN configured -> no job persisted, caller falls back to per-item.
     assert session.added == []
 
@@ -539,15 +530,14 @@ async def test_fall_back_when_orchestrator_http_error(monkeypatch):
     client = FakeAsyncClient(post_responses=[FakeResponse({}, status_code=503)])
     _patch_client(monkeypatch, client)
 
-    result = await batch_module.try_batch_import_embeddings(
-        session,
-        ["body", "att"],
-        embedding_provider=PROVIDER,
-        user_id="user-1",
-        organization_id="org-acme",
-    )
-
-    assert result is None
+    with pytest.raises(EmbeddingGenerationError, match="unavailable"):
+        await batch_module.try_batch_import_embeddings(
+            session,
+            ["body", "att"],
+            embedding_provider=PROVIDER,
+            user_id="user-1",
+            organization_id="org-acme",
+        )
     assert session.added == []
 
 
@@ -568,16 +558,15 @@ async def test_fall_back_when_orchestrator_returns_incomplete_vectors(monkeypatc
     )
     _patch_client(monkeypatch, client)
 
-    result = await batch_module.try_batch_import_embeddings(
-        session,
-        ["body", "att"],
-        embedding_provider=PROVIDER,
-        user_id="user-1",
-        organization_id="org-acme",
-        dimension=8,
-    )
-
-    assert result is None
+    with pytest.raises(EmbeddingGenerationError, match="unavailable"):
+        await batch_module.try_batch_import_embeddings(
+            session,
+            ["body", "att"],
+            embedding_provider=PROVIDER,
+            user_id="user-1",
+            organization_id="org-acme",
+            dimension=8,
+        )
     assert session.added == []
 
 
@@ -585,7 +574,7 @@ async def test_fall_back_when_orchestrator_returns_incomplete_vectors(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_falls_back_to_local_engine_when_orchestrator_unavailable(monkeypatch):
+async def test_zdr_orchestrator_does_not_fall_back_to_local_engine(monkeypatch):
     session = FakeAsyncSession(
         _orchestrator_tenant_config(batch_local_dsn="postgresql://batch-host/batch_db")
     )
@@ -597,25 +586,17 @@ async def test_falls_back_to_local_engine_when_orchestrator_unavailable(monkeypa
     monkeypatch.setattr(batch_module, "generate_embeddings", generate)
 
     texts = ["body", "att-1", "att-2", "att-3", "att-4"]
-    result = await batch_module.try_batch_import_embeddings(
-        session,
-        texts,
-        embedding_provider=PROVIDER,
-        user_id="user-1",
-        organization_id="org-acme",
-        dimension=8,
-    )
+    with pytest.raises(EmbeddingGenerationError, match="unavailable"):
+        await batch_module.try_batch_import_embeddings(
+            session,
+            texts,
+            embedding_provider=PROVIDER,
+            user_id="user-1",
+            organization_id="org-acme",
+            dimension=8,
+        )
 
-    assert result is not None
-    assert len(result) == 5
-    # 5 texts partitioned two-at-a-time -> 3 parts -> 3 embedding calls.
-    assert generate.await_count == 3
-    # Credentials came from the runtime provider, not os.getenv.
-    assert generate.await_args_list[0].args[1] == "secret-provider-token"
-    jobs = [obj for obj in session.added if isinstance(obj, LlmBatchJob)]
-    assert jobs[0].routing_mode == "local_engine"
-    assert jobs[0].job_status == "completed"
-    assert jobs[0].part_count == 3
+    generate.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -629,15 +610,14 @@ async def test_local_fallback_skipped_when_package_missing(monkeypatch):
     generate = AsyncMock()
     monkeypatch.setattr(batch_module, "generate_embeddings", generate)
 
-    result = await batch_module.try_batch_import_embeddings(
-        session,
-        ["body"],
-        embedding_provider=PROVIDER,
-        user_id="user-1",
-        organization_id="org-acme",
-    )
-
-    assert result is None
+    with pytest.raises(EmbeddingGenerationError, match="unavailable"):
+        await batch_module.try_batch_import_embeddings(
+            session,
+            ["body"],
+            embedding_provider=PROVIDER,
+            user_id="user-1",
+            organization_id="org-acme",
+        )
     generate.assert_not_awaited()
     assert session.added == []
 

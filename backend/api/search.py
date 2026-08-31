@@ -52,7 +52,6 @@ from services.hybrid_retrieval.retrieval_channels import (
     build_lexical_project_object_statement,
 )
 from services.llm_provider_selection import resolve_runtime_llm_provider
-from services.llm_provider_selection import uses_contextual_orchestrator
 from services.rag_service import GroundedAnswer, answer_from_emails
 
 router = APIRouter(prefix="/api")
@@ -307,7 +306,7 @@ async def _resolve_query_embedding(
             runtime_provider.api_key,
             base_url=runtime_provider.base_url,
             model=runtime_provider.embedding_model,
-            zdr_only=uses_contextual_orchestrator(runtime_provider.embedding_model),
+            zdr_only=runtime_provider.zdr_required,
         )
     except EmbeddingGenerationError:
         logger.info("Search embedding unavailable; using lexical search only")
@@ -504,7 +503,7 @@ async def grounded_answer(
                 runtime_provider.api_key,
                 base_url=runtime_provider.base_url,
                 model=runtime_provider.embedding_model,
-                zdr_only=uses_contextual_orchestrator(runtime_provider.embedding_model),
+                zdr_only=runtime_provider.zdr_required,
             )
             query_embedding = (
                 fit_embedding_vector(embeddings[0], SEARCH_VECTOR_DIMENSIONS)
@@ -535,7 +534,7 @@ async def grounded_answer(
             base_url=runtime_provider.base_url,
             model=runtime_provider.chat_model,
             provider_name=runtime_provider.provider_name,
-            zdr_only=uses_contextual_orchestrator(runtime_provider.chat_model),
+            zdr_only=runtime_provider.zdr_required,
         )
         if grounded is None:
             return AnswerResponse(answer=None, citations=[])

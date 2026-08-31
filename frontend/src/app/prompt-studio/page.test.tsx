@@ -237,6 +237,8 @@ describe("PromptStudioPage", () => {
     const page = await renderPage();
 
     setControlValue(page.querySelector<HTMLInputElement>("#prompt-model")!, "");
+    expect(page.textContent).toContain("조직 기본 모델 (자동 선택)");
+    expect(page.textContent).toContain("비워두면 `provider-default`를 사용합니다.");
     act(() => {
       getButton(page, "실행 (Test)").click();
     });

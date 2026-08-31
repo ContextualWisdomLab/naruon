@@ -38,7 +38,6 @@ from db.models import (
 from services.llm_provider_selection import (
     RuntimeLLMProvider,
     resolve_runtime_llm_provider,
-    uses_contextual_orchestrator,
 )
 from services.llm_provider_urls import build_llm_provider_http_client
 
@@ -494,7 +493,7 @@ async def build_noema_agent(
 
     model_settings = (
         {"extra_body": {"zdr_only": True}}
-        if uses_contextual_orchestrator(provider.chat_model)
+        if provider.zdr_required
         else None
     )
     model = modules["OpenAIChatModel"](

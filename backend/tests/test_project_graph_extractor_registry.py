@@ -277,7 +277,8 @@ async def test_direct_llm_gateway_model_forwards_zdr_policy(monkeypatch):
         context=KgExtractorContext(
             api_key="key",
             base_url="https://gateway.example/v1",
-            model="orchestrator/free",
+            model="gateway-free",
+            zdr_required=True,
         ),
     )
 

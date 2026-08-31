@@ -182,8 +182,13 @@ type PromptSettings = {
   outputFormat: string;
 };
 
+function getEffectivePromptModel(modelValue: string) {
+  return modelValue.trim() || DEFAULT_PROMPT_MODEL;
+}
+
 function getModelLabel(modelValue: string) {
-  return modelValue === DEFAULT_PROMPT_MODEL ? '조직 기본 모델 (자동 선택)' : modelValue;
+  const effectiveModel = getEffectivePromptModel(modelValue);
+  return effectiveModel === DEFAULT_PROMPT_MODEL ? '조직 기본 모델 (자동 선택)' : effectiveModel;
 }
 
 export default function PromptStudioPage() {
@@ -256,7 +261,7 @@ export default function PromptStudioPage() {
   };
 
   const buildPromptTestSettings = () => ({
-    model: promptSettings.model.trim() || DEFAULT_PROMPT_MODEL,
+    model: getEffectivePromptModel(promptSettings.model),
     temperature: Number.parseFloat(promptSettings.temperature),
     response_style: promptSettings.responseStyle,
     output_format: promptSettings.outputFormat,
@@ -555,7 +560,7 @@ export default function PromptStudioPage() {
                     className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   />
                   <p id="prompt-model-help" className="text-xs font-semibold text-muted-foreground">
-                    비워두지 말고 `provider-default` 또는 조직 provider의 모델 식별자를 입력하세요.
+                    비워두면 `provider-default`를 사용합니다. 또는 조직 provider의 모델 식별자를 입력하세요.
                   </p>
                 </div>
                 <div className="space-y-1.5">

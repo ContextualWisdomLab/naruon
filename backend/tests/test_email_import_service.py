@@ -561,7 +561,8 @@ async def test_generate_import_embeddings_marks_gateway_model_zdr_only():
     provider = EmailImportEmbeddingProvider(
         api_key="gateway-token",
         base_url="https://gateway.example/v1",
-        embedding_model="orchestrator/free",
+        embedding_model="text-embedding-test",
+        zdr_required=True,
     )
     with patch(
         "services.email_import_service.generate_embeddings",
@@ -624,7 +625,8 @@ async def test_partial_batch_falls_back_only_for_unfinished_sources():
     provider = EmailImportEmbeddingProvider(
         api_key="provider-key",
         base_url="https://provider.example/v1",
-        embedding_model="orchestrator/free",
+        embedding_model="text-embedding-test",
+        zdr_required=True,
     )
     partial = BatchEmbeddingPartial(
         completed_vectors=[[0.25] * EMBEDDING_DIMENSION],
@@ -659,7 +661,7 @@ async def test_partial_batch_falls_back_only_for_unfinished_sources():
 
 
 @pytest.mark.asyncio
-async def test_partial_batch_fallback_keeps_provider_windows_bounded():
+async def test_partial_zdr_batch_does_not_leak_remainder_to_direct_provider():
     provider = EmailImportEmbeddingProvider(
         api_key="provider-key",
         base_url="https://provider.example/v1",
@@ -689,22 +691,16 @@ async def test_partial_batch_fallback_keeps_provider_windows_bounded():
             ],
         ) as mock_generate,
     ):
-        embeddings = await _generate_import_embeddings(
-            ["completed source", *pending_texts],
-            embedding_provider=provider,
-            batch_context=EmailImportBatchContext(
-                session=None, user_id="user-1", organization_id="org-acme"
-            ),
-        )
+        with pytest.raises(EmbeddingGenerationError, match="non-ZDR provider fallback"):
+            await _generate_import_embeddings(
+                ["completed source", *pending_texts],
+                embedding_provider=provider,
+                batch_context=EmailImportBatchContext(
+                    session=None, user_id="user-1", organization_id="org-acme"
+                ),
+            )
 
-    assert [len(call.args[0]) for call in mock_generate.await_args_list] == [
-        MAX_EMBEDDING_CHUNKS_PER_WINDOW,
-        MAX_EMBEDDING_CHUNKS_PER_WINDOW,
-        1,
-    ]
-    assert all(call.kwargs["zdr_only"] is False for call in mock_generate.await_args_list)
-    assert len(embeddings) == len(pending_texts) + 1
-    assert embeddings[0] == [0.25] * EMBEDDING_DIMENSION
+    mock_generate.assert_not_awaited()
 
 
 @pytest.mark.asyncio

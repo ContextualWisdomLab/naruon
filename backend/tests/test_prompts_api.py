@@ -337,9 +337,9 @@ def test_prompt_test_preserves_gateway_zdr_when_preview_overrides_model(auth_cli
             user_id="testuser",
             organization_id="org-acme",
             name="Contextual gateway",
-            provider_type="openai",
+            provider_type="contextual_orchestrator",
             api_key="test-key",
-            model_identifier="orchestrator/auto",
+            model_identifier="gateway-auto",
             is_active=True,
         )
     )

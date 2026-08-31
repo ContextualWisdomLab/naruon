@@ -24,8 +24,11 @@ config-level integration, not a bespoke client (unlike clearfolio/codec-carver).
 The integration slice in naruon#1480 adds the request-policy contract without
 hard-coding a model candidate array:
 
-- `orchestrator/*` chat, responses, completion, embedding, project-graph, and
-  batch paths send the strict boolean `zdr_only=true` to the gateway.
+- providers explicitly configured with `provider_type=contextual_orchestrator`
+  send the strict boolean `zdr_only=true` for chat, completion, embedding,
+  project-graph, and Noema calls, independent of the selected model string.
+- the separately scoped batch-orchestrator transport always requires ZDR. If it
+  cannot complete, raw content is not retried through a non-ZDR provider.
 - contextual-orchestrator assembles its provider/model pool through credential-
   backed auto-discovery and selects ZDR members from the caller-supplied or
   discovered model-group array.
@@ -45,7 +48,8 @@ hard-coding a model candidate array:
 2. **Allowlist the host:** add the orchestrator host to
    `ALLOWED_LLM_BASE_URL_HOSTS` so naruon's SSRF-safe
    `build_llm_provider_http_client` accepts it.
-3. **Request policy:** when naruon selects the contextual-orchestrator
+3. **Request policy:** configure the scoped provider with
+   `provider_type=contextual_orchestrator`. When naruon selects that transport,
    transport, it sends the strict boolean `zdr_only=true` as a gateway policy
    field. The gateway validates it as a boolean and applies it while assembling
    the active model group. A caller-supplied model string or candidate array
@@ -64,8 +68,9 @@ hard-coding a model candidate array:
 1. **Config + allowlist** — document + wire `ALLOWED_LLM_BASE_URL_HOSTS` +
    provider base_url pointing at the orchestrator; verify an existing naruon LLM
    path (search embedding / RAG answer) works unchanged through it.
-2. **(Optional) orchestration hints** — a thin extra-body passthrough so naruon
-   can request a routing `mode` per call, if wanted.
+2. **ZDR fail-closed routing** — the scoped provider capability, not a model
+   prefix, controls `zdr_only`; batch failures never downgrade to a non-ZDR
+   external fallback.
 
 ## Cross-repo note
 Same org-central CI gate as the other repos (opencode/trivy) → `.github#323`

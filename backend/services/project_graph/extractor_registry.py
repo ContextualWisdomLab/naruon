@@ -42,7 +42,6 @@ from .llm_extractor import (
     LLM_EXTRACTOR_VERSION,
     extract_project_semantics_llm,
 )
-from services.llm_provider_selection import uses_contextual_orchestrator
 from .models import ProjectSemanticExtractionResult, ProjectSourceSegment
 
 logger = logging.getLogger(__name__)
@@ -80,6 +79,7 @@ class KgExtractorContext:
     base_url: str | None = None
     model: str | None = None
     orchestrator_base_url: str | None = None
+    zdr_required: bool = False
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -174,8 +174,7 @@ class LlmGroundedExtractor:
             api_key=context.api_key,
             base_url=base_url,
             model=context.model,
-            zdr_only=self.routed_via_orchestrator
-            or uses_contextual_orchestrator(context.model),
+            zdr_only=self.routed_via_orchestrator or context.zdr_required,
         )
 
 

@@ -84,6 +84,58 @@ async def test_resolve_runtime_llm_provider_prefers_active_local_provider():
     assert runtime_provider.base_url == "http://ollama:11434/v1"
     assert runtime_provider.chat_model == "gemma4"
     assert runtime_provider.embedding_model == "embeddinggemma"
+    assert runtime_provider.zdr_required is False
+
+
+@pytest.mark.asyncio
+async def test_explicit_orchestrator_provider_requires_zdr_for_nonprefixed_models():
+    provider = LLMProvider(
+        id=11,
+        user_id="admin",
+        organization_id="org-acme",
+        name="Contextual Orchestrator",
+        provider_type="contextual_orchestrator",
+        base_url="https://gateway.example/v1",
+        model_identifier="gateway-auto",
+        embedding_model="gateway-embedding",
+        api_key="gateway-token",
+        is_active=True,
+        updated_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    runtime_provider = await resolve_runtime_llm_provider(
+        MockSession(providers=[provider]),
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert runtime_provider is not None
+    assert runtime_provider.chat_model == "gateway-auto"
+    assert runtime_provider.zdr_required is True
+
+
+@pytest.mark.asyncio
+async def test_model_prefix_cannot_enable_zdr_for_direct_provider():
+    provider = LLMProvider(
+        id=12,
+        user_id="admin",
+        organization_id="org-acme",
+        name="Direct provider",
+        provider_type="openai",
+        model_identifier="orchestrator/untrusted-prefix",
+        api_key="direct-token",
+        is_active=True,
+        updated_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    runtime_provider = await resolve_runtime_llm_provider(
+        MockSession(providers=[provider]),
+        user_id="testuser",
+        organization_id="org-acme",
+    )
+
+    assert runtime_provider is not None
+    assert runtime_provider.zdr_required is False
 
 
 @pytest.mark.asyncio
@@ -97,3 +149,4 @@ async def test_resolve_runtime_llm_provider_falls_back_to_tenant_config():
     assert runtime_provider is not None
     assert runtime_provider.provider_source == "tenant_config"
     assert runtime_provider.api_key == "sk-tenant"
+    assert runtime_provider.zdr_required is False
