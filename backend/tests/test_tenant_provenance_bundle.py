@@ -13,6 +13,7 @@ from services.tenant_provenance_bundle import (
     JSON_SAFE_INTEGER_MAX,
     MAX_COMPRESSION_RATIO,
     ProvenanceArchiveError,
+    _within_archive_bounds,
     build_provenance_archive,
     parse_provenance_archive,
 )
@@ -165,6 +166,29 @@ def test_parse_round_trips_records_and_verifies_ro_crate_metadata():
     assert "prov:SoftwareAgent" in nodes["#naruon"]["@type"]
 
 
+@pytest.mark.parametrize("date_published", ("not-a-date", "2026-02-30"))
+def test_build_rejects_non_iso_ro_crate_date_published(date_published):
+    with pytest.raises(ProvenanceArchiveError):
+        build_provenance_archive(
+            {
+                **RECORDS,
+                "export_activity": {
+                    **RECORDS["export_activity"],
+                    "date_published": date_published,
+                },
+            }
+        )
+
+
+def test_build_preserves_valid_iso_ro_crate_date_published():
+    archive = build_provenance_archive(RECORDS)
+
+    assert (
+        parse_provenance_archive(archive)["export_activity"]["date_published"]
+        == "1980-01-01T00:00:00Z"
+    )
+
+
 def test_parse_rejects_payload_tampering():
     archive = build_provenance_archive(RECORDS)
     tampered = _replace_entries(archive, {"data/records.json": b'{"tampered":true}'})
@@ -315,11 +339,81 @@ def test_parse_rejects_zip_comments_and_extra_fields(metadata):
         parse_provenance_archive(_archive_with_zip_metadata(entries, **metadata))
 
 
+@pytest.mark.parametrize(
+    "container_bytes", (b"leading-", b"trailing-unvalidated-bytes")
+)
+def test_parse_rejects_leading_and_trailing_container_bytes(container_bytes):
+    archive = build_provenance_archive(RECORDS)
+    candidate = (
+        container_bytes + archive
+        if container_bytes == b"leading-"
+        else archive + container_bytes
+    )
+
+    with pytest.raises(ProvenanceArchiveError):
+        parse_provenance_archive(candidate)
+
+
+@pytest.mark.parametrize(
+    "archive",
+    (
+        lambda value: value[:-1],
+        lambda value: value[:-22] + b"truncated",
+        lambda value: value[:-22] + b"gap" + value[-22:],
+    ),
+)
+def test_parse_rejects_truncated_or_malformed_eocd(archive):
+    with pytest.raises(ProvenanceArchiveError):
+        parse_provenance_archive(archive(build_provenance_archive(RECORDS)))
+
+
 def test_production_archive_limits_are_fixed():
     assert ARCHIVE_MAX_BYTES == 64 * 1024 * 1024
     assert ARCHIVE_MAX_ENTRIES == 64
     assert ENTRY_MAX_BYTES == 32 * 1024 * 1024
     assert MAX_COMPRESSION_RATIO == 100
+
+
+@pytest.mark.parametrize(
+    (
+        "archive_bytes",
+        "entry_count",
+        "total_bytes",
+        "entry_bytes",
+        "compressed_bytes",
+        "expected",
+    ),
+    (
+        (ARCHIVE_MAX_BYTES - 1, 0, 0, 0, 0, True),
+        (ARCHIVE_MAX_BYTES, 0, 0, 0, 0, True),
+        (ARCHIVE_MAX_BYTES + 1, 0, 0, 0, 0, False),
+        (0, ARCHIVE_MAX_ENTRIES - 1, 0, 0, 0, True),
+        (0, ARCHIVE_MAX_ENTRIES, 0, 0, 0, True),
+        (0, ARCHIVE_MAX_ENTRIES + 1, 0, 0, 0, False),
+        (0, 0, ARCHIVE_MAX_BYTES - 1, 0, 0, True),
+        (0, 0, ARCHIVE_MAX_BYTES, 0, 0, True),
+        (0, 0, ARCHIVE_MAX_BYTES + 1, 0, 0, False),
+        (0, 0, 0, ENTRY_MAX_BYTES - 1, ENTRY_MAX_BYTES, True),
+        (0, 0, 0, ENTRY_MAX_BYTES, ENTRY_MAX_BYTES, True),
+        (0, 0, 0, ENTRY_MAX_BYTES + 1, ENTRY_MAX_BYTES + 1, False),
+        (0, 0, 0, MAX_COMPRESSION_RATIO - 1, 1, True),
+        (0, 0, 0, MAX_COMPRESSION_RATIO, 1, True),
+        (0, 0, 0, MAX_COMPRESSION_RATIO + 1, 1, False),
+    ),
+)
+def test_production_archive_limits_boundary(
+    archive_bytes, entry_count, total_bytes, entry_bytes, compressed_bytes, expected
+):
+    assert (
+        _within_archive_bounds(
+            archive_bytes=archive_bytes,
+            entry_count=entry_count,
+            total_bytes=total_bytes,
+            entry_bytes=entry_bytes,
+            compressed_bytes=compressed_bytes,
+        )
+        is expected
+    )
 
 
 def test_build_output_always_passes_parser_bounds():

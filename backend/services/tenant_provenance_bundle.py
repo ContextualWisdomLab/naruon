@@ -6,8 +6,10 @@ import hashlib
 import io
 import json
 import stat
+import struct
 import zipfile
 from collections.abc import Mapping
+from datetime import date, datetime
 from typing import Any
 
 
@@ -20,6 +22,9 @@ JSON_SAFE_INTEGER_MAX = 2**53 - 1
 _MAX_IDENTIFIER_LENGTH = 256
 _FIXED_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 _PAYLOAD_NAME = "data/records.json"
+_LOCAL_FILE_SIGNATURE = b"PK\x03\x04"
+_EOCD_SIGNATURE = b"PK\x05\x06"
+_EOCD_SIZE = 22
 _EXPECTED_ENTRIES = frozenset(
     {
         "bagit.txt",
@@ -102,6 +107,18 @@ def _safe_identifier(value: object) -> str:
     return value
 
 
+def _iso8601_date_or_datetime(value: object) -> str:
+    date_published = _safe_identifier(value)
+    try:
+        date.fromisoformat(date_published)
+    except ValueError:
+        try:
+            datetime.fromisoformat(date_published)
+        except ValueError:
+            _fail()
+    return date_published
+
+
 def _bag_info(bundle_uid: str) -> bytes:
     return (
         "Bag-Software-Agent: naruon\n"
@@ -115,7 +132,7 @@ def _ro_crate(records: Mapping[str, object], payload_digest: str) -> bytes:
     if not isinstance(activity, Mapping):
         _fail()
     activity_uid = _safe_identifier(activity.get("activity_uid"))
-    date_published = _safe_identifier(activity.get("date_published"))
+    date_published = _iso8601_date_or_datetime(activity.get("date_published"))
     crate = {
         "@context": [
             "https://w3id.org/ro/crate/1.3/context",
@@ -258,12 +275,64 @@ def _has_fixed_metadata(info: zipfile.ZipInfo) -> bool:
     )
 
 
+def _within_archive_bounds(
+    *,
+    archive_bytes: int,
+    entry_count: int,
+    total_bytes: int,
+    entry_bytes: int,
+    compressed_bytes: int,
+) -> bool:
+    return (
+        0 <= archive_bytes <= ARCHIVE_MAX_BYTES
+        and 0 <= entry_count <= ARCHIVE_MAX_ENTRIES
+        and 0 <= total_bytes <= ARCHIVE_MAX_BYTES
+        and 0 <= entry_bytes <= ENTRY_MAX_BYTES
+        and compressed_bytes >= 0
+        and (
+            entry_bytes == 0
+            or 0 < compressed_bytes
+            and entry_bytes <= compressed_bytes * MAX_COMPRESSION_RATIO
+        )
+    )
+
+
+def _has_profile_container_framing(archive_bytes: bytes | bytearray) -> bool:
+    if (
+        len(archive_bytes) < _EOCD_SIZE
+        or not archive_bytes.startswith(_LOCAL_FILE_SIGNATURE)
+        or archive_bytes[-_EOCD_SIZE:-18] != _EOCD_SIGNATURE
+    ):
+        return False
+    (
+        _,
+        disk_number,
+        directory_disk,
+        entries_on_disk,
+        entries,
+        directory_size,
+        directory_offset,
+        comment_size,
+    ) = struct.unpack("<4s4H2LH", archive_bytes[-_EOCD_SIZE:])
+    return (
+        disk_number == 0
+        and directory_disk == 0
+        and entries_on_disk == entries
+        and entries != 0xFFFF
+        and directory_size != 0xFFFFFFFF
+        and directory_offset != 0xFFFFFFFF
+        and comment_size == 0
+        and directory_offset + directory_size == len(archive_bytes) - _EOCD_SIZE
+    )
+
+
 def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
-    if info.file_size > ENTRY_MAX_BYTES:
-        _fail()
-    if info.file_size and (
-        not info.compress_size
-        or info.file_size / info.compress_size > MAX_COMPRESSION_RATIO
+    if not _within_archive_bounds(
+        archive_bytes=0,
+        entry_count=0,
+        total_bytes=0,
+        entry_bytes=info.file_size,
+        compressed_bytes=info.compress_size,
     ):
         _fail()
     data = bytearray()
@@ -309,7 +378,14 @@ def parse_provenance_archive(archive_bytes: bytes) -> dict[str, object]:
     """Validate a bounded fixed envelope and return its canonical record payload."""
     if (
         not isinstance(archive_bytes, (bytes, bytearray))
-        or len(archive_bytes) > ARCHIVE_MAX_BYTES
+        or not _within_archive_bounds(
+            archive_bytes=len(archive_bytes),
+            entry_count=0,
+            total_bytes=0,
+            entry_bytes=0,
+            compressed_bytes=0,
+        )
+        or not _has_profile_container_framing(archive_bytes)
     ):
         _fail()
     try:
@@ -317,8 +393,13 @@ def parse_provenance_archive(archive_bytes: bytes) -> dict[str, object]:
             infos = archive.infolist()
             if (
                 archive.comment
-                or len(infos) > ARCHIVE_MAX_ENTRIES
-                or sum(info.file_size for info in infos) > ARCHIVE_MAX_BYTES
+                or not _within_archive_bounds(
+                    archive_bytes=len(archive_bytes),
+                    entry_count=len(infos),
+                    total_bytes=sum(info.file_size for info in infos),
+                    entry_bytes=0,
+                    compressed_bytes=0,
+                )
                 or any(
                     _is_unsafe_member(info) or not _has_fixed_metadata(info)
                     for info in infos
