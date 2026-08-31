@@ -326,6 +326,20 @@ def _has_profile_container_framing(archive_bytes: bytes | bytearray) -> bool:
     )
 
 
+def _has_contiguous_member_data(infos: list[zipfile.ZipInfo], start_dir: int) -> bool:
+    expected_offset = 0
+    for info in infos:
+        if info.header_offset != expected_offset:
+            return False
+        expected_offset += (
+            zipfile.sizeFileHeader
+            + len(info.filename.encode("ascii"))
+            + len(info.extra)
+            + info.compress_size
+        )
+    return expected_offset == start_dir
+
+
 def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
     if not _within_archive_bounds(
         archive_bytes=0,
@@ -411,6 +425,7 @@ def parse_provenance_archive(archive_bytes: bytes) -> dict[str, object]:
                 names != sorted(names)
                 or len(set(names)) != len(names)
                 or set(names) != _EXPECTED_ENTRIES
+                or not _has_contiguous_member_data(infos, archive.start_dir)
             ):
                 _fail()
             entries = {info.filename: _read_entry(archive, info) for info in infos}

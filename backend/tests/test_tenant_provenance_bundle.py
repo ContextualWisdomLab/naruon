@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import struct
 import warnings
 import zipfile
 
@@ -365,6 +366,19 @@ def test_parse_rejects_leading_and_trailing_container_bytes(container_bytes):
 def test_parse_rejects_truncated_or_malformed_eocd(archive):
     with pytest.raises(ProvenanceArchiveError):
         parse_provenance_archive(archive(build_provenance_archive(RECORDS)))
+
+
+def test_parse_rejects_gap_before_central_directory():
+    archive = build_provenance_archive(RECORDS)
+    assert parse_provenance_archive(archive) == RECORDS
+    with zipfile.ZipFile(io.BytesIO(archive), "r") as source:
+        start_dir = source.start_dir
+    gap = b"unaccounted-gap"
+    candidate = bytearray(archive[:start_dir] + gap + archive[start_dir:])
+    struct.pack_into("<L", candidate, len(candidate) - 22 + 16, start_dir + len(gap))
+
+    with pytest.raises(ProvenanceArchiveError):
+        parse_provenance_archive(candidate)
 
 
 def test_production_archive_limits_are_fixed():
