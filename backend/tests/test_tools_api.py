@@ -495,6 +495,24 @@ def test_validate_parameters_missing_required():
         r._validate_parameters("req_params", {})
 
 
+def test_validate_parameters_allows_explicit_optional_parameter():
+    r = ToolRegistry()
+    r._tools["optional_params"] = ToolInfo(
+        code="optional_params",
+        name="N",
+        description="D",
+        category="C",
+        parameters={
+            "required_text": "string",
+            "optional_text": {"type": "string", "required": False},
+        },
+    )
+
+    assert r._validate_parameters("optional_params", {"required_text": "value"}) == {
+        "required_text": "value"
+    }
+
+
 def test_parameter_type_name_dict():
     assert _parameter_type_name({"type": "integer"}) == "integer"
     assert _parameter_type_name({"other": "thing"}) == "string"
@@ -520,17 +538,17 @@ def test_execute_json_formatter_preserves_number_lexemes():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["formatted_json"] == (
-        '{\n'
+        "{\n"
         '  "precise": 0.12345678901234567890123456789,\n'
         '  "large": 1e+1000,\n'
         '  "nested": [\n'
-        '    900719925474099312345\n'
-        '  ]\n'
-        '}'
+        "    900719925474099312345\n"
+        "  ]\n"
+        "}"
     )
 
 
-def test_execute_json_formatter_preserves_string_lexemes():
+def test_execute_json_formatter_canonicalizes_string_escapes():
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/json_formatter/execute",
@@ -546,10 +564,7 @@ def test_execute_json_formatter_preserves_string_lexemes():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["formatted_json"] == (
-        "{\n"
-        '  "escaped": "\\u003c\\/",\n'
-        '  "key\\u002dname": "\\u000a"\n'
-        "}"
+        '{\n  "escaped": "</",\n  "key-name": "\\n"\n}'
     )
 
 
@@ -589,6 +604,7 @@ def test_execute_url_decoder_rejects_invalid_utf8_escape():
         ("json_formatter", "json_str"),
         ("html_escape", "text"),
         ("html_unescape", "escaped_html"),
+        ("hash_generator", "text"),
     ],
 )
 def test_utility_tools_reject_oversized_input(tool_code, parameter_name):
@@ -596,17 +612,68 @@ def test_utility_tools_reject_oversized_input(tool_code, parameter_name):
         response = client.post(
             f"/api/tools/{tool_code}/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    parameter_name: "x" * (MAX_TOOL_INPUT_CHARS + 1)
-                }
-            },
+            json={"parameters": {parameter_name: "x" * (MAX_TOOL_INPUT_CHARS + 1)}},
         )
 
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
     assert "maximum length" in data["message"]
+
+
+@pytest.mark.parametrize(
+    ("algorithm", "expected"),
+    [
+        ("md5", "5d41402abc4b2a76b9719d911017c592"),
+        ("sha1", "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"),
+        (
+            "sha256",
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        ),
+        (
+            "sha512",
+            "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7"
+            "2323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043",
+        ),
+    ],
+)
+def test_hash_generator_supported_algorithms(algorithm, expected):
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": algorithm}},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["result"]["hash"] == expected
+
+
+def test_hash_generator_defaults_to_sha256():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello"}},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["result"]["hash"] == (
+        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+
+
+def test_hash_generator_rejects_unknown_algorithm():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/hash_generator/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "hello", "algorithm": "unknown"}},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert "Unsupported hash algorithm" in response.json()["message"]
 
 
 @pytest.mark.asyncio

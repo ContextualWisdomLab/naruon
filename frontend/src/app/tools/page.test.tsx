@@ -184,7 +184,7 @@ describe("ToolsPage", () => {
         HTMLInputElement.prototype,
         "value",
       )?.set;
-      setNativeNumberValue?.call(limitInput, "1.5");
+      setNativeNumberValue?.call(limitInput, "2");
       limitInput?.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
@@ -194,10 +194,59 @@ describe("ToolsPage", () => {
     await flushAsyncWork();
 
     expect(executeCalled).toBe(true);
-    expect(executeBody).toEqual({ parameters: { thread_id: "user-provided content", limit: 1.5 } });
+    expect(executeBody).toEqual({ parameters: { thread_id: "user-provided content", limit: 2 } });
     expect(container.textContent).toContain("성공");
     expect(container.textContent).toContain("Execution OK");
     expect(container.textContent).not.toContain("Success message");
+  });
+
+  it("preserves structured drafts and rejects fractional integer input", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url.includes("/api/tools") && !url.includes("execute")) {
+          return jsonResponse([
+            {
+              code: "structured_tool",
+              name: "구조화 도구",
+              description: "설명",
+              category: "카테고리",
+              parameters: { payload: "object", count: "integer" },
+            },
+          ]);
+        }
+        return jsonResponse({ status: "success", result: "ok" });
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => root?.render(<ToolsPage />));
+    await flushAsyncWork();
+
+    const payload = container.querySelector(
+      'input[data-tool-parameter="structured_tool.payload"]',
+    ) as HTMLInputElement;
+    const count = container.querySelector(
+      'input[data-tool-parameter="structured_tool.count"]',
+    ) as HTMLInputElement;
+    const execute = container.querySelector(
+      'button[data-tool-execute="structured_tool"]',
+    ) as HTMLButtonElement;
+
+    act(() => {
+      const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      inputSetter?.call(payload, "{");
+      payload.dispatchEvent(new Event("input", { bubbles: true }));
+      inputSetter?.call(count, "1.5");
+      count.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(payload.value).toBe("{");
+    expect(payload.getAttribute("aria-invalid")).toBe("true");
+    expect(count.getAttribute("aria-invalid")).toBe("true");
+    expect(execute.disabled).toBe(true);
   });
 
   it("rebuilds parameter values when the tool schema is refreshed", async () => {

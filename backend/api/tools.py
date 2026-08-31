@@ -10,7 +10,6 @@ import urllib.parse
 import uuid
 from collections import Counter
 from collections.abc import Callable
-from json.scanner import py_make_scanner
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -178,14 +177,23 @@ class ToolRegistry:
 
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
+            is_required = not (
+                isinstance(descriptor, dict) and descriptor.get("required") is False
+            )
             if key not in params:
-                raise ValueError("Missing required tool parameter")
+                if is_required:
+                    raise ValueError("Missing required tool parameter")
+                continue
             value = params[key]
             expected_type = _parameter_type_name(descriptor)
             if not _parameter_matches_type(value, expected_type):
                 raise ValueError("Invalid tool parameter type")
             max_length = _parameter_max_length(descriptor)
-            if expected_type == "string" and max_length is not None and len(value) > max_length:
+            if (
+                expected_type == "string"
+                and max_length is not None
+                and len(value) > max_length
+            ):
                 raise ValueError(
                     f"Tool parameter exceeds maximum length of {max_length} characters"
                 )
@@ -492,7 +500,11 @@ def _parameter_max_length(descriptor: Any) -> int | None:
     if not isinstance(descriptor, dict):
         return None
     max_length = descriptor.get("max_length")
-    if isinstance(max_length, int) and not isinstance(max_length, bool) and max_length >= 0:
+    if (
+        isinstance(max_length, int)
+        and not isinstance(max_length, bool)
+        and max_length >= 0
+    ):
         return max_length
     return None
 
@@ -829,16 +841,6 @@ registry.register(
 )
 
 
-class _RawJSONString:
-    """Hold a validated JSON string's original lexical representation."""
-
-    __slots__ = ("text", "value")
-
-    def __init__(self, text: str, value: str):
-        self.text = text
-        self.value = value
-
-
 class _RawJSONNumber:
     """Hold a validated JSON number's original lexical representation."""
 
@@ -857,76 +859,6 @@ class _RawJSONObject:
         self.pairs = pairs
 
 
-def _parse_raw_json_string(
-    source: str, end: int, strict: bool = True
-) -> tuple[_RawJSONString, int]:
-    value, end_index = json.decoder.scanstring(source, end, strict)
-    return _RawJSONString(source[end - 1 : end_index], value), end_index
-
-
-def _parse_raw_json_object(
-    source_and_end: tuple[str, int],
-    strict: bool,
-    scan_once: Callable[[str, int], tuple[Any, int]],
-    object_hook: Callable[[dict[str, Any]], Any] | None,
-    object_pairs_hook: Callable[[list[tuple[Any, Any]]], Any] | None,
-    memo: dict[str, Any] | None = None,
-) -> tuple[Any, int]:
-    """Parse an object while retaining each key's original string token."""
-    source, end = source_and_end
-    pairs: list[tuple[Any, Any]] = []
-    next_char = source[end : end + 1]
-    if next_char in json.decoder.WHITESPACE_STR:
-        end = json.decoder.WHITESPACE.match(source, end).end()
-        next_char = source[end : end + 1]
-    if next_char == "}":
-        result = object_pairs_hook(pairs) if object_pairs_hook else {}
-        return result, end + 1
-    if next_char != '"':
-        raise json.decoder.JSONDecodeError(
-            "Expecting property name enclosed in double quotes", source, end
-        )
-
-    while True:
-        key, end = _parse_raw_json_string(source, end + 1, strict)
-        if source[end : end + 1] != ":":
-            end = json.decoder.WHITESPACE.match(source, end).end()
-            if source[end : end + 1] != ":":
-                raise json.decoder.JSONDecodeError(
-                    "Expecting ':' delimiter", source, end
-                )
-        end += 1
-        if source[end : end + 1] in json.decoder.WHITESPACE_STR:
-            end = json.decoder.WHITESPACE.match(source, end).end()
-        try:
-            value, end = scan_once(source, end)
-        except StopIteration as exc:
-            raise json.decoder.JSONDecodeError(
-                "Expecting value", source, exc.value
-            ) from None
-        pairs.append((key, value))
-        next_char = source[end : end + 1]
-        if next_char in json.decoder.WHITESPACE_STR:
-            end = json.decoder.WHITESPACE.match(source, end).end()
-            next_char = source[end : end + 1]
-        if next_char == "}":
-            break
-        if next_char != ",":
-            raise json.decoder.JSONDecodeError(
-                "Expecting ',' delimiter", source, end
-            )
-        end += 1
-        end = json.decoder.WHITESPACE.match(source, end).end()
-        if source[end : end + 1] != '"':
-            raise json.decoder.JSONDecodeError(
-                "Expecting property name enclosed in double quotes", source, end
-            )
-    if object_pairs_hook:
-        return object_pairs_hook(pairs), end + 1
-    result = {key.value if isinstance(key, _RawJSONString) else key: value for key, value in pairs}
-    return object_hook(result) if object_hook else result, end + 1
-
-
 def _reject_non_standard_json_number(value: str) -> None:
     """Reject JavaScript numeric extensions that are not valid JSON."""
     raise ValueError(f"Non-standard JSON number: {value}")
@@ -937,10 +869,9 @@ def _reject_duplicate_json_keys(pairs: list[tuple[Any, Any]]) -> _RawJSONObject:
     seen: set[str] = set()
     result: list[tuple[Any, Any]] = []
     for key, value in pairs:
-        key_value = key.value if isinstance(key, _RawJSONString) else str(key)
-        if key_value in seen:
-            raise ValueError(f"Duplicate JSON object key: {key_value}")
-        seen.add(key_value)
+        if key in seen:
+            raise ValueError(f"Duplicate JSON object key: {key}")
+        seen.add(key)
         result.append((key, value))
     return _RawJSONObject(result)
 
@@ -948,15 +879,13 @@ def _reject_duplicate_json_keys(pairs: list[tuple[Any, Any]]) -> _RawJSONObject:
 def _format_json_value(value: Any, level: int = 0) -> str:
     """Pretty-print parsed JSON while preserving raw number tokens."""
     indent = "  "
-    if isinstance(value, _RawJSONString):
-        return value.text
     if isinstance(value, _RawJSONNumber):
         return value.text
     if isinstance(value, _RawJSONObject):
         if not value.pairs:
             return "{}"
         entries = [
-            f"{indent * (level + 1)}{_format_json_value(key)}: "
+            f"{indent * (level + 1)}{json.dumps(key, ensure_ascii=False)}: "
             f"{_format_json_value(item, level + 1)}"
             for key, item in value.pairs
         ]
@@ -985,16 +914,13 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
     """Format JSON, preserving numbers and rejecting duplicate keys."""
     json_str = params.get("json_str") or ""
     try:
-        decoder = json.JSONDecoder(
+        parsed = json.loads(
+            json_str,
             parse_constant=_reject_non_standard_json_number,
             parse_int=_RawJSONNumber,
             parse_float=_RawJSONNumber,
             object_pairs_hook=_reject_duplicate_json_keys,
         )
-        decoder.parse_object = _parse_raw_json_object
-        decoder.parse_string = _parse_raw_json_string
-        decoder.scan_once = py_make_scanner(decoder)
-        parsed = decoder.decode(json_str)
         return {"formatted_json": _format_json_value(parsed)}
     except (RecursionError, TypeError, ValueError) as e:
         raise ValueError(f"Invalid JSON string: {e}")
@@ -1045,6 +971,43 @@ registry.register(
         },
     ),
     html_unescape_handler,
+)
+
+
+async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
+    """Generate a display checksum using an explicitly supported algorithm."""
+    text = params["text"]
+    algorithm = params.get("algorithm", "sha256").lower()
+    encoded_text = text.encode("utf-8")
+    if algorithm == "md5":
+        digest = hashlib.md5(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha1":
+        digest = hashlib.sha1(encoded_text, usedforsecurity=False)  # nosemgrep
+    elif algorithm == "sha256":
+        digest = hashlib.sha256(encoded_text)
+    elif algorithm == "sha512":
+        digest = hashlib.sha512(encoded_text)
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+    return {"hash": digest.hexdigest()}
+
+
+registry.register(
+    ToolInfo(
+        code="hash_generator",
+        name="해시 생성기 (Hash Generator)",
+        description="텍스트 체크섬을 생성합니다. 기본 알고리즘은 SHA-256입니다.",
+        category="유틸리티",
+        parameters={
+            "text": {"type": "string", "max_length": MAX_TOOL_INPUT_CHARS},
+            "algorithm": {
+                "type": "string",
+                "required": False,
+                "allowed_values": ["md5", "sha1", "sha256", "sha512"],
+            },
+        },
+    ),
+    hash_generator_handler,
 )
 
 

@@ -43,10 +43,14 @@ interface ExecuteResponse {
 
 function buildDefaultParameters(tool: ToolInfo) {
   return Object.fromEntries(
-    Object.entries(tool.parameters ?? {}).map(([key, descriptor]) => [
-      key,
-      defaultParameterValue(descriptor),
-    ]),
+    Object.entries(tool.parameters ?? {})
+      .filter(([, descriptor]) => !(
+        descriptor &&
+        typeof descriptor === "object" &&
+        "required" in descriptor &&
+        (descriptor as { required?: unknown }).required === false
+      ))
+      .map(([key, descriptor]) => [key, defaultParameterValue(descriptor)]),
   );
 }
 
@@ -73,7 +77,9 @@ function defaultParameterValue(descriptor: unknown) {
 }
 
 function parameterInputValue(value: unknown, type: string) {
-  if (type === "array" || type === "object") return JSON.stringify(value);
+  if (type === "array" || type === "object") {
+    return typeof value === "string" ? value : JSON.stringify(value);
+  }
   if (type === "boolean") return Boolean(value);
   return String(value ?? "");
 }
@@ -83,7 +89,8 @@ function parameterValueFromInput(value: string, type: string) {
     case "number":
       return value === "" ? "" : Number(value);
     case "integer":
-      return value === "" ? "" : Number(value);
+      if (value === "") return "";
+      return Number.isInteger(Number(value)) ? Number(value) : value;
     case "boolean":
       return value === "true";
     case "array":
@@ -233,6 +240,19 @@ export default function ToolsPage() {
     }
   };
 
+  const toolParametersAreValid = (tool: ToolInfo) => {
+    const values = parameterValues[tool.code] ?? buildDefaultParameters(tool);
+    return Object.entries(tool.parameters ?? {}).every(([key, descriptor]) => {
+      const isOptional = Boolean(
+        descriptor &&
+        typeof descriptor === "object" &&
+        "required" in descriptor &&
+        (descriptor as { required?: unknown }).required === false
+      );
+      return (!(key in values) && isOptional) || parameterValueMatchesType(values[key], descriptor);
+    });
+  };
+
   const updateParameter = (toolCode: string, key: string, value: unknown) => {
     setParameterValues((currentValues) => ({
       ...currentValues,
@@ -355,6 +375,7 @@ export default function ToolsPage() {
                           const inputId = `tool-${tool.code}-${key}`;
                           const value = parameterValues[tool.code]?.[key] ?? defaultParameterValue(descriptor);
                           const inputValue = parameterInputValue(value, type);
+                          const isValid = parameterValueMatchesType(value, descriptor);
                           return (
                             <div key={key} className="grid gap-2 text-sm">
                               <div className="flex items-center justify-between gap-3">
@@ -388,6 +409,7 @@ export default function ToolsPage() {
                                   id={inputId}
                                   type={type === "number" || type === "integer" ? "number" : "text"}
                                   value={String(inputValue)}
+                                  step={type === "integer" ? 1 : undefined}
                                   onChange={(event) => updateParameter(
                                     tool.code,
                                     key,
@@ -395,6 +417,7 @@ export default function ToolsPage() {
                                   )}
                                   data-tool-parameter={`${tool.code}.${key}`}
                                   aria-label={key}
+                                  aria-invalid={!isValid}
                                 />
                               )}
                             </div>
@@ -425,7 +448,11 @@ export default function ToolsPage() {
                   <Button
                     type="button"
                     onClick={() => handleExecute(tool.code)}
-                    disabled={executing[tool.code] || tool.is_active === false}
+                    disabled={
+                      executing[tool.code] ||
+                      tool.is_active === false ||
+                      !toolParametersAreValid(tool)
+                    }
                     data-tool-execute={tool.code}
                     className="w-full font-black"
                   >

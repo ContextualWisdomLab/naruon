@@ -10,12 +10,17 @@ When the catalog is refreshed, only values whose parameter names and types
 still match the refreshed schema are retained. Removed parameters and values
 incompatible with a changed type are replaced with that type's default.
 
-The five text utilities enforce a 100,000-character input limit at the shared
+The six text utilities enforce a 100,000-character input limit at the shared
 tool-parameter validation boundary. The JSON formatter preserves the original
-lexical form of valid JSON numbers, rejects duplicate object names and
-non-standard numeric constants, and only changes whitespace. The URL decoder
+lexical form of valid JSON numbers through the public `json.loads` hooks,
+canonicalizes equivalent JSON string escapes, and rejects duplicate object
+names and non-standard numeric constants. The URL decoder
 rejects percent-encoded byte sequences that are not valid UTF-8 instead of
 silently replacing them.
+
+The hash generator defaults to SHA-256 when its optional algorithm is omitted.
+MD5 and SHA-1 are exposed only as non-security checksums for compatibility;
+SHA-256 and SHA-512 are the supported cryptographic digest choices.
 
 ## Standards and research basis
 
@@ -42,7 +47,7 @@ https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
 ## Verification commands
 
 ```text
-DISABLE_BACKGROUND_WORKERS=1 PYTHONWARNINGS=error pytest -q tests/test_tools_api.py
+cd backend && DISABLE_BACKGROUND_WORKERS=1 PYTHONWARNINGS=error uv run pytest -q tests/test_tools_api.py
 corepack pnpm@11.5.3 --dir frontend exec vitest run
 corepack pnpm@11.5.3 --dir frontend exec playwright test tests/e2e/dashboard-branding.spec.ts -g "submits edited utility-console parameters" --project=desktop
 ```
