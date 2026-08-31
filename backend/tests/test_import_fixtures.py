@@ -243,6 +243,65 @@ async def test_root_importer_duplicate_check_is_scoped_to_owner(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_root_importer_stores_email_under_configured_workspace_id(
+    tmp_path, monkeypatch
+):
+    # A custom NARUON_IMPORT_WORKSPACE_ID is threaded into assign_thread_id
+    # (asserted above) but the stored Email row must land in that SAME
+    # workspace -- otherwise thread assignment and email storage disagree on
+    # which workspace a fixture belongs to, splitting or hiding the imported
+    # conversation when queried by workspace.
+    class MockResult:
+        def scalar_one_or_none(self):
+            return None
+
+    class MockSession:
+        def __init__(self):
+            self.added = None
+
+        async def execute(self, _query):
+            return MockResult()
+
+        def add(self, obj):
+            self.added = obj
+
+        async def commit(self):
+            pass
+
+    monkeypatch.setattr(import_fixtures, "IMPORT_WORKSPACE_ID", "workspace-custom-fixture")
+
+    eml_file = tmp_path / "custom-workspace.eml"
+    eml_file.write_text("Message-ID: <custom-workspace@example.com>\n\nBody")
+    parsed = {
+        "message_id": "<custom-workspace@example.com>",
+        "sender": "sender@example.com",
+        "recipients": "user@example.com",
+        "subject": "Custom workspace",
+        "date": datetime.datetime.now(datetime.timezone.utc),
+        "body": "Body",
+        "attachments": [],
+    }
+    session = MockSession()
+
+    with (
+        patch.object(import_fixtures, "parse_eml", return_value=parsed),
+        patch.object(
+            import_fixtures, "generate_embeddings", new_callable=AsyncMock
+        ) as mock_embeddings,
+        patch.object(
+            import_fixtures, "assign_thread_id", new_callable=AsyncMock
+        ) as mock_assign,
+    ):
+        mock_embeddings.return_value = [[0.0] * 1536]
+        mock_assign.return_value = "custom-workspace-thread"
+
+        imported = await import_fixtures.import_eml_file(session, eml_file)
+
+    assert imported is True
+    assert session.added.workspace_id == "workspace-custom-fixture"
+
+
+@pytest.mark.asyncio
 async def test_root_importer_uses_local_embedding_without_openai_key(
     tmp_path, monkeypatch
 ):

@@ -73,11 +73,7 @@ async def import_eml_file(session, eml_file: Path) -> bool:
     email_obj = Email(
         user_id=IMPORT_USER_ID,
         organization_id=IMPORT_ORGANIZATION_ID,
-        workspace_id=(
-            f"workspace-{IMPORT_ORGANIZATION_ID}"
-            if IMPORT_ORGANIZATION_ID
-            else f"workspace-{IMPORT_USER_ID}"
-        ),
+        workspace_id=IMPORT_WORKSPACE_ID,
         message_id=parsed["message_id"],
         sender=parsed["sender"],
         reply_to=parsed.get("reply_to"),

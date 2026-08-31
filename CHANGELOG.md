@@ -1,4 +1,16 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🟡) `import_fixtures.py`가 커스텀 `NARUON_IMPORT_WORKSPACE_ID`를
+  무시하던 문제를 고쳤습니다.** `import_eml_file`은 스레드 배정(`assign_thread_id`)에는
+  `IMPORT_WORKSPACE_ID`(env var 반영)를 넘기면서도, 실제로 저장하는 `Email` 행의
+  `workspace_id`는 이를 무시하고 `f"workspace-{IMPORT_ORGANIZATION_ID}"`(또는
+  `IMPORT_USER_ID` 기반)를 그 자리에서 다시 계산해 사용했습니다 — env var를 기본값과 다르게
+  설정하면 스레드 배정과 저장이 서로 다른 workspace를 가리켜, 임포트된 대화가 분리되거나
+  workspace 기준 조회에서 보이지 않을 수 있었습니다. `workspace_id=IMPORT_WORKSPACE_ID`로
+  단순화(기존 기본값 동작은 `IMPORT_WORKSPACE_ID`의 기본값 표현식 자체가 이미 동일하므로
+  변화 없음). 새 테스트
+  `test_root_importer_stores_email_under_configured_workspace_id` — 수정 전 코드가
+  `workspace-default` 대신 커스텀 값을 반환하지 못함을 먼저 확인했습니다. 검증: 전체 백엔드
+  스위트 1896 passed/35 skipped, ruff clean.
 - **(Devin 리뷰 대응, 🔴 critical) POP3 동기화가 매 실행마다 조용히 메일을 0건 임포트하던
   버그를 고쳤습니다.** `TenantConfig`에는 애초에 `workspace_id` 컬럼이 없는데,
   `Pop3SyncWorker._import_messages`는 `getattr(config, "workspace_id", "")`로 이를 읽어
