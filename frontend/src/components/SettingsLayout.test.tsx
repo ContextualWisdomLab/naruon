@@ -484,6 +484,8 @@ describe("SettingsLayout", () => {
     const logoutButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "로그아웃");
     expect(loginButton).toBeTruthy();
     expect(logoutButton).toBeTruthy();
+    expect(loginButton?.title).toBe("OIDC 로그인");
+    expect(logoutButton?.title).toBe("로그아웃");
 
     await act(async () => {
       loginButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -532,10 +534,12 @@ describe("SettingsLayout", () => {
     const loginButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "OIDC 로그인");
     const loginReason = container.querySelector('#oidc-login-availability');
     expect(loginButton?.getAttribute("aria-disabled")).toBe("true");
+    expect(loginButton?.title).toBe("OIDC 로그인을 사용하려면 관리자에게 OIDC 설정을 요청하세요.");
     expect(loginReason?.className).not.toContain("sr-only");
     expect(loginReason?.textContent).toBe("OIDC 로그인을 사용하려면 관리자에게 OIDC 설정을 요청하세요.");
     expect(logoutButton?.getAttribute("aria-disabled")).toBe("true");
     expect(logoutButton?.getAttribute("aria-describedby")).toBe("oidc-logout-availability");
+    expect(logoutButton?.title).toBe("로그인 세션을 확인하는 중입니다. 잠시만 기다려 주세요.");
     const logoutReason = container.querySelector('#oidc-logout-availability');
     expect(logoutReason?.className).not.toContain("sr-only");
     expect(logoutReason?.textContent).toBe("로그인 세션을 확인하는 중입니다. 잠시만 기다려 주세요.");
@@ -547,6 +551,36 @@ describe("SettingsLayout", () => {
       await Promise.resolve();
     });
     expect(oidcMocks.clearOidcSession).not.toHaveBeenCalled();
+  });
+
+  it("titles logout with the resolved no-session reason", async () => {
+    const defaultFetch = vi.mocked(fetch);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/auth/session") {
+        return Promise.resolve(jsonResponse({ authenticated: false, claims: {} }));
+      }
+      return defaultFetch(input, init);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const developerTab = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "개발자",
+    );
+    await act(async () => {
+      developerTab?.click();
+      await Promise.resolve();
+    });
+
+    const logoutButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "로그아웃");
+    expect(logoutButton?.title).toBe("로그아웃하려면 먼저 로그인하세요.");
   });
 
   it("loads and saves source-backed mail account settings without public identity headers or secret replay", async () => {
@@ -620,6 +654,7 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("Naruon은 메일함 용량이나 SMTP/IMAP 서버를 제공하지 않습니다");
 
     const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    expect(saveButton?.title).toBe("계정 설정 저장");
     expect(saveButton).toBeTruthy();
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -677,10 +712,60 @@ describe("SettingsLayout", () => {
 
     const saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
     expect(saveButton?.getAttribute("aria-describedby")).toBe("account-save-availability");
+    expect(saveButton?.title).toBe("계정 설정을 불러오지 못했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요.");
     const accountReason = container.querySelector('#account-save-availability');
     expect(accountReason?.className).not.toContain("sr-only");
     expect(accountReason?.textContent).toBe("계정 설정을 불러오지 못했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요.");
     expect(container.textContent).not.toContain("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+  });
+
+  it("titles account save with its loading and saving states", async () => {
+    const defaultFetch = vi.mocked(fetch);
+    let resolveLoad!: (response: Response) => void;
+    let resolveSave!: (response: Response) => void;
+    const pendingLoad = new Promise<Response>((resolve) => { resolveLoad = resolve; });
+    const pendingSave = new Promise<Response>((resolve) => { resolveSave = resolve; });
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/accounts/config") {
+        return init?.method === "PUT" ? pendingSave : pendingLoad;
+      }
+      return defaultFetch(input, init);
+    }));
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<SettingsLayout />);
+      await Promise.resolve();
+    });
+    const accountButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "연결 계정");
+    await act(async () => {
+      accountButton?.click();
+      await Promise.resolve();
+    });
+    let saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    expect(saveButton?.title).toBe("계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.");
+
+    await act(async () => {
+      resolveLoad(jsonResponse({ user_id: "default" }));
+      await pendingLoad;
+      await Promise.resolve();
+    });
+    saveButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "계정 설정 저장");
+    expect(saveButton?.title).toBe("계정 설정 저장");
+
+    await act(async () => {
+      saveButton?.click();
+      await Promise.resolve();
+    });
+    const savingButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "저장 중");
+    expect(savingButton?.title).toBe("계정 설정을 저장하는 중입니다.");
+    await act(async () => {
+      resolveSave(jsonResponse({ user_id: "default" }));
+      await pendingSave;
+      await Promise.resolve();
+    });
   });
 
   it("keeps account saving available after a save failure", async () => {
@@ -712,6 +797,7 @@ describe("SettingsLayout", () => {
     expect(container.textContent).toContain("API request failed");
     expect(updatedSaveButton?.getAttribute("aria-disabled")).toBeNull();
     expect(updatedSaveButton?.getAttribute("aria-describedby")).toBeNull();
+    expect(updatedSaveButton?.title).toBe("계정 설정 저장");
   });
 
   it("loads and saves AI model registry entries without public identity headers or secret replay", async () => {
