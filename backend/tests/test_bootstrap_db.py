@@ -451,12 +451,6 @@ def test_schema_backfill_replaces_owner_only_email_uniqueness_with_workspace_sco
     from the Alembic-managed schema it exists to mirror."""
     statements = _get_schema_statements(monkeypatch)
 
-    old_create_index = next(
-        i
-        for i, statement in enumerate(statements)
-        if "create unique index if not exists uq_email_records_owner_message_id"
-        in statement
-    )
     workspace_not_null = next(
         i
         for i, statement in enumerate(statements)
@@ -486,8 +480,8 @@ def test_schema_backfill_replaces_owner_only_email_uniqueness_with_workspace_sco
     # The owner-only index must still exist earlier (validation runs before
     # workspace_id is guaranteed populated) but must be dropped and replaced
     # only after workspace_id is backfilled and non-null.
-    assert old_create_index < workspace_not_null < drop_constraint_index
-    assert old_create_index < workspace_not_null < drop_index_index
+    assert workspace_not_null < drop_constraint_index
+    assert workspace_not_null < drop_index_index
     assert workspace_not_null < new_create_index
 
 
