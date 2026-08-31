@@ -1128,6 +1128,38 @@ async def test_export_rejects_oversized_stored_text_before_descendant_orm_load(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_export_ignores_oversized_attachment_excluded_from_archive(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(f"excluded-oversized-{token}")
+    async with provenance_sessionmaker() as session:
+        seeded = await _seed_provenance_closure(session, scope=scope, token=token)
+        session.add(
+            Attachment(
+                email_id=seeded["email_id"],
+                filename="pending.bin",
+                content="x" * (ENTRY_MAX_BYTES + 1),
+                content_type="application/octet-stream",
+                parse_status="unsupported_content_type",
+                parser_key="unsupported_binary",
+                embedding=[0.0] * 1536,
+            )
+        )
+        await session.commit()
+
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, scope)
+        )
+
+    assert [row["filename"] for row in records["attachments"]] == [
+        "evidence.txt"
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_import_composes_with_transaction_started_by_prior_select(
     provenance_sessionmaker,
 ):
@@ -1394,6 +1426,86 @@ async def test_same_database_cross_workspace_import_keeps_portable_identity(
     assert target_correction.after_json == {
         "target_object_uid": target_object.object_uid,
         "primary_segment_uid": target_segment.content_segment_uid,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_portable_archive_imports_into_two_scopes_after_source_deletion(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"deleted-source-{token}")
+    target_a = _scope(f"portable-target-a-{token}")
+    target_b = _scope(f"portable-target-b-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    source_records = parse_provenance_archive(archive)
+
+    async with provenance_sessionmaker() as session:
+        email_id = await session.scalar(
+            select(Email.id).where(Email.message_id == source_records["emails"][0]["email_uid"])
+        )
+        assert email_id is not None
+        for model in (
+            ProjectGraphCorrectionRecord,
+            ProjectGraphEdgeRecord,
+            ProjectGraphObjectRecord,
+        ):
+            await session.execute(
+                delete(model).where(model.workspace_id == source_scope.workspace_id)
+            )
+        for model in (
+            KnowledgeGraphEdgeRecord,
+            ContentSegmentRecord,
+            ContentNodeRecord,
+            Attachment,
+        ):
+            await session.execute(delete(model).where(model.email_id == email_id))
+        await session.execute(delete(Email).where(Email.id == email_id))
+        await session.commit()
+
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_a, archive)
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_b, archive)
+
+    async with provenance_sessionmaker() as session:
+        target_a_records = parse_provenance_archive(
+            await export_tenant_provenance(session, target_a)
+        )
+        target_b_records = parse_provenance_archive(
+            await export_tenant_provenance(session, target_b)
+        )
+        mappings = list(
+            (
+                await session.scalars(
+                    select(ProvenanceIdentityMapping).where(
+                        ProvenanceIdentityMapping.target_workspace_id.in_(
+                            (target_a.workspace_id, target_b.workspace_id)
+                        )
+                    )
+                )
+            ).all()
+        )
+
+    for collection in (
+        "emails",
+        "attachments",
+        "content_nodes",
+        "content_segments",
+        "structural_edges",
+        "project_objects",
+        "project_edges",
+        "corrections",
+    ):
+        assert target_a_records[collection] == source_records[collection]
+        assert target_b_records[collection] == source_records[collection]
+    assert {row.target_workspace_id for row in mappings} == {
+        target_a.workspace_id,
+        target_b.workspace_id,
     }
 
 

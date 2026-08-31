@@ -1451,9 +1451,11 @@ async def export_tenant_provenance(
         _fail()
     email_uids = {email.id: email.message_id for email in emails}
 
-    async def descendants(model: Any, order_column: Any) -> list[Any]:
+    async def descendants(
+        model: Any, order_column: Any, *admission_filters: Any
+    ) -> list[Any]:
         nonlocal consumed_bytes
-        descendant_filters = (model.email_id.in_(email_ids),)
+        descendant_filters = (model.email_id.in_(email_ids), *admission_filters)
         consumed_bytes = await _preflight_export_rows(
             session, model, descendant_filters, consumed_bytes
         )
@@ -1467,7 +1469,12 @@ async def export_tenant_provenance(
             ).all()
         )
 
-    attachments = await descendants(Attachment, Attachment.id)
+    attachments = await descendants(
+        Attachment,
+        Attachment.id,
+        Attachment.parse_status == "parsed",
+        Attachment.parser_key.in_(_TEXTUAL_PARSER_KEYS),
+    )
     nodes = await descendants(ContentNodeRecord, ContentNodeRecord.content_node_uid)
     segments = await descendants(
         ContentSegmentRecord, ContentSegmentRecord.content_segment_uid
@@ -2261,11 +2268,15 @@ async def _prepare_identity_import(
         if set(scoped_mappings) != expected_mapping_keys:
             _fail()
         for (collection, portable_uid), row in scoped_mappings.items():
-            if row.target_database_uid != forward_maps[collection][portable_uid]:
+            if row.target_database_uid not in {
+                portable_uid,
+                forward_maps[collection][portable_uid],
+            }:
                 _fail()
+            forward_maps[collection][portable_uid] = row.target_database_uid
         return _translate_identity_records(records, forward_maps), []
 
-    scoped_collisions: list[Any] = []
+    scoped_collisions: list[tuple[str, Any, str]] = []
     for model, column, collection in (
         (
             ProjectGraphObjectRecord,
@@ -2284,28 +2295,68 @@ async def _prepare_identity_import(
         }
         if portable_uids:
             scoped_collisions.extend(
-                (
-                    await session.scalars(
-                        select(model).where(column.in_(portable_uids))
-                    )
+                (collection, row, getattr(row, _UID_KEYS[collection]))
+                for row in (
+                    await session.scalars(select(model).where(column.in_(portable_uids)))
                 ).all()
             )
     if not scoped_collisions:
-        return copy.deepcopy(records), []
+        return copy.deepcopy(records), [
+            ProvenanceIdentityMapping(
+                target_user_id=scope.user_id,
+                target_organization_id=scope.organization_id,
+                target_workspace_id=scope.workspace_id,
+                source_user_uid=source_scope["user_uid"],
+                source_organization_uid=source_scope["organization_uid"],
+                source_workspace_uid=source_scope["workspace_uid"],
+                entity_kind=collection,
+                portable_uid=portable_uid,
+                target_database_uid=portable_uid,
+            )
+            for collection in _REMAPPED_COLLECTIONS
+            for portable_uid in forward_maps[collection]
+        ]
     if any(
         row.user_id == scope.user_id
         and row.organization_id == scope.organization_id
         and row.workspace_id == scope.workspace_id
-        for row in scoped_collisions
+        for _, row, _ in scoped_collisions
     ):
         return copy.deepcopy(records), []
-    if any(
-        _source_user_uid(row.user_id) != source_scope["user_uid"]
-        or (row.organization_id or "unscoped") != source_scope["organization_uid"]
-        or row.workspace_id != source_scope["workspace_uid"]
-        for row in scoped_collisions
-    ):
-        _fail()
+    native_source = all(
+        _source_user_uid(row.user_id) == source_scope["user_uid"]
+        and (row.organization_id or "unscoped") == source_scope["organization_uid"]
+        and row.workspace_id == source_scope["workspace_uid"]
+        for _, row, _ in scoped_collisions
+    )
+    if not native_source:
+        collision_keys = {
+            (collection, portable_uid)
+            for collection, _, portable_uid in scoped_collisions
+        }
+        origin_rows = list(
+            (
+                await session.scalars(
+                    select(ProvenanceIdentityMapping).where(
+                        ProvenanceIdentityMapping.target_database_uid.in_(
+                            {portable_uid for _, portable_uid in collision_keys}
+                        )
+                    )
+                )
+            ).all()
+        )
+        origins = {
+            (row.entity_kind, row.target_database_uid): row
+            for row in origin_rows
+            if (row.entity_kind, row.target_database_uid) in collision_keys
+        }
+        if set(origins) != collision_keys or any(
+            row.source_user_uid != source_scope["user_uid"]
+            or row.source_organization_uid != source_scope["organization_uid"]
+            or row.source_workspace_uid != source_scope["workspace_uid"]
+            for row in origins.values()
+        ):
+            _fail()
 
     target_uids = {
         database_uid
