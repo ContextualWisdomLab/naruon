@@ -769,7 +769,7 @@ registry.register(
 )
 
 
-_URL_PATTERN = re.compile(r"https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?(?<![.,!?])")
+_URL_PATTERN = re.compile(r"https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[a-zA-Z0-9_.-]*[a-zA-Z0-9_/-])?")
 
 async def url_extractor_handler(params: Dict[str, Any]) -> Dict[str, list[str]]:
     text = params.get("text") or ""

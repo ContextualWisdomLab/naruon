@@ -382,7 +382,7 @@ async def test_execute_tool_handler_error():
 
 
 def test_execute_url_extractor():
-    text = "Here is a link to https://example.com/test_page and another http://foo.bar. Also https://example.com/test_page again."
+    text = "Here is a link to https://example.com/test_page and another http://foo.com/bar. Also https://example.com/test_page again."
     with TestClient(app) as client:
         response = client.post(
             "/api/tools/url_extractor/execute",
@@ -392,7 +392,7 @@ def test_execute_url_extractor():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["result"]["urls"] == ["https://example.com/test_page", "http://foo.bar"]
+    assert data["result"]["urls"] == ["https://example.com/test_page", "http://foo.com/bar"]
 
 
 @pytest.mark.asyncio
