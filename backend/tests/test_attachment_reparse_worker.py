@@ -180,13 +180,19 @@ class _LeaseConnection:
         self.scalar_result = scalar_result
         self.scalar_calls = []
         self.execution_options_calls = []
+        # Ordered log spanning both call types, so a test can prove
+        # AUTOCOMMIT was set BEFORE the advisory-lock query ran, not just
+        # that both happened at some point.
+        self.ordered_calls = []
 
     async def execution_options(self, **options):
         self.execution_options_calls.append(options)
+        self.ordered_calls.append(("execution_options", options))
         return self
 
     async def scalar(self, statement, params):
         self.scalar_calls.append((statement, params))
+        self.ordered_calls.append(("scalar", params))
         return self.scalar_result
 
 
@@ -439,6 +445,11 @@ async def test_postgresql_lease_helpers_and_non_postgresql_fallback(monkeypatch)
         postgres_connection.scalar_calls[0][1]
         == attachment_reparse_worker_module._SWEEP_LOCK_PARAMS
     )
+    # Ordering, not just occurrence: AUTOCOMMIT must be set before the
+    # advisory-lock query runs, or the query could still open an implicit
+    # transaction under the connection's prior isolation level.
+    assert postgres_connection.ordered_calls[0][0] == "execution_options"
+    assert postgres_connection.ordered_calls[1][0] == "scalar"
     await attachment_reparse_worker_module._release_sweep_lease(postgres_connection)
     assert len(postgres_connection.scalar_calls) == 2
 

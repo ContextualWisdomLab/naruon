@@ -232,6 +232,52 @@ than reversing the original decision:
   backing mail list/search/ontology/threading/Noema-agent reads — has the
   identical gap and remains a deliberately separate, tracked follow-up (see
   Consequences above); it was not touched here.
+- **CodeRabbit raised a real, but pre-existing and org-wide, question about
+  the `workspace-<organization_id>` backfill's trust boundary — verified,
+  not fixed here.** Its concern: if a real signed session's `workspace`
+  claim ever diverges from the `workspace-<organization_id>` formula, the
+  migration's backfill (and every new row this PR's production call sites
+  write) could misattribute rows or make them unreachable. Traced this
+  precisely rather than assuming either way: for the HMAC session path (the
+  only one `docs/operations/auth-key-management.md` currently claims —
+  OIDC is explicitly still "가설/Hypothesis," not production), no code
+  anywhere in this repo can produce a `workspace` claim other than
+  `workspace-<organization_id>` (`AuthContext.organization_id` is required
+  non-null since `_auth_context_from_session_payload` rejects a missing
+  `org` claim outright, and no route, service, or table lets an
+  organization have more than one workspace or a custom workspace name —
+  `WorkspaceRunnerConfig` even enforces `unique=True` on both columns). So
+  for every request path exercised today, the derived value and the real
+  signed value are provably identical. The **actual** exposure is narrower
+  and older than this PR: `_decode_cached_oidc_session_payload` (the
+  enterprise OIDC path, `api/auth.py`) reads `workspace` verbatim from
+  whatever an external IdP's claim mapper emits, with zero normalization
+  or validation against `workspace-<organization_id>` — a gap in the OIDC
+  integration itself, not in this migration, and one that would equally
+  affect every other already-shipped `workspace_id`-scoped table
+  (`Document`, `WebdavAccount`, `ProjectFolder`, `CalendarConflictJudgment`,
+  `CarddavAccount`), not just `Email`. Documented here rather than
+  redesigned: the fix belongs in the OIDC claim-validation layer (normalize
+  or reject a non-conventional `workspace` claim at the point tokens are
+  decoded), as its own dedicated, cross-cutting change — not a narrower
+  patch to one migration's backfill formula, and not something to block
+  this PR on given it isn't live in production today.
+- **Devin flagged that `services/email_import_service.py`'s
+  `_build_email_object` re-derives `workspace_id` from `organization_id`
+  instead of accepting the caller's already-verified
+  `auth_context.workspace_id`, reachable at `import_email_files`'s HTTP
+  route — confirmed accurate as an architecture observation, confirmed
+  NOT currently exploitable.** Per the trust-boundary tracing above, the
+  derived value and the real signed value are guaranteed identical for
+  every request today, so this is a latent DRY gap (it would only produce
+  different behavior once the OIDC gap above is both live and actually
+  exercised with a non-conventional claim), not a live bug. Threading the
+  real `workspace_id` through `import_email_files` → `import_email_uploads`
+  → `_import_single_eml` → `_build_email_object` (`imap_worker.py`'s
+  background-poll path has no `AuthContext` at all — there is no signed
+  workspace to thread through there, so it must keep deriving) is a
+  reasonable consistency improvement, but a multi-call-site plumbing change
+  is a larger, separate PR, not a fix for this one's narrower scope.
 
 ## References (APA 7th)
 

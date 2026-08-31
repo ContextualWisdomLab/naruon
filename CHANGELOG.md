@@ -1,4 +1,25 @@
 ## [Unreleased]
+- (CodeRabbit/Devin 리뷰 검증) `workspace-<organization_id>` 백필 관례의
+  신뢰 경계를 직접 추적해 확인했습니다 — HMAC 세션 경로에서는
+  `AuthContext.organization_id`가 항상 non-null이고 이 저장소 어디에도
+  조직 하나가 workspace를 두 개 이상 갖거나 커스텀 workspace 이름을 가질
+  수 있는 코드 경로가 없어(`WorkspaceRunnerConfig`가 두 컬럼 모두
+  `unique=True`), 파생값과 실제 서명된 값이 항상 일치함을 확인했습니다.
+  실제 노출 지점은 이 PR보다 오래된, 더 넓은 범위의 것이었습니다 — 엔터프라이즈
+  OIDC 경로(`api/auth.py`의 `_decode_cached_oidc_session_payload`)가
+  외부 IdP의 `workspace` 클레임을 정규화 없이 그대로 신뢰하는데, 이는
+  `docs/operations/auth-key-management.md`에 아직 "가설(Hypothesis)"
+  단계로 명시된, 프로덕션에 배포되지 않은 경로이고, 이미 배포된 다른 모든
+  `workspace_id` 스코프 테이블(`Document`, `WebdavAccount`,
+  `ProjectFolder`, `CalendarConflictJudgment`, `CarddavAccount`)에도
+  동일하게 적용되는 문제라 `Email` 마이그레이션 하나만 고쳐서 닫을 수 있는
+  범위가 아닙니다. ADR-0005에 별도의 후속 작업으로 기록했습니다. Devin이
+  지적한 `email_import_service.py`의 workspace_id 재파생(서명된
+  `auth_context.workspace_id`를 쓰지 않고 organization_id로부터 다시
+  계산)도 같은 근거로 검증했습니다 — 아키텍처 관찰로는 정확하지만, 위
+  추적 결과 파생값과 실제 서명된 값이 오늘 기준 항상 일치하므로 현재
+  악용 가능한 버그는 아닙니다(다중 호출부 배관 변경이 필요해 이 PR의
+  범위를 벗어나는 별도 개선으로 기록).
 - (보안, IDOR 근본 수정) `Email`이 `workspace_id`를 전혀 갖고 있지 않아
   `_email_scope_filter`(및 이를 쓰는 `_get_scoped_attachment`/모든
   quality-surface 통계 쿼리)가 `user_id`/`organization_id`로만 스코프돼,
