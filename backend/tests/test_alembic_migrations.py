@@ -61,6 +61,16 @@ def _run_0020_upgrade(sync_conn) -> None:
         module.upgrade()
 
 
+def _run_0021_upgrade(sync_conn) -> None:
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    module = _load_revision_module("0021_calendar_correction_rationale.py")
+    context = MigrationContext.configure(sync_conn, opts={"target_metadata": None})
+    with Operations.context(context):
+        module.upgrade()
+
+
 def test_alembic_scaffold_exists_with_model_metadata_target():
     alembic_ini = BACKEND_ROOT / "alembic.ini"
     env_py = BACKEND_ROOT / "alembic" / "env.py"
@@ -158,6 +168,35 @@ def test_calendar_correction_rationale_upgrade_renames_legacy_column(monkeypatch
             {"new_column_name": "correction_rationale"},
         )
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_calendar_correction_rationale_real_postgres_smoke():
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TEMP TABLE calendar_conflict_corrections ("
+                    "rationale text) ON COMMIT DROP"
+                )
+            )
+            await conn.run_sync(_run_0021_upgrade)
+
+            def _column_names(sync_conn):
+                return {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns(
+                        "calendar_conflict_corrections"
+                    )
+                }
+
+            column_names = await conn.run_sync(_column_names)
+            assert "correction_rationale" in column_names
+            assert "rationale" not in column_names
+    finally:
+        await engine.dispose()
 
 
 def test_email_workspace_migration_also_drops_bootstrap_created_owner_only_index():
