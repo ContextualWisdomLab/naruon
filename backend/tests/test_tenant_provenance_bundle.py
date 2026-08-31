@@ -56,14 +56,14 @@ from services.tenant_provenance_bundle import (
 RECORDS = {
     "profile": "naruon-tenant-provenance/v1",
     "schema_version": 1,
-    "bundle_uid": "bundle-01HZZ",
+    "bundle_uid": "bundle-d046d1ed5d46714042ed93ee835abe93db3d56e548440e6b0eff69e5a808fc74",
     "source_scope": {
         "user_uid": "0" * 64,
         "organization_uid": "org-01",
         "workspace_uid": "ws-01",
     },
     "export_activity": {
-        "activity_uid": "activity-01",
+        "activity_uid": "export-d046d1ed5d46714042ed93ee835abe93db3d56e548440e6b0eff69e5a808fc74",
         "date_published": "1980-01-01T00:00:00Z",
     },
     "emails": [{"email_uid": "email-01", "subject": "Evidence"}],
@@ -200,7 +200,8 @@ def test_parse_round_trips_records_and_verifies_ro_crate_metadata():
         "conformsTo": {"@id": "https://w3id.org/ro/crate/1.3"},
     }
     assert nodes["./"]["datePublished"] == RECORDS["export_activity"]["date_published"]
-    assert nodes["#activity-01"]["prov:wasAssociatedWith"] == {"@id": "#naruon"}
+    activity_uid = RECORDS["export_activity"]["activity_uid"]
+    assert nodes[f"#{activity_uid}"]["prov:wasAssociatedWith"] == {"@id": "#naruon"}
     assert "prov:SoftwareAgent" in nodes["#naruon"]["@type"]
 
 
@@ -288,6 +289,27 @@ def test_parse_rejects_payload_tampering():
 
     with pytest.raises(ProvenanceArchiveError):
         parse_provenance_archive(tampered)
+
+
+def test_archive_entries_reject_reused_content_identifiers_for_different_records():
+    rebuilt_records = copy.deepcopy(RECORDS)
+    rebuilt_records["emails"][0]["subject"] = "Different evidence"
+
+    with pytest.raises(ProvenanceArchiveError):
+        provenance_service._archive_entries(rebuilt_records)
+
+
+def test_build_rebinds_content_identifiers_for_different_records():
+    rebuilt_records = copy.deepcopy(RECORDS)
+    rebuilt_records["emails"][0]["subject"] = "Different evidence"
+
+    parsed = parse_provenance_archive(build_provenance_archive(rebuilt_records))
+
+    assert parsed["bundle_uid"] != RECORDS["bundle_uid"]
+    assert (
+        parsed["export_activity"]["activity_uid"]
+        != RECORDS["export_activity"]["activity_uid"]
+    )
 
 
 @pytest.mark.parametrize(

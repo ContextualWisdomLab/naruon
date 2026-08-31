@@ -533,6 +533,32 @@ def _records_bundle_uid(records: Mapping[str, object]) -> str:
     return _safe_identifier(records.get("bundle_uid"))
 
 
+def _content_identity_digest(records: Mapping[str, object]) -> str:
+    activity = records.get("export_activity")
+    if not isinstance(activity, Mapping):
+        _fail()
+    identity = {
+        "profile": records.get("profile"),
+        "schema_version": records.get("schema_version"),
+        "source_scope": records.get("source_scope"),
+        **{collection: records.get(collection) for collection in _COLLECTIONS},
+        "export_activity": {"date_published": activity.get("date_published")},
+    }
+    return hashlib.sha256(_canonical_json(identity)).hexdigest()
+
+
+def _validate_content_bound_identifiers(records: Mapping[str, object]) -> str:
+    content_digest = _content_identity_digest(records)
+    if _records_bundle_uid(records) != f"bundle-{content_digest}":
+        _fail()
+    activity = records.get("export_activity")
+    if not isinstance(activity, Mapping) or _safe_identifier(
+        activity.get("activity_uid")
+    ) != f"export-{content_digest}":
+        _fail()
+    return content_digest
+
+
 def _safe_identifier(value: object) -> str:
     if (
         not isinstance(value, str)
@@ -616,6 +642,7 @@ def _manifest(entries: Mapping[str, bytes], names: tuple[str, ...]) -> bytes:
 
 def _archive_entries(records: Mapping[str, object]) -> dict[str, bytes]:
     payload = _canonical_json(records)
+    _validate_content_bound_identifiers(records)
     bundle_uid = _records_bundle_uid(records)
     entries = {
         "bagit.txt": b"BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8\n",
@@ -653,7 +680,19 @@ def build_provenance_archive(records: Mapping[str, object]) -> bytes:
     """Build the fixed deterministic ZIP envelope for a validated record payload."""
     if not isinstance(records, Mapping):
         _fail()
-    entries = _archive_entries(records)
+    activity = records.get("export_activity")
+    if not isinstance(activity, Mapping):
+        _fail()
+    _records_bundle_uid(records)
+    _safe_identifier(activity.get("activity_uid"))
+    bound_records = {
+        **records,
+        "export_activity": dict(activity),
+    }
+    content_digest = _content_identity_digest(bound_records)
+    bound_records["bundle_uid"] = f"bundle-{content_digest}"
+    bound_records["export_activity"]["activity_uid"] = f"export-{content_digest}"
+    entries = _archive_entries(bound_records)
     output = io.BytesIO()
     with zipfile.ZipFile(
         output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
@@ -1535,17 +1574,17 @@ async def export_tenant_provenance(
     }
     if can_restore_source_identity:
         payload = _translate_identity_records(payload, reverse_maps)
-    content_digest = hashlib.sha256(_canonical_json(payload)).hexdigest()
     records = {
         "profile": "naruon-tenant-provenance/v1",
         "schema_version": 1,
-        "bundle_uid": f"bundle-{content_digest}",
         **payload,
         "export_activity": {
-            "activity_uid": f"export-{content_digest}",
             "date_published": "1980-01-01T00:00:00Z",
         },
     }
+    content_digest = _content_identity_digest(records)
+    records["bundle_uid"] = f"bundle-{content_digest}"
+    records["export_activity"]["activity_uid"] = f"export-{content_digest}"
     _validate_record_graph(records)
     return build_provenance_archive(records)
 

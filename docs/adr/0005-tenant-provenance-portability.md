@@ -29,6 +29,9 @@ to the exact workspace and includes only their cited source records.
 3. Canonical JSON uses UTF-8, no BOM, no insignificant whitespace, sorted object
    keys, pre-sorted set-like arrays, and canonical UTC `Z` timestamps throughout
    the archive. SHA-512 manifests cover exact bytes.
+   `bundle_uid` and the export PROV activity UID are SHA-256 identities over the
+   complete canonical record content except those two derived UID fields, so a
+   rebuilt archive cannot reuse either identity for different records.
 4. Reject unsafe or colliding ZIP paths, unlisted files, checksum mismatch,
    unsupported profiles, dangling references, scope mismatch, duplicate logical
    UIDs, and non-finite numbers before mutation.
