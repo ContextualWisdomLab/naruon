@@ -1,13 +1,39 @@
 ## [Unreleased]
-- (CodeRabbit/Devin 리뷰 검증) `workspace-<organization_id>` 백필 관례의
-  신뢰 경계를 직접 추적해 확인했습니다 — HMAC 세션 경로에서는
-  `AuthContext.organization_id`가 항상 non-null이고 이 저장소 어디에도
-  조직 하나가 workspace를 두 개 이상 갖거나 커스텀 workspace 이름을 가질
-  수 있는 코드 경로가 없어(`WorkspaceRunnerConfig`가 두 컬럼 모두
-  `unique=True`), 파생값과 실제 서명된 값이 항상 일치함을 확인했습니다.
-  실제 노출 지점은 이 PR보다 오래된, 더 넓은 범위의 것이었습니다 — 엔터프라이즈
-  OIDC 경로(`api/auth.py`의 `_decode_cached_oidc_session_payload`)가
-  외부 IdP의 `workspace` 클레임을 정규화 없이 그대로 신뢰하는데, 이는
+- **(보안 수정, 정정) 서명된 세션의 `workspace` 클레임이 `org` 클레임과
+  실제로 일치하는지 서버가 검증하지 않던 문제를 `api/auth.py`에서
+  고쳤습니다.** 이전 커밋의 CodeRabbit/Devin 리뷰 검증 항목(바로 아래)은
+  "HMAC 경로는 이 저장소의 코드가 `workspace-<organization_id>` 외의 값을
+  절대 쓰지 않으므로 안전하다"고 결론 내렸으나, 이는 틀린 추론이었습니다 —
+  HMAC 세션은 이 저장소에 코드가 없는 외부 control-plane 토큰 발급자
+  (`iss=naruon-control-plane`)가 발급하므로, 이 저장소의 데이터 기록
+  경로만 봐서는 발급되는 `workspace` 클레임 값을 전혀 증명할 수 없습니다.
+  CodeRabbit이 `_auth_context_from_session_payload`를 직접 추적해
+  `org`·`workspace` 두 클레임이 각각 존재하는지만 검사할 뿐 둘의 관계는
+  전혀 검증하지 않음을 정확히 지적했습니다. 이제
+  `_auth_context_from_session_payload`가 `workspace`가 정확히
+  `workspace-<organization_id>`가 아니면 세션을 거부(401)합니다 — HMAC과
+  OIDC 두 경로 모두 이 함수를 거치므로 한 곳에서 근본적으로 닫힙니다.
+  `Email` 뿐 아니라 `workspace_id`로 스코프되는 모든 테이블(`Document`,
+  `WebdavAccount`, `ProjectFolder`, `CalendarConflictJudgment`,
+  `CarddavAccount`)의 경계가 이제 실제로 서버가 강제하는 불변식이
+  됩니다. 새 테스트:
+  `backend/tests/test_auth_real.py::test_build_auth_context_rejects_workspace_claim_not_derived_from_org`.
+  기존 테스트 2건(`test_security_api.py`의 HMAC 비인가 검사,
+  `test_data_api.py`의 데이터 품질 쿼리 스코프 검사)이 자신의 `org`
+  클레임과 불일치하는 `workspace` 값을 우연히 쓰고 있어 이번 변경으로
+  의도치 않게 401로 막혔기에, 각 테스트가 실제로 검증하려던 동작만
+  격리되도록 org와 일치하는 workspace 값으로 수정했습니다. ADR-0005에
+  정정 경위를 기록했습니다.
+- (CodeRabbit/Devin 리뷰 검증, 최초 결론 — 위 항목에서 정정됨)
+  `workspace-<organization_id>` 백필 관례의 신뢰 경계를 직접 추적해
+  확인했습니다 — HMAC 세션 경로에서는 `AuthContext.organization_id`가
+  항상 non-null이고 이 저장소 어디에도 조직 하나가 workspace를 두 개
+  이상 갖거나 커스텀 workspace 이름을 가질 수 있는 코드 경로가 없어
+  (`WorkspaceRunnerConfig`가 두 컬럼 모두 `unique=True`), 파생값과 실제
+  서명된 값이 항상 일치함을 확인했습니다. 실제 노출 지점은 이 PR보다
+  오래된, 더 넓은 범위의 것이었습니다 — 엔터프라이즈 OIDC 경로
+  (`api/auth.py`의 `_decode_cached_oidc_session_payload`)가 외부 IdP의
+  `workspace` 클레임을 정규화 없이 그대로 신뢰하는데, 이는
   `docs/operations/auth-key-management.md`에 아직 "가설(Hypothesis)"
   단계로 명시된, 프로덕션에 배포되지 않은 경로이고, 이미 배포된 다른 모든
   `workspace_id` 스코프 테이블(`Document`, `WebdavAccount`,

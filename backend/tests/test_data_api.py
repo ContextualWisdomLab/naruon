@@ -2508,9 +2508,7 @@ def test_data_quality_surface_rejects_public_identity_headers_without_signed_ses
 
 def test_member_data_quality_queries_are_owner_scoped(mock_db):
     token = _signed_session_token(
-        _valid_session_payload(
-            sub="member", role="member", workspace="workspace-member"
-        )
+        _valid_session_payload(sub="member", role="member")
     )
     client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
     try:
