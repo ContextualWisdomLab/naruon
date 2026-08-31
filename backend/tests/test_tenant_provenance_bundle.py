@@ -26,6 +26,7 @@ from db.models import (
     ProjectGraphCorrectionRecord,
     ProjectGraphEdgeRecord,
     ProjectGraphObjectRecord,
+    ProvenanceIdentityMapping,
 )
 from services.project_graph.repository import ProjectGraphRepository
 
@@ -50,7 +51,11 @@ RECORDS = {
     "profile": "naruon-tenant-provenance/v1",
     "schema_version": 1,
     "bundle_uid": "bundle-01HZZ",
-    "source_scope": {"organization_uid": "org-01", "workspace_uid": "ws-01"},
+    "source_scope": {
+        "user_uid": "user-source-01",
+        "organization_uid": "org-01",
+        "workspace_uid": "ws-01",
+    },
     "export_activity": {
         "activity_uid": "activity-01",
         "date_published": "1980-01-01T00:00:00Z",
@@ -1000,6 +1005,275 @@ async def test_postgres_round_trip_preserves_stable_evidence_with_fresh_keys(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_same_database_cross_workspace_import_keeps_portable_identity(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"source-{token}")
+    target_scope = TenantProvenanceScope(
+        user_id=source_scope.user_id,
+        organization_id=source_scope.organization_id,
+        workspace_id=f"target-workspace-{token}",
+    )
+    async with provenance_sessionmaker() as session:
+        source = await _seed_provenance_closure(
+            session, scope=source_scope, token=token
+        )
+    async with provenance_sessionmaker() as session:
+        source_archive = await export_tenant_provenance(session, source_scope)
+    source_records = parse_provenance_archive(source_archive)
+
+    async with provenance_sessionmaker() as session:
+        first = await import_tenant_provenance(session, target_scope, source_archive)
+    async with provenance_sessionmaker() as session:
+        second = await import_tenant_provenance(session, target_scope, source_archive)
+    async with provenance_sessionmaker() as session:
+        source_after = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+        target_after = parse_provenance_archive(
+            await export_tenant_provenance(session, target_scope)
+        )
+        source_objects = list(
+            (
+                await session.scalars(
+                    select(ProjectGraphObjectRecord).where(
+                        ProjectGraphObjectRecord.workspace_id
+                        == source_scope.workspace_id
+                    )
+                )
+            ).all()
+        )
+        target_objects = list(
+            (
+                await session.scalars(
+                    select(ProjectGraphObjectRecord).where(
+                        ProjectGraphObjectRecord.workspace_id
+                        == target_scope.workspace_id
+                    )
+                )
+            ).all()
+        )
+        target_edge = await session.scalar(
+            select(ProjectGraphEdgeRecord).where(
+                ProjectGraphEdgeRecord.workspace_id == target_scope.workspace_id
+            )
+        )
+        target_correction = await session.scalar(
+            select(ProjectGraphCorrectionRecord).where(
+                ProjectGraphCorrectionRecord.workspace_id == target_scope.workspace_id
+            )
+        )
+        identity_mappings = list(
+            (
+                await session.scalars(
+                    select(ProvenanceIdentityMapping).where(
+                        ProvenanceIdentityMapping.target_workspace_id
+                        == target_scope.workspace_id
+                    )
+                )
+            ).all()
+        )
+
+    assert first.created == {
+        "emails": 0,
+        "attachments": 0,
+        "content_nodes": 1,
+        "content_segments": 1,
+        "structural_edges": 1,
+        "project_objects": 2,
+        "project_edges": 1,
+        "corrections": 1,
+    }
+    assert sum(second.created.values()) == 0
+    assert second.skipped == {
+        collection: len(source_records[collection])
+        for collection in (
+            "emails",
+            "attachments",
+            "content_nodes",
+            "content_segments",
+            "structural_edges",
+            "project_objects",
+            "project_edges",
+            "corrections",
+        )
+    }
+    for collection in (
+        "emails",
+        "attachments",
+        "content_nodes",
+        "content_segments",
+        "structural_edges",
+        "project_objects",
+        "project_edges",
+        "corrections",
+    ):
+        assert source_after[collection] == source_records[collection]
+        assert target_after[collection] == source_records[collection]
+    assert {record.object_uid for record in source_objects} == set(
+        source["object_uids"]
+    )
+    assert {record.object_uid for record in source_objects}.isdisjoint(
+        {record.object_uid for record in target_objects}
+    )
+    target_object_uids = {record.object_uid for record in target_objects}
+    assert target_edge.source_uid in target_object_uids
+    assert target_edge.target_uid in target_object_uids
+    assert target_edge.source_object_id in {
+        record.project_graph_object_id for record in target_objects
+    }
+    assert target_edge.target_object_id in {
+        record.project_graph_object_id for record in target_objects
+    }
+    assert target_correction.project_graph_object_id in {
+        record.project_graph_object_id for record in target_objects
+    }
+    assert all(
+        record.primary_content_segment_id == target_edge.primary_content_segment_id
+        for record in target_objects
+    )
+    assert len(identity_mappings) == 7
+    assert {row.entity_kind for row in identity_mappings} == {
+        "content_nodes",
+        "content_segments",
+        "structural_edges",
+        "project_objects",
+        "project_edges",
+        "corrections",
+    }
+    assert all(
+        record.source_segment_uids == [target_edge.source_segment_uids[0]]
+        for record in target_objects
+    )
+    assert target_correction.source_segment_uids == target_edge.source_segment_uids
+
+
+@pytest.mark.parametrize(
+    ("model", "value"),
+    (
+        (ProjectGraphObjectRecord, -0.01),
+        (ProjectGraphObjectRecord, 1.01),
+        (ProjectGraphEdgeRecord, -0.01),
+        (ProjectGraphEdgeRecord, 1.01),
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_export_rejects_confidence_outside_unit_interval(
+    provenance_sessionmaker,
+    model,
+    value,
+):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(f"confidence-export-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=scope, token=token)
+        record = await session.scalar(
+            select(model).where(model.workspace_id == scope.workspace_id)
+        )
+        record.confidence = value
+        await session.commit()
+
+    async with provenance_sessionmaker() as session:
+        with pytest.raises(ProvenanceArchiveError):
+            await export_tenant_provenance(session, scope)
+
+
+@pytest.mark.parametrize(
+    ("collection", "value"),
+    (
+        ("project_objects", "-0.01"),
+        ("project_objects", "1.01"),
+        ("project_edges", "-0.01"),
+        ("project_edges", "1.01"),
+    ),
+)
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_import_rejects_confidence_outside_unit_interval_before_flush(
+    provenance_sessionmaker,
+    monkeypatch,
+    collection,
+    value,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"confidence-source-{token}")
+    target_scope = _scope(f"confidence-target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, source_scope)
+        )
+    records[collection][0]["confidence"] = value
+    invalid_archive = build_provenance_archive(records)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+
+    async with provenance_sessionmaker() as session:
+        flush_count = 0
+        original_flush = session.flush
+
+        async def counting_flush(*args, **kwargs):
+            nonlocal flush_count
+            flush_count += 1
+            return await original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", counting_flush)
+        with pytest.raises(ProvenanceArchiveError):
+            await import_tenant_provenance(session, target_scope, invalid_archive)
+        assert flush_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_confidence_unit_interval_boundaries_round_trip(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"confidence-source-{token}")
+    target_scope = _scope(f"confidence-target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(session, scope=source_scope, token=token)
+        project_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.workspace_id == source_scope.workspace_id
+            )
+        )
+        project_edge = await session.scalar(
+            select(ProjectGraphEdgeRecord).where(
+                ProjectGraphEdgeRecord.workspace_id == source_scope.workspace_id
+            )
+        )
+        project_object.confidence = 0.0
+        project_edge.confidence = 1.0
+        await session.commit()
+    async with provenance_sessionmaker() as session:
+        archive = await export_tenant_provenance(session, source_scope)
+    records = parse_provenance_archive(archive)
+    async with provenance_sessionmaker() as session:
+        await _delete_exported_closure(session, records)
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_scope, archive)
+        restored_object = await session.scalar(
+            select(ProjectGraphObjectRecord).where(
+                ProjectGraphObjectRecord.workspace_id == target_scope.workspace_id,
+                ProjectGraphObjectRecord.confidence == 0.0,
+            )
+        )
+        restored_edge = await session.scalar(
+            select(ProjectGraphEdgeRecord).where(
+                ProjectGraphEdgeRecord.workspace_id == target_scope.workspace_id
+            )
+        )
+
+    assert restored_object is not None
+    assert restored_edge.confidence == 1.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_export_is_exact_workspace_scoped(provenance_sessionmaker):
     token = uuid.uuid4().hex[:12]
     shared_scope = _scope(f"shared-{token}")
@@ -1257,9 +1531,8 @@ async def test_duplicate_canonical_attachments_keep_node_and_segment_identity(
         for record in source_records["content_segments"]
         if record["content_segment_uid"].startswith("duplicate-segment-")
     }
-    assert list(source_node_attachments.values()) != sorted(
-        source_node_attachments.values()
-    )
+    assert len(source_node_attachments) == 5
+    assert len(set(source_node_attachments.values())) == 5
     async with provenance_sessionmaker() as session:
         await _delete_exported_closure(session, source_records)
     async with provenance_sessionmaker() as session:

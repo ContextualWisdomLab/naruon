@@ -44,6 +44,11 @@ to the exact workspace and includes only their cited source records.
    membership; OIDC or server verification is required outside tests.
 8. Full mailbox/customer-exit completion remains open until email ownership has
    an explicit workspace dimension and binary object lifecycle is portable.
+9. Same-instance cross-workspace imports reuse identical owner-scoped Email and
+   Attachment rows. Globally unique graph UIDs are deterministically remapped
+   only while the source graph coexists, using a target-scope plus source-scope
+   identity table; export reverses the mapping to the stable portable UIDs. The
+   archive identifies the source user with a one-way digest.
 
 ## Alternatives rejected
 

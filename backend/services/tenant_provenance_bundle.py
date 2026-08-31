@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import json
@@ -28,6 +29,7 @@ from db.models import (
     ProjectGraphCorrectionRecord,
     ProjectGraphEdgeRecord,
     ProjectGraphObjectRecord,
+    ProvenanceIdentityMapping,
 )
 
 
@@ -63,6 +65,30 @@ _COLLECTIONS = (
     "project_edges",
     "corrections",
 )
+_REMAPPED_COLLECTIONS = (
+    "content_nodes",
+    "content_segments",
+    "structural_edges",
+    "project_objects",
+    "project_edges",
+    "corrections",
+)
+_UID_KEYS = {
+    "content_nodes": "content_node_uid",
+    "content_segments": "content_segment_uid",
+    "structural_edges": "edge_uid",
+    "project_objects": "object_uid",
+    "project_edges": "edge_uid",
+    "corrections": "correction_uid",
+}
+_UID_PREFIXES = {
+    "content_nodes": "tpn-",
+    "content_segments": "tps-",
+    "structural_edges": "tpk-",
+    "project_objects": "tpo-",
+    "project_edges": "tpe-",
+    "corrections": "tpc-",
+}
 _TEXTUAL_PARSER_KEYS = frozenset(
     {"plain_text", "html", "markdown", "json", "csv", "xml", "calendar", "pdf"}
 )
@@ -339,6 +365,33 @@ def _portable_metadata(
     return value
 
 
+def _source_user_uid(user_id: str) -> str:
+    return hashlib.sha256(user_id.encode("utf-8")).hexdigest()
+
+
+def _target_database_uid(
+    scope: TenantProvenanceScope,
+    source_scope: Mapping[str, str],
+    collection: str,
+    portable_uid: str,
+) -> str:
+    digest = hashlib.sha256(
+        _canonical_json(
+            {
+                "collection": collection,
+                "portable_uid": portable_uid,
+                "source_scope": dict(source_scope),
+                "target_scope": {
+                    "organization_uid": scope.organization_id,
+                    "user_uid": scope.user_id,
+                    "workspace_uid": scope.workspace_id,
+                },
+            }
+        )
+    ).hexdigest()
+    return f"{_UID_PREFIXES[collection]}{digest[:60]}"
+
+
 def _canonical_json(value: object) -> bytes:
     _validate_json_value(value)
     try:
@@ -351,6 +404,57 @@ def _canonical_json(value: object) -> bytes:
         ).encode("utf-8")
     except (TypeError, ValueError, UnicodeEncodeError) as exc:
         raise ProvenanceArchiveError("Invalid provenance archive") from exc
+
+
+def _translate_identity_records(
+    records: Mapping[str, object], maps: Mapping[str, Mapping[str, str]]
+) -> dict[str, object]:
+    translated = copy.deepcopy(records)
+
+    def replace(record: dict[str, object], field: str, collection: str) -> None:
+        value = record[field]
+        if value is not None:
+            record[field] = maps[collection].get(value, value)
+
+    def replace_list(record: dict[str, object], field: str, collection: str) -> None:
+        record[field] = sorted(
+            maps[collection].get(value, value) for value in record[field]
+        )
+
+    for record in translated["content_nodes"]:
+        replace(record, "content_node_uid", "content_nodes")
+        replace(record, "parent_node_uid", "content_nodes")
+    for record in translated["content_segments"]:
+        replace(record, "content_segment_uid", "content_segments")
+        replace(record, "content_node_uid", "content_nodes")
+    for record in translated["structural_edges"]:
+        replace(record, "edge_uid", "structural_edges")
+        for field in ("source_node_uid", "target_node_uid"):
+            replace(record, field, "content_nodes")
+        for field in ("source_segment_uid", "target_segment_uid"):
+            replace(record, field, "content_segments")
+    for record in translated["project_objects"]:
+        replace(record, "object_uid", "project_objects")
+        replace(record, "primary_content_segment_uid", "content_segments")
+        replace_list(record, "source_segment_uids", "content_segments")
+    for record in translated["project_edges"]:
+        replace(record, "edge_uid", "project_edges")
+        for field in (
+            "source_uid",
+            "target_uid",
+            "source_object_uid",
+            "target_object_uid",
+        ):
+            replace(record, field, "project_objects")
+        replace(record, "primary_content_segment_uid", "content_segments")
+        replace_list(record, "source_segment_uids", "content_segments")
+    for record in translated["corrections"]:
+        replace(record, "correction_uid", "corrections")
+        replace(record, "object_uid", "project_objects")
+        replace_list(record, "source_segment_uids", "content_segments")
+    for collection in _REMAPPED_COLLECTIONS:
+        translated[collection].sort(key=lambda record: record[_UID_KEYS[collection]])
+    return translated
 
 
 def _records_bundle_uid(records: Mapping[str, object]) -> str:
@@ -737,7 +841,7 @@ def _parse_datetime(value: object) -> datetime:
 
 
 def _confidence(value: float) -> str:
-    if not math.isfinite(value):
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
         _fail()
     return repr(value)
 
@@ -749,7 +853,7 @@ def _parse_confidence(value: object) -> float:
         parsed = float(value)
     except ValueError as exc:
         raise ProvenanceArchiveError("Invalid provenance archive") from exc
-    if not math.isfinite(parsed):
+    if not math.isfinite(parsed) or not 0.0 <= parsed <= 1.0:
         _fail()
     return parsed
 
@@ -1097,6 +1201,122 @@ async def export_tenant_provenance(
     structural_edges = await descendants(
         KnowledgeGraphEdgeRecord, KnowledgeGraphEdgeRecord.edge_uid
     )
+    candidate_uids = {
+        *(row.content_node_uid for row in nodes),
+        *(row.content_segment_uid for row in segments),
+        *(row.edge_uid for row in structural_edges),
+        *(row.object_uid for row in project_objects),
+        *(row.edge_uid for row in project_edges),
+        *(row.correction_uid for row in corrections),
+    }
+    candidate_identity_rows = list(
+        (
+            await session.scalars(
+                select(ProvenanceIdentityMapping).where(
+                    ProvenanceIdentityMapping.target_database_uid.in_(candidate_uids)
+                )
+            )
+        ).all()
+    )
+    identity_rows = [
+        row
+        for row in candidate_identity_rows
+        if row.target_user_id == scope.user_id
+        and row.target_organization_id == scope.organization_id
+        and row.target_workspace_id == scope.workspace_id
+    ]
+    mapped_uids = {
+        collection: {
+            row.target_database_uid
+            for row in candidate_identity_rows
+            if row.entity_kind == collection
+        }
+        for collection in _REMAPPED_COLLECTIONS
+    }
+    target_mapped_uids = {
+        collection: {
+            row.target_database_uid
+            for row in identity_rows
+            if row.entity_kind == collection
+        }
+        for collection in _REMAPPED_COLLECTIONS
+    }
+    if identity_rows:
+        nodes = [
+            row
+            for row in nodes
+            if row.content_node_uid in target_mapped_uids["content_nodes"]
+        ]
+        segments = [
+            row
+            for row in segments
+            if row.content_segment_uid in target_mapped_uids["content_segments"]
+        ]
+        structural_edges = [
+            row
+            for row in structural_edges
+            if row.edge_uid in target_mapped_uids["structural_edges"]
+        ]
+    else:
+        nodes = [
+            row
+            for row in nodes
+            if row.content_node_uid not in mapped_uids["content_nodes"]
+        ]
+        segments = [
+            row
+            for row in segments
+            if row.content_segment_uid not in mapped_uids["content_segments"]
+        ]
+        structural_edges = [
+            row
+            for row in structural_edges
+            if row.edge_uid not in mapped_uids["structural_edges"]
+        ]
+    database_uids = {
+        "content_nodes": {row.content_node_uid for row in nodes},
+        "content_segments": {row.content_segment_uid for row in segments},
+        "structural_edges": {row.edge_uid for row in structural_edges},
+        "project_objects": {row.object_uid for row in project_objects},
+        "project_edges": {row.edge_uid for row in project_edges},
+        "corrections": {row.correction_uid for row in corrections},
+    }
+    relevant_identity_rows = [
+        row
+        for row in identity_rows
+        if row.entity_kind in database_uids
+        and row.target_database_uid in database_uids[row.entity_kind]
+    ]
+    reverse_maps = {collection: {} for collection in _REMAPPED_COLLECTIONS}
+    source_scopes = {
+        (
+            row.source_user_uid,
+            row.source_organization_uid,
+            row.source_workspace_uid,
+        )
+        for row in relevant_identity_rows
+    }
+    if relevant_identity_rows:
+        if len(source_scopes) != 1:
+            _fail()
+        for collection in _REMAPPED_COLLECTIONS:
+            collection_rows = [
+                row for row in relevant_identity_rows if row.entity_kind == collection
+            ]
+            if {row.target_database_uid for row in collection_rows} != database_uids[
+                collection
+            ]:
+                _fail()
+            reverse_maps[collection] = {
+                row.target_database_uid: row.portable_uid for row in collection_rows
+            }
+        source_user_uid, source_organization_uid, source_workspace_uid = next(
+            iter(source_scopes)
+        )
+    else:
+        source_user_uid = _source_user_uid(scope.user_id)
+        source_organization_uid = scope.organization_id or "unscoped"
+        source_workspace_uid = scope.workspace_id
     attachment_records, attachment_uids = _attachment_records(attachments, email_uids)
     attachment_references = {
         f"attachment-{attachment_id}": f"attachment:{attachment_uid}"
@@ -1112,8 +1332,9 @@ async def export_tenant_provenance(
     }
     payload = {
         "source_scope": {
-            "organization_uid": scope.organization_id or "unscoped",
-            "workspace_uid": scope.workspace_id,
+            "user_uid": source_user_uid,
+            "organization_uid": source_organization_uid,
+            "workspace_uid": source_workspace_uid,
         },
         "emails": [_email_record(email) for email in emails],
         "attachments": attachment_records,
@@ -1149,6 +1370,8 @@ async def export_tenant_provenance(
             for correction in corrections
         ],
     }
+    if relevant_identity_rows:
+        payload = _translate_identity_records(payload, reverse_maps)
     content_digest = hashlib.sha256(_canonical_json(payload)).hexdigest()
     records = {
         "profile": "naruon-tenant-provenance/v1",
@@ -1435,10 +1658,12 @@ def _validate_record_graph(records: Mapping[str, object]) -> None:
     _records_bundle_uid(records)
     source_scope = records.get("source_scope")
     if not isinstance(source_scope, dict) or set(source_scope) != {
+        "user_uid",
         "organization_uid",
         "workspace_uid",
     }:
         _fail()
+    _safe_identifier(source_scope.get("user_uid"))
     _safe_identifier(source_scope.get("organization_uid"))
     _safe_identifier(source_scope.get("workspace_uid"))
     activity = records.get("export_activity")
@@ -1627,6 +1852,126 @@ async def _matching_models(
         return {}
     rows = list((await session.scalars(select(model).where(column.in_(values)))).all())
     return {getattr(row, key_attribute): row for row in rows}
+
+
+async def _prepare_identity_import(
+    session: AsyncSession,
+    scope: TenantProvenanceScope,
+    records: Mapping[str, object],
+) -> tuple[dict[str, object], list[ProvenanceIdentityMapping]]:
+    source_scope = records["source_scope"]
+    same_scope = (
+        source_scope["user_uid"] == _source_user_uid(scope.user_id)
+        and source_scope["organization_uid"] == (scope.organization_id or "unscoped")
+        and source_scope["workspace_uid"] == scope.workspace_id
+    )
+    if same_scope:
+        return copy.deepcopy(records), []
+
+    scoped_collisions: list[Any] = []
+    for model, column, collection in (
+        (
+            ProjectGraphObjectRecord,
+            ProjectGraphObjectRecord.object_uid,
+            "project_objects",
+        ),
+        (ProjectGraphEdgeRecord, ProjectGraphEdgeRecord.edge_uid, "project_edges"),
+        (
+            ProjectGraphCorrectionRecord,
+            ProjectGraphCorrectionRecord.correction_uid,
+            "corrections",
+        ),
+    ):
+        portable_uids = {
+            record[_UID_KEYS[collection]] for record in records[collection]
+        }
+        if portable_uids:
+            scoped_collisions.extend(
+                (
+                    await session.scalars(
+                        select(model).where(column.in_(portable_uids))
+                    )
+                ).all()
+            )
+    if not scoped_collisions:
+        return copy.deepcopy(records), []
+    if any(
+        row.user_id == scope.user_id
+        and row.organization_id == scope.organization_id
+        and row.workspace_id == scope.workspace_id
+        for row in scoped_collisions
+    ):
+        return copy.deepcopy(records), []
+    if any(
+        _source_user_uid(row.user_id) != source_scope["user_uid"]
+        or (row.organization_id or "unscoped") != source_scope["organization_uid"]
+        or row.workspace_id != source_scope["workspace_uid"]
+        for row in scoped_collisions
+    ):
+        _fail()
+
+    forward_maps = {collection: {} for collection in _REMAPPED_COLLECTIONS}
+    for collection in _REMAPPED_COLLECTIONS:
+        for record in records[collection]:
+            portable_uid = record[_UID_KEYS[collection]]
+            forward_maps[collection][portable_uid] = _target_database_uid(
+                scope, source_scope, collection, portable_uid
+            )
+    target_uids = {
+        database_uid
+        for collection_map in forward_maps.values()
+        for database_uid in collection_map.values()
+    }
+    existing_rows = list(
+        (
+            await session.scalars(
+                select(ProvenanceIdentityMapping).where(
+                    ProvenanceIdentityMapping.target_database_uid.in_(target_uids)
+                )
+            )
+        ).all()
+    )
+    existing = {(row.entity_kind, row.portable_uid): row for row in existing_rows}
+    new_rows: list[ProvenanceIdentityMapping] = []
+    for collection, collection_map in forward_maps.items():
+        for portable_uid, database_uid in collection_map.items():
+            row = existing.get((collection, portable_uid))
+            expected = (
+                scope.user_id,
+                scope.organization_id,
+                scope.workspace_id,
+                source_scope["user_uid"],
+                source_scope["organization_uid"],
+                source_scope["workspace_uid"],
+                database_uid,
+            )
+            if row is not None:
+                actual = (
+                    row.target_user_id,
+                    row.target_organization_id,
+                    row.target_workspace_id,
+                    row.source_user_uid,
+                    row.source_organization_uid,
+                    row.source_workspace_uid,
+                    row.target_database_uid,
+                )
+                if actual != expected:
+                    _fail()
+                continue
+            new_rows.append(
+                ProvenanceIdentityMapping(
+                    target_user_id=scope.user_id,
+                    target_organization_id=scope.organization_id,
+                    target_workspace_id=scope.workspace_id,
+                    source_user_uid=source_scope["user_uid"],
+                    source_organization_uid=source_scope["organization_uid"],
+                    source_workspace_uid=source_scope["workspace_uid"],
+                    entity_kind=collection,
+                    portable_uid=portable_uid,
+                    target_database_uid=database_uid,
+                )
+            )
+    return _translate_identity_records(records, forward_maps), new_rows
 
 
 async def _preflight_existing(
@@ -2046,11 +2391,16 @@ async def import_tenant_provenance(
     created = {collection: 0 for collection in _COLLECTIONS}
     try:
         async with session.begin():
-            models = await _preflight_existing(session, scope, records)
+            database_records, identity_rows = await _prepare_identity_import(
+                session, scope, records
+            )
+            models = await _preflight_existing(session, scope, database_records)
             skipped = {
                 collection: len(models[collection]) for collection in _COLLECTIONS
             }
-            await _insert_records(session, scope, records, models, created)
+            await _insert_records(session, scope, database_records, models, created)
+            session.add_all(identity_rows)
+            await session.flush()
     except ProvenanceArchiveError:
         raise
     except (DataError, IntegrityError, StatementError, TypeError, ValueError) as exc:

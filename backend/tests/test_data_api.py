@@ -716,7 +716,7 @@ async def test_provenance_archive_accepts_absent_length_boundary_chunks(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_provenance_archive_rejects_body_larger_than_declared_length(monkeypatch):
+async def test_provenance_archive_rejects_streamed_body_over_max_bytes(monkeypatch):
     monkeypatch.setattr(data_api, "_PROVENANCE_ARCHIVE_MAX_BYTES", 4)
 
     with pytest.raises(HTTPException) as exc_info:
