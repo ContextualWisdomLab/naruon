@@ -162,6 +162,11 @@ class _LeaseConnection:
     def __init__(self, *, scalar_result=True):
         self.scalar_result = scalar_result
         self.scalar_calls = []
+        self.execution_options_calls = []
+
+    async def execution_options(self, **options):
+        self.execution_options_calls.append(options)
+        return self
 
     async def scalar(self, statement, params):
         self.scalar_calls.append((statement, params))
@@ -733,6 +738,14 @@ async def test_postgresql_lease_helpers_and_non_postgresql_fallback(monkeypatch)
         await newsdom_worker_module._try_acquire_sweep_lease(postgres_connection)
         is True
     )
+    # AUTOCOMMIT before the lock-acquire statement: a plain (non-autocommit)
+    # connection would otherwise leave this connection's implicit
+    # transaction open and idle for the whole sweep -- a PostgreSQL
+    # idle_in_transaction_session_timeout could then kill this connection
+    # mid-sweep, silently dropping the lease.
+    assert postgres_connection.execution_options_calls == [
+        {"isolation_level": "AUTOCOMMIT"}
+    ]
     assert (
         postgres_connection.scalar_calls[0][1]
         == newsdom_worker_module._SWEEP_LOCK_PARAMS

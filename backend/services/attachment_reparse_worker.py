@@ -123,7 +123,15 @@ async def _try_acquire_sweep_lease(connection: AsyncConnection) -> bool:
     session, so a mismatched unlock is a silent no-op and the lock stays held
     (blocking every replica's sweep) until the stray connection is eventually
     recycled or closed.
+
+    Sets AUTOCOMMIT on this connection first: without it, the advisory-lock
+    SELECT below opens an implicit transaction that would otherwise stay
+    open and idle on this connection for the whole sweep (every other
+    statement runs through the separate per-item session), risking
+    PostgreSQL's ``idle_in_transaction_session_timeout`` killing this
+    connection mid-sweep and silently dropping the lease.
     """
+    await connection.execution_options(isolation_level="AUTOCOMMIT")
     acquired = await connection.scalar(
         select(
             func.pg_try_advisory_lock(

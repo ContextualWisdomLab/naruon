@@ -1,4 +1,17 @@
 ## [Unreleased]
+- (CodeRabbit review 반영) `AttachmentReparseWorker`/`NewsdomRecognitionWorker`
+  둘 다 advisory lease를 잡는 전용 `AsyncConnection`에 `AUTOCOMMIT`
+  isolation level을 설정하지 않고 있었습니다 — lock 획득 `SELECT`가 암묵적
+  트랜잭션을 열고, 그 트랜잭션이 스윕 전체 동안(실제 항목 처리는 별도의
+  세션에서 일어나는데도) 커밋되지 않은 채 idle 상태로 남아 있었습니다.
+  PostgreSQL의 `idle_in_transaction_session_timeout`이 설정된 환경에서는
+  이 커넥션이 스윕 도중 강제 종료될 수 있고, 그러면 lease가 조용히
+  풀려 다른 replica가 중복 스윕을 시작할 수 있었습니다. 두 워커의
+  `_try_acquire_sweep_lease` 모두 lock 획득 전에
+  `await connection.execution_options(isolation_level="AUTOCOMMIT")`를
+  호출하도록 고쳤습니다(advisory lock 자체는 세션 스코프라 AUTOCOMMIT과
+  무관하게 계속 유지됨). 검증: 신규 테스트 2개(두 워커 각각), 전체
+  백엔드 스위트 1879 passed/33 skipped, ruff clean.
 - (G-15 follow-up, 근본 수정) `services/newsdom_worker.py`가
   `AttachmentReparseWorker`와 똑같은 두 결함을 그대로 갖고 있던 것을 고쳤습니다 —
   ADR-0005 Revisions와 gap-baseline에 추적 기록해 둔 바로 그 후속 후보입니다. (1) 🔴
