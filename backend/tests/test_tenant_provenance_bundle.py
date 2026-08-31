@@ -1209,6 +1209,89 @@ async def test_same_database_cross_workspace_import_keeps_portable_identity(
     }
 
 
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_mixed_native_and_multiple_import_origins_export_as_target_scope(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    target_scope = _scope(f"target-{token}")
+    source_scopes = [_scope(f"source-{index}-{token}") for index in range(2)]
+    async with provenance_sessionmaker() as session:
+        native = await _seed_provenance_closure(
+            session, scope=target_scope, token=f"native-{token}"
+        )
+        native_node = await session.get(ContentNodeRecord, native["node_id"])
+        parent_uid = f"parent-node-native-{token}"
+        session.add(
+            ContentNodeRecord(
+                content_node_uid=parent_uid,
+                email_id=native["email_id"],
+                attachment_id=native["attachment_id"],
+                source_kind="attachment",
+                source_record_uid=f"attachment-source-native-{token}",
+                parent_node_uid=None,
+                node_kind="document",
+                node_path="/",
+                ordinal_index=0,
+                display_label="Parent",
+                safe_text_content="Parent evidence",
+                content_hash=f"parenthash-{token}",
+            )
+        )
+        native_node.parent_node_uid = parent_uid
+        await session.commit()
+        sources = [
+            await _seed_provenance_closure(
+                session, scope=scope, token=f"source-{index}-{token}"
+            )
+            for index, scope in enumerate(source_scopes)
+        ]
+    archives = []
+    async with provenance_sessionmaker() as session:
+        for scope in source_scopes:
+            archives.append(await export_tenant_provenance(session, scope))
+    for archive in archives:
+        async with provenance_sessionmaker() as session:
+            await import_tenant_provenance(session, target_scope, archive)
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, target_scope)
+        )
+
+    assert records["source_scope"] == {
+        "user_uid": hashlib.sha256(target_scope.user_id.encode()).hexdigest(),
+        "organization_uid": target_scope.organization_id,
+        "workspace_uid": target_scope.workspace_id,
+    }
+    assert {
+        collection: len(records[collection])
+        for collection in (
+            "emails",
+            "attachments",
+            "content_nodes",
+            "content_segments",
+            "structural_edges",
+            "project_objects",
+            "project_edges",
+            "corrections",
+        )
+    } == {
+        "emails": 3,
+        "attachments": 3,
+        "content_nodes": 4,
+        "content_segments": 3,
+        "structural_edges": 3,
+        "project_objects": 6,
+        "project_edges": 3,
+        "corrections": 3,
+    }
+    serialized = json.dumps(records, sort_keys=True)
+    assert native["email_uid"] in serialized
+    assert parent_uid in serialized
+    assert all(source["email_uid"] in serialized for source in sources)
+
+
 @pytest.mark.parametrize(
     "source_user_uid",
     ("a" * 63, "A" * 64, "g" * 64, "0" * 65),

@@ -41,7 +41,7 @@ to the exact workspace and includes only their cited source records.
 7. Signed-session API routes use the current `user_id`, `organization_id`, and
    `workspace_id`; bundle payload scope cannot override target authority. HMAC
    fallback sessions are rejected because they do not prove workspace
-   membership; OIDC or server verification is required outside tests.
+   membership; OIDC verification is required outside tests.
 8. Full mailbox/customer-exit completion remains open until email ownership has
    an explicit workspace dimension and binary object lifecycle is portable.
 9. Same-instance cross-workspace imports reuse identical owner-scoped Email and
@@ -52,7 +52,9 @@ to the exact workspace and includes only their cited source records.
    Known typed UID keys nested in graph metadata are translated recursively,
    while arbitrary string values remain unchanged. PostgreSQL serializes only
    identical source-to-target import scopes with a transaction advisory lock so
-   concurrent retries remain idempotent.
+   concurrent retries remain idempotent. A target containing native records or
+   multiple imported origins exports one target-scoped archive with its current
+   database UIDs; a single fully mapped origin still restores its portable UIDs.
 
 ## Alternatives rejected
 

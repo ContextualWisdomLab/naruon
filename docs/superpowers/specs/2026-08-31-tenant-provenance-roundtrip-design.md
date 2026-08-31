@@ -81,6 +81,9 @@ identity mapping and deterministically remaps every graph UID and typed graph
 reference, including recognized UID keys nested in object and correction
 metadata. Arbitrary strings are never value-matched or rewritten. Export
 reverses that mapping, preserving the portable archive bytes.
+If native records or multiple imported origins coexist, export instead emits a
+single target-scoped closure with the target database UIDs so every record stays
+exportable without pretending that the mixed archive has one original source.
 The source-user component stored in the archive is a one-way digest rather than
 an account identifier and must be exactly a lowercase SHA-256 hex digest.
 Concurrent imports of the same source-to-target scope are serialized with a
@@ -93,8 +96,8 @@ PostgreSQL transaction advisory lock; other scopes remain independent.
   returns created/skipped counts plus a verified manifest digest.
 - Both routes use the existing signed authentication dependency and reject the
   HMAC fallback verifier because it is not authoritative workspace-membership
-  evidence. OIDC and server-verified contexts are accepted; dependency override
-  is test-only evidence.
+  evidence. Only OIDC-verified contexts are accepted; dependency override is
+  test-only evidence.
 
 ## Verification
 

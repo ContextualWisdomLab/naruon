@@ -1285,20 +1285,56 @@ async def export_tenant_provenance(
         for collection in _REMAPPED_COLLECTIONS
     }
     if identity_rows:
-        nodes = [
-            row
+        nodes_by_id = {row.content_node_id: row for row in nodes}
+        nodes_by_uid = {row.content_node_uid: row for row in nodes}
+        selected_node_uids = {
+            row.content_node_uid
             for row in nodes
             if row.content_node_uid in target_mapped_uids["content_nodes"]
-        ]
+        } | {nodes_by_id[row.content_node_id].content_node_uid for row in cited_segments}
+        pending_node_uids = list(selected_node_uids)
+        while pending_node_uids:
+            parent_uid = nodes_by_uid[pending_node_uids.pop()].parent_node_uid
+            if parent_uid is not None and parent_uid not in selected_node_uids:
+                selected_node_uids.add(parent_uid)
+                pending_node_uids.append(parent_uid)
+        cited_segment_uid_set = {row.content_segment_uid for row in cited_segments}
+        nodes = [row for row in nodes if row.content_node_uid in selected_node_uids]
         segments = [
             row
             for row in segments
             if row.content_segment_uid in target_mapped_uids["content_segments"]
+            or row.content_segment_uid in cited_segment_uid_set
         ]
+        selected_node_ids = {row.content_node_id for row in nodes}
+        selected_segment_ids = {row.content_segment_id for row in segments}
         structural_edges = [
             row
             for row in structural_edges
             if row.edge_uid in target_mapped_uids["structural_edges"]
+            or (
+                (row.source_node_id is None or row.source_node_id in selected_node_ids)
+                and (
+                    row.target_node_id is None or row.target_node_id in selected_node_ids
+                )
+                and (
+                    row.source_segment_id is None
+                    or row.source_segment_id in selected_segment_ids
+                )
+                and (
+                    row.target_segment_id is None
+                    or row.target_segment_id in selected_segment_ids
+                )
+                and any(
+                    value is not None
+                    for value in (
+                        row.source_node_id,
+                        row.target_node_id,
+                        row.source_segment_id,
+                        row.target_segment_id,
+                    )
+                )
+            )
         ]
     else:
         nodes = [
@@ -1339,9 +1375,10 @@ async def export_tenant_provenance(
         )
         for row in relevant_identity_rows
     }
-    if relevant_identity_rows:
-        if len(source_scopes) != 1:
-            _fail()
+    can_restore_source_identity = bool(relevant_identity_rows) and len(
+        source_scopes
+    ) == 1
+    if can_restore_source_identity:
         for collection in _REMAPPED_COLLECTIONS:
             collection_rows = [
                 row for row in relevant_identity_rows if row.entity_kind == collection
@@ -1349,10 +1386,13 @@ async def export_tenant_provenance(
             if {row.target_database_uid for row in collection_rows} != database_uids[
                 collection
             ]:
-                _fail()
+                can_restore_source_identity = False
+                break
             reverse_maps[collection] = {
                 row.target_database_uid: row.portable_uid for row in collection_rows
             }
+
+    if can_restore_source_identity:
         source_user_uid, source_organization_uid, source_workspace_uid = next(
             iter(source_scopes)
         )
@@ -1413,7 +1453,7 @@ async def export_tenant_provenance(
             for correction in corrections
         ],
     }
-    if relevant_identity_rows:
+    if can_restore_source_identity:
         payload = _translate_identity_records(payload, reverse_maps)
     content_digest = hashlib.sha256(_canonical_json(payload)).hexdigest()
     records = {
