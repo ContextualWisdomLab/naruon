@@ -276,12 +276,17 @@ async def create_reply_sla_escalation_tasks(
     *,
     user_id: str,
     organization_id: str | None,
+    workspace_id: str,
     overdue_hours: int,
     limit: int,
     tenant_config: TenantConfig | None = None,
 ) -> ReplySlaEscalationResult:
     pending_replies = await check_missing_replies(
-        db, user_id, organization_id, tenant_config=tenant_config
+        db,
+        user_id,
+        organization_id,
+        workspace_id,
+        tenant_config=tenant_config,
     )
     now = datetime.datetime.now(datetime.timezone.utc)
     overdue_cutoff = now - datetime.timedelta(hours=overdue_hours)

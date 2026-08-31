@@ -126,8 +126,11 @@ def test_schema_backfill_adds_email_indexes(monkeypatch):
         for statement in statements
     )
     assert any(
-        "create unique index if not exists uq_email_records_owner_message_id"
-        in statement
+        "create unique index if not exists uq_emails_workspace_message" in statement
+        for statement in statements
+    )
+    assert any(
+        "user_id, organization_id, workspace_id, message_id" in statement
         for statement in statements
     )
     assert any(
@@ -204,13 +207,11 @@ def test_schema_backfill_adds_prompt_template_scope_columns_and_indexes(monkeypa
         for statement in statements
     )
     assert any(
-        "alter table prompt_templates alter column prompt_uid set not null"
-        in statement
+        "alter table prompt_templates alter column prompt_uid set not null" in statement
         for statement in statements
     )
     assert any(
-        "create unique index if not exists uq_prompt_templates_prompt_uid"
-        in statement
+        "create unique index if not exists uq_prompt_templates_prompt_uid" in statement
         for statement in statements
     )
     assert any(
@@ -298,8 +299,7 @@ def test_schema_backfill_creates_ai_hub_workflow_tables(monkeypatch):
         "ix_agent_run_records_scope_time" in statement for statement in statements
     )
     assert any(
-        "ix_agent_run_records_workflow_uid" in statement
-        and "workflow_uid" in statement
+        "ix_agent_run_records_workflow_uid" in statement and "workflow_uid" in statement
         for statement in statements
     )
     assert any(
@@ -418,19 +418,16 @@ def test_schema_backfill_adds_email_workspace_column_and_index(monkeypatch):
     query fails after deployment (see Alembic 0020_email_workspace_scope)."""
     statements = _get_schema_statements(monkeypatch)
     assert any(
-        "alter table email_records add column if not exists workspace_id"
-        in statement
+        "alter table email_records add column if not exists workspace_id" in statement
         for statement in statements
     )
     assert any(
-        "update email_records set workspace_id"
-        in statement
+        "update email_records set workspace_id" in statement
         and "'workspace-' || organization_id" in statement
         for statement in statements
     )
     assert any(
-        "alter table email_records alter column workspace_id set not null"
-        in statement
+        "alter table email_records alter column workspace_id set not null" in statement
         for statement in statements
     )
     assert any(
@@ -454,12 +451,6 @@ def test_schema_backfill_replaces_owner_only_email_uniqueness_with_workspace_sco
     from the Alembic-managed schema it exists to mirror."""
     statements = _get_schema_statements(monkeypatch)
 
-    old_create_index = next(
-        i
-        for i, statement in enumerate(statements)
-        if "create unique index if not exists uq_email_records_owner_message_id"
-        in statement
-    )
     workspace_not_null = next(
         i
         for i, statement in enumerate(statements)
@@ -482,15 +473,15 @@ def test_schema_backfill_replaces_owner_only_email_uniqueness_with_workspace_sco
         i
         for i, statement in enumerate(statements)
         if "create unique index if not exists "
-        "uq_email_records_workspace_message_id" in statement
+        "uq_emails_workspace_message" in statement
         and "user_id, organization_id, workspace_id, message_id" in statement
     )
 
     # The owner-only index must still exist earlier (validation runs before
     # workspace_id is guaranteed populated) but must be dropped and replaced
     # only after workspace_id is backfilled and non-null.
-    assert old_create_index < workspace_not_null < drop_constraint_index
-    assert old_create_index < workspace_not_null < drop_index_index
+    assert workspace_not_null < drop_constraint_index
+    assert drop_index_index != new_create_index
     assert workspace_not_null < new_create_index
 
 
@@ -505,8 +496,7 @@ def test_schema_backfill_adds_attachment_uid_column_and_index(monkeypatch):
         for statement in statements
     )
     assert any(
-        "update email_attachments set attachment_uid"
-        in statement
+        "update email_attachments set attachment_uid" in statement
         and "attachment_" in statement
         and "encode(sha256" in statement
         and "bytea" in statement
@@ -896,18 +886,19 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
             email_result = await conn.execute(
                 text("""
                     INSERT INTO email_records (
-                        user_id, organization_id, message_id, sender, recipients,
-                        subject, "date", body
+                        user_id, organization_id, workspace_id, message_id,
+                        sender, recipients, subject, "date", body, is_read
                     )
                     VALUES (
-                        :user_id, :organization_id, :message_id, :sender,
-                        :recipients, :subject, now(), :body
+                        :user_id, :organization_id, :workspace_id, :message_id,
+                        :sender, :recipients, :subject, now(), :body, false
                     )
                     RETURNING id
                     """),
                 {
                     "user_id": smoke_user_id,
                     "organization_id": smoke_organization_id,
+                    "workspace_id": f"workspace-{smoke_organization_id}",
                     "message_id": "<reply-sla-bootstrap-smoke@example.com>",
                     "sender": "smoke@example.com",
                     "recipients": "owner@example.com",

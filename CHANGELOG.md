@@ -1,4 +1,10 @@
 ## [Unreleased]
+- **Superseding workspace-scope correction:** historical bullets below that call
+  `Email.owner_filters()` workspace scoping deferred are no longer current.
+  The helper now requires `workspace_id`, and every production caller supplies
+  an authoritative workspace without a silent default. Background mailbox
+  processing fails closed when its owner-scoped account cannot be tied to an
+  unambiguous persisted workspace.
 - **(Devin 리뷰 대응, 직전 수정 자체의 회귀) `0020_email_workspace_scope`가 legacy identity를
   CONSTRAINT로 잘못 `DROP INDEX`해 마이그레이션 전체를 중단시킬 수 있던 버그를 고쳤습니다.**
   PostgreSQL은 UNIQUE CONSTRAINT를 내부적으로 동일 이름의 unique index로 구현하므로,

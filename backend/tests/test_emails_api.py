@@ -163,9 +163,7 @@ class LimitAwareMockSession(MockSession):
             # Emulate the SQL window query: newest head row per thread,
             # ordered by date desc, LIMIT applied to heads (not raw rows).
             heads: dict[str, object] = {}
-            for item in sorted(
-                self.items, key=lambda email: email.date, reverse=True
-            ):
+            for item in sorted(self.items, key=lambda email: email.date, reverse=True):
                 key = item.thread_id or item.message_id
                 heads.setdefault(key, item)
             rows = list(heads.values())
@@ -953,7 +951,9 @@ async def test_import_email_files_rejects_invalid_canonical_filename(
 ):
     response = await client.post(
         "/api/emails/import-files",
-        files=[("files", (upload_filename, b"not accepted", "application/octet-stream"))],
+        files=[
+            ("files", (upload_filename, b"not accepted", "application/octet-stream"))
+        ],
         headers={"X-Organization-Id": "org-acme"},
     )
 
@@ -2095,9 +2095,11 @@ def test_email_owner_filters():
         group_ids=(),
         workspace_id="ws-789",
     )
-    filters1 = Email.owner_filters(ctx1.user_id, ctx1.organization_id)
+    filters1 = Email.owner_filters(
+        ctx1.user_id, ctx1.organization_id, ctx1.workspace_id
+    )
 
-    assert len(filters1) == 2
+    assert len(filters1) == 3
     assert (
         str(filters1[0].compile(compile_kwargs={"literal_binds": True}))
         == "email_records.user_id = 'user-123'"
@@ -2105,6 +2107,10 @@ def test_email_owner_filters():
     assert (
         str(filters1[1].compile(compile_kwargs={"literal_binds": True}))
         == "email_records.organization_id = 'org-456'"
+    )
+    assert (
+        str(filters1[2].compile(compile_kwargs={"literal_binds": True}))
+        == "email_records.workspace_id = 'ws-789'"
     )
 
     # Test with None organization_id
@@ -2115,9 +2121,11 @@ def test_email_owner_filters():
         group_ids=(),
         workspace_id="ws-789",
     )
-    filters2 = Email.owner_filters(ctx2.user_id, ctx2.organization_id)
+    filters2 = Email.owner_filters(
+        ctx2.user_id, ctx2.organization_id, ctx2.workspace_id
+    )
 
-    assert len(filters2) == 2
+    assert len(filters2) == 3
     assert (
         str(filters2[0].compile(compile_kwargs={"literal_binds": True}))
         == "email_records.user_id = 'user-123'"
@@ -2126,6 +2134,7 @@ def test_email_owner_filters():
         str(filters2[1].compile(compile_kwargs={"literal_binds": True}))
         == "email_records.organization_id IS NULL"
     )
+
 
 def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
     """
@@ -2143,7 +2152,7 @@ def test_find_matches_for_candidates_perf_optim_handles_missing_lookups():
         sender="test@test.com",
         recipients="test2@test.com",
         subject="Subject",
-        body="Body"
+        body="Body",
     )
 
     candidates = [candidate]

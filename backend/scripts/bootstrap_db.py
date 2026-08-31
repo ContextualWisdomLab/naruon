@@ -98,8 +98,7 @@ def _get_add_columns_statements() -> list[Executable]:
             "ADD COLUMN IF NOT EXISTS organization_id varchar"
         ),
         _static_bootstrap_sql(
-            "ALTER TABLE prompt_templates "
-            "ADD COLUMN IF NOT EXISTS workspace_id varchar"
+            "ALTER TABLE prompt_templates ADD COLUMN IF NOT EXISTS workspace_id varchar"
         ),
     ]
 
@@ -352,7 +351,7 @@ def _get_update_email_workspace_statements() -> list[Executable]:
         text("DROP INDEX IF EXISTS uq_email_records_owner_message_id"),
         text(
             "CREATE UNIQUE INDEX IF NOT EXISTS "
-            "uq_email_records_workspace_message_id "
+            "uq_emails_workspace_message "
             "ON email_records (user_id, organization_id, workspace_id, message_id)"
         ),
     ]
@@ -368,9 +367,7 @@ def _get_update_email_attachment_statements() -> list[Executable]:
             ")::bytea), 'hex') "
             "WHERE attachment_uid IS NULL OR attachment_uid = ''"
         ),
-        text(
-            "ALTER TABLE email_attachments ALTER COLUMN attachment_uid SET NOT NULL"
-        ),
+        text("ALTER TABLE email_attachments ALTER COLUMN attachment_uid SET NOT NULL"),
         text(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_email_attachments_uid "
             "ON email_attachments (attachment_uid)"
@@ -516,10 +513,6 @@ def _get_validation_and_final_indexes_statements() -> list[Executable]:
         ),
         text("ALTER TABLE llm_providers ALTER COLUMN user_id SET NOT NULL"),
         text("ALTER TABLE llm_providers ALTER COLUMN organization_id SET NOT NULL"),
-        text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_email_records_owner_message_id "
-            "ON email_records (user_id, organization_id, message_id)"
-        ),
         text(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_llm_providers_org_name "
             "ON llm_providers (organization_id, name)"

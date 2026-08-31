@@ -40,16 +40,27 @@ async def test_reply_sla_scheduler_escalates_configured_mailbox_owners(monkeypat
             self.statement = stmt
             return MockResult()
 
+        async def scalars(self, stmt):
+            return ["workspace-a"]
+
     session = MockSession()
 
     async def fake_create_reply_sla_escalation_tasks(
-        db, *, user_id, organization_id, overdue_hours, limit, tenant_config
+        db,
+        *,
+        user_id,
+        organization_id,
+        workspace_id,
+        overdue_hours,
+        limit,
+        tenant_config,
     ):
         calls.append(
             {
                 "db": db,
                 "user_id": user_id,
                 "organization_id": organization_id,
+                "workspace_id": workspace_id,
                 "overdue_hours": overdue_hours,
                 "limit": limit,
                 "tenant_config": tenant_config,
@@ -74,6 +85,7 @@ async def test_reply_sla_scheduler_escalates_configured_mailbox_owners(monkeypat
             "db": session,
             "user_id": "alice",
             "organization_id": "org-acme",
+            "workspace_id": "workspace-a",
             "overdue_hours": 24,
             "limit": 7,
             "tenant_config": calls[0]["tenant_config"],
@@ -82,6 +94,7 @@ async def test_reply_sla_scheduler_escalates_configured_mailbox_owners(monkeypat
             "db": session,
             "user_id": "bob",
             "organization_id": "org-beta",
+            "workspace_id": "workspace-a",
             "overdue_hours": 24,
             "limit": 7,
             "tenant_config": calls[1]["tenant_config"],
@@ -118,8 +131,18 @@ async def test_reply_sla_scheduler_continues_after_owner_escalation_failure(
         async def execute(self, stmt):
             return MockResult()
 
+        async def scalars(self, stmt):
+            return ["workspace-a"]
+
     async def fake_create_reply_sla_escalation_tasks(
-        db, *, user_id, organization_id, overdue_hours, limit, tenant_config
+        db,
+        *,
+        user_id,
+        organization_id,
+        workspace_id,
+        overdue_hours,
+        limit,
+        tenant_config,
     ):
         calls.append(user_id)
         if user_id == "alice":

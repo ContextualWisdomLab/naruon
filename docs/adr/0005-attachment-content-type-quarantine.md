@@ -1,5 +1,10 @@
 # ADR-0005: Quarantine attachments whose bytes disagree with their declared type
 
+> Status correction (2026-09-01): references below to an open or deferred
+> `Email.owner_filters()` gap are historical. The helper now requires
+> `(user_id, organization_id, workspace_id)` and all production callers must
+> provide an explicit workspace; no implicit workspace scope is accepted.
+
 **Status:** Accepted (Naruon-local attachment ingestion policy)
 **Date:** 2026-08-30
 **Decision owner:** Naruon maintainers

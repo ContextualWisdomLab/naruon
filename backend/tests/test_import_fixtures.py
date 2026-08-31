@@ -161,11 +161,15 @@ async def test_root_importer_persists_canonical_thread_id(tmp_path):
     }
     session = MockSession()
 
-    with patch.object(import_fixtures, "parse_eml", return_value=parsed), patch.object(
-        import_fixtures, "generate_embeddings", new_callable=AsyncMock
-    ) as mock_embeddings, patch.object(
-        import_fixtures, "assign_thread_id", new_callable=AsyncMock
-    ) as mock_assign:
+    with (
+        patch.object(import_fixtures, "parse_eml", return_value=parsed),
+        patch.object(
+            import_fixtures, "generate_embeddings", new_callable=AsyncMock
+        ) as mock_embeddings,
+        patch.object(
+            import_fixtures, "assign_thread_id", new_callable=AsyncMock
+        ) as mock_assign,
+    ):
         mock_embeddings.return_value = [[0.0] * 1536]
         mock_assign.return_value = "canonical-thread"
 
@@ -210,11 +214,15 @@ async def test_root_importer_duplicate_check_is_scoped_to_owner(tmp_path):
     }
     session = MockSession()
 
-    with patch.object(import_fixtures, "parse_eml", return_value=parsed), patch.object(
-        import_fixtures, "generate_embeddings", new_callable=AsyncMock
-    ) as mock_embeddings, patch.object(
-        import_fixtures, "assign_thread_id", new_callable=AsyncMock
-    ) as mock_assign:
+    with (
+        patch.object(import_fixtures, "parse_eml", return_value=parsed),
+        patch.object(
+            import_fixtures, "generate_embeddings", new_callable=AsyncMock
+        ) as mock_embeddings,
+        patch.object(
+            import_fixtures, "assign_thread_id", new_callable=AsyncMock
+        ) as mock_assign,
+    ):
         mock_embeddings.return_value = [[0.0] * 1536]
         mock_assign.return_value = "duplicate-scope-thread"
 
@@ -230,6 +238,7 @@ async def test_root_importer_duplicate_check_is_scoped_to_owner(tmp_path):
         parsed,
         user_id=import_fixtures.IMPORT_USER_ID,
         organization_id=import_fixtures.IMPORT_ORGANIZATION_ID,
+        workspace_id=import_fixtures.IMPORT_WORKSPACE_ID,
     )
 
 
@@ -268,10 +277,13 @@ async def test_root_importer_uses_local_embedding_without_openai_key(
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     session = MockSession()
 
-    with patch.object(import_fixtures, "parse_eml", return_value=parsed), patch.object(
-        import_fixtures,
-        "generate_embeddings",
-        side_effect=AssertionError("network call"),
+    with (
+        patch.object(import_fixtures, "parse_eml", return_value=parsed),
+        patch.object(
+            import_fixtures,
+            "generate_embeddings",
+            side_effect=AssertionError("network call"),
+        ),
     ):
         imported = await import_fixtures.import_eml_file(session, eml_file)
 
@@ -314,11 +326,15 @@ async def test_root_importer_handles_empty_embedding_provider_response(
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     session = MockSession()
 
-    with patch.object(import_fixtures, "parse_eml", return_value=parsed), patch.object(
-        import_fixtures, "generate_embeddings", new_callable=AsyncMock
-    ) as mock_embeddings, patch.object(
-        import_fixtures, "assign_thread_id", new_callable=AsyncMock
-    ) as mock_assign:
+    with (
+        patch.object(import_fixtures, "parse_eml", return_value=parsed),
+        patch.object(
+            import_fixtures, "generate_embeddings", new_callable=AsyncMock
+        ) as mock_embeddings,
+        patch.object(
+            import_fixtures, "assign_thread_id", new_callable=AsyncMock
+        ) as mock_assign,
+    ):
         mock_embeddings.return_value = []
         mock_assign.return_value = "empty-embedding-thread"
 
@@ -364,11 +380,15 @@ async def test_root_importer_rolls_back_and_returns_false_on_commit_failure(tmp_
     }
     session = MockSession()
 
-    with patch.object(import_fixtures, "parse_eml", return_value=parsed), patch.object(
-        import_fixtures, "generate_embeddings", new_callable=AsyncMock
-    ) as mock_embeddings, patch.object(
-        import_fixtures, "assign_thread_id", new_callable=AsyncMock
-    ) as mock_assign:
+    with (
+        patch.object(import_fixtures, "parse_eml", return_value=parsed),
+        patch.object(
+            import_fixtures, "generate_embeddings", new_callable=AsyncMock
+        ) as mock_embeddings,
+        patch.object(
+            import_fixtures, "assign_thread_id", new_callable=AsyncMock
+        ) as mock_assign,
+    ):
         mock_embeddings.return_value = [[0.0] * 1536]
         mock_assign.return_value = "commit-failure-thread"
 

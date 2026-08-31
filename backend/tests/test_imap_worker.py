@@ -64,6 +64,7 @@ async def test_imap_worker_imports_fetched_rfc822_messages(monkeypatch):
         imap_username="imap-user@example.com",
         imap_password="imap-secret",
     )
+    config.workspace_id = "workspace-imap"
     raw_message = (
         b"Message-ID: <imap-1@example.com>\r\n"
         b"From: Sender <sender@example.com>\r\n"
@@ -173,7 +174,7 @@ def test_flags_indicate_seen_parses_seen_flag():
     no_flags = ("OK", [(b"1 (RFC822 {%d}" % len(raw), raw)])
 
     assert flags_indicate_seen(seen[1]) is True
-    assert flags_indicate_seen(unseen[1]) is False   # other flags, but not \Seen
+    assert flags_indicate_seen(unseen[1]) is False  # other flags, but not \Seen
     assert flags_indicate_seen(no_flags[1]) is False  # no FLAGS section -> unread
     assert flags_indicate_seen([]) is False
     assert flags_indicate_seen(None) is False

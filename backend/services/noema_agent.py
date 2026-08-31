@@ -162,8 +162,7 @@ async def tool_search_mail(
     query = (query or "").strip()
     bounded = max(1, min(int(limit or 1), _MAX_MAIL_RESULTS))
     statement = select(Email).where(
-        *Email.owner_filters(deps.user_id, deps.organization_id),
-        Email.workspace_id == deps.workspace_id,
+        *Email.owner_filters(deps.user_id, deps.organization_id, deps.workspace_id),
     )
     if query:
         pattern = f"%{query}%"
@@ -199,8 +198,9 @@ async def tool_read_mail(deps: NoemaAgentDeps, message_id: str) -> dict[str, Any
         return {"status": "error", "reason": "message_id is required"}
     statement = (
         select(Email)
-        .where(*Email.owner_filters(deps.user_id, deps.organization_id))
-        .where(Email.workspace_id == deps.workspace_id)
+        .where(
+            *Email.owner_filters(deps.user_id, deps.organization_id, deps.workspace_id)
+        )
         .where(Email.message_id == message_id)
         .limit(1)
     )
@@ -232,8 +232,9 @@ async def tool_content_graph_query(
 
     email_result = await deps.session.execute(
         select(Email.id)
-        .where(*Email.owner_filters(deps.user_id, deps.organization_id))
-        .where(Email.workspace_id == deps.workspace_id)
+        .where(
+            *Email.owner_filters(deps.user_id, deps.organization_id, deps.workspace_id)
+        )
         .where(Email.message_id == message_id)
         .limit(1)
     )

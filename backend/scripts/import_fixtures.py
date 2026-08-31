@@ -28,13 +28,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 IMPORT_USER_ID = os.environ.get("NARUON_IMPORT_USER_ID", "default")
 IMPORT_ORGANIZATION_ID = os.environ.get("NARUON_IMPORT_ORGANIZATION_ID", "default")
+IMPORT_WORKSPACE_ID = os.environ.get(
+    "NARUON_IMPORT_WORKSPACE_ID", f"workspace-{IMPORT_ORGANIZATION_ID}"
+)
 
 
 async def process_zip_file(zip_path: str | Path, session: AsyncSession):
     with tempfile.TemporaryDirectory() as temp_dir:
         logger.info(f"Extracting {zip_path}...")
         extracted_files = await extract_backup_async(zip_path, temp_dir)
-
 
         batch_values = []
         for file_path in extracted_files:
@@ -81,28 +83,27 @@ async def process_zip_file(zip_path: str | Path, session: AsyncSession):
                 email_data,
                 user_id=IMPORT_USER_ID,
                 organization_id=IMPORT_ORGANIZATION_ID,
+                workspace_id=IMPORT_WORKSPACE_ID,
             )
 
-            batch_values.append(dict(
-                user_id=IMPORT_USER_ID,
-                organization_id=IMPORT_ORGANIZATION_ID,
-                workspace_id=(
-                    f"workspace-{IMPORT_ORGANIZATION_ID}"
-                    if IMPORT_ORGANIZATION_ID
-                    else f"workspace-{IMPORT_USER_ID}"
-                ),
-                message_id=email_data["message_id"],
-                sender=email_data["sender"],
-                reply_to=email_data.get("reply_to"),
-                recipients=email_data["recipients"],
-                subject=email_data["subject"],
-                in_reply_to=email_data.get("in_reply_to"),
-                references=email_data.get("references"),
-                thread_id=thread_id,
-                date=email_data["date"],
-                body=email_data["body"],
-                embedding=embedding,
-            ))
+            batch_values.append(
+                dict(
+                    user_id=IMPORT_USER_ID,
+                    organization_id=IMPORT_ORGANIZATION_ID,
+                    workspace_id=IMPORT_WORKSPACE_ID,
+                    message_id=email_data["message_id"],
+                    sender=email_data["sender"],
+                    reply_to=email_data.get("reply_to"),
+                    recipients=email_data["recipients"],
+                    subject=email_data["subject"],
+                    in_reply_to=email_data.get("in_reply_to"),
+                    references=email_data.get("references"),
+                    thread_id=thread_id,
+                    date=email_data["date"],
+                    body=email_data["body"],
+                    embedding=embedding,
+                )
+            )
 
         if batch_values:
             stmt = insert(Email)
