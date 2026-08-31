@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import random
 import struct
 import uuid
 import warnings
@@ -1160,6 +1161,29 @@ async def test_export_ignores_oversized_attachment_excluded_from_archive(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_export_counts_cited_segment_bytes_once(provenance_sessionmaker):
+    token = uuid.uuid4().hex[:12]
+    scope = _scope(f"large-cited-segment-{token}")
+    large_text = random.Random(0).randbytes(
+        ENTRY_MAX_BYTES // 8 + 2048
+    ).hex()
+    async with provenance_sessionmaker() as session:
+        seeded = await _seed_provenance_closure(session, scope=scope, token=token)
+        segment = await session.get(ContentSegmentRecord, seeded["segment_id"])
+        segment.safe_text_content = large_text
+        segment.content_hash = hashlib.sha256(large_text.encode()).hexdigest()
+        await session.commit()
+
+    async with provenance_sessionmaker() as session:
+        records = parse_provenance_archive(
+            await export_tenant_provenance(session, scope)
+        )
+
+    assert records["content_segments"][0]["safe_text_content"] == large_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_import_composes_with_transaction_started_by_prior_select(
     provenance_sessionmaker,
 ):
@@ -1708,6 +1732,86 @@ async def test_concurrent_identical_same_database_imports_are_idempotent():
                     delete(Attachment).where(Attachment.email_id == email.id)
                 )
                 await session.delete(email)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_concurrent_cross_tenant_imports_remap_global_identities():
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    await _require_direct_postgres(engine)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"concurrent-portable-source-{token}")
+    target_scopes = (
+        _scope(f"concurrent-portable-target-a-{token}"),
+        _scope(f"concurrent-portable-target-b-{token}"),
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with session_factory() as session:
+            await _seed_provenance_closure(session, scope=source_scope, token=token)
+        async with session_factory() as session:
+            archive = await export_tenant_provenance(session, source_scope)
+            records = parse_provenance_archive(archive)
+            await _delete_exported_closure(session, records)
+            await session.commit()
+
+        async def run_import(target_scope):
+            async with session_factory() as session:
+                return await import_tenant_provenance(session, target_scope, archive)
+
+        receipts = await asyncio.gather(
+            *(run_import(target_scope) for target_scope in target_scopes)
+        )
+        assert all(sum(receipt.created.values()) > 0 for receipt in receipts)
+        async with session_factory() as session:
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProjectGraphObjectRecord)
+                    .where(
+                        ProjectGraphObjectRecord.workspace_id.in_(
+                            [scope.workspace_id for scope in target_scopes]
+                        )
+                    )
+                )
+                == 4
+            )
+    finally:
+        async with session_factory.begin() as session:
+            workspace_ids = [scope.workspace_id for scope in target_scopes]
+            for model in (
+                ProjectGraphCorrectionRecord,
+                ProjectGraphEdgeRecord,
+                ProjectGraphObjectRecord,
+            ):
+                await session.execute(
+                    delete(model).where(model.workspace_id.in_(workspace_ids))
+                )
+            await session.execute(
+                delete(ProvenanceIdentityMapping).where(
+                    ProvenanceIdentityMapping.target_workspace_id.in_(workspace_ids)
+                )
+            )
+            email_ids = list(
+                (
+                    await session.scalars(
+                        select(Email.id).where(
+                            Email.message_id == f"<{token}@example.com>"
+                        )
+                    )
+                ).all()
+            )
+            for model in (
+                KnowledgeGraphEdgeRecord,
+                ContentSegmentRecord,
+                ContentNodeRecord,
+                Attachment,
+            ):
+                await session.execute(delete(model).where(model.email_id.in_(email_ids)))
+            await session.execute(delete(Email).where(Email.id.in_(email_ids)))
         await engine.dispose()
 
 

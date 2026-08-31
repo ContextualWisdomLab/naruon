@@ -1476,8 +1476,25 @@ async def export_tenant_provenance(
         Attachment.parser_key.in_(_TEXTUAL_PARSER_KEYS),
     )
     nodes = await descendants(ContentNodeRecord, ContentNodeRecord.content_node_uid)
-    segments = await descendants(
-        ContentSegmentRecord, ContentSegmentRecord.content_segment_uid
+    consumed_bytes = await _preflight_export_rows(
+        session,
+        ContentSegmentRecord,
+        (
+            ContentSegmentRecord.email_id.in_(email_ids),
+            ContentSegmentRecord.content_segment_id.not_in(
+                {segment.content_segment_id for segment in cited_segments}
+            ),
+        ),
+        consumed_bytes,
+    )
+    segments = list(
+        (
+            await session.scalars(
+                select(ContentSegmentRecord)
+                .where(ContentSegmentRecord.email_id.in_(email_ids))
+                .order_by(ContentSegmentRecord.content_segment_uid)
+            )
+        ).all()
     )
     structural_edges = await descendants(
         KnowledgeGraphEdgeRecord, KnowledgeGraphEdgeRecord.edge_uid
@@ -2837,6 +2854,27 @@ async def import_tenant_provenance(
         async with transaction:
             bind = session.get_bind()
             if getattr(getattr(bind, "dialect", None), "name", None) == "postgresql":
+                identity_lock_digest = hashlib.sha256(
+                    _canonical_json(
+                        {
+                            "namespace": "tenant-provenance-portable-identities-v1",
+                            "identities": {
+                                collection: sorted(
+                                    record[_UID_KEYS[collection]]
+                                    for record in records[collection]
+                                )
+                                for collection in _REMAPPED_COLLECTIONS
+                            },
+                        }
+                    )
+                ).digest()
+                await session.execute(
+                    select(
+                        func.pg_advisory_xact_lock(
+                            int.from_bytes(identity_lock_digest[:8], "big", signed=True)
+                        )
+                    )
+                )
                 for email_uid in sorted(
                     record["email_uid"] for record in records["emails"]
                 ):

@@ -764,6 +764,16 @@ async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
                 )
             )
             assert result.scalar_one() == "ix_emails_owner_date"
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        pytest.skip("PostgreSQL smoke path unavailable")
     finally:
         await engine.dispose()
 
