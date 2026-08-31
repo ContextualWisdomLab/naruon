@@ -1,4 +1,26 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응) `backend/scripts/bootstrap_db.py`에 이번 PR의 신규 컬럼 두 개가
+  누락되어 있던 문제를 고쳤습니다.** `email_records.workspace_id`
+  (`0020_email_workspace_scope`)와 `email_attachments.attachment_uid`
+  (`0019_attachment_uid`)는 Alembic 마이그레이션에만 반영돼 있었고, Alembic
+  대신 `bootstrap_db.py`(로컬/개발용 `create_all` + 멱등 백필 호환 경로)로
+  기존 데이터베이스를 부트스트랩하면 두 컬럼이 그대로 빠진 채 남아 이후 모든
+  이메일/첨부파일 쿼리가 깨졌습니다. 기존 `webdav_accounts.workspace_id`/
+  `project_folders.folder_uid` 백필과 동일한 관례(컬럼 추가 → 백필 → NOT
+  NULL → 인덱스 생성)로 두 컬럼을 추가했습니다. `workspace_id` 백필은
+  `organization_id`가 이미 NOT NULL로 검증된 뒤(`_get_validation_and_final_indexes_statements`
+  이후)에 실행되도록 순서를 맞췄습니다. 새 테스트
+  `test_schema_backfill_adds_email_workspace_column_and_index`,
+  `test_schema_backfill_adds_attachment_uid_column_and_index`.
+- **(Devin 리뷰 대응, 보안) 재파싱이 격리 보관 중이던 원본 바이트를 삭제하던
+  문제를 고쳤습니다.** `apply_reparsed_result`가 재분류 결과를 무조건
+  `attachment.content`에 덮어썼는데, `parse_email_attachment`는
+  `unsupported_content_type`/`parse_size_limit_exceeded`처럼 표시할 내용이
+  없는 상태에서 `content=""`을 반환합니다 — 격리(quarantine)된 첨부파일이
+  재파싱을 거쳐 "정상 파일이지만 아직 지원하지 않는 타입"으로 판정되면, 유일하게
+  보관돼 있던 원본 바이트가 빈 문자열로 영구히 사라졌습니다. 이제 결과의
+  `content`가 비어 있지 않을 때만 덮어씁니다. 새 테스트
+  `test_reparse_to_unsupported_content_type_preserves_retained_bytes`.
 - **(보안 수정, 정정) 서명된 세션의 `workspace` 클레임이 `org` 클레임과
   실제로 일치하는지 서버가 검증하지 않던 문제를 `api/auth.py`에서
   고쳤습니다.** 이전 커밋의 CodeRabbit/Devin 리뷰 검증 항목(바로 아래)은

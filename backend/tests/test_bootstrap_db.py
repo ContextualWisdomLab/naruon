@@ -412,6 +412,66 @@ def test_schema_backfill_adds_project_folder_columns_and_indexes(monkeypatch):
     )
 
 
+def test_schema_backfill_adds_email_workspace_column_and_index(monkeypatch):
+    """A pre-existing database bootstrapped via create_all/backfill (not Alembic)
+    must gain email_records.workspace_id too, or every workspace-scoped email
+    query fails after deployment (see Alembic 0020_email_workspace_scope)."""
+    statements = _get_schema_statements(monkeypatch)
+    assert any(
+        "alter table email_records add column if not exists workspace_id"
+        in statement
+        for statement in statements
+    )
+    assert any(
+        "update email_records set workspace_id"
+        in statement
+        and "'workspace-' || organization_id" in statement
+        for statement in statements
+    )
+    assert any(
+        "alter table email_records alter column workspace_id set not null"
+        in statement
+        for statement in statements
+    )
+    assert any(
+        "create index if not exists ix_email_records_workspace_id" in statement
+        and "email_records (workspace_id)" in statement
+        for statement in statements
+    )
+
+
+def test_schema_backfill_adds_attachment_uid_column_and_index(monkeypatch):
+    """A pre-existing database bootstrapped via create_all/backfill (not Alembic)
+    must gain email_attachments.attachment_uid too, or every opaque-id
+    attachment lookup fails after deployment (see Alembic 0019_attachment_uid)."""
+    statements = _get_schema_statements(monkeypatch)
+    assert any(
+        "alter table email_attachments add column if not exists attachment_uid"
+        in statement
+        for statement in statements
+    )
+    assert any(
+        "update email_attachments set attachment_uid"
+        in statement
+        and "attachment_" in statement
+        and "encode(sha256" in statement
+        and "bytea" in statement
+        and "hex" in statement
+        and "random()::text" in statement
+        and "clock_timestamp()::text" in statement
+        for statement in statements
+    )
+    assert any(
+        "alter table email_attachments alter column attachment_uid set not null"
+        in statement
+        for statement in statements
+    )
+    assert any(
+        "create unique index if not exists uq_email_attachments_uid" in statement
+        for statement in statements
+    )
+
+
 def test_schema_backfill_adds_tenant_config_columns_and_indexes(monkeypatch):
     statements = _get_schema_statements(monkeypatch)
     assert any(
@@ -461,7 +521,20 @@ def test_schema_backfill_uses_only_explicit_non_default_owner_ids(monkeypatch):
         and "where user_id is null and organization_id is null" in statement
         for statement in statements
     )
-    assert sum("update email_records" in statement for statement in statements) == 1
+    # email_records also gets a separate, unrelated workspace_id backfill
+    # (see test_schema_backfill_adds_email_workspace_column_and_index), so
+    # this counts only the owner-backfill statement specifically, not every
+    # "update email_records" statement.
+    assert (
+        sum(
+            "update email_records" in statement
+            and "set user_id" in statement
+            and "organization_id = :organization_id" in statement
+            and "where user_id is null and organization_id is null" in statement
+            for statement in statements
+        )
+        == 1
+    )
     assert any(
         "update llm_providers" in statement
         and "set user_id" in statement

@@ -37,6 +37,11 @@ def _get_add_columns_statements() -> list[Executable]:
         text("ALTER TABLE email_records ADD COLUMN IF NOT EXISTS in_reply_to varchar"),
         text('ALTER TABLE email_records ADD COLUMN IF NOT EXISTS "references" varchar'),
         text("ALTER TABLE email_records ADD COLUMN IF NOT EXISTS reply_to varchar"),
+        text("ALTER TABLE email_records ADD COLUMN IF NOT EXISTS workspace_id varchar"),
+        text(
+            "ALTER TABLE email_attachments "
+            "ADD COLUMN IF NOT EXISTS attachment_uid varchar"
+        ),
         text("ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS user_id varchar"),
         text(
             "ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS organization_id varchar"
@@ -317,6 +322,41 @@ def _get_update_project_folders_statements() -> list[Executable]:
     ]
 
 
+def _get_update_email_workspace_statements() -> list[Executable]:
+    return [
+        text(
+            "UPDATE email_records "
+            "SET workspace_id = 'workspace-' || organization_id "
+            "WHERE workspace_id IS NULL OR workspace_id = ''"
+        ),
+        text("ALTER TABLE email_records ALTER COLUMN workspace_id SET NOT NULL"),
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_email_records_workspace_id "
+            "ON email_records (workspace_id)"
+        ),
+    ]
+
+
+def _get_update_email_attachment_statements() -> list[Executable]:
+    return [
+        text(
+            "UPDATE email_attachments "
+            "SET attachment_uid = 'attachment_' || encode(sha256(("
+            "random()::text || ':' || clock_timestamp()::text || ':' || "
+            "id::text"
+            ")::bytea), 'hex') "
+            "WHERE attachment_uid IS NULL OR attachment_uid = ''"
+        ),
+        text(
+            "ALTER TABLE email_attachments ALTER COLUMN attachment_uid SET NOT NULL"
+        ),
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_email_attachments_uid "
+            "ON email_attachments (attachment_uid)"
+        ),
+    ]
+
+
 def _get_update_prompt_template_statements() -> list[Executable]:
     return [
         _static_bootstrap_sql(
@@ -512,6 +552,7 @@ def schema_backfill_sql() -> list[Executable]:
     statements.extend(_get_update_webdav_accounts_statements())
     statements.extend(_get_update_project_folders_statements())
     statements.extend(_get_update_prompt_template_statements())
+    statements.extend(_get_update_email_attachment_statements())
     statements.extend(_get_drop_constraints_and_indexes_statements())
     statements.extend(_get_create_new_indexes_statements())
 
@@ -523,6 +564,12 @@ def schema_backfill_sql() -> list[Executable]:
         )
 
     statements.extend(_get_validation_and_final_indexes_statements())
+
+    # email_records.organization_id is only guaranteed NOT NULL once the
+    # validation above passes, so the workspace_id backfill (derived from
+    # organization_id) must run after it, not alongside the other
+    # independent per-table backfills above.
+    statements.extend(_get_update_email_workspace_statements())
 
     return statements
 

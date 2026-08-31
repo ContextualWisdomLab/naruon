@@ -74,6 +74,31 @@ def test_reparse_escapes_a_now_recognized_false_positive():
     assert attachment.parse_status != _QUARANTINED_STATUS
 
 
+def test_reparse_to_unsupported_content_type_preserves_retained_bytes():
+    # Same false-positive escape as above, but this asserts the one thing
+    # that test doesn't: parse_email_attachment returns content="" for
+    # unsupported_content_type (nothing to display), and apply_reparsed_result
+    # must not let that empty result overwrite the only retained copy of the
+    # original quarantined bytes -- there would be no way to ever recover or
+    # re-attempt parsing on this attachment again.
+    docx_content_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    payload = b"PK\x03\x04" + b"real docx zip bytes"
+    attachment = _reparse_pending_attachment(
+        content_type=docx_content_type,
+        payload=payload,
+        filename="report.docx",
+    )
+    retained_content = attachment.content
+
+    result = process_reparse_pending_attachment(attachment=attachment)
+
+    assert result == "unsupported_content_type"
+    assert attachment.content == retained_content
+    assert base64.b64decode(attachment.content) == payload
+
+
 def test_reparse_of_a_genuine_mismatch_returns_to_quarantine():
     # PNG bytes declared as a PDF -- a real disguise, unrelated to any parser
     # bug. Reparsing must reconfirm the same quarantine, not silently parse.

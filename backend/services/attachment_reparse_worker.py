@@ -67,8 +67,16 @@ def apply_reparsed_result(*, attachment: Attachment, result: AttachmentParseResu
     which a reparse pass should silently rewrite (``parse_email_attachment``
     only ever normalizes them for a *new* row, and the retained
     ``attachment.content_type`` is what is fed back in as its input here).
+
+    ``content`` is only overwritten when the result actually has content to
+    store. A reparse that lands on a status with no displayable content
+    (``unsupported_content_type``, ``parse_size_limit_exceeded``) returns
+    ``content=""`` by design -- storing that would destroy the only retained
+    copy of the original quarantined bytes, permanently losing a file that
+    later parser support could otherwise still recover.
     """
-    attachment.content = result.content
+    if result.content:
+        attachment.content = result.content
     attachment.parse_content_type = result.parse_content_type
     attachment.parser_key = result.parser_key
     attachment.parse_status = result.parse_status
