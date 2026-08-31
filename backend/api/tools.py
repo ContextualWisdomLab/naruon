@@ -30,6 +30,14 @@ MAX_TOOL_FAILURE_MESSAGE_CHARS = 500
 MAX_TOOL_INPUT_CHARS = 100_000
 
 
+class ToolExecutionError(ValueError):
+    """A public tool failure with a stable machine-readable code."""
+
+    def __init__(self, error_code: str, message: str):
+        super().__init__(message)
+        self.error_code = error_code
+
+
 def _tool_code_fingerprint(code: str) -> str:
     """Return a stable non-reversible identifier for correlating tool failures."""
     return hashlib.sha256(code.encode("utf-8", errors="replace")).hexdigest()[:12]
@@ -130,6 +138,7 @@ class ExecuteResponse(BaseModel):
     status: str = Field(..., description="실행 상태 (예: success, failed)")
     result: Any = Field(..., description="실행 결과 데이터")
     message: Optional[str] = Field(default=None, description="결과 메시지")
+    error_code: Optional[str] = Field(default=None, description="안정적인 실패 코드")
 
 
 class ToolRegistry:
@@ -162,31 +171,46 @@ class ToolRegistry:
 
     def _validate_parameters(self, code: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(params, dict):
-            raise ValueError("Tool parameters must be an object")
+            raise ToolExecutionError(
+                "invalid_tool_parameters", "Tool parameters must be an object"
+            )
 
         tool_info = self._tools.get(code)
         schema = tool_info.parameters if tool_info else None
         if not schema:
             if params:
-                raise ValueError("Tool does not accept parameters")
+                raise ToolExecutionError(
+                    "unexpected_tool_parameters", "Tool does not accept parameters"
+                )
             return {}
 
         unexpected_keys = set(params) - set(schema)
         if unexpected_keys:
-            raise ValueError("Unexpected tool parameter")
+            raise ToolExecutionError(
+                "unexpected_tool_parameters", "Unexpected tool parameter"
+            )
 
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
             if key not in params:
-                raise ValueError("Missing required tool parameter")
+                raise ToolExecutionError(
+                    "missing_tool_parameter", "Missing required tool parameter"
+                )
             value = params[key]
             expected_type = _parameter_type_name(descriptor)
             if not _parameter_matches_type(value, expected_type):
-                raise ValueError("Invalid tool parameter type")
+                raise ToolExecutionError(
+                    "invalid_tool_parameter_type", "Invalid tool parameter type"
+                )
             max_length = _parameter_max_length(descriptor)
-            if expected_type == "string" and max_length is not None and len(value) > max_length:
-                raise ValueError(
-                    f"Tool parameter exceeds maximum length of {max_length} characters"
+            if (
+                expected_type == "string"
+                and max_length is not None
+                and len(value) > max_length
+            ):
+                raise ToolExecutionError(
+                    "tool_parameter_too_long",
+                    f"Tool parameter exceeds maximum length of {max_length} characters",
                 )
             validated[key] = value
         return validated
@@ -491,7 +515,11 @@ def _parameter_max_length(descriptor: Any) -> int | None:
     if not isinstance(descriptor, dict):
         return None
     max_length = descriptor.get("max_length")
-    if isinstance(max_length, int) and not isinstance(max_length, bool) and max_length >= 0:
+    if (
+        isinstance(max_length, int)
+        and not isinstance(max_length, bool)
+        and max_length >= 0
+    ):
         return max_length
     return None
 
@@ -810,7 +838,9 @@ async def url_decoder_handler(params: Dict[str, Any]) -> Dict[str, str]:
     try:
         decoded_url = urllib.parse.unquote(encoded_url, errors="strict")
     except UnicodeDecodeError as exc:
-        raise ValueError(f"Invalid URL-encoded string: {exc}") from exc
+        raise ToolExecutionError(
+            "invalid_url_encoding", f"Invalid URL-encoded string: {exc}"
+        ) from exc
     return {"decoded_url": decoded_url}
 
 
@@ -890,7 +920,7 @@ async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
         )
         return {"formatted_json": _format_json_value(parsed)}
     except (RecursionError, TypeError, ValueError) as e:
-        raise ValueError(f"Invalid JSON string: {e}")
+        raise ToolExecutionError("invalid_json", f"Invalid JSON string: {e}") from e
 
 
 registry.register(
@@ -1031,7 +1061,10 @@ def delete_tool(code: str) -> None:
     registry.unregister(code)
 
 
-@router.post("/tools/{code}/execute", response_model=ExecuteResponse)
+@router.post(
+    "/tools/{code}/execute",
+    response_model=ExecuteResponse,
+)
 async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
     """
     특정 도구를 실행합니다.
@@ -1060,4 +1093,9 @@ async def execute_tool(code: str, request: ExecuteRequest) -> ExecuteResponse:
             status="failed",
             result=None,
             message=_safe_tool_failure_message(e),
+            error_code=(
+                e.error_code
+                if isinstance(e, ToolExecutionError)
+                else "tool_execution_failed"
+            ),
         )
