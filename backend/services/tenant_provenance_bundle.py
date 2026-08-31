@@ -1215,6 +1215,41 @@ async def export_tenant_provenance(
         {segment.content_segment_id for segment in cited_segments}
     ):
         _fail()
+    segments_by_uid = {
+        segment.content_segment_uid: segment for segment in cited_segments
+    }
+    segments_by_id = {segment.content_segment_id: segment for segment in cited_segments}
+    objects_by_id = {
+        record.project_graph_object_id: record for record in project_objects
+    }
+    for record in project_objects:
+        if segments_by_id[
+            record.primary_content_segment_id
+        ].email_id != record.email_id or any(
+            segments_by_uid[segment_uid].email_id != record.email_id
+            for segment_uid in record.source_segment_uids
+        ):
+            _fail()
+    for record in project_edges:
+        source_object = objects_by_id.get(record.source_object_id)
+        target_object = objects_by_id.get(record.target_object_id)
+        if source_object is None or target_object is None:
+            _fail()
+        endpoint_email_ids = {source_object.email_id, target_object.email_id}
+        if segments_by_id[
+            record.primary_content_segment_id
+        ].email_id not in endpoint_email_ids or any(
+            segments_by_uid[segment_uid].email_id not in endpoint_email_ids
+            for segment_uid in record.source_segment_uids
+        ):
+            _fail()
+    for record in corrections:
+        project_object = objects_by_id.get(record.project_graph_object_id)
+        if project_object is None or any(
+            segments_by_uid[segment_uid].email_id != project_object.email_id
+            for segment_uid in record.source_segment_uids
+        ):
+            _fail()
     email_ids = {record.email_id for record in project_objects} | {
         segment.email_id for segment in cited_segments
     }

@@ -877,18 +877,10 @@ async def _two_email_rooted_archive(
     token: str,
 ) -> bytes:
     source = await _seed_provenance_closure(session, scope=scope, token=token)
-    cited = await _seed_email_graph_without_project_rows(
+    cited = await _seed_provenance_closure(
         session,
         scope=scope,
         token=f"cited-{token}",
-    )
-    project_object = await session.scalar(
-        select(ProjectGraphObjectRecord).where(
-            ProjectGraphObjectRecord.object_uid == source["object_uids"][0]
-        )
-    )
-    project_object.source_segment_uids = sorted(
-        [*project_object.source_segment_uids, f"segment-cited-{token}"]
     )
     session.add(
         Attachment(
@@ -1804,7 +1796,7 @@ async def test_import_is_idempotent_for_exact_target_records(provenance_sessionm
 @pytest.mark.parametrize("citation_owner", ("object", "edge", "correction"))
 @pytest.mark.asyncio
 @pytest.mark.postgres
-async def test_export_includes_cross_email_citation_source_closure(
+async def test_export_rejects_cross_email_citation_source_closure(
     provenance_sessionmaker,
     citation_owner,
 ):
@@ -1817,7 +1809,7 @@ async def test_export_includes_cross_email_citation_source_closure(
     )
     async with provenance_sessionmaker() as session:
         source = await _seed_provenance_closure(session, scope=scope, token=token)
-        cited = await _seed_provenance_closure(
+        await _seed_provenance_closure(
             session,
             scope=cited_scope,
             token=f"cited-{token}",
@@ -1846,26 +1838,8 @@ async def test_export_includes_cross_email_citation_source_closure(
         )
         await session.commit()
     async with provenance_sessionmaker() as session:
-        records = parse_provenance_archive(
+        with pytest.raises(ProvenanceArchiveError):
             await export_tenant_provenance(session, scope)
-        )
-
-    assert {record["email_uid"] for record in records["emails"]} == {
-        source["email_uid"],
-        cited["email_uid"],
-    }
-    assert cited_segment_uid in {
-        record["content_segment_uid"] for record in records["content_segments"]
-    }
-    assert f"node-cited-{token}" in {
-        record["content_node_uid"] for record in records["content_nodes"]
-    }
-    assert any(
-        record["email_uid"] == cited["email_uid"] for record in records["attachments"]
-    )
-    assert f"project-object-source-cited-{token}" not in {
-        record["object_uid"] for record in records["project_objects"]
-    }
 
 
 @pytest.mark.asyncio
@@ -2453,17 +2427,24 @@ async def test_export_excludes_separate_user_and_organization_scope(
         "edge_source",
         "edge_primary",
         "correction_source",
+        "edge_source_object",
+        "edge_target_object",
+        "correction_object",
     ),
 )
 @pytest.mark.asyncio
 @pytest.mark.postgres
-async def test_export_rejects_cross_tenant_segment_references_before_email_closure(
+async def test_export_rejects_cross_workspace_segment_references_before_email_closure(
     provenance_sessionmaker,
     reference_field,
 ):
     token = uuid.uuid4().hex[:12]
     scope = _scope(f"selected-{token}")
-    foreign_scope = _scope(f"foreign-{token}")
+    foreign_scope = TenantProvenanceScope(
+        user_id=scope.user_id,
+        organization_id=scope.organization_id,
+        workspace_id=f"workspace-foreign-{token}",
+    )
     async with provenance_sessionmaker() as session:
         selected = await _seed_provenance_closure(
             session, scope=scope, token=f"selected-{token}"
@@ -2495,7 +2476,13 @@ async def test_export_rejects_cross_tenant_segment_references_before_email_closu
                     ProjectGraphCorrectionRecord.workspace_id == scope.workspace_id
                 )
             )
-        if reference_field.endswith("_primary"):
+        if reference_field == "edge_source_object":
+            record.source_object_id = foreign["project_object_id"]
+        elif reference_field == "edge_target_object":
+            record.target_object_id = foreign["project_object_id"]
+        elif reference_field == "correction_object":
+            record.project_graph_object_id = foreign["project_object_id"]
+        elif reference_field.endswith("_primary"):
             record.primary_content_segment_id = foreign_segment.content_segment_id
         else:
             record.source_segment_uids = [foreign_segment.content_segment_uid]
