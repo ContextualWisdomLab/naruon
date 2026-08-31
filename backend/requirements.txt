@@ -33,7 +33,7 @@ wheel==0.48.0
 websockets==17.1
 PyJWT==2.13.0  # latest verified 2026-06-12; do not downgrade to 2.8.0
 icalendar==7.3.0
-ruff==0.16.5
+ruff==0.15.21
 defusedxml==0.7.1
 # Optional: the Noema general agent (services/noema_agent.py) uses pydantic-ai
 # (MIT). It is intentionally NOT in the hashed runtime set — install it
