@@ -108,6 +108,55 @@ def test_email_workspace_migration_replaces_owner_only_identity_constraint():
     assert "sa.text(" not in revision_text
 
 
+def test_calendar_correction_rationale_uses_append_only_rename_migration():
+    original_revision = (
+        BACKEND_ROOT / "alembic" / "versions" / "0018_calendar_conflict_judgments.py"
+    ).read_text()
+    rename_revision = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "0021_calendar_correction_rationale.py"
+    ).read_text()
+
+    assert 'sa.Column("rationale"' in original_revision
+    assert 'down_revision = "0020_email_workspace_scope"' in rename_revision
+    assert 'new_column_name="correction_rationale"' in rename_revision
+    assert "op.alter_column(" in rename_revision
+    assert "sa.text(" not in rename_revision
+
+
+def test_calendar_correction_rationale_upgrade_renames_legacy_column(monkeypatch):
+    module = _load_revision_module("0021_calendar_correction_rationale.py")
+    calls = []
+
+    class Inspector:
+        @staticmethod
+        def has_table(table_name):
+            return table_name == "calendar_conflict_corrections"
+
+        @staticmethod
+        def get_columns(_table_name):
+            return [{"name": "rationale"}]
+
+    monkeypatch.setattr(module.op, "get_bind", lambda: object())
+    monkeypatch.setattr(module.sa, "inspect", lambda _connection: Inspector())
+    monkeypatch.setattr(
+        module.op,
+        "alter_column",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    module.upgrade()
+
+    assert calls == [
+        (
+            ("calendar_conflict_corrections", "rationale"),
+            {"new_column_name": "correction_rationale"},
+        )
+    ]
+
+
 def test_email_workspace_migration_also_drops_bootstrap_created_owner_only_index():
     """backend/scripts/bootstrap_db.py's owner-only identity predates this
     migration's own uq_emails_owner_message_id and uses a different name

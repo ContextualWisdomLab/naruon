@@ -1557,6 +1557,7 @@ async def _seed_reply_tracking_smoke_data(Session, user_id, organization_id, now
                 Email(
                     user_id=user_id,
                     organization_id=organization_id,
+                    workspace_id=f"workspace-{organization_id}",
                     message_id="waiting-smoke-msg",
                     thread_id="<waiting-smoke-thread>",
                     sender="reply-smoke@example.com",
@@ -1568,6 +1569,7 @@ async def _seed_reply_tracking_smoke_data(Session, user_id, organization_id, now
                 Email(
                     user_id=user_id,
                     organization_id=organization_id,
+                    workspace_id=f"workspace-{organization_id}",
                     message_id="note-smoke-msg",
                     thread_id="note-smoke-thread",
                     sender="reply-smoke@example.com",
@@ -1579,6 +1581,7 @@ async def _seed_reply_tracking_smoke_data(Session, user_id, organization_id, now
                 Email(
                     user_id=user_id,
                     organization_id=organization_id,
+                    workspace_id=f"workspace-{organization_id}",
                     message_id="answered-smoke-msg",
                     thread_id="<answered-smoke-thread>",
                     sender="reply-smoke@example.com",
@@ -1590,6 +1593,7 @@ async def _seed_reply_tracking_smoke_data(Session, user_id, organization_id, now
                 Email(
                     user_id=user_id,
                     organization_id=organization_id,
+                    workspace_id=f"workspace-{organization_id}",
                     message_id="answer-smoke-msg",
                     thread_id="answered-smoke-thread",
                     sender="target@example.com",
