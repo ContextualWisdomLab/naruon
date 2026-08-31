@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from core.config import settings
 from db.models import Base
-from scripts.bootstrap_db import schema_backfill_sql
+from scripts.bootstrap_db import (
+    LEGACY_EMAILS_INDEX,
+    execute_schema_backfill,
+    schema_backfill_sql,
+)
 from db.models import (
     AgentRunRecord,
     CalendarWritebackSource,
@@ -30,8 +34,7 @@ def _get_schema_statements(monkeypatch):
 
 
 def _execute_schema_backfill(sync_conn):
-    for statement in schema_backfill_sql():
-        sync_conn.execute(statement)
+    execute_schema_backfill(sync_conn)
 
 
 def test_schema_backfill_adds_email_columns(monkeypatch):
@@ -204,13 +207,11 @@ def test_schema_backfill_adds_prompt_template_scope_columns_and_indexes(monkeypa
         for statement in statements
     )
     assert any(
-        "alter table prompt_templates alter column prompt_uid set not null"
-        in statement
+        "alter table prompt_templates alter column prompt_uid set not null" in statement
         for statement in statements
     )
     assert any(
-        "create unique index if not exists uq_prompt_templates_prompt_uid"
-        in statement
+        "create unique index if not exists uq_prompt_templates_prompt_uid" in statement
         for statement in statements
     )
     assert any(
@@ -298,8 +299,7 @@ def test_schema_backfill_creates_ai_hub_workflow_tables(monkeypatch):
         "ix_agent_run_records_scope_time" in statement for statement in statements
     )
     assert any(
-        "ix_agent_run_records_workflow_uid" in statement
-        and "workflow_uid" in statement
+        "ix_agent_run_records_workflow_uid" in statement and "workflow_uid" in statement
         for statement in statements
     )
     assert any(
@@ -744,6 +744,32 @@ def test_schema_backfill_creates_connector_signal_events():
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TEMP TABLE emails ("
+                    "user_id varchar, organization_id varchar, date timestamptz"
+                    ") ON COMMIT DROP"
+                )
+            )
+            await conn.run_sync(execute_schema_backfill, [LEGACY_EMAILS_INDEX])
+            result = await conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE tablename = 'emails' "
+                    "AND indexname = 'ix_emails_owner_date'"
+                )
+            )
+            assert result.scalar_one() == "ix_emails_owner_date"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_connector_signal_events_real_postgres_bootstrap_smoke():
     engine = create_async_engine(settings.DATABASE_URL)
     duplicate_count = 0
@@ -765,13 +791,6 @@ async def test_connector_signal_events_real_postgres_bootstrap_smoke():
             await conn.execute(
                 text("DELETE FROM email_records WHERE user_id = :user_id"),
                 {"user_id": smoke_user_id},
-            )
-            await conn.execute(
-                text(
-                    "CREATE TEMP TABLE emails ("
-                    "user_id varchar, organization_id varchar, date timestamptz"
-                    ") ON COMMIT DROP"
-                )
             )
             email_result = await conn.execute(
                 text("""
