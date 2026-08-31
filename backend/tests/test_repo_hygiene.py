@@ -26,7 +26,8 @@ def test_backend_dockerfile_runtime_stages_run_as_non_root_user():
     )
     combined_cmd = 'CMD ["/app/scripts/docker_entrypoint.sh"]'
 
-    assert "useradd --system --create-home --home-dir /home/appuser" in dockerfile
+    assert "useradd --create-home --home-dir /home/appuser" in dockerfile
+    assert "--uid 10001 --gid appuser --no-log-init" in dockerfile
     assert "chown -R appuser:appuser /app" in dockerfile
     assert dockerfile.find("USER appuser") < dockerfile.find(backend_cmd)
     assert dockerfile.rfind("USER appuser") < dockerfile.find(combined_cmd)

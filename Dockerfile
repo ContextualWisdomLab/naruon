@@ -15,8 +15,8 @@ RUN PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ONLY_BINARY=
 COPY VERSION /app/VERSION
 COPY backend /app/
 
-RUN groupadd --system --gid 10001 appuser \
-    && useradd --system --create-home --home-dir /home/appuser --uid 10001 --gid appuser --shell /usr/sbin/nologin appuser \
+RUN groupadd --gid 10001 appuser \
+    && useradd --create-home --home-dir /home/appuser --uid 10001 --gid appuser --no-log-init --shell /usr/sbin/nologin appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
