@@ -1,5 +1,5 @@
 # Stage 1: Backend runtime for local Compose and backend-only deployments
-FROM python:3.14-slim@sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc AS backend-runtime
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS backend-runtime
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -15,8 +15,8 @@ RUN PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ONLY_BINARY=
 COPY VERSION /app/VERSION
 COPY backend /app/
 
-RUN groupadd --system --gid 10001 appuser \
-    && useradd --system --create-home --home-dir /home/appuser --uid 10001 --gid appuser --shell /usr/sbin/nologin appuser \
+RUN groupadd --gid 10001 appuser \
+    && useradd --create-home --home-dir /home/appuser --uid 10001 --gid appuser --no-log-init --shell /usr/sbin/nologin appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
@@ -25,7 +25,7 @@ EXPOSE 8000
 CMD ["python", "scripts/start_backend.py", "--host", "0.0.0.0", "--port", "8000"]
 
 # Stage 2: Build Frontend
-FROM node:26-slim@sha256:4ebb5ace66f15a24c14c492e01a8beeed4fddf970a856109f5126e703e5fe503 AS frontend-builder
+FROM node:26-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146 AS frontend-builder
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 ENV PNPM_VERSION=11.5.3
@@ -63,8 +63,8 @@ ARG OCI_IMAGE_LICENSES="LicenseRef-Naruon-Proprietary"
 ARG OCI_IMAGE_REF_NAME=""
 ARG OCI_IMAGE_TITLE="naruon"
 ARG OCI_IMAGE_DESCRIPTION="Naruon combined FastAPI and Next.js runtime image"
-ARG OCI_IMAGE_BASE_DIGEST="sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc"
-ARG OCI_IMAGE_BASE_NAME="docker.io/library/python:3.14-slim@sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc"
+ARG OCI_IMAGE_BASE_DIGEST="sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5"
+ARG OCI_IMAGE_BASE_NAME="docker.io/library/python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5"
 
 # Defaults keep local builds provenance-complete. The publishing workflow derives
 # and overrides both values from the exact first FROM instruction, while

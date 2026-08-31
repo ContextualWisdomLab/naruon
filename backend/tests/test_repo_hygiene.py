@@ -26,7 +26,8 @@ def test_backend_dockerfile_runtime_stages_run_as_non_root_user():
     )
     combined_cmd = 'CMD ["/app/scripts/docker_entrypoint.sh"]'
 
-    assert "useradd --system --create-home --home-dir /home/appuser" in dockerfile
+    assert "useradd --create-home --home-dir /home/appuser" in dockerfile
+    assert "--uid 10001 --gid appuser --no-log-init" in dockerfile
     assert "chown -R appuser:appuser /app" in dockerfile
     assert dockerfile.find("USER appuser") < dockerfile.find(backend_cmd)
     assert dockerfile.rfind("USER appuser") < dockerfile.find(combined_cmd)
@@ -50,7 +51,7 @@ def test_ollama_dockerfile_keeps_pulled_models_available_to_runtime_user():
 
     assert (
         "FROM ollama/ollama@sha256:"
-        "b88c73ace3e115f8ec53dc8761ae1c0aabfa675406e3681786b98757ce050f42"
+        "020e4134285e2ef4d8fd801234176de3b4faadc992a3eb06c8e66a2f9d4c4ba2"
         in dockerfile
     )
     assert "FROM ollama/ollama:latest\n" not in dockerfile
