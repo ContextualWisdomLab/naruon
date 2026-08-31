@@ -195,6 +195,20 @@ async def test_calendar_correction_rationale_real_postgres_smoke():
             column_names = await conn.run_sync(_column_names)
             assert "correction_rationale" in column_names
             assert "rationale" not in column_names
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+    except Exception:
+        await engine.dispose()
+        raise
     finally:
         await engine.dispose()
 

@@ -1,4 +1,18 @@
 ## [Unreleased]
+- **(테스트 컨벤션 위반 수정) 병행 세션이 추가한 real-PostgreSQL 테스트 2개가 이 저장소의
+  표준 "Postgres 연결 불가 시 정상 skip" 패턴 없이 작성되어, Postgres가 없는 환경에서
+  스킵 대신 하드 실패하던 문제를 고쳤습니다.** 커밋 `96cd0c07`(`fix(db): skip absent
+  legacy email table during bootstrap`)가 추가한
+  `test_schema_backfill_creates_legacy_emails_index_when_table_exists`
+  (`tests/test_bootstrap_db.py`)와
+  `test_calendar_correction_rationale_real_postgres_smoke`
+  (`tests/test_alembic_migrations.py`)는 다른 기존 real-Postgres 테스트들과 달리
+  `ConnectionRefusedError`/`OperationalError`/`asyncpg.CannotConnectNowError` 등을 잡아
+  `pytest.skip(...)`하는 try/except 없이 바로 연결을 시도해, 이 환경(Postgres 미기동)에서
+  실제로 `ConnectionRefusedError`로 하드 실패함을 확인. 기존 real-Postgres 테스트들이 이미
+  쓰는 것과 동일한 except 절을 두 테스트에 추가. 로컬 PostgreSQL 16을 기동해 두 테스트가
+  실제로 통과함을 확인한 뒤, 다시 중지하고 정상적으로 skip됨을 확인 — 두 상태 모두 검증.
+  전체 백엔드 스위트: Postgres 없이 1902 passed / 38 skipped, ruff clean.
 - **(Devin 리뷰 대응, 🔍 analysis) hybrid 검색이 quarantine/deferred-recognition 상태의
   첨부파일 base64 원본 payload를 정상 파싱된 콘텐츠처럼 검색 결과에 노출하던 문제를
   고쳤습니다.** `content_type_mismatch_quarantined`(이 PR에서 새로 추가된 상태)와
