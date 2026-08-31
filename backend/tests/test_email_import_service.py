@@ -557,6 +557,28 @@ async def test_generate_import_embeddings_logs_non_secret_provider_fallback(capl
 
 
 @pytest.mark.asyncio
+async def test_generate_import_embeddings_marks_gateway_model_zdr_only():
+    provider = EmailImportEmbeddingProvider(
+        api_key="gateway-token",
+        base_url="https://gateway.example/v1",
+        embedding_model="text-embedding-test",
+        zdr_required=True,
+    )
+    with patch(
+        "services.email_import_service.generate_embeddings",
+        new_callable=AsyncMock,
+        return_value=[[0.5] * EMBEDDING_DIMENSION],
+    ) as mock_generate_embeddings:
+        result = await _generate_import_embeddings(
+            ["Gateway body"],
+            embedding_provider=provider,
+        )
+
+    assert result == [[0.5] * EMBEDDING_DIMENSION]
+    assert mock_generate_embeddings.await_args.kwargs["zdr_only"] is True
+
+
+@pytest.mark.asyncio
 async def test_extract_embeddings_chunks_long_sources_and_averages_vectors():
     provider = EmailImportEmbeddingProvider(
         api_key="provider-key",
@@ -604,10 +626,12 @@ async def test_partial_batch_falls_back_only_for_unfinished_sources():
         api_key="provider-key",
         base_url="https://provider.example/v1",
         embedding_model="text-embedding-test",
+        zdr_required=True,
     )
     partial = BatchEmbeddingPartial(
         completed_vectors=[[0.25] * EMBEDDING_DIMENSION],
         pending_texts=["pending source"],
+        zdr_only=True,
     )
 
     with (
@@ -632,11 +656,12 @@ async def test_partial_batch_falls_back_only_for_unfinished_sources():
 
     mock_batch.assert_awaited_once()
     assert mock_generate.await_args.args[0] == ["pending source"]
+    assert mock_generate.await_args.kwargs["zdr_only"] is True
     assert embeddings == [[0.25] * EMBEDDING_DIMENSION, [0.75] * EMBEDDING_DIMENSION]
 
 
 @pytest.mark.asyncio
-async def test_partial_batch_fallback_keeps_provider_windows_bounded():
+async def test_partial_zdr_batch_does_not_leak_remainder_to_direct_provider():
     provider = EmailImportEmbeddingProvider(
         api_key="provider-key",
         base_url="https://provider.example/v1",
@@ -649,6 +674,7 @@ async def test_partial_batch_fallback_keeps_provider_windows_bounded():
     partial = BatchEmbeddingPartial(
         completed_vectors=[[0.25] * EMBEDDING_DIMENSION],
         pending_texts=pending_texts,
+        zdr_only=True,
     )
 
     with (
@@ -665,21 +691,16 @@ async def test_partial_batch_fallback_keeps_provider_windows_bounded():
             ],
         ) as mock_generate,
     ):
-        embeddings = await _generate_import_embeddings(
-            ["completed source", *pending_texts],
-            embedding_provider=provider,
-            batch_context=EmailImportBatchContext(
-                session=None, user_id="user-1", organization_id="org-acme"
-            ),
-        )
+        with pytest.raises(EmbeddingGenerationError, match="non-ZDR provider fallback"):
+            await _generate_import_embeddings(
+                ["completed source", *pending_texts],
+                embedding_provider=provider,
+                batch_context=EmailImportBatchContext(
+                    session=None, user_id="user-1", organization_id="org-acme"
+                ),
+            )
 
-    assert [len(call.args[0]) for call in mock_generate.await_args_list] == [
-        MAX_EMBEDDING_CHUNKS_PER_WINDOW,
-        MAX_EMBEDDING_CHUNKS_PER_WINDOW,
-        1,
-    ]
-    assert len(embeddings) == len(pending_texts) + 1
-    assert embeddings[0] == [0.25] * EMBEDDING_DIMENSION
+    mock_generate.assert_not_awaited()
 
 
 @pytest.mark.asyncio

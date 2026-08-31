@@ -86,6 +86,8 @@ class EmailImportEmbeddingProvider:
     api_key: str
     base_url: str | None
     embedding_model: str
+    chat_model: str | None = None
+    zdr_required: bool = False
 
 
 @dataclass(frozen=True)
@@ -781,8 +783,10 @@ async def _extract_project_semantics_for_import(
     context = KgExtractorContext(
         api_key=embedding_provider.api_key if embedding_provider else None,
         base_url=embedding_provider.base_url if embedding_provider else None,
-        model=settings.OPENAI_MODEL,
+        model=(embedding_provider.chat_model if embedding_provider else None)
+        or settings.OPENAI_MODEL,
         orchestrator_base_url=settings.PROJECT_GRAPH_ORCHESTRATOR_BASE_URL,
+        zdr_required=embedding_provider.zdr_required if embedding_provider else False,
     )
     return await run_extraction(
         source_segments,
@@ -951,6 +955,7 @@ async def _generate_import_embeddings(
     *,
     embedding_provider: EmailImportEmbeddingProvider | None,
     batch_context: "EmailImportBatchContext | None" = None,
+    zdr_only: bool | None = None,
 ) -> list[list[float]]:
     if not texts:
         return []
@@ -959,8 +964,8 @@ async def _generate_import_embeddings(
     if batch_context is not None and texts:
         # Bulk import embeddings are latency-tolerant: route them through
         # contextual-orchestrator first. A None result means batch is
-        # unconfigured/unavailable, so we transparently fall through to the
-        # existing per-request path below.
+        # unconfigured. A configured ZDR orchestrator fails closed before this
+        # function can retransmit raw content through another provider.
         batched = await try_batch_import_embeddings(
             batch_context.session,
             texts,
@@ -968,6 +973,7 @@ async def _generate_import_embeddings(
             user_id=batch_context.user_id,
             organization_id=batch_context.organization_id,
             dimension=EMBEDDING_DIMENSION,
+            zdr_only=zdr_only,
         )
         if batched is not None:
             if isinstance(batched, BatchEmbeddingPartial):
@@ -982,16 +988,23 @@ async def _generate_import_embeddings(
                             ],
                             embedding_provider=embedding_provider,
                             batch_context=None,
+                            zdr_only=batched.zdr_only,
                         )
                     )
                 return [*batched.completed_vectors, *remainder]
             return batched
+    if zdr_only is True and not embedding_provider.zdr_required:
+        raise EmbeddingGenerationError(
+            "ZDR-required embedding work cannot use a non-ZDR provider fallback"
+        )
+    effective_zdr_only = embedding_provider.zdr_required
     try:
         provider_embeddings = await generate_embeddings(
             texts,
             embedding_provider.api_key,
             base_url=embedding_provider.base_url,
             model=embedding_provider.embedding_model,
+            zdr_only=effective_zdr_only,
         )
     except (EmbeddingGenerationError, ValueError) as exc:
         logger.warning(
@@ -1009,6 +1022,7 @@ async def _generate_import_embeddings(
                     embedding_provider.api_key,
                     base_url=embedding_provider.base_url,
                     model=embedding_provider.embedding_model,
+                    zdr_only=effective_zdr_only,
                 )
                 if not single_embedding:
                     recovered.append(_zero_embedding())

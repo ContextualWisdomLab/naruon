@@ -16,6 +16,7 @@ from services.tenant_config_scope import get_scoped_tenant_config
 
 ProviderSource = Literal["llm_provider", "tenant_config"]
 LOCAL_PROVIDER_API_KEY = "local-provider"
+CONTEXTUAL_ORCHESTRATOR_PROVIDER_TYPE = "contextual_orchestrator"
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,16 @@ class RuntimeLLMProvider:
     embedding_model: str
     provider_name: str
     provider_source: ProviderSource
+    zdr_required: bool = False
     provider_id: int | None = None
+
+
+def provider_requires_zdr(provider_type: str | None) -> bool:
+    """Resolve the explicit gateway policy without trusting a model string."""
+    return (
+        isinstance(provider_type, str)
+        and provider_type.strip().lower() == CONTEXTUAL_ORCHESTRATOR_PROVIDER_TYPE
+    )
 
 
 def _provider_type(provider: LLMProvider) -> str:
@@ -80,6 +90,7 @@ def _runtime_from_provider(provider: LLMProvider) -> RuntimeLLMProvider | None:
         or settings.OPENAI_EMBEDDING_MODEL,
         provider_name=llm_provider_model_label(provider),
         provider_source="llm_provider",
+        zdr_required=provider_requires_zdr(provider.provider_type),
         provider_id=provider.id,
     )
 
@@ -107,5 +118,6 @@ async def resolve_runtime_llm_provider(
         embedding_model=settings.OPENAI_EMBEDDING_MODEL,
         provider_name="OpenAI",
         provider_source="tenant_config",
+        zdr_required=False,
         provider_id=None,
     )

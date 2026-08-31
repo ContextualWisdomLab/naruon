@@ -73,7 +73,7 @@ function setControlValue(control: HTMLInputElement | HTMLTextAreaElement, value:
 
 function defaultPromptTestSettings() {
   return {
-    model: "gpt-4o",
+    model: "provider-default",
     temperature: 0.3,
     response_style: "전문적이고 간결하게",
     output_format: "마크다운 (Markdown)",
@@ -211,6 +211,42 @@ describe("PromptStudioPage", () => {
       getButton(page, "데이터 분석 판단 포인트").click();
     });
     expect(page.textContent).not.toContain("맥락 종합 결과");
+  });
+
+  it("passes an arbitrary runtime model identifier without a static allowlist", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse({ result: "동적 모델 결과" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const page = await renderPage();
+    const modelInput = page.querySelector<HTMLInputElement>("#prompt-model");
+    expect(modelInput?.value).toBe("provider-default");
+
+    setControlValue(modelInput!, "orchestrator/another-runtime-model");
+    act(() => {
+      getButton(page, "실행 (Test)").click();
+    });
+    await flushAsyncWork();
+
+    const requestInit = (fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit])?.[1];
+    const payload = JSON.parse(String(requestInit.body));
+    expect(payload.settings.model).toBe("orchestrator/another-runtime-model");
+  });
+
+  it("falls back to the provider default when the model field is cleared", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse({ result: "기본 모델 결과" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const page = await renderPage();
+
+    setControlValue(page.querySelector<HTMLInputElement>("#prompt-model")!, "");
+    expect(page.textContent).toContain("조직 기본 모델 (자동 선택)");
+    expect(page.textContent).toContain("비워두면 `provider-default`를 사용합니다.");
+    act(() => {
+      getButton(page, "실행 (Test)").click();
+    });
+    await flushAsyncWork();
+
+    const requestInit = (fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit])?.[1];
+    const payload = JSON.parse(String(requestInit.body));
+    expect(payload.settings.model).toBe("provider-default");
   });
 
   it("loads a fresh sample input from the preview panel", async () => {

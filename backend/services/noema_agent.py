@@ -491,9 +491,15 @@ async def build_noema_agent(
     async def _closer() -> None:
         await openai_client.close()
 
+    model_settings = (
+        {"extra_body": {"zdr_only": True}}
+        if provider.zdr_required
+        else None
+    )
     model = modules["OpenAIChatModel"](
         provider.chat_model,
         provider=modules["OpenAIProvider"](openai_client=openai_client),
+        settings=model_settings,
     )
     agent = modules["Agent"](
         model,

@@ -602,6 +602,8 @@ async def import_email_files(
             api_key=runtime_provider.api_key,
             base_url=runtime_provider.base_url,
             embedding_model=runtime_provider.embedding_model,
+            chat_model=runtime_provider.chat_model,
+            zdr_required=runtime_provider.zdr_required,
         )
 
     try:

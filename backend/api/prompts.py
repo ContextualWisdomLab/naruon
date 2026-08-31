@@ -9,10 +9,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import AuthContext, get_auth_context
-from db.models import LLMProvider, PromptTemplate
+from db.models import PromptTemplate
 from db.session import get_db
 from services.llm_provider_urls import build_llm_provider_http_client
-from services.tenant_config_scope import get_scoped_tenant_config
+from services.llm_provider_selection import (
+    resolve_runtime_llm_provider,
+)
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
 
@@ -90,10 +92,14 @@ async def execute_prompt_with_llm(
     model_name: str | None = None,
     temperature: float = 0.0,
     system_message: str | None = None,
+    zdr_only: bool = False,
 ) -> dict:
     from openai import AsyncOpenAI
     from core.config import settings as app_settings
 
+    if type(zdr_only) is not bool:
+        raise TypeError("zdr_only must be a boolean")
+    selected_model = model_name or app_settings.OPENAI_MODEL
     validated_base_url, http_client = await build_llm_provider_http_client(base_url)
     messages = []
     if system_message:
@@ -106,10 +112,11 @@ async def execute_prompt_with_llm(
     )
     try:
         response = await client.chat.completions.create(
-            model=model_name or app_settings.OPENAI_MODEL,
+            model=selected_model,
             messages=messages,
             temperature=temperature,
             max_tokens=512,
+            **({"extra_body": {"zdr_only": True}} if zdr_only else {}),
         )
         content = response.choices[0].message.content
         return {"result": content if content else ""}
@@ -205,39 +212,23 @@ async def test_prompt(
     user_id = auth_context.user_id
     prompt_text = _render_prompt_test_content(data)
 
-    active_provider = None
-    if auth_context.organization_id is not None:
-        provider_result = await db.execute(
-            select(LLMProvider).where(
-                LLMProvider.is_active.is_(True),
-                LLMProvider.organization_id == auth_context.organization_id,
-            )
-        )
-        active_provider = provider_result.scalars().first()
-
-    api_key = None
-    base_url = None
-
-    if active_provider and active_provider.api_key:
-        api_key = active_provider.api_key
-        base_url = active_provider.base_url
-    else:
-        tenant_config = await get_scoped_tenant_config(
-            db,
-            user_id,
-            auth_context.organization_id,
-        )
-        if tenant_config and tenant_config.openai_api_key:
-            api_key = tenant_config.openai_api_key
-
-    if not api_key:
+    runtime_provider = await resolve_runtime_llm_provider(
+        db,
+        user_id=user_id,
+        organization_id=auth_context.organization_id,
+    )
+    if runtime_provider is None:
         raise HTTPException(status_code=400, detail="LLM API key not configured")
 
+    selected_model = _resolve_prompt_test_model(data.settings) or runtime_provider.chat_model
     return await execute_prompt_with_llm(
         prompt_text,
-        api_key,
-        base_url,
-        model_name=_resolve_prompt_test_model(data.settings),
+        runtime_provider.api_key,
+        runtime_provider.base_url,
+        model_name=selected_model,
         temperature=data.settings.temperature if data.settings else 0.0,
         system_message=_build_prompt_test_system_message(data.settings),
+        # The resolved transport owns the policy. A preview model override is
+        # only a model value and must never enable or disable ZDR by its name.
+        zdr_only=runtime_provider.zdr_required,
     )

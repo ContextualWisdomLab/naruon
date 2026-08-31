@@ -580,7 +580,7 @@ button, form, navigation, chart, or asynchronous data surface.
 |---|---|---|---|---|
 | Canonical evidence identity | OCR/media/attachment/model slices can disagree about the same source | source segments and several deterministic admission slices exist | #1350, #1353, #1397, #1419 | one source identity/provenance chain across email, thread, document, attachment, media, model result |
 | Judgment explanation | model output without evidence/calibration is not defensible | grounded extractor seam exists; wider evidence pipeline incomplete | #1350 | evidence IDs, claim support, abstention, correction, verifier result, prompt/model/version receipt |
-| Provider-neutral route | raw provider coupling spreads credentials and failure behavior | contextual-orchestrator boundary exists; EgressWeave integration is blocked on release | #1262, #1264 | released hash-locked adapter, route/fallback evidence, no raw secret in products |
+| Provider-neutral route | raw provider coupling spreads credentials and failure behavior | contextual-orchestrator boundary and `zdr_only` request policy exist in the current integration slice; EgressWeave integration remains blocked on release | #1262, #1264, #1480 | released hash-locked adapter, dynamic provider discovery/model-group evidence, route/fallback evidence, no raw secret in products |
 | Scientific claim discipline | keyword labels can be mistaken for topic/event measurement | architecture explicitly says no live STM | TEPP dependency path | accepted immutable TEPP artifact/API or explicit feature absence; no lexical-as-STM claim |
 
 ### P1 — Typed context and scheduling differentiation

@@ -68,6 +68,7 @@ async def _call_llm(
     model: str,
     question: str,
     emails_json: str,
+    zdr_only: bool = False,
 ) -> GroundedAnswerPayload:
     """Isolated network seam so tests can fake the provider response."""
     validated_base_url, http_client = await build_llm_provider_http_client(base_url)
@@ -77,9 +78,9 @@ async def _call_llm(
         http_client=http_client,
     )
     try:
-        response = await client.beta.chat.completions.parse(
-            model=model,
-            messages=[
+        request = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": _system_instruction()},
                 {
                     "role": "user",
@@ -88,8 +89,11 @@ async def _call_llm(
                     ),
                 },
             ],
-            response_format=GroundedAnswerPayload,
-        )
+            "response_format": GroundedAnswerPayload,
+        }
+        if zdr_only:
+            request["extra_body"] = {"zdr_only": True}
+        response = await client.beta.chat.completions.parse(**request)
     finally:
         await client.close()
 
@@ -107,6 +111,7 @@ async def answer_from_emails(
     base_url: str | None = None,
     model: str | None = None,
     provider_name: str = "OpenAI",
+    zdr_only: bool = False,
 ) -> GroundedAnswer | None:
     """Answer ``question`` from retrieved emails; None when nothing retrieved."""
     if not context_emails:
@@ -119,6 +124,7 @@ async def answer_from_emails(
         model=selected_model,
         question=question,
         emails_json=_emails_json(context_emails),
+        zdr_only=zdr_only,
     )
 
     provided_ids = {email["id"] for email in context_emails[:MAX_CONTEXT_EMAILS]}

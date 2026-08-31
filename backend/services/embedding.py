@@ -46,6 +46,7 @@ async def generate_embeddings(
     openai_api_key: str,
     base_url: str | None = None,
     model: str | None = None,
+    zdr_only: bool = False,
 ) -> list[list[float]]:
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY is not set")
@@ -65,6 +66,8 @@ async def generate_embeddings(
     request = {"model": selected_model, "input": texts}
     if _supports_native_dimensions(selected_model):
         request["dimensions"] = STORAGE_EMBEDDING_DIMENSION
+    if zdr_only:
+        request["extra_body"] = {"zdr_only": True}
 
     try:
         response = await provider_circuit_breaker.call(

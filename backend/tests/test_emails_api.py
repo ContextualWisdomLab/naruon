@@ -1152,6 +1152,7 @@ async def test_import_email_files_uses_active_provider_embedding_model(
         "local-provider",
         base_url="http://ollama:11434/v1",
         model="embeddinggemma",
+        zdr_only=False,
     )
     added_email = session.added[0]
     assert len(added_email.embedding) == STORAGE_EMBEDDING_DIMENSION

@@ -318,8 +318,79 @@ def test_prompt_test_applies_preview_settings(auth_client, monkeypatch):
     assert resp.status_code == 200
     assert captured["kwargs"]["model_name"] == "gpt-4o"
     assert captured["kwargs"]["temperature"] == 0.6
+    assert captured["kwargs"]["zdr_only"] is False
     assert "Response style: 실행 항목 중심" in captured["kwargs"]["system_message"]
     assert "Output format: JSON 구조화" in captured["kwargs"]["system_message"]
+
+
+def test_prompt_test_preserves_gateway_zdr_when_preview_overrides_model(auth_client, monkeypatch):
+    captured = {}
+
+    async def mock_execute(prompt_text, *args, **kwargs):
+        captured["kwargs"] = kwargs
+        return {"result": "gateway result"}
+
+    monkeypatch.setattr(prompts_module, "execute_prompt_with_llm", mock_execute)
+    mock_session.items.append(
+        LLMProvider(
+            id=1,
+            user_id="testuser",
+            organization_id="org-acme",
+            name="Contextual gateway",
+            provider_type="contextual_orchestrator",
+            api_key="test-key",
+            model_identifier="gateway-auto",
+            is_active=True,
+        )
+    )
+
+    resp = auth_client.post(
+        "/api/prompts/test",
+        json={
+            "content": "Summarize this",
+            "variables": {},
+            "settings": {"model": "gpt-4o"},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert captured["kwargs"]["model_name"] == "gpt-4o"
+    assert captured["kwargs"]["zdr_only"] is True
+
+
+def test_prompt_model_override_does_not_enable_zdr_for_a_direct_provider(auth_client, monkeypatch):
+    captured = {}
+
+    async def mock_execute(prompt_text, *args, **kwargs):
+        captured["kwargs"] = kwargs
+        return {"result": "direct provider result"}
+
+    monkeypatch.setattr(prompts_module, "execute_prompt_with_llm", mock_execute)
+    mock_session.items.append(
+        LLMProvider(
+            id=1,
+            user_id="testuser",
+            organization_id="org-acme",
+            name="Direct provider",
+            provider_type="openai",
+            api_key="test-key",
+            model_identifier="gpt-4o",
+            is_active=True,
+        )
+    )
+
+    resp = auth_client.post(
+        "/api/prompts/test",
+        json={
+            "content": "Summarize this",
+            "variables": {},
+            "settings": {"model": "orchestrator/arbitrary-runtime-model"},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert captured["kwargs"]["model_name"] == "orchestrator/arbitrary-runtime-model"
+    assert captured["kwargs"]["zdr_only"] is False
 
 
 def test_prompt_test_wraps_variable_values_as_untrusted_data(auth_client, monkeypatch):
@@ -530,6 +601,8 @@ async def test_execute_prompt_with_llm_disables_redirect_following_for_custom_ba
             "Summarize this",
             "test-key",
             base_url="https://llm-gateway.example.com/v1",
+            model_name="orchestrator/free",
+            zdr_only=True,
         )
 
     assert result == {"result": "Prompt result"}
@@ -540,6 +613,7 @@ async def test_execute_prompt_with_llm_disables_redirect_following_for_custom_ba
     assert mock_client.chat.completions.create.await_args is not None
     create_kwargs = mock_client.chat.completions.create.await_args.kwargs
     assert create_kwargs["max_tokens"] == 512
+    assert create_kwargs["extra_body"] == {"zdr_only": True}
     assert create_kwargs["messages"] == [{"role": "user", "content": "Summarize this"}]
     await constructor_kwargs["http_client"].aclose()
     mock_client.close.assert_awaited_once()
