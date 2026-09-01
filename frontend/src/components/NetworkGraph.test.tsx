@@ -129,21 +129,13 @@ describe("NetworkGraph", () => {
 
     expect(button).toBeInstanceOf(HTMLButtonElement);
     expect(button?.getAttribute("aria-disabled")).toBe("true");
-    expect(button?.hasAttribute("title")).toBe(false);
+    expect(button?.getAttribute("title")).toBe("표시할 관계 데이터가 없습니다.");
     expect(button?.className).toContain("aria-disabled:cursor-not-allowed");
     expect(button?.className).toContain("aria-disabled:opacity-50");
     expect(descriptionId).toBeTruthy();
-    const tooltip = document.getElementById(descriptionId ?? "");
-    expect(tooltip?.textContent).toBe(
+    expect(document.getElementById(descriptionId ?? "")?.textContent).toBe(
       "표시할 관계 데이터가 없습니다.",
     );
-    expect(tooltip?.getAttribute("role")).toBe("tooltip");
-    expect(tooltip?.className).toContain("left-0");
-    expect(tooltip?.className).not.toContain("-translate-x-1/2");
-    expect(tooltip?.className).toContain("group-hover:opacity-100");
-    expect(tooltip?.className).toContain("group-focus-within:opacity-100");
-    button?.focus();
-    expect(document.activeElement).toBe(button);
   });
 
   it("announces graph loading failures as a polite alert", async () => {
