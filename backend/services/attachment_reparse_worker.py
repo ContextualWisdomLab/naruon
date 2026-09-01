@@ -378,6 +378,14 @@ class AttachmentReparseWorker:
                 attachment = await session.get(Attachment, attachment_id)
                 if attachment is None:
                     continue
+                # ``apply_reparsed_result`` appends graph rows through these
+                # relationships.  Load them explicitly at the async boundary;
+                # implicit lazy IO from the synchronous parser path raises
+                # MissingGreenlet for persisted attachments.
+                await session.refresh(
+                    attachment,
+                    attribute_names=["content_nodes", "content_segments"],
+                )
                 result = process_reparse_pending_attachment(attachment=attachment)
                 await session.commit()
                 logger.info(

@@ -260,6 +260,7 @@ class _SequenceSession:
         self.statements = []
         self.commit_count = 0
         self.rollback_count = 0
+        self.refresh_calls = []
 
     async def execute(self, statement):
         self.statements.append(statement)
@@ -267,6 +268,9 @@ class _SequenceSession:
 
     async def get(self, _model, attachment_id):
         return self._by_id.get(attachment_id)
+
+    async def refresh(self, attachment, *, attribute_names):
+        self.refresh_calls.append((attachment.id, tuple(attribute_names)))
 
     async def commit(self):
         self.commit_count += 1
@@ -392,6 +396,10 @@ async def test_sweep_advances_the_cursor_across_batches():
     assert second.parse_status == _QUARANTINED_STATUS
     assert session.commit_count == 2
     assert session.rollback_count == 0
+    assert session.refresh_calls == [
+        (1, ("content_nodes", "content_segments")),
+        (2, ("content_nodes", "content_segments")),
+    ]
 
 
 @pytest.mark.asyncio
