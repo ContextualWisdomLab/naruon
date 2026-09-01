@@ -1,6 +1,22 @@
 """Add is_read to emails (IMAP \\Seen read state).
 
 Existing rows default to read so historical/file imports do not surface as unread.
+
+Deliberate exception to this repo's "Alembic migrations use structured
+operations (``op.create_index``, ...), never ``sa.text(f"...")`` DDL" rule
+(``AGENTS.md``/``CLAUDE.md``): ``upgrade()``/``downgrade()`` below use
+``op.execute()`` with the module-level ``_UPGRADE_SQL``/``_DOWNGRADE_SQL``
+constants instead of a structured ``op.*`` call. That rule's actual target is
+DDL built from interpolated identifier strings (an injection-safety concern);
+these constants are plain static text with no interpolation, string
+formatting, or identifiers built from variables -- the same safety property
+a structured call would have. The reason a structured call isn't used is
+different: this migration's behavior must be conditional on whether the
+legacy ``emails`` table exists, evaluated at apply time (see the comment on
+``_UPGRADE_SQL`` below for why that check cannot live in Python), and no
+structured Alembic operation expresses "run this DDL only if a runtime
+condition holds" -- a ``DO $$ ... $$`` block is the correct primitive for
+that, not a workaround for one.
 """
 
 from alembic import op
