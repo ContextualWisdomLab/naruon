@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import importlib.util
 from pathlib import Path
@@ -704,6 +705,34 @@ def test_app_ci_collects_repository_root_governance_contract_tests() -> None:
         "the repo-root tests/ step must screen its own output for "
         "Timeout/Fatal/Warn/Denied, like the backend test step does"
     )
+
+
+def test_app_ci_repository_root_governance_step_runs_clean_under_warnings_as_error() -> (
+    None
+):
+    """The repo-root ``tests/`` step must actually pass, not just be wired in.
+
+    Live incident: the previous test confirms this step is wired into
+    app-ci.yml, but the step itself crashed on every real CI run with an
+    unhandled pytest ``INTERNALERROR`` -- the repo root had no pytest
+    configuration setting ``asyncio_default_fixture_loop_scope``, so
+    pytest-asyncio's ``pytest_configure`` hook emitted a
+    ``PytestDeprecationWarning`` for that unset option, and the workflow
+    step's ``PYTHONWARNINGS=error`` env (mirrored here) turned that warning
+    into a fatal exception before pytest could even collect a single test.
+    Reproduces the exact workflow invocation as a subprocess so this passes
+    only when the real CI step would too.
+    """
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "tests"],
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONWARNINGS": "error"},
+        capture_output=True,
+        text=True,
+    )
+    assert "INTERNALERROR" not in result.stdout, result.stdout
+    assert "INTERNALERROR" not in result.stderr, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_tags() -> (
