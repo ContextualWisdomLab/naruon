@@ -30,6 +30,12 @@ from services.attachment_parser import (
     parse_email_attachment,
 )
 from services.content_graph import content_graph_source_record_uid, parse_content
+from services.email_import_service import (
+    EmailImportEmbeddingProvider,
+    _generate_import_embeddings,
+    append_knowledge_graph_edges,
+)
+from services.llm_provider_selection import resolve_runtime_llm_provider
 
 logger = logging.getLogger(__name__)
 _sysrand = random.SystemRandom()
@@ -147,6 +153,7 @@ def _append_reparsed_attachment_content_graph(
         attachment.content_nodes.append(node_record)
         node_records_by_uid[parsed_node.content_node_uid] = node_record
 
+    segment_records: list[ContentSegmentRecord] = []
     for parsed_segment in parse_result.segments:
         segment_record = ContentSegmentRecord(
             email_id=attachment.email_id,
@@ -165,6 +172,37 @@ def _append_reparsed_attachment_content_graph(
             segment_record
         )
         attachment.content_segments.append(segment_record)
+        segment_records.append(segment_record)
+
+    append_knowledge_graph_edges(
+        nodes=list(node_records_by_uid.values()),
+        segments=segment_records,
+        attachment_obj=attachment,
+    )
+
+
+async def _refresh_reparsed_attachment_embedding(
+    session: AsyncSession, attachment: Attachment
+) -> None:
+    """Regenerate the attachment vector through its tenant's active provider."""
+    provider = await resolve_runtime_llm_provider(
+        session,
+        user_id=attachment.email.user_id,
+        organization_id=attachment.email.organization_id,
+    )
+    embedding_provider = (
+        EmailImportEmbeddingProvider(
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+            embedding_model=provider.embedding_model,
+        )
+        if provider is not None
+        else None
+    )
+    embeddings = await _generate_import_embeddings(
+        [attachment.content], embedding_provider=embedding_provider
+    )
+    attachment.embedding = embeddings[0]
 
 
 def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
@@ -384,9 +422,16 @@ class AttachmentReparseWorker:
                 # MissingGreenlet for persisted attachments.
                 await session.refresh(
                     attachment,
-                    attribute_names=["content_nodes", "content_segments"],
+                    attribute_names=[
+                        "email",
+                        "content_nodes",
+                        "content_segments",
+                        "knowledge_graph_edges",
+                    ],
                 )
                 result = process_reparse_pending_attachment(attachment=attachment)
+                if result == "parsed":
+                    await _refresh_reparsed_attachment_embedding(session, attachment)
                 await session.commit()
                 logger.info(
                     "Attachment %s reparse result: %s",

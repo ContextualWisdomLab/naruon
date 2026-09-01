@@ -440,7 +440,11 @@ def _build_email_object(
         message_id=message_id,
         attachment_payloads=attachment_payloads,
     )
-    _append_knowledge_graph_edges(email_obj)
+    append_knowledge_graph_edges(
+        nodes=email_obj.content_nodes,
+        segments=email_obj.content_segments,
+        email_obj=email_obj,
+    )
 
     return email_obj, attachment_count
 
@@ -574,11 +578,20 @@ def _append_parse_result_records(
             attachment_obj.content_segments.append(segment_record)
 
 
-def _append_knowledge_graph_edges(email_obj: Email) -> None:
+def append_knowledge_graph_edges(
+    *,
+    nodes: list[ContentNodeRecord],
+    segments: list[ContentSegmentRecord],
+    email_obj: Email | None = None,
+    attachment_obj: Attachment | None = None,
+) -> None:
+    """Append the canonical content-graph topology for one indexed source."""
+    if email_obj is None and attachment_obj is None:
+        raise ValueError("email_obj or attachment_obj is required")
     nodes_by_uid = {
         node.content_node_uid: node
         for node in sorted(
-            email_obj.content_nodes,
+            nodes,
             key=lambda item: (
                 item.source_kind,
                 item.source_record_uid,
@@ -602,6 +615,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
     ) -> None:
         nonlocal ordinal_index
         edge = KnowledgeGraphEdgeRecord(
+            email_id=attachment_obj.email_id if attachment_obj is not None else None,
             edge_uid=_knowledge_graph_edge_uid(
                 edge_kind,
                 _edge_endpoint_uid(source_node, source_segment),
@@ -618,12 +632,11 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
             source_segment=source_segment,
             target_segment=target_segment,
         )
-        email_obj.knowledge_graph_edges.append(edge)
-        attachment = _edge_attachment(
-            source_node=source_node,
-            target_node=target_node,
-            source_segment=source_segment,
-            target_segment=target_segment,
+        if email_obj is not None:
+            email_obj.knowledge_graph_edges.append(edge)
+        attachment = attachment_obj or _edge_attachment(
+            source_node=source_node, target_node=target_node,
+            source_segment=source_segment, target_segment=target_segment,
         )
         if attachment is not None:
             attachment.knowledge_graph_edges.append(edge)
@@ -649,7 +662,7 @@ def _append_knowledge_graph_edges(email_obj: Email) -> None:
         list[ContentSegmentRecord],
     ] = defaultdict(list)
     for segment in sorted(
-        email_obj.content_segments,
+        segments,
         key=lambda item: (
             item.source_kind,
             item.source_record_uid,

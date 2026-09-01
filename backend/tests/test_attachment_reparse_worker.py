@@ -1,7 +1,8 @@
-"""Unit tests for the attachment reparse worker's per-item processing.
+"""Tests for attachment reparse classification and persisted worker processing.
 
-Fully mocked: in-memory ``Attachment`` instances and a fake async session --
-no database, no network. Covers the fail-closed outcome (invalid retained
+Most tests use in-memory ``Attachment`` instances and a fake async session;
+one PostgreSQL smoke test covers the real async persistence boundary. Covers
+the fail-closed outcome (invalid retained
 payload -> a dedicated terminal status) alongside the two "successful
 re-evaluation" outcomes: a previously-quarantined attachment whose
 disagreement is now recognized as legitimate (escapes quarantine), and one
@@ -10,11 +11,24 @@ whose disagreement is still genuine (stays quarantined).
 
 import asyncio
 import base64
+import datetime
 from types import SimpleNamespace
+import uuid
 
 import pytest
+from sqlalchemy import delete, select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import selectinload, undefer
 
-from db.models import Attachment
+from core.config import settings
+from db.models import (
+    Attachment,
+    ContentNodeRecord,
+    ContentSegmentRecord,
+    Email,
+    KnowledgeGraphEdgeRecord,
+)
+from db.session import AsyncSessionLocal
 import services.attachment_reparse_worker as attachment_reparse_worker_module
 from services.content_graph import content_graph_source_record_uid
 
@@ -31,6 +45,118 @@ process_reparse_pending_attachment = (
 )
 
 _QUARANTINED_STATUS = "content_type_mismatch_quarantined"
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeypatch):
+    """Exercise the real AsyncSession relationship and pgvector persistence path."""
+    if not settings.DATABASE_URL:
+        pytest.skip("PostgreSQL smoke path unavailable")
+    suffix = uuid.uuid4().hex
+    expected_embedding = [0.25] * 1536
+
+    async def runtime_provider(*_args, **_kwargs):
+        return SimpleNamespace(
+            api_key="test-provider-key",
+            base_url="https://provider.example/v1",
+            embedding_model="embedding-test-model",
+        )
+
+    async def generated_embeddings(texts, *, embedding_provider, batch_context=None):
+        assert texts == ["Meeting notes Discuss the roadmap."]
+        assert embedding_provider.base_url == "https://provider.example/v1"
+        assert embedding_provider.embedding_model == "embedding-test-model"
+        assert batch_context is None
+        return [expected_embedding]
+
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "resolve_runtime_llm_provider",
+        runtime_provider,
+    )
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "_generate_import_embeddings",
+        generated_embeddings,
+    )
+
+    async with AsyncSessionLocal() as session:
+        email = Email(
+            user_id=f"reparse-user-{suffix}",
+            organization_id=f"reparse-org-{suffix}",
+            workspace_id=f"reparse-workspace-{suffix}",
+            message_id=f"reparse-message-{suffix}",
+            sender="sender@example.com",
+            recipients="recipient@example.com",
+            subject="Reparse persistence smoke",
+            date=datetime.datetime.now(datetime.timezone.utc),
+            body="body",
+            embedding=[0.0] * 1536,
+        )
+        attachment = _reparse_pending_attachment(
+            content_type="text/plain",
+            payload=b"Meeting notes\n\nDiscuss the roadmap.",
+            attachment_uid=f"attachment_{suffix}",
+        )
+        email.attachments.append(attachment)
+        session.add(email)
+        try:
+            await session.commit()
+        except OperationalError:
+            await session.rollback()
+            pytest.skip("PostgreSQL smoke path unavailable")
+        attachment_id = attachment.id
+        email_id = email.id
+
+        worker = AttachmentReparseWorker(batch_limit=1)
+        worker._attachment_cursor = attachment.id - 1
+        try:
+            await worker._sweep_attachments(session)
+            persisted = (
+                await session.execute(
+                    select(Attachment)
+                    .where(Attachment.attachment_uid == attachment.attachment_uid)
+                    .options(
+                        selectinload(Attachment.content_nodes),
+                        selectinload(Attachment.content_segments),
+                        selectinload(Attachment.knowledge_graph_edges),
+                        undefer(Attachment.embedding),
+                    )
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one()
+            assert persisted.parse_status == "parsed"
+            assert len(persisted.content_nodes) == 3
+            assert len(persisted.content_segments) == 2
+            assert {edge.edge_kind for edge in persisted.knowledge_graph_edges} == {
+                "node_contains_node",
+                "node_has_segment",
+                "segment_next",
+            }
+            assert list(persisted.embedding) == expected_embedding
+        finally:
+            await session.rollback()
+            await session.execute(
+                delete(KnowledgeGraphEdgeRecord).where(
+                    KnowledgeGraphEdgeRecord.attachment_id == attachment_id
+                )
+            )
+            await session.execute(
+                delete(ContentSegmentRecord).where(
+                    ContentSegmentRecord.attachment_id == attachment_id
+                )
+            )
+            await session.execute(
+                delete(ContentNodeRecord).where(
+                    ContentNodeRecord.attachment_id == attachment_id
+                )
+            )
+            await session.execute(
+                delete(Attachment).where(Attachment.id == attachment_id)
+            )
+            await session.execute(delete(Email).where(Email.id == email_id))
+            await session.commit()
 
 
 def _reparse_pending_attachment(
@@ -191,6 +317,11 @@ def test_reparse_that_lands_on_parsed_indexes_the_content_graph():
     # Every segment is linked back to its parent node's own segments list too
     # (the same node<->segment wiring _append_parse_result_records builds).
     assert sum(len(node.segments) for node in attachment.content_nodes) == 2
+    assert {edge.edge_kind for edge in attachment.knowledge_graph_edges} == {
+        "node_contains_node",
+        "node_has_segment",
+        "segment_next",
+    }
 
 
 def test_reparse_that_lands_on_parsed_with_blank_content_does_not_index_content_graph():
@@ -397,8 +528,8 @@ async def test_sweep_advances_the_cursor_across_batches():
     assert session.commit_count == 2
     assert session.rollback_count == 0
     assert session.refresh_calls == [
-        (1, ("content_nodes", "content_segments")),
-        (2, ("content_nodes", "content_segments")),
+        (1, ("email", "content_nodes", "content_segments", "knowledge_graph_edges")),
+        (2, ("email", "content_nodes", "content_segments", "knowledge_graph_edges")),
     ]
 
 
