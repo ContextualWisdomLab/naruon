@@ -1,5 +1,7 @@
 """Tests for the workspace agent registry loader."""
 
+import json
+
 import services.agent_registry as agent_registry_module
 from services.agent_registry import (
     clear_registry_cache,
@@ -141,6 +143,35 @@ def test_legacy_raw_mutations_write_through_to_semantic_evidence() -> None:
     # raw/raw_entry are compatibility/evidence metadata rather than live field setters.
     assert registered_agent.agent_name == "Original Agent"
     assert registered_agent.agent_description == "original description"
+
+
+def test_legacy_raw_remains_a_json_serializable_dictionary() -> None:
+    """Preserve historical dict-specific integrations at the compatibility boundary."""
+    registered_agent = agent_registry_module._agent_from_entry(
+        "compatibility-agent",
+        {
+            "agent_name": "Serializable Agent",
+            "agent_framework": "pydantic-ai",
+            "agent_entrypoint": "services.serializable_agent:run",
+            "agent_description": "serializable description",
+            "agent_capabilities": ["mail.search"],
+            "agent_enabled": True,
+            "custom_metadata": {"source_name": "registry"},
+        },
+    )
+    assert registered_agent is not None
+
+    legacy_raw = registered_agent.raw
+    assert isinstance(legacy_raw, dict)
+    serialized_raw = json.loads(json.dumps(legacy_raw, sort_keys=True))
+    assert serialized_raw["name"] == "Serializable Agent"
+    assert serialized_raw["custom_metadata"] == {"source_name": "registry"}
+    assert "agent_name" not in serialized_raw
+
+    union_result = legacy_raw | {"runtime_status": "available"}
+    assert union_result["name"] == "Serializable Agent"
+    assert union_result["runtime_status"] == "available"
+    assert "agent_name" not in union_result
 
 
 def test_task_mapping_resolves_to_noema_agent() -> None:
