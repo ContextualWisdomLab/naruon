@@ -126,3 +126,31 @@ def test_prepare_local_env_preserves_literal_quoted_secret_assignments(
 
     for key in PRESERVED_KEYS:
         assert resulting_assignments[key] == original_assignments[key]
+
+
+def test_prepare_local_env_replaces_comment_only_managed_values(tmp_path: Path) -> None:
+    example = tmp_path / ".env.example"
+    path = tmp_path / ".env"
+    example.write_text("TEMPLATE_ONLY=value\n", encoding="utf-8")
+    path.write_text(
+        "\n".join(
+            [
+                "POSTGRES_DB=workspace_db",
+                "POSTGRES_USER=workspace_user",
+                "POSTGRES_PASSWORD= # required",
+                "DATABASE_URL='' # required",
+                'AUTH_SESSION_HMAC_SECRET="" # required',
+                "ENCRYPTION_KEY= # required",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    _run(path, example)
+    values = _values(path)
+
+    for key in PRESERVED_KEYS:
+        assert values[key]
+        assert "# required" not in values[key]
+    assert values["POSTGRES_PASSWORD"] in values["DATABASE_URL"]
