@@ -147,6 +147,24 @@ that is the point to re-evaluate a dedicated library against this policy.
   a PR whose stated purpose is a calendar-conflict-check tool. Recorded here
   rather than silently worked around; the fix belongs in its own dedicated PR.
 
+## Research grounding
+
+The content-graph follow-up is grounded in Edge et al.'s GraphRAG work, which
+separates graph-based indexing from later graph-guided answer construction and
+reports benefits for query-focused summarization over large private corpora.
+That supports preserving the same document topology when content enters the
+index through reparse as when it enters through initial import; this ADR does
+not claim that Naruon implements the paper's entity extraction or community
+summarization pipeline.
+
+- Darren Edge, Ha Trinh, Newman Cheng, Joshua Bradley, Alex Chao, Apurva Mody,
+  Steven Truitt, and Jonathan Larson. 2024. “From Local to Global: A Graph RAG
+  Approach to Query-Focused Summarization.” arXiv:2404.16130.
+  https://arxiv.org/abs/2404.16130
+
+No paper PDF is copied into this repository: the stable source citation is
+linked instead, avoiding an unsupported redistribution assumption.
+
 ## Revisions
 
 Two real gaps were found and fixed after initial review, both narrowing rather

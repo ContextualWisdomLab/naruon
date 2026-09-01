@@ -32,7 +32,7 @@ from services.attachment_parser import (
 from services.content_graph import content_graph_source_record_uid, parse_content
 from services.email_import_service import (
     EmailImportEmbeddingProvider,
-    _generate_import_embeddings,
+    _generate_source_embedding,
     append_knowledge_graph_edges,
 )
 from services.llm_provider_selection import resolve_runtime_llm_provider
@@ -199,10 +199,10 @@ async def _refresh_reparsed_attachment_embedding(
         if provider is not None
         else None
     )
-    embeddings = await _generate_import_embeddings(
-        [attachment.content], embedding_provider=embedding_provider
+    attachment.embedding = await _generate_source_embedding(
+        attachment.content,
+        embedding_provider=embedding_provider,
     )
-    attachment.embedding = embeddings[0]
 
 
 def process_reparse_pending_attachment(*, attachment: Attachment) -> str:

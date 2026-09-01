@@ -17,7 +17,7 @@ import uuid
 
 import pytest
 from sqlalchemy import delete, select
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import selectinload, undefer
 
 from core.config import settings
@@ -30,6 +30,7 @@ from db.models import (
 )
 from db.session import AsyncSessionLocal
 import services.attachment_reparse_worker as attachment_reparse_worker_module
+import services.email_import_service as email_import_service_module
 from services.content_graph import content_graph_source_record_uid
 
 AttachmentReparseWorker = attachment_reparse_worker_module.AttachmentReparseWorker
@@ -54,7 +55,8 @@ async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeyp
     if not settings.DATABASE_URL:
         pytest.skip("PostgreSQL smoke path unavailable")
     suffix = uuid.uuid4().hex
-    expected_embedding = [0.25] * 1536
+    long_content = ("alpha " * 400) + "\n\n" + ("beta " * 400)
+    provider_batches: list[list[str]] = []
 
     async def runtime_provider(*_args, **_kwargs):
         return SimpleNamespace(
@@ -64,11 +66,14 @@ async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeyp
         )
 
     async def generated_embeddings(texts, *, embedding_provider, batch_context=None):
-        assert texts == ["Meeting notes Discuss the roadmap."]
         assert embedding_provider.base_url == "https://provider.example/v1"
         assert embedding_provider.embedding_model == "embedding-test-model"
         assert batch_context is None
-        return [expected_embedding]
+        start = sum(len(batch) for batch in provider_batches)
+        provider_batches.append(list(texts))
+        return [
+            [float(start + index + 1)] * 1536 for index in range(len(texts))
+        ]
 
     monkeypatch.setattr(
         attachment_reparse_worker_module,
@@ -76,7 +81,7 @@ async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeyp
         runtime_provider,
     )
     monkeypatch.setattr(
-        attachment_reparse_worker_module,
+        email_import_service_module,
         "_generate_import_embeddings",
         generated_embeddings,
     )
@@ -96,14 +101,14 @@ async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeyp
         )
         attachment = _reparse_pending_attachment(
             content_type="text/plain",
-            payload=b"Meeting notes\n\nDiscuss the roadmap.",
+            payload=long_content.encode(),
             attachment_uid=f"attachment_{suffix}",
         )
         email.attachments.append(attachment)
         session.add(email)
         try:
             await session.commit()
-        except OperationalError:
+        except (OperationalError, ProgrammingError):
             await session.rollback()
             pytest.skip("PostgreSQL smoke path unavailable")
         attachment_id = attachment.id
@@ -134,6 +139,14 @@ async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeyp
                 "node_has_segment",
                 "segment_next",
             }
+            chunk_count = sum(len(batch) for batch in provider_batches)
+            assert chunk_count > 1
+            assert all(
+                0 < len(batch) <= email_import_service_module.MAX_EMBEDDING_CHUNKS_PER_WINDOW
+                for batch in provider_batches
+            )
+            expected_value = sum(range(1, chunk_count + 1)) / chunk_count
+            expected_embedding = [expected_value] * 1536
             assert list(persisted.embedding) == expected_embedding
         finally:
             await session.rollback()

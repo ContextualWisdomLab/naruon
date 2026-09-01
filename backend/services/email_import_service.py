@@ -337,31 +337,46 @@ async def _extract_and_generate_embeddings(
     )
     fitted_embeddings: list[list[float]] = []
     for source_text in source_texts:
-        source_chunks = chunk_text(source_text)
-        if not source_chunks:
-            fitted_embeddings.append(_zero_embedding())
-            continue
-
-        vector_sum: list[float] | None = None
-        vector_count = 0
-        for start in range(0, len(source_chunks), MAX_EMBEDDING_CHUNKS_PER_WINDOW):
-            chunk_embeddings = await _generate_import_embeddings(
-                source_chunks[start : start + MAX_EMBEDDING_CHUNKS_PER_WINDOW],
+        fitted_embeddings.append(
+            await _generate_source_embedding(
+                source_text,
                 embedding_provider=embedding_provider,
                 batch_context=batch_context,
             )
-            for embedding in chunk_embeddings:
-                if vector_sum is None:
-                    vector_sum = [0.0] * len(embedding)
-                for index, value in enumerate(embedding):
-                    vector_sum[index] += value
-                vector_count += 1
-        fitted_embeddings.append(
-            [value / vector_count for value in vector_sum]
-            if vector_sum and vector_count
-            else _zero_embedding()
         )
     return attachment_payloads, fitted_embeddings
+
+
+async def _generate_source_embedding(
+    source_text: str,
+    *,
+    embedding_provider: EmailImportEmbeddingProvider | None,
+    batch_context: "EmailImportBatchContext | None" = None,
+) -> list[float]:
+    """Chunk, embed in bounded windows, and average one source vector."""
+    source_chunks = chunk_text(source_text)
+    if not source_chunks:
+        return _zero_embedding()
+
+    vector_sum: list[float] | None = None
+    vector_count = 0
+    for start in range(0, len(source_chunks), MAX_EMBEDDING_CHUNKS_PER_WINDOW):
+        chunk_embeddings = await _generate_import_embeddings(
+            source_chunks[start : start + MAX_EMBEDDING_CHUNKS_PER_WINDOW],
+            embedding_provider=embedding_provider,
+            batch_context=batch_context,
+        )
+        for embedding in chunk_embeddings:
+            if vector_sum is None:
+                vector_sum = [0.0] * len(embedding)
+            for index, value in enumerate(embedding):
+                vector_sum[index] += value
+            vector_count += 1
+    return (
+        [value / vector_count for value in vector_sum]
+        if vector_sum and vector_count
+        else _zero_embedding()
+    )
 
 
 def _build_email_object(
