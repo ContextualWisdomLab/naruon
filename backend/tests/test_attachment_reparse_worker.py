@@ -17,8 +17,8 @@ import uuid
 
 import asyncpg
 import pytest
-from sqlalchemy import delete, select
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy import delete, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import selectinload, undefer
 
 from core.config import settings
@@ -55,6 +55,20 @@ async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeyp
     """Exercise the real AsyncSession relationship and pgvector persistence path."""
     if not settings.DATABASE_URL:
         pytest.skip("PostgreSQL smoke path unavailable")
+    try:
+        async with AsyncSessionLocal() as probe_session:
+            await probe_session.execute(text("SELECT 1"))
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        pytest.skip("PostgreSQL smoke path unavailable")
+
     suffix = uuid.uuid4().hex
     long_content = ("alpha " * 400) + "\n\n" + ("beta " * 400)
     provider_batches: list[list[str]] = []
@@ -107,27 +121,7 @@ async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeyp
         )
         email.attachments.append(attachment)
         session.add(email)
-        try:
-            await session.commit()
-        except (
-            ConnectionRefusedError,
-            OSError,
-            OperationalError,
-            ProgrammingError,
-            asyncpg.CannotConnectNowError,
-            asyncpg.InvalidAuthorizationSpecificationError,
-            asyncpg.InvalidCatalogNameError,
-            asyncpg.InvalidPasswordError,
-        ):
-            # A truly unreachable DATABASE_URL (the common case: conftest.py
-            # defaults it to a postgresql:// URL even when no server is
-            # actually listening) can fail the connection attempt itself --
-            # asyncpg/SQLAlchemy don't always wrap that as OperationalError,
-            # so a plain ConnectionRefusedError/OSError must be caught here
-            # too, or this test hard-fails instead of skipping everywhere
-            # postgres isn't actually running (this sandbox included).
-            await session.rollback()
-            pytest.skip("PostgreSQL smoke path unavailable")
+        await session.commit()
         attachment_id = attachment.id
         email_id = email.id
 
