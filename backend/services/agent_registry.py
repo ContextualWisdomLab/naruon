@@ -83,8 +83,8 @@ class RegisteredAgent:
 
     @property
     def raw(self) -> dict[str, Any]:
-        """Return ``raw_entry`` for legacy Python callers."""
-        return self.raw_entry
+        """Return a legacy-shaped raw mapping for historical Python callers."""
+        return _legacy_raw_entry(self.raw_entry)
 
 
 def _coerce_capabilities(value: Any) -> tuple[str, ...]:
@@ -118,6 +118,23 @@ def _canonical_raw_entry(entry: dict[str, Any]) -> dict[str, Any]:
             canonical_entry[semantic_key] = canonical_entry[legacy_key]
         canonical_entry.pop(legacy_key, None)
     return canonical_entry
+
+
+def _legacy_raw_entry(canonical_entry: dict[str, Any]) -> dict[str, Any]:
+    """Translate semantic registry evidence back to the historical raw key shape."""
+    legacy_entry = dict(canonical_entry)
+    for semantic_key, legacy_key in (
+        ("agent_name", "name"),
+        ("agent_framework", "framework"),
+        ("agent_entrypoint", "entrypoint"),
+        ("agent_description", "description"),
+        ("agent_capabilities", "capabilities"),
+        ("agent_enabled", "enabled"),
+    ):
+        if semantic_key in legacy_entry:
+            legacy_entry[legacy_key] = legacy_entry[semantic_key]
+        legacy_entry.pop(semantic_key, None)
+    return legacy_entry
 
 
 def _agent_from_entry(agent_id: str, entry: dict[str, Any]) -> RegisteredAgent | None:
