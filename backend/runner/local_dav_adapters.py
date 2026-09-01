@@ -60,7 +60,7 @@ class LocalDavAdapters:
         )
 
     def _default_http_client(self):
-        return httpx.AsyncClient(follow_redirects=False, timeout=60)
+        return httpx.AsyncClient(follow_redirects=False, timeout=60, trust_env=False)
 
     async def _put(
         self,
