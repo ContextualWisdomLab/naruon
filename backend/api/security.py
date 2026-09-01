@@ -274,6 +274,7 @@ def _source_policy(
         (auth_context.user_id,)
         if (
             is_admin_role(auth_context.role)
+            and organization_id is not None
             and organization_id == auth_context.organization_id
         )
         else ()
