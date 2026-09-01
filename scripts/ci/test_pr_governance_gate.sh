@@ -252,6 +252,9 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
       coderabbit_no_actionable_with_blocker)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"No actionable comments were generated in the recent review. Blocking issue remains on 0123456789abcdef0123456789abcdef01234567."}]'
         ;;
+      coderabbit_approval_pending)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->CodeRabbit has no unresolved comments, but it has not reviewed the latest commit. CodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} --><!-- approval_notice_end -->"}]'
+        ;;
       github_code_quality_blocking_comment)
         printf '[{"id":777,"user":{"login":"github-code-quality[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Potential issue for 0123456789abcdef0123456789abcdef01234567"}]'
         ;;
@@ -779,6 +782,18 @@ assert_coderabbit_no_actionable_summary_with_blocker_still_blocks() {
   assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
+assert_coderabbit_approval_pending_waits_without_blocking() {
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_approval_pending "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Waiting for CodeRabbit to review the latest commit' "$temp_dir/output.txt"
+  assert_in_file 'status=in_progress' "$temp_dir/gh.log"
+  assert_not_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
+}
+
 assert_coderabbit_current_review_comment_blocks() {
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -966,6 +981,7 @@ assert_coderabbit_stale_issue_comment_does_not_block
 assert_coderabbit_review_limit_issue_comment_does_not_block
 assert_coderabbit_no_actionable_summary_does_not_block
 assert_coderabbit_no_actionable_summary_with_blocker_still_blocks
+assert_coderabbit_approval_pending_waits_without_blocking
 assert_coderabbit_current_review_comment_blocks
 assert_coderabbit_resolved_current_review_comment_does_not_block
 assert_truncated_review_thread_metadata_blocks
