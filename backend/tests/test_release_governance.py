@@ -682,9 +682,28 @@ def test_app_ci_collects_repository_root_governance_contract_tests() -> None:
     (``cd backend && python -m pytest -q``) never collects it. Without a
     dedicated step, a future trigger regression on the governed workflows
     could land without CI ever running that contract.
+
+    Parses the workflow as YAML (rather than a raw substring match) so a
+    comment that merely preserves the ``pytest -q tests`` text after the real
+    step is deleted cannot satisfy this assertion, and additionally requires
+    the same Timeout/Fatal/Warn/Denied output screening the backend test step
+    already applies, so prohibited output from this step can't slip through
+    Application CI unnoticed.
     """
-    workflow = read_repo_text(".github/workflows/app-ci.yml")
-    assert "pytest -q tests" in workflow
+    workflow = yaml.safe_load(read_repo_text(".github/workflows/app-ci.yml"))
+    backend_steps = workflow["jobs"]["backend"]["steps"]
+    root_test_steps = [
+        step for step in backend_steps if "pytest -q tests" in (step.get("run") or "")
+    ]
+    assert len(root_test_steps) == 1, (
+        "app-ci.yml's backend job must have exactly one real (non-commented) "
+        "step running the repo-root tests/ suite"
+    )
+    root_test_run = root_test_steps[0]["run"]
+    assert re.search(r"grep -qiE ['\"]timeout\|fatal\|warn\|denied['\"]", root_test_run), (
+        "the repo-root tests/ step must screen its own output for "
+        "Timeout/Fatal/Warn/Denied, like the backend test step does"
+    )
 
 
 def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_tags() -> (

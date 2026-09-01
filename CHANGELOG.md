@@ -14,6 +14,16 @@
   회귀 테스트(`test_app_ci_collects_repository_root_governance_contract_tests`)를 추가해 진짜
   RED(스텝 부재) 확인 후 GREEN. 전체 백엔드 스위트 1906 passed / 40 skipped, ruff clean,
   `scripts/ci/test_pr_governance_gate.sh: PASS`.
+- **(Devin 리뷰 대응, 🟡 실제 결함 2건 추가) 위 CI 배선 수정 자체에 대한 Devin의 후속 지적 2건도
+  같은 커밋에서 반영.** (1) 새 회귀 테스트가 `"pytest -q tests" in workflow` 원문 substring
+  검사였는데, 이후 누군가 실제 스텝을 지우고 주석에만 같은 문자열을 남기면(`# python -m pytest -q
+  tests`) 통과해 버려 계약이 무력화될 수 있었다 — `yaml.safe_load`로 워크플로를 파싱해
+  `jobs.backend.steps[].run`에 실제로 존재하는 스텝만 인정하도록 재작성(주석은 YAML 파서 단계에서
+  이미 제거되므로 더 이상 매치되지 않음, 직접 확인). (2) 새로 추가한 repo-root `tests/` 스텝이
+  기존 backend 테스트 스텝과 달리 Timeout/Fatal/Warn/Denied 출력 스크리닝이 없어, 이 스텝만
+  금지된 출력을 내고도 CI를 통과할 수 있었다 — 동일한 `grep -qiE 'timeout|fatal|warn|denied'`
+  가드를 추가하고, 이를 잠그는 assertion을 같은 회귀 테스트에 통합. 두 항목 모두 수정 전 상태로
+  되돌려 진짜 RED(주석 매치 무시 확인, 스크리닝 부재로 assert 실패) → GREEN 확인 후 복원.
 - **(Devin 리뷰 대응, 🟡 minor → 실제로는 진짜 결함) NewsDOM 재인식 sweep의 커서가
   `RESULT_PENDING`(아직 provider 미설정) 행도 실패 없이 진행했다고 취급해 커서를 그 너머로
   진행시켜, 계속 새 업로드가 들어오는 동안 해당 행이 무기한 굶주릴 수 있었습니다.**

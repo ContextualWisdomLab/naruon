@@ -78,7 +78,12 @@ jobs:
         # invocation above runs from backend/ and never collects this
         # directory, so it needs its own explicit step.
         run: |
-          python -m pytest -q tests
+          set -o pipefail
+          python -m pytest -q tests 2>&1 | tee root_pytest_output.log
+          if grep -qiE 'timeout|fatal|warn|denied' root_pytest_output.log; then
+            echo "::error::Tests produced Timeout, Fatal, Warn, or Denied outputs"
+            exit 1
+          fi
 
   frontend:
     name: frontend
