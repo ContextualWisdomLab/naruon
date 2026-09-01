@@ -28,6 +28,7 @@ from db.models import (
     Email,
     ProjectFolder,
     WebdavAccount,
+    Workspace,
 )
 from db.session import get_db
 from main import app
@@ -59,6 +60,7 @@ class MockAsyncSession:
     def __init__(self, results):
         self.results = results
         self.documents: list[Document] = []
+        self.workspaces: list[Workspace] = []
         self.queries = []
         self.execute_calls = 0
 
@@ -82,6 +84,26 @@ class MockAsyncSession:
                     for account in result
                 ]
             )
+        if "from workspace_entities" in rendered_query_lower:
+            compiled = query.compile()
+            params = compiled.params
+            workspace_id = next(
+                (
+                    value
+                    for key, value in params.items()
+                    if key.startswith("workspace_id")
+                ),
+                None,
+            )
+            workspace = next(
+                (
+                    workspace
+                    for workspace in self.workspaces
+                    if workspace.workspace_id == workspace_id
+                ),
+                None,
+            )
+            return MockResult(workspace)
         if "from workspace_documents" in rendered_query_lower:
             compiled = query.compile()
             params = compiled.params
@@ -121,8 +143,15 @@ class MockAsyncSession:
             if not obj.created_at:
                 obj.created_at = _now()
             self.documents.append(obj)
+        elif isinstance(obj, Workspace):
+            if not obj.created_at:
+                obj.created_at = _now()
+            self.workspaces.append(obj)
 
     async def commit(self):
+        pass
+
+    async def flush(self):
         pass
 
     async def refresh(self, obj):

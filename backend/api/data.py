@@ -36,6 +36,7 @@ from services.newsdom_pdf_recognition import (
 )
 from services.ontology_service import ontology_service
 from services.webdav_service import webdav_service
+from services.workspace_scope import get_or_create_workspace
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -3166,6 +3167,7 @@ async def upload_data_document(
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> DataDocumentActionResponse:
+    await get_or_create_workspace(db, auth_context.workspace_id)
     document = Document(
         workspace_id=auth_context.workspace_id,
         organization_id=auth_context.organization_id,
@@ -3301,6 +3303,7 @@ async def upload_document_for_pdf_dom_recognition(
             status_code=415,
             detail="Only application/pdf uploads are supported for DOM recognition.",
         )
+    await get_or_create_workspace(db, auth_context.workspace_id)
     document = Document(
         workspace_id=auth_context.workspace_id,
         organization_id=auth_context.organization_id,
