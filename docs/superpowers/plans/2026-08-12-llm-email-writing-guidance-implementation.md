@@ -279,8 +279,9 @@ git commit -m "feat(email-writing): parse contextual review candidates"
 - Create: `backend/tests/test_email_writing_judge.py`
 - Create: `backend/tests/fixtures/email_writing/judge_outputs.json`
 
+- [ ] Write failing Judge-contract tests first for duplicate JSON keys, non-integral categories, reversed anchors, missing criterion IDs, extra criterion IDs, NaN/infinity, score/category disagreement, same-model policy violation, worker-lane saturation, cancellation, redacted errors, unavailable-package dependency injection, and mixed response-matrix semantics.
 - [ ] Import the released `ContextualOrchestratorJudge`, `JudgeCriterion`, `JudgeFormatError`, `LLMJudgeResult`, and response-matrix validator from fast-mlsirm.
-- [ ] Define independently observable criteria with two-or-more-word snake_case IDs:
+- [ ] Define independently observable criteria with stable snake_case IDs:
   - `issue_support`;
   - `span_fidelity`;
   - `replacement_correctness`;
@@ -295,9 +296,9 @@ git commit -m "feat(email-writing): parse contextual review candidates"
 - [ ] Use explicit ordered categories and exact anchors. The initial category count remains an evaluation parameter until Task 14 ablation selects and publishes an approved value.
 - [ ] Pass bounded task, candidate answer, reference context, and rubric as untrusted data to fast-mlsirm; never parse free-form `pass`, `polite`, or `correct` tokens.
 - [ ] Derive final acceptance from fast-mlsirm's validated criterion result plus the external policy. Do not trust candidate confidence or the Judge's advisory boolean.
-- [ ] Add tests for duplicate JSON keys, non-integral categories, reversed anchors, missing criterion IDs, extra criterion IDs, NaN/infinity, score/category disagreement, same-model policy violation, worker-lane saturation, cancellation, and redacted errors.
-- [ ] Convert repeated Judge results into response rows and validate the matrix before any calibration export.
+- [ ] Convert repeated Judge results into response rows and validate the matrix before any calibration export; reject mixed criterion identity/order/category semantics rather than coercing rows.
 - [ ] Verify no Judge raw output, task text, answer text, reference text, or full trace reaches ordinary logs or persistent product tables.
+- [ ] Keep package-unavailable behavior testable through dependency injection; do not define the test by assuming fast-mlsirm is absent from the environment.
 - [ ] Run:
 
 ```bash
@@ -321,9 +322,10 @@ git commit -m "feat(email-writing): add independent fast-mlsirm Judge"
 - Create: `backend/services/email_writing_policy.py`
 - Create: `backend/tests/test_email_writing_policy.py`
 
-- [ ] Define a strict JSON Schema for policy ID/version, status, creation/expiry, compatible Naruon/Inkspan/fast-mlsirm/orchestrator contracts, approved model/provider/rubric/language profiles, category count/anchors, mandatory criterion floors, posterior/score admission rules, adjudication conditions, calibration/DIF summary, dataset/provenance hashes, limitations, and rollback version.
-- [ ] Check in an integrity-bound `evaluation_only` policy that can exercise the pipeline but cannot emit user-facing diagnostics in production.
-- [ ] Require runtime admission to assert `publish_decision == "publish"`; `withhold` and `evaluation_only` artifacts remain audit/pipeline evidence only and cannot produce user-facing diagnostics.
+- [ ] Write failing policy-schema tests before implementation, including missing/invalid `publish_decision`, invalid lifecycle `status`, an `evaluation_only` artifact whose decision is not `withhold`, unknown fields, malformed hashes, incompatible profiles, and runtime attempts to admit non-published artifacts.
+- [ ] Define a strict JSON Schema for policy ID/version, lifecycle `status`, required `publish_decision` constrained exactly to `publish | withhold`, creation/expiry, compatible Naruon/Inkspan/fast-mlsirm/orchestrator contracts, approved model/provider/rubric/language profiles, category count/anchors, mandatory criterion floors, posterior/score admission rules, adjudication conditions, calibration/DIF summary, dataset/provenance hashes, limitations, and rollback version.
+- [ ] Check in an integrity-bound `evaluation_only` policy with `status: evaluation_only` and `publish_decision: withhold`; it can exercise the pipeline but cannot emit user-facing diagnostics in production. Keep lifecycle status and publication decision as separate fields and enforce their legal combinations.
+- [ ] Require runtime admission to assert `publish_decision == "publish"` and an otherwise admissible published lifecycle status; `withhold`, `evaluation_only`, superseded, revoked, and incompatible artifacts remain audit/pipeline evidence only and cannot produce user-facing diagnostics.
 - [ ] Add a manifest containing the literal SHA-256 of every allowed policy artifact; reject modified, unknown, expired, future-dated, revoked, incompatible, or non-approved artifacts.
 - [ ] Implement outcomes:
 
@@ -339,7 +341,7 @@ policy_unavailable
 - [ ] Require an approved profile for language, model/provider pair, candidate/Judge separation, review mode, and rubric version.
 - [ ] Do not hard-code unvalidated production thresholds in Python. Approved threshold values enter only through a Task 14 policy artifact with calibration evidence.
 - [ ] Add rollback tests proving a revoked current policy can atomically fall back only to a compatible, non-expired, explicitly listed rollback policy; otherwise semantic review disables.
-- [ ] Add policy tests for field smuggling, signature/hash mismatch, downgrade, category-anchor reversal, impossible floors, hidden keyword tables, and unexpected executable content.
+- [ ] Add policy tests for field smuggling, signature/hash mismatch, downgrade, category-anchor reversal, impossible floors, hidden keyword tables, unexpected executable content, and `evaluation_only` preservation without user-facing admission.
 - [ ] Run:
 
 ```bash
@@ -560,7 +562,8 @@ git commit -m "feat(email-writing): connect guidance actions and evidence"
 - Create after passing evidence: `backend/policies/email_writing_judge_approved_v1.json`
 
 - [ ] Define a consented/de-identified or synthetic case schema with source context, recipient roles, draft, gold spans, categories, acceptable replacements, preservation constraints, annotator IDs, adjudication, and consequence severity.
-- [ ] Before calibration, publish the canonical `email_writing_policy_protocol_v1` with a SHA-256, fixed contrast-family splits of 60% calibration, 20% development, and 20% locked human-labeled holdout, a fixed `minimum_slice_sample_size` of 30 cases per prespecified slice, plus the literal publication gates: holdout macro-F1 >= 0.80, every mandatory preservation criterion >= 0.90, unsupported-claim rate <= 0.02, expected calibration error <= 0.05, and no prespecified slice below macro-F1 0.70 when its minimum sample size is met.
+- [ ] Before calibration, publish the canonical `email_writing_policy_protocol_v1` with a SHA-256, fixed contrast-family splits of 60% calibration, 20% development, and 20% locked human-labeled holdout, and fixed `minimum_slice_sample_size: 30`. Record literal initial publication gates: holdout macro-F1 >= 0.80; every mandatory preservation criterion >= 0.90; unsupported-claim rate <= 0.02; expected calibration error <= 0.05; no supported prespecified slice below macro-F1 0.70; `maximum_large_dif_flags = 0` using the released fast-mlsirm estimator's preregistered method-specific effect classification; supported-slice versus pooled-holdout absolute macro-F1 gap <= 0.10 and mandatory-preservation-rate gap <= 0.05; temporal macro-F1 drop <= 0.05 and ECE increase <= 0.02 versus the last published baseline on the same frozen recurrent benchmark; `maximum_observed_critical_consequence_errors = 0`; and a one-sided 95% exact-binomial upper bound for the critical-consequence error rate <= 0.05. Treat these numbers as conservative Naruon product-admission tolerances, not universal scientific constants.
+- [ ] If the released fast-mlsirm DIF estimator cannot provide a compatible method-specific effect classification for a requested profile, mark that profile's DIF evidence insufficient and withhold it rather than substituting a Naruon lexical/statistical shortcut.
 - [ ] Include contrast families:
   - same words in quotation, neutral incident report, and direct rebuke;
   - same pragmatic issue expressed through unrelated paraphrases;
@@ -572,13 +575,13 @@ git commit -m "feat(email-writing): connect guidance actions and evidence"
   - Korean, English, mixed-language, CJK, emoji, combining-mark, and hostile-Unicode cases.
 - [ ] Collect independent human annotations and report inter-rater agreement plus adjudicated disagreement. Human labels are reference evidence, not unquestioned truth.
 - [ ] Freeze the holdout manifest before any calibration or threshold selection; record calibration, development, locked-holdout, and protocol hashes in every result and keep the holdout read-only until the final publish/no-publish decision.
-- [ ] Measure issue/category precision, recall, macro-F1, span IoU/exactness, replacement correctness, intent/fact/actor/deadline/request-strength preservation, unsupported-claim rate, accepted-suggestion precision, Brier score, calibration error, and human ignore rate.
+- [ ] Measure issue/category precision, recall, macro-F1, span IoU/exactness, replacement correctness, intent/fact/actor/deadline/request-strength preservation, unsupported-claim rate, accepted-suggestion precision, Brier score, calibration error, human ignore rate, preregistered supported-slice gaps, critical-consequence errors and confidence bounds.
 - [ ] Use fast-mlsirm response matrices to analyze criterion/category behavior, item/rater effects where supported, reliability, prompt/model test-retest, category sparsity, category-count ablation, and DIF by language, recipient configuration, role/hierarchy, thread depth, document length, review mode, model, prompt, and time.
 - [ ] Compare single-model, separated candidate/Judge, and deeper multi-agent/adjudicator workflows with role-specific reasoning effort. Speed is recorded but does not override validity.
 - [ ] Use deterministic offline fixtures in required CI. Run live scheduled/manual evaluation with `NVIDIA_NIM_API_KEY`; do not expose the secret to pull-request code from untrusted forks and do not use `COPILOT_GITHUB_TOKEN`.
-- [ ] Fail the policy publication job when sample size, calibration, preservation, DIF, drift, or consequence thresholds are not met. Do not publish a policy merely because average accuracy is high.
+- [ ] Fail the policy publication job when sample size, calibration, preservation, DIF, supported-slice gap, drift, or consequence gates are not met. Do not publish a policy merely because average accuracy is high.
 - [ ] Generate the approved policy artifact from measured outputs, review its literal values, add its SHA-256 to the manifest, and prove production rejects the earlier `evaluation_only` artifact for user-facing output.
-- [ ] Include `protocol_id`, `protocol_hash`, `calibration_split_hash`, `development_split_hash`, `locked_holdout_hash`, literal `minimum_slice_sample_size: 30`, literal thresholds, and `publish_decision` (`publish` or `withhold`) in the policy artifact. Freeze thresholds before reading locked-holdout labels; a run that tunes thresholds against that holdout is invalid for publication and requires a new locked holdout. Any protocol, split, threshold, or holdout change creates a new protocol version and a new run.
+- [ ] Include `protocol_id`, `protocol_hash`, `calibration_split_hash`, `development_split_hash`, `locked_holdout_hash`, literal `minimum_slice_sample_size: 30`, every literal threshold/decision rule, lifecycle `status`, and required `publish_decision` (`publish` or `withhold`) in the policy artifact. Represent evaluation-only evidence as `status: evaluation_only` plus `publish_decision: withhold`. Require every duplicated literal value to match the immutable protocol identified by `protocol_hash`. Freeze thresholds before reading locked-holdout labels; a run that tunes thresholds against that holdout is invalid for publication and requires a new locked holdout. Any protocol, split, threshold, or holdout change creates a new protocol version and a new run.
 - [ ] Store reports, response matrices, aggregate metrics, manifests, and source hashes without confidential raw company email.
 - [ ] Run:
 
