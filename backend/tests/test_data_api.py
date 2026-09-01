@@ -148,11 +148,25 @@ class MockAsyncSession:
                 ),
                 None,
             )
+            organization_id = next(
+                (
+                    value
+                    for key, value in params.items()
+                    if key.startswith("organization_id")
+                ),
+                None,
+            )
             rows = [
                 document
                 for document in self.documents
                 if (document_id is None or document.document_id == document_id)
                 and (workspace_id is None or document.workspace_id == workspace_id)
+                and (
+                    organization_id is None
+                    # Older fixtures predate Document.organization_id; keep
+                    # them usable while enforcing any explicit organization.
+                    or document.organization_id in (None, organization_id)
+                )
             ]
             if "order by" in rendered_query_lower:
                 return MockResult(rows)
@@ -2655,7 +2669,17 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
         document_status="uploaded",
         created_at=_now(),
     )
-    mock_db.documents.extend([document, rival_document])
+    other_organization_document = Document(
+        document_id="doc_other_org",
+        workspace_id="workspace-org-acme",
+        organization_id="org-rival",
+        document_name="other-org.md",
+        document_type="text/markdown",
+        document_content="other organization",
+        document_status="uploaded",
+        created_at=_now(),
+    )
+    mock_db.documents.extend([document, rival_document, other_organization_document])
     token = _signed_session_token(_valid_session_payload())
     client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
     try:
@@ -2667,6 +2691,9 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
             "/api/data/documents/doc_owned/hwp-conversion-intent"
         )
         rival_response = client.post("/api/data/documents/doc_rival/reparse")
+        other_organization_response = client.post(
+            "/api/data/documents/doc_other_org/reparse"
+        )
     finally:
         client.close()
         _restore_overrides(previous_secret, original_overrides)
@@ -2692,6 +2719,8 @@ def test_data_document_actions_are_workspace_scoped_and_intent_only(mock_db):
 
     assert rival_response.status_code == 404
     assert "doc_rival" not in rival_response.text
+    assert other_organization_response.status_code == 404
+    assert "doc_other_org" not in other_organization_response.text
 
 
 def test_data_document_webdav_materialization_executes_source_backed_write(
