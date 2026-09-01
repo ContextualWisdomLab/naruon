@@ -70,16 +70,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    connection = op.get_bind()
-    inspector = sa.inspect(connection)
-
-    if inspector.has_table(_DOCUMENTS_TABLE):
-        for index_name in (
-            "ix_workspace_documents_organization_id",
-            "ix_workspace_documents_workspace_id",
-        ):
-            op.drop_index(index_name, table_name=_DOCUMENTS_TABLE, if_exists=True)
-        op.drop_table(_DOCUMENTS_TABLE)
-
-    if inspector.has_table(_ENTITIES_TABLE):
-        op.drop_table(_ENTITIES_TABLE)
+    # This revision's upgrade is a no-op whenever the tables already exist
+    # (e.g. created by 0001's create_all), so a downgrade cannot tell "this
+    # revision created these tables" apart from "they predate it" -- and
+    # workspace_documents.document_content holds real uploaded content, not
+    # rebuildable derived state. Unconditionally dropping it risks destroying
+    # data this revision never created. As with 0001_initial_control_plane:
+    # production rollbacks should restore from backup or a later explicit
+    # down revision rather than dropping customer-owned data.
+    return None

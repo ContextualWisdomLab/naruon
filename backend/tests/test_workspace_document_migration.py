@@ -6,7 +6,9 @@ this repository's incremental migration history tracked them explicitly (see
 ``alembic/versions/0018_workspace_registry.py``). No production code path ever
 inserted a ``Workspace`` row for a real signed session either, so
 ``Document.workspace_id``'s foreign key could never be satisfied by a real
-``/api/data/documents`` upload.
+``/api/data/documents`` upload. A database missing these tables also used to
+crash on ``0016_document_org_scope`` (``NoSuchTableError``) before ever
+reaching ``0018_workspace_registry``; ``0016`` is now ``has_table``-guarded.
 
 These tests exercise the actual documented production path
 (``scripts/migrate_db.py`` -> ``alembic upgrade head``, never
@@ -42,7 +44,12 @@ from main import app
 pytestmark = pytest.mark.postgres
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-_PRE_REGISTRY_REVISION = "0017_merge_newsdom_carddav_heads"
+# The revision immediately before 0016_document_org_scope, which -- for a
+# database missing workspace_documents -- is the first migration in the
+# chain that touches the table at all. Stopping here (rather than at 0017,
+# after 0016 has already run) is what actually exercises the real historical
+# gap: 0016 must not crash before 0018_workspace_registry ever gets to run.
+_PRE_REGISTRY_REVISION = "0015_merge_newsdom_email_heads"
 _SMOKE_WORKSPACE_ID = "workspace-workspace-migration-smoke-org"
 
 
@@ -227,9 +234,12 @@ async def test_document_upload_serves_after_upgrading_a_pre_registry_database(
     ``0018_workspace_registry`` (``0001_initial_control_plane``'s
     ``Base.metadata.create_all`` only reflects *today's* model metadata, so it
     cannot recreate that historical, pre-model-addition state on its own).
-    Force that end state directly -- dropping the tables a stopped-at-0017
-    database would never have had -- then prove upgrading to head both
-    recreates them and lets /api/data/documents serve cleanly."""
+    Force that end state directly -- dropping the tables a stopped-at-0015
+    database would never have had -- then migrate straight to head in one
+    call, crossing 0016_document_org_scope (which used to crash with
+    NoSuchTableError on a database in exactly this state) before
+    0018_workspace_registry ever runs. Prove that both tables end up correct
+    and /api/data/documents serves cleanly."""
     _run_migrations(fresh_database_url, revision=_PRE_REGISTRY_REVISION)
 
     await _drop_workspace_registry_tables(fresh_database_url)
