@@ -4,7 +4,7 @@ from api.search import SearchResultItem
 
 
 def test_search_result_uses_email_id_internally_with_legacy_wire_alias() -> None:
-    """Keep the public ``id`` key while owning a semantic ``email_id`` field."""
+    """Keep public ``id`` compatibility while owning a semantic ``email_id`` field."""
     search_result = SearchResultItem(
         email_id=17,
         subject="Subject",
@@ -17,6 +17,7 @@ def test_search_result_uses_email_id_internally_with_legacy_wire_alias() -> None
     assert "email_id" in SearchResultItem.model_fields
     assert "id" not in SearchResultItem.model_fields
     assert search_result.email_id == 17
+    assert search_result.id == 17
     assert search_result.model_dump(by_alias=True)["id"] == 17
 
 
@@ -34,4 +35,5 @@ def test_search_result_accepts_existing_wire_id_during_deserialization() -> None
     )
 
     assert search_result.email_id == 23
+    assert search_result.id == 23
     assert search_result.model_dump(by_alias=True)["id"] == 23
