@@ -78,55 +78,26 @@ See [Architecture](ARCHITECTURE.md) for the detailed system and trust boundaries
 ### 1. Create local configuration
 
 ```bash
-cp .env.example .env
-python3 - <<'PY'
-from pathlib import Path
-import base64
-import re
-import secrets
-
-path = Path(".env")
-text = path.read_text()
-password = secrets.token_urlsafe(32)
-values = {
-    "POSTGRES_DB": "ai_email",
-    "POSTGRES_USER": "postgres",
-    "POSTGRES_PASSWORD": password,
-    "DATABASE_URL": (
-        "postgresql+asyncpg://postgres:"
-        f"{password}@127.0.0.1:15432/ai_email"
-    ),
-    "AUTH_SESSION_HMAC_SECRET": secrets.token_urlsafe(48),
-    "ENCRYPTION_KEY": base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
-}
-
-for key, value in values.items():
-    pattern = rf"(?m)^{re.escape(key)}=.*$"
-    replacement = f"{key}={value}"
-    if re.search(pattern, text):
-        text = re.sub(pattern, replacement, text)
-    else:
-        text += f"\n{replacement}"
-
-path.write_text(text.rstrip() + "\n")
-PY
+python3 scripts/prepare_local_env.py
 ```
+
+The helper creates `.env` from `.env.example` only when `.env` does not exist. On later runs it preserves every existing non-empty `POSTGRES_PASSWORD`, `DATABASE_URL`, `AUTH_SESSION_HMAC_SECRET`, and `ENCRYPTION_KEY`; it generates only missing values. This makes the setup safe to repeat against an existing PostgreSQL volume and encrypted credential store instead of silently rotating access material.
 
 Keep `.env` local. Never commit mailbox exports, provider credentials, session secrets, encryption keys, or customer content.
 
 ### 2. Start the core stack
 
 ```bash
-./scripts/naruon_compose.sh up -d --build
-./scripts/naruon_compose.sh exec backend python import_fixtures.py
+NARUON_ENV_FILE=.env ./scripts/naruon_compose.sh up -d --build
+NARUON_ENV_FILE=.env ./scripts/naruon_compose.sh exec backend python import_fixtures.py
 ```
 
-The default Compose profile starts PostgreSQL, Ollama, the backend, and the frontend.
+`NARUON_ENV_FILE=.env` is explicit because the Compose wrapper otherwise honors an operator-level `~/.env` before the project file. The default Compose profile starts PostgreSQL, Ollama, the backend, and the frontend.
 
 ### 3. Verify the deployment
 
 ```bash
-./scripts/naruon_compose.sh ps
+NARUON_ENV_FILE=.env ./scripts/naruon_compose.sh ps
 curl -fsS http://127.0.0.1:8000/
 python3 -m webbrowser http://localhost:3000
 ```
@@ -136,7 +107,7 @@ The API root should return an `ok` status. The fixture import creates a small sy
 ### Optional PDF recognition
 
 ```bash
-COMPOSE_PROFILES=newsdom ./scripts/naruon_compose.sh up -d --build
+COMPOSE_PROFILES=newsdom NARUON_ENV_FILE=.env ./scripts/naruon_compose.sh up -d --build
 ```
 
 The `newsdom` service stays on the internal Compose network and is not published to the host. Enable it deliberately and review the pinned sidecar revision before production use.
@@ -183,8 +154,8 @@ Read:
 ## Routine operator checks
 
 ```bash
-./scripts/naruon_compose.sh ps
-./scripts/naruon_compose.sh logs --tail=200 db backend frontend
+NARUON_ENV_FILE=.env ./scripts/naruon_compose.sh ps
+NARUON_ENV_FILE=.env ./scripts/naruon_compose.sh logs --tail=200 db backend frontend
 curl -fsS http://127.0.0.1:8000/
 ```
 
