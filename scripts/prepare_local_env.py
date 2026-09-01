@@ -46,13 +46,9 @@ def _quoted_dotenv_value(value: str) -> str | None:
     return value
 
 
-def _existing_value(text: str, key: str) -> str | None:
-    """Return the effective non-empty Compose dotenv value for ``key``."""
+def _effective_value(raw_value: str) -> str | None:
+    """Return one assignment's effective Compose dotenv value."""
 
-    match = re.search(rf"(?m)^{re.escape(key)}=(.*)$", text)
-    if match is None:
-        return None
-    raw_value = match.group(1)
     value = raw_value.strip()
     if not value:
         return None
@@ -62,15 +58,41 @@ def _existing_value(text: str, key: str) -> str | None:
     return value or None
 
 
-def _upsert(text: str, key: str, value: str) -> str:
-    """Replace an empty assignment or append one missing dotenv assignment."""
+def _assignment_matches(text: str, key: str) -> list[re.Match[str]]:
+    """Return ordered assignments for ``key`` so the last one remains effective."""
 
-    pattern = rf"(?m)^{re.escape(key)}=.*$"
+    return list(re.finditer(rf"(?m)^{re.escape(key)}=(.*)$", text))
+
+
+def _existing_value(text: str, key: str) -> str | None:
+    """Return the effective non-empty Compose dotenv value for ``key``."""
+
+    matches = _assignment_matches(text, key)
+    if not matches:
+        return None
+    return _effective_value(matches[-1].group(1))
+
+
+def _upsert(text: str, key: str, value: str) -> str:
+    """Replace only the effective empty assignment or append a missing key."""
+
     replacement = f"{key}={value}"
-    if re.search(pattern, text):
-        return re.sub(pattern, replacement, text)
+    matches = _assignment_matches(text, key)
+    if matches:
+        match = matches[-1]
+        return f"{text[: match.start()]}{replacement}{text[match.end() :]}"
     separator = "" if not text or text.endswith("\n") else "\n"
     return f"{text}{separator}{replacement}\n"
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Restrict ``path`` before any generated secret material is written."""
+
+    private_mode = stat.S_IRUSR | stat.S_IWUSR
+    if not path.exists():
+        path.touch(mode=private_mode, exist_ok=False)
+    path.chmod(private_mode)
+    path.write_text(text, encoding="utf-8")
 
 
 def prepare_local_env(path: Path, example_path: Path) -> None:
@@ -111,8 +133,7 @@ def prepare_local_env(path: Path, example_path: Path) -> None:
             continue
         text = _upsert(text, key, value)
 
-    path.write_text(text.rstrip() + "\n", encoding="utf-8")
-    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    _write_private(path, text.rstrip() + "\n")
 
 
 def _parser() -> argparse.ArgumentParser:
