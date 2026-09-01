@@ -651,7 +651,6 @@ def test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushe
     workflow = read_repo_text(".github/workflows/app-ci.yml")
 
     assert "pull_request:" in workflow
-    assert "release/**" in workflow
     assert "python -m pytest" in workflow
     assert "PYTHONWARNINGS: error" in workflow
     assert 'DISABLE_BACKGROUND_WORKERS: "1"' in workflow
@@ -668,6 +667,24 @@ def test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushe
     push_block = workflow.split("push:", 1)[1].split("pull_request:", 1)[0]
     assert "master" in push_block
     assert "release/**" not in push_block
+
+    pull_request_block = workflow.split("pull_request:", 1)[1].split("push:", 1)[0]
+    assert "branches:" not in pull_request_block, (
+        "pull_request trigger must not exclude stacked PR base branches"
+    )
+
+
+def test_app_ci_collects_repository_root_governance_contract_tests() -> None:
+    """The repo-root ``tests/`` contract suite must run in CI, not only locally.
+
+    ``tests/test_stacked_pr_workflow_contract.py`` asserts on workflow YAML but
+    lives outside ``backend/``, where the backend job's pytest invocation
+    (``cd backend && python -m pytest -q``) never collects it. Without a
+    dedicated step, a future trigger regression on the governed workflows
+    could land without CI ever running that contract.
+    """
+    workflow = read_repo_text(".github/workflows/app-ci.yml")
+    assert "pytest -q tests" in workflow
 
 
 def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_tags() -> (
@@ -710,7 +727,9 @@ def test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_
     ]
     assert "tags:" in push_block
     assert "branches:" not in push_block
-    assert "develop" in pull_request_block
+    assert "branches:" not in pull_request_block, (
+        "pull_request trigger must not exclude stacked PR base branches"
+    )
     assert "ai_email_client-backend" in workflow
     assert "ai_email_client-frontend" in workflow
     assert workflow.count("image: naruon") == 2
