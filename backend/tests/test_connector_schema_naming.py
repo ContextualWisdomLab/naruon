@@ -21,7 +21,8 @@ def test_connector_registration_request_uses_semantic_owned_names() -> None:
     )
 
     assert request.connector_capabilities == ["mail_read"]
-    assert request.model_dump(by_alias=True)["capabilities"] == ["mail_read"]
+    assert request.model_dump()["capabilities"] == ["mail_read"]
+    assert "connector_capabilities" not in request.model_dump()
 
 
 def test_connector_registration_response_uses_semantic_owned_status_name() -> None:
@@ -39,4 +40,5 @@ def test_connector_registration_response_uses_semantic_owned_status_name() -> No
     )
 
     assert response.registration_status == "pending_approval"
-    assert response.model_dump(by_alias=True)["status"] == "pending_approval"
+    assert response.model_dump()["status"] == "pending_approval"
+    assert "registration_status" not in response.model_dump()
