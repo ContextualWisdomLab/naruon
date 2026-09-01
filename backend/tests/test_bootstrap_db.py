@@ -778,8 +778,10 @@ async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
             )
             assert result.scalar_one() == "ix_emails_owner_date"
     finally:
-        await conn.close()
-        await engine.dispose()
+        try:
+            await conn.close()
+        finally:
+            await engine.dispose()
 
 
 @pytest.mark.asyncio
