@@ -30,14 +30,27 @@ depends_on = None
 # against the other kind of target. A ``DO $$ ... $$`` block defers the
 # check to apply time instead, so the one generated script is correct
 # against either kind of target, online or offline-then-applied-later alike.
+#
+# ``to_regclass('emails')`` (not ``information_schema.tables`` by bare
+# ``table_name``) deliberately: the unqualified ``ALTER TABLE emails`` below
+# resolves through the connection's ``search_path``, and ``to_regclass``
+# resolves an unqualified name exactly the same way, returning NULL if it
+# doesn't. ``information_schema.tables`` filtered only by ``table_name``
+# ignores ``search_path`` entirely and matches a same-named table in *any*
+# schema the connecting role can see -- on a deployment with more than one
+# accessible schema, that could find an unrelated ``emails`` table outside
+# the search path while the unqualified ``ALTER TABLE emails`` targets a
+# different (or no) table, passing the guard for the wrong relation or
+# aborting the migration outright. Resolving both the check and the DDL
+# through the same name lookup makes that mismatch structurally impossible.
 _UPGRADE_SQL = """
 DO $$
 BEGIN
-    IF EXISTS (
-        SELECT 1 FROM information_schema.tables WHERE table_name = 'emails'
-    ) AND NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'emails' AND column_name = 'is_read'
+    IF to_regclass('emails') IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = to_regclass('emails')
+        AND attname = 'is_read'
+        AND NOT attisdropped
     ) THEN
         ALTER TABLE emails ADD COLUMN is_read boolean NOT NULL DEFAULT true;
     END IF;
@@ -47,9 +60,7 @@ END $$;
 _DOWNGRADE_SQL = """
 DO $$
 BEGIN
-    IF EXISTS (
-        SELECT 1 FROM information_schema.tables WHERE table_name = 'emails'
-    ) THEN
+    IF to_regclass('emails') IS NOT NULL THEN
         ALTER TABLE emails DROP COLUMN IF EXISTS is_read;
     END IF;
 END $$;

@@ -758,11 +758,22 @@ def test_legacy_email_read_state_branch_defers_check_to_sql(monkeypatch):
     upgrade_and_after = revision_text.split("def upgrade", 1)[1]
     assert "sa.inspect(op.get_bind())" not in upgrade_and_after
     assert "context.is_offline_mode()" not in upgrade_and_after
-    assert "DO $$" in revision_text
-    assert "information_schema.tables" in revision_text
-    assert "ALTER TABLE emails ADD COLUMN is_read" in revision_text
 
     module = _load_revision_module("0011_email_read_state.py")
+    # to_regclass('emails'), not information_schema.tables by bare
+    # table_name: the latter ignores search_path and can match an unrelated
+    # same-named table in a different accessible schema than the one the
+    # unqualified ALTER TABLE below actually resolves to. Checked on the
+    # loaded module's own SQL constants, not the raw file text, so this
+    # can't be fooled by a comment mentioning either string for context.
+    assert "DO $$" in module._UPGRADE_SQL
+    assert "DO $$" in module._DOWNGRADE_SQL
+    assert "to_regclass('emails')" in module._UPGRADE_SQL
+    assert "to_regclass('emails')" in module._DOWNGRADE_SQL
+    assert "information_schema.tables" not in module._UPGRADE_SQL
+    assert "information_schema.tables" not in module._DOWNGRADE_SQL
+    assert "ALTER TABLE emails ADD COLUMN is_read" in module._UPGRADE_SQL
+
     calls = []
     monkeypatch.setattr(module.op, "execute", lambda sql: calls.append(sql))
     module.upgrade()
