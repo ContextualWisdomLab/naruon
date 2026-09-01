@@ -163,7 +163,6 @@ async def test_malformed_txt_path_is_ignored():
     assert result.base_url == "https://dav.example.com/"
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "txt_path",
     [
