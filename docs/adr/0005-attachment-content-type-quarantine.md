@@ -343,6 +343,41 @@ than reversing the original decision:
   narrowed by this reversal to: the claim is *present and well-formed*, not
   that it's provably derived from or consistent with `organization_id`.
 
+- **Attachment reparse never indexed a successfully re-recognized
+  attachment's content into the content graph, unlike the initial import
+  path — flagged as informational by Devin Review on this PR ("confirm this
+  is intended"), confirmed real but out of scope for this PR, and closed
+  here as the tracked follow-up.**
+  `services/email_import_service.py::_append_email_content_graph` already
+  builds a `ContentNodeRecord`/`ContentSegmentRecord` graph for an
+  attachment that parses cleanly on first import, but
+  `attachment_reparse_worker.py::apply_reparsed_result` only ever updated
+  the `Attachment` row's own columns — a previously-quarantined attachment
+  that later reparses to `"parsed"` stayed invisible to content-graph-backed
+  search/AI-hub features even after successful recognition, despite
+  `AttachmentParseResult` carrying the same `parse_content` field the import
+  path indexes. Fixed by calling a new
+  `_append_reparsed_attachment_content_graph` from `apply_reparsed_result`
+  whenever the reparse result lands on `"parsed"`. It reuses the same
+  `services.content_graph.parse_content` helper the import path already
+  calls, plus a newly shared `content_graph_source_record_uid` (moved out of
+  `email_import_service.py`, where it was a private function, into
+  `services/content_graph/parser.py` as a public helper both call sites
+  import) — not a second indexing path, the same one with a second caller.
+  Since a persisted attachment's original position among its email's
+  siblings is not reliably reproducible after import, the reparse path keys
+  `source_record_uid` on the attachment's permanent `attachment_uid` alone
+  instead of the import path's message-id + list-position convention, and
+  sets the new records' `email_id` directly from the attachment's
+  already-loaded `email_id` column rather than through a transient `Email`
+  relationship append (the attachment here is already a persisted row,
+  unlike at import time, so there is no transient parent to defer FK
+  resolution through). New tests:
+  `test_reparse_that_lands_on_parsed_indexes_the_content_graph`,
+  `test_reparse_that_lands_on_parsed_with_blank_content_does_not_index_content_graph`,
+  `test_reparse_that_does_not_land_on_parsed_does_not_index_content_graph`.
+  Verification: full backend suite 1908 passed / 40 skipped, ruff clean.
+
 ## References (APA 7th)
 
 Freed, N., & Borenstein, N. (1996). *Multipurpose Internet Mail Extensions

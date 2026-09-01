@@ -1,4 +1,29 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, naruon#1486 후속) 첨부파일 reparse가 성공적으로 재인식된 콘텐츠를
+  초기 import 경로와 달리 content graph에 색인하지 않던 gap을 고쳤습니다.**
+  `services/email_import_service.py::_append_email_content_graph`는 첨부파일이 첫
+  import에서 정상 파싱되면 `ContentNodeRecord`/`ContentSegmentRecord` 그래프를
+  만들지만, `attachment_reparse_worker.py::apply_reparsed_result`는 `Attachment`
+  행 자체 컬럼만 갱신했습니다 — 격리(quarantine)됐던 첨부파일이 나중에 reparse로
+  `"parsed"`가 되어도 content-graph 기반 검색/AI-hub 기능에는 계속 보이지
+  않았습니다(`AttachmentParseResult`가 import 경로와 동일한 `parse_content` 필드를
+  이미 들고 있었음에도). `apply_reparsed_result`가 결과 `parse_status`가
+  `"parsed"`일 때 새 `_append_reparsed_attachment_content_graph`를 호출하도록
+  추가했습니다 — import 경로가 이미 쓰는 `services.content_graph.parse_content`와,
+  새로 공개 API로 옮긴 `content_graph_source_record_uid`(원래
+  `email_import_service.py`의 private 함수였던 것을
+  `services/content_graph/parser.py`로 옮겨 두 호출부가 공유)를 그대로 재사용해
+  색인 경로를 두 개로 만들지 않았습니다. 영속화된 attachment가 자신이 속한
+  이메일의 첨부파일 목록에서 원래 몇 번째였는지는 신뢰성 있게 재현할 수 없으므로,
+  reparse 경로의 `source_record_uid`는 import 경로의 message-id + 목록 위치
+  조합 대신 attachment의 영구 `attachment_uid` 하나로만 구성하고, 새 레코드의
+  `email_id`는 (import 경로처럼 아직 저장되지 않은 `Email`을 통한 관계 append로
+  간접 설정하는 대신) 이미 영속화된 attachment 행의 `email_id` 컬럼에서 직접
+  가져옵니다. 빈 문자열로만 파싱되는 `"parsed"` 결과(공백만 있는 첨부파일 등)는
+  기존 import 경로와 동일하게 색인을 건너뜁니다. 신규 테스트 3개
+  (`test_reparse_that_lands_on_parsed_indexes_the_content_graph`,
+  blank-content 스킵, non-parsed 스킵). 검증: 전체 백엔드 스위트 1908
+  passed/40 skipped, ruff clean.
 - **(Devin 리뷰 대응, 🟡 minor → 실제로는 진짜 결함) NewsDOM 재인식 sweep의 커서가
   `RESULT_PENDING`(아직 provider 미설정) 행도 실패 없이 진행했다고 취급해 커서를 그 너머로
   진행시켜, 계속 새 업로드가 들어오는 동안 해당 행이 무기한 굶주릴 수 있었습니다.**

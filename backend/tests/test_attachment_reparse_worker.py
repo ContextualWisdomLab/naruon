@@ -16,6 +16,7 @@ import pytest
 
 from db.models import Attachment
 import services.attachment_reparse_worker as attachment_reparse_worker_module
+from services.content_graph import content_graph_source_record_uid
 
 AttachmentReparseWorker = attachment_reparse_worker_module.AttachmentReparseWorker
 ATTACHMENT_REPARSE_PENDING_STATUS = (
@@ -38,9 +39,13 @@ def _reparse_pending_attachment(
     payload: bytes,
     filename: str = "attachment.bin",
     attachment_id: int | None = None,
+    email_id: int | None = None,
+    attachment_uid: str = "attachment_test-uid",
 ) -> Attachment:
     return Attachment(
         id=attachment_id,
+        email_id=email_id,
+        attachment_uid=attachment_uid,
         filename=filename,
         content_type=content_type,
         content=base64.b64encode(payload).decode("ascii"),
@@ -140,6 +145,87 @@ def test_reparse_preserves_filename_and_declared_content_type():
 
     assert attachment.filename == "invoice.pdf"
     assert attachment.content_type == "application/pdf"
+
+
+def test_reparse_that_lands_on_parsed_indexes_the_content_graph():
+    # Unlike the OOXML/PDF/PNG scenarios above, plain text is never
+    # magic-byte-sniffed (see attachment_parser._MAGIC_BYTE_SIGNATURES), so
+    # this reparse lands on the ordinary "parsed" status -- exactly the
+    # outcome email_import_service._append_email_content_graph already
+    # builds a content graph record for on a cleanly-first-parsed attachment.
+    # apply_reparsed_result must do the same on this path, or a reparsed
+    # attachment stays invisible to content-graph-backed search/AI-hub
+    # features even after successful recognition.
+    attachment = _reparse_pending_attachment(
+        content_type="text/plain",
+        payload=b"Meeting notes\n\nDiscuss the roadmap.",
+        filename="notes.txt",
+        email_id=42,
+        attachment_uid="attachment_notes-uid",
+    )
+
+    result = process_reparse_pending_attachment(attachment=attachment)
+
+    assert result == "parsed"
+    assert attachment.parse_status == "parsed"
+    assert [node.node_kind for node in attachment.content_nodes] == [
+        "document",
+        "paragraph",
+        "paragraph",
+    ]
+    assert [
+        segment.safe_text_content for segment in attachment.content_segments
+    ] == ["Meeting notes", "Discuss the roadmap."]
+    assert {node.source_kind for node in attachment.content_nodes} == {"attachment"}
+    assert {segment.source_kind for segment in attachment.content_segments} == {
+        "attachment"
+    }
+    expected_source_record_uid = content_graph_source_record_uid(
+        "attachment", "attachment_notes-uid"
+    )
+    assert {node.source_record_uid for node in attachment.content_nodes} == {
+        expected_source_record_uid
+    }
+    assert {node.email_id for node in attachment.content_nodes} == {42}
+    assert {segment.email_id for segment in attachment.content_segments} == {42}
+    # Every segment is linked back to its parent node's own segments list too
+    # (the same node<->segment wiring _append_parse_result_records builds).
+    assert sum(len(node.segments) for node in attachment.content_nodes) == 2
+
+
+def test_reparse_that_lands_on_parsed_with_blank_content_does_not_index_content_graph():
+    # A reparse can land on "parsed" with nothing displayable (an empty or
+    # whitespace-only retained payload) -- parse_email_attachment does not
+    # special-case that. Indexing an empty content graph record for it would
+    # be pure noise, so this must be skipped exactly like
+    # _append_email_content_graph skips a blank attachment on import.
+    attachment = _reparse_pending_attachment(
+        content_type="text/plain",
+        payload=b"   ",
+        filename="blank.txt",
+        email_id=42,
+    )
+
+    result = process_reparse_pending_attachment(attachment=attachment)
+
+    assert result == "parsed"
+    assert attachment.content_nodes == []
+    assert attachment.content_segments == []
+
+
+def test_reparse_that_does_not_land_on_parsed_does_not_index_content_graph():
+    attachment = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"real png bytes",
+        filename="invoice.pdf",
+        email_id=42,
+    )
+
+    result = process_reparse_pending_attachment(attachment=attachment)
+
+    assert result == _QUARANTINED_STATUS
+    assert attachment.content_nodes == []
+    assert attachment.content_segments == []
 
 
 class _RowsResult:

@@ -30,7 +30,11 @@ from services.batch_embedding_service import (
     BatchEmbeddingPartial,
     try_batch_import_embeddings,
 )
-from services.content_graph import ParseResult, parse_content
+from services.content_graph import (
+    ParseResult,
+    content_graph_source_record_uid,
+    parse_content,
+)
 from services.email_dedupe_service import strong_email_fingerprint
 from services.email_parser import EmailData, parse_eml_bytes
 from services.embedding import (
@@ -477,7 +481,7 @@ def _append_email_content_graph(
 ) -> None:
     body_parse_result = parse_content(
         source_kind="email_body",
-        source_record_uid=_content_graph_source_record_uid("email", message_id),
+        source_record_uid=content_graph_source_record_uid("email", message_id),
         content=str(parsed.get("body_parse_content") or parsed.get("body") or ""),
         content_type=str(parsed.get("body_content_type") or "text/plain"),
         display_name="Email body",
@@ -503,7 +507,7 @@ def _append_email_content_graph(
             continue
         attachment_parse_result = parse_content(
             source_kind="attachment",
-            source_record_uid=_content_graph_source_record_uid(
+            source_record_uid=content_graph_source_record_uid(
                 "attachment",
                 message_id,
                 str(attachment_index),
@@ -752,12 +756,6 @@ def _knowledge_graph_edge_uid(
     payload = "\x00".join((edge_kind, source_uid, target_uid, edge_path))
     digest = hashlib.sha256(payload.encode("utf-8", errors="surrogatepass")).hexdigest()
     return f"kgedge_{digest[:32]}"
-
-
-def _content_graph_source_record_uid(prefix: str, *parts: str) -> str:
-    payload = "\x00".join(str(part) for part in parts)
-    digest = hashlib.sha256(payload.encode("utf-8", errors="surrogatepass")).hexdigest()
-    return f"{prefix}:{digest[:32]}"
 
 
 def _project_source_segments(email_obj: Email) -> list[ProjectSourceSegment]:
