@@ -27,6 +27,7 @@ OWNER="${GITHUB_REPOSITORY%/*}"
 REPO="${GITHUB_REPOSITORY#*/}"
 BLOCKERS=()
 WAITING=()
+OPENCODE_FALLBACK_APPROVED=0
 PR_CHECKS_ERROR_FILE="$(mktemp)"
 ISSUE_COMMENTS_ERROR_FILE="$(mktemp)"
 REVIEW_COMMENTS_ERROR_FILE="$(mktemp)"
@@ -387,6 +388,7 @@ if [ "$CODERABBIT_COUNT" = "0" ]; then
     if [ "$OPENCODE_ADVERSARIAL_APPROVAL_COUNT" = "0" ]; then
       add_waiting "Waiting for current-head CodeRabbit evidence or a structured OpenCode App adversarial approval on ${HEAD_REF_OID}."
     else
+      OPENCODE_FALLBACK_APPROVED=1
       printf 'CodeRabbit check is absent; accepted current-head OpenCode App adversarial approval on %s.\n' "$HEAD_REF_OID"
     fi
   fi
@@ -467,7 +469,7 @@ else
   )"
   if [ "$CODERABBIT_ISSUE_BLOCKERS" != "0" ]; then
     add_blocker "Current-head CodeRabbit issue comment has blocking warning/failure evidence on ${HEAD_REF_OID}."
-  elif [ "$CODERABBIT_APPROVAL_PENDING_COUNT" != "0" ]; then
+  elif [ "$CODERABBIT_APPROVAL_PENDING_COUNT" != "0" ] && [ "$OPENCODE_FALLBACK_APPROVED" != "1" ]; then
     add_waiting "Waiting for CodeRabbit to review the latest commit on ${HEAD_REF_OID}."
   fi
 fi
