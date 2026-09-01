@@ -274,6 +274,39 @@ def test_execute_tool_rejects_missing_required_parameter():
     assert "Missing required tool parameter" in data["message"]
 
 
+def test_execute_tool_accepts_omitted_optional_parameter():
+    try:
+        registry.register(
+            ToolInfo(
+                code="optional_tool",
+                name="Optional Tool",
+                description="Test tool",
+                category="Test",
+                parameters={
+                    "required_value": "string",
+                    "optional_value": {"type": "string", "required": False},
+                },
+            ),
+            lambda params: params,
+        )
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/tools/optional_tool/execute",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                json={"parameters": {"required_value": "kept"}},
+            )
+    finally:
+        registry.unregister("optional_tool")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "result": {"required_value": "kept"},
+        "message": "Execution successful",
+        "error_code": None,
+    }
+
+
 def test_execute_tool_no_parameters_accepted():
     try:
         registry.register(
@@ -520,13 +553,13 @@ def test_execute_json_formatter_preserves_number_lexemes():
     data = response.json()
     assert data["status"] == "success"
     assert data["result"]["formatted_json"] == (
-        '{\n'
+        "{\n"
         '  "precise": 0.12345678901234567890123456789,\n'
         '  "large": 1e+1000,\n'
         '  "nested": [\n'
-        '    900719925474099312345\n'
-        '  ]\n'
-        '}'
+        "    900719925474099312345\n"
+        "  ]\n"
+        "}"
     )
 
 
@@ -542,6 +575,7 @@ def test_execute_json_formatter_rejects_duplicate_keys():
     data = response.json()
     assert data["status"] == "failed"
     assert "Duplicate JSON object key" in data["message"]
+    assert data["error_code"] == "invalid_json"
 
 
 def test_execute_url_decoder_rejects_invalid_utf8_escape():
@@ -556,6 +590,7 @@ def test_execute_url_decoder_rejects_invalid_utf8_escape():
     data = response.json()
     assert data["status"] == "failed"
     assert "Invalid URL-encoded string" in data["message"]
+    assert data["error_code"] == "invalid_url_encoding"
 
 
 @pytest.mark.parametrize(
@@ -573,17 +608,14 @@ def test_utility_tools_reject_oversized_input(tool_code, parameter_name):
         response = client.post(
             f"/api/tools/{tool_code}/execute",
             headers={"Authorization": f"Bearer {_signed_session_token()}"},
-            json={
-                "parameters": {
-                    parameter_name: "x" * (MAX_TOOL_INPUT_CHARS + 1)
-                }
-            },
+            json={"parameters": {parameter_name: "x" * (MAX_TOOL_INPUT_CHARS + 1)}},
         )
 
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "failed"
     assert "maximum length" in data["message"]
+    assert data["error_code"] == "tool_parameter_too_long"
 
 
 @pytest.mark.asyncio
@@ -1294,6 +1326,7 @@ def test_execute_analysis_tool_rejects_oversized_text():
         "message": (
             f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
         ),
+        "error_code": "tool_execution_failed",
     }
 
 
@@ -1366,6 +1399,7 @@ def test_json_formatter_tool_rejects_non_standard_numbers(json_str: str) -> None
     data = response.json()
     assert data["status"] == "failed"
     assert "Invalid JSON string" in data["message"]
+    assert data["error_code"] == "invalid_json"
 
 
 def test_html_escape_tool_success() -> None:
