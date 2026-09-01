@@ -289,7 +289,7 @@ git commit -m "feat(email-writing): parse contextual review candidates"
   - `request_strength_preservation`;
   - `audience_pragmatics`;
   - `technical_precision`;
-  - `actionability_support`;
+  - `actionability`;
   - `explanation_quality`.
 - [ ] Make the required criterion subset depend on candidate type without changing IDs or anchors. A no-replacement diagnostic does not fabricate `replacement_correctness`; the policy schema declares which criteria are mandatory for each candidate kind.
 - [ ] Use explicit ordered categories and exact anchors. The initial category count remains an evaluation parameter until Task 14 ablation selects and publishes an approved value.
@@ -323,6 +323,7 @@ git commit -m "feat(email-writing): add independent fast-mlsirm Judge"
 
 - [ ] Define a strict JSON Schema for policy ID/version, status, creation/expiry, compatible Naruon/Inkspan/fast-mlsirm/orchestrator contracts, approved model/provider/rubric/language profiles, category count/anchors, mandatory criterion floors, posterior/score admission rules, adjudication conditions, calibration/DIF summary, dataset/provenance hashes, limitations, and rollback version.
 - [ ] Check in an integrity-bound `evaluation_only` policy that can exercise the pipeline but cannot emit user-facing diagnostics in production.
+- [ ] Require runtime admission to assert `publish_decision == "publish"`; `withhold` and `evaluation_only` artifacts remain audit/pipeline evidence only and cannot produce user-facing diagnostics.
 - [ ] Add a manifest containing the literal SHA-256 of every allowed policy artifact; reject modified, unknown, expired, future-dated, revoked, incompatible, or non-approved artifacts.
 - [ ] Implement outcomes:
 
@@ -376,7 +377,9 @@ context build
 - [ ] Incremental mode reviews the declared changed selector plus bounded authorized thread context; deep mode reviews the complete bounded draft and may use contextual-orchestrator `conduct` mode with decomposed reviewer roles.
 - [ ] Semantic escalation is based on structured Judge disagreement, policy uncertainty, missing context, preservation-criterion conflict, or approved compute policy. It is never triggered by lexical words or phrase counts.
 - [ ] Bound candidate count, Judge calls, concurrency, context bytes, draft bytes, orchestration steps, retries, total wall time, and cost/tokens by policy.
-- [ ] Use one database transaction for review session and admitted/withheld diagnostic metadata; roll back on persistence failure without returning unrecorded diagnostics.
+- [ ] Persist the session and admitted/withheld diagnostic metadata in the Task 3 feature-owned tables through one database transaction; apply the default 30-day expiry and owner-scoped deletion contract without storing raw content.
+- [ ] Roll back the evidence transaction on persistence failure without returning unrecorded diagnostics. The transaction failure returns a typed failure or abstention; it does not silently disable the feature or downgrade its schema.
+- [ ] Treat feature rollback as a separate, explicitly authorized operation: disable semantic review, delete dependent feature evidence, and downgrade only when the ADR rollback conditions are satisfied; never alter canonical email tables or mail content.
 - [ ] Return no raw candidate or Judge output. Return admitted diagnostics, non-mutating document guidance, limitations, abstentions, and redacted provenance only.
 - [ ] If one candidate fails, apply the policy's explicit atomicity rule. Do not silently drop failed candidates while claiming a complete review.
 - [ ] Ensure review cancellation closes provider requests, releases capacity limiters, and leaves a typed cancelled/abstained session rather than a running record.
@@ -557,6 +560,7 @@ git commit -m "feat(email-writing): connect guidance actions and evidence"
 - Create after passing evidence: `backend/policies/email_writing_judge_approved_v1.json`
 
 - [ ] Define a consented/de-identified or synthetic case schema with source context, recipient roles, draft, gold spans, categories, acceptable replacements, preservation constraints, annotator IDs, adjudication, and consequence severity.
+- [ ] Before calibration, publish the canonical `email_writing_policy_protocol_v1` with a SHA-256, fixed contrast-family splits of 60% calibration, 20% development, and 20% locked human-labeled holdout, a fixed `minimum_slice_sample_size` of 30 cases per prespecified slice, plus the literal publication gates: holdout macro-F1 >= 0.80, every mandatory preservation criterion >= 0.90, unsupported-claim rate <= 0.02, expected calibration error <= 0.05, and no prespecified slice below macro-F1 0.70 when its minimum sample size is met.
 - [ ] Include contrast families:
   - same words in quotation, neutral incident report, and direct rebuke;
   - same pragmatic issue expressed through unrelated paraphrases;
@@ -567,12 +571,14 @@ git commit -m "feat(email-writing): connect guidance actions and evidence"
   - terse but acceptable negative controls;
   - Korean, English, mixed-language, CJK, emoji, combining-mark, and hostile-Unicode cases.
 - [ ] Collect independent human annotations and report inter-rater agreement plus adjudicated disagreement. Human labels are reference evidence, not unquestioned truth.
+- [ ] Freeze the holdout manifest before any calibration or threshold selection; record calibration, development, locked-holdout, and protocol hashes in every result and keep the holdout read-only until the final publish/no-publish decision.
 - [ ] Measure issue/category precision, recall, macro-F1, span IoU/exactness, replacement correctness, intent/fact/actor/deadline/request-strength preservation, unsupported-claim rate, accepted-suggestion precision, Brier score, calibration error, and human ignore rate.
 - [ ] Use fast-mlsirm response matrices to analyze criterion/category behavior, item/rater effects where supported, reliability, prompt/model test-retest, category sparsity, category-count ablation, and DIF by language, recipient configuration, role/hierarchy, thread depth, document length, review mode, model, prompt, and time.
 - [ ] Compare single-model, separated candidate/Judge, and deeper multi-agent/adjudicator workflows with role-specific reasoning effort. Speed is recorded but does not override validity.
 - [ ] Use deterministic offline fixtures in required CI. Run live scheduled/manual evaluation with `NVIDIA_NIM_API_KEY`; do not expose the secret to pull-request code from untrusted forks and do not use `COPILOT_GITHUB_TOKEN`.
 - [ ] Fail the policy publication job when sample size, calibration, preservation, DIF, drift, or consequence thresholds are not met. Do not publish a policy merely because average accuracy is high.
 - [ ] Generate the approved policy artifact from measured outputs, review its literal values, add its SHA-256 to the manifest, and prove production rejects the earlier `evaluation_only` artifact for user-facing output.
+- [ ] Include `protocol_id`, `protocol_hash`, `calibration_split_hash`, `development_split_hash`, `locked_holdout_hash`, literal `minimum_slice_sample_size: 30`, literal thresholds, and `publish_decision` (`publish` or `withhold`) in the policy artifact. Freeze thresholds before reading locked-holdout labels; a run that tunes thresholds against that holdout is invalid for publication and requires a new locked holdout. Any protocol, split, threshold, or holdout change creates a new protocol version and a new run.
 - [ ] Store reports, response matrices, aggregate metrics, manifests, and source hashes without confidential raw company email.
 - [ ] Run:
 
