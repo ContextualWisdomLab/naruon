@@ -747,7 +747,20 @@ def test_schema_backfill_creates_connector_signal_events():
 async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
     engine = create_async_engine(settings.DATABASE_URL)
     try:
-        async with engine.begin() as conn:
+        conn = await engine.connect()
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+    try:
+        async with conn.begin():
             await conn.execute(
                 text(
                     "CREATE TEMP TABLE emails ("
@@ -764,17 +777,8 @@ async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
                 )
             )
             assert result.scalar_one() == "ix_emails_owner_date"
-    except (
-        ConnectionRefusedError,
-        OSError,
-        OperationalError,
-        asyncpg.CannotConnectNowError,
-        asyncpg.InvalidAuthorizationSpecificationError,
-        asyncpg.InvalidCatalogNameError,
-        asyncpg.InvalidPasswordError,
-    ):
-        pytest.skip("PostgreSQL smoke path unavailable")
     finally:
+        await conn.close()
         await engine.dispose()
 
 
