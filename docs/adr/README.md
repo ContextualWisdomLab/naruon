@@ -13,6 +13,7 @@ govern implementation.
 | [ADR-0002](0002-fitted-topic-artifact-consumption.md) | Conditionally consume only a versioned fitted topic artifact through a fail-closed adapter | Proposed | Target `PLANNED`; runtime `BLOCKED-UPSTREAM` |
 | [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md) | Keep statistical measurement separate from agenda generation | Proposed | Target and future capability `PLANNED`; no implementation authorization |
 | [ADR-0004](0004-status-weighted-calendar-conflicts.md) | Evaluate CalDAV VEVENT overlaps by occupying status; cancelled does not occupy | Accepted | `ACCEPTED-NARUON-POLICY`; advisory evaluate API only |
+| [ADR-0005](0005-inkspan-backed-llm-email-writing-guidance.md) | Compose Inkspan, contextual-orchestrator, and fast-mlsirm for LLM-native email guidance without lexical semantic fallback | Proposed | Design and TDD plan only; runtime remains unshipped |
 
 The complete topic-intelligence requirements, architecture, contract, UML,
 conceptual ERD, security, test, and operability graph is indexed at
@@ -20,11 +21,32 @@ conceptual ERD, security, test, and operability graph is indexed at
 Its [canonical digest inventory](../topic-intelligence/README.md#canonical-digest-inventory)
 is the single cross-document list for the planned adapter profile.
 
+## Decision discipline
+
+- **Proposed:** design and ownership boundaries are documented, but implementation
+  or operational acceptance evidence is incomplete.
+- **Accepted:** protected `develop` contains the governing implementation or
+  process and its tests, security evidence, documentation, and rollback contract
+  are current.
+- **Superseded:** retained for traceability but replaced by a later ADR.
+
+## Required ADR sections
+
+Every material ADR records context, alternatives, decision, consequences, failure
+and recovery, security and privacy, accessibility where applicable, compatibility
+and migration, verification, research or standards traceability, and rollback or
+supersession conditions.
+
 ## Change rule
 
-Create or update an ADR when a Naruon change adopts or declines an external service contract, introduces a new scientific/statistical inference contract, changes persistence or tenant authority, changes model/credential trust boundaries, or replaces a fail-closed product capability with a different production dependency. A Naruon ADR records Naruon's decision only; it cannot assign authority to, or accept a decision for, another service.
+Create or update an ADR when a Naruon change adopts or declines an external service
+contract, introduces a scientific or statistical inference contract, changes
+persistence or tenant authority, changes model or credential trust boundaries, or
+replaces a fail-closed product capability with a different production dependency.
+A Naruon ADR records Naruon's decision only; it cannot assign authority to, or
+accept a decision for, another service.
 
 Every implementing PR must keep the corresponding source, tests, doctoring,
-architecture/operability contract, and CHANGELOG maturity truthful. An active PR,
-accepted local policy, or proposed target must not be described as protected-
+architecture and operability contract, and CHANGELOG maturity truthful. An active
+PR, accepted local policy, or proposed target must not be described as protected-
 branch implementation before it is integrated and independently verified.
