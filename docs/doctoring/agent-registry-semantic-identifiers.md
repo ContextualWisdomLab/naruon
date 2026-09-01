@@ -14,13 +14,15 @@ Casing follows the implementation surface: JSON/Python use snake_case here. This
 
 **Value objects:** agent display identity (`agent_name`), runtime framework (`agent_framework`), executable entry point (`agent_entrypoint`), capability set (`agent_capabilities`), provider provenance (`provider_source`), and writeback safety posture.
 
-**Invariant:** the registry loader never requires callers to infer what a generic `name`, `framework`, `entrypoint`, `capabilities`, or `enabled` value refers to. The canonical organization-owned catalog uses the `agent_*` vocabulary, and the typed Python object exposes that same vocabulary.
+**Invariant:** the registry loader never requires new callers to infer what a generic `name`, `framework`, `entrypoint`, `capabilities`, or `enabled` value refers to. The canonical organization-owned catalog uses the `agent_*` vocabulary, and the typed Python object exposes that same vocabulary.
 
 ## Compatibility boundary
 
-Historical `registered_agents.json` entries using `name`, `framework`, `entrypoint`, `description`, `capabilities`, or `enabled` are accepted only by the loader's anti-corruption boundary. `_entry_value` maps a legacy key to its semantic equivalent, while `_canonical_raw_entry` removes those generic keys from the internal evidence mapping. New checked-in catalog data uses only the semantic keys.
+Historical `registered_agents.json` entries using `name`, `framework`, `entrypoint`, `description`, `capabilities`, or `enabled` are accepted only by the loader's anti-corruption boundary. `_entry_value` maps a legacy key to its semantic equivalent, while `_canonical_raw_entry` removes those generic keys from the authoritative internal `raw_entry` evidence mapping. New checked-in catalog data uses only the semantic keys.
 
-Read-only Python properties (`name`, `framework`, `entrypoint`, `description`, `capabilities`, `enabled`, `raw`) remain as bounded compatibility aliases for downstream package/submodule consumers. The authoritative dataclass fields are the semantic names, so new code does not depend on the compatibility surface.
+Read-only Python properties (`name`, `framework`, `entrypoint`, `description`, `capabilities`, `enabled`) remain bounded compatibility aliases for downstream package/submodule consumers. The historical `raw` property is also preserved, but it no longer aliases `raw_entry` directly: `_legacy_raw_entry` reconstructs the previous generic-key mapping from the semantic evidence so calls such as `agent.raw["name"]` and `agent.raw["entrypoint"]` remain compatible. This applies whether the loader received the new semantic JSON form or an older legacy JSON form. The authoritative dataclass field remains `raw_entry`, which never exposes the generic compatibility keys.
+
+This split keeps migration one-way and explicit: legacy inputs are canonicalized on ingress, organization-owned code reads semantic fields internally, and only the compatibility property reconstructs the historical raw shape on egress. No caller needs a flag-day migration, while new code has no reason to adopt the generic names.
 
 ## Persistence and operational impact
 
@@ -30,7 +32,7 @@ Malformed or missing registry files continue to fail closed to an empty registry
 
 ## Verification
 
-The focused registry tests require the canonical semantic attributes and checked-in semantic JSON keys. They also exercise the bounded legacy Python properties so downstream callers can migrate without a flag day. The RED commit preceded the production/config repair: the test required `agent_name`, `agent_framework`, `agent_entrypoint`, `agent_enabled`, `agent_capabilities`, and `raw_entry` while the exact branch still exposed only the legacy generic fields.
+The focused registry tests require the canonical semantic attributes and checked-in semantic JSON keys. They exercise the bounded legacy Python properties and explicitly verify that the old `raw` mapping contract is retained for both semantic and historical JSON input while `raw_entry` remains free of the generic names. The RED commit preceded the production/config repair, and a later reviewer-discovered compatibility regression received its own RED regression before the source repair.
 
 Fresh hosted checks on the final unchanged PR head remain the merge authority; predecessor or protected-base results do not transfer.
 
