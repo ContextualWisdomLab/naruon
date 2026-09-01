@@ -80,6 +80,7 @@ describe("SearchLayout product events", () => {
     root = null;
     container?.remove();
     container = null;
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     clearRecordedProductEvents();
   });
