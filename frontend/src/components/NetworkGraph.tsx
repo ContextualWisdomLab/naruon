@@ -407,6 +407,7 @@ export default function NetworkGraph() {
             )}
             <button
               type="button"
+              aria-label="첫 관계 보기"
               onClick={handleSelectFirstRelationship}
               disabled={!firstEdge}
               className={`rounded-md border border-primary/25 bg-background px-3 py-2 text-xs font-bold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 ${!firstEdge ? "pointer-events-none" : ""}`}

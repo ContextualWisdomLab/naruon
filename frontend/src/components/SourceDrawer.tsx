@@ -180,6 +180,7 @@ export function SourceDrawer({
           <button
             type="button"
             onClick={onClose}
+            aria-label="근거 원본 닫기"
             className="h-9 rounded-lg border border-border bg-card px-3 text-xs font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             닫기
