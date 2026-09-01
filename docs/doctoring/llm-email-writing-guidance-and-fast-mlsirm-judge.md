@@ -1,7 +1,8 @@
 # LLM email writing guidance and fast-mlsirm judge calibration
 
 **Status:** Proposed architecture evidence; no production accuracy or language-coverage claim is made.  
-**Date:** 2026-08-12
+**Date:** 2026-08-12  
+**Evidence refreshed:** 2026-09-01
 
 ## Purpose
 
@@ -9,9 +10,13 @@ This record supports Naruon's decision to use contextual LLM judgment for email 
 
 ## Current CWL implementation evidence
 
-`ContextualWisdomLab/fast-mlsirm` pull request #733 introduced a provider-neutral `ContextualOrchestratorJudge`, strict criterion-level JSON, explicit polytomous categories, runtime-derived acceptance, `LLMJudgeResult.to_irt_row()`, multi-item response-matrix validation, and a deliberate no-keyword/no-positional-repair boundary. All judge model calls are injected through contextual-orchestrator rather than bound to one provider.
+The current immutable `fast-mlsirm` GitHub release is [`v0.9.1`](https://github.com/ContextualWisdomLab/fast-mlsirm/releases/tag/v0.9.1), published 2026-08-26. The `v0.9.1` tag resolves to source commit `09f762ded35786dd1078222a4577ff09d649816f`. Its tagged package source exports the provider-neutral `ContextualOrchestratorJudge`, `JudgeCriterion`, `JudgeFormatError`, `LLMJudgeResult`, and `validate_irt_response_matrix`; package metadata declares version `0.9.1` and Python `>=3.12`. The GitHub release currently has no attached distributable assets.
 
-This is useful infrastructure, not proof that an email-writing rubric is valid. Naruon must still define the construct, criteria, category anchors, evaluation cases, language profiles, human reference process, calibration policy, and consequences of false positive or false negative guidance.
+That distinction is material. The released source contract is sufficient to retire the obsolete `v0.6.0` source-surface assumption, but it is not yet sufficient for Naruon runtime import. Before Naruon consumes `fast-mlsirm`, the dependency gate must verify an approved immutable distributable package source, exact artifact integrity hash, provenance back to source commit `09f762ded35786dd1078222a4577ff09d649816f`, Python 3.14 compatibility, and Naruon's immutable hash lock. Mutable branches, Git URLs, source copies, local stubs, and workspace paths are not acceptable production dependencies. Package-unavailable behavior must remain testable by dependency injection rather than by assuming the package is absent from the environment.
+
+The verified public surface includes strict criterion-level structured output, explicit dichotomous/polytomous category semantics, deterministic response-matrix validation, and provider-neutral contextual-orchestrator injection. This is useful infrastructure, not proof that an email-writing rubric is valid. Naruon must still define the construct, criteria, category anchors, evaluation cases, language profiles, human reference process, calibration policy, and consequences of false-positive or false-negative guidance.
+
+Inkspan is a separate immutable dependency gate. Its current immutable GitHub release is `v0.3.1`; that release does not contain the open writing-diagnostics stack. Naruon therefore must not consume Inkspan writing diagnostics from an open branch or Draft PR. Runtime integration waits for a released public package subpath with version, integrity, source provenance, browser/package compatibility, and the revision-bound diagnostic contract required by this design.
 
 ## Why keyword matching is rejected
 
@@ -132,6 +137,32 @@ Report, at minimum:
 - latency, token, cost, and orchestration-depth distributions.
 
 No overall “email danger” or “tone risk” score substitutes for the criterion results.
+
+### Pre-registered publication protocol
+
+Before calibration or threshold selection, the evaluation runner writes a
+canonical `email_writing_policy_protocol_v1` document and records its SHA-256.
+The split is fixed by contrast family, not by individual rows: 60% calibration,
+20% development, and a 20% human-labeled locked holdout. The holdout is read
+only until the final publish/no-publish decision and its case-manifest SHA-256 is
+stored beside the protocol hash. The initial publication gates are fixed in the
+protocol: holdout macro-F1 at least 0.80, every mandatory preservation criterion
+at least 0.90, unsupported-claim rate at most 0.02, expected calibration error
+at most 0.05, and no prespecified language/role/context slice with macro-F1
+below 0.70 when that slice has the preregistered minimum sample size.
+
+The preregistered `minimum_slice_sample_size` is 30 labeled cases per slice. A
+slice below that count is reported as underpowered rather than selectively
+excluded after seeing its result.
+
+The policy artifact must contain `protocol_id`, `protocol_hash`,
+`calibration_split_hash`, `development_split_hash`, `locked_holdout_hash`, the
+literal thresholds, and `publish_decision` (`publish` or `withhold`). Changing
+any split, threshold, or holdout requires a new protocol version and a new
+calibration run. Thresholds must be frozen before the locked-holdout labels are
+accessed. A run that tunes thresholds against the locked holdout is invalid for
+publication and requires a new locked holdout; it is not a publication
+decision.
 
 ## Multi-agent and compute allocation
 
