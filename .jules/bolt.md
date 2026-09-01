@@ -26,7 +26,6 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
-
 ## 2024-05-14 - Optimize SearchLayout O(N) Re-renders
 **Learning:** `SearchLayout` frequently re-renders due to loading/error states and event handlers. Evaluating `.find()` on a large array of search results during every render loop creates unnecessary O(N) overhead and blocks the main thread.
-**Action:** Wrap `.find()` lookups on state arrays in `useMemo` with the result array and selected identifier as dependencies so unrelated state changes preserve responsiveness.
+**Action:** Always wrap `.find()` lookups on state arrays within `useMemo` when they are inside components that handle frequent state changes, to preserve responsiveness.
