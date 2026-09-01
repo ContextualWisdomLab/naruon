@@ -1193,6 +1193,25 @@ async def test_keyword_extractor_handler():
     assert empty == {"keywords": [], "keyword_count": 0}
 
 
+
+@pytest.mark.asyncio
+async def test_email_address_extractor_handler():
+    from api.tools import email_address_extractor_handler
+
+    text = "Please contact me at John.Doe@example.com or support@example.com. For urgent matters, email john.doe@EXAMPLE.COM."
+    first = await email_address_extractor_handler({"text": text})
+    second = await email_address_extractor_handler({"text": text})
+
+    assert first == second
+    assert first == {
+        "emails": ["john.doe@example.com", "support@example.com"],
+        "count": 2,
+    }
+
+    empty = await email_address_extractor_handler({"text": "No emails here."})
+    assert empty == {"emails": [], "count": 0}
+
+
 def test_execute_analysis_tool_rejects_oversized_text():
     from api.tools import ANALYSIS_TEXT_MAX_CHARS
 

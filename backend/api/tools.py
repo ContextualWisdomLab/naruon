@@ -753,6 +753,34 @@ registry.register(
 )
 
 
+
+EMAIL_PATTERN = re.compile(
+    r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+"
+)
+
+async def email_address_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
+    text = params.get("text", "")
+    emails = EMAIL_PATTERN.findall(text)
+
+    unique_emails = []
+    for email in emails:
+        email_lower = email.lower()
+        if email_lower not in unique_emails:
+            unique_emails.append(email_lower)
+
+    return {"emails": unique_emails, "count": len(unique_emails)}
+
+registry.register(
+    ToolInfo(
+        code="email_address_extractor",
+        name="이메일 주소 추출기 (Email Address Extractor)",
+        description="텍스트 본문에서 이메일 주소를 찾아 중복을 제거하여 추출합니다.",
+        category="이메일 분석",
+        parameters={"text": "string"},
+    ),
+    email_address_extractor_handler,
+)
+
 async def uuid_v4_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
     return {"uuid": str(uuid.uuid4())}
 
