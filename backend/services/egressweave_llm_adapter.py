@@ -25,7 +25,11 @@ _build_egress_http_client = build_egress_http_client
 
 
 def _operator_allowed_hosts() -> frozenset[str]:
-    """Return normalized operator LLM host entries without granting wildcards."""
+    """Return normalized operator LLM host entries without granting wildcards.
+
+    Empty entries are discarded, case and trailing-dot differences are normalized,
+    and wildcard authority is deliberately left for the caller to reject fail-closed.
+    """
     return frozenset(
         item.strip().lower().rstrip(".")
         for item in settings.ALLOWED_LLM_BASE_URL_HOSTS.split(",")
@@ -67,7 +71,11 @@ def _custom_provider_authority(base_url: str) -> tuple[str, int]:
 
 
 def _policy_for_base_url(base_url: str | None) -> tuple[str, EgressPolicy, bool]:
-    """Return the effective URL, exact policy, and default-provider marker."""
+    """Return the effective URL, exact policy, and default-provider marker.
+
+    The OpenAI default remains caller-visible as an omitted base URL, while every
+    custom provider must first pass Naruon's exact operator-host authorization.
+    """
     if base_url is None or not base_url.strip():
         return (
             _OPENAI_DEFAULT_BASE_URL,
