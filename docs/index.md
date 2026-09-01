@@ -6,12 +6,12 @@ Naruon is an AI email workspace that connects mail, attachments, calendars, task
 
 ## Start here
 
-- [README and five-minute local path](../README.md)
-- [Architecture](architecture/)
+- [README and five-minute local path](https://github.com/ContextualWisdomLab/naruon/blob/develop/README.md)
+- [Architecture](architecture/naruon-product-spec.md)
 - [Architecture decisions](adr/README.md)
 - [Topic-intelligence documentation](topic-intelligence/README.md)
-- [Contributing](../CONTRIBUTING.md)
-- [Security policy](../SECURITY.md)
+- [Contributing](https://github.com/ContextualWisdomLab/naruon/blob/develop/CONTRIBUTING.md)
+- [Security policy](https://github.com/ContextualWisdomLab/naruon/blob/develop/SECURITY.md)
 
 ## Product boundary
 
@@ -21,7 +21,7 @@ The product combines a FastAPI backend and Next.js frontend with vector search, 
 
 ## Architecture at a glance
 
-The repository keeps product boundaries and technical decisions in versioned documentation. Start with the [architecture directory](architecture/) for system structure and the [ADR index](adr/README.md) for durable decisions. The README records the current north-star scope and the local development path.
+The repository keeps product boundaries and technical decisions in versioned documentation. Start with the [north-star architecture](architecture/naruon-product-spec.md) for system structure and the [ADR index](adr/README.md) for durable decisions. The README records the current north-star scope and the local development path.
 
 ## Releases
 
