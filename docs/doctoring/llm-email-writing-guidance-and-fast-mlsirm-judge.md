@@ -16,7 +16,7 @@ That distinction is material. The released source contract is sufficient to reti
 
 The verified public surface includes strict criterion-level structured output, explicit dichotomous/polytomous category semantics, deterministic response-matrix validation, and provider-neutral contextual-orchestrator injection. This is useful infrastructure, not proof that an email-writing rubric is valid. Naruon must still define the construct, criteria, category anchors, evaluation cases, language profiles, human reference process, calibration policy, and consequences of false-positive or false-negative guidance.
 
-Inkspan is a separate immutable dependency gate. Its current immutable GitHub release is `v0.3.1`; that release does not contain the open writing-diagnostics stack. Naruon therefore must not consume Inkspan writing diagnostics from an open branch or Draft PR. Runtime integration waits for a released public package subpath with version, integrity, source provenance, browser/package compatibility, and the revision-bound diagnostic contract required by this design.
+Inkspan is a separate immutable dependency gate. The current immutable release is [`v0.3.1`](https://github.com/ContextualWisdomLab/inkspan/releases/tag/v0.3.1) from `ContextualWisdomLab/inkspan`; tag `v0.3.1` resolves to source commit `67afc7099cc0e5711a9cc9476bf3be5bb820e229`, and the tagged npm manifest identifies `@contextualwisdomlab/cwl-editor` version `0.3.1`. The GitHub release contains no attached assets, so there is no release-asset SHA-256 to record or invent. Its public exports cover the editor root, collaboration, converter, styles, and fonts but not a `writing-diagnostics` subpath. Naruon therefore must not consume the open writing-diagnostics stack from a branch or Draft PR. Runtime integration waits for a future immutable package artifact that exposes the required writing-diagnostics public subpath and supplies registry/tarball integrity, source provenance, browser/package compatibility, and the revision-bound diagnostic contract required by this design.
 
 ## Why keyword matching is rejected
 
@@ -155,14 +155,52 @@ The preregistered `minimum_slice_sample_size` is 30 labeled cases per slice. A
 slice below that count is reported as underpowered rather than selectively
 excluded after seeing its result.
 
+The same protocol preregisters three additional release-risk gates before any
+locked-holdout labels are accessed:
+
+- **DIF/fairness:** `maximum_large_dif_flags = 0`. A “large” flag must come from
+  the exact released fast-mlsirm DIF estimator and its method-specific,
+  preregistered effect-size classification. The protocol also caps the absolute
+  macro-F1 gap between every supported prespecified slice and the pooled
+  holdout at `0.10`, and the absolute mandatory-preservation-rate gap at `0.05`.
+  If the released estimator cannot produce a compatible effect-size
+  classification for a requested profile, that profile is withheld rather than
+  declared DIF-clean.
+- **Temporal drift:** relative to the last published baseline on the same frozen
+  recurrent benchmark, macro-F1 may fall by at most `0.05` and expected
+  calibration error may increase by at most `0.02`. Crossing either bound
+  withholds the affected profile pending a new preregistered evaluation.
+- **Critical consequences:** for cases whose adjudicated reference marks a
+  fact/actor/deadline/request-strength distortion as critical,
+  `maximum_observed_critical_consequence_errors = 0` and the one-sided 95%
+  exact-binomial upper confidence bound for the critical-consequence error rate
+  must be at most `0.05`. An underpowered critical-consequence set therefore
+  withholds publication rather than converting zero observed errors into a
+  safety claim.
+
+These numeric cutoffs are conservative Naruon product-admission tolerances, not
+universal psychometric, fairness, or AI-safety constants. The AERA/APA/NCME
+Standards support intended-use, fairness, reliability, and consequence evidence;
+DIF literature supports combining statistical evidence with effect magnitude;
+and NIST AI RMF guidance supports comparing production behavior with
+pre-deployment metrics and monitoring drift. None of those sources mandates
+these particular Naruon cutoffs. Any threshold change requires a new protocol
+version before the new locked holdout is opened.
+
 The policy artifact must contain `protocol_id`, `protocol_hash`,
-`calibration_split_hash`, `development_split_hash`, `locked_holdout_hash`, the
-literal thresholds, and `publish_decision` (`publish` or `withhold`). Changing
-any split, threshold, or holdout requires a new protocol version and a new
-calibration run. Thresholds must be frozen before the locked-holdout labels are
-accessed. A run that tunes thresholds against the locked holdout is invalid for
-publication and requires a new locked holdout; it is not a publication
-decision.
+`calibration_split_hash`, `development_split_hash`, `locked_holdout_hash`,
+literal `minimum_slice_sample_size: 30`, every literal publication threshold and
+decision rule above, a lifecycle `status`, and `publish_decision` (`publish` or
+`withhold`). An `evaluation_only` artifact is represented as
+`status: evaluation_only` plus `publish_decision: withhold`; the two fields are
+orthogonal and the combination is enforced by schema. Every artifact consumer
+must have access to the immutable protocol identified by `protocol_hash` and
+must reject an artifact whose duplicated literal values disagree with that
+protocol. Changing any split, threshold, protocol, or holdout requires a new
+protocol version and a new calibration run. Thresholds must be frozen before
+the locked-holdout labels are accessed. A run that tunes thresholds against the
+locked holdout is invalid for publication and requires a new locked holdout; it
+is not a publication decision.
 
 ## Multi-agent and compute allocation
 
@@ -198,6 +236,7 @@ This design does not assert that every provider satisfies those requirements. Te
 ## Standards and governance alignment
 
 - **NIST AI 600-1** supports lifecycle risk identification, evaluation, monitoring, and governance for generative AI systems.
+- **NIST AI 100-1** supports use-case-specific measurement and ongoing comparison of deployed behavior with pre-deployment evidence rather than universal thresholds.
 - **ISO/IEC 23894:2023** provides AI risk-management guidance.
 - **ISO/IEC 42001:2023** establishes an AI management-system framework for responsible development and use.
 - **W3C Web Annotation Data Model** defines `TextPositionSelector` semantics and resource-change limitations.
@@ -211,6 +250,8 @@ Autio, C., Schwartz, R., Dunietz, J., Jain, S., Stanley, M., Tabassi, E., Hall, 
 
 Chen, H., & Goldfarb-Tarrant, S. (2025). Safer or luckier? LLMs as safety evaluators are not robust to artifacts. In *Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)* (pp. 19750–19766). Association for Computational Linguistics. https://doi.org/10.18653/v1/2025.acl-long.970
 
+Gómez-Benito, J., Hidalgo, M. D., & Zumbo, B. D. (2013). Effectiveness of combining statistical tests and effect sizes when using logistic discriminant function regression to detect differential item functioning for polytomous items. *Educational and Psychological Measurement, 73*(5), 875–897. https://doi.org/10.1177/0013164413492419
+
 Fu, X., & Liu, W. (2025). How reliable is multilingual LLM-as-a-Judge? In *Findings of the Association for Computational Linguistics: EMNLP 2025*. Association for Computational Linguistics. https://aclanthology.org/2025.findings-emnlp.587/
 
 International Organization for Standardization. (2023a). *Information technology—Artificial intelligence—Guidance on risk management* (ISO/IEC Standard No. 23894:2023). https://www.iso.org/standard/77304.html
@@ -223,6 +264,8 @@ Liu, Y., Iter, D., Xu, Y., Wang, S., Xu, R., & Zhu, C. (2023). G-Eval: NLG evalu
 
 Shen, C., Cheng, L., Nguyen, X.-P., You, Y., & Bing, L. (2023). Large language models are not yet human-level evaluators for abstractive summarization. In *Findings of the Association for Computational Linguistics: EMNLP 2023* (pp. 4215–4233). Association for Computational Linguistics. https://doi.org/10.18653/v1/2023.findings-emnlp.278
 
+Tabassi, E. (2023). *Artificial intelligence risk management framework (AI RMF 1.0)* (NIST AI 100-1). National Institute of Standards and Technology. https://doi.org/10.6028/NIST.AI.100-1
+
 Usami, H., Hara, K., Tsuboi, A., & Matsuda, N. (2026). *LLM judges have dark current: A psychometric datasheet for LLM-as-a-Judge evaluation* [Preprint]. arXiv. https://arxiv.org/abs/2606.15610
 
 Wang, P., Li, L., Chen, L., Cai, Z., Zhu, D., Lin, B., Cao, Y., Kong, L., Liu, Q., Liu, T., & Sui, Z. (2024). Large language models are not fair evaluators. In *Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)* (pp. 9440–9450). Association for Computational Linguistics. https://doi.org/10.18653/v1/2024.acl-long.511
@@ -233,4 +276,4 @@ Zheng, L., Chiang, W.-L., Sheng, Y., Zhuang, S., Wu, Z., Zhuang, Y., Lin, Z., Li
 
 ## Claim boundary
 
-The cited evidence supports structured, bias-aware, calibrated LLM evaluation and revision-bound editor integrity. It does not prove that the planned Naruon rubric, model, provider, language profile, or fast-mlsirm configuration is sufficiently valid. Those claims require the benchmark, ablation, DIF, drift, security, privacy, and user-consequence evidence defined in the design.
+The cited evidence supports structured, bias-aware, calibrated LLM evaluation and revision-bound editor integrity. It does not prove that the planned Naruon rubric, model, provider, language profile, or fast-mlsirm configuration is sufficiently valid. The numeric admission thresholds above are product policy, not literature-derived universal constants. Product validity claims require the benchmark, ablation, DIF, drift, security, privacy, and user-consequence evidence defined in the design.
