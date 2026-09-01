@@ -1,47 +1,63 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from db.session import get_db
-from db.models import Email
-from api.auth import AuthContext, get_auth_context
 import re
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.auth import AuthContext, get_auth_context
+from db.models import Email
+from db.session import get_db
 
 router = APIRouter(prefix="/api/network")
 
 
-class Node(BaseModel):
-    id: str
-    label: str
+class NetworkGraphNode(BaseModel):
+    """One email-identity node in the organization communication graph."""
+
+    node_id: str = Field(alias="id")
+    node_label: str = Field(alias="label")
+
+    model_config = {"populate_by_name": True}
 
 
-class Edge(BaseModel):
-    source: str
-    target: str
-    weight: int
+class NetworkGraphEdge(BaseModel):
+    """One directed sender-to-recipient relationship in the network graph."""
+
+    source_node_id: str = Field(alias="source")
+    target_node_id: str = Field(alias="target")
+    edge_weight: int = Field(alias="weight")
+
+    model_config = {"populate_by_name": True}
 
 
-class GraphResponse(BaseModel):
-    nodes: list[Node]
-    edges: list[Edge]
+class NetworkGraphResponse(BaseModel):
+    """Network graph payload with semantic internal names and stable wire aliases."""
+
+    network_nodes: list[NetworkGraphNode] = Field(alias="nodes")
+    network_edges: list[NetworkGraphEdge] = Field(alias="edges")
+
+    model_config = {"populate_by_name": True}
 
 
 EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 
 
 def extract_emails(text: str | None) -> list[str]:
+    """Extract email addresses from one sender or recipient text value."""
     if not text:
         return []
     return EMAIL_PATTERN.findall(text)
 
 
-@router.get("/graph", response_model=GraphResponse)
+@router.get("/graph", response_model=NetworkGraphResponse)
 async def get_network_graph(
-    limit: int = Query(default=500, ge=1, le=2000),
+    email_record_limit: int = Query(default=500, ge=1, le=2000, alias="limit"),
     user_id: str | None = None,
     db: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(get_auth_context),
 ):
+    """Return the caller-scoped email communication graph without changing wire keys."""
     current_user = auth_context.user_id
     if user_id and user_id != current_user:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -55,7 +71,7 @@ async def get_network_graph(
     result = await db.execute(
         select(Email.sender, Email.recipients)
         .where(Email.user_id == target_user_id, organization_filter)
-        .limit(limit)
+        .limit(email_record_limit)
     )
     rows = result.fetchall()
 
@@ -87,10 +103,19 @@ async def get_network_graph(
                             edge_key = (sender_email, rec_email)
                             edges_dict[edge_key] = edges_get(edge_key, 0) + 1
 
-    nodes = [Node(id=email, label=email) for email in nodes_set]
-    edges = [
-        Edge(source=src, target=tgt, weight=weight)
-        for (src, tgt), weight in edges_dict.items()
+    network_nodes = [
+        NetworkGraphNode(node_id=email, node_label=email) for email in nodes_set
+    ]
+    network_edges = [
+        NetworkGraphEdge(
+            source_node_id=source_email,
+            target_node_id=target_email,
+            edge_weight=edge_weight,
+        )
+        for (source_email, target_email), edge_weight in edges_dict.items()
     ]
 
-    return GraphResponse(nodes=nodes, edges=edges)
+    return NetworkGraphResponse(
+        network_nodes=network_nodes,
+        network_edges=network_edges,
+    )
