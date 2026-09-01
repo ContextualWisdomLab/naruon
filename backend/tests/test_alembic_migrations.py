@@ -35,6 +35,18 @@ def test_initial_alembic_revision_records_current_schema_path():
     assert "execute_schema_backfill" in revision_text
 
 
+def test_email_read_state_legacy_table_guard_is_reversible():
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    )
+    revision_text = revision_path.read_text()
+
+    assert revision_text.count('has_table("emails")') == 2
+    assert revision_text.count("return") == 2
+    assert 'op.add_column(\n        "emails"' in revision_text
+    assert 'op.drop_column("emails", "is_read")' in revision_text
+
+
 def test_provider_writeback_retry_queue_has_incremental_revision():
     versions_dir = BACKEND_ROOT / "alembic" / "versions"
     revision_path = versions_dir / "0002_provider_writeback_retry_queue.py"

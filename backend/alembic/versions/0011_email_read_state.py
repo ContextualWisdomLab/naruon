@@ -32,4 +32,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not sa.inspect(op.get_bind()).has_table("emails"):
+        return
     op.drop_column("emails", "is_read")
