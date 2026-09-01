@@ -49,7 +49,7 @@ Merge evidence belongs to one immutable PR head SHA.
 - A success from an earlier commit, base branch, merge simulation, or sibling PR is not evidence for the current head.
 - A new push invalidates predecessor-head evidence and starts a new evidence cycle.
 - Queued, pending, requested, waiting, or in-progress checks are wait states, not successes and not automatically defects.
-- Failed, cancelled, timed-out, action-required, unknown, or unverifiable required states fail closed.
+- Failed, cancelled, timed-out, action-required, unknown, unverifiable, `Fatal`, `Warn`, `Denied`, or explicit `Timeout` required states fail closed.
 - Review comments and requested changes must be resolved or superseded on the current diff.
 - Before a merge action, re-read live rulesets, current head, required contexts, reviews, and unresolved threads.
 
