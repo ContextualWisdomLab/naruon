@@ -1,6 +1,7 @@
-"""Semantic naming contracts for Naruon's ticket-task API models."""
+"""Semantic naming contracts for Naruon's ticket-task API and service models."""
 
 import datetime
+from dataclasses import fields
 
 from api.tasks import (
     CreateTasksFromEmailRequest,
@@ -10,6 +11,10 @@ from api.tasks import (
     ReplySlaPolicyResponse,
     TicketTaskResponse,
     UpdateTicketTaskRequest,
+)
+from services.reply_sla_escalation_service import (
+    ReplySlaEscalatedTask,
+    ReplySlaEscalationResult,
 )
 
 
@@ -59,6 +64,19 @@ def test_ticket_task_models_use_semantically_specific_internal_fields() -> None:
 
     assert {"task_status", "task_priority"} <= set(UpdateTicketTaskRequest.model_fields)
     assert {"status", "priority"}.isdisjoint(UpdateTicketTaskRequest.model_fields)
+
+
+def test_reply_sla_service_results_use_ticket_task_domain_names() -> None:
+    """Keep generic result vocabulary out of the service-owned domain seam."""
+    escalated_task_fields = {field.name for field in fields(ReplySlaEscalatedTask)}
+    escalation_result_fields = {field.name for field in fields(ReplySlaEscalationResult)}
+
+    assert "ticket_task" in escalated_task_fields
+    assert "task" not in escalated_task_fields
+    assert {"evaluated_email_count", "created_task_count", "ticket_tasks"} <= (
+        escalation_result_fields
+    )
+    assert {"evaluated", "created", "tasks"}.isdisjoint(escalation_result_fields)
 
 
 def test_ticket_task_models_preserve_established_wire_keys_through_aliases() -> None:
