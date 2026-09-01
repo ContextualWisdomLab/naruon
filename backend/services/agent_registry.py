@@ -42,48 +42,148 @@ _SEMANTIC_RAW_TO_LEGACY = {
 _MISSING_POP_DEFAULT = object()
 
 
+class _SemanticRawDict(dict[str, Any]):
+    """Semantic evidence dictionary synchronized with one legacy dictionary.
+
+    ``raw_entry`` is the canonical organization-owned mapping, so generic legacy
+    keys are rejected here. Direct semantic mutations remain supported because
+    the field is a public dictionary; each mutation synchronizes the retained
+    compatibility dictionary without reintroducing generic keys into semantic
+    evidence.
+    """
+
+    def __init__(self, semantic_entries: dict[str, Any]) -> None:
+        self._legacy_raw_dict: _LegacyRawDict | None = None
+        super().__init__(semantic_entries)
+
+    def bind_legacy_raw_dict(self, legacy_raw_dict: _LegacyRawDict) -> None:
+        """Bind the one compatibility dictionary owned by the registered agent."""
+        self._legacy_raw_dict = legacy_raw_dict
+
+    def set_from_legacy(self, semantic_key: str, semantic_value: Any) -> None:
+        """Write semantic evidence without recursively notifying the legacy side."""
+        dict.__setitem__(self, semantic_key, semantic_value)
+
+    def delete_from_legacy(self, semantic_key: str) -> None:
+        """Delete semantic evidence without recursively notifying the legacy side."""
+        dict.__delitem__(self, semantic_key)
+
+    def clear_from_legacy(self) -> None:
+        """Clear semantic evidence without recursively notifying the legacy side."""
+        dict.clear(self)
+
+    def __setitem__(self, semantic_key: str, semantic_value: Any) -> None:
+        if semantic_key in _LEGACY_RAW_TO_SEMANTIC:
+            raise KeyError(
+                f"{semantic_key!r} is legacy-only; use its semantic agent_* key "
+                "through raw_entry"
+            )
+        dict.__setitem__(self, semantic_key, semantic_value)
+        if self._legacy_raw_dict is not None:
+            self._legacy_raw_dict.sync_semantic_set(semantic_key, semantic_value)
+
+    def __delitem__(self, semantic_key: str) -> None:
+        if semantic_key in _LEGACY_RAW_TO_SEMANTIC:
+            raise KeyError(semantic_key)
+        dict.__delitem__(self, semantic_key)
+        if self._legacy_raw_dict is not None:
+            self._legacy_raw_dict.sync_semantic_delete(semantic_key)
+
+    def update(self, *update_sources: Any, **update_values: Any) -> None:
+        """Apply a normal dict update while synchronizing legacy compatibility."""
+        incoming_entries = dict(*update_sources, **update_values)
+        for semantic_key, semantic_value in incoming_entries.items():
+            self[semantic_key] = semantic_value
+
+    def setdefault(self, semantic_key: str, default_value: Any = None) -> Any:
+        """Return or insert one semantic key while synchronizing compatibility."""
+        if semantic_key in self:
+            return self[semantic_key]
+        self[semantic_key] = default_value
+        return default_value
+
+    def pop(self, semantic_key: str, default_value: Any = _MISSING_POP_DEFAULT) -> Any:
+        """Remove one semantic key while preserving normal ``dict.pop`` behavior."""
+        if semantic_key in self:
+            semantic_value = self[semantic_key]
+            del self[semantic_key]
+            return semantic_value
+        if default_value is _MISSING_POP_DEFAULT:
+            raise KeyError(semantic_key)
+        return default_value
+
+    def popitem(self) -> tuple[str, Any]:
+        """Remove the newest semantic item and synchronize compatibility."""
+        if not self:
+            raise KeyError("popitem(): dictionary is empty")
+        semantic_key = next(reversed(self))
+        return semantic_key, self.pop(semantic_key)
+
+    def clear(self) -> None:
+        """Clear both semantic evidence and its retained compatibility dictionary."""
+        dict.clear(self)
+        if self._legacy_raw_dict is not None:
+            self._legacy_raw_dict.clear_from_semantic()
+
+    def __ior__(self, other_mapping: Any) -> _SemanticRawDict:
+        """Apply in-place dict union while synchronizing compatibility."""
+        self.update(other_mapping)
+        return self
+
+
 class _LegacyRawDict(dict[str, Any]):
     """Legacy ``dict`` contract backed by authoritative semantic registry evidence.
 
-    Historical callers received an actual mutable dictionary from
-    ``RegisteredAgent.raw`` and may therefore rely on JSON serialization, dict
-    union, ``isinstance(..., dict)``, and the full mutation API. This bounded
-    compatibility adapter keeps a legacy-shaped shallow dictionary for those
-    operations while writing every mutation through to semantic ``raw_entry``.
-    Nested values intentionally retain shallow aliasing, matching the historical
-    dictionary behavior.
+    Historical callers received one actual mutable dictionary from
+    ``RegisteredAgent.raw`` and may retain that reference, serialize it, perform
+    dict union, and use the full mutation API. This bounded compatibility adapter
+    stays a real shallow dictionary while every mutation writes through to the
+    paired semantic ``raw_entry`` mapping.
     """
 
-    def __init__(self, raw_entry: dict[str, Any]) -> None:
+    def __init__(self, raw_entry: _SemanticRawDict) -> None:
         self._raw_entry = raw_entry
         legacy_entries = {
             _SEMANTIC_RAW_TO_LEGACY.get(raw_key, raw_key): raw_value
             for raw_key, raw_value in raw_entry.items()
         }
         super().__init__(legacy_entries)
+        raw_entry.bind_legacy_raw_dict(self)
+
+    def sync_semantic_set(self, semantic_key: str, semantic_value: Any) -> None:
+        """Mirror one direct semantic mutation without writing it back recursively."""
+        legacy_key = _SEMANTIC_RAW_TO_LEGACY.get(semantic_key, semantic_key)
+        dict.__setitem__(self, legacy_key, semantic_value)
+
+    def sync_semantic_delete(self, semantic_key: str) -> None:
+        """Mirror one direct semantic deletion without writing it back recursively."""
+        legacy_key = _SEMANTIC_RAW_TO_LEGACY.get(semantic_key, semantic_key)
+        dict.__delitem__(self, legacy_key)
+
+    def clear_from_semantic(self) -> None:
+        """Mirror a direct semantic clear without recursively clearing evidence."""
+        dict.clear(self)
 
     def __setitem__(self, legacy_key: str, legacy_value: Any) -> None:
         semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
-        if semantic_key is not None:
-            self._raw_entry[semantic_key] = legacy_value
-        elif legacy_key in _SEMANTIC_RAW_TO_LEGACY:
+        if semantic_key is None and legacy_key in _SEMANTIC_RAW_TO_LEGACY:
             raise KeyError(
                 f"{legacy_key!r} is semantic-only in raw_entry; "
                 "mutate its historical alias through raw instead"
             )
-        else:
-            self._raw_entry[legacy_key] = legacy_value
-        super().__setitem__(legacy_key, legacy_value)
+        semantic_key = semantic_key or legacy_key
+        self._raw_entry.set_from_legacy(semantic_key, legacy_value)
+        dict.__setitem__(self, legacy_key, legacy_value)
 
     def __delitem__(self, legacy_key: str) -> None:
-        semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
-        if semantic_key is not None:
-            del self._raw_entry[semantic_key]
-        elif legacy_key in _SEMANTIC_RAW_TO_LEGACY:
+        if legacy_key not in self:
             raise KeyError(legacy_key)
-        else:
-            del self._raw_entry[legacy_key]
-        super().__delitem__(legacy_key)
+        semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
+        if semantic_key is None and legacy_key in _SEMANTIC_RAW_TO_LEGACY:
+            raise KeyError(legacy_key)
+        semantic_key = semantic_key or legacy_key
+        self._raw_entry.delete_from_legacy(semantic_key)
+        dict.__delitem__(self, legacy_key)
 
     def update(self, *update_sources: Any, **update_values: Any) -> None:
         """Apply a normal dict update while synchronizing semantic evidence."""
@@ -110,15 +210,15 @@ class _LegacyRawDict(dict[str, Any]):
 
     def popitem(self) -> tuple[str, Any]:
         """Remove the newest legacy item and synchronize semantic evidence."""
-        legacy_key, legacy_value = super().popitem()
-        semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key, legacy_key)
-        del self._raw_entry[semantic_key]
-        return legacy_key, legacy_value
+        if not self:
+            raise KeyError("popitem(): dictionary is empty")
+        legacy_key = next(reversed(self))
+        return legacy_key, self.pop(legacy_key)
 
     def clear(self) -> None:
         """Clear both compatibility and semantic registry evidence."""
-        super().clear()
-        self._raw_entry.clear()
+        self._raw_entry.clear_from_legacy()
+        dict.clear(self)
 
     def __ior__(self, other_mapping: Any) -> _LegacyRawDict:
         """Apply in-place dict union while synchronizing semantic evidence."""
@@ -152,6 +252,14 @@ class RegisteredAgent:
     degrades_gracefully: bool = False
     agent_enabled: bool = True
     raw_entry: dict[str, Any] = field(default_factory=dict)
+    _legacy_raw_dict: _LegacyRawDict = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        """Bind one coherent semantic/legacy dictionary pair for this agent."""
+        semantic_raw_entry = _SemanticRawDict(self.raw_entry)
+        legacy_raw_dict = _LegacyRawDict(semantic_raw_entry)
+        object.__setattr__(self, "raw_entry", semantic_raw_entry)
+        object.__setattr__(self, "_legacy_raw_dict", legacy_raw_dict)
 
     @property
     def name(self) -> str:
@@ -185,8 +293,8 @@ class RegisteredAgent:
 
     @property
     def raw(self) -> dict[str, Any]:
-        """Return a legacy-shaped dict synchronized with semantic ``raw_entry``."""
-        return _LegacyRawDict(self.raw_entry)
+        """Return this agent's stable legacy dictionary compatibility boundary."""
+        return self._legacy_raw_dict
 
 
 def _coerce_capabilities(capability_value: Any) -> tuple[str, ...]:
