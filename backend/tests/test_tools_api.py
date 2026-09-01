@@ -578,6 +578,25 @@ def test_execute_json_formatter_rejects_duplicate_keys():
     assert data["error_code"] == "invalid_json"
 
 
+def test_execute_json_formatter_serializes_unicode_and_lone_surrogates():
+    source = r'{"한글":"값","\ud800":"\udfff"}'
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/json_formatter/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"json_str": source}},
+        )
+
+    assert response.status_code == 200
+    formatted = response.json()["result"]["formatted_json"]
+    assert formatted.encode("utf-8")
+    assert json.loads(formatted) == json.loads(source)
+    assert "\\ud55c\\uae00" in formatted
+    assert "\\ud800" in formatted
+    assert "\\udfff" in formatted
+
+
 def test_execute_url_decoder_rejects_invalid_utf8_escape():
     with TestClient(app) as client:
         response = client.post(

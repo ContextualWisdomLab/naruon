@@ -893,7 +893,7 @@ def _format_json_value(value: Any, level: int = 0) -> str:
         if not value:
             return "{}"
         entries = [
-            f"{indent * (level + 1)}{json.dumps(key, ensure_ascii=False)}: "
+            f"{indent * (level + 1)}{json.dumps(key, ensure_ascii=True)}: "
             f"{_format_json_value(item, level + 1)}"
             for key, item in value.items()
         ]
@@ -906,7 +906,7 @@ def _format_json_value(value: Any, level: int = 0) -> str:
             for item in value
         ]
         return "[\n" + ",\n".join(entries) + f"\n{indent * level}]"
-    return json.dumps(value, ensure_ascii=False, allow_nan=False)
+    return json.dumps(value, ensure_ascii=True, allow_nan=False)
 
 
 async def json_formatter_handler(params: Dict[str, Any]) -> Dict[str, str]:
