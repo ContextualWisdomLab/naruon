@@ -143,13 +143,16 @@ No overall “email danger” or “tone risk” score substitutes for the crite
 Before calibration or threshold selection, the evaluation runner writes a
 canonical `email_writing_policy_protocol_v1` document and records its SHA-256.
 The split is fixed by contrast family, not by individual rows: 60% calibration,
-20% development, and a 20% human-labeled locked holdout. The holdout is read
-only until the final publish/no-publish decision and its case-manifest SHA-256 is
-stored beside the protocol hash. The initial publication gates are fixed in the
-protocol: holdout macro-F1 at least 0.80, every mandatory preservation criterion
-at least 0.90, unsupported-claim rate at most 0.02, expected calibration error
-at most 0.05, and no prespecified language/role/context slice with macro-F1
-below 0.70 when that slice has the preregistered minimum sample size.
+20% development, and a 20% human-labeled locked holdout. Locked-holdout labels
+remain sealed and inaccessible to calibration, development, threshold selection,
+and policy fitting; they are opened only for the preregistered final
+publish/no-publish evaluation after all thresholds and decision rules are frozen.
+The holdout case-manifest SHA-256 is stored beside the protocol hash before that
+label access. The initial publication gates are fixed in the protocol: holdout
+macro-F1 at least 0.80, every mandatory preservation criterion at least 0.90,
+unsupported-claim rate at most 0.02, expected calibration error at most 0.05,
+and no prespecified language/role/context slice with macro-F1 below 0.70 when
+that slice has the preregistered minimum sample size.
 
 The preregistered `minimum_slice_sample_size` is 30 labeled cases per slice. A
 slice below that count is reported as underpowered rather than selectively
