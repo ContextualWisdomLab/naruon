@@ -40,6 +40,25 @@ _SEMANTIC_RAW_TO_LEGACY = {
     for legacy_key, semantic_key in _LEGACY_RAW_TO_SEMANTIC.items()
 }
 _MISSING_POP_DEFAULT = object()
+_CONSTRUCTOR_UNSET = object()
+
+
+def _resolve_constructor_alias(
+    semantic_key: str,
+    semantic_value: Any,
+    legacy_value: Any,
+    default_value: Any,
+) -> Any:
+    """Resolve one semantic/legacy constructor pair and reject contradictions."""
+    semantic_supplied = semantic_value is not _CONSTRUCTOR_UNSET
+    legacy_supplied = legacy_value is not _CONSTRUCTOR_UNSET
+    if semantic_supplied and legacy_supplied and semantic_value != legacy_value:
+        raise ValueError(f"conflicting values supplied for {semantic_key}")
+    if semantic_supplied:
+        return semantic_value
+    if legacy_supplied:
+        return legacy_value
+    return default_value
 
 
 class _SemanticRawDict(dict[str, Any]):
@@ -230,14 +249,14 @@ class _LegacyRawDict(dict[str, Any]):
         return dict(self)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class RegisteredAgent:
     """A semantically named entry from ``registered_agents.json``.
 
     The ``agent_*`` attributes are the authoritative organization-owned Python
-    contract. Read-only legacy properties keep older package/submodule callers
-    working while the JSON loader translates historical generic keys at the
-    registry boundary.
+    contract. Historical constructor keywords and scalar properties remain a
+    bounded compatibility surface while the JSON loader translates generic keys
+    at the registry boundary.
     """
 
     agent_id: str
@@ -252,7 +271,95 @@ class RegisteredAgent:
     degrades_gracefully: bool = False
     agent_enabled: bool = True
     raw_entry: dict[str, Any] = field(default_factory=dict)
-    _legacy_raw_dict: _LegacyRawDict = field(init=False, repr=False, compare=False)
+
+    def __init__(
+        self,
+        agent_id: str,
+        agent_name: Any = _CONSTRUCTOR_UNSET,
+        agent_framework: Any = _CONSTRUCTOR_UNSET,
+        agent_entrypoint: Any = _CONSTRUCTOR_UNSET,
+        agent_description: Any = _CONSTRUCTOR_UNSET,
+        agent_capabilities: Any = _CONSTRUCTOR_UNSET,
+        provider_source: str = "",
+        writeback_opt_in: bool = False,
+        writeback_audit_logged: bool = False,
+        degrades_gracefully: bool = False,
+        agent_enabled: Any = _CONSTRUCTOR_UNSET,
+        raw_entry: Any = _CONSTRUCTOR_UNSET,
+        *,
+        name: Any = _CONSTRUCTOR_UNSET,
+        framework: Any = _CONSTRUCTOR_UNSET,
+        entrypoint: Any = _CONSTRUCTOR_UNSET,
+        description: Any = _CONSTRUCTOR_UNSET,
+        capabilities: Any = _CONSTRUCTOR_UNSET,
+        enabled: Any = _CONSTRUCTOR_UNSET,
+        raw: Any = _CONSTRUCTOR_UNSET,
+    ) -> None:
+        """Build an agent from semantic names or the bounded legacy vocabulary."""
+        resolved_name = _resolve_constructor_alias(
+            "agent_name", agent_name, name, _CONSTRUCTOR_UNSET
+        )
+        resolved_framework = _resolve_constructor_alias(
+            "agent_framework", agent_framework, framework, _CONSTRUCTOR_UNSET
+        )
+        resolved_entrypoint = _resolve_constructor_alias(
+            "agent_entrypoint", agent_entrypoint, entrypoint, _CONSTRUCTOR_UNSET
+        )
+        for required_key, required_value in (
+            ("agent_name", resolved_name),
+            ("agent_framework", resolved_framework),
+            ("agent_entrypoint", resolved_entrypoint),
+        ):
+            if required_value is _CONSTRUCTOR_UNSET:
+                raise TypeError(f"missing required argument: {required_key!r}")
+
+        resolved_description = _resolve_constructor_alias(
+            "agent_description", agent_description, description, ""
+        )
+        semantic_capabilities = (
+            tuple(agent_capabilities)
+            if agent_capabilities is not _CONSTRUCTOR_UNSET
+            else _CONSTRUCTOR_UNSET
+        )
+        legacy_capabilities = (
+            tuple(capabilities)
+            if capabilities is not _CONSTRUCTOR_UNSET
+            else _CONSTRUCTOR_UNSET
+        )
+        resolved_capabilities = _resolve_constructor_alias(
+            "agent_capabilities", semantic_capabilities, legacy_capabilities, ()
+        )
+        resolved_enabled = _resolve_constructor_alias(
+            "agent_enabled", agent_enabled, enabled, True
+        )
+
+        semantic_raw_entry = (
+            _canonical_raw_entry(dict(raw_entry))
+            if raw_entry is not _CONSTRUCTOR_UNSET
+            else _CONSTRUCTOR_UNSET
+        )
+        legacy_raw_entry = (
+            _canonical_raw_entry(dict(raw))
+            if raw is not _CONSTRUCTOR_UNSET
+            else _CONSTRUCTOR_UNSET
+        )
+        resolved_raw_entry = _resolve_constructor_alias(
+            "raw_entry", semantic_raw_entry, legacy_raw_entry, {}
+        )
+
+        object.__setattr__(self, "agent_id", agent_id)
+        object.__setattr__(self, "agent_name", resolved_name)
+        object.__setattr__(self, "agent_framework", resolved_framework)
+        object.__setattr__(self, "agent_entrypoint", resolved_entrypoint)
+        object.__setattr__(self, "agent_description", resolved_description)
+        object.__setattr__(self, "agent_capabilities", resolved_capabilities)
+        object.__setattr__(self, "provider_source", provider_source)
+        object.__setattr__(self, "writeback_opt_in", writeback_opt_in)
+        object.__setattr__(self, "writeback_audit_logged", writeback_audit_logged)
+        object.__setattr__(self, "degrades_gracefully", degrades_gracefully)
+        object.__setattr__(self, "agent_enabled", resolved_enabled)
+        object.__setattr__(self, "raw_entry", resolved_raw_entry)
+        self.__post_init__()
 
     def __post_init__(self) -> None:
         """Bind one coherent semantic/legacy dictionary pair for this agent."""
