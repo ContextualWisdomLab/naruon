@@ -179,3 +179,35 @@ async def test_downgrade_does_not_destroy_read_state_on_a_fresh_database(
     _run_downgrade(fresh_database_url, _PRE_READ_STATE_REVISION)
 
     assert await _column_exists(fresh_database_url, "email_records", "is_read") is True
+
+
+@pytest.mark.asyncio
+async def test_upgrade_head_repairs_a_database_already_stamped_past_0011(
+    fresh_database_url,
+):
+    """Alembic never re-runs a revision's upgrade() once that revision id is
+    recorded as applied -- editing 0011_email_read_state.py cannot repair a
+    database whose alembic_version history already includes it but is
+    missing is_read regardless (e.g. an earlier broken version of that
+    revision, a partial apply, manual intervention). 0019_email_read_state_
+    repair is the real fix: it must add the column even though the database
+    is already stamped through 0018 with 0011 long since applied, so only
+    0019 itself -- not a re-run of 0011 -- is what's left to bring it to
+    head."""
+    _run_migrations(fresh_database_url, revision="0018_workspace_registry")
+    assert await _column_exists(fresh_database_url, "email_records", "is_read") is True
+
+    engine = create_async_engine(fresh_database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("ALTER TABLE email_records DROP COLUMN IF EXISTS is_read")
+            )
+    finally:
+        await engine.dispose()
+
+    assert await _column_exists(fresh_database_url, "email_records", "is_read") is False
+
+    _run_migrations(fresh_database_url)
+
+    assert await _column_exists(fresh_database_url, "email_records", "is_read") is True
