@@ -1,47 +1,66 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from db.session import get_db
-from db.models import Email
-from api.auth import AuthContext, get_auth_context
 import re
+
+from api.auth import AuthContext, get_auth_context
+from db.models import Email
+from db.session import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/network")
 
 
-class Node(BaseModel):
-    id: str
-    label: str
+class NetworkGraphWireModel(BaseModel):
+    """Translate specific Naruon graph names to the established JSON wire keys."""
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
-class Edge(BaseModel):
-    source: str
-    target: str
-    weight: int
+class NetworkGraphNode(NetworkGraphWireModel):
+    """Represent one email-address node with bounded-context-specific names."""
+
+    node_id: str = Field(alias="id")
+    node_label: str = Field(alias="label")
 
 
-class GraphResponse(BaseModel):
-    nodes: list[Node]
-    edges: list[Edge]
+class NetworkGraphEdge(NetworkGraphWireModel):
+    """Represent one directed email relationship and its observed message count."""
+
+    source_node_id: str = Field(alias="source")
+    target_node_id: str = Field(alias="target")
+    message_count: int = Field(alias="weight")
+
+
+class NetworkGraphResponse(NetworkGraphWireModel):
+    """Return the network-graph collection without exposing generic internal names."""
+
+    network_nodes: list[NetworkGraphNode] = Field(alias="nodes")
+    network_edges: list[NetworkGraphEdge] = Field(alias="edges")
 
 
 EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 
 
-def extract_emails(text: str | None) -> list[str]:
-    if not text:
+def extract_emails(email_text: str | None) -> list[str]:
+    """Extract email addresses from one optional source string."""
+    if not email_text:
         return []
-    return EMAIL_PATTERN.findall(text)
+    return EMAIL_PATTERN.findall(email_text)
 
 
-@router.get("/graph", response_model=GraphResponse)
+@router.get(
+    "/graph",
+    response_model=NetworkGraphResponse,
+    response_model_by_alias=True,
+)
 async def get_network_graph(
-    limit: int = Query(default=500, ge=1, le=2000),
+    email_limit: int = Query(default=500, ge=1, le=2000, alias="limit"),
     user_id: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    database_session: AsyncSession = Depends(get_db),
     auth_context: AuthContext = Depends(get_auth_context),
-):
+) -> NetworkGraphResponse:
+    """Build the authenticated user's sender-recipient relationship graph."""
     current_user = auth_context.user_id
     if user_id and user_id != current_user:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -52,45 +71,57 @@ async def get_network_graph(
         else Email.organization_id.is_(None)
     )
 
-    result = await db.execute(
+    email_query_result = await database_session.execute(
         select(Email.sender, Email.recipients)
         .where(Email.user_id == target_user_id, organization_filter)
-        .limit(limit)
+        .limit(email_limit)
     )
-    rows = result.fetchall()
+    email_rows = email_query_result.fetchall()
 
-    nodes_set = set()
-    edges_dict = {}  # (sender, recipient) -> weight
+    network_node_emails: set[str] = set()
+    network_edge_counts: dict[tuple[str, str], int] = {}
 
-    nodes_add = nodes_set.add
-    edges_get = edges_dict.get
-    findall = EMAIL_PATTERN.findall
+    add_network_node = network_node_emails.add
+    get_network_edge_count = network_edge_counts.get
+    extract_email_addresses = EMAIL_PATTERN.findall
 
-    for row in rows:
-        sender_str = row[0]
-        recipients_str = row[1]
+    for email_row in email_rows:
+        sender_text = email_row[0]
+        recipient_text = email_row[1]
 
         sender_email = None
-        if sender_str:
-            senders = findall(sender_str.lower())
-            if senders:
-                sender_email = senders[0]
-                nodes_add(sender_email)
+        if sender_text:
+            sender_addresses = extract_email_addresses(sender_text.lower())
+            if sender_addresses:
+                sender_email = sender_addresses[0]
+                add_network_node(sender_email)
 
-        if recipients_str:
-            recipients = findall(recipients_str.lower())
-            if recipients:
-                nodes_set.update(recipients)
+        if recipient_text:
+            recipient_addresses = extract_email_addresses(recipient_text.lower())
+            if recipient_addresses:
+                network_node_emails.update(recipient_addresses)
                 if sender_email:
-                    for rec_email in recipients:
-                        if sender_email != rec_email:
-                            edge_key = (sender_email, rec_email)
-                            edges_dict[edge_key] = edges_get(edge_key, 0) + 1
+                    for recipient_email in recipient_addresses:
+                        if sender_email != recipient_email:
+                            network_edge_key = (sender_email, recipient_email)
+                            network_edge_counts[network_edge_key] = (
+                                get_network_edge_count(network_edge_key, 0) + 1
+                            )
 
-    nodes = [Node(id=email, label=email) for email in nodes_set]
-    edges = [
-        Edge(source=src, target=tgt, weight=weight)
-        for (src, tgt), weight in edges_dict.items()
+    network_nodes = [
+        NetworkGraphNode(node_id=email_address, node_label=email_address)
+        for email_address in network_node_emails
+    ]
+    network_edges = [
+        NetworkGraphEdge(
+            source_node_id=source_email,
+            target_node_id=target_email,
+            message_count=message_count,
+        )
+        for (source_email, target_email), message_count in network_edge_counts.items()
     ]
 
-    return GraphResponse(nodes=nodes, edges=edges)
+    return NetworkGraphResponse(
+        network_nodes=network_nodes,
+        network_edges=network_edges,
+    )
