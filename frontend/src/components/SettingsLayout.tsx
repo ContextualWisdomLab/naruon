@@ -525,6 +525,7 @@ export function SettingsLayout() {
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState('embeddinggemma');
   const [embeddingSaving, setEmbeddingSaving] = useState(false);
   const [oidcSessionClaims, setOidcSessionClaims] = useState<SessionClaims>(EMPTY_SESSION_CLAIMS);
+  const [oidcSessionLoading, setOidcSessionLoading] = useState(true);
   const [oidcActionError, setOidcActionError] = useState<string | null>(null);
   const smtpPasswordInputRef = useRef<HTMLInputElement>(null);
   const imapPasswordInputRef = useRef<HTMLInputElement>(null);
@@ -539,7 +540,24 @@ export function SettingsLayout() {
   const connectorEvents = operationalSignals?.connector.recent_events ?? [];
   const activeModelProvider = modelProviders.find((provider) => provider.is_active) ?? modelProviders[0] ?? null;
   const selectedEmbeddingProvider = modelProviders.find((provider) => provider.id === selectedEmbeddingProviderId) ?? activeModelProvider;
-  const accountReady = !accountLoading && !accountError && accountConfig !== null;
+  const accountReady = !accountLoading && accountConfig !== null;
+  const accountUnavailableReason = accountSaving
+    ? '계정 설정을 저장하는 중입니다.'
+    : accountLoading
+      ? '계정 설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.'
+      : accountConfig === null && accountError
+        ? '계정 설정을 불러오지 못했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요.'
+        : !accountReady
+          ? '계정 설정을 준비할 수 없습니다. 잠시 후 다시 시도하세요.'
+          : null;
+  const oidcLoginUnavailableReason = !oidcBrowserConfig
+    ? 'OIDC 로그인을 사용하려면 관리자에게 OIDC 설정을 요청하세요.'
+    : null;
+  const oidcLogoutUnavailableReason = oidcSessionLoading
+    ? '로그인 세션을 확인하는 중입니다. 잠시만 기다려 주세요.'
+    : !oidcSessionClaims.userId
+      ? '로그아웃하려면 먼저 로그인하세요.'
+      : null;
   const oauthAppConfigured = Boolean(
     accountConfig?.oauth_client_id
       && accountConfig?.oauth_redirect_uri
@@ -579,6 +597,7 @@ export function SettingsLayout() {
 
   const updateAccountField = (field: keyof AccountFormState, value: string) => {
     setAccountForm((current) => ({ ...current, [field]: value }));
+    setAccountError(null);
     setAccountStatus(null);
   };
 
@@ -610,7 +629,7 @@ export function SettingsLayout() {
 
   const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!accountReady) return;
+    if (accountSaving || !accountReady) return;
     setAccountSaving(true);
     setAccountError(null);
     setAccountStatus(null);
@@ -729,6 +748,9 @@ export function SettingsLayout() {
       })
       .catch(() => {
         if (!cancelled) setOidcSessionClaims(EMPTY_SESSION_CLAIMS);
+      })
+      .finally(() => {
+        if (!cancelled) setOidcSessionLoading(false);
       });
 
     void apiClient
@@ -1299,17 +1321,29 @@ export function SettingsLayout() {
                         빈 secret 입력은 기존 저장값을 유지합니다. 실제 연결과 외부 쓰기는 서버 검증과 self-hosted connector 정책을 통과한 뒤 별도 실행됩니다.
                       </p>
                     </div>
-                    <button
-                      type="submit"
-                      disabled={accountSaving || !accountReady}
-                      aria-disabled={accountSaving || !accountReady}
-                      aria-busy={accountSaving}
-                      title={accountSaving ? "저장 중입니다" : !accountReady ? "입력값이 부족합니다" : "계정 설정 저장"}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-                      {accountSaving ? '저장 중' : '계정 설정 저장'}
-                    </button>
+                    <div className="flex max-w-sm flex-col items-start gap-2 sm:items-end">
+                      <button
+                        type="submit"
+                        aria-disabled={accountSaving || !accountReady ? "true" : undefined}
+                        aria-describedby={accountSaving || !accountReady ? "account-save-availability" : undefined}
+                        aria-busy={accountSaving}
+                        onClick={(e) => {
+                          if (accountSaving || !accountReady) {
+                            e.preventDefault();
+                            return;
+                          }
+                        }}
+                        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-2 text-sm font-bold text-background transition-colors hover:bg-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${accountSaving || !accountReady ? "opacity-60 cursor-not-allowed" : ""}`}
+                      >
+                        {accountSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                        {accountSaving ? '저장 중' : '계정 설정 저장'}
+                      </button>
+                      {accountUnavailableReason ? (
+                        <p id="account-save-availability" className="text-xs font-semibold leading-5 text-muted-foreground">
+                          {accountUnavailableReason}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="mt-6 grid gap-5">
@@ -1613,25 +1647,51 @@ export function SettingsLayout() {
                         Keycloak/Casdoor OIDC 토큰을 브라우저 bearer 세션으로 연결합니다.
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleOidcLogin}
-                        disabled={!oidcBrowserConfig}
-                        title={!oidcBrowserConfig ? "OIDC 브라우저 설정이 없습니다" : "OIDC 로그인"}
-                        className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        OIDC 로그인
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleOidcLogout}
-                        disabled={!oidcSessionClaims.userId}
-                        title={!oidcSessionClaims.userId ? "로그인된 세션이 없습니다" : "로그아웃"}
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        로그아웃
-                      </button>
+                    <div className="flex flex-wrap items-start gap-3">
+                      <div className="flex max-w-xs flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            if (!oidcBrowserConfig) {
+                              e.preventDefault();
+                              return;
+                            }
+                            handleOidcLogin();
+                          }}
+                          aria-disabled={!oidcBrowserConfig ? "true" : undefined}
+                          aria-describedby={!oidcBrowserConfig ? "oidc-login-availability" : undefined}
+                          className={`rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${!oidcBrowserConfig ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          OIDC 로그인
+                        </button>
+                        {oidcLoginUnavailableReason ? (
+                          <p id="oidc-login-availability" className="text-xs font-semibold leading-5 text-muted-foreground">
+                            {oidcLoginUnavailableReason}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex max-w-xs flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            if (oidcSessionLoading || !oidcSessionClaims.userId) {
+                              e.preventDefault();
+                              return;
+                            }
+                            handleOidcLogout();
+                          }}
+                          aria-disabled={oidcSessionLoading || !oidcSessionClaims.userId ? "true" : undefined}
+                          aria-describedby={oidcSessionLoading || !oidcSessionClaims.userId ? "oidc-logout-availability" : undefined}
+                          className={`rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${oidcSessionLoading || !oidcSessionClaims.userId ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          로그아웃
+                        </button>
+                        {oidcLogoutUnavailableReason ? (
+                          <p id="oidc-logout-availability" className="text-xs font-semibold leading-5 text-muted-foreground">
+                            {oidcLogoutUnavailableReason}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   {oidcActionError ? (
