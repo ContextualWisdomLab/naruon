@@ -20,19 +20,21 @@ Casing follows the implementation surface: JSON/Python use snake_case here. This
 
 Historical `registered_agents.json` entries using `name`, `framework`, `entrypoint`, `description`, `capabilities`, or `enabled` are accepted only by the loader's anti-corruption boundary. `_entry_value` maps a legacy key to its semantic equivalent, while `_canonical_raw_entry` removes those generic keys from the authoritative internal `raw_entry` evidence mapping. New checked-in catalog data uses only the semantic keys.
 
-Read-only Python properties (`name`, `framework`, `entrypoint`, `description`, `capabilities`, `enabled`) remain bounded compatibility aliases for downstream package/submodule consumers. The historical `raw` property is also preserved, but it no longer aliases `raw_entry` directly: `_legacy_raw_entry` reconstructs the previous generic-key mapping from the semantic evidence so calls such as `agent.raw["name"]` and `agent.raw["entrypoint"]` remain compatible. This applies whether the loader received the new semantic JSON form or an older legacy JSON form. The authoritative dataclass field remains `raw_entry`, which never exposes the generic compatibility keys.
+Read-only Python properties (`name`, `framework`, `entrypoint`, `description`, `capabilities`, `enabled`) remain bounded compatibility aliases for downstream package/submodule consumers. The historical mutable `raw` mapping is preserved through `_LegacyRawView`, a write-through adapter backed by `raw_entry`. Reads of the six translated legacy keys address their semantic `agent_*` counterparts; assignment or deletion through `raw["name"]`, `raw["description"]`, and the other historical aliases updates/removes the corresponding semantic evidence key. Unrelated legacy metadata writes address the same key in `raw_entry`. Repeated `raw` access therefore observes earlier mutations without storing generic compatibility keys in the authoritative evidence mapping.
 
-This split keeps migration one-way and explicit: legacy inputs are canonicalized on ingress, organization-owned code reads semantic fields internally, and only the compatibility property reconstructs the historical raw shape on egress. No caller needs a flag-day migration, while new code has no reason to adopt the generic names.
+The immutable typed dataclass attributes continue to represent the values captured when the registry entry was loaded. Mutating `raw` historically changed metadata rather than reassigning those dataclass attributes, so the compatibility adapter preserves that split: `raw`/`raw_entry` metadata mutations are synchronized with each other, while `agent_name`, `agent_description`, and the other typed fields remain unchanged until a registry reload.
+
+This keeps migration one-way and explicit: legacy inputs are canonicalized on ingress, organization-owned code reads semantic fields internally, and the mutable compatibility view translates historical raw keys at the boundary. No caller needs a flag-day migration, while new code has no reason to adopt the generic names.
 
 ## Persistence and operational impact
 
 This repair does not alter a database table, migration, network protocol, provider credential, or writeback authority. The registry remains a local UTF-8 JSON catalog loaded lazily and cached in-process. No UPSERT, locking, hot-partition, or read/write database behavior changes.
 
-Malformed or missing registry files continue to fail closed to an empty registry. Invalid entries without an agent entry point continue to be skipped. `resolve_agent_for_task` now reads `agent_enabled` directly, preserving the existing disabled-agent behavior.
+Malformed or missing registry files continue to fail closed to an empty registry. Invalid entries without an agent entry point continue to be skipped. `resolve_agent_for_task` reads `agent_enabled` directly, preserving the existing disabled-agent behavior.
 
 ## Verification
 
-The focused registry tests require the canonical semantic attributes and checked-in semantic JSON keys. They exercise the bounded legacy Python properties and explicitly verify that the old `raw` mapping contract is retained for both semantic and historical JSON input while `raw_entry` remains free of the generic names. The RED commit preceded the production/config repair, and a later reviewer-discovered compatibility regression received its own RED regression before the source repair.
+The focused registry tests require the canonical semantic attributes and checked-in semantic JSON keys. They exercise the bounded legacy Python properties and verify that the old `raw` mapping keys remain readable for both semantic and historical JSON input while `raw_entry` remains free of generic compatibility keys. A reviewer-discovered mutation regression has its own RED regression: it assigns and deletes both translated and unrelated keys through `raw`, then proves later `raw` access and semantic `raw_entry` observe the mutation while immutable typed fields retain their load-time values.
 
 Fresh hosted checks on the final unchanged PR head remain the merge authority; predecessor or protected-base results do not transfer.
 
