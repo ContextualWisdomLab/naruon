@@ -89,3 +89,40 @@ def test_prepare_local_env_preserves_existing_operator_values(tmp_path: Path) ->
     assert values["ENCRYPTION_KEY"] == "keep-this-encryption-key"
     assert values["UNRELATED_SETTING"] == "keep-me"
     assert "TEMPLATE_ONLY" not in values
+
+
+def test_prepare_local_env_preserves_literal_quoted_secret_assignments(
+    tmp_path: Path,
+) -> None:
+    example = tmp_path / ".env.example"
+    path = tmp_path / ".env"
+    example.write_text("TEMPLATE_ONLY=value\n", encoding="utf-8")
+    path.write_text(
+        "\n".join(
+            [
+                "POSTGRES_DB=workspace_db",
+                "POSTGRES_USER=workspace_user",
+                "POSTGRES_PASSWORD='pa$$word$literal'",
+                "DATABASE_URL='postgresql+asyncpg://workspace_user:pa%24%24word%24literal@127.0.0.1:15432/workspace_db'",
+                "AUTH_SESSION_HMAC_SECRET='session$literal'",
+                "ENCRYPTION_KEY='encryption$literal'",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    original_assignments = {
+        line.split("=", 1)[0]: line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if "=" in line
+    }
+
+    _run(path, example)
+    resulting_assignments = {
+        line.split("=", 1)[0]: line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if "=" in line
+    }
+
+    for key in PRESERVED_KEYS:
+        assert resulting_assignments[key] == original_assignments[key]
