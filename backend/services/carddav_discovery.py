@@ -26,10 +26,12 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 import socket
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from unicodedata import category
+from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -42,6 +44,9 @@ SrvResolver = Callable[[str], list[tuple[str, int]]]
 # character strings (one joined string per record), or an empty iterable.
 TxtResolver = Callable[[str], list[str]]
 HttpClientFactory = Callable[[], Any]
+
+_MALFORMED_PERCENT_TRIPLET = re.compile(r"%(?![0-9A-Fa-f]{2})")
+_REMAINING_PERCENT_TRIPLET = re.compile(r"%[0-9A-Fa-f]{2}")
 
 
 @dataclass(frozen=True)
@@ -217,25 +222,35 @@ def _default_txt_resolver(name: str) -> list[str]:
 
 
 def _txt_context_path(records: list[str]) -> str | None:
-    """Extract and validate the RFC 6764 Section 6 TXT ``path`` hint."""
+    """Extract and validate a singly decoded RFC 6764 TXT ``path`` hint."""
     for record in records:
         for part in record.split(";"):
             key, _, value = part.strip().partition("=")
             if key.strip().lower() != "path":
                 continue
             path = value.strip()
+            if _MALFORMED_PERCENT_TRIPLET.search(path):
+                continue
+            try:
+                decoded_path = unquote(path, errors="strict")
+            except UnicodeDecodeError:
+                continue
+            if _REMAINING_PERCENT_TRIPLET.search(decoded_path):
+                # A second decode would change the request target. Reject the
+                # ambiguous value instead of inventing a recursive decode count.
+                continue
             if (
-                path.startswith("/")
-                and "://" not in path
-                and "\\" not in path
-                and "?" not in path
-                and "#" not in path
+                decoded_path.startswith("/")
+                and "://" not in decoded_path
+                and "\\" not in decoded_path
+                and "?" not in decoded_path
+                and "#" not in decoded_path
                 and all(
-                    segment not in {".", ".."} for segment in path.split("/")
+                    segment not in {".", ".."} for segment in decoded_path.split("/")
                 )
-                and all(ord(ch) >= 32 and ord(ch) != 127 for ch in path)
+                and all(category(ch) != "Cc" for ch in decoded_path)
             ):
-                return path
+                return decoded_path
     return None
 
 
