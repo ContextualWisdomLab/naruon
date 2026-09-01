@@ -104,6 +104,45 @@ def test_legacy_raw_mapping_survives_semantic_and_legacy_catalog_input() -> None
         assert "enabled" not in registered_agent.raw_entry
 
 
+def test_legacy_raw_mutations_write_through_to_semantic_evidence() -> None:
+    """Preserve mutable raw metadata while keeping semantic raw_entry authority."""
+    registered_agent = agent_registry_module._agent_from_entry(
+        "compatibility-agent",
+        {
+            "agent_name": "Original Agent",
+            "agent_framework": "pydantic-ai",
+            "agent_entrypoint": "services.original_agent:run",
+            "agent_description": "original description",
+            "agent_capabilities": ["mail.search"],
+            "agent_enabled": True,
+            "custom_metadata": "original",
+        },
+    )
+    assert registered_agent is not None
+
+    legacy_raw = registered_agent.raw
+    legacy_raw["name"] = "Renamed Agent"
+    legacy_raw["custom_metadata"] = "changed"
+
+    assert registered_agent.raw["name"] == "Renamed Agent"
+    assert registered_agent.raw["custom_metadata"] == "changed"
+    assert registered_agent.raw_entry["agent_name"] == "Renamed Agent"
+    assert registered_agent.raw_entry["custom_metadata"] == "changed"
+    assert "name" not in registered_agent.raw_entry
+
+    del registered_agent.raw["description"]
+    del registered_agent.raw["custom_metadata"]
+
+    assert "description" not in registered_agent.raw
+    assert "custom_metadata" not in registered_agent.raw
+    assert "agent_description" not in registered_agent.raw_entry
+    assert "custom_metadata" not in registered_agent.raw_entry
+    # Typed immutable fields remain the values captured when the entry was loaded;
+    # raw/raw_entry are compatibility/evidence metadata rather than live field setters.
+    assert registered_agent.agent_name == "Original Agent"
+    assert registered_agent.agent_description == "original description"
+
+
 def test_task_mapping_resolves_to_noema_agent() -> None:
     """Resolve mapped task types to the semantic registered-agent contract."""
     mapping = load_task_agent_mapping()
