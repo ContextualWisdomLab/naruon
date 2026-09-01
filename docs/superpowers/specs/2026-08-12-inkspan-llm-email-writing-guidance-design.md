@@ -321,9 +321,25 @@ A calibration run emits an integrity-bound `judge_policy_artifact` containing:
 - category anchors and admission rules;
 - calibration and DIF summary;
 - dataset and source hashes;
+- a pre-registered `protocol_id` and `protocol_hash`;
+- `calibration_split_hash`, `development_split_hash`, and
+  `locked_holdout_hash`, with the locked holdout reserved for the final
+  publish/no-publish decision;
+- a fixed `minimum_slice_sample_size` of 30 labeled cases per prespecified
+  slice;
+- literal publication thresholds for holdout macro-F1, mandatory preservation,
+  unsupported-claim rate, expected calibration error, and prespecified slice
+  performance;
+- a `publish_decision` of `publish` or `withhold`;
 - known limitations.
 
-Naruon runtime consumes the artifact but does not refit it.
+Naruon runtime consumes the artifact but does not refit it, and admits it for
+user-facing diagnostics only when `publish_decision == "publish"`. `withhold`
+and `evaluation_only` artifacts remain audit/pipeline evidence and cannot
+produce user-facing output. Changing a split, threshold, protocol, or holdout
+requires a new protocol version and a new artifact. Thresholds are frozen before
+locked-holdout labels are accessed; tuning against that holdout invalidates the
+run for publication and requires a new locked holdout.
 
 ## Benchmark design
 
