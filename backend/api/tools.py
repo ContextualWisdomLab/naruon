@@ -755,18 +755,31 @@ registry.register(
 
 
 EMAIL_PATTERN = re.compile(
-    r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+"
+    r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
 )
 
 async def email_address_extractor_handler(params: Dict[str, Any]) -> Dict[str, Any]:
     text = params.get("text", "")
+    if len(text) > ANALYSIS_TEXT_MAX_CHARS:
+        raise ValueError(
+            f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters"
+        )
     emails = EMAIL_PATTERN.findall(text)
 
     unique_emails = []
+    seen_lower = set()
     for email in emails:
         email_lower = email.lower()
-        if email_lower not in unique_emails:
-            unique_emails.append(email_lower)
+        if email_lower not in seen_lower:
+            seen_lower.add(email_lower)
+            # Remove trailing dot if exists, which is a common artifact of regex matching
+            if email.endswith('.'):
+                email = email[:-1]
+                email_lower = email_lower[:-1]
+                if email_lower in seen_lower:
+                     continue
+                seen_lower.add(email_lower)
+            unique_emails.append(email)
 
     return {"emails": unique_emails, "count": len(unique_emails)}
 

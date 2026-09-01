@@ -2737,7 +2737,6 @@
 - `docker compose down`
 
 ## [Unreleased]
-- 텍스트 본문에서 이메일 주소를 찾아 중복을 제거하여 추출하는 "이메일 주소 추출기 (Email Address Extractor)" 도구를 백엔드 도구에 추가했습니다.
 ### Added
 - `backend/api/tools.py` 내의 임시 `mock_handler`를 구체적인 기능을 수행하는 5개의 실제 도구 핸들러로 대체했습니다.
   - `thread_summarizer_handler`: 이메일 스레드 요약 정보 반환

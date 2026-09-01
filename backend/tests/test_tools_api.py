@@ -1198,18 +1198,51 @@ async def test_keyword_extractor_handler():
 async def test_email_address_extractor_handler():
     from api.tools import email_address_extractor_handler
 
-    text = "Please contact me at John.Doe@example.com or support@example.com. For urgent matters, email john.doe@EXAMPLE.COM."
+    text = "Please contact me at John.Doe@example.com or support@example.com. For urgent matters, email john.doe@EXAMPLE.COM. Or try user@mail.example.com"
     first = await email_address_extractor_handler({"text": text})
     second = await email_address_extractor_handler({"text": text})
 
     assert first == second
     assert first == {
-        "emails": ["john.doe@example.com", "support@example.com"],
-        "count": 2,
+        "emails": ["John.Doe@example.com", "support@example.com", "user@mail.example.com"],
+        "count": 3,
     }
 
     empty = await email_address_extractor_handler({"text": "No emails here."})
     assert empty == {"emails": [], "count": 0}
+
+def test_execute_email_address_extractor_envelope():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_address_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={
+                "parameters": {
+                    "text": "Hello, contact test@example.com."
+                }
+            },
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["result"] == {"emails": ["test@example.com"], "count": 1}
+
+def test_email_address_extractor_rejects_oversized_text():
+    from api.tools import ANALYSIS_TEXT_MAX_CHARS
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tools/email_address_extractor/execute",
+            headers={"Authorization": f"Bearer {_signed_session_token()}"},
+            json={"parameters": {"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)}},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "failed",
+        "result": None,
+        "message": f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters",
+    }
 
 
 def test_execute_analysis_tool_rejects_oversized_text():
