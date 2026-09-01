@@ -15,6 +15,7 @@ import datetime
 from types import SimpleNamespace
 import uuid
 
+import asyncpg
 import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -108,7 +109,23 @@ async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeyp
         session.add(email)
         try:
             await session.commit()
-        except (OperationalError, ProgrammingError):
+        except (
+            ConnectionRefusedError,
+            OSError,
+            OperationalError,
+            ProgrammingError,
+            asyncpg.CannotConnectNowError,
+            asyncpg.InvalidAuthorizationSpecificationError,
+            asyncpg.InvalidCatalogNameError,
+            asyncpg.InvalidPasswordError,
+        ):
+            # A truly unreachable DATABASE_URL (the common case: conftest.py
+            # defaults it to a postgresql:// URL even when no server is
+            # actually listening) can fail the connection attempt itself --
+            # asyncpg/SQLAlchemy don't always wrap that as OperationalError,
+            # so a plain ConnectionRefusedError/OSError must be caught here
+            # too, or this test hard-fails instead of skipping everywhere
+            # postgres isn't actually running (this sandbox included).
             await session.rollback()
             pytest.skip("PostgreSQL smoke path unavailable")
         attachment_id = attachment.id
