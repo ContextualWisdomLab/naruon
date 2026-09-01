@@ -5,7 +5,7 @@ Thank you for improving Naruon. Keep each change focused, preserve customer-owne
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Prefer `./scripts/naruon_compose.sh up -d --build` for full-stack local work.
+2. Run `python3 scripts/prepare_local_env.py`, then start the full local stack with `NARUON_ENV_FILE=.env ./scripts/naruon_compose.sh up -d --build`.
 3. Use synthetic fixtures only. Do not commit real email, calendar, contact, file, credential, or customer data.
 
 ## Manual development paths
