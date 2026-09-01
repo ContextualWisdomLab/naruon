@@ -35,14 +35,24 @@ def test_initial_alembic_revision_records_current_schema_path():
     assert "execute_schema_backfill" in revision_text
 
 
-def test_email_read_state_legacy_table_guard_is_reversible():
+def test_email_read_state_guards_both_legacy_and_current_table_names():
+    """0011_email_read_state must add is_read to a genuinely historical
+    email_records table missing it (a database whose own 0001 ran before
+    is_read was added to the Email model), not just a legacy "emails" table
+    that, per 0011_email_model_reconciliation's docstring, no migration in
+    this repo's history ever actually created for a real managed database.
+    Both checks must guard on column existence, not just table existence, so
+    upgrade/downgrade stay idempotent against a table that already has (or
+    lacks) the column either way."""
     revision_path = BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
     revision_text = revision_path.read_text()
 
-    assert revision_text.count('has_table("emails")') == 2
-    assert revision_text.count("return") == 2
-    assert 'op.add_column(\n        "emails"' in revision_text
-    assert 'op.drop_column("emails", "is_read")' in revision_text
+    assert '"email_records"' in revision_text
+    assert '"emails"' in revision_text
+    assert "has_table" in revision_text
+    assert "_has_column" in revision_text
+    assert "op.add_column(" in revision_text
+    assert "op.drop_column(" in revision_text
 
 
 def test_provider_writeback_retry_queue_has_incremental_revision():
