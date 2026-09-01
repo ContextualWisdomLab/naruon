@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 import httpx
 
 from runner.utils.dispatch import dispatch_error
+from services.carddav_client import pinned_request_target
 
 
 _MAX_TARGET_PATH_LENGTH = 4096
@@ -74,8 +75,11 @@ class LocalDavAdapters:
         if not source.writeback_enabled:
             return dispatch_error("source_writeback_disabled")
 
+        requires_if_match = payload.get("requires_if_match", True)
+        if not isinstance(requires_if_match, bool):
+            return dispatch_error("invalid_payload")
         if_match = self._payload_text(payload, "if_match")
-        if if_match is None:
+        if requires_if_match and if_match is None:
             return dispatch_error("missing_if_match")
 
         target_path = self._safe_target_path(payload.get("target_path"))
@@ -88,13 +92,18 @@ class LocalDavAdapters:
 
         try:
             target_url = self._target_url(source.base_url, target_path)
-        except ValueError as exc:
-            return dispatch_error(str(exc))
+            pinned_url, pinned_headers, request_extensions = pinned_request_target(
+                target_url
+            )
+        except ValueError:
+            return dispatch_error("invalid_source_url")
 
         content_type = (
             self._payload_text(payload, "content_type") or default_content_type
         )
-        headers = {"Content-Type": content_type, "If-Match": if_match}
+        headers = {"Content-Type": content_type, **pinned_headers}
+        if if_match is not None:
+            headers["If-Match"] = if_match
         auth = (
             (source.username, source.password or "")
             if source.username is not None
@@ -104,10 +113,11 @@ class LocalDavAdapters:
         try:
             async with self._http_client_factory() as client:
                 response = await client.put(
-                    target_url,
+                    pinned_url,
                     content=content,
                     headers=headers,
                     auth=auth,
+                    extensions=request_extensions,
                 )
         except httpx.HTTPError:
             return dispatch_error("provider_request_failed")
