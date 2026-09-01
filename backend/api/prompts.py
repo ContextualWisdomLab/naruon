@@ -36,7 +36,6 @@ class PromptCreate(BaseModel):
 
 
 class PromptResponse(BaseModel):
-    prompt_record_id: int = Field(alias="id")
     prompt_uid: str
     title: str
     description: Optional[str] = None
@@ -46,7 +45,7 @@ class PromptResponse(BaseModel):
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PromptTestSettings(BaseModel):
