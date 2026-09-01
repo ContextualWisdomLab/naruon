@@ -1,4 +1,19 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🟡 실제 결함 2건) stacked-PR 트리거 수정(`a4e01191`)이 4개 워크플로의
+  `pull_request:` 트리거에서 `branches:` 제한을 제거하면서, 그 값(`release/**`, `develop`)을
+  리터럴로 assert하던 기존 계약 테스트 2개(`test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushes`,
+  `test_docker_publish_validates_pr_images_and_publishes_semver_images_only_on_tags`)가 깨진 채
+  방치되어 있었다.** 실제로 재현: `backend/tests/test_release_governance.py`만 단독 실행하면
+  2 failed (owner 코멘트의 "workflow/Alembic contracts 29 passed"는 이 파일 전체를 포함하지
+  않았던 것으로 보임). 두 테스트를 새 의도(스택형 PR 지원을 위해 `pull_request:`가 베이스
+  브랜치를 제한하지 않아야 한다)에 맞게 갱신하고, 동일 계약을 app-ci/docker-publish 양쪽에
+  `assert "branches:" not in pull_request_block`으로 통일. 추가로 Devin이 별도 지적한 CI 배선
+  누락도 같은 커밋에서 수정: `tests/test_stacked_pr_workflow_contract.py`는 repo-root
+  `tests/`에 있는데 `app-ci.yml`의 backend job은 `cd backend && pytest`만 실행해 이 계약
+  테스트를 전혀 collect하지 않았다 — `python -m pytest -q tests` 스텝을 추가하고, 이를 잠그는
+  회귀 테스트(`test_app_ci_collects_repository_root_governance_contract_tests`)를 추가해 진짜
+  RED(스텝 부재) 확인 후 GREEN. 전체 백엔드 스위트 1906 passed / 40 skipped, ruff clean,
+  `scripts/ci/test_pr_governance_gate.sh: PASS`.
 - **(Devin 리뷰 대응, 🟡 minor → 실제로는 진짜 결함) NewsDOM 재인식 sweep의 커서가
   `RESULT_PENDING`(아직 provider 미설정) 행도 실패 없이 진행했다고 취급해 커서를 그 너머로
   진행시켜, 계속 새 업로드가 들어오는 동안 해당 행이 무기한 굶주릴 수 있었습니다.**
