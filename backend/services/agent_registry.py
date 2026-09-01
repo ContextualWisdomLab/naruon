@@ -30,62 +30,136 @@ TASK_AGENT_MAPPING_PATH = _REPO_ROOT / "task_agent_mapping.json"
 
 @dataclass(frozen=True)
 class RegisteredAgent:
-    """A single entry from ``registered_agents.json``."""
+    """A semantically named entry from ``registered_agents.json``.
+
+    The ``agent_*`` attributes are the authoritative organization-owned Python
+    contract. Read-only legacy properties keep older package/submodule callers
+    working while the JSON loader translates historical generic keys at the
+    registry boundary.
+    """
 
     agent_id: str
-    name: str
-    framework: str
-    entrypoint: str
-    description: str = ""
-    capabilities: tuple[str, ...] = ()
+    agent_name: str
+    agent_framework: str
+    agent_entrypoint: str
+    agent_description: str = ""
+    agent_capabilities: tuple[str, ...] = ()
     provider_source: str = ""
     writeback_opt_in: bool = False
     writeback_audit_logged: bool = False
     degrades_gracefully: bool = False
-    enabled: bool = True
-    raw: dict[str, Any] = field(default_factory=dict)
+    agent_enabled: bool = True
+    raw_entry: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def name(self) -> str:
+        """Return ``agent_name`` for legacy Python callers."""
+        return self.agent_name
+
+    @property
+    def framework(self) -> str:
+        """Return ``agent_framework`` for legacy Python callers."""
+        return self.agent_framework
+
+    @property
+    def entrypoint(self) -> str:
+        """Return ``agent_entrypoint`` for legacy Python callers."""
+        return self.agent_entrypoint
+
+    @property
+    def description(self) -> str:
+        """Return ``agent_description`` for legacy Python callers."""
+        return self.agent_description
+
+    @property
+    def capabilities(self) -> tuple[str, ...]:
+        """Return ``agent_capabilities`` for legacy Python callers."""
+        return self.agent_capabilities
+
+    @property
+    def enabled(self) -> bool:
+        """Return ``agent_enabled`` for legacy Python callers."""
+        return self.agent_enabled
+
+    @property
+    def raw(self) -> dict[str, Any]:
+        """Return ``raw_entry`` for legacy Python callers."""
+        return self.raw_entry
 
 
 def _coerce_capabilities(value: Any) -> tuple[str, ...]:
+    """Return non-empty string capability names from a registry JSON value."""
     if not isinstance(value, list):
         return ()
     return tuple(item for item in value if isinstance(item, str) and item)
 
 
-def _agent_from_entry(agent_id: str, entry: dict[str, Any]) -> RegisteredAgent | None:
-    entrypoint = entry.get("entrypoint")
-    name = entry.get("name")
-    framework = entry.get("framework")
-    if not isinstance(entrypoint, str) or not entrypoint:
-        logger.debug("Skipping agent %s: missing entrypoint", agent_id)
-        return None
-    if not isinstance(name, str) or not name:
-        name = agent_id
-    if not isinstance(framework, str):
-        framework = ""
+def _entry_value(
+    entry: dict[str, Any], semantic_key: str, legacy_key: str, default_value: Any = None
+) -> Any:
+    """Read a canonical semantic key, falling back to one bounded legacy alias."""
+    if semantic_key in entry:
+        return entry[semantic_key]
+    return entry.get(legacy_key, default_value)
 
-    writeback = entry.get("writeback")
-    writeback = writeback if isinstance(writeback, dict) else {}
+
+def _canonical_raw_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return registry evidence with owned generic keys translated semantically."""
+    canonical_entry = dict(entry)
+    for semantic_key, legacy_key in (
+        ("agent_name", "name"),
+        ("agent_framework", "framework"),
+        ("agent_entrypoint", "entrypoint"),
+        ("agent_description", "description"),
+        ("agent_capabilities", "capabilities"),
+        ("agent_enabled", "enabled"),
+    ):
+        if semantic_key not in canonical_entry and legacy_key in canonical_entry:
+            canonical_entry[semantic_key] = canonical_entry[legacy_key]
+        canonical_entry.pop(legacy_key, None)
+    return canonical_entry
+
+
+def _agent_from_entry(agent_id: str, entry: dict[str, Any]) -> RegisteredAgent | None:
+    """Translate one registry JSON entry into the semantic Python contract."""
+    agent_entrypoint = _entry_value(entry, "agent_entrypoint", "entrypoint")
+    agent_name = _entry_value(entry, "agent_name", "name")
+    agent_framework = _entry_value(entry, "agent_framework", "framework")
+    if not isinstance(agent_entrypoint, str) or not agent_entrypoint:
+        logger.debug("Skipping agent %s: missing agent_entrypoint", agent_id)
+        return None
+    if not isinstance(agent_name, str) or not agent_name:
+        agent_name = agent_id
+    if not isinstance(agent_framework, str):
+        agent_framework = ""
+
+    writeback_policy = entry.get("writeback")
+    writeback_policy = writeback_policy if isinstance(writeback_policy, dict) else {}
 
     return RegisteredAgent(
         agent_id=agent_id,
-        name=name,
-        framework=framework,
-        entrypoint=entrypoint,
-        description=str(entry.get("description", "") or ""),
-        capabilities=_coerce_capabilities(entry.get("capabilities")),
+        agent_name=agent_name,
+        agent_framework=agent_framework,
+        agent_entrypoint=agent_entrypoint,
+        agent_description=str(
+            _entry_value(entry, "agent_description", "description", "") or ""
+        ),
+        agent_capabilities=_coerce_capabilities(
+            _entry_value(entry, "agent_capabilities", "capabilities", [])
+        ),
         provider_source=str(entry.get("provider_source", "") or ""),
-        writeback_opt_in=bool(writeback.get("opt_in", False)),
-        writeback_audit_logged=bool(writeback.get("audit_logged", False)),
+        writeback_opt_in=bool(writeback_policy.get("opt_in", False)),
+        writeback_audit_logged=bool(writeback_policy.get("audit_logged", False)),
         degrades_gracefully=bool(entry.get("degrades_gracefully", False)),
-        enabled=bool(entry.get("enabled", True)),
-        raw=dict(entry),
+        agent_enabled=bool(_entry_value(entry, "agent_enabled", "enabled", True)),
+        raw_entry=_canonical_raw_entry(entry),
     )
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
+    """Load one UTF-8 JSON object or fail closed to an empty mapping."""
     try:
-        text = path.read_text(encoding="utf-8")
+        file_text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         logger.debug("Registration file not found: %s", path)
         return {}
@@ -94,41 +168,41 @@ def _load_json_object(path: Path) -> dict[str, Any]:
         return {}
 
     try:
-        parsed = json.loads(text or "{}")
+        parsed_object = json.loads(file_text or "{}")
     except json.JSONDecodeError:
         logger.debug("Malformed registration file: %s", path, exc_info=True)
         return {}
 
-    return parsed if isinstance(parsed, dict) else {}
+    return parsed_object if isinstance(parsed_object, dict) else {}
 
 
 @lru_cache(maxsize=1)
 def load_registered_agents() -> dict[str, RegisteredAgent]:
     """Return the registered agents keyed by ``agent_id`` (cached)."""
-    raw = _load_json_object(REGISTERED_AGENTS_PATH)
-    agents: dict[str, RegisteredAgent] = {}
-    for agent_id, entry in raw.items():
-        if not isinstance(agent_id, str) or not isinstance(entry, dict):
+    registry_entries = _load_json_object(REGISTERED_AGENTS_PATH)
+    registered_agents: dict[str, RegisteredAgent] = {}
+    for agent_id, registry_entry in registry_entries.items():
+        if not isinstance(agent_id, str) or not isinstance(registry_entry, dict):
             continue
-        agent = _agent_from_entry(agent_id, entry)
-        if agent is not None:
-            agents[agent_id] = agent
-    return agents
+        registered_agent = _agent_from_entry(agent_id, registry_entry)
+        if registered_agent is not None:
+            registered_agents[agent_id] = registered_agent
+    return registered_agents
 
 
 @lru_cache(maxsize=1)
 def load_task_agent_mapping() -> dict[str, str]:
     """Return the task-type -> agent-id mapping (cached)."""
-    raw = _load_json_object(TASK_AGENT_MAPPING_PATH)
-    mapping: dict[str, str] = {}
-    for task_type, agent_id in raw.items():
+    mapping_entries = _load_json_object(TASK_AGENT_MAPPING_PATH)
+    task_agent_mapping: dict[str, str] = {}
+    for task_type, agent_id in mapping_entries.items():
         if isinstance(task_type, str) and isinstance(agent_id, str) and agent_id:
-            mapping[task_type] = agent_id
-    return mapping
+            task_agent_mapping[task_type] = agent_id
+    return task_agent_mapping
 
 
 def get_registered_agent(agent_id: str) -> RegisteredAgent | None:
-    """Look up a single registered agent by id."""
+    """Look up a single registered agent by ``agent_id``."""
     return load_registered_agents().get(agent_id)
 
 
@@ -137,10 +211,10 @@ def resolve_agent_for_task(task_type: str) -> RegisteredAgent | None:
     agent_id = load_task_agent_mapping().get(task_type)
     if not agent_id:
         return None
-    agent = get_registered_agent(agent_id)
-    if agent is None or not agent.enabled:
+    registered_agent = get_registered_agent(agent_id)
+    if registered_agent is None or not registered_agent.agent_enabled:
         return None
-    return agent
+    return registered_agent
 
 
 def clear_registry_cache() -> None:
