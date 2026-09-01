@@ -94,7 +94,7 @@ def test_release_version_sources_are_synchronized() -> None:
 
     assert frontend_package["version"] == version
     assert "version=get_release_version()" in backend_main
-    assert "version=get_release_version()" in runtime_config
+    assert "product_version=get_release_version()" in runtime_config
     assert "COPY VERSION /app/VERSION" in dockerfile
     assert 'ARG OCI_IMAGE_TITLE="naruon"' in dockerfile
     assert 'org.opencontainers.image.title="${OCI_IMAGE_TITLE}"' in dockerfile
@@ -345,27 +345,18 @@ def test_github_workflows_do_not_define_duplicate_mapping_keys() -> None:
         construct_mapping,
     )
 
-    # Verify that UniqueKeyLoader is strictly a subclass of SafeLoader so that `# nosec B506`
-    # suppression is genuinely justified according to PyYAML safety contracts.
     assert issubclass(UniqueKeyLoader, yaml.SafeLoader), (
         "UniqueKeyLoader must inherit from SafeLoader to suppress B506"
     )
-    # Ensure that Python object instantiation tags (like !!python/object) are safely
-    # rejected rather than executed.
     with pytest.raises(yaml.constructor.ConstructorError):
         yaml.load("!!python/object/apply:os.system ['echo pwned']", Loader=UniqueKeyLoader)  # nosec B506
-    # Ensure normal valid YAML loading still works
     assert yaml.load("a: 1\nb: 2", Loader=UniqueKeyLoader) == {"a": 1, "b": 2}  # nosec B506
-    # Ensure the duplicate key prevention still works
     with pytest.raises(AssertionError, match="duplicate mapping key 'a'"):
         yaml.load("a: 1\na: 2", Loader=UniqueKeyLoader)  # nosec B506
 
     duplicates: list[str] = []
     for workflow_path in governed_workflows:
         try:
-            # We explicitly pass UniqueKeyLoader (which inherits from SafeLoader).
-            # Bandit B506 blindly flags yaml.load() regardless of the Loader argument.
-            # This is a verified false positive.
             yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)  # nosec B506
         except AssertionError as exc:
             duplicates.append(f"{workflow_path.relative_to(REPO_ROOT)}: {exc}")
@@ -377,10 +368,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
     harden_runner_ref = (
         "step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0"
     )
-    # Governance/security workflows (codeql, dependency-review, scorecard,
-    # trivy) are centralized in the org-level ContextualWisdomLab/.github
-    # required workflows and are intentionally not duplicated locally. Only the
-    # functional workflows that remain in this repository are asserted here.
     hardened_workflows = [
         ".github/workflows/app-ci.yml",
         ".github/workflows/bandit.yml",
@@ -393,9 +380,6 @@ def test_stepsecurity_remediation_adds_pinned_audit_hardening() -> None:
         assert harden_runner_ref in workflow
         assert "egress-policy: audit" in workflow
 
-    # mail-smoke seeds live mailbox/DAV credentials on a self-hosted runner, so
-    # it is hardened one level further: egress is blocked to an allowlist, not
-    # merely audited, so checked-out code cannot exfiltrate the secrets.
     mail_smoke_workflow = read_repo_text(".github/workflows/mail-smoke.yml")
     assert harden_runner_ref in mail_smoke_workflow
     assert "egress-policy: block" in mail_smoke_workflow
@@ -506,13 +490,6 @@ def test_bandit_security_scan_does_not_continue_on_error() -> None:
     workflow = read_repo_text(".github/workflows/bandit.yml")
 
     assert "continue-on-error: true" not in workflow
-
-
-# CodeQL, Scorecard, and Trivy code-scanning workflows are centralized in the
-# org-level ContextualWisdomLab/.github required workflows. Their local copies
-# were removed to stop duplicate runs and duplicate SARIF uploads, so the
-# repository-level assertions that previously guarded those local files no
-# longer apply here and are enforced centrally instead.
 
 
 def test_scorecard_sarif_normalizer_preserves_branch_protection_category(
@@ -827,7 +804,6 @@ def test_backend_dockerfile_uses_modern_env_syntax() -> None:
     assert "pnpm install --frozen-lockfile" in dockerfile
     assert "pnpm run build" in dockerfile
     assert "FROM backend-runtime" in dockerfile
-    # Node binary is copied into /app/bin (owned by appuser) to avoid USER root.
     assert (
         "COPY --from=frontend-builder --chown=appuser:appuser /usr/local/bin/node /app/bin/node"
         in dockerfile
