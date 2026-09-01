@@ -3,7 +3,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SelfHostedConnectorRegistrationRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid", populate_by_name=True, serialize_by_alias=True
+    )
 
     connector_id: str = Field(..., description="Unique identifier for the self-hosted connector")
     public_key: str = Field(..., description="Public key for mTLS or secure payload exchange")
@@ -16,7 +18,9 @@ class SelfHostedConnectorRegistrationRequest(BaseModel):
 
 
 class SelfHostedConnectorRegistrationResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid", populate_by_name=True, serialize_by_alias=True
+    )
 
     connector_id: str
     registration_status: Literal["pending_approval", "active", "rejected"] = Field(
