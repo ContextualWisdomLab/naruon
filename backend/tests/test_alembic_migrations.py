@@ -813,6 +813,20 @@ async def test_legacy_email_read_state_real_postgres_smoke():
     """
     engine = create_async_engine(settings.DATABASE_URL)
     try:
+        try:
+            async with engine.connect() as probe_conn:
+                await probe_conn.execute(text("SELECT 1"))
+        except (
+            ConnectionRefusedError,
+            OSError,
+            OperationalError,
+            asyncpg.CannotConnectNowError,
+            asyncpg.InvalidAuthorizationSpecificationError,
+            asyncpg.InvalidCatalogNameError,
+            asyncpg.InvalidPasswordError,
+        ):
+            pytest.skip("PostgreSQL smoke path unavailable")
+
         async with engine.begin() as conn:
             # Fresh-baseline case first, on a connection with no "emails"
             # table anywhere in scope: must no-op, not raise.
@@ -834,20 +848,6 @@ async def test_legacy_email_read_state_real_postgres_smoke():
 
             await conn.run_sync(_run_0011_downgrade)
             assert not await conn.run_sync(_has_is_read)
-    except (
-        ConnectionRefusedError,
-        OSError,
-        OperationalError,
-        asyncpg.CannotConnectNowError,
-        asyncpg.InvalidAuthorizationSpecificationError,
-        asyncpg.InvalidCatalogNameError,
-        asyncpg.InvalidPasswordError,
-    ):
-        await engine.dispose()
-        pytest.skip("PostgreSQL smoke path unavailable")
-    except Exception:
-        await engine.dispose()
-        raise
     finally:
         await engine.dispose()
 
