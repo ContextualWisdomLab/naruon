@@ -14,6 +14,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Fresh installations materialize the current ``email_records`` model in
+    # the 0001 baseline, including ``is_read``.  This historical side branch
+    # only applies to databases that still carry its legacy ``emails`` table.
+    if "emails" not in sa.inspect(op.get_bind()).get_table_names():
+        return
     op.add_column(
         "emails",
         sa.Column(
@@ -26,4 +31,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if "emails" not in sa.inspect(op.get_bind()).get_table_names():
+        return
     op.drop_column("emails", "is_read")

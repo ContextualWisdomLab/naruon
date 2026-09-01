@@ -736,6 +736,16 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.drop_column(" not in revision_text
 
 
+def test_legacy_email_read_state_branch_skips_fresh_baseline_schema():
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    )
+    revision_text = revision_path.read_text()
+
+    assert '"emails" not in sa.inspect(op.get_bind()).get_table_names()' in revision_text
+    assert 'op.add_column(\n        "emails"' in revision_text
+
+
 def test_merge_revision_reconciles_newsdom_provider_branch():
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0015_merge_newsdom_email_heads.py"
