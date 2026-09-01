@@ -876,6 +876,20 @@ async def test_legacy_email_read_state_downgrade_preserves_a_preexisting_column(
     """
     engine = create_async_engine(settings.DATABASE_URL)
     try:
+        try:
+            async with engine.connect() as probe_conn:
+                await probe_conn.execute(text("SELECT 1"))
+        except (
+            ConnectionRefusedError,
+            OSError,
+            OperationalError,
+            asyncpg.CannotConnectNowError,
+            asyncpg.InvalidAuthorizationSpecificationError,
+            asyncpg.InvalidCatalogNameError,
+            asyncpg.InvalidPasswordError,
+        ):
+            pytest.skip("PostgreSQL smoke path unavailable")
+
         async with engine.begin() as conn:
             await conn.execute(
                 text(
@@ -907,20 +921,6 @@ async def test_legacy_email_read_state_downgrade_preserves_a_preexisting_column(
                 await conn.execute(text("SELECT is_read FROM emails"))
             ).scalar_one()
             assert preserved_value is False
-    except (
-        ConnectionRefusedError,
-        OSError,
-        OperationalError,
-        asyncpg.CannotConnectNowError,
-        asyncpg.InvalidAuthorizationSpecificationError,
-        asyncpg.InvalidCatalogNameError,
-        asyncpg.InvalidPasswordError,
-    ):
-        await engine.dispose()
-        pytest.skip("PostgreSQL smoke path unavailable")
-    except Exception:
-        await engine.dispose()
-        raise
     finally:
         await engine.dispose()
 
