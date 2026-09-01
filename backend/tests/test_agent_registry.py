@@ -1,5 +1,6 @@
 """Tests for the workspace agent registry loader."""
 
+import services.agent_registry as agent_registry_module
 from services.agent_registry import (
     clear_registry_cache,
     get_registered_agent,
@@ -57,6 +58,50 @@ def test_registry_uses_semantic_owned_keys_with_bounded_legacy_aliases() -> None
     assert agent.entrypoint == agent.agent_entrypoint
     assert agent.enabled == agent.agent_enabled
     assert agent.capabilities == agent.agent_capabilities
+
+
+def test_legacy_raw_mapping_survives_semantic_and_legacy_catalog_input() -> None:
+    """Keep historical raw keys readable while raw_entry remains semantic."""
+    semantic_entry = {
+        "agent_name": "Semantic Agent",
+        "agent_framework": "pydantic-ai",
+        "agent_entrypoint": "services.semantic_agent:run",
+        "agent_description": "semantic description",
+        "agent_capabilities": ["mail.search"],
+        "agent_enabled": True,
+    }
+    legacy_entry = {
+        "name": "Legacy Agent",
+        "framework": "pydantic-ai",
+        "entrypoint": "services.legacy_agent:run",
+        "description": "legacy description",
+        "capabilities": ["mail.read"],
+        "enabled": False,
+    }
+
+    for catalog_entry, expected_name, expected_entrypoint, expected_enabled in (
+        (semantic_entry, "Semantic Agent", "services.semantic_agent:run", True),
+        (legacy_entry, "Legacy Agent", "services.legacy_agent:run", False),
+    ):
+        registered_agent = agent_registry_module._agent_from_entry(
+            "compatibility-agent", catalog_entry
+        )
+        assert registered_agent is not None
+        assert registered_agent.raw["name"] == expected_name
+        assert registered_agent.raw["framework"] == "pydantic-ai"
+        assert registered_agent.raw["entrypoint"] == expected_entrypoint
+        assert registered_agent.raw["description"] in {
+            "semantic description",
+            "legacy description",
+        }
+        assert isinstance(registered_agent.raw["capabilities"], list)
+        assert registered_agent.raw["enabled"] is expected_enabled
+        assert "name" not in registered_agent.raw_entry
+        assert "framework" not in registered_agent.raw_entry
+        assert "entrypoint" not in registered_agent.raw_entry
+        assert "description" not in registered_agent.raw_entry
+        assert "capabilities" not in registered_agent.raw_entry
+        assert "enabled" not in registered_agent.raw_entry
 
 
 def test_task_mapping_resolves_to_noema_agent() -> None:
