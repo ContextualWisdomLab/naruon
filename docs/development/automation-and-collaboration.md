@@ -14,6 +14,16 @@ This procedure is a repository policy, not a claim that one study uniquely deter
 - Bacchelli and Bird's empirical study of modern code review found that review supports defect discovery as well as code understanding, knowledge transfer, team awareness, and alternative solutions. That supports preserving review context and resolving findings against the actual changed revision rather than treating review as a ceremonial approval count.
 - Forsgren, Humble, and Kim synthesize empirical DevOps research around small batches, continuous integration, fast feedback, and recovery-oriented delivery. Those findings support narrow changes, independent safe lanes, automated verification, and causal repair instead of large unverified batches.
 
+### Research artifact disposition
+
+The repository records why each cited source is linked rather than silently vendoring an arbitrary PDF copy. This keeps copyright decisions explicit and avoids turning an unversioned local binary into a competing source of truth.
+
+- **NIST SP 800-218 (SSDF 1.1):** NIST states that SP 800-series publications are not subject to copyright in the United States. The official NIST publication and DOI remain the canonical, versioned evidence, so this policy links that authoritative copy rather than duplicating a binary that could become stale when NIST revises the series. A future offline-evidence package may vendor the exact official PDF only with its publication identity and integrity digest recorded alongside it.
+- **Bacchelli & Bird (2013):** the final conference paper was published by IEEE, while Microsoft Research provides an author-hosted reading copy. The public source metadata used here does not grant this repository an explicit redistribution license for the final publisher PDF, so Naruon does not republish it. The DOI/author-hosted source and the design implication are retained instead.
+- **Forsgren, Humble, & Kim (2018):** *Accelerate* is a commercially published book from IT Revolution. No redistribution right for the book PDF is documented for this repository, so no local copy is committed. The bibliographic reference and the specific delivery implication are recorded without reproducing the work.
+
+This disposition follows the repository research-grounding rule: attach a paper only when redistribution is permissible and useful as durable evidence; otherwise cite, link, summarize, and make the non-vendoring reason reviewable.
+
 APA 7 references:
 
 - Bacchelli, A., & Bird, C. (2013). Expectations, outcomes, and challenges of modern code review. *2013 35th International Conference on Software Engineering (ICSE)*, 712–721. https://doi.org/10.1109/ICSE.2013.6606617
