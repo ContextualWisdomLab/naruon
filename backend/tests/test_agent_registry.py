@@ -1,11 +1,13 @@
 """Tests for the workspace agent registry loader."""
 
+from dataclasses import asdict
 import json
 
 import pytest
 
 import services.agent_registry as agent_registry_module
 from services.agent_registry import (
+    RegisteredAgent,
     clear_registry_cache,
     get_registered_agent,
     load_registered_agents,
@@ -264,6 +266,74 @@ def test_retained_raw_references_share_one_coherent_dictionary() -> None:
     del registered_agent.raw_entry["semantic_metadata"]
     assert "enabled" not in first_raw
     assert "semantic_metadata" not in second_raw
+
+
+def test_registered_agent_accepts_legacy_constructor_keywords() -> None:
+    """Preserve direct legacy construction while keeping semantic fields canonical."""
+    agent = RegisteredAgent(
+        agent_id="legacy-constructor",
+        name="Legacy Constructor",
+        framework="pydantic-ai",
+        entrypoint="services.legacy_constructor:run",
+        description="legacy description",
+        capabilities=("mail.read",),
+        enabled=False,
+        raw={
+            "name": "Legacy Constructor",
+            "framework": "pydantic-ai",
+            "entrypoint": "services.legacy_constructor:run",
+            "description": "legacy description",
+            "capabilities": ["mail.read"],
+            "enabled": False,
+        },
+    )
+
+    assert agent.agent_name == "Legacy Constructor"
+    assert agent.agent_framework == "pydantic-ai"
+    assert agent.agent_entrypoint == "services.legacy_constructor:run"
+    assert agent.agent_description == "legacy description"
+    assert agent.agent_capabilities == ("mail.read",)
+    assert agent.agent_enabled is False
+    assert agent.raw["name"] == "Legacy Constructor"
+    assert "name" not in agent.raw_entry
+
+
+def test_registered_agent_rejects_conflicting_semantic_and_legacy_keywords() -> None:
+    """Fail closed when old and new constructor vocabularies disagree."""
+    with pytest.raises(ValueError, match="agent_name"):
+        RegisteredAgent(
+            agent_id="conflicting-constructor",
+            agent_name="Semantic Name",
+            name="Legacy Name",
+            agent_framework="pydantic-ai",
+            agent_entrypoint="services.conflicting_constructor:run",
+        )
+
+
+def test_registered_agent_asdict_exposes_only_semantic_dataclass_state() -> None:
+    """Serialize dataclass state without traversing the retained legacy adapter."""
+    agent = agent_registry_module._agent_from_entry(
+        "serializable-agent",
+        {
+            "agent_name": "Serializable Agent",
+            "agent_framework": "pydantic-ai",
+            "agent_entrypoint": "services.serializable_agent:run",
+            "agent_description": "semantic description",
+            "agent_capabilities": ["mail.search"],
+            "agent_enabled": True,
+        },
+    )
+    assert agent is not None
+
+    serialized_agent = asdict(agent)
+
+    assert serialized_agent["agent_name"] == "Serializable Agent"
+    assert serialized_agent["agent_framework"] == "pydantic-ai"
+    assert serialized_agent["agent_entrypoint"] == "services.serializable_agent:run"
+    assert serialized_agent["raw_entry"]["agent_name"] == "Serializable Agent"
+    assert "_legacy_raw_dict" not in serialized_agent
+    assert "raw" not in serialized_agent
+    assert "name" not in serialized_agent
 
 
 def test_task_mapping_resolves_to_noema_agent() -> None:
