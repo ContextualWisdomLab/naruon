@@ -2721,6 +2721,42 @@ def test_data_attachment_reparse_intent_transitions_quarantined_to_pending(mock_
     assert attachment.parse_error_code is None
 
 
+def test_data_attachment_reparse_intent_locks_the_attachment_row(mock_db):
+    # Concurrent reparse-intent requests (or a request racing the reparse
+    # worker) must never read-then-blindly-overwrite the same unlocked row:
+    # a stale request holding an earlier "quarantined" read could otherwise
+    # clobber a result the worker already landed. Locking the row for the
+    # duration of this transaction serializes that race, exactly like
+    # calendar_conflict_judgment_service.apply_correction's FOR UPDATE.
+    owned_email = _email("<owned-quarantine-lock@example.com>", thread_id="thread-owned")
+    attachment = _attachment("invoice.pdf", "")
+    attachment.attachment_uid = "attachment_owned_lock"
+    attachment.content_type = "application/pdf"
+    attachment.parse_content_type = "image/png"
+    attachment.parse_status = "content_type_mismatch_quarantined"
+    attachment.parse_error_code = "content_type_mismatch_quarantined"
+    attachment.email = owned_email
+    mock_db.attachments.append(attachment)
+
+    token = _signed_session_token(_valid_session_payload(sub="owner"))
+    client, previous_secret, original_overrides = _with_signed_auth(mock_db, token)
+    try:
+        response = client.post(
+            "/api/data/attachments/attachment_owned_lock/reparse-intent"
+        )
+    finally:
+        client.close()
+        _restore_overrides(previous_secret, original_overrides)
+
+    assert response.status_code == 200, response.text
+    attachment_query = next(
+        query
+        for query in mock_db.queries
+        if "email_attachments.attachment_uid = " in str(query).lower()
+    )
+    assert "FOR UPDATE" in str(attachment_query)
+
+
 def test_data_attachment_reparse_intent_rejects_non_quarantined_status(mock_db):
     owned_email = _email("<owned-parsed@example.com>", thread_id="thread-owned")
     attachment = _attachment("notes.txt", "already parsed content")

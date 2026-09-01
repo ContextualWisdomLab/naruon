@@ -489,16 +489,20 @@ class NewsdomRecognitionWorker:
     async def _sweep_attachments(self, session: AsyncSession) -> None:
         """Process a bounded, starvation-free batch of pending attachments.
 
-        The cursor only advances past a row once it is confirmed resolved
-        (its processing did not raise). A row whose processing raised keeps
-        its ``pdf_dom_recognition_pending`` status untouched, so if the
-        cursor advanced past it anyway it would never be reselected by
-        ``_load_pending_attachments``'s ``id > cursor`` filter until the
-        whole forward queue happens to drain to empty -- silent, indefinite
-        starvation of that one row under continuous inbound attachment
-        traffic. Capping the cursor at the first failure keeps that row in
-        range for the next sweep. Each row is also re-fetched fresh by id
-        rather than reusing the bulk-loaded instance: ``AsyncSession.rollback()``
+        The cursor only advances past a row once it is confirmed resolved:
+        its processing did not raise, AND it did not return
+        ``RESULT_PENDING``. A row whose processing raised, or that came back
+        ``RESULT_PENDING`` (e.g. no active provider configured for its
+        organization yet), keeps its ``pdf_dom_recognition_pending`` status
+        untouched, so if the cursor advanced past it anyway it would never
+        be reselected by ``_load_pending_attachments``'s ``id > cursor``
+        filter until the whole forward queue happens to drain to empty --
+        silent, indefinite starvation of that one row under continuous
+        inbound attachment traffic. Capping the cursor at the first
+        unresolved row (failure or still-pending) keeps that row in range
+        for the next sweep, while later rows in the same batch are still
+        processed normally. Each row is also re-fetched fresh by id rather
+        than reusing the bulk-loaded instance: ``AsyncSession.rollback()``
         expires every object already loaded in this session, and
         ``process_pending_attachment`` reads attachment/email attributes
         synchronously, so a stale, expired instance from an earlier item's
@@ -507,7 +511,7 @@ class NewsdomRecognitionWorker:
         ``services.attachment_reparse_worker.AttachmentReparseWorker._sweep_attachments``.
         """
         rows = await self._load_pending_attachments(session)
-        first_failed_id = None
+        first_unresolved_id = None
         for attachment_id in [attachment.id for attachment in rows]:
             try:
                 attachment = await session.get(
@@ -524,7 +528,10 @@ class NewsdomRecognitionWorker:
                     request_fn=self._request_fn,
                 )
                 await session.commit()
-                if result != RESULT_PENDING:
+                if result == RESULT_PENDING:
+                    if first_unresolved_id is None:
+                        first_unresolved_id = attachment_id
+                else:
                     logger.info(
                         "NewsDOM attachment %s recognition result: %s",
                         attachment_id,
@@ -537,11 +544,13 @@ class NewsdomRecognitionWorker:
                     attachment_id,
                     exc_info=True,
                 )
-                if first_failed_id is None:
-                    first_failed_id = attachment_id
+                if first_unresolved_id is None:
+                    first_unresolved_id = attachment_id
         if rows:
             self._attachment_cursor = (
-                first_failed_id - 1 if first_failed_id is not None else rows[-1].id
+                first_unresolved_id - 1
+                if first_unresolved_id is not None
+                else rows[-1].id
             )
 
     def _pending_attachment_statement(self, after_id: int | None):
@@ -586,24 +595,27 @@ class NewsdomRecognitionWorker:
     async def _sweep_documents(self, session: AsyncSession) -> None:
         """Process a bounded, starvation-free batch of pending documents.
 
-        Same starvation/staleness fix as ``_sweep_attachments``, adapted for
-        ``Document.document_id`` being an opaque string primary key rather
-        than an auto-incrementing integer: there is no ``id - 1`` to fall
-        back on, so instead of capping at "first failure minus one" this
-        tracks the id of the last row actually confirmed resolved before
-        any failure, and never advances the cursor past that point. This is
-        equivalent to the integer case for a contiguous key (both stop the
-        cursor exactly at the position before the first failure) and
-        remains correct for a non-contiguous or non-numeric key.
+        Same starvation/staleness fix as ``_sweep_attachments`` -- a row that
+        raised, or that came back ``RESULT_PENDING`` (no active provider
+        configured for its organization yet), must not advance the cursor
+        past it -- adapted for ``Document.document_id`` being an opaque
+        string primary key rather than an auto-incrementing integer: there
+        is no ``id - 1`` to fall back on, so instead of capping at "first
+        unresolved row minus one" this tracks the id of the last row
+        actually confirmed resolved before any unresolved row, and never
+        advances the cursor past that point. This is equivalent to the
+        integer case for a contiguous key (both stop the cursor exactly at
+        the position before the first unresolved row) and remains correct
+        for a non-contiguous or non-numeric key.
         """
         rows = await self._load_pending_documents(session)
         last_resolved_id = self._document_cursor
-        failed = False
+        unresolved = False
         for document_id in [document.document_id for document in rows]:
             try:
                 document = await session.get(Document, document_id)
                 if document is None:
-                    if not failed:
+                    if not unresolved:
                         last_resolved_id = document_id
                     continue
                 result = await process_pending_document(
@@ -613,9 +625,11 @@ class NewsdomRecognitionWorker:
                     request_fn=self._request_fn,
                 )
                 await session.commit()
-                if not failed:
-                    last_resolved_id = document_id
-                if result != RESULT_PENDING:
+                if result == RESULT_PENDING:
+                    unresolved = True
+                else:
+                    if not unresolved:
+                        last_resolved_id = document_id
                     logger.info(
                         "NewsDOM document %s recognition result: %s",
                         document_id,
@@ -628,10 +642,10 @@ class NewsdomRecognitionWorker:
                     document_id,
                     exc_info=True,
                 )
-                failed = True
+                unresolved = True
         if rows:
             self._document_cursor = (
-                last_resolved_id if failed else rows[-1].document_id
+                last_resolved_id if unresolved else rows[-1].document_id
             )
 
     def _pending_document_statement(self, after_id: str | None):

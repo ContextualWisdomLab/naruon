@@ -2530,16 +2530,27 @@ async def _get_scoped_attachment(
     db: AsyncSession,
     auth_context: AuthContext,
     attachment_uid: str,
+    *,
+    lock: bool = False,
 ) -> Attachment:
     # Attachment carries no workspace_id/user_id/organization_id of its own --
     # it is scoped through its parent Email, same as every other
     # attachment-facing query in this file.
     email_scope = _email_scope_filter(auth_context)
-    result = await db.execute(
+    statement = (
         select(Attachment)
         .join(Email)
         .where(Attachment.attachment_uid == attachment_uid, *email_scope)
     )
+    if lock:
+        # Concurrent read-then-write status transitions (e.g. reparse-intent)
+        # must not race unlocked: without this, a stale request that already
+        # read an earlier status could commit after a concurrent request (or
+        # the reparse worker) has moved the row further along, silently
+        # clobbering that newer result. Scoped to Attachment only so this
+        # doesn't also lock the joined Email row.
+        statement = statement.with_for_update(of=Attachment)
+    result = await db.execute(statement)
     attachment = result.scalar_one_or_none()
     if attachment is None:
         raise HTTPException(status_code=404, detail="Attachment not found")
@@ -3353,7 +3364,9 @@ async def create_attachment_reparse_intent(
     auth_context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> DataAttachmentActionResponse:
-    attachment = await _get_scoped_attachment(db, auth_context, attachment_uid)
+    attachment = await _get_scoped_attachment(
+        db, auth_context, attachment_uid, lock=True
+    )
     if attachment.parse_status != CONTENT_TYPE_MISMATCH_QUARANTINED_STATUS:
         raise HTTPException(
             status_code=422,

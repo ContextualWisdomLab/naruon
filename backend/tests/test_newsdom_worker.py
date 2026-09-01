@@ -509,6 +509,39 @@ async def test_attachment_sweep_caps_the_cursor_at_the_first_failure_not_the_las
     assert session.rollback_count == 1
 
 
+@pytest.mark.asyncio
+async def test_attachment_sweep_caps_the_cursor_at_the_first_pending_result_too():
+    # RESULT_PENDING (no active provider yet) leaves parse_status untouched,
+    # exactly like a raised exception -- the row must still be selectable by
+    # the next sweep's "id > cursor" filter, not skipped forever just
+    # because later rows in the same batch resolved successfully.
+    first = _pending_attachment(attachment_id=1, organization_id="org-unconfigured")
+    second = _pending_attachment(attachment_id=2, organization_id="org-ready")
+    third = _pending_attachment(attachment_id=3, organization_id="org-ready")
+    session = _SequenceSession([[first, second, third]])
+
+    async def config_resolver(_session, organization_id):
+        return _config() if organization_id == "org-ready" else None
+
+    async def request_fn(**_kwargs):
+        return _canned_response()
+
+    worker = NewsdomRecognitionWorker(
+        config_resolver=config_resolver,
+        request_fn=request_fn,
+    )
+    await worker._sweep_attachments(session)
+
+    # The cursor stops just before the still-pending row (id 1), not at the
+    # batch's last row (id 3), so a later sweep -- once org-unconfigured
+    # gains a provider -- still reselects it.
+    assert worker._attachment_cursor == 0
+    assert first.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+    assert second.parse_status == "parsed"
+    assert third.parse_status == "parsed"
+    assert session.rollback_count == 0
+
+
 class _ExpiredAttachment:
     """Stands in for an ORM instance ``AsyncSession.rollback()`` expired.
 
@@ -570,18 +603,27 @@ async def test_attachment_sweep_never_processes_the_bulk_loaded_instance_directl
 
 @pytest.mark.asyncio
 async def test_document_sweep_advances_and_wraps_without_starvation():
-    blocked = [
-        _pending_document(f"doc-{index:03d}", organization_id="org-blocked")
+    # A batch that fully resolves lets the cursor legitimately advance to
+    # its tail. The next sweep then finds nothing above that cursor and
+    # wraps (resets to None, re-queries from the start) -- which is how a
+    # late-arriving row behind the old cursor position gets picked up. A
+    # row that comes back via the wrap but is still blocked (no provider
+    # configured for its org) must not itself advance the cursor -- that is
+    # the same no-starvation fix as `_sweep_attachments`, just reached via
+    # the wrap path instead of directly.
+    resolved_batch = [
+        _pending_document(f"doc-{index:03d}", organization_id="org-ready")
         for index in range(1, 11)
     ]
-    ready_after_batch = _pending_document("doc-011", organization_id="org-ready")
-    # The wrap re-fetches "doc-001" by id -- exactly like a real database
-    # would return the current state of that single row, not a separate
-    # instance -- so simulate "it became configured" by mutating the same
-    # object rather than registering a second, distinct Document under the
-    # same id (the fake session's by-id map, like a real one, has exactly
-    # one row per id).
-    session = _SequenceSession([blocked, [ready_after_batch], [], [blocked[0]]])
+    late_arrival = _pending_document("doc-011", organization_id="org-blocked")
+    # The re-sweep re-fetches "doc-011" by id -- exactly like a real
+    # database would return the current state of that single row, not a
+    # separate instance -- so simulate "it became configured" by mutating
+    # the same object rather than registering a second, distinct Document
+    # under the same id.
+    session = _SequenceSession(
+        [resolved_batch, [], [late_arrival], [late_arrival]]
+    )
 
     async def config_resolver(_session, organization_id):
         return _config() if organization_id == "org-ready" else None
@@ -595,19 +637,26 @@ async def test_document_sweep_advances_and_wraps_without_starvation():
         request_fn=request_fn,
     )
     await worker._sweep_documents(session)
-    await worker._sweep_documents(session)
-    worker._document_cursor = "doc-999"
-    blocked[0].organization_id = "org-ready"
-    await worker._sweep_documents(session)
+    assert worker._document_cursor == "doc-010"
+    for document in resolved_batch:
+        assert document.document_status == "parsed"
 
-    second_query = session.statements[1].compile()
-    wrapped_query = session.statements[3].compile()
-    assert "workspace_documents.document_id >" in str(second_query)
-    assert "doc-010" in second_query.params.values()
+    await worker._sweep_documents(session)
+    # Nothing above "doc-010" existed, so the wrap fired; the still-blocked
+    # late arrival keeps the cursor at None rather than skipping past it.
+    assert worker._document_cursor is None
+    assert late_arrival.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+
+    late_arrival.organization_id = "org-ready"
+    await worker._sweep_documents(session)
+    assert worker._document_cursor == "doc-011"
+    assert late_arrival.document_status == "parsed"
+
+    empty_query = session.statements[1].compile()
+    wrapped_query = session.statements[2].compile()
+    assert "workspace_documents.document_id >" in str(empty_query)
+    assert "doc-010" in empty_query.params.values()
     assert "workspace_documents.document_id >" not in str(wrapped_query)
-    assert worker._document_cursor == "doc-001"
-    assert ready_after_batch.document_status == "parsed"
-    assert blocked[0].document_status == "parsed"
     assert session.commit_count == 12
     assert session.rollback_count == 0
 
@@ -655,6 +704,34 @@ async def test_document_sweep_caps_the_cursor_at_the_first_failure_not_the_last_
     assert third.document_status == "parsed"
     assert session.commit_count == 2
     assert session.rollback_count == 1
+
+
+@pytest.mark.asyncio
+async def test_document_sweep_caps_the_cursor_at_the_first_pending_result_too():
+    # Same fix as the attachment sweep: RESULT_PENDING must cap the cursor
+    # just like a raised exception, not advance past the still-pending row.
+    first = _pending_document("doc-001", organization_id="org-unconfigured")
+    second = _pending_document("doc-002", organization_id="org-ready")
+    third = _pending_document("doc-003", organization_id="org-ready")
+    session = _SequenceSession([[first, second, third]])
+
+    async def config_resolver(_session, organization_id):
+        return _config() if organization_id == "org-ready" else None
+
+    async def request_fn(**_kwargs):
+        return _canned_response()
+
+    worker = NewsdomRecognitionWorker(
+        config_resolver=config_resolver,
+        request_fn=request_fn,
+    )
+    await worker._sweep_documents(session)
+
+    assert worker._document_cursor is None
+    assert first.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+    assert second.document_status == "parsed"
+    assert third.document_status == "parsed"
+    assert session.rollback_count == 0
 
 
 @pytest.mark.asyncio

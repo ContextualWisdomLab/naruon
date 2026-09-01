@@ -1,4 +1,31 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🟡 minor → 실제로는 진짜 결함) NewsDOM 재인식 sweep의 커서가
+  `RESULT_PENDING`(아직 provider 미설정) 행도 실패 없이 진행했다고 취급해 커서를 그 너머로
+  진행시켜, 계속 새 업로드가 들어오는 동안 해당 행이 무기한 굶주릴 수 있었습니다.**
+  `_sweep_attachments`/`_sweep_documents`는 이미 "예외가 발생한 행은 커서를 그 앞에서 멈춘다"는
+  불변식을 문서화하고 구현했지만, `RESULT_PENDING`(예외 없이 정상 반환되지만
+  `pdf_dom_recognition_pending` 상태가 그대로인 경우)은 같은 취급을 받지 못했습니다 —
+  provider가 아직 설정되지 않은 organization의 첨부/문서가 배치 중간에 있으면, 이후 provider가
+  설정되어도 그 뒤로 새 행이 계속 쌓이는 한 그 특정 행은 `id > cursor` 필터에 걸려 영원히
+  재선택되지 못할 수 있었습니다. 두 sweep 모두 `RESULT_PENDING`을 예외와 동일하게(첫 미해결
+  행에서 커서를 멈추되, 같은 배치의 나머지 행은 계속 처리) 취급하도록 수정. 새 테스트 2개로
+  진짜 RED(커서가 last row까지 진행됨) 확인 후 GREEN. 기존
+  `test_document_sweep_advances_and_wraps_without_starvation`은 이 버그가 고쳐지기 전
+  동작(모두 pending인 배치도 커서가 끝까지 진행)을 전제로 작성되어 있어, 수정된 계약(완전히
+  resolve된 배치만 커서가 진행하고, wrap 이후에도 여전히 막힌 행은 커서를 None으로 유지)에
+  맞게 시나리오를 다시 작성.
+- **(Devin 리뷰 대응, 🟨 실제 결함) 첨부파일 reparse-intent 엔드포인트가 락 없는
+  read-then-write로 상태를 전이해, 동시 요청(또는 워커와의 경합)이 최신 결과를 덮어쓸 수
+  있었습니다.** `create_attachment_reparse_intent`가 `quarantined` 상태를 확인한 뒤 락 없이
+  `reparse_pending`으로 갱신·커밋했는데, 오래된 읽기를 들고 있는 지연된 중복 요청이 그 사이
+  워커가 이미 처리를 마친 최신 상태를 `reparse_pending`으로 되돌려 덮어쓸 수 있는 TOCTOU
+  경쟁이었습니다. `calendar_conflict_judgment_service.apply_correction`이 이미 쓰는 것과 같은
+  `with_for_update()` 패턴을 `_get_scoped_attachment`에 `lock` 키워드 인자로 추가해 이
+  엔드포인트에서만 사용하도록 수정. 새 테스트로 컴파일된 쿼리에 `FOR UPDATE`가 포함됨을
+  확인(같은 파일의 다른 호출부는 계속 락 없이 조회), 실제 PostgreSQL에 대해 이 JOIN +
+  `FOR UPDATE OF` 조합이 유효한 SQL임을 별도로 확인.
+  전체 백엔드 스위트: Postgres 기동 시 1942 passed / 3 skipped, 중지 시 1905 passed / 40
+  skipped, ruff clean.
 - **(🔴 critical, 현실성검증으로 발견: 신선한 DB에 대한 `alembic upgrade head`가 항상 실패)
   `backend/.github/workflows/app-ci.yml`의 backend job에는 Postgres 서비스 컨테이너가 전혀
   구성되어 있지 않다** — `@pytest.mark.postgres`로 표시된 모든 real-PostgreSQL 테스트는 CI에서
