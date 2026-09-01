@@ -221,9 +221,9 @@ def test_reparse_escapes_a_now_recognized_false_positive():
         filename="report.docx",
     )
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == "unsupported_content_type"
+    assert outcome.parse_status == "unsupported_content_type"
     assert attachment.parse_status == "unsupported_content_type"
     assert attachment.parse_error_code == "unsupported_content_type"
     assert attachment.parse_status != _QUARANTINED_STATUS
@@ -247,9 +247,9 @@ def test_reparse_to_unsupported_content_type_preserves_retained_bytes():
     )
     retained_content = attachment.content
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == "unsupported_content_type"
+    assert outcome.parse_status == "unsupported_content_type"
     assert attachment.content == retained_content
     assert base64.b64decode(attachment.content) == payload
 
@@ -263,9 +263,9 @@ def test_reparse_of_a_genuine_mismatch_returns_to_quarantine():
         filename="invoice.pdf",
     )
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == _QUARANTINED_STATUS
+    assert outcome.parse_status == _QUARANTINED_STATUS
     assert attachment.parse_status == _QUARANTINED_STATUS
     assert attachment.parse_error_code == _QUARANTINED_STATUS
     assert attachment.parse_content_type == "image/png"
@@ -277,9 +277,9 @@ def test_reparse_rejects_an_invalid_retained_payload():
     )
     attachment.content = "not@@base64!!"
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == RESULT_DECODE_FAILED
+    assert outcome.parse_status == RESULT_DECODE_FAILED
     assert attachment.parse_status == ATTACHMENT_REPARSE_PAYLOAD_INVALID_STATUS
     assert attachment.parse_error_code == ATTACHMENT_REPARSE_PAYLOAD_INVALID_STATUS
 
@@ -314,9 +314,10 @@ def test_reparse_that_lands_on_parsed_indexes_the_content_graph():
         attachment_uid="attachment_notes-uid",
     )
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == "parsed"
+    assert outcome.parse_status == "parsed"
+    assert outcome.embedding_source_text == "Meeting notes\n\nDiscuss the roadmap."
     assert attachment.parse_status == "parsed"
     assert [node.node_kind for node in attachment.content_nodes] == [
         "document",
@@ -361,11 +362,40 @@ def test_reparse_that_lands_on_parsed_with_blank_content_does_not_index_content_
         email_id=42,
     )
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == "parsed"
+    assert outcome.parse_status == "parsed"
     assert attachment.content_nodes == []
     assert attachment.content_segments == []
+
+
+def test_reparse_that_lands_on_parsed_with_markup_only_content_still_embeds_parse_content():
+    # A "parsed" result whose *display* text (content) strips down to empty
+    # while its *parse* text (parse_content) does not -- e.g. an attachment
+    # that is only markup with no visible text nodes. apply_reparsed_result's
+    # `if result.content:` guard (see its docstring) then leaves
+    # attachment.content untouched, so the embedding source must come from
+    # ReparseOutcome.embedding_source_text (parse_content preferred over
+    # content, matching _append_reparsed_attachment_content_graph and
+    # email_import_service._extract_and_generate_embeddings), never from
+    # attachment.content directly -- CodeRabbit flagged this exact mismatch
+    # on naruon#1501.
+    attachment = _reparse_pending_attachment(
+        content_type="text/plain",
+        payload=b"<div></div>",
+        filename="markup-only.txt",
+        email_id=42,
+    )
+
+    outcome = process_reparse_pending_attachment(attachment=attachment)
+
+    assert outcome.parse_status == "parsed"
+    # result.content ("") is falsy, so apply_reparsed_result's `if
+    # result.content:` guard leaves attachment.content at its retained,
+    # still-base64-encoded original value -- exactly why the embedding
+    # source cannot come from attachment.content.
+    assert attachment.content == base64.b64encode(b"<div></div>").decode("ascii")
+    assert outcome.embedding_source_text == "<div></div>"
 
 
 def test_reparse_that_does_not_land_on_parsed_does_not_index_content_graph():
@@ -376,9 +406,9 @@ def test_reparse_that_does_not_land_on_parsed_does_not_index_content_graph():
         email_id=42,
     )
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == _QUARANTINED_STATUS
+    assert outcome.parse_status == _QUARANTINED_STATUS
     assert attachment.content_nodes == []
     assert attachment.content_segments == []
 

@@ -1,4 +1,39 @@
 ## [Unreleased]
+- **(CodeRabbit 리뷰 대응, naruon#1501) 첨부파일 reparse content-graph 색인 후속(바로 아래 항목)의
+  전체 리뷰에서 실제 결함 2건이 나와 모두 고쳤습니다.** (1) reparse 임베딩 재생성이
+  resolved parse 소스 텍스트 대신 `attachment.content`에서 값을 읽고 있었습니다.
+  `apply_reparsed_result`는 `result.content`(마크업을 걷어낸 *display* 문자열)가 비어있지
+  않을 때만 `attachment.content`를 덮어쓰는데, `"parsed"` 결과의 display 텍스트는 빈 문자열로
+  스트립되지만 raw `result.parse_content`는 그렇지 않은 경우(예: 보이는 텍스트 노드 없이
+  마크업만 있는 첨부파일) `attachment.content`가 base64로 인코딩된 채 그대로 남아있어,
+  임베딩이 실제 재파싱된 텍스트가 아니라 base64 노이즈로부터 생성됐습니다 — content graph는
+  올바른 텍스트로 색인됐는데(`_append_reparsed_attachment_content_graph`가 이미
+  `result.parse_content or result.content`를 직접 resolve했으므로, import 시점의
+  `email_import_service._extract_and_generate_embeddings`와 동일한 resolve 방식), 임베딩만
+  어긋난 것입니다. `process_reparse_pending_attachment`는 이제 단순 상태 문자열 대신
+  `ReparseOutcome(parse_status, embedding_source_text)`를 반환해, 그 동일한 resolved 텍스트를
+  attachment 행에서 다시(불안정하게) 유도하지 않고 임베딩 재생성으로 명시적으로 전달합니다.
+  신규 테스트:
+  `test_reparse_that_lands_on_parsed_with_markup_only_content_still_embeds_parse_content`.
+  (2) `0011_email_read_state.py`의 `downgrade()`가 legacy `emails` 테이블과 `is_read`
+  컬럼이 둘 다 있으면 무조건 컬럼을 drop했습니다 — 이 리비전보다 먼저 존재했던(그래서 이
+  리비전의 `NOT EXISTS` 가드가 건드리지 않은) 동명의 `is_read` 컬럼까지 데이터째 파괴할 수
+  있었습니다. `upgrade()`가 이제 자신이 만든 컬럼에 `COMMENT ON COLUMN` provenance 마커
+  (`_IS_READ_PROVENANCE_MARKER = "0011_email_read_state:added"`)를 남기고, `downgrade()`는
+  `col_description`으로 그 마커가 정확히 있을 때만 drop합니다 — 이 리비전이 추가한 것만
+  drop하고 그 외에는 손대지 않습니다. 신규 real-Postgres 테스트:
+  `test_legacy_email_read_state_downgrade_preserves_a_preexisting_column`(legacy
+  `emails.is_read` 컬럼에 데이터를 미리 심어두고 upgrade→downgrade를 실행해 컬럼과 데이터가
+  모두 살아남는지 확인). 추가로 `email_import_service._generate_source_embedding`을 공개
+  `generate_source_embedding`으로 개명(CodeRabbit nitpick): `content_graph_source_record_uid`,
+  `append_knowledge_graph_edges`에 이어 `attachment_reparse_worker.py`가 가져다 쓰는 세
+  번째 cross-module 헬퍼이므로, 모든 cross-module 헬퍼가 public일 때 모듈 경계가 일관됩니다.
+  검증: 전체 백엔드 스위트 1911 passed/43 skipped(`DATABASE_URL` 미설정, CI와 동일), 이번
+  수정이 건드린 테스트는 전부 실제 PostgreSQL 16 + pgvector에 대해 단독 실행 시 통과 — 같은
+  실제 DB에 대해 스위트 전체를 한 프로세스로 돌리면 이 PR에서 이미 보고된 기존 cross-file
+  test-ordering 실패 1건(`test_0001_initial_upgrade_succeeds_against_a_fresh_database`가
+  스위트 중간에 `email_records`를 drop·재생성)이 재현되지만, 이번 수정과는 무관합니다. ruff
+  clean.
 - **(Devin 리뷰 대응, naruon#1486 후속) 첨부파일 reparse가 성공적으로 재인식된 콘텐츠를
   초기 import 경로와 달리 content graph에 색인하지 않던 gap을 고쳤습니다.**
   `services/email_import_service.py::_append_email_content_graph`는 첨부파일이 첫

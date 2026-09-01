@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from dataclasses import dataclass
 
 from sqlalchemy import bindparam, func, select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
@@ -32,8 +33,8 @@ from services.attachment_parser import (
 from services.content_graph import content_graph_source_record_uid, parse_content
 from services.email_import_service import (
     EmailImportEmbeddingProvider,
-    _generate_source_embedding,
     append_knowledge_graph_edges,
+    generate_source_embedding,
 )
 from services.llm_provider_selection import resolve_runtime_llm_provider
 
@@ -182,9 +183,18 @@ def _append_reparsed_attachment_content_graph(
 
 
 async def _refresh_reparsed_attachment_embedding(
-    session: AsyncSession, attachment: Attachment
+    session: AsyncSession, attachment: Attachment, *, source_text: str
 ) -> None:
-    """Regenerate the attachment vector through its tenant's active provider."""
+    """Regenerate the attachment vector through its tenant's active provider.
+
+    ``source_text`` must be the caller's already-resolved embedding source
+    (see ``ReparseOutcome.embedding_source_text``), not read from
+    ``attachment.content``: ``apply_reparsed_result`` only overwrites that
+    column when ``result.content`` is non-empty (see its docstring), so a
+    "parsed" result whose *display* text strips to empty while its *parse*
+    text does not (e.g. markup-only content) would leave ``attachment.content``
+    stale and this would otherwise embed unrelated, already-superseded bytes.
+    """
     provider = await resolve_runtime_llm_provider(
         session,
         user_id=attachment.email.user_id,
@@ -199,20 +209,37 @@ async def _refresh_reparsed_attachment_embedding(
         if provider is not None
         else None
     )
-    attachment.embedding = await _generate_source_embedding(
-        attachment.content,
+    attachment.embedding = await generate_source_embedding(
+        source_text,
         embedding_provider=embedding_provider,
     )
 
 
-def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
+@dataclass(frozen=True, slots=True)
+class ReparseOutcome:
+    """Result of one ``process_reparse_pending_attachment`` call.
+
+    ``embedding_source_text`` mirrors the exact source-text resolution
+    ``_append_reparsed_attachment_content_graph`` uses (``parse_content``
+    preferred over ``content``) and the import path's
+    ``email_import_service._extract_and_generate_embeddings`` already uses
+    for the same reason -- it is meaningful only when ``parse_status ==
+    "parsed"``, but is always populated for a uniform return shape.
+    """
+
+    parse_status: str
+    embedding_source_text: str
+
+
+def process_reparse_pending_attachment(*, attachment: Attachment) -> ReparseOutcome:
     """Re-evaluate one ``reparse_pending`` attachment in place.
 
-    Returns the resulting ``parse_status`` on a successful re-evaluation
-    (``"parsed"``, the quarantine status again, or any other terminal status
-    ``parse_email_attachment`` can return), or ``RESULT_DECODE_FAILED`` when
-    the retained payload itself is not valid base64 -- moved to a dedicated
-    failure status so the sweep does not retry it forever.
+    Returns a :class:`ReparseOutcome` carrying the resulting ``parse_status``
+    on a successful re-evaluation (``"parsed"``, the quarantine status again,
+    or any other terminal status ``parse_email_attachment`` can return), or
+    ``RESULT_DECODE_FAILED`` when the retained payload itself is not valid
+    base64 -- moved to a dedicated failure status so the sweep does not retry
+    it forever.
     """
     try:
         raw_content = decode_quarantined_attachment_payload(attachment.content)
@@ -224,7 +251,9 @@ def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
             getattr(attachment, "id", "?"),
             exc,
         )
-        return RESULT_DECODE_FAILED
+        return ReparseOutcome(
+            parse_status=RESULT_DECODE_FAILED, embedding_source_text=""
+        )
 
     result = parse_email_attachment(
         filename=attachment.filename,
@@ -232,7 +261,10 @@ def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
         raw_content=raw_content,
     )
     apply_reparsed_result(attachment=attachment, result=result)
-    return result.parse_status
+    return ReparseOutcome(
+        parse_status=result.parse_status,
+        embedding_source_text=result.parse_content or result.content,
+    )
 
 
 def _engine_uses_postgresql() -> bool:
@@ -429,14 +461,18 @@ class AttachmentReparseWorker:
                         "knowledge_graph_edges",
                     ],
                 )
-                result = process_reparse_pending_attachment(attachment=attachment)
-                if result == "parsed":
-                    await _refresh_reparsed_attachment_embedding(session, attachment)
+                outcome = process_reparse_pending_attachment(attachment=attachment)
+                if outcome.parse_status == "parsed":
+                    await _refresh_reparsed_attachment_embedding(
+                        session,
+                        attachment,
+                        source_text=outcome.embedding_source_text,
+                    )
                 await session.commit()
                 logger.info(
                     "Attachment %s reparse result: %s",
                     attachment_id,
-                    result,
+                    outcome.parse_status,
                 )
             except Exception:
                 await session.rollback()

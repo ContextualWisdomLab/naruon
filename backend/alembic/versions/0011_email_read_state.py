@@ -8,15 +8,16 @@ operations (``op.create_index``, ...), never ``sa.text(f"...")`` DDL" rule
 ``op.execute()`` with the module-level ``_UPGRADE_SQL``/``_DOWNGRADE_SQL``
 constants instead of a structured ``op.*`` call. That rule's actual target is
 DDL built from interpolated identifier strings (an injection-safety concern);
-these constants are plain static text with no interpolation, string
-formatting, or identifiers built from variables -- the same safety property
-a structured call would have. The reason a structured call isn't used is
-different: this migration's behavior must be conditional on whether the
-legacy ``emails`` table exists, evaluated at apply time (see the comment on
-``_UPGRADE_SQL`` below for why that check cannot live in Python), and no
-structured Alembic operation expresses "run this DDL only if a runtime
-condition holds" -- a ``DO $$ ... $$`` block is the correct primitive for
-that, not a workaround for one.
+these constants interpolate only ``_IS_READ_PROVENANCE_MARKER``, a fixed
+module-level literal, never an identifier or a value built from a variable,
+external input, or runtime state -- the same safety property a structured
+call would have. The reason a structured call isn't used is different: this
+migration's behavior must be conditional on whether the legacy ``emails``
+table exists, evaluated at apply time (see the comment on ``_UPGRADE_SQL``
+below for why that check cannot live in Python), and no structured Alembic
+operation expresses "run this DDL only if a runtime condition holds" -- a
+``DO $$ ... $$`` block is the correct primitive for that, not a workaround
+for one.
 """
 
 from alembic import op
@@ -59,7 +60,20 @@ depends_on = None
 # different (or no) table, passing the guard for the wrong relation or
 # aborting the migration outright. Resolving both the check and the DDL
 # through the same name lookup makes that mismatch structurally impossible.
-_UPGRADE_SQL = """
+#
+# ``COMMENT ON COLUMN emails.is_read`` tags the column with a provenance
+# marker (``_IS_READ_PROVENANCE_MARKER``) the moment upgrade() actually adds
+# it. downgrade() only drops the column when that exact marker is present
+# (CodeRabbit, naruon#1501): an ``emails.is_read`` column that already
+# existed before this revision ran -- from some other, unrelated origin --
+# would upgrade()'s ``NOT EXISTS`` guard correctly leave alone, but an
+# unconditional ``DROP COLUMN IF EXISTS`` on downgrade would still destroy it
+# and its data, since a downgrade has no other way to tell "I added this"
+# apart from "this happens to be present". Checking the marker via
+# ``col_description`` makes downgrade drop only what this exact revision's
+# upgrade created.
+_IS_READ_PROVENANCE_MARKER = "0011_email_read_state:added"
+_UPGRADE_SQL = f"""
 DO $$
 BEGIN
     IF to_regclass('emails') IS NOT NULL AND NOT EXISTS (
@@ -69,14 +83,25 @@ BEGIN
         AND NOT attisdropped
     ) THEN
         ALTER TABLE emails ADD COLUMN is_read boolean NOT NULL DEFAULT true;
+        COMMENT ON COLUMN emails.is_read IS '{_IS_READ_PROVENANCE_MARKER}';
     END IF;
 END $$;
 """
 
-_DOWNGRADE_SQL = """
+_DOWNGRADE_SQL = f"""
 DO $$
 BEGIN
-    IF to_regclass('emails') IS NOT NULL THEN
+    IF to_regclass('emails') IS NOT NULL AND EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = to_regclass('emails')
+        AND attname = 'is_read'
+        AND NOT attisdropped
+    ) AND col_description(to_regclass('emails'), (
+        SELECT attnum FROM pg_attribute
+        WHERE attrelid = to_regclass('emails')
+        AND attname = 'is_read'
+        AND NOT attisdropped
+    )) = '{_IS_READ_PROVENANCE_MARKER}' THEN
         ALTER TABLE emails DROP COLUMN IF EXISTS is_read;
     END IF;
 END $$;

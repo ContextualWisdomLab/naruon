@@ -338,7 +338,7 @@ async def _extract_and_generate_embeddings(
     fitted_embeddings: list[list[float]] = []
     for source_text in source_texts:
         fitted_embeddings.append(
-            await _generate_source_embedding(
+            await generate_source_embedding(
                 source_text,
                 embedding_provider=embedding_provider,
                 batch_context=batch_context,
@@ -347,13 +347,19 @@ async def _extract_and_generate_embeddings(
     return attachment_payloads, fitted_embeddings
 
 
-async def _generate_source_embedding(
+async def generate_source_embedding(
     source_text: str,
     *,
     embedding_provider: EmailImportEmbeddingProvider | None,
     batch_context: "EmailImportBatchContext | None" = None,
 ) -> list[float]:
-    """Chunk, embed in bounded windows, and average one source vector."""
+    """Chunk, embed in bounded windows, and average one source vector.
+
+    Public (not ``_``-prefixed): ``attachment_reparse_worker.py`` imports
+    this cross-module, alongside ``content_graph_source_record_uid`` and
+    ``append_knowledge_graph_edges`` -- the module boundary stays consistent
+    when every cross-module helper is public (CodeRabbit, naruon#1501).
+    """
     source_chunks = chunk_text(source_text)
     if not source_chunks:
         return _zero_embedding()
