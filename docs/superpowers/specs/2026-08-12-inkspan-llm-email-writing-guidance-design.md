@@ -117,7 +117,7 @@ Creates a bounded review for one exact editor revision.
 
 ```json
 {
-  "source_email_id": 184,
+  "source_email_id": "<root@example.com>",
   "document_revision": "\"sha256-BASE64URL\"",
   "projection_name": "inkspan-prosemirror-text",
   "projection_version": 1,
@@ -135,7 +135,7 @@ Creates a bounded review for one exact editor revision.
 
 Rules:
 
-- `source_email_id` is scoped and re-read server-side;
+- `source_email_id` is the opaque source-message identifier already exposed by Naruon mail contracts (the message `message_id`), never the sequential/internal database `email_id`; it is owner/tenant scoped and re-read server-side;
 - revision, projection, and draft describe one exact Inkspan snapshot;
 - `changed_selector` is required in incremental mode and omitted in deep mode;
 - `reply_objective` is untrusted user guidance, not a policy override;
@@ -400,20 +400,19 @@ No scalar “email risk score” is a release criterion.
 
 ## Data model
 
-Phase 1 may keep review state ephemeral. Persistent objects, if later required, use two-or-more-word `snake_case` names:
+The first release persists exactly three privacy-minimized, feature-owned evidence tables through migration `20260812_0001_add_email_writing_review_evidence.py`:
 
 ```text
 email_review_session
 writing_diagnostic_record
 diagnostic_feedback_event
-judge_policy_artifact
-judge_calibration_run
-review_model_profile
-review_rubric_version
-review_evaluation_case
 ```
 
-Raw source email or draft text is not duplicated by default. Persisted diagnostic content requires encryption, retention, access, and deletion policy and never becomes canonical email content.
+`email_review_session` owns the review scope, opaque source-message reference, reviewed revision/projection, policy/workflow/rubric provenance, status, bounded timing/cost buckets, and expiry. `writing_diagnostic_record` owns selector coordinates, hashes, criterion categories, admission metadata, and the session relationship without replacement or explanation plaintext. `diagnostic_feedback_event` owns explicit author feedback, revision references, stale/conflict reason, event time, and an idempotency key. Session and admitted/withheld diagnostic evidence are committed atomically; a persistence failure rolls back the evidence transaction and returns a typed failure or abstention without disabling the feature or changing schema.
+
+The default evidence-retention period is 30 days. Owner-scoped expiry/deletion removes a session and its dependent diagnostic and feedback rows without scanning, rewriting, or deleting canonical email content. Raw source email, draft, replacement, explanation, prompt, model/Judge output, provider credentials, and complete traces are not stored in these tables. PostgreSQL and the repository's SQLite compatibility path must both prove upgrade and downgrade behavior. Every table, column, index, constraint, and relationship uses descriptive two-or-more-word `snake_case` names.
+
+Later calibration or registry persistence such as `judge_policy_artifact`, `judge_calibration_run`, `review_model_profile`, `review_rubric_version`, or `review_evaluation_case` requires its own explicit migration/retention contract before it becomes durable state; naming those concepts here does not authorize an unversioned first-release table.
 
 ## Privacy and PII controls
 
@@ -560,12 +559,13 @@ No mutable branch or source archive becomes a production dependency.
 
 ## Rollback
 
-- disable semantic review by tenant/product configuration;
-- preserve Inkspan authoring, drafts, and sending;
-- stop review requests;
-- retain only policy-required bounded audit evidence;
-- optionally retain the separately described one-shot drafting path without claiming contextual inline review;
-- require no canonical email or database migration to remove ephemeral state.
+- disable semantic review by tenant/product configuration before removing any evidence contract;
+- preserve Inkspan authoring, existing drafts, and the mail-send path;
+- stop new review requests and writes to the three feature-owned evidence tables;
+- delete dependent `diagnostic_feedback_event` and `writing_diagnostic_record` rows before their owning `email_review_session` rows under the authorized retention/deletion operation;
+- run the documented downgrade only after semantic review is disabled and dependent feature evidence is removed; downgrade drops only `email_review_session`, `writing_diagnostic_record`, and `diagnostic_feedback_event` and never alters canonical email tables or mail content;
+- treat an individual evidence-transaction failure as a typed review failure/abstention only; it never implicitly disables the feature or triggers schema downgrade;
+- optionally retain the separately described one-shot drafting path without claiming contextual inline review.
 
 ## Documentation and traceability required during implementation
 
