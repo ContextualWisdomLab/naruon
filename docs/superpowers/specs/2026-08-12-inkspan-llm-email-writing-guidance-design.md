@@ -316,6 +316,7 @@ Collect ordered category responses across criteria and, where feasible, repeated
 A calibration run emits an integrity-bound `judge_policy_artifact` containing:
 
 - version, creation time, expiry, and rollback version;
+- lifecycle `status`;
 - compatible fast-mlsirm, Naruon, Inkspan, and orchestrator contract versions;
 - approved model/provider/rubric/language profiles;
 - category anchors and admission rules;
@@ -327,19 +328,29 @@ A calibration run emits an integrity-bound `judge_policy_artifact` containing:
   publish/no-publish decision;
 - a fixed `minimum_slice_sample_size` of 30 labeled cases per prespecified
   slice;
-- literal publication thresholds for holdout macro-F1, mandatory preservation,
-  unsupported-claim rate, expected calibration error, and prespecified slice
-  performance;
-- a `publish_decision` of `publish` or `withhold`;
+- literal publication thresholds and decision rules for holdout macro-F1,
+  mandatory preservation, unsupported-claim rate, expected calibration error,
+  prespecified slice performance, DIF/fairness gaps, temporal drift, and
+  critical consequences;
+- a required `publish_decision` of `publish` or `withhold`;
 - known limitations.
 
-Naruon runtime consumes the artifact but does not refit it, and admits it for
-user-facing diagnostics only when `publish_decision == "publish"`. `withhold`
-and `evaluation_only` artifacts remain audit/pipeline evidence and cannot
-produce user-facing output. Changing a split, threshold, protocol, or holdout
-requires a new protocol version and a new artifact. Thresholds are frozen before
-locked-holdout labels are accessed; tuning against that holdout invalidates the
-run for publication and requires a new locked holdout.
+Lifecycle and publication decision are separate dimensions. An evaluation-only
+artifact is represented exactly as `status: evaluation_only` and
+`publish_decision: withhold`. Schema validation rejects
+`status: evaluation_only` with `publish_decision: publish`, and the runtime
+rejects every artifact from user-facing output unless its lifecycle status is
+admissible for publication and `publish_decision == "publish"`. `withhold`,
+`evaluation_only`, superseded, revoked, and incompatible artifacts remain
+available only as bounded audit/pipeline evidence.
+
+Every producer and consumer validates the duplicated literal policy fields
+against the immutable protocol named by `protocol_hash`, including
+`minimum_slice_sample_size: 30` and all threshold/decision-rule values. Changing
+a split, threshold, protocol, or holdout requires a new protocol version and a
+new artifact. Thresholds are frozen before locked-holdout labels are accessed;
+tuning against that holdout invalidates the run for publication and requires a
+new locked holdout.
 
 ## Benchmark design
 
@@ -380,6 +391,7 @@ Use consented, de-identified, or synthetic reconstruction cases. Do not persist 
 - human inter-rater agreement;
 - Brier score, expected calibration error, and reliability curves;
 - category occupancy, DIF, and drift;
+- supported-slice performance gaps and critical-consequence confidence bounds;
 - latency, token, step, and cost distributions;
 - stale/conflict rates;
 - accessibility task success.
