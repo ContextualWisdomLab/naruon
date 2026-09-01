@@ -2552,6 +2552,7 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
             Document(
                 document_id="doc_owned",
                 workspace_id="workspace-org-acme",
+                organization_id="org-acme",
                 document_name="<b>roadmap.md</b>",
                 document_type="text/markdown",
                 document_content="# Roadmap",
@@ -2564,6 +2565,16 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
                 document_name="rival.md",
                 document_type="text/markdown",
                 document_content="rival",
+                document_status="uploaded",
+                created_at=_now(),
+            ),
+            Document(
+                document_id="doc_other_org",
+                workspace_id="workspace-org-acme",
+                organization_id="org-rival",
+                document_name="other-org.md",
+                document_type="text/markdown",
+                document_content="other organization",
                 document_status="uploaded",
                 created_at=_now(),
             ),
@@ -2612,6 +2623,7 @@ def test_data_quality_surface_includes_workspace_document_assets(mock_db):
         }
     ]
     assert "doc_rival" not in response.text
+    assert "doc_other_org" not in response.text
 
 
 def test_data_document_upload_creates_workspace_scoped_document(mock_db):
