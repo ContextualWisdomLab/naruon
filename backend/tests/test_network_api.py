@@ -3,7 +3,12 @@ from fastapi.testclient import TestClient
 from main import app
 from db.session import get_db
 from unittest.mock import patch
-from api.network import extract_emails
+from api.network import (
+    NetworkGraphEdge,
+    NetworkGraphNode,
+    NetworkGraphResponse,
+    extract_emails,
+)
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
 
@@ -41,6 +46,41 @@ def get_override(rows):
         yield MockSession(rows)
 
     return override_get_db
+
+
+def test_network_graph_models_use_semantic_internal_names_with_legacy_wire_aliases():
+    """Keep public graph JSON stable while making owned model names domain-specific."""
+    graph_node = NetworkGraphNode(
+        node_id="alice@example.com",
+        node_label="alice@example.com",
+    )
+    graph_edge = NetworkGraphEdge(
+        source_node_id="alice@example.com",
+        target_node_id="bob@example.com",
+        edge_weight=2,
+    )
+    graph_response = NetworkGraphResponse(
+        network_nodes=[graph_node],
+        network_edges=[graph_edge],
+    )
+
+    assert set(NetworkGraphNode.model_fields) == {"node_id", "node_label"}
+    assert set(NetworkGraphEdge.model_fields) == {
+        "source_node_id",
+        "target_node_id",
+        "edge_weight",
+    }
+    assert set(NetworkGraphResponse.model_fields) == {"network_nodes", "network_edges"}
+    assert graph_response.model_dump(by_alias=True) == {
+        "nodes": [{"id": "alice@example.com", "label": "alice@example.com"}],
+        "edges": [
+            {
+                "source": "alice@example.com",
+                "target": "bob@example.com",
+                "weight": 2,
+            }
+        ],
+    }
 
 
 def test_network_endpoint_exists():
@@ -163,6 +203,7 @@ def test_network_graph_query_is_scoped_to_current_user():
     assert "email_records.user_id" in query_text
     assert "email_records.organization_id" in query_text
 
+
 def test_extract_emails_valid():
     assert extract_emails("foo@example.com") == ["foo@example.com"]
     assert extract_emails("User <foo.bar@example.co.uk>") == ["foo.bar@example.co.uk"]
@@ -171,12 +212,14 @@ def test_extract_emails_valid():
     assert extract_emails("Mixed case: Foo@Bar.com") == ["Foo@Bar.com"]
     assert extract_emails("123@numbers.com") == ["123@numbers.com"]
 
+
 def test_extract_emails_invalid():
     assert extract_emails("not_an_email") == []
     assert extract_emails("foo@bar") == []
     assert extract_emails("foo@.com") == []
     assert extract_emails("@domain.com") == []
     assert extract_emails("foo@bar.") == []
+
 
 def test_extract_emails_empty_or_none():
     assert extract_emails("") == []
