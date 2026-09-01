@@ -7,14 +7,14 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from core.config import settings
-from db.models import Base
+from db.email_writing_evidence import EmailReviewSession
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
+target_metadata = EmailReviewSession.__table__.metadata
 
 
 def _database_url() -> str:
