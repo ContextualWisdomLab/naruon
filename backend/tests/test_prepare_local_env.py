@@ -89,6 +89,7 @@ def test_prepare_local_env_preserves_existing_operator_values(tmp_path: Path) ->
     assert values["ENCRYPTION_KEY"] == "keep-this-encryption-key"
     assert values["UNRELATED_SETTING"] == "keep-me"
     assert "TEMPLATE_ONLY" not in values
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_prepare_local_env_preserves_literal_quoted_secret_assignments(
@@ -154,3 +155,65 @@ def test_prepare_local_env_replaces_comment_only_managed_values(tmp_path: Path) 
         assert values[key]
         assert "# required" not in values[key]
     assert values["POSTGRES_PASSWORD"] in values["DATABASE_URL"]
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_prepare_local_env_uses_last_duplicate_assignment_as_effective_value(
+    tmp_path: Path,
+) -> None:
+    example = tmp_path / ".env.example"
+    path = tmp_path / ".env"
+    example.write_text("TEMPLATE_ONLY=value\n", encoding="utf-8")
+    path.write_text(
+        "\n".join(
+            [
+                "POSTGRES_DB=workspace_db",
+                "POSTGRES_USER=workspace_user",
+                "POSTGRES_PASSWORD= # obsolete empty assignment",
+                "POSTGRES_PASSWORD='keep$effective$password'",
+                "DATABASE_URL=postgresql+asyncpg://existing/db",
+                "AUTH_SESSION_HMAC_SECRET= # obsolete empty assignment",
+                "AUTH_SESSION_HMAC_SECRET='keep$effective$session'",
+                "ENCRYPTION_KEY= # obsolete empty assignment",
+                "ENCRYPTION_KEY='keep$effective$encryption'",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    before = path.read_text(encoding="utf-8")
+
+    _run(path, example)
+
+    assert path.read_text(encoding="utf-8") == before
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_prepare_local_env_replaces_only_effective_empty_duplicate(tmp_path: Path) -> None:
+    example = tmp_path / ".env.example"
+    path = tmp_path / ".env"
+    example.write_text("TEMPLATE_ONLY=value\n", encoding="utf-8")
+    path.write_text(
+        "\n".join(
+            [
+                "POSTGRES_DB=workspace_db",
+                "POSTGRES_USER=workspace_user",
+                "POSTGRES_PASSWORD=historical-value",
+                "POSTGRES_PASSWORD= # effective empty assignment",
+                "DATABASE_URL=postgresql+asyncpg://existing/db",
+                "AUTH_SESSION_HMAC_SECRET=keep-session",
+                "ENCRYPTION_KEY=keep-encryption",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    _run(path, example)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    password_lines = [line for line in lines if line.startswith("POSTGRES_PASSWORD=")]
+
+    assert password_lines[0] == "POSTGRES_PASSWORD=historical-value"
+    assert password_lines[1] != "POSTGRES_PASSWORD= # effective empty assignment"
+    assert password_lines[1].split("=", 1)[1]
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
