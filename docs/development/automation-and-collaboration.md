@@ -6,6 +6,20 @@ This document contains repository-internal delivery rules. It is intentionally s
 
 These rules apply to human contributors, coding agents, review agents, and repository automation working on Naruon. Live branch protection and organization rulesets remain authoritative. Detailed merge-gate semantics are maintained in [`merge-gate-policy.md`](merge-gate-policy.md).
 
+## Research and standards basis
+
+This procedure is a repository policy, not a claim that one study uniquely determines a delivery process. Its review, feedback, and secure-development choices are grounded in three complementary sources:
+
+- NIST SSDF 1.1 treats protected source, review/analysis, provenance, vulnerability handling, and root-cause improvement as integrated secure-development practices. NIST published SSDF 1.2 as an **Initial Public Draft** in December 2025; until a final revision supersedes 1.1, this policy uses 1.1 as the stable normative baseline and treats the draft only as informative current work.
+- Bacchelli and Bird's empirical study of modern code review found that review supports defect discovery as well as code understanding, knowledge transfer, team awareness, and alternative solutions. That supports preserving review context and resolving findings against the actual changed revision rather than treating review as a ceremonial approval count.
+- Forsgren, Humble, and Kim synthesize empirical DevOps research around small batches, continuous integration, fast feedback, and recovery-oriented delivery. Those findings support narrow changes, independent safe lanes, automated verification, and causal repair instead of large unverified batches.
+
+APA 7 references:
+
+- Bacchelli, A., & Bird, C. (2013). Expectations, outcomes, and challenges of modern code review. *2013 35th International Conference on Software Engineering (ICSE)*, 712–721. https://doi.org/10.1109/ICSE.2013.6606617
+- Forsgren, N., Humble, J., & Kim, G. (2018). *Accelerate: The science of lean software and DevOps: Building and scaling high performing technology organizations*. IT Revolution.
+- Scarfone, K., Souppaya, M., & Dodson, D. (2022). *Secure Software Development Framework (SSDF) version 1.1: Recommendations for mitigating the risk of software vulnerabilities* (NIST Special Publication 800-218). National Institute of Standards and Technology. https://doi.org/10.6028/NIST.SP.800-218
+
 ## Delivery procedure
 
 1. **Stepwise execution** — Dependent work uses explicit PR ancestry and does not land before its parent.
