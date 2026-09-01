@@ -52,12 +52,13 @@ def _existing_value(text: str, key: str) -> str | None:
     match = re.search(rf"(?m)^{re.escape(key)}=(.*)$", text)
     if match is None:
         return None
-    value = match.group(1).strip()
+    raw_value = match.group(1)
+    value = raw_value.strip()
     if not value:
         return None
     if value[0] in {"'", '"'}:
         return _quoted_dotenv_value(value)
-    value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+    value = re.split(r"\s+#", raw_value, maxsplit=1)[0].strip()
     return value or None
 
 
