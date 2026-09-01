@@ -742,8 +742,82 @@ def test_legacy_email_read_state_branch_skips_fresh_baseline_schema():
     )
     revision_text = revision_path.read_text()
 
-    assert '"emails" not in sa.inspect(op.get_bind()).get_table_names()' in revision_text
+    assert '"emails" in sa.inspect(op.get_bind()).get_table_names()' in revision_text
+    # Offline SQL generation (`alembic upgrade --sql`) has no live connection
+    # to introspect -- op.get_bind() returns a MockConnection sa.inspect
+    # rejects outright -- so the legacy-table check must short-circuit to
+    # "absent" in that mode rather than raising.
+    assert "context.is_offline_mode()" in revision_text
     assert 'op.add_column(\n        "emails"' in revision_text
+
+
+def test_legacy_email_read_state_offline_generation_never_inspects(monkeypatch):
+    """Regression for offline `alembic upgrade --sql`: op.get_bind() returns a
+    MockConnection in that mode, and sa.inspect(...) raises NoInspectionAvailable
+    for it -- so upgrade()/downgrade() must short-circuit on is_offline_mode()
+    before ever calling sa.inspect, not just happen to skip the add/drop.
+    """
+    module = _load_revision_module("0011_email_read_state.py")
+
+    def _boom(_connection):
+        raise AssertionError("sa.inspect must not run in offline mode")
+
+    monkeypatch.setattr(module.context, "is_offline_mode", lambda: True)
+    monkeypatch.setattr(module.sa, "inspect", _boom)
+    monkeypatch.setattr(
+        module.op,
+        "add_column",
+        lambda *a, **k: pytest.fail("must not add_column in offline mode"),
+    )
+    monkeypatch.setattr(
+        module.op,
+        "drop_column",
+        lambda *a, **k: pytest.fail("must not drop_column in offline mode"),
+    )
+
+    module.upgrade()
+    module.downgrade()
+
+
+def test_legacy_email_read_state_online_adds_column_only_when_table_present(
+    monkeypatch,
+):
+    module = _load_revision_module("0011_email_read_state.py")
+    monkeypatch.setattr(module.context, "is_offline_mode", lambda: False)
+    monkeypatch.setattr(module.op, "get_bind", lambda: object())
+
+    class _AbsentInspector:
+        @staticmethod
+        def get_table_names():
+            return ["email_records"]
+
+    monkeypatch.setattr(module.sa, "inspect", lambda _connection: _AbsentInspector())
+    monkeypatch.setattr(
+        module.op,
+        "add_column",
+        lambda *a, **k: pytest.fail("must not add_column when emails is absent"),
+    )
+    module.upgrade()
+
+    calls = []
+
+    class _PresentInspector:
+        @staticmethod
+        def get_table_names():
+            return ["emails"]
+
+    monkeypatch.setattr(module.sa, "inspect", lambda _connection: _PresentInspector())
+    monkeypatch.setattr(
+        module.op,
+        "add_column",
+        lambda *args, **kwargs: calls.append(args),
+    )
+    module.upgrade()
+
+    assert len(calls) == 1
+    table_name, column = calls[0]
+    assert table_name == "emails"
+    assert column.name == "is_read"
 
 
 def test_merge_revision_reconciles_newsdom_provider_branch():
