@@ -1,4 +1,36 @@
 ## [Unreleased]
+- **(CI 인프라, 🔴 critical) `backend` job에 Postgres 서비스 컨테이너가 없어 `@pytest.mark.postgres`
+  real-Postgres 테스트가 CI에서 단 한 번도 실제로 실행되지 않고 항상 조용히 skip되던 문제를
+  고쳤습니다.** `.github/workflows/app-ci.yml`의 `backend` job에 `pgvector/pgvector:pg16`
+  서비스 컨테이너(`test`/`test`/`test_db`, `pg_isready` 헬스체크)를 추가하고 `DATABASE_URL`을
+  같은 자격증명으로 설정해, `tests/conftest.py`의 기본값과 그대로 맞물리도록 했습니다. 실제로
+  CI 환경과 동일하게(로컬 PostgreSQL 16 + pgvector) 처음 돌려보자 다음 3개의 실재 결함이 추가로
+  드러났습니다.
+  1. **`0001_initial_control_plane`뿐 아니라 `0011_email_read_state`도 완전히 새 데이터베이스에
+     대한 `alembic upgrade head`를 깨뜨렸다.** `backend/scripts/bootstrap_db.py`의
+     `ix_emails_owner_date` 인덱스 생성문(레거시 `emails` 테이블 대상)을 식별자로 삼아 건너뛰는
+     `execute_schema_backfill()`을 추가해 0001에서 쓰도록 했지만, `0011_email_read_state.py`가
+     같은 레거시 `emails` 테이블에 `op.add_column("emails", "is_read", ...)`을 직접 실행해
+     `relation "emails" does not exist`로 여전히 실패했습니다 — `email_records`(현재 ORM
+     모델)에는 `is_read`가 이미 있으므로, 신선한 설치에서는 이 마이그레이션이 전혀 필요하지
+     않습니다. `sa.inspect(op.get_bind()).has_table("emails")`가 거짓이면 no-op하도록 가드.
+     두 수정 모두 완전히 새 데이터베이스에 대해 실제로 `alembic upgrade head`를 실행해 진짜
+     RED(각각 `relation "emails" does not exist`)를 확인한 뒤 고쳤습니다(진짜 GREEN, 단일 head
+     `0017_merge_newsdom_carddav_heads`까지 재현).
+  2. **`tests/test_bootstrap_db.py`와 `tests/test_data_api.py`의 raw SQL `INSERT INTO
+     email_records`가 `is_read`(ORM 쪽 Python-side `default=True`, DB 서버측 default 없음)를
+     빠뜨려 real Postgres에서 `NotNullViolationError`로 하드 실패했습니다.** 두 파일의 4개
+     INSERT문 모두에 `is_read`를 명시적으로 채우도록 수정. `test_bootstrap_db.py`의 로컬 헬퍼
+     `_execute_schema_backfill`이 가드 없는 예전 루프를 그대로 복제하고 있던 것도
+     `scripts.bootstrap_db.execute_schema_backfill`을 위임 호출하도록 정리.
+  3. 새 구현에 맞춰 `tests/test_alembic_migrations.py`의 prose contract test
+     (`test_initial_alembic_revision_records_current_schema_path`)가 `schema_backfill_sql`
+     대신 `execute_schema_backfill`을 검증하도록 갱신.
+  전체 백엔드 스위트를 실제 PostgreSQL 16(+pgvector)로 검증: **1837 passed, 2 skipped**
+  (남은 2개는 `LIVE_BASE_URL` 미설정에 따른 무관한 live-API smoke skip), `ruff check` clean.
+  `CLAUDE.md`/`AGENTS.md`에 이 job이 이제 real-Postgres 테스트를 하드 게이트로 실행한다는 것과
+  로컬 재현 방법을 기록. 후속 과제로 남겨두었던 항목(`docs/product-technical-gap-baseline.md`,
+  `.github` repo)을 닫습니다.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 

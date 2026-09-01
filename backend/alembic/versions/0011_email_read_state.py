@@ -14,6 +14,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # A fresh install's 0001 migration creates only the current ORM tables
+    # (email_records, which already carries is_read) via
+    # Base.metadata.create_all(); the legacy "emails" table this migration
+    # targets exists only on databases provisioned before that rename.
+    if not sa.inspect(op.get_bind()).has_table("emails"):
+        return
     op.add_column(
         "emails",
         sa.Column(

@@ -623,6 +623,13 @@ in this repo.
   (`created_at`, `observed_at`, `parse_content_type`, `parser_key`). Under
   asyncpg, `INSERT ... SELECT`/`UNION` parameters default to `text`, so cast
   integer FK params explicitly (`CAST(:email_id AS INTEGER)`).
+- The `backend` CI job runs these real-Postgres tests against an actual
+  `pgvector/pgvector:pg16` `services:` container (`.github/workflows/app-ci.yml`),
+  not a soft-skip: a broken seeding helper or migration now fails the job
+  instead of silently `pytest.skip`ping with "PostgreSQL smoke database/path
+  unavailable". Reproduce locally with any Postgres 16 + pgvector instance
+  (the `docker-compose.yml` `db` service works) before assuming a change is
+  green.
 - Postgres smoke seeding of `EncryptedString` columns
   (`credentials_encrypted`, provider `api_key`, runner tokens) must set a
   Fernet `ENCRYPTION_KEY` for the test (monkeypatch `settings.ENCRYPTION_KEY`)

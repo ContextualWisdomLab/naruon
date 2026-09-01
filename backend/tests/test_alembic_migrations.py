@@ -32,7 +32,7 @@ def test_initial_alembic_revision_records_current_schema_path():
     assert "down_revision = None" in revision_text
     assert "CREATE EXTENSION IF NOT EXISTS vector" in revision_text
     assert "Base.metadata.create_all" in revision_text
-    assert "schema_backfill_sql" in revision_text
+    assert "execute_schema_backfill" in revision_text
 
 
 def test_provider_writeback_retry_queue_has_incremental_revision():
