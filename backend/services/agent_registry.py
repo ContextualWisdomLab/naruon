@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -26,6 +27,73 @@ logger = logging.getLogger(__name__)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTERED_AGENTS_PATH = _REPO_ROOT / "registered_agents.json"
 TASK_AGENT_MAPPING_PATH = _REPO_ROOT / "task_agent_mapping.json"
+
+_LEGACY_RAW_TO_SEMANTIC = {
+    "name": "agent_name",
+    "framework": "agent_framework",
+    "entrypoint": "agent_entrypoint",
+    "description": "agent_description",
+    "capabilities": "agent_capabilities",
+    "enabled": "agent_enabled",
+}
+_SEMANTIC_RAW_TO_LEGACY = {
+    semantic_key: legacy_key
+    for legacy_key, semantic_key in _LEGACY_RAW_TO_SEMANTIC.items()
+}
+
+
+class _LegacyRawView(MutableMapping[str, Any]):
+    """Mutable legacy-key view backed by authoritative semantic registry evidence.
+
+    Historical callers received a mutable dictionary from ``RegisteredAgent.raw``.
+    This adapter preserves write-through mutation semantics without storing the
+    generic compatibility keys in ``raw_entry``. The six translated legacy keys
+    address their semantic counterparts; unrelated metadata addresses the same
+    key in ``raw_entry`` directly.
+    """
+
+    def __init__(self, raw_entry: dict[str, Any]) -> None:
+        self._raw_entry = raw_entry
+
+    def __getitem__(self, legacy_key: str) -> Any:
+        semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
+        if semantic_key is not None:
+            return self._raw_entry[semantic_key]
+        if legacy_key in _SEMANTIC_RAW_TO_LEGACY:
+            raise KeyError(legacy_key)
+        return self._raw_entry[legacy_key]
+
+    def __setitem__(self, legacy_key: str, legacy_value: Any) -> None:
+        semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
+        if semantic_key is not None:
+            self._raw_entry[semantic_key] = legacy_value
+            return
+        if legacy_key in _SEMANTIC_RAW_TO_LEGACY:
+            raise KeyError(
+                f"{legacy_key!r} is semantic-only in raw_entry; "
+                "mutate its historical alias through raw instead"
+            )
+        self._raw_entry[legacy_key] = legacy_value
+
+    def __delitem__(self, legacy_key: str) -> None:
+        semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
+        if semantic_key is not None:
+            del self._raw_entry[semantic_key]
+            return
+        if legacy_key in _SEMANTIC_RAW_TO_LEGACY:
+            raise KeyError(legacy_key)
+        del self._raw_entry[legacy_key]
+
+    def __iter__(self) -> Iterator[str]:
+        for raw_key in self._raw_entry:
+            yield _SEMANTIC_RAW_TO_LEGACY.get(raw_key, raw_key)
+
+    def __len__(self) -> int:
+        return len(self._raw_entry)
+
+    def copy(self) -> dict[str, Any]:
+        """Return a detached legacy-shaped dictionary like ``dict.copy``."""
+        return dict(self.items())
 
 
 @dataclass(frozen=True)
@@ -82,9 +150,9 @@ class RegisteredAgent:
         return self.agent_enabled
 
     @property
-    def raw(self) -> dict[str, Any]:
-        """Return a legacy-shaped raw mapping for historical Python callers."""
-        return _legacy_raw_entry(self.raw_entry)
+    def raw(self) -> MutableMapping[str, Any]:
+        """Return a mutable legacy-key view synchronized with ``raw_entry``."""
+        return _LegacyRawView(self.raw_entry)
 
 
 def _coerce_capabilities(value: Any) -> tuple[str, ...]:
@@ -106,35 +174,11 @@ def _entry_value(
 def _canonical_raw_entry(entry: dict[str, Any]) -> dict[str, Any]:
     """Return registry evidence with owned generic keys translated semantically."""
     canonical_entry = dict(entry)
-    for semantic_key, legacy_key in (
-        ("agent_name", "name"),
-        ("agent_framework", "framework"),
-        ("agent_entrypoint", "entrypoint"),
-        ("agent_description", "description"),
-        ("agent_capabilities", "capabilities"),
-        ("agent_enabled", "enabled"),
-    ):
+    for legacy_key, semantic_key in _LEGACY_RAW_TO_SEMANTIC.items():
         if semantic_key not in canonical_entry and legacy_key in canonical_entry:
             canonical_entry[semantic_key] = canonical_entry[legacy_key]
         canonical_entry.pop(legacy_key, None)
     return canonical_entry
-
-
-def _legacy_raw_entry(canonical_entry: dict[str, Any]) -> dict[str, Any]:
-    """Translate semantic registry evidence back to the historical raw key shape."""
-    legacy_entry = dict(canonical_entry)
-    for semantic_key, legacy_key in (
-        ("agent_name", "name"),
-        ("agent_framework", "framework"),
-        ("agent_entrypoint", "entrypoint"),
-        ("agent_description", "description"),
-        ("agent_capabilities", "capabilities"),
-        ("agent_enabled", "enabled"),
-    ):
-        if semantic_key in legacy_entry:
-            legacy_entry[legacy_key] = legacy_entry[semantic_key]
-        legacy_entry.pop(semantic_key, None)
-    return legacy_entry
 
 
 def _agent_from_entry(agent_id: str, entry: dict[str, Any]) -> RegisteredAgent | None:
