@@ -67,6 +67,27 @@ def _pin_public_dns(monkeypatch):
     )
 
 
+def test_default_dav_client_does_not_trust_ambient_proxy_environment(monkeypatch):
+    captured: dict[str, object] = {}
+    sentinel = object()
+
+    def fake_async_client(**kwargs):
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(
+        "runner.local_dav_adapters.httpx.AsyncClient",
+        fake_async_client,
+    )
+
+    adapters = LocalDavAdapters([])
+
+    assert adapters._default_http_client() is sentinel  # noqa: SLF001
+    assert captured["follow_redirects"] is False
+    assert captured["timeout"] == 60
+    assert captured["trust_env"] is False
+
+
 @pytest.mark.asyncio
 async def test_caldav_create_without_if_match_is_pinned_and_dispatched():
     fake_client = _FakeDavClient(_FakeDavResponse(201))
