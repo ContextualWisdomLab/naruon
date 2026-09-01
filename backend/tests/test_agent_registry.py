@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 import services.agent_registry as agent_registry_module
 from services.agent_registry import (
     clear_registry_cache,
@@ -172,6 +174,55 @@ def test_legacy_raw_remains_a_json_serializable_dictionary() -> None:
     assert union_result["name"] == "Serializable Agent"
     assert union_result["runtime_status"] == "available"
     assert "agent_name" not in union_result
+    assert legacy_raw.copy() == dict(legacy_raw)
+
+
+def test_legacy_raw_dict_mutators_keep_semantic_evidence_synchronized() -> None:
+    """Keep dict mutation APIs synchronized with semantic registry evidence."""
+    registered_agent = agent_registry_module._agent_from_entry(
+        "compatibility-agent",
+        {
+            "agent_name": "Mutable Agent",
+            "agent_framework": "pydantic-ai",
+            "agent_entrypoint": "services.mutable_agent:run",
+            "agent_description": "mutable description",
+            "agent_capabilities": ["mail.search"],
+            "agent_enabled": True,
+        },
+    )
+    assert registered_agent is not None
+    legacy_raw = registered_agent.raw
+
+    legacy_raw.update({"name": "Updated Agent", "custom_metadata": "updated"})
+    assert registered_agent.raw_entry["agent_name"] == "Updated Agent"
+    assert registered_agent.raw_entry["custom_metadata"] == "updated"
+
+    assert legacy_raw.setdefault("name", "ignored") == "Updated Agent"
+    assert legacy_raw.setdefault("new_metadata", "created") == "created"
+    assert registered_agent.raw_entry["new_metadata"] == "created"
+
+    assert legacy_raw.pop("new_metadata") == "created"
+    assert "new_metadata" not in registered_agent.raw_entry
+    assert legacy_raw.pop("missing_metadata", "fallback") == "fallback"
+    with pytest.raises(KeyError, match="missing_metadata"):
+        legacy_raw.pop("missing_metadata")
+
+    legacy_raw["tail_metadata"] = "tail"
+    assert legacy_raw.popitem() == ("tail_metadata", "tail")
+    assert "tail_metadata" not in registered_agent.raw_entry
+
+    legacy_raw |= {"description": "updated description", "ior_metadata": "present"}
+    assert registered_agent.raw_entry["agent_description"] == "updated description"
+    assert registered_agent.raw_entry["ior_metadata"] == "present"
+
+    with pytest.raises(KeyError, match="agent_name"):
+        legacy_raw["agent_name"] = "semantic key is not a legacy key"
+    with pytest.raises(KeyError, match="agent_name"):
+        del legacy_raw["agent_name"]
+
+    legacy_raw.clear()
+    assert legacy_raw == {}
+    assert registered_agent.raw_entry == {}
 
 
 def test_task_mapping_resolves_to_noema_agent() -> None:
