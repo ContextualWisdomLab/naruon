@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -40,60 +39,95 @@ _SEMANTIC_RAW_TO_LEGACY = {
     semantic_key: legacy_key
     for legacy_key, semantic_key in _LEGACY_RAW_TO_SEMANTIC.items()
 }
+_MISSING_POP_DEFAULT = object()
 
 
-class _LegacyRawView(MutableMapping[str, Any]):
-    """Mutable legacy-key view backed by authoritative semantic registry evidence.
+class _LegacyRawDict(dict[str, Any]):
+    """Legacy ``dict`` contract backed by authoritative semantic registry evidence.
 
-    Historical callers received a mutable dictionary from ``RegisteredAgent.raw``.
-    This adapter preserves write-through mutation semantics without storing the
-    generic compatibility keys in ``raw_entry``. The six translated legacy keys
-    address their semantic counterparts; unrelated metadata addresses the same
-    key in ``raw_entry`` directly.
+    Historical callers received an actual mutable dictionary from
+    ``RegisteredAgent.raw`` and may therefore rely on JSON serialization, dict
+    union, ``isinstance(..., dict)``, and the full mutation API. This bounded
+    compatibility adapter keeps a legacy-shaped shallow dictionary for those
+    operations while writing every mutation through to semantic ``raw_entry``.
+    Nested values intentionally retain shallow aliasing, matching the historical
+    dictionary behavior.
     """
 
     def __init__(self, raw_entry: dict[str, Any]) -> None:
         self._raw_entry = raw_entry
-
-    def __getitem__(self, legacy_key: str) -> Any:
-        semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
-        if semantic_key is not None:
-            return self._raw_entry[semantic_key]
-        if legacy_key in _SEMANTIC_RAW_TO_LEGACY:
-            raise KeyError(legacy_key)
-        return self._raw_entry[legacy_key]
+        legacy_entries = {
+            _SEMANTIC_RAW_TO_LEGACY.get(raw_key, raw_key): raw_value
+            for raw_key, raw_value in raw_entry.items()
+        }
+        super().__init__(legacy_entries)
 
     def __setitem__(self, legacy_key: str, legacy_value: Any) -> None:
         semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
         if semantic_key is not None:
             self._raw_entry[semantic_key] = legacy_value
-            return
-        if legacy_key in _SEMANTIC_RAW_TO_LEGACY:
+        elif legacy_key in _SEMANTIC_RAW_TO_LEGACY:
             raise KeyError(
                 f"{legacy_key!r} is semantic-only in raw_entry; "
                 "mutate its historical alias through raw instead"
             )
-        self._raw_entry[legacy_key] = legacy_value
+        else:
+            self._raw_entry[legacy_key] = legacy_value
+        super().__setitem__(legacy_key, legacy_value)
 
     def __delitem__(self, legacy_key: str) -> None:
         semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key)
         if semantic_key is not None:
             del self._raw_entry[semantic_key]
-            return
-        if legacy_key in _SEMANTIC_RAW_TO_LEGACY:
+        elif legacy_key in _SEMANTIC_RAW_TO_LEGACY:
             raise KeyError(legacy_key)
-        del self._raw_entry[legacy_key]
+        else:
+            del self._raw_entry[legacy_key]
+        super().__delitem__(legacy_key)
 
-    def __iter__(self) -> Iterator[str]:
-        for raw_key in self._raw_entry:
-            yield _SEMANTIC_RAW_TO_LEGACY.get(raw_key, raw_key)
+    def update(self, *update_sources: Any, **update_values: Any) -> None:
+        """Apply a normal dict update while synchronizing semantic evidence."""
+        incoming_entries = dict(*update_sources, **update_values)
+        for legacy_key, legacy_value in incoming_entries.items():
+            self[legacy_key] = legacy_value
 
-    def __len__(self) -> int:
-        return len(self._raw_entry)
+    def setdefault(self, legacy_key: str, default_value: Any = None) -> Any:
+        """Return or insert one legacy key while synchronizing semantic evidence."""
+        if legacy_key in self:
+            return self[legacy_key]
+        self[legacy_key] = default_value
+        return default_value
+
+    def pop(self, legacy_key: str, default_value: Any = _MISSING_POP_DEFAULT) -> Any:
+        """Remove one legacy key while preserving normal ``dict.pop`` semantics."""
+        if legacy_key in self:
+            legacy_value = self[legacy_key]
+            del self[legacy_key]
+            return legacy_value
+        if default_value is _MISSING_POP_DEFAULT:
+            raise KeyError(legacy_key)
+        return default_value
+
+    def popitem(self) -> tuple[str, Any]:
+        """Remove the newest legacy item and synchronize semantic evidence."""
+        legacy_key, legacy_value = super().popitem()
+        semantic_key = _LEGACY_RAW_TO_SEMANTIC.get(legacy_key, legacy_key)
+        del self._raw_entry[semantic_key]
+        return legacy_key, legacy_value
+
+    def clear(self) -> None:
+        """Clear both compatibility and semantic registry evidence."""
+        super().clear()
+        self._raw_entry.clear()
+
+    def __ior__(self, other_mapping: Any) -> _LegacyRawDict:
+        """Apply in-place dict union while synchronizing semantic evidence."""
+        self.update(other_mapping)
+        return self
 
     def copy(self) -> dict[str, Any]:
         """Return a detached legacy-shaped dictionary like ``dict.copy``."""
-        return dict(self.items())
+        return dict(self)
 
 
 @dataclass(frozen=True)
@@ -150,30 +184,37 @@ class RegisteredAgent:
         return self.agent_enabled
 
     @property
-    def raw(self) -> MutableMapping[str, Any]:
-        """Return a mutable legacy-key view synchronized with ``raw_entry``."""
-        return _LegacyRawView(self.raw_entry)
+    def raw(self) -> dict[str, Any]:
+        """Return a legacy-shaped dict synchronized with semantic ``raw_entry``."""
+        return _LegacyRawDict(self.raw_entry)
 
 
-def _coerce_capabilities(value: Any) -> tuple[str, ...]:
+def _coerce_capabilities(capability_value: Any) -> tuple[str, ...]:
     """Return non-empty string capability names from a registry JSON value."""
-    if not isinstance(value, list):
+    if not isinstance(capability_value, list):
         return ()
-    return tuple(item for item in value if isinstance(item, str) and item)
+    return tuple(
+        capability_name
+        for capability_name in capability_value
+        if isinstance(capability_name, str) and capability_name
+    )
 
 
 def _entry_value(
-    entry: dict[str, Any], semantic_key: str, legacy_key: str, default_value: Any = None
+    registry_entry: dict[str, Any],
+    semantic_key: str,
+    legacy_key: str,
+    default_value: Any = None,
 ) -> Any:
     """Read a canonical semantic key, falling back to one bounded legacy alias."""
-    if semantic_key in entry:
-        return entry[semantic_key]
-    return entry.get(legacy_key, default_value)
+    if semantic_key in registry_entry:
+        return registry_entry[semantic_key]
+    return registry_entry.get(legacy_key, default_value)
 
 
-def _canonical_raw_entry(entry: dict[str, Any]) -> dict[str, Any]:
+def _canonical_raw_entry(registry_entry: dict[str, Any]) -> dict[str, Any]:
     """Return registry evidence with owned generic keys translated semantically."""
-    canonical_entry = dict(entry)
+    canonical_entry = dict(registry_entry)
     for legacy_key, semantic_key in _LEGACY_RAW_TO_SEMANTIC.items():
         if semantic_key not in canonical_entry and legacy_key in canonical_entry:
             canonical_entry[semantic_key] = canonical_entry[legacy_key]
@@ -181,11 +222,15 @@ def _canonical_raw_entry(entry: dict[str, Any]) -> dict[str, Any]:
     return canonical_entry
 
 
-def _agent_from_entry(agent_id: str, entry: dict[str, Any]) -> RegisteredAgent | None:
+def _agent_from_entry(
+    agent_id: str, registry_entry: dict[str, Any]
+) -> RegisteredAgent | None:
     """Translate one registry JSON entry into the semantic Python contract."""
-    agent_entrypoint = _entry_value(entry, "agent_entrypoint", "entrypoint")
-    agent_name = _entry_value(entry, "agent_name", "name")
-    agent_framework = _entry_value(entry, "agent_framework", "framework")
+    agent_entrypoint = _entry_value(
+        registry_entry, "agent_entrypoint", "entrypoint"
+    )
+    agent_name = _entry_value(registry_entry, "agent_name", "name")
+    agent_framework = _entry_value(registry_entry, "agent_framework", "framework")
     if not isinstance(agent_entrypoint, str) or not agent_entrypoint:
         logger.debug("Skipping agent %s: missing agent_entrypoint", agent_id)
         return None
@@ -194,7 +239,7 @@ def _agent_from_entry(agent_id: str, entry: dict[str, Any]) -> RegisteredAgent |
     if not isinstance(agent_framework, str):
         agent_framework = ""
 
-    writeback_policy = entry.get("writeback")
+    writeback_policy = registry_entry.get("writeback")
     writeback_policy = writeback_policy if isinstance(writeback_policy, dict) else {}
 
     return RegisteredAgent(
@@ -203,35 +248,44 @@ def _agent_from_entry(agent_id: str, entry: dict[str, Any]) -> RegisteredAgent |
         agent_framework=agent_framework,
         agent_entrypoint=agent_entrypoint,
         agent_description=str(
-            _entry_value(entry, "agent_description", "description", "") or ""
+            _entry_value(
+                registry_entry, "agent_description", "description", ""
+            )
+            or ""
         ),
         agent_capabilities=_coerce_capabilities(
-            _entry_value(entry, "agent_capabilities", "capabilities", [])
+            _entry_value(
+                registry_entry, "agent_capabilities", "capabilities", []
+            )
         ),
-        provider_source=str(entry.get("provider_source", "") or ""),
+        provider_source=str(registry_entry.get("provider_source", "") or ""),
         writeback_opt_in=bool(writeback_policy.get("opt_in", False)),
         writeback_audit_logged=bool(writeback_policy.get("audit_logged", False)),
-        degrades_gracefully=bool(entry.get("degrades_gracefully", False)),
-        agent_enabled=bool(_entry_value(entry, "agent_enabled", "enabled", True)),
-        raw_entry=_canonical_raw_entry(entry),
+        degrades_gracefully=bool(
+            registry_entry.get("degrades_gracefully", False)
+        ),
+        agent_enabled=bool(
+            _entry_value(registry_entry, "agent_enabled", "enabled", True)
+        ),
+        raw_entry=_canonical_raw_entry(registry_entry),
     )
 
 
-def _load_json_object(path: Path) -> dict[str, Any]:
+def _load_json_object(registry_path: Path) -> dict[str, Any]:
     """Load one UTF-8 JSON object or fail closed to an empty mapping."""
     try:
-        file_text = path.read_text(encoding="utf-8")
+        file_text = registry_path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        logger.debug("Registration file not found: %s", path)
+        logger.debug("Registration file not found: %s", registry_path)
         return {}
     except OSError:
-        logger.debug("Could not read registration file: %s", path, exc_info=True)
+        logger.debug("Could not read registration file: %s", registry_path, exc_info=True)
         return {}
 
     try:
         parsed_object = json.loads(file_text or "{}")
     except json.JSONDecodeError:
-        logger.debug("Malformed registration file: %s", path, exc_info=True)
+        logger.debug("Malformed registration file: %s", registry_path, exc_info=True)
         return {}
 
     return parsed_object if isinstance(parsed_object, dict) else {}
