@@ -66,7 +66,9 @@ class SearchRequest(BaseModel):
 
 
 class SearchResultItem(BaseModel):
-    id: int
+    """One email-backed search result with a stable legacy wire identifier."""
+
+    email_id: int = Field(alias="id")
     source_message_id: str | None = None
     subject: str | None
     sender: str
@@ -77,6 +79,8 @@ class SearchResultItem(BaseModel):
     score: float
     result_kind: str | None = None
     evidence_kinds: list[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
 
 
 class SearchResponse(BaseModel):
@@ -263,7 +267,7 @@ def build_search_result_items(
         )
         search_results.append(
             SearchResultItem(
-                id=candidate.email_id,
+                email_id=candidate.email_id,
                 source_message_id=candidate.source_message_id,
                 subject=candidate.subject,
                 sender=candidate.sender,
