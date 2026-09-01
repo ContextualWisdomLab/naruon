@@ -193,6 +193,8 @@ class ToolRegistry:
         validated: Dict[str, Any] = {}
         for key, descriptor in schema.items():
             if key not in params:
+                if isinstance(descriptor, dict) and descriptor.get("required") is False:
+                    continue
                 raise ToolExecutionError(
                     "missing_tool_parameter", "Missing required tool parameter"
                 )

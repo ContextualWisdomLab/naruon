@@ -274,6 +274,39 @@ def test_execute_tool_rejects_missing_required_parameter():
     assert "Missing required tool parameter" in data["message"]
 
 
+def test_execute_tool_accepts_omitted_optional_parameter():
+    try:
+        registry.register(
+            ToolInfo(
+                code="optional_tool",
+                name="Optional Tool",
+                description="Test tool",
+                category="Test",
+                parameters={
+                    "required_value": "string",
+                    "optional_value": {"type": "string", "required": False},
+                },
+            ),
+            lambda params: params,
+        )
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/tools/optional_tool/execute",
+                headers={"Authorization": f"Bearer {_signed_session_token()}"},
+                json={"parameters": {"required_value": "kept"}},
+            )
+    finally:
+        registry.unregister("optional_tool")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "result": {"required_value": "kept"},
+        "message": "Execution successful",
+        "error_code": None,
+    }
+
+
 def test_execute_tool_no_parameters_accepted():
     try:
         registry.register(

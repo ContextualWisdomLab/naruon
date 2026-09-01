@@ -341,6 +341,65 @@ describe("ToolsPage", () => {
     expect(container.textContent).toContain("API request failed");
   });
 
+  it("submits optional schemas and shows bounded stable failures", async () => {
+    let executeBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        if (url.includes("/api/tools") && !url.includes("execute")) {
+          return jsonResponse([
+            {
+              code: "bounded_tool",
+              name: "제한 도구",
+              description: "설명",
+              category: "카테고리",
+              parameters: {
+                required_text: { type: "string", max_length: 12 },
+                optional_text: { type: "string", required: false },
+              },
+            },
+          ]);
+        }
+        if (url.includes("/api/tools/bounded_tool/execute")) {
+          executeBody = JSON.parse(String(init?.body));
+          return jsonResponse({
+            status: "failed",
+            result: null,
+            message: "입력값을 확인하세요.",
+            error_code: "tool_parameter_too_long",
+          });
+        }
+        return jsonResponse({});
+      }),
+    );
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => root?.render(<ToolsPage />));
+    await flushAsyncWork();
+
+    const requiredInput = container.querySelector(
+      'textarea[data-tool-parameter="bounded_tool.required_text"]',
+    ) as HTMLTextAreaElement;
+    const executeButton = container.querySelector(
+      'button[data-tool-execute="bounded_tool"]',
+    );
+    expect(requiredInput.maxLength).toBe(12);
+    expect(requiredInput.getAttribute("aria-describedby")).toBe(
+      "tool-bounded_tool-required_text-help",
+    );
+    expect(container.textContent).toContain("최대 12자");
+
+    act(() => executeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await flushAsyncWork();
+
+    expect(executeBody).toEqual({ parameters: { required_text: "" } });
+    expect(container.textContent).toContain("입력값을 확인하세요.");
+    expect(container.textContent).toContain("입력 길이를 줄인 뒤 다시 실행하세요.");
+    expect(container.textContent).not.toContain("tool_parameter_too_long");
+  });
+
   it("distinguishes a load failure from an empty tool list", async () => {
     vi.stubGlobal(
       "fetch",

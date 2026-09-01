@@ -39,17 +39,22 @@ interface ExecuteResponse {
   status: string;
   result: unknown;
   message?: string;
+  error_code?: string;
+}
+
+function parameterIsOptional(descriptor: unknown) {
+  return Boolean(
+    descriptor &&
+    typeof descriptor === "object" &&
+    "required" in descriptor &&
+    (descriptor as { required?: unknown }).required === false
+  );
 }
 
 function buildDefaultParameters(tool: ToolInfo) {
   return Object.fromEntries(
     Object.entries(tool.parameters ?? {})
-      .filter(([, descriptor]) => !(
-        descriptor &&
-        typeof descriptor === "object" &&
-        "required" in descriptor &&
-        (descriptor as { required?: unknown }).required === false
-      ))
+      .filter(([, descriptor]) => !parameterIsOptional(descriptor))
       .map(([key, descriptor]) => [key, defaultParameterValue(descriptor)]),
   );
 }
@@ -117,6 +122,16 @@ function parameterType(descriptor: unknown) {
   return parameterTypeLabel(descriptor).toLowerCase();
 }
 
+function parameterMaxLength(descriptor: unknown) {
+  if (!descriptor || typeof descriptor !== "object" || !("max_length" in descriptor)) {
+    return undefined;
+  }
+  const maxLength = (descriptor as { max_length?: unknown }).max_length;
+  return typeof maxLength === "number" && Number.isInteger(maxLength) && maxLength >= 0
+    ? maxLength
+    : undefined;
+}
+
 function parameterValueMatchesType(value: unknown, descriptor: unknown) {
   switch (parameterType(descriptor)) {
     case "string":
@@ -159,13 +174,32 @@ function resultLabel(status: string) {
   return status === "success" ? "성공" : "실패";
 }
 
+function failureAction(errorCode?: string) {
+  switch (errorCode) {
+    case "tool_parameter_too_long":
+      return "입력 길이를 줄인 뒤 다시 실행하세요.";
+    case "invalid_json":
+      return "JSON 형식을 확인한 뒤 다시 실행하세요.";
+    case "invalid_url_encoding":
+      return "URL 인코딩을 확인한 뒤 다시 실행하세요.";
+    case "missing_tool_parameter":
+    case "invalid_tool_parameter_type":
+    case "unexpected_tool_parameters":
+      return "입력 항목과 형식을 확인한 뒤 다시 실행하세요.";
+    default:
+      return errorCode ? "잠시 후 다시 실행하세요." : "";
+  }
+}
+
 function resultMessage(response: ExecuteResponse) {
   if (response.status === "success") {
     return typeof response.result === "string"
       ? response.result
       : JSON.stringify(response.result) ?? "실행 결과가 없습니다.";
   }
-  return response.message || JSON.stringify(response.result) || "실행 결과가 없습니다.";
+  const message = response.message || JSON.stringify(response.result) || "실행 결과가 없습니다.";
+  const action = failureAction(response.error_code);
+  return action ? `${message} ${action}` : message;
 }
 
 export default function ToolsPage() {
@@ -243,12 +277,7 @@ export default function ToolsPage() {
   const toolParametersAreValid = (tool: ToolInfo) => {
     const values = parameterValues[tool.code] ?? buildDefaultParameters(tool);
     return Object.entries(tool.parameters ?? {}).every(([key, descriptor]) => {
-      const isOptional = Boolean(
-        descriptor &&
-        typeof descriptor === "object" &&
-        "required" in descriptor &&
-        (descriptor as { required?: unknown }).required === false
-      );
+      const isOptional = parameterIsOptional(descriptor);
       return (!(key in values) && isOptional) || parameterValueMatchesType(values[key], descriptor);
     });
   };
@@ -373,9 +402,11 @@ export default function ToolsPage() {
                         {Object.entries(tool.parameters ?? {}).map(([key, descriptor]) => {
                           const type = parameterType(descriptor);
                           const inputId = `tool-${tool.code}-${key}`;
+                          const inputHelpId = `${inputId}-help`;
                           const value = parameterValues[tool.code]?.[key] ?? defaultParameterValue(descriptor);
                           const inputValue = parameterInputValue(value, type);
                           const isValid = parameterValueMatchesType(value, descriptor);
+                          const maxLength = type === "string" ? parameterMaxLength(descriptor) : undefined;
                           return (
                             <div key={key} className="grid gap-2 text-sm">
                               <div className="flex items-center justify-between gap-3">
@@ -399,9 +430,11 @@ export default function ToolsPage() {
                                 <Textarea
                                   id={inputId}
                                   value={String(inputValue)}
+                                  maxLength={maxLength}
                                   onChange={(event) => updateParameter(tool.code, key, event.target.value)}
                                   data-tool-parameter={`${tool.code}.${key}`}
                                   aria-label={key}
+                                  aria-describedby={maxLength === undefined ? undefined : inputHelpId}
                                   rows={3}
                                 />
                               ) : (
@@ -419,6 +452,11 @@ export default function ToolsPage() {
                                   aria-label={key}
                                   aria-invalid={!isValid}
                                 />
+                              )}
+                              {maxLength !== undefined && (
+                                <p id={inputHelpId} className="text-xs font-semibold text-muted-foreground">
+                                  최대 {maxLength.toLocaleString()}자
+                                </p>
                               )}
                             </div>
                           );
