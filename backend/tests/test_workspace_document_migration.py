@@ -15,6 +15,7 @@ then call the real ``/api/data/documents`` endpoints through the real FastAPI
 app with only the database session swapped for one bound to that database.
 """
 
+import asyncio
 import os
 import subprocess
 import sys
@@ -189,6 +190,30 @@ async def test_document_upload_serves_after_full_head_migration_from_empty(
     /api/data/documents without a missing-relation or FK-violation error."""
     _run_migrations(fresh_database_url)
     await _assert_document_upload_serves_cleanly(migrated_client)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_first_uploads_provision_one_workspace(
+    fresh_database_url, migrated_client
+):
+    """Concurrent first requests must not race on the workspace primary key."""
+    _run_migrations(fresh_database_url)
+
+    responses = await asyncio.gather(
+        *(
+            migrated_client.post(
+                "/api/data/documents",
+                json={
+                    "document_name": f"concurrent-{index}.md",
+                    "document_type": "text/markdown",
+                    "document_content": "# Concurrent",
+                },
+            )
+            for index in range(16)
+        )
+    )
+
+    assert [response.status_code for response in responses] == [200] * 16
 
 
 @pytest.mark.asyncio

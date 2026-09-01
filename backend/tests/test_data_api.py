@@ -68,6 +68,31 @@ class MockAsyncSession:
         self.queries.append(query)
         rendered_query = str(query)
         rendered_query_lower = rendered_query.lower()
+        if "insert into workspace_entities" in rendered_query_lower:
+            compiled = query.compile()
+            params = compiled.params
+            workspace_id = next(
+                value
+                for key, value in params.items()
+                if key.startswith("workspace_id")
+            )
+            workspace = next(
+                (
+                    workspace
+                    for workspace in self.workspaces
+                    if workspace.workspace_id == workspace_id
+                ),
+                None,
+            )
+            if workspace is None:
+                workspace = Workspace(
+                    workspace_id=workspace_id,
+                    workspace_name=workspace_id,
+                    created_at=_now(),
+                )
+                self.workspaces.append(workspace)
+                return MockResult(workspace)
+            return MockResult(None)
         if (
             "webdav_accounts.source_uid" in rendered_query_lower
             and "webdav_accounts.account_id" not in rendered_query_lower
