@@ -1,29 +1,47 @@
-"""Naming and compatibility contract for prompt response identifiers."""
+"""Naming and public-identifier contract for prompt responses."""
 
 from __future__ import annotations
 
 import datetime
+from types import SimpleNamespace
 
 from api.prompts import PromptResponse
 
 
-def test_prompt_response_uses_semantic_internal_identifier_and_legacy_wire_alias() -> None:
-    """Keep the owned identifier specific while preserving the established ``id`` wire key."""
-    assert "prompt_record_id" in PromptResponse.model_fields
-    assert "id" not in PromptResponse.model_fields
-
+def _prompt_record() -> SimpleNamespace:
+    """Return an ORM-shaped prompt record that still contains its private row id."""
     now = datetime.datetime(2026, 9, 1, tzinfo=datetime.timezone.utc)
-    prompt_response = PromptResponse(
+    return SimpleNamespace(
         id=17,
         prompt_uid="prompt-example",
         title="Example",
+        description=None,
+        content="Summarize {{email}}",
         is_shared=False,
         created_by="user-example",
         created_at=now,
         updated_at=now,
     )
 
-    assert prompt_response.prompt_record_id == 17
-    serialized_response = prompt_response.model_dump(by_alias=True)
-    assert serialized_response["id"] == 17
+
+def test_prompt_response_uses_only_opaque_public_identifier() -> None:
+    """Sequential database identity must not enter the owned API response model."""
+    assert "prompt_uid" in PromptResponse.model_fields
+    assert "id" not in PromptResponse.model_fields
+    assert "prompt_record_id" not in PromptResponse.model_fields
+
+    prompt_response = PromptResponse.model_validate(_prompt_record())
+    serialized_response = prompt_response.model_dump()
+
+    assert serialized_response["prompt_uid"] == "prompt-example"
+    assert "id" not in serialized_response
     assert "prompt_record_id" not in serialized_response
+
+
+def test_prompt_response_json_schema_does_not_advertise_sequential_database_id() -> None:
+    """FastAPI's response schema must advertise the opaque UID as the sole identifier."""
+    response_properties = PromptResponse.model_json_schema()["properties"]
+
+    assert "prompt_uid" in response_properties
+    assert "id" not in response_properties
+    assert "prompt_record_id" not in response_properties
