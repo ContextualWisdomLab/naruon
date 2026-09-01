@@ -71,6 +71,16 @@ def _run_0021_upgrade(sync_conn) -> None:
         module.upgrade()
 
 
+def _run_0001_upgrade(sync_conn) -> None:
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    module = _load_revision_module("0001_initial_control_plane.py")
+    context = MigrationContext.configure(sync_conn, opts={"target_metadata": None})
+    with Operations.context(context):
+        module.upgrade()
+
+
 def test_alembic_scaffold_exists_with_model_metadata_target():
     alembic_ini = BACKEND_ROOT / "alembic.ini"
     env_py = BACKEND_ROOT / "alembic" / "env.py"
@@ -99,7 +109,10 @@ def test_initial_alembic_revision_records_current_schema_path():
     assert "down_revision = None" in revision_text
     assert "CREATE EXTENSION IF NOT EXISTS vector" in revision_text
     assert "Base.metadata.create_all" in revision_text
-    assert "schema_backfill_sql" in revision_text
+    # Must delegate to the guarded execute_schema_backfill (which skips
+    # legacy-table-only statements when the table doesn't exist yet on a
+    # fresh database) rather than iterating schema_backfill_sql() directly.
+    assert "execute_schema_backfill" in revision_text
 
 
 def test_email_workspace_migration_replaces_owner_only_identity_constraint():
@@ -195,6 +208,47 @@ async def test_calendar_correction_rationale_real_postgres_smoke():
             column_names = await conn.run_sync(_column_names)
             assert "correction_rationale" in column_names
             assert "rationale" not in column_names
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+    except Exception:
+        await engine.dispose()
+        raise
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_0001_initial_upgrade_succeeds_against_a_fresh_database():
+    # 0001_initial_control_plane.py::upgrade() is what a genuinely fresh
+    # `alembic upgrade head` runs first. Base.metadata.create_all() never
+    # creates a table named "emails" (only "email_records" is ORM-modeled),
+    # so if this migration bypasses execute_schema_backfill's guard and
+    # blindly executes every schema_backfill_sql() statement itself, the
+    # legacy "ix_emails_owner_date" index statement raises
+    # 'relation "emails" does not exist' and a fresh install can never
+    # migrate at all.
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(_run_0001_upgrade)
+            result = await conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE tablename = 'email_records' "
+                    "AND indexname = 'ix_email_records_owner_date'"
+                )
+            )
+            assert result.scalar_one() == "ix_email_records_owner_date"
     except (
         ConnectionRefusedError,
         OSError,

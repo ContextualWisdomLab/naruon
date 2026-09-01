@@ -1,4 +1,41 @@
 ## [Unreleased]
+- **(🔴 critical, 현실성검증으로 발견: 신선한 DB에 대한 `alembic upgrade head`가 항상 실패)
+  `backend/.github/workflows/app-ci.yml`의 backend job에는 Postgres 서비스 컨테이너가 전혀
+  구성되어 있지 않다** — `@pytest.mark.postgres`로 표시된 모든 real-PostgreSQL 테스트는 CI에서
+  단 한 번도 실제로 실행된 적이 없고(연결 실패로 항상 조용히 skip), 이 세션에서 로컬
+  PostgreSQL 16 + pgvector 확장을 직접 설치·기동해 처음으로 실행해 봄으로써 다음 두 클래스의
+  실재 결함이 드러났다.
+  1. **`backend/alembic/versions/0001_initial_control_plane.py::upgrade()`가
+     `execute_schema_backfill`의 guard를 우회해, 완전히 새 데이터베이스에 대한
+     `alembic upgrade head`가 항상 실패했다.** `Base.metadata.create_all()`는 ORM에 없는 legacy
+     `emails` 테이블을 만들지 않는데, 0001이 `schema_backfill_sql()`을 직접 순회하며 실행해
+     `CREATE INDEX IF NOT EXISTS ix_emails_owner_date ON emails (...)`가
+     `relation "emails" does not exist`로 항상 실패했다(`CREATE INDEX IF NOT EXISTS`는 인덱스
+     이름만 보호하지 대상 테이블의 존재 여부는 보호하지 않는다). 완전히 새 데이터베이스에 대해
+     실제로 `alembic upgrade head`를 실행해 이 실패를 직접 재현한 뒤(진짜 RED),
+     `execute_schema_backfill(connection)`을 호출하도록 수정(진짜 GREEN, 같은 방식으로 재현).
+     새 real-Postgres 테스트 `test_0001_initial_upgrade_succeeds_against_a_fresh_database`
+     (`tests/test_alembic_migrations.py`)와
+     `test_schema_backfill_skips_legacy_emails_index_when_table_absent`
+     (`tests/test_bootstrap_db.py`) 추가. 관련 prose contract test
+     (`test_initial_alembic_revision_records_current_schema_path`)도 새 구현(`execute_schema_backfill`
+     호출)에 맞게 갱신.
+  2. **workspace_id NOT NULL 제약이 이 PR에서 추가된 이후, 이를 반영하지 못한 pre-existing
+     real-Postgres 테스트 19개가 하드 실패했다.** `test_project_graph_api.py`,
+     `test_project_graph_projection.py`, `test_search_postgres.py`,
+     `test_tasks_api.py`(각 파일이 이 PR에서 손대지 않은, 완전히 무관한 기존 파일들)의 공유
+     `Email(...)` 시딩 헬퍼들이 `workspace_id`를 전혀 넘기지 않아
+     `email_records.workspace_id`의 NOT NULL 위반으로 실패. `test_data_api.py`(이 PR이 수정한
+     파일)의 raw SQL INSERT 3건도 `workspace_id`뿐 아니라 `is_read`(ORM 쪽 Python-side
+     `default=True`, DB 서버측 default 없음)까지 빠뜨리고 있었고, 별도의 raw SQL
+     `email_attachments` INSERT도 `attachment_uid`(ORM 쪽 Python-side default, 서버측 default
+     없음)를 빠뜨려 NOT NULL 위반이었다 — 둘 다 raw SQL이 ORM 레벨 Python 기본값을 우회하기
+     때문에 발생. 모든 위치에 `workspace_id`/`is_read`/`attachment_uid`를 명시적으로 채우도록
+     수정.
+  로컬 PostgreSQL 16(+ pgvector)로 두 상태 모두 검증: Postgres 기동 시 1939 passed / 3 skipped,
+  중지 시 1902 passed / 40 skipped(정상 skip), 양쪽 다 ruff clean. **CI에 Postgres 서비스가
+  없다는 사실 자체는 이번 커밋의 범위 밖으로 남겨둔다** — 별도 후속 작업으로
+  `docs/product-technical-gap-baseline.md`(.github repo)에 기록.
 - **(테스트 컨벤션 위반 수정) 병행 세션이 추가한 real-PostgreSQL 테스트 2개가 이 저장소의
   표준 "Postgres 연결 불가 시 정상 skip" 패턴 없이 작성되어, Postgres가 없는 환경에서
   스킵 대신 하드 실패하던 문제를 고쳤습니다.** 커밋 `96cd0c07`(`fix(db): skip absent

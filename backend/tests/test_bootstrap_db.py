@@ -926,6 +926,37 @@ async def test_schema_backfill_creates_legacy_emails_index_when_table_exists():
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_schema_backfill_skips_legacy_emails_index_when_table_absent():
+    # A genuinely fresh database (0001_initial_control_plane.py's own
+    # Base.metadata.create_all()) never creates a table named "emails" --
+    # only "email_records" is ORM-modeled. execute_schema_backfill's guard
+    # must skip LEGACY_EMAILS_INDEX in exactly this case rather than raising
+    # "relation \"emails\" does not exist" (Postgres's CREATE INDEX IF NOT
+    # EXISTS only guards the index name, not the target table's existence).
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(execute_schema_backfill, [LEGACY_EMAILS_INDEX])
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+    except Exception:
+        await engine.dispose()
+        raise
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_connector_signal_events_real_postgres_bootstrap_smoke():
     engine = create_async_engine(settings.DATABASE_URL)
     duplicate_count = 0

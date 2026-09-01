@@ -3113,12 +3113,14 @@ async def _seed_smoke_test_data(conn, ids: dict):
         text(
             """
             INSERT INTO email_records (
-                user_id, organization_id, message_id, thread_id,
-                fingerprint, sender, recipients, subject, "date", body
+                user_id, organization_id, workspace_id, message_id, thread_id,
+                fingerprint, sender, recipients, subject, "date", body,
+                is_read
             )
             VALUES (
-                :user_id, :organization_id, :message_id, :thread_id,
-                :fingerprint, :sender, :recipients, :subject, now(), :body
+                :user_id, :organization_id, :workspace_id, :message_id,
+                :thread_id, :fingerprint, :sender, :recipients, :subject,
+                now(), :body, true
             )
             RETURNING id
             """
@@ -3126,6 +3128,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
         {
             "user_id": ids["user_id"],
             "organization_id": ids["organization_id"],
+            "workspace_id": ids["workspace_id"],
             "message_id": first_message_id,
             "thread_id": "thread-data-smoke",
             "fingerprint": "sha256:data-smoke",
@@ -3139,12 +3142,12 @@ async def _seed_smoke_test_data(conn, ids: dict):
         text(
             """
             INSERT INTO email_records (
-                user_id, organization_id, message_id, sender, recipients,
-                subject, "date", body
+                user_id, organization_id, workspace_id, message_id, sender,
+                recipients, subject, "date", body, is_read
             )
             VALUES (
-                :user_id, :organization_id, :message_id, :sender,
-                :recipients, :subject, now(), :body
+                :user_id, :organization_id, :workspace_id, :message_id,
+                :sender, :recipients, :subject, now(), :body, true
             )
             RETURNING id
             """
@@ -3152,6 +3155,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
         {
             "user_id": ids["user_id"],
             "organization_id": ids["organization_id"],
+            "workspace_id": ids["workspace_id"],
             "message_id": second_message_id,
             "sender": "partner@example.com",
             "recipients": "owner@example.com",
@@ -3163,12 +3167,14 @@ async def _seed_smoke_test_data(conn, ids: dict):
         text(
             """
             INSERT INTO email_records (
-                user_id, organization_id, message_id, thread_id,
-                fingerprint, sender, recipients, subject, "date", body
+                user_id, organization_id, workspace_id, message_id, thread_id,
+                fingerprint, sender, recipients, subject, "date", body,
+                is_read
             )
             VALUES (
-                :user_id, :organization_id, :message_id, :thread_id,
-                :fingerprint, :sender, :recipients, :subject, now(), :body
+                :user_id, :organization_id, :workspace_id, :message_id,
+                :thread_id, :fingerprint, :sender, :recipients, :subject,
+                now(), :body, true
             )
             RETURNING id
             """
@@ -3176,6 +3182,7 @@ async def _seed_smoke_test_data(conn, ids: dict):
         {
             "user_id": ids["rival_user_id"],
             "organization_id": ids["rival_organization_id"],
+            "workspace_id": ids["rival_workspace_id"],
             "message_id": rival_message_id,
             "thread_id": "thread-rival",
             "fingerprint": "sha256:rival",
@@ -3352,32 +3359,35 @@ async def _seed_smoke_test_data(conn, ids: dict):
         text(
             """
             INSERT INTO email_attachments (
-                email_id, filename, content,
+                attachment_uid, email_id, filename, content,
                 content_type, parse_status, parse_content_type,
                 parser_key, parse_error_code
             )
             VALUES
             (
-                :first_email_id, 'ready.txt', 'ready attachment',
-                'text/plain', 'parsed', 'text/plain',
+                :first_attachment_uid, :first_email_id, 'ready.txt',
+                'ready attachment', 'text/plain', 'parsed', 'text/plain',
                 'plain_text', NULL
             ),
             (
-                :second_email_id, 'blank.txt', '',
+                :second_attachment_uid, :second_email_id, 'blank.txt', '',
                 'application/pdf', 'unsupported_content_type',
                 'application/pdf', 'plain_text',
                 'unsupported_content_type'
             ),
             (
-                :rival_email_id, 'rival.txt', 'rival attachment',
-                'text/plain', 'parsed', 'text/plain',
+                :rival_attachment_uid, :rival_email_id, 'rival.txt',
+                'rival attachment', 'text/plain', 'parsed', 'text/plain',
                 'plain_text', NULL
             )
             """
         ),
         {
+            "first_attachment_uid": f"attachment_{uuid.uuid4().hex}",
             "first_email_id": first_email_id,
+            "second_attachment_uid": f"attachment_{uuid.uuid4().hex}",
             "second_email_id": second_email_id,
+            "rival_attachment_uid": f"attachment_{uuid.uuid4().hex}",
             "rival_email_id": rival_email_id,
         },
     )
