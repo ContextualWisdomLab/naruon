@@ -48,11 +48,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    connection = op.get_bind()
-    inspector = sa.inspect(connection)
-    if not inspector.has_table(_DOCUMENTS_TABLE):
-        return
-    columns = {column["name"] for column in inspector.get_columns(_DOCUMENTS_TABLE)}
-    op.drop_index(_ORG_INDEX, table_name=_DOCUMENTS_TABLE, if_exists=True)
-    if _ORG_COLUMN in columns:
-        op.drop_column(_DOCUMENTS_TABLE, _ORG_COLUMN)
+    # 0018 can create this table and column after 0016 was a no-op. Alembic
+    # cannot distinguish that case from a table altered by this revision, so
+    # dropping the column here could destroy later organization assignments.
+    return None

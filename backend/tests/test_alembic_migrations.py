@@ -60,6 +60,14 @@ def test_email_read_state_guards_both_legacy_and_current_table_names():
     assert "op.drop_column(" not in revision_text
 
 
+def test_document_org_scope_downgrade_preserves_later_assignments():
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0016_document_org_scope.py"
+    )
+
+    assert "op.drop_column(" not in revision_path.read_text()
+
+
 def test_provider_writeback_retry_queue_has_incremental_revision():
     versions_dir = BACKEND_ROOT / "alembic" / "versions"
     revision_path = versions_dir / "0002_provider_writeback_retry_queue.py"

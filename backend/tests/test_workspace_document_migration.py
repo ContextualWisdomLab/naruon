@@ -18,8 +18,8 @@ app with only the database session swapped for one bound to that database.
 """
 
 import asyncio
-import os
 import subprocess
+import secrets
 import sys
 import uuid
 from pathlib import Path
@@ -54,11 +54,13 @@ _SMOKE_WORKSPACE_ID = "workspace-workspace-migration-smoke-org"
 
 
 def _run_migrations(database_url: str, revision: str = "head") -> None:
-    env = {**os.environ, "DATABASE_URL": database_url}
     result = subprocess.run(
         [sys.executable, str(BACKEND_ROOT / "scripts" / "migrate_db.py"), revision],
         cwd=BACKEND_ROOT,
-        env=env,
+        env={
+            "DATABASE_URL": database_url,
+            "AUTH_SESSION_HMAC_SECRET": secrets.token_urlsafe(48),
+        },
         capture_output=True,
         text=True,
         timeout=180,
@@ -67,6 +69,10 @@ def _run_migrations(database_url: str, revision: str = "head") -> None:
         f"scripts/migrate_db.py {revision} failed "
         f"(exit {result.returncode}):\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert not any(
+        status in result.stdout + result.stderr
+        for status in ("Timeout", "Fatal", "Warn", "Denied")
     )
 
 

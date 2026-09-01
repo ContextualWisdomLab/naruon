@@ -7,8 +7,8 @@ without making the same NULL row visible to a different organization that presen
 the same workspace string.
 """
 
-import os
 import subprocess
+import secrets
 import sys
 import uuid
 from pathlib import Path
@@ -38,12 +38,19 @@ def _run_migrations(database_url: str) -> None:
     result = subprocess.run(
         [sys.executable, str(_BACKEND_ROOT / "scripts" / "migrate_db.py"), "head"],
         cwd=_BACKEND_ROOT,
-        env={**os.environ, "DATABASE_URL": database_url},
+        env={
+            "DATABASE_URL": database_url,
+            "AUTH_SESSION_HMAC_SECRET": secrets.token_urlsafe(48),
+        },
         capture_output=True,
         text=True,
         timeout=180,
     )
-    assert result.returncode == 0, result.stderr
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert not any(
+        status in output for status in ("Timeout", "Fatal", "Warn", "Denied")
+    ), output
 
 
 @pytest.mark.asyncio
