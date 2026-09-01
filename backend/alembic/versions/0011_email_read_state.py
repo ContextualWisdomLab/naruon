@@ -1,4 +1,4 @@
-"""Add is_read to email_records (IMAP \\Seen read state).
+"""Add is_read to emails (IMAP \\Seen read state).
 
 Existing rows default to read so historical/file imports do not surface as unread.
 """
@@ -12,32 +12,26 @@ down_revision = "0009_project_graph_projection"
 branch_labels = None
 depends_on = None
 
-_EMAIL_TABLE = "email_records"
-
 
 def upgrade() -> None:
-    connection = op.get_bind()
-    inspector = sa.inspect(connection)
-    if not _has_column(inspector, _EMAIL_TABLE, "is_read"):
-        op.add_column(
-            _EMAIL_TABLE,
-            sa.Column(
-                "is_read",
-                sa.Boolean(),
-                nullable=False,
-                server_default=sa.text("true"),
-            ),
-        )
+    # A fresh install's 0001 migration creates only the current ORM tables
+    # (email_records, which already carries is_read) via
+    # Base.metadata.create_all(); the legacy "emails" table this migration
+    # targets exists only on databases provisioned before that rename.
+    if not sa.inspect(op.get_bind()).has_table("emails"):
+        return
+    op.add_column(
+        "emails",
+        sa.Column(
+            "is_read",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("true"),
+        ),
+    )
 
 
 def downgrade() -> None:
-    connection = op.get_bind()
-    inspector = sa.inspect(connection)
-    if _has_column(inspector, _EMAIL_TABLE, "is_read"):
-        op.drop_column(_EMAIL_TABLE, "is_read")
-
-
-def _has_column(inspector, table_name: str, column_name: str) -> bool:
-    return any(
-        column["name"] == column_name for column in inspector.get_columns(table_name)
-    )
+    if not sa.inspect(op.get_bind()).has_table("emails"):
+        return
+    op.drop_column("emails", "is_read")
