@@ -27,8 +27,27 @@ _MANAGED_KEYS = (
 )
 
 
+def _quoted_dotenv_value(value: str) -> str | None:
+    """Return a closed quoted Compose dotenv value, or ``None`` when empty."""
+
+    quote_character = value[0]
+    escaped = False
+    for character_index, character in enumerate(value[1:], start=1):
+        if character == "\\" and not escaped:
+            escaped = True
+            continue
+        if character == quote_character and not escaped:
+            trailing_text = value[character_index + 1 :].strip()
+            if trailing_text and not trailing_text.startswith("#"):
+                return value
+            quoted_value = value[1:character_index]
+            return quoted_value or None
+        escaped = False
+    return value
+
+
 def _existing_value(text: str, key: str) -> str | None:
-    """Return a non-empty dotenv value for ``key``, stripping simple quotes."""
+    """Return the effective non-empty Compose dotenv value for ``key``."""
 
     match = re.search(rf"(?m)^{re.escape(key)}=(.*)$", text)
     if match is None:
@@ -36,8 +55,9 @@ def _existing_value(text: str, key: str) -> str | None:
     value = match.group(1).strip()
     if not value:
         return None
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        value = value[1:-1]
+    if value[0] in {"'", '"'}:
+        return _quoted_dotenv_value(value)
+    value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
     return value or None
 
 
