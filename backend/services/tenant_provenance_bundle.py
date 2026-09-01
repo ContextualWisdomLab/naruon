@@ -45,6 +45,11 @@ _PAYLOAD_NAME = "data/records.json"
 _LOCAL_FILE_SIGNATURE = b"PK\x03\x04"
 _EOCD_SIGNATURE = b"PK\x05\x06"
 _EOCD_SIZE = 22
+_EXPORT_MEMORY_LOCK_KEY = int.from_bytes(
+    hashlib.sha256(b"naruon-tenant-provenance-export-memory-v1").digest()[:8],
+    "big",
+    signed=True,
+)
 
 _EXPORT_TEXT_COLUMNS = {
     Email: (
@@ -1293,6 +1298,13 @@ async def export_tenant_provenance(
 ) -> bytes:
     """Export the exact signed-scope project-evidence closure."""
     _validate_scope(scope)
+    bind = session.get_bind()
+    if getattr(getattr(bind, "dialect", None), "name", None) == "postgresql":
+        # ponytail: global lock bounds cross-worker archive memory; replace with
+        # file-backed streaming when the public export contract supports it.
+        await session.execute(
+            select(func.pg_advisory_xact_lock(_EXPORT_MEMORY_LOCK_KEY))
+        )
     consumed_bytes = 0
     for model in (
         ProjectGraphObjectRecord,
@@ -2282,8 +2294,6 @@ async def _prepare_identity_import(
         if (row.entity_kind, row.portable_uid) in expected_mapping_keys
     }
     if scoped_mappings:
-        if set(scoped_mappings) != expected_mapping_keys:
-            _fail()
         for (collection, portable_uid), row in scoped_mappings.items():
             if row.target_database_uid not in {
                 portable_uid,
@@ -2291,7 +2301,21 @@ async def _prepare_identity_import(
             }:
                 _fail()
             forward_maps[collection][portable_uid] = row.target_database_uid
-        return _translate_identity_records(records, forward_maps), []
+        missing_mapping_keys = expected_mapping_keys - set(scoped_mappings)
+        return _translate_identity_records(records, forward_maps), [
+            ProvenanceIdentityMapping(
+                target_user_id=scope.user_id,
+                target_organization_id=scope.organization_id,
+                target_workspace_id=scope.workspace_id,
+                source_user_uid=source_scope["user_uid"],
+                source_organization_uid=source_scope["organization_uid"],
+                source_workspace_uid=source_scope["workspace_uid"],
+                entity_kind=collection,
+                portable_uid=portable_uid,
+                target_database_uid=forward_maps[collection][portable_uid],
+            )
+            for collection, portable_uid in sorted(missing_mapping_keys)
+        ]
 
     scoped_collisions: list[tuple[str, Any, str]] = []
     for model, column, collection in (

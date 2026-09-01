@@ -1535,6 +1535,44 @@ async def test_portable_archive_imports_into_two_scopes_after_source_deletion(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres
+async def test_portable_archive_incrementally_adds_identity_mappings(
+    provenance_sessionmaker,
+):
+    token = uuid.uuid4().hex[:12]
+    source_scope = _scope(f"incremental-source-{token}")
+    target_scope = _scope(f"incremental-target-{token}")
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(
+            session, scope=source_scope, token=f"first-{token}"
+        )
+    async with provenance_sessionmaker() as session:
+        first_archive = await export_tenant_provenance(session, source_scope)
+    async with provenance_sessionmaker() as session:
+        await import_tenant_provenance(session, target_scope, first_archive)
+
+    async with provenance_sessionmaker() as session:
+        await _seed_provenance_closure(
+            session, scope=source_scope, token=f"second-{token}"
+        )
+    async with provenance_sessionmaker() as session:
+        expanded_archive = await export_tenant_provenance(session, source_scope)
+        expanded_records = parse_provenance_archive(expanded_archive)
+    async with provenance_sessionmaker() as session:
+        receipt = await import_tenant_provenance(
+            session, target_scope, expanded_archive
+        )
+    async with provenance_sessionmaker() as session:
+        target_records = parse_provenance_archive(
+            await export_tenant_provenance(session, target_scope)
+        )
+
+    assert sum(receipt.created.values()) > 0
+    for collection in provenance_service._COLLECTIONS:
+        assert target_records[collection] == expanded_records[collection]
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
 async def test_mixed_native_and_multiple_import_origins_export_as_target_scope(
     provenance_sessionmaker,
 ):
