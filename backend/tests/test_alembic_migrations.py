@@ -41,9 +41,14 @@ def test_email_read_state_guards_both_legacy_and_current_table_names():
     is_read was added to the Email model), not just a legacy "emails" table
     that, per 0011_email_model_reconciliation's docstring, no migration in
     this repo's history ever actually created for a real managed database.
-    Both checks must guard on column existence, not just table existence, so
-    upgrade/downgrade stay idempotent against a table that already has (or
-    lacks) the column either way."""
+    The upgrade check must guard on column existence, not just table
+    existence, so it stays idempotent against a table that already has the
+    column. downgrade is a no-op: a fresh database's email_records.is_read
+    comes from 0001's live create_all, not from this revision, so there is
+    no way to tell "this revision added it" apart from "the baseline already
+    had it" -- and is_read holds real read/unread state, not rebuildable
+    derived data (same ownership-ambiguity reasoning as
+    0018_workspace_registry's downgrade)."""
     revision_path = BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
     revision_text = revision_path.read_text()
 
@@ -52,7 +57,7 @@ def test_email_read_state_guards_both_legacy_and_current_table_names():
     assert "has_table" in revision_text
     assert "_has_column" in revision_text
     assert "op.add_column(" in revision_text
-    assert "op.drop_column(" in revision_text
+    assert "op.drop_column(" not in revision_text
 
 
 def test_provider_writeback_retry_queue_has_incremental_revision():

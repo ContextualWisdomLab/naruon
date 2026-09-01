@@ -41,12 +41,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    for table_name in _CANDIDATE_TABLES:
-        if inspector.has_table(table_name) and _has_column(
-            inspector, table_name, "is_read"
-        ):
-            op.drop_column(table_name, "is_read")
+    # Same ownership-ambiguity problem as 0018_workspace_registry's downgrade:
+    # a fresh database gets email_records.is_read from 0001's live
+    # Base.metadata.create_all, not from this revision, so there is no way to
+    # tell "this revision added the column" apart from "the baseline already
+    # had it" -- and is_read holds real per-message read/unread state, not
+    # rebuildable derived data. As with 0001_initial_control_plane and
+    # 0018_workspace_registry: production rollbacks should restore from
+    # backup or a later explicit down revision rather than dropping
+    # customer-owned data.
+    return None
 
 
 def _has_column(inspector, table_name: str, column_name: str) -> bool:
