@@ -225,6 +225,47 @@ def test_legacy_raw_dict_mutators_keep_semantic_evidence_synchronized() -> None:
     assert registered_agent.raw_entry == {}
 
 
+def test_retained_raw_references_share_one_coherent_dictionary() -> None:
+    """Keep every retained legacy mapping coherent with semantic evidence."""
+    registered_agent = agent_registry_module._agent_from_entry(
+        "compatibility-agent",
+        {
+            "agent_name": "Coherent Agent",
+            "agent_framework": "pydantic-ai",
+            "agent_entrypoint": "services.coherent_agent:run",
+            "agent_description": "coherent description",
+            "agent_capabilities": ["mail.search"],
+            "agent_enabled": True,
+            "custom_metadata": "initial",
+        },
+    )
+    assert registered_agent is not None
+
+    first_raw = registered_agent.raw
+    second_raw = registered_agent.raw
+    assert first_raw is second_raw
+
+    first_raw["name"] = "Changed Through First"
+    first_raw["custom_metadata"] = "changed-through-first"
+    assert second_raw["name"] == "Changed Through First"
+    assert second_raw["custom_metadata"] == "changed-through-first"
+    assert registered_agent.raw_entry["agent_name"] == "Changed Through First"
+
+    second_raw.pop("description")
+    assert "description" not in first_raw
+    assert "agent_description" not in registered_agent.raw_entry
+
+    registered_agent.raw_entry["agent_framework"] = "semantic-runtime"
+    registered_agent.raw_entry["semantic_metadata"] = "semantic-update"
+    assert first_raw["framework"] == "semantic-runtime"
+    assert second_raw["semantic_metadata"] == "semantic-update"
+
+    del registered_agent.raw_entry["agent_enabled"]
+    del registered_agent.raw_entry["semantic_metadata"]
+    assert "enabled" not in first_raw
+    assert "semantic_metadata" not in second_raw
+
+
 def test_task_mapping_resolves_to_noema_agent() -> None:
     """Resolve mapped task types to the semantic registered-agent contract."""
     mapping = load_task_agent_mapping()
