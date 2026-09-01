@@ -179,4 +179,6 @@ async def test_legacy_null_org_document_is_visible_only_to_matching_signed_org()
         try:
             await admin(f'DROP DATABASE IF EXISTS "{database_name}" WITH (FORCE)')
         except (OSError, ConnectionError):
+            # Best-effort teardown: a transient connectivity error here must not
+            # mask the test's actual assertions.
             pass
