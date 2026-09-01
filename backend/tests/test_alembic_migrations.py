@@ -736,88 +736,109 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.drop_column(" not in revision_text
 
 
-def test_legacy_email_read_state_branch_skips_fresh_baseline_schema():
+def test_legacy_email_read_state_branch_defers_check_to_sql(monkeypatch):
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
     )
     revision_text = revision_path.read_text()
 
-    assert '"emails" in sa.inspect(op.get_bind()).get_table_names()' in revision_text
-    # Offline SQL generation (`alembic upgrade --sql`) has no live connection
-    # to introspect -- op.get_bind() returns a MockConnection sa.inspect
-    # rejects outright -- so the legacy-table check must short-circuit to
-    # "absent" in that mode rather than raising.
-    assert "context.is_offline_mode()" in revision_text
-    assert 'op.add_column(\n        "emails"' in revision_text
+    # The legacy-table check must be evaluated in SQL (at apply time), not in
+    # Python at generation time: offline SQL generation (`alembic upgrade
+    # --sql`, a real flag `scripts/migrate_db.py` exposes) has no live
+    # connection to introspect with, and the one generated script is meant to
+    # later be applied against whichever database a DBA chooses -- a
+    # Python-side sa.inspect(op.get_bind()) check can only ever bake in one
+    # fixed answer, which is wrong for whichever kind of target it didn't
+    # assume (silently skips the real column on a legacy target while
+    # `alembic_version` still advances, or crashes outright against a fresh
+    # one). upgrade()/downgrade() themselves must contain no such check --
+    # only op.execute(<static SQL>) calls -- so this can't regress into
+    # either failure mode.
+    assert "def upgrade" in revision_text
+    upgrade_and_after = revision_text.split("def upgrade", 1)[1]
+    assert "sa.inspect(op.get_bind())" not in upgrade_and_after
+    assert "context.is_offline_mode()" not in upgrade_and_after
+    assert "DO $$" in revision_text
+    assert "information_schema.tables" in revision_text
+    assert "ALTER TABLE emails ADD COLUMN is_read" in revision_text
 
-
-def test_legacy_email_read_state_offline_generation_never_inspects(monkeypatch):
-    """Regression for offline `alembic upgrade --sql`: op.get_bind() returns a
-    MockConnection in that mode, and sa.inspect(...) raises NoInspectionAvailable
-    for it -- so upgrade()/downgrade() must short-circuit on is_offline_mode()
-    before ever calling sa.inspect, not just happen to skip the add/drop.
-    """
     module = _load_revision_module("0011_email_read_state.py")
-
-    def _boom(_connection):
-        raise AssertionError("sa.inspect must not run in offline mode")
-
-    monkeypatch.setattr(module.context, "is_offline_mode", lambda: True)
-    monkeypatch.setattr(module.sa, "inspect", _boom)
-    monkeypatch.setattr(
-        module.op,
-        "add_column",
-        lambda *a, **k: pytest.fail("must not add_column in offline mode"),
-    )
-    monkeypatch.setattr(
-        module.op,
-        "drop_column",
-        lambda *a, **k: pytest.fail("must not drop_column in offline mode"),
-    )
-
+    calls = []
+    monkeypatch.setattr(module.op, "execute", lambda sql: calls.append(sql))
     module.upgrade()
     module.downgrade()
+    assert len(calls) == 2
+    assert "ADD COLUMN is_read" in calls[0]
+    assert "DROP COLUMN IF EXISTS is_read" in calls[1]
 
 
-def test_legacy_email_read_state_online_adds_column_only_when_table_present(
-    monkeypatch,
-):
+def _run_0011_upgrade(sync_conn) -> None:
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
     module = _load_revision_module("0011_email_read_state.py")
-    monkeypatch.setattr(module.context, "is_offline_mode", lambda: False)
-    monkeypatch.setattr(module.op, "get_bind", lambda: object())
+    context = MigrationContext.configure(sync_conn, opts={"target_metadata": None})
+    with Operations.context(context):
+        module.upgrade()
 
-    class _AbsentInspector:
-        @staticmethod
-        def get_table_names():
-            return ["email_records"]
 
-    monkeypatch.setattr(module.sa, "inspect", lambda _connection: _AbsentInspector())
-    monkeypatch.setattr(
-        module.op,
-        "add_column",
-        lambda *a, **k: pytest.fail("must not add_column when emails is absent"),
-    )
-    module.upgrade()
+def _run_0011_downgrade(sync_conn) -> None:
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
 
-    calls = []
+    module = _load_revision_module("0011_email_read_state.py")
+    context = MigrationContext.configure(sync_conn, opts={"target_metadata": None})
+    with Operations.context(context):
+        module.downgrade()
 
-    class _PresentInspector:
-        @staticmethod
-        def get_table_names():
-            return ["emails"]
 
-    monkeypatch.setattr(module.sa, "inspect", lambda _connection: _PresentInspector())
-    monkeypatch.setattr(
-        module.op,
-        "add_column",
-        lambda *args, **kwargs: calls.append(args),
-    )
-    module.upgrade()
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_legacy_email_read_state_real_postgres_smoke():
+    """Both directions this migration must get right against a real database:
+    a legacy target (still has the ``emails`` table) gets the column added and
+    later removed; a fresh-baseline target (no ``emails`` table at all, the
+    now-common case) is left untouched rather than erroring.
+    """
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with engine.begin() as conn:
+            # Fresh-baseline case first, on a connection with no "emails"
+            # table anywhere in scope: must no-op, not raise.
+            await conn.run_sync(_run_0011_upgrade)
 
-    assert len(calls) == 1
-    table_name, column = calls[0]
-    assert table_name == "emails"
-    assert column.name == "is_read"
+            await conn.execute(
+                text("CREATE TEMP TABLE emails (id serial primary key) ON COMMIT DROP")
+            )
+
+            def _has_is_read(sync_conn):
+                return any(
+                    column["name"] == "is_read"
+                    for column in inspect(sync_conn).get_columns("emails")
+                )
+
+            assert not await conn.run_sync(_has_is_read)
+            await conn.run_sync(_run_0011_upgrade)
+            assert await conn.run_sync(_has_is_read)
+
+            await conn.run_sync(_run_0011_downgrade)
+            assert not await conn.run_sync(_has_is_read)
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        await engine.dispose()
+        pytest.skip("PostgreSQL smoke path unavailable")
+    except Exception:
+        await engine.dispose()
+        raise
+    finally:
+        await engine.dispose()
 
 
 def test_merge_revision_reconciles_newsdom_provider_branch():
