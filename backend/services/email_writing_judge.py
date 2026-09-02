@@ -43,7 +43,7 @@ EMAIL_WRITING_JUDGE_CRITERION_IDS: Final = (
     "request_strength_preservation",
     "audience_pragmatics",
     "technical_precision",
-    "actionability_support",
+    "actionability",
     "explanation_quality",
 )
 EMAIL_WRITING_JUDGE_EVALUATION_CATEGORY_COUNT: Final = 4
@@ -80,7 +80,7 @@ _CRITERION_DESCRIPTIONS: Final = {
     "request_strength_preservation": "Firmness and accountability are not softened without direction.",
     "audience_pragmatics": "Wording fits the recipient, copied audience, and thread context.",
     "technical_precision": "Terminology and causal claims remain technically defensible.",
-    "actionability_support": "Actor, artifact, timing, and channel stay clear where required.",
+    "actionability": "Actor, artifact, timing, and channel stay clear where required.",
     "explanation_quality": "The explanation is specific, evidence-based, and useful to the author.",
 }
 _SCORE_AGREEMENT_TOLERANCE: Final = 1e-9
