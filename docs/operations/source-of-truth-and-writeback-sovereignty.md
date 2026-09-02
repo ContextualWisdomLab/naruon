@@ -41,26 +41,31 @@ claims.
 
 Implemented slices currently cover signed task/mail provenance, dedupe/threading
 contracts, source-linked ticket tasks, self-sent knowledge capture into
-idempotent ticket tasks, deterministic sender ontology action hints, generic
-WebDAV writeback intent, source-backed Today dashboard pending reply reads from
-`/api/emails/pending-replies`, self-sent knowledge WebDAV/Notes materialization
-intent, overdue-reply follow-up into idempotent source-linked `reply_sla`
-ticket tasks, DB-backed CalDAV intent source selection through opaque
+idempotent ticket tasks, owner-scoped source-backed sender relationship reads,
+generic WebDAV writeback intent, source-backed Today dashboard pending reply
+reads from `/api/emails/pending-replies`, self-sent knowledge WebDAV/Notes
+materialization intent, overdue-reply follow-up into idempotent source-linked
+`reply_sla` ticket tasks, DB-backed CalDAV intent source selection through opaque
 `calendar_writeback_sources.source_uid` rows exposed to the Calendar workspace
 through a signed source-registry read, and WebDAV intent selection through
 opaque, organization-scoped `webdav_accounts.source_uid` rows with persisted
 writeback eligibility; sequential `webdav_accounts.account_id` values remain
-internal and are not browser-visible source identifiers. WebDAV project folders
-now expose opaque `project_folders.folder_uid` values, scope listing by the
-signed-session `user_id` and `organization_id`, and keep sequential folder
-primary keys internal. `/dav` mutation methods fail closed until provider
-execution can enforce source, capability, credential, and ETag/If-Match checks.
-The Data workspace can create scoped workspace document rows through signed
-`POST /api/data/documents` and can request reparse, embedding regeneration
-intent, and HWP conversion intent for the selected opaque `document_id`; these
-actions update control-plane document status only and return
-`provider_write_executed=false`. Selected workspace documents can also request
-signed WebDAV materialization through
+internal and are not browser-visible source identifiers. Automatic sender
+relationship type, confidence, and next-action inference is not an implemented
+source-of-truth path: lexical phrases, sender domains, local-part aliases, and
+recipient counts are not semantic relationship evidence. Until a validated
+classifier/model authority is integrated through an explicit contract, signed
+source capture returns an unavailable response and persists no guessed
+relationship. WebDAV project folders now expose opaque
+`project_folders.folder_uid` values, scope listing by the signed-session `user_id`
+and `organization_id`, and keep sequential folder primary keys internal. `/dav`
+mutation methods fail closed until provider execution can enforce source,
+capability, credential, and ETag/If-Match checks. The Data workspace can create
+scoped workspace document rows through signed `POST /api/data/documents` and can
+request reparse, embedding regeneration intent, and HWP conversion intent for the
+selected opaque `document_id`; these actions update control-plane document status
+only and return `provider_write_executed=false`. Selected workspace documents can
+also request signed WebDAV materialization through
 `POST /api/data/documents/{document_id}/webdav-materialization-intent`: the
 backend re-reads the document from the signed `workspace_id`, derives the target
 path and Markdown content server-side, validates the selected opaque WebDAV
@@ -81,8 +86,8 @@ payloads. Transient writeback dispatch failures (`runner_not_connected`,
 worker can retry without treating Naruon as the provider source of truth. The
 backend starts a scoped retry worker that dispatches due retry items with retry
 enqueue disabled, marks successful provider writes as `succeeded`, reschedules
-retryable transient failures with exponential backoff, and marks exhausted
-items as `failed_exhausted`. Organization-admin observability reads surface only
+retryable transient failures with exponential backoff, and marks exhausted items
+as `failed_exhausted`. Organization-admin observability reads surface only
 aggregate queue depth by state from `provider_writeback_retry_items`, not queued
 payloads, provider credentials, or retry item identifiers. The Calendar
 workspace now exposes an explicit ETag-guarded execution request control that
@@ -93,9 +98,9 @@ materialization: users can create intent-only evidence or explicitly request
 connector execution, and the UI shows execution/retry state without exposing
 target paths, opaque source ids, runner ids, retry ids, or audit event names.
 Data workspace document materialization follows the same deliberate execution
-boundary for uploaded workspace documents. Configurable reply deadline policy storage and
-any remaining source-registry expansion remain episode work and must preserve
-this registry boundary.
+boundary for uploaded workspace documents. Configurable reply deadline policy
+storage and any remaining source-registry expansion remain episode work and must
+preserve this registry boundary.
 
 ## Policy and audit requirements
 
