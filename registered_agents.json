@@ -1,12 +1,12 @@
 {
   "noema-general-agent": {
     "agent_id": "noema-general-agent",
-    "name": "Noema General Agent",
-    "framework": "pydantic-ai",
+    "agent_display_name": "Noema General Agent",
+    "agent_framework_name": "pydantic-ai",
     "framework_license": "MIT",
-    "entrypoint": "services.noema_agent:run_noema_agent",
-    "description": "General-purpose assistant that reasons over the naruon workspace (mail, content graph, tasks) on the tenant's configured LLM provider and dispatches opt-in, audit-logged writebacks through the self-hosted runner.",
-    "capabilities": [
+    "agent_entrypoint": "services.noema_agent:run_noema_agent",
+    "agent_description": "General-purpose assistant that reasons over the naruon workspace (mail, content graph, tasks) on the tenant's configured LLM provider and dispatches opt-in, audit-logged writebacks through the self-hosted runner.",
+    "agent_capabilities": [
       "mail.search",
       "mail.read",
       "content_graph.query",
@@ -15,11 +15,11 @@
       "calendar.writeback"
     ],
     "provider_source": "runtime_llm_provider",
-    "writeback": {
+    "writeback_policy": {
       "opt_in": true,
       "audit_logged": true
     },
     "degrades_gracefully": true,
-    "enabled": true
+    "agent_enabled": true
   }
 }
