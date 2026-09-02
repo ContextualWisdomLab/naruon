@@ -258,6 +258,19 @@ def test_deferred_pdf_decoder_rejects_non_pdf_and_oversized_payloads(monkeypatch
         decode_deferred_attachment_payload(oversized)
 
 
+def test_literal_percent_escape_does_not_change_attachment_parser():
+    result = parse_email_attachment(
+        filename="quarterly%2Ejson",
+        content_type="application/octet-stream",
+        raw_content=b'{"project":"Launch"}',
+    )
+
+    assert result.filename == "quarterly%2Ejson"
+    assert result.parse_content_type == "application/octet-stream"
+    assert result.parser_key == "unsupported_binary"
+    assert result.parse_status == "unsupported_content_type"
+
+
 def test_safe_filename_handles_windows_path_traversal():
     assert _safe_filename("..\\..\\upload.txt") == "upload.txt"
     assert _safe_filename("C:\\mail\\report.pdf") == "report.pdf"
