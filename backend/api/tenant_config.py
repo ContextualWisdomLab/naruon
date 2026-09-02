@@ -1,22 +1,17 @@
 import logging
 from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import TenantConfig
-from db.session import get_db
 from api.auth import (
     AuthContext,
     get_auth_context,
     get_current_user_role,
     is_admin_role,
 )
-from services.tenant_config_scope import (
-    get_scoped_tenant_config,
-    new_scoped_tenant_config,
-)
+from db.models import TenantConfig
+from db.session import get_db
 from services.access_policy import (
     AccessRequest,
     PolicyRoleName,
@@ -32,6 +27,10 @@ from services.email_client import (
     validate_smtp_host,
     validate_smtp_port,
 )
+from services.tenant_config_scope import (
+    get_scoped_tenant_config,
+    new_scoped_tenant_config,
+)
 
 router = APIRouter(prefix="/api/config")
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 @router.get("/global")
 async def get_global_config(
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(get_current_user_role),
 ):
     if not is_admin_role(role):
         raise HTTPException(status_code=403, detail="Not enough privileges")
@@ -115,7 +114,6 @@ MAILBOX_SELF_SERVICE_ROLES: tuple[PolicyRoleName, ...] = (
     "group_admin",
     "member",
 )
-
 
 def ensure_mailbox_config_self_access(
     target_user_id: str, auth_context: AuthContext, forbidden_detail: str
