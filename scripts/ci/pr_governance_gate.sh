@@ -27,7 +27,6 @@ OWNER="${GITHUB_REPOSITORY%/*}"
 REPO="${GITHUB_REPOSITORY#*/}"
 BLOCKERS=()
 WAITING=()
-OPENCODE_FALLBACK_APPROVED=0
 PR_CHECKS_ERROR_FILE="$(mktemp)"
 ISSUE_COMMENTS_ERROR_FILE="$(mktemp)"
 REVIEW_COMMENTS_ERROR_FILE="$(mktemp)"
@@ -419,7 +418,6 @@ if [ "$CODERABBIT_COUNT" = "0" ]; then
       # terminal verdict. Wait for CodeRabbit specifically.
       add_waiting "Waiting for CodeRabbit to review the latest commit on ${HEAD_REF_OID}."
     else
-      OPENCODE_FALLBACK_APPROVED=1
       printf 'CodeRabbit check and issue-comment evidence are both absent; accepted current-head OpenCode App adversarial approval on %s.\n' "$HEAD_REF_OID"
     fi
   fi
