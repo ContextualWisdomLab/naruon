@@ -31,6 +31,20 @@ def test_html_markup_filename_cannot_smuggle_generic_mime_extension() -> None:
     assert result.parse_status == "unsupported_content_type"
 
 
+def test_unknown_angle_bracket_filename_cannot_select_generic_parser() -> None:
+    """Unknown tag-shaped filename text must not become extension authority."""
+    result = parse_email_attachment(
+        filename="<Q4>.json",
+        content_type="application/octet-stream",
+        raw_content=b'{"project":"Launch"}',
+    )
+
+    assert result.filename == "attachment"
+    assert result.parse_content_type == "application/octet-stream"
+    assert result.parser_key == "unsupported_binary"
+    assert result.parse_status == "unsupported_content_type"
+
+
 def test_benign_ampersand_filename_remains_literal() -> None:
     """Ordinary filename punctuation remains unchanged."""
     assert _safe_filename("quarterly report & notes.pdf") == (
