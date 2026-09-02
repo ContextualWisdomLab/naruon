@@ -37,9 +37,13 @@ from services.email_writing_review_service import (
 )
 
 UTC = datetime.timezone.utc
-NOW = datetime.datetime(2026, 9, 2, 7, 0, tzinfo=UTC)
+REVISION_DIGEST = "7c" * 32
+PROMPT_HASH = "sha256:" + "ab" * 32
+CANDIDATE_HASH = "sha256:" + "cd" * 32
+REPLACEMENT_HASH = "sha256:" + "de" * 32
+EXPLANATION_HASH = "sha256:" + "ef" * 32
 DRAFT = "Please send the signed report by Friday."
-REVISION_DIGEST = "a1" * 32
+NOW = datetime.datetime(2026, 9, 2, 7, 0, tzinfo=UTC)
 
 
 def _revision(digest: str = REVISION_DIGEST) -> EmailWritingDocumentRevision:
@@ -114,7 +118,12 @@ def _guidance() -> EmailWritingDocumentGuidance:
     )
 
 
-def _candidate(*, start: int = 0, end: int = 6, title: str = "Clarify request") -> EmailWritingCandidateDiagnostic:
+def _candidate(
+    *,
+    start: int = 0,
+    end: int = 6,
+    title: str = "Clarify request",
+) -> EmailWritingCandidateDiagnostic:
     return EmailWritingCandidateDiagnostic(
         selector=EmailWritingTextPositionSelector(
             type="TextPositionSelector",
@@ -131,7 +140,9 @@ def _candidate(*, start: int = 0, end: int = 6, title: str = "Clarify request") 
     )
 
 
-def _candidate_result(*diagnostics: EmailWritingCandidateDiagnostic) -> EmailWritingCandidateReviewResult:
+def _candidate_result(
+    *diagnostics: EmailWritingCandidateDiagnostic,
+) -> EmailWritingCandidateReviewResult:
     return EmailWritingCandidateReviewResult(
         output=EmailWritingCandidateOutput(
             diagnostics=list(diagnostics),
@@ -210,7 +221,10 @@ class _CandidateReviewer:
     delay_seconds: float = 0.0
     calls: int = 0
 
-    async def review(self, bundle: EmailWritingContextBundle) -> EmailWritingCandidateReviewResult:
+    async def review(
+        self,
+        bundle: EmailWritingContextBundle,
+    ) -> EmailWritingCandidateReviewResult:
         self.calls += 1
         if self.delay_seconds:
             await asyncio.sleep(self.delay_seconds)
@@ -230,7 +244,10 @@ class _CandidateReviewer:
 
 
 class _Judge:
-    def __init__(self, evaluations: list[EmailWritingJudgeEvaluation | BaseException]) -> None:
+    def __init__(
+        self,
+        evaluations: list[EmailWritingJudgeEvaluation | BaseException],
+    ) -> None:
         self._evaluations = list(evaluations)
         self.calls = 0
 
@@ -241,6 +258,17 @@ class _Judge:
         if isinstance(result, BaseException):
             raise result
         return result
+
+
+class _JudgeExecutor:
+    """Deterministic stand-in for Task 5's bounded Judge worker lane."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_judge(self, operation, *args: object, **kwargs: object):
+        self.calls += 1
+        return operation(*args, **kwargs)
 
 
 class _Session:
@@ -273,7 +301,11 @@ def _auth() -> AuthContext:
 
 
 def _builder_for(bundle: EmailWritingContextBundle):
-    async def build(session: object, auth_context: AuthContext, request: EmailWritingReviewRequest) -> EmailWritingContextBundle:
+    async def build(
+        session: object,
+        auth_context: AuthContext,
+        request: EmailWritingReviewRequest,
+    ) -> EmailWritingContextBundle:
         del session, auth_context, request
         return bundle
 
@@ -299,6 +331,7 @@ def _service(
     service = EmailWritingReviewService(
         candidate_reviewer=candidate_reviewer,
         independent_judge=judge,
+        judge_executor=_JudgeExecutor(),
         judge_policy=_policy(),
         runtime_profile=runtime or _runtime(),
         context_builder=_builder_for(bundle or _bundle(request)),
@@ -568,6 +601,7 @@ async def test_policy_validation_exception_becomes_redacted_unavailable_review()
     service = EmailWritingReviewService(
         candidate_reviewer=_CandidateReviewer(result=_candidate_result(_candidate())),
         independent_judge=_Judge([_judge_evaluation()]),
+        judge_executor=_JudgeExecutor(),
         judge_policy=_policy(),
         runtime_profile=_runtime(),
         context_builder=_builder_for(_bundle(request)),
