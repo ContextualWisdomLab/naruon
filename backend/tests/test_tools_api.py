@@ -1239,11 +1239,11 @@ async def test_url_extractor_handler():
         await url_extractor_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
 
 @pytest.mark.asyncio
-async def test_pii_anonymizer_handler():
-    from api.tools import pii_anonymizer_handler, ANALYSIS_TEXT_MAX_CHARS
+async def test_email_phone_masker_handler():
+    from api.tools import email_phone_masker_handler, ANALYSIS_TEXT_MAX_CHARS
 
-    res = await pii_anonymizer_handler({"text": "Contact me at user@example.com or 010-1234-5678."})
-    assert res["anonymized_text"] == "Contact me at [EMAIL] or [PHONE]."
+    res = await email_phone_masker_handler({"text": "Contact me at user@example.com or 010-1234-5678."})
+    assert res["masked_text"] == "Contact me at [EMAIL] or [PHONE]."
 
     with pytest.raises(ValueError, match="Analysis text must not exceed"):
-        await pii_anonymizer_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})
+        await email_phone_masker_handler({"text": "x" * (ANALYSIS_TEXT_MAX_CHARS + 1)})

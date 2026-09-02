@@ -808,7 +808,7 @@ registry.register(
 _EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _PHONE_PATTERN = re.compile(r"\b\d{2,3}-\d{3,4}-\d{4}\b|\b\d{3}-\d{4}-\d{4}\b")
 
-async def pii_anonymizer_handler(params: Dict[str, Any]) -> Dict[str, str]:
+async def email_phone_masker_handler(params: Dict[str, Any]) -> Dict[str, str]:
     text = params["text"]
     if len(text) > ANALYSIS_TEXT_MAX_CHARS:
         raise ValueError(f"Analysis text must not exceed {ANALYSIS_TEXT_MAX_CHARS} characters")
@@ -816,17 +816,17 @@ async def pii_anonymizer_handler(params: Dict[str, Any]) -> Dict[str, str]:
     anonymized = _EMAIL_PATTERN.sub("[EMAIL]", text)
     anonymized = _PHONE_PATTERN.sub("[PHONE]", anonymized)
 
-    return {"anonymized_text": anonymized}
+    return {"masked_text": anonymized}
 
 registry.register(
     ToolInfo(
-        code="pii_anonymizer",
-        name="개인정보 비식별화 (PII Anonymizer)",
-        description="텍스트에서 이메일 주소, 전화번호 등 개인정보를 마스킹 처리합니다.",
-        category="보안",
+        code="email_phone_masker",
+        name="이메일/전화번호 마스킹 (Email/Phone Masker)",
+        description="텍스트에서 ASCII 이메일 주소와 일부 전화번호 패턴을 단순 마스킹 처리합니다. 보안 목적의 완전한 개인정보 비식별화를 보장하지 않습니다.",
+        category="유틸리티",
         parameters={"text": "string"},
     ),
-    pii_anonymizer_handler,
+    email_phone_masker_handler,
 )
 
 
