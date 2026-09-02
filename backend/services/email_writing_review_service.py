@@ -59,6 +59,7 @@ EMAIL_WRITING_REVIEW_RETENTION_DAYS = 30
 EMAIL_WRITING_REVIEW_DEFAULT_MAXIMUM_CANDIDATES = 16
 EMAIL_WRITING_REVIEW_DEFAULT_TOTAL_WALL_SECONDS = 45.0
 EMAIL_WRITING_REVIEW_TIMEOUT_EVIDENCE_SECONDS = 1.0
+EMAIL_WRITING_REVIEW_ROLLBACK_SECONDS = 0.05
 _EMPTY_PROMPT_HASH = "sha256:" + hashlib.sha256(b"").hexdigest()
 
 
@@ -264,6 +265,17 @@ def _criterion_category_receipt(
         f"{criterion_id}:{evaluation.criterion_categories[criterion_id]}"
         for criterion_id in sorted(evaluation.criterion_categories)
     ]
+
+
+async def _rollback_bounded(session: _ReviewEvidenceSession) -> None:
+    """Bound rollback cleanup so a failing evidence path cannot hang review return."""
+    try:
+        async with asyncio.timeout(EMAIL_WRITING_REVIEW_ROLLBACK_SECONDS):
+            await session.rollback()
+    except TimeoutError:
+        return
+    except Exception:
+        return
 
 
 def _validate_context_binding(
@@ -938,12 +950,9 @@ class EmailWritingReviewService:
         try:
             await session.commit()
         except asyncio.CancelledError:
-            await asyncio.shield(session.rollback())
+            await _rollback_bounded(session)
             raise
         except Exception:
-            try:
-                await session.rollback()
-            except Exception:
-                pass
+            await _rollback_bounded(session)
             raise EmailWritingReviewServiceError("review_evidence_unavailable") from None
         return review_session_id
