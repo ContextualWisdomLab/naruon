@@ -26,3 +26,7 @@
 ## 2024-05-24 - [React Component Memoization]
 **Learning:** In React components like `WorkspaceHome`, when layout state or polling changes trigger parent re-renders, expensive child components like `EmailDetail` will also re-render unnecessarily if not memoized.
 **Action:** Always consider `React.memo` for heavy child components that rely on stable props (like IDs) when the parent component has frequent unrelated state updates.
+## 2025-02-12 - Replaced O(N) Array Lookups with O(1) Bounded Loops in NetworkGraph
+
+**Learning:** When using `useMemo` in React components (like `NetworkGraph.tsx`), chaining methods like `Array.from(map.values()).slice(0, 5).map(...)` allocates and iterates over the entire graph structure in memory (O(N)), only to discard most of it. For network graphs which often contain thousands of edges/nodes, this causes significant memory and performance bottlenecks on every render.
+**Action:** Replace `Array.from(...).slice(...)` and full array `map` chains with bounded `for...of` loops that manually accumulate the result and `break` early. This guarantees O(1) (constant time and space) performance regardless of graph size, as the iterators guarantee insertion-order and stop after extracting exactly the needed elements.
