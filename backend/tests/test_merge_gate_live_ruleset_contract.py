@@ -25,3 +25,11 @@ def test_robot_evidence_is_not_substituted_for_required_approval() -> None:
 
     assert "one qualifying independent approval" in policy.lower()
     assert "robot-review evidence does not replace" in policy.lower()
+
+
+def test_merge_gate_policy_tracks_live_develop_application_ci_targets() -> None:
+    """Current operator policy names the protected develop CI path, not only legacy master."""
+    policy = MERGE_GATE_POLICY.read_text(encoding="utf-8")
+
+    assert "pull requests to `develop`, `master`, and `release/**`" in policy
+    assert "pushes to `develop` and `master`" in policy
