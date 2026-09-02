@@ -740,6 +740,14 @@ class _LiveReparsePendingSession:
     async def get(self, _model, attachment_id):
         return self._table.get(attachment_id)
 
+    async def refresh(self, _attachment, *, attribute_names):
+        # No-op: the fake table already holds the live, fully-populated
+        # instances (see _SequenceSession.refresh for the sibling fake that
+        # records calls instead -- this one has no need to, since nothing
+        # here asserts on refresh() itself, only on the resulting sweep
+        # behavior across many sweeps).
+        del attribute_names
+
     async def commit(self):
         self.commit_count += 1
 
