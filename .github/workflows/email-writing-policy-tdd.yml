@@ -11,6 +11,7 @@ on:
       - backend/policies/email_writing_policy_manifest.json
       - backend/services/email_writing_policy.py
       - backend/tests/test_email_writing_policy.py
+      - backend/tests/test_email_writing_policy_candidate_kind.py
       - scripts/ci/reject_terminal_output.sh
       - .github/workflows/email-writing-policy-tdd.yml
   workflow_dispatch:
@@ -71,7 +72,9 @@ jobs:
         run: |
           cd backend
           bash ../scripts/ci/reject_terminal_output.sh \
-            python -m pytest -q --noconftest tests/test_email_writing_policy.py
+            python -m pytest -q --noconftest \
+              tests/test_email_writing_policy.py \
+              tests/test_email_writing_policy_candidate_kind.py
       - name: Verify Task 8 statement and branch coverage
         run: |
           cd backend
@@ -79,7 +82,9 @@ jobs:
           bash ../scripts/ci/reject_terminal_output.sh \
             python -m coverage run --branch \
               --include='services/email_writing_policy.py' \
-              -m pytest -q --noconftest tests/test_email_writing_policy.py
+              -m pytest -q --noconftest \
+                tests/test_email_writing_policy.py \
+                tests/test_email_writing_policy_candidate_kind.py
           bash ../scripts/ci/reject_terminal_output.sh \
             python -m coverage report --show-missing --fail-under=100 \
               services/email_writing_policy.py
@@ -112,10 +117,12 @@ jobs:
           bash ../scripts/ci/reject_terminal_output.sh \
             python -m ruff check \
               services/email_writing_policy.py \
-              tests/test_email_writing_policy.py
+              tests/test_email_writing_policy.py \
+              tests/test_email_writing_policy_candidate_kind.py
       - name: Compile Task 8 source and tests
         run: |
           bash scripts/ci/reject_terminal_output.sh \
             python -m compileall -q \
               backend/services/email_writing_policy.py \
-              backend/tests/test_email_writing_policy.py
+              backend/tests/test_email_writing_policy.py \
+              backend/tests/test_email_writing_policy_candidate_kind.py
