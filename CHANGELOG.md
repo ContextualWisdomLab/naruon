@@ -568,10 +568,17 @@
   기존 commitment 행은 건너뛰고 전체 판단을 막지 않습니다. `.github`의
   중앙 리뷰 에이전트(Noema OIDC 브로커)와 이름은 같지만 서로 다른 개별
   에이전트임을 `registered_agents.json`/`task_agent_mapping.json`에 명확히
-  했습니다: Noema는 `.github`에서는 CI 리뷰 에이전트, naruon에서는 테넌트가
-  구성한 자체 LLM provider로 동작하는 워크스페이스 전반의 범용 어시스턴트입니다.
+  했습니다: Noema는 `.github`에서는 CI 리뷰 에이전트, naruon에서는 워크스페이스
+  전반(메일·콘텐츠 그래프·태스크·일정)을 다루는 범용 어시스턴트입니다.
   검증: `PYTHONPATH=. python -m pytest backend/tests/test_noema_agent.py -q`
   (21 passed), 전체 백엔드 스위트 `python -m pytest -q` (1808 passed, 32 skipped).
+  **(2026-09-02 정정)** 이 항목이 처음 쓰인 시점에는 naruon Noema가 "테넌트가
+  구성한 자체 LLM provider"로 직접 동작한다고 기술했으나, 이는 잘못된 경계
+  설정이었습니다 — 아래 "owner 아키텍처 지적 반영" 항목에서 이를
+  contextual-orchestrator 게이트웨이 경유로 교정했습니다. 올바른 분리는
+  "naruon Noema 도메인 로직 vs `.github` 리뷰 Noema 도메인 로직"이며, 두
+  에이전트 모두 contextual-orchestrator를 서로 별도로 인가된 스코프로
+  소비합니다 — naruon이 두 번째 provider 라우팅 권한이 되는 것이 아닙니다.
 - (Devin review 반영, G-06 증분) `calendar_conflict_judgment_service.py`에 대한 5건의 지적을
   반영했습니다: (1) `apply_correction`이 대상 judgment 행을 `SELECT ... FOR UPDATE`로 잠가
   동시 정정 요청이 같은 이전 상태를 읽고 감사 기록이 서로를 덮어쓰는 경쟁을 막습니다. (2)
@@ -612,6 +619,40 @@
   잘라내지 않고 `calendar_existing_batch_exceeded` 오류로 fail closed하도록 수정했습니다.
   상한 이후에 실존하는 충돌이 잘려나가 `available`로 오판되는 것을 막습니다(REST
   엔드포인트의 동일 상한 처리와 일치). 검증: `test_noema_agent.py` 22 passed.
+- **(owner 아키텍처 지적 반영, 🔴 실제 경계 위반) `noema_agent.py`가 여전히
+  `resolve_runtime_llm_provider`를 import해 테넌트의 직접 LLM provider
+  `base_url`/`api_key`로 `AsyncOpenAI`를 구성하고 있었습니다 — 이는 naruon의
+  "provider 라우팅 권한이 아니라 Noema 도구/인가/컨텍스트만 소유한다"는 현재
+  경계와 충돌합니다.** 프로덕션 LLM 라우팅은 전적으로
+  `ContextualWisdomLab/contextual-orchestrator`가 소유합니다. 오래된 Cursor PR
+  #1384가 의도된 계약(테넌트 스코프 orchestrator 자격증명, orchestrator 전용
+  모델 별칭, 업스트림 provider로의 fallback 없음)을 담고 있었으나 head/base가
+  stale해 그대로 이식하지 않고, 계약만 현재 소스에 재구현했습니다. 먼저 RED로
+  `run_noema_agent`가 `resolve_runtime_llm_provider`/직접 provider 구성에 도달할
+  수 없음을 증명(수정 전 코드에서 실제 실패 확인)한 뒤: 새
+  `services/orchestrator_gateway.py`(`resolve_orchestrator_gateway` +
+  `OrchestratorGateway` — `tenant_configs.noema_orchestrator_base_url`/
+  `noema_orchestrator_token`을 SSRF 허용목록 검증까지 마쳐 해석, 모델 별칭은
+  항상 고정된 `ORCHESTRATOR_MODEL_ALIAS`)을 추가하고, Alembic
+  `0022_noema_orchestrator_gateway`로 두 컬럼을 `tenant_configs`에 추가했습니다
+  (기존 `batch_orchestrator_base_url`/`batch_orchestrator_token`
+  패턴(migration `0012`)을 그대로 미러링). `noema_agent.py`는 이제 게이트웨이가
+  없거나 무효면 업스트림 provider로 폴백하지 않고 구조화된
+  `status="unavailable"`/`error_code="orchestrator_gateway_unavailable"`로
+  즉시 abstain합니다. 올바른 경계 분리는 "naruon Noema 도메인 로직 vs
+  `.github` 리뷰 Noema 도메인 로직"이며, 둘 다 contextual-orchestrator를 서로
+  별도로 인가된 스코프로 소비합니다 — `.github`의 CI 리뷰 자격증명 경로와는
+  절대 공유하지 않고, 이 경로로 워크스페이스 데이터가 흘러가지도 않습니다.
+  검증: RED(패치 전 `resolve_runtime_llm_provider` 참조가 실제로 존재함을
+  spy로 확인) → GREEN(픽스 후 같은 스파이는 `AttributeError`로 실패 —
+  `resolve_runtime_llm_provider`가 모듈에서 완전히 사라졌다는 가장 강한
+  증거이므로, 테스트를 `assert not hasattr(noema_agent,
+  "resolve_runtime_llm_provider")`로 재작성); 로컬에 pydantic-ai-slim[openai]
+  2.9.0(`backend/requirements-agent.txt` 고정 버전)을 실제로 설치해 실 `AsyncOpenAI`
+  구성 경로까지 스킵 없이 검증. `PYTHONPATH=. python -m pytest
+  backend/tests/test_noema_agent.py -q` → 22 passed, 0 skipped; 전체 백엔드
+  스위트 `PYTHONWARNINGS=error DISABLE_BACKGROUND_WORKERS=1 python -m pytest -q`
+  → 1908 passed, 39 skipped, ruff clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
