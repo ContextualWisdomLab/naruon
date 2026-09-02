@@ -43,7 +43,6 @@ from services.email_writing_contracts import (
     ReviewStatus,
 )
 from services.email_writing_judge import (
-    EMAIL_WRITING_JUDGE_RUBRIC_VERSION,
     EmailWritingIndependentJudge,
     EmailWritingJudgeError,
     EmailWritingJudgeEvaluation,
@@ -136,6 +135,18 @@ class EmailWritingReviewJudgePort(Protocol):
         category_anchors: tuple[str, ...],
     ) -> EmailWritingJudgeEvaluation:
         """Return structured criterion evidence without user-facing admission."""
+
+
+class EmailWritingReviewJudgeExecutorPort(Protocol):
+    """Bounded Task-5-compatible execution lane for synchronous Judge work."""
+
+    async def run_judge(
+        self,
+        operation: Callable[..., EmailWritingJudgeEvaluation],
+        *args: object,
+        **kwargs: object,
+    ) -> EmailWritingJudgeEvaluation:
+        """Run one Judge operation without consuming the FastAPI event-loop thread."""
 
 
 class _ReviewEvidenceSession(Protocol):
@@ -299,6 +310,7 @@ class EmailWritingReviewService:
         *,
         candidate_reviewer: EmailWritingReviewCandidatePort | EmailWritingCandidateReviewer,
         independent_judge: EmailWritingReviewJudgePort | EmailWritingIndependentJudge,
+        judge_executor: EmailWritingReviewJudgeExecutorPort,
         judge_policy: EmailWritingJudgePolicy,
         runtime_profile: EmailWritingReviewRuntimeProfile,
         context_builder: ContextBuilder = build_email_writing_context,
@@ -309,6 +321,7 @@ class EmailWritingReviewService:
         """Bind explicit runtime dependencies without resolving providers or secrets."""
         self._candidate_reviewer = candidate_reviewer
         self._independent_judge = independent_judge
+        self._judge_executor = judge_executor
         self._judge_policy = judge_policy
         self._runtime_profile = runtime_profile
         self._context_builder = context_builder
@@ -479,7 +492,7 @@ class EmailWritingReviewService:
         evaluated: list[_EvaluatedCandidate] = []
         for diagnostic in diagnostics:
             try:
-                evaluation = await asyncio.to_thread(
+                evaluation = await self._judge_executor.run_judge(
                     self._independent_judge.evaluate,
                     diagnostic,
                     bundle,
