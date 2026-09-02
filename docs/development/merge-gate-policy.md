@@ -10,8 +10,9 @@ unless that evidence is itself carried by a qualifying `APPROVED` review object.
 
 - Required status checks must pass on the current head SHA.
 - Application CI must run backend pytest and frontend test/lint/build checks on
-  pull requests to `master` and `release/**`, while release-branch pushes must
-  not create duplicate check noise; push checks are scoped to `master`.
+  pull requests to `develop`, `master`, and `release/**`; pushes to `develop`
+  and `master` are also checked so the current protected/default path is not
+  omitted by legacy master-only guidance.
 - The robot-review gate prefers CodeRabbit evidence. When the current head has
   CodeRabbit check-run evidence, it satisfies the robot-evidence gate only when
   current-head blocking findings, warnings, and failures are fixed, rebutted
