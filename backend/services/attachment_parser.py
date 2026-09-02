@@ -274,7 +274,11 @@ def _safe_filename(filename: str | None) -> str:
     segments, and preserve all other filename text exactly.
     """
     display_filename = _sanitize_nul(filename or "attachment")
-    if contains_html_markup(display_filename):
+    if (
+        "<" in display_filename
+        or ">" in display_filename
+        or contains_html_markup(display_filename)
+    ):
         return "attachment"
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
