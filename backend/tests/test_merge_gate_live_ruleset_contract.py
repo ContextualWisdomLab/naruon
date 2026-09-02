@@ -33,3 +33,11 @@ def test_merge_gate_policy_tracks_live_develop_application_ci_targets() -> None:
 
     assert "pull requests to `develop`, `master`, and `release/**`" in policy
     assert "pushes to `develop` and `master`" in policy
+
+
+def test_required_neutral_or_skipped_evidence_never_becomes_merge_permission() -> None:
+    """Required neutral/skipped evidence remains incomplete even if a workflow emits it."""
+    policy = MERGE_GATE_POLICY.read_text(encoding="utf-8")
+
+    assert "skipped-required and neutral evidence are non-passing" in policy.lower()
+    assert "success, pass, skipped, and neutral states satisfy" not in policy.lower()
