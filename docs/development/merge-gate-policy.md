@@ -15,13 +15,14 @@ unless that evidence is itself carried by a qualifying `APPROVED` review object.
   CodeRabbit check-run evidence, it satisfies the robot-evidence gate only when
   current-head blocking findings, warnings, and failures are fixed, rebutted
   with evidence, or superseded. Authoritative current-head `Review skipped`
-  evidence satisfies that path only when applicable. When no CodeRabbit
-  check-run exists, the gate waits for an exact-current-head `APPROVED` review
-  from the `opencode-agent` GitHub App. The review body must name the head SHA
-  and include structured adversarial validation with `status=passed` and at
-  least two probes whose outcome is `falsified`. Stale-head reviews,
-  `github-actions` reviews, and insufficient probe evidence do not satisfy the
-  robot-evidence gate.
+  evidence satisfies that robot-evidence path only when it is not itself a
+  required check result and the same output carries no blocking warning/failure
+  language. When no CodeRabbit check-run exists, the gate waits for an
+  exact-current-head `APPROVED` review from the `opencode-agent` GitHub App. The
+  review body must name the head SHA and include structured adversarial
+  validation with `status=passed` and at least two probes whose outcome is
+  `falsified`. Stale-head reviews, `github-actions` reviews, and insufficient
+  probe evidence do not satisfy the robot-evidence gate.
 - The active organization ruleset `CWL Central required workflows` currently
   sets `required_approving_review_count=1`. Do not lower that count, add a
   bypass, or reinterpret robot status/check evidence as an approval merely to
@@ -40,12 +41,12 @@ unless that evidence is itself carried by a qualifying `APPROVED` review object.
   Trusted tarball materialization uses bounded retry plus archive validation for
   transient GitHub API truncation and fails closed instead of falling back to
   PR-head or local scripts.
-- Pending, queued, requested, waiting, or in-progress checks are wait states, not
-  hard failure findings. Success, pass, skipped, and neutral states satisfy the
-  repository policy only where the live required workflow/ruleset also accepts
-  them. Every other required-check state — including failed, cancelled,
-  timed-out, action-required, and any unrecognized state — is a blocker: the
-  gate fails closed rather than passing states it does not understand.
+- Pending, queued, requested, waiting, and in-progress required checks are wait
+  states and remain non-passing. Skipped-required and neutral evidence are
+  non-passing. Cancelled, failed, timed-out, action-required, absent-required,
+  and unrecognized required-check states are blockers. Only exact-current-head
+  terminal success/pass evidence for every live required context authorizes the
+  required-check portion of the merge gate.
 - If gate evaluation itself errors (for example a transient GitHub API
   failure), the gate publishes a completed/failure check-run instead of leaving
   a previously published result in place.
@@ -53,8 +54,6 @@ unless that evidence is itself carried by a qualifying `APPROVED` review object.
   only; raw CLI diagnostics stay in the workflow run log. Inside Actions the
   gate runs with a pinned system PATH so earlier steps cannot influence tool
   resolution via GITHUB_PATH.
-- Authoritative `Review skipped` evidence counts only when the same check
-  output carries no blocking warning/failure language alongside it.
 - `reviewDecision=CHANGES_REQUESTED` is a blocker until requested changes are
   addressed or superseded on the current head.
 - Blocker comments use the idempotent
