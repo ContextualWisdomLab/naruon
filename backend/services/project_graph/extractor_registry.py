@@ -22,9 +22,14 @@ that error rather than silently substituting the deterministic keyword
 extractor's output. This is deliberate product policy, not an oversight: a
 keyword-derived semantic result must never masquerade as successful LLM
 work (naruon#1525, exact-head review 2026-09-02). Only :data:`SELECTOR_KEYWORD`
-(explicit, or an unrecognized selector value) resolves to the deterministic
-extractor — that remains an intentional, always-available, non-LLM product
-mode, not a hidden fallback for a failed LLM request.
+resolves to the deterministic extractor — that remains an intentional,
+always-available, non-LLM product mode, not a hidden fallback for a failed
+or misconfigured request. An *unrecognized* selector value (a
+``PROJECT_GRAPH_EXTRACTOR`` typo, for instance) is exactly such a
+misconfiguration and is treated the same way: :meth:`KgExtractorRegistry.
+resolve_chain` raises :class:`ExtractorUnavailableError` rather than
+silently substituting keyword extraction, so a typo cannot persist
+keyword-derived graphs under a caller's belief that LLM extraction ran.
 
 **Neither LLM-backed selector is operational right now**, for related but
 distinct reasons:
@@ -139,10 +144,22 @@ class KgExtractor(Protocol):
     :class:`ProjectSemanticExtractionResult`. ``extract`` is always awaited so
     pure/deterministic and LLM-backed extractors compose uniformly behind the
     seam.
+
+    ``requires_llm_capability`` is part of this contract, not an optional
+    extra an implementer might not discover: :meth:`KgExtractorRegistry.
+    resolve_chain` reads it to decide whether an unavailable or failed
+    request may resolve to a different algorithm's output. Set it ``True``
+    for any extractor whose failure must be reported truthfully rather than
+    silently substituted (every LLM-backed extractor); set it ``False`` for
+    an extractor that is fine being a fallback candidate (the deterministic
+    keyword extractor, or a future non-LLM plugin that accepts the same
+    role). Declaring it explicitly, on every implementation, is the point —
+    there is deliberately no attribute default on the Protocol itself.
     """
 
     name: str
     version: str
+    requires_llm_capability: bool
 
     async def extract(
         self,
@@ -273,7 +290,10 @@ class KgExtractorRegistry:
     fallback *unless* the resolved extractor sets
     ``requires_llm_capability = True`` (see :class:`LlmGroundedExtractor`),
     in which case the chain contains only that extractor and an unavailable
-    or failed request propagates instead of silently degrading.
+    or failed request propagates instead of silently degrading. An
+    unrecognized selector is treated as a misconfiguration, not an implicit
+    request for ``keyword`` mode: only an explicit :data:`SELECTOR_KEYWORD`
+    resolves to the deterministic extractor.
     """
 
     def __init__(self) -> None:
@@ -295,8 +315,18 @@ class KgExtractorRegistry:
         return self._by_selector[SELECTOR_KEYWORD]
 
     def resolve_chain(self, selector: str) -> list[KgExtractor]:
-        fallback = self.fallback
-        primary = self._by_selector.get(selector, fallback)
+        fallback = self.fallback  # KeyError if the registry itself has no keyword extractor
+        if selector not in self._by_selector:
+            # A typo or otherwise-unrecognized PROJECT_GRAPH_EXTRACTOR value
+            # is a misconfiguration, not an implicit request for keyword
+            # mode: silently substituting keyword extraction here would let
+            # a typo persist keyword-derived graphs indefinitely under the
+            # caller's belief that the requested capability ran (Devin
+            # Review, naruon#1525, exact-head bb889797 follow-up).
+            raise ExtractorUnavailableError(
+                f"unrecognized PROJECT_GRAPH_EXTRACTOR selector: {selector!r}"
+            )
+        primary = self._by_selector[selector]
         if primary is fallback:
             return [fallback]
         if getattr(primary, "requires_llm_capability", False):
@@ -324,7 +354,13 @@ def resolve_extractor_chain(
     *,
     registry: KgExtractorRegistry | None = None,
 ) -> list[KgExtractor]:
-    """Ordered extractor chain for ``selector`` (deterministic fallback last)."""
+    """Ordered extractor chain for ``selector``.
+
+    Raises :class:`ExtractorUnavailableError` for an unrecognized selector.
+    Otherwise the deterministic keyword extractor is the last (or only)
+    element, unless the resolved extractor sets ``requires_llm_capability
+    = True``, in which case it is the only element.
+    """
     return (registry or default_registry).resolve_chain(selector)
 
 

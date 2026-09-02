@@ -6,8 +6,9 @@ invariants are load-bearing and asserted here:
 
 1. **The deterministic keyword extractor is available as its own product
    mode, and as a fallback only for extractors that opt into degrading.**
-   ``SELECTOR_KEYWORD`` (and an unrecognized selector) always resolves to it
-   directly.
+   Only an explicit ``SELECTOR_KEYWORD`` resolves to it directly. An
+   unrecognized selector value is a misconfiguration, not an implicit
+   request for keyword mode, and raises instead.
 2. **LLM-backed extractors (``requires_llm_capability = True``) never
    degrade.** An unavailable or failed :data:`SELECTOR_LLM` or
    :data:`SELECTOR_ORCHESTRATOR` request propagates through
@@ -131,14 +132,22 @@ def test_orchestrator_chain_has_no_fallback():
     assert chain[0].routed_via_orchestrator is True
 
 
-def test_unknown_selector_falls_back_to_deterministic_only():
-    chain = resolve_extractor_chain("bogus_selector")
-    assert [e.name for e in chain] == [DETERMINISTIC_EXTRACTOR_NAME]
+def test_unknown_selector_raises_instead_of_defaulting_to_keyword():
+    """A typo must not silently persist keyword-derived graphs.
+
+    A prior revision silently treated any unrecognized
+    PROJECT_GRAPH_EXTRACTOR value as an implicit request for keyword mode.
+    Devin Review (naruon#1525, exact-head bb889797 follow-up) correctly
+    flagged this as the same masquerading problem Revision 8 closes for
+    llm/orchestrator: a misconfiguration should fail closed and truthfully,
+    not silently resolve to a different mode.
+    """
+    with pytest.raises(ExtractorUnavailableError, match="unrecognized"):
+        resolve_extractor_chain("bogus_selector")
 
 
-@pytest.mark.parametrize("selector", [SELECTOR_KEYWORD, "unknown"])
-def test_deterministic_selectors_resolve_only_to_the_keyword_extractor(selector):
-    chain = resolve_extractor_chain(selector)
+def test_keyword_selector_resolves_only_to_the_keyword_extractor():
+    chain = resolve_extractor_chain(SELECTOR_KEYWORD)
     assert [e.name for e in chain] == [DETERMINISTIC_EXTRACTOR_NAME]
 
 
@@ -407,6 +416,10 @@ def test_custom_extractor_can_register_into_the_seam():
         name = "custom_project_graph"
         version = "1.0.0"
         routed_via_orchestrator = False
+        # Declared explicitly, per the KgExtractor Protocol contract: a
+        # plugin author must consciously opt out of the keyword fallback
+        # (True) or accept it (False) -- there is no attribute default.
+        requires_llm_capability = False
 
         async def extract(self, segments, *, context):  # pragma: no cover - shape only
             raise NotImplementedError
@@ -414,6 +427,29 @@ def test_custom_extractor_can_register_into_the_seam():
     registry = build_default_registry()
     registry.register("custom", _CustomExtractor())
     assert registry.get("custom").name == "custom_project_graph"
+    assert isinstance(registry.get("custom"), KgExtractor)
     chain = registry.resolve_chain("custom")
     assert chain[0].name == "custom_project_graph"
     assert chain[-1].name == DETERMINISTIC_EXTRACTOR_NAME
+
+
+def test_llm_backed_custom_extractor_also_gets_no_fallback():
+    """A third-party plugin opts into the no-masquerade guarantee the same
+    way the built-in llm/orchestrator extractors do -- this is a Protocol-
+    level mechanism, not something special-cased to LlmGroundedExtractor.
+    """
+
+    class _CustomLlmExtractor:
+        name = "custom_llm_project_graph"
+        version = "1.0.0"
+        routed_via_orchestrator = False
+        requires_llm_capability = True
+
+        async def extract(self, segments, *, context):  # pragma: no cover - shape only
+            raise NotImplementedError
+
+    registry = build_default_registry()
+    registry.register("custom_llm", _CustomLlmExtractor())
+    assert isinstance(registry.get("custom_llm"), KgExtractor)
+    chain = registry.resolve_chain("custom_llm")
+    assert [e.name for e in chain] == ["custom_llm_project_graph"]
