@@ -265,16 +265,24 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
     return "unsupported_binary"
 
 
+def _has_unsafe_filename_control(filename: str) -> bool:
+    """Return whether a MIME filename contains C0, DEL, or C1 controls."""
+    return any(
+        ord(character) < 0x20 or 0x7F <= ord(character) <= 0x9F
+        for character in filename
+    )
+
+
 def _safe_filename(filename: str | None) -> str:
     """Return a basename-only filename projection safe for display and storage.
 
     Display sanitization is intentionally separate from parser selection. Known
     markup is stripped so active HTML cannot reach UI-facing attachment fields,
-    while unknown raw angle-bracket labels and NUL-bearing names fail closed.
+    while raw angle-bracket labels and control-bearing names fail closed.
     Percent and character-reference text that is not markup remains literal.
     """
     raw_filename = filename or "attachment"
-    if "\x00" in raw_filename:
+    if _has_unsafe_filename_control(raw_filename):
         return "attachment"
     if contains_html_markup(raw_filename):
         display_filename = strip_html_markup(raw_filename)
@@ -293,13 +301,17 @@ def _parser_authority_filename(filename: str | None) -> str:
 
     MIME filename identity is neither HTML nor URL source. Parser authority must
     therefore use the pre-display representation: semantic decoding, markup
-    stripping, NUL deletion, or whitespace trimming must never manufacture a
-    recognized suffix for a generic MIME type.
+    stripping, control deletion, or whitespace trimming must never manufacture
+    a recognized suffix for a generic MIME type.
     """
     raw_filename = filename or "attachment"
-    if "\x00" in raw_filename:
+    if _has_unsafe_filename_control(raw_filename):
         return "attachment"
-    if "<" in raw_filename or ">" in raw_filename or contains_html_markup(raw_filename):
+    if (
+        "<" in raw_filename
+        or ">" in raw_filename
+        or contains_html_markup(raw_filename)
+    ):
         return "attachment"
     authority_filename = Path(raw_filename.replace("\\", "/")).name
     if authority_filename in {"", ".", ".."}:
