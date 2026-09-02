@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, memo } from 'react';
 import { Network } from 'vis-network';
 
 interface Node {
@@ -157,7 +157,9 @@ function describeEdge(edge: Edge, nodeMap: Map<string | number, string>) {
 
 import { apiClient } from '@/lib/api-client';
 
-export default function NetworkGraph() {
+// 🎯 Why: Re-renders of NetworkGraph when the parent components (like WorkspaceHome) re-render can cause performance issues because it initializes a costly third-party vis-network graph.
+// 📊 Impact: Significantly reduces React reconciliation work and DOM thrashing when the parent component re-renders but the relationship context is structurally stable.
+export default memo(function NetworkGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const unavailableRelationshipDescriptionId = useId();
@@ -478,4 +480,4 @@ export default function NetworkGraph() {
       />
     </div>
   );
-}
+});
