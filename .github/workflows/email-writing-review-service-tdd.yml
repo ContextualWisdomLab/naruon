@@ -9,6 +9,7 @@ on:
       - backend/services/email_writing_review_service.py
       - backend/tests/test_email_writing_review_service.py
       - backend/tests/test_email_writing_review_service_execution.py
+      - backend/tests/test_email_writing_review_service_review_regressions.py
       - scripts/ci/reject_terminal_output.sh
       - .github/workflows/email-writing-review-service-tdd.yml
   workflow_dispatch:
@@ -71,7 +72,8 @@ jobs:
           bash ../scripts/ci/reject_terminal_output.sh \
             python -m pytest -q --noconftest \
               tests/test_email_writing_review_service.py \
-              tests/test_email_writing_review_service_execution.py
+              tests/test_email_writing_review_service_execution.py \
+              tests/test_email_writing_review_service_review_regressions.py
       - name: Verify Task 9 statement and branch coverage
         run: |
           cd backend
@@ -81,7 +83,8 @@ jobs:
               --include='services/email_writing_review_service.py' \
               -m pytest -q --noconftest \
                 tests/test_email_writing_review_service.py \
-                tests/test_email_writing_review_service_execution.py
+                tests/test_email_writing_review_service_execution.py \
+                tests/test_email_writing_review_service_review_regressions.py
           bash ../scripts/ci/reject_terminal_output.sh \
             python -m coverage report --show-missing --fail-under=100 \
               services/email_writing_review_service.py
@@ -115,11 +118,13 @@ jobs:
             python -m ruff check \
               services/email_writing_review_service.py \
               tests/test_email_writing_review_service.py \
-              tests/test_email_writing_review_service_execution.py
+              tests/test_email_writing_review_service_execution.py \
+              tests/test_email_writing_review_service_review_regressions.py
       - name: Compile Task 9 source and tests
         run: |
           bash scripts/ci/reject_terminal_output.sh \
             python -m compileall -q \
               backend/services/email_writing_review_service.py \
               backend/tests/test_email_writing_review_service.py \
-              backend/tests/test_email_writing_review_service_execution.py
+              backend/tests/test_email_writing_review_service_execution.py \
+              backend/tests/test_email_writing_review_service_review_regressions.py
