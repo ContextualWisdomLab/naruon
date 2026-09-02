@@ -19,7 +19,7 @@ def test_html_attachment_preserves_parse_source_and_safe_display_text():
         raw_content="<h1>Launch</h1><script>alert(1)</script><p>Ship</p>",
     )
 
-    assert result.filename == "attachment"
+    assert result.filename == "report.html"
     assert result.content_type == "text/html"
     assert result.content == "Launch Ship"
     assert result.parse_content == "<h1>Launch</h1><script>alert(1)</script><p>Ship</p>"
