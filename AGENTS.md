@@ -1,5 +1,8 @@
 # AGENTS.md
 
+<!-- CWL-ENTRY -->
+> **Agents: read the master context FIRST.** Before any work, read [`docs/architecture/naruon-product-spec.md`](docs/architecture/naruon-product-spec.md) (product vision & architecture, RBAC/ABAC, core features & AI agent ontology, branding/UX, observability & governance), the live **GitHub Project #1** <https://github.com/orgs/ContextualWisdomLab/projects/1> (work/roadmap source of truth), the live gap snapshot [`docs/product-technical-gap-baseline.md`](docs/product-technical-gap-baseline.md) (not merge authorization; canonical completion issue [#1428](https://github.com/ContextualWisdomLab/naruon/issues/1428); this repo's Figma file ID is not yet canonical on `develop` — the design-system decision (ADR-0013, file ID `68b5XB58w8nwT2LYOOnikK`) is still in open PR [#1436](https://github.com/ContextualWisdomLab/naruon/pull/1436)), and operate the Project per `ContextualWisdomLab/.github`'s [`docs/agent-github-project-protocol.md`](https://github.com/ContextualWisdomLab/.github/blob/main/docs/agent-github-project-protocol.md). The repo/Project — not any private agent memory — is the source of truth. The standing autonomous operating directive for the continuous PR review→fix→merge→develop loop across the ecosystem is `ContextualWisdomLab/.github`'s [`docs/product-goal-directive.md`](https://github.com/ContextualWisdomLab/.github/blob/main/docs/product-goal-directive.md) — a `/goal` session's length-capped pointer refers to it; read the full directive before running or configuring any such loop.
+
 <!-- BEGIN cwl-agent-guidance -->
 ## Agent guidance (CWL governance)
 
