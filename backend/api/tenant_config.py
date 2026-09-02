@@ -66,6 +66,8 @@ class TenantConfigCreate(BaseModel):
     openai_api_key: Optional[str] = None
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
+    noema_orchestrator_base_url: Optional[str] = None
+    noema_orchestrator_token: Optional[str] = None
 
 
 class TenantConfigResponse(BaseModel):
@@ -88,6 +90,8 @@ class TenantConfigResponse(BaseModel):
     openai_api_key: Optional[str] = None
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
+    noema_orchestrator_base_url: Optional[str] = None
+    noema_orchestrator_token: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,6 +103,7 @@ SECRET_FIELDS = {
     "oauth_client_secret",
     "openai_api_key",
     "google_client_secret",
+    "noema_orchestrator_token",
 }
 
 MAILBOX_MANAGE_FORBIDDEN = (

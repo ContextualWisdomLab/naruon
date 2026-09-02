@@ -13,11 +13,12 @@ with in-memory model instances and a mocked NewsDOM client.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 import random
 from collections.abc import Awaitable, Callable
 
-from sqlalchemy import bindparam, case, func, or_, select
+from sqlalchemy import and_, bindparam, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -410,7 +411,7 @@ class NewsdomRecognitionWorker:
         self._task: asyncio.Task | None = None
         self._is_running = False
         self._attachment_cursor: int | None = None
-        self._document_cursor: str | None = None
+        self._document_cursor: tuple[datetime.datetime, str] | None = None
         # Rows a past sweep saw as still-pending (RESULT_PENDING or a raised
         # exception). Retried every sweep via an explicit id filter,
         # independent of the forward cursor below -- see _sweep_attachments.
@@ -635,27 +636,40 @@ class NewsdomRecognitionWorker:
         """Process a bounded, starvation-free batch of pending documents.
 
         Same design as ``_sweep_attachments`` -- a monotonically-advancing
-        forward cursor (``_document_cursor``, the highest ``document_id``
-        seen in a batch) plus a persistent ``_document_retry_ids`` set for
+        forward cursor plus a persistent ``_document_retry_ids`` set for
         rows that raised or came back ``RESULT_PENDING`` (no active provider
         configured for its organization yet), retried every sweep
         independent of the cursor. See ``_sweep_attachments`` for why a
         cursor that instead capped itself at the first unresolved row let
         more than ``batch_limit`` consecutive stuck rows starve everything
-        past them -- the same fix applies here, adapted for
-        ``Document.document_id`` being an opaque string primary key: "the
-        highest id seen" is a lexicographic max rather than an integer one,
-        which remains correct for a non-contiguous or non-numeric key.
+        past them -- the same fix applies here.
+
+        Unlike ``Attachment.id`` (an auto-incrementing integer, monotonic
+        with insertion order), ``Document.document_id`` defaults to a random
+        UUID (``f"doc_{uuid.uuid4().hex}"``) -- not monotonic at all. A
+        document inserted *after* the cursor already advanced can still sort
+        lexicographically *below* it; since it was never seen before, it is
+        not in the retry set either, so it would never be selected again --
+        confirmed by Devin Review and by direct inspection of the model.
+        ``_document_cursor`` is therefore a ``(created_at, document_id)``
+        tuple: ``created_at`` (a Python-side timestamp set at insert time)
+        is genuinely monotonic with insertion order, and ``document_id``
+        only breaks ties between rows inserted in the same instant.
         """
         rows = await self._load_pending_documents(session)
         processed_ids: set[str] = set()
         unresolved_ids: set[str] = set()
+        # (created_at, document_id) pairs captured from the freshly re-fetched
+        # instance only -- never from the bulk-loaded `rows` list, which may
+        # hold an instance a *prior* item's rollback already expired.
+        seen_pairs: list[tuple[datetime.datetime, str]] = []
         for document_id in [document.document_id for document in rows]:
             processed_ids.add(document_id)
             try:
                 document = await session.get(Document, document_id)
                 if document is None:
                     continue
+                seen_pairs.append((document.created_at, document.document_id))
                 result = await process_pending_document(
                     session=session,
                     document=document,
@@ -679,8 +693,8 @@ class NewsdomRecognitionWorker:
                     exc_info=True,
                 )
                 unresolved_ids.add(document_id)
-        if rows:
-            highest_seen = max(document.document_id for document in rows)
+        if seen_pairs:
+            highest_seen = max(seen_pairs)
             self._document_cursor = (
                 highest_seen
                 if self._document_cursor is None
@@ -691,21 +705,37 @@ class NewsdomRecognitionWorker:
         ) | unresolved_ids
 
     def _pending_document_statement(
-        self, after_id: str | None, retry_ids: set[str]
+        self,
+        after_cursor: tuple[datetime.datetime, str] | None,
+        retry_ids: set[str],
     ):
         """Build the next deterministic workspace-document batch query.
 
-        Selects rows past the forward cursor OR still tracked in
-        ``retry_ids``, and orders forward rows ahead of retry rows when both
-        are present, exactly like ``_pending_attachment_statement`` (see its
-        docstring for why the priority must run that way).
+        Selects rows past the forward ``(created_at, document_id)`` cursor
+        OR still tracked in ``retry_ids``, and orders forward rows ahead of
+        retry rows when both are present, exactly like
+        ``_pending_attachment_statement`` (see its docstring for why the
+        priority must run that way). The forward comparison is a row-value
+        (tuple) comparison -- ``created_at`` first, ``document_id`` only to
+        break same-instant ties -- so it stays correct however
+        ``document_id`` sorts.
         """
         statement = select(Document).where(
             Document.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
         )
+        forward_condition = None
+        if after_cursor is not None:
+            after_created_at, after_document_id = after_cursor
+            forward_condition = or_(
+                Document.created_at > after_created_at,
+                and_(
+                    Document.created_at == after_created_at,
+                    Document.document_id > after_document_id,
+                ),
+            )
         conditions = []
-        if after_id is not None:
-            conditions.append(Document.document_id > after_id)
+        if forward_condition is not None:
+            conditions.append(forward_condition)
         if retry_ids:
             conditions.append(Document.document_id.in_(retry_ids))
         if conditions:
@@ -713,11 +743,9 @@ class NewsdomRecognitionWorker:
                 conditions[0] if len(conditions) == 1 else or_(*conditions)
             )
         order_columns = []
-        if after_id is not None and retry_ids:
-            order_columns.append(
-                case((Document.document_id > after_id, 0), else_=1)
-            )
-        order_columns.append(Document.document_id)
+        if forward_condition is not None and retry_ids:
+            order_columns.append(case((forward_condition, 0), else_=1))
+        order_columns.extend([Document.created_at, Document.document_id])
         return statement.order_by(*order_columns).limit(self.batch_limit)
 
     async def _load_pending_documents(self, session: AsyncSession) -> list[Document]:

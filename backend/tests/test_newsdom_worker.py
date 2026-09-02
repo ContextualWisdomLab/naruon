@@ -8,6 +8,7 @@ failed) that keep a pending PDF from ever masquerading as parsed.
 
 import asyncio
 import base64
+import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -77,7 +78,18 @@ def _pending_attachment(
     return attachment
 
 
-def _pending_document(document_id: str, *, organization_id: str = "org-1") -> Document:
+def _pending_document(
+    document_id: str,
+    *,
+    organization_id: str = "org-1",
+    created_at=None,
+) -> Document:
+    # A real, DB-flushed Document always has created_at populated (the
+    # column's own default); constructing one directly, outside a session,
+    # would otherwise leave it None -- an artifact of the test fixture that
+    # a bare, un-flushed cursor comparison can never hit in production.
+    if created_at is None:
+        created_at = datetime.datetime.now(datetime.timezone.utc)
     return Document(
         document_id=document_id,
         workspace_id="ws-1",
@@ -86,6 +98,7 @@ def _pending_document(document_id: str, *, organization_id: str = "org-1") -> Do
         document_type="pdf",
         document_content=base64.b64encode(b"%PDF-1.7 fake").decode("ascii"),
         document_status=PDF_DOM_RECOGNITION_PENDING_STATUS,
+        created_at=created_at,
     )
 
 
@@ -711,6 +724,100 @@ async def test_attachment_sweep_does_not_starve_rows_behind_many_stuck_rows():
     assert worker._attachment_retry_ids == {a.id for a in blocked}
 
 
+class _LivePendingDocumentSession:
+    """Document counterpart of ``_LivePendingAttachmentSession`` -- mirrors
+    ``NewsdomRecognitionWorker._pending_document_statement`` for real,
+    including its ``(created_at, document_id)`` forward comparison, so a
+    test can prove the query genuinely reaches a document whose random UUID
+    sorts below the cursor but whose ``created_at`` sorts after it.
+    """
+
+    def __init__(self, worker, documents):
+        self._worker = worker
+        self._table = {document.document_id: document for document in documents}
+        self.commit_count = 0
+        self.rollback_count = 0
+
+    def _is_forward(self, document):
+        cursor = self._worker._document_cursor
+        if cursor is None:
+            return True
+        cursor_created_at, cursor_document_id = cursor
+        if document.created_at != cursor_created_at:
+            return document.created_at > cursor_created_at
+        return document.document_id > cursor_document_id
+
+    async def execute(self, _statement):
+        retry_ids = self._worker._document_retry_ids
+        pending = [
+            row
+            for row in self._table.values()
+            if row.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
+            and (self._is_forward(row) or row.document_id in retry_ids)
+        ]
+        pending.sort(
+            key=lambda row: (
+                0 if self._is_forward(row) else 1,
+                row.created_at,
+                row.document_id,
+            )
+        )
+        return _RowsResult(pending[: self._worker.batch_limit])
+
+    async def get(self, _model, document_id):
+        return self._table.get(document_id)
+
+    async def commit(self):
+        self.commit_count += 1
+
+    async def rollback(self):
+        self.rollback_count += 1
+
+
+@pytest.mark.asyncio
+async def test_document_sweep_cursor_uses_created_at_not_document_id_ordering():
+    # Document.document_id defaults to a random UUID (db/models.py: default=
+    # lambda: f"doc_{uuid.uuid4().hex}"), so it is NOT monotonic with
+    # insertion order -- a document inserted later can sort lexicographically
+    # *below* one inserted earlier. Devin Review flagged that a cursor based
+    # on document_id alone would then permanently miss such a row: it is
+    # never in the retry set (never seen before) and never satisfies
+    # "document_id > cursor" (it sorts lower), so it would stay pending
+    # forever. The cursor is now a (created_at, document_id) tuple --
+    # created_at is genuinely monotonic with insertion order.
+    early = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    later = datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)
+    # "doc-zzz" sorts after "doc-aaa" as a string, despite being created
+    # first -- exactly the adversarial ordering the fix must survive.
+    already_seen = _pending_document(
+        "doc-zzz", organization_id="org-ready", created_at=early
+    )
+    new_arrival = _pending_document(
+        "doc-aaa", organization_id="org-ready", created_at=later
+    )
+
+    async def config_resolver(_session, _organization_id):
+        return _config()
+
+    async def request_fn(**_kwargs):
+        return _canned_response()
+
+    worker = NewsdomRecognitionWorker(
+        config_resolver=config_resolver, request_fn=request_fn
+    )
+    session = _LivePendingDocumentSession(worker, [already_seen])
+    await worker._sweep_documents(session)
+    assert worker._document_cursor == (early, "doc-zzz")
+    assert already_seen.document_status == "parsed"
+
+    # The new, later-arriving document lands in the same table only once it
+    # actually exists -- exactly like a real insert between sweeps.
+    session._table["doc-aaa"] = new_arrival
+    await worker._sweep_documents(session)
+
+    assert new_arrival.document_status == "parsed"
+
+
 @pytest.mark.asyncio
 async def test_document_sweep_advances_the_cursor_and_retries_a_blocked_row():
     # A batch that fully resolves lets the cursor advance to its tail (a
@@ -746,7 +853,7 @@ async def test_document_sweep_advances_the_cursor_and_retries_a_blocked_row():
         request_fn=request_fn,
     )
     await worker._sweep_documents(session)
-    assert worker._document_cursor == "doc-010"
+    assert worker._document_cursor == (resolved_batch[-1].created_at, "doc-010")
     assert worker._document_retry_ids == set()
     for document in resolved_batch:
         assert document.document_status == "parsed"
@@ -755,13 +862,13 @@ async def test_document_sweep_advances_the_cursor_and_retries_a_blocked_row():
     # The cursor still advances (to doc-011, past doc-010), but doc-011
     # stays pending and now enters the retry set rather than forcing a
     # rescan-from-scratch.
-    assert worker._document_cursor == "doc-011"
+    assert worker._document_cursor == (late_arrival.created_at, "doc-011")
     assert worker._document_retry_ids == {"doc-011"}
     assert late_arrival.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
 
     late_arrival.organization_id = "org-ready"
     await worker._sweep_documents(session)
-    assert worker._document_cursor == "doc-011"
+    assert worker._document_cursor == (late_arrival.created_at, "doc-011")
     assert worker._document_retry_ids == set()
     assert late_arrival.document_status == "parsed"
 
@@ -810,7 +917,7 @@ async def test_document_sweep_advances_the_cursor_and_retries_the_failed_row(
     )
     await worker._sweep_documents(session)
 
-    assert worker._document_cursor == "doc-003"
+    assert worker._document_cursor == (third.created_at, "doc-003")
     assert worker._document_retry_ids == {"doc-002"}
     assert first.document_status == "parsed"
     assert second.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
@@ -820,7 +927,7 @@ async def test_document_sweep_advances_the_cursor_and_retries_the_failed_row(
 
     await worker._sweep_documents(session)
 
-    assert worker._document_cursor == "doc-003"
+    assert worker._document_cursor == (third.created_at, "doc-003")
     assert worker._document_retry_ids == set()
     assert second.document_status == "parsed"
     assert session.commit_count == 3
@@ -849,7 +956,7 @@ async def test_document_sweep_advances_the_cursor_and_retries_the_pending_row():
     )
     await worker._sweep_documents(session)
 
-    assert worker._document_cursor == "doc-003"
+    assert worker._document_cursor == (third.created_at, "doc-003")
     assert worker._document_retry_ids == {"doc-001"}
     assert first.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
     assert second.document_status == "parsed"

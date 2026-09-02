@@ -1,4 +1,36 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🟡 실제 결함) `backend/api/tenant_config.py`의 `TenantConfigCreate`/
+  `TenantConfigResponse`가 `noema_orchestrator_base_url`/`noema_orchestrator_token`을
+  선언하지 않아, `services/orchestrator_gateway.py`가 요구하는 이 게이트웨이
+  자격증명을 지원되는 어떤 API 호출로도 설정할 수 없었습니다(기능이 사실상
+  도달 불가능).** 두 필드를 두 Pydantic 모델에 추가하고, `noema_orchestrator_token`을
+  다른 자격증명(`openai_api_key` 등)과 동일하게 `SECRET_FIELDS`에 등록해 조회
+  시 마스킹되도록 했습니다(생성/수정 로직은 이미 필드-무관 `setattr` 루프라
+  추가 배선이 필요 없었습니다). 동일한 선행 패턴인
+  `batch_orchestrator_base_url`/`batch_orchestrator_token`에도 같은 배선 공백이
+  있음을 확인했으나, 이 PR이 추가한 필드만 범위로 좁혔습니다. 검증: RED(POST 후
+  GET에서 `KeyError`로 필드 부재 확인) → GREEN. `PYTHONPATH=. python -m pytest
+  tests/test_tenant_config_api.py -q` → 29 passed, 1 skipped.
+- **(Devin 리뷰 대응, 🔴 실제 결함, `backend/services/newsdom_worker.py:707-710`)
+  `Document.document_id`는 `db/models.py`에서 `f"doc_{uuid.uuid4().hex}"`로
+  무작위 생성되어 삽입 순서와 전혀 무관한데, 문서 sweep의 커서가 이
+  `document_id`만으로 전진 여부를 판단하고 있었습니다 — 커서가 전진한 뒤에
+  삽입된 새 문서가 우연히 더 작게 정렬되는 id를 받으면, 한 번도 본 적 없어
+  재시도 집합에도 없고 "id > cursor" 조건도 만족하지 못해 영원히 pending으로
+  남을 수 있었습니다(바로 위 항목의 커서-고정 수정보다 더 심각 — 이미 본 행을
+  지연시키는 게 아니라 전혀 새로운 행을 완전히 놓칠 수 있음).** 커서를
+  `document_id` 단일 값 대신 `(created_at, document_id)` 튜플로 바꿔
+  `created_at`(삽입 시점에 Python 쪽에서 설정되는, 실제로 삽입 순서와 일치하는
+  타임스탬프)을 1차 정렬 키로, `document_id`는 동일 순간 충돌 시의 tie-breaker로만
+  사용하도록 수정했습니다. 수정 과정에서 발견한 관련 버그: 커서를
+  bulk-loaded `rows` 목록에서 직접 계산하면(`document.created_at`) 이전 항목의
+  rollback으로 이미 expire된 인스턴스의 속성을 읽을 위험이 있어(기존
+  `_ExpiredDocument`류 회귀 테스트가 정확히 이를 검출), 매 반복에서 새로
+  re-fetch한 인스턴스에서 즉시 캡처한 `(created_at, document_id)` 쌍만 사용하도록
+  고쳤습니다. 검증: RED(무작위 UUID가 낮게 정렬되지만 늦게 생성된 문서가
+  다음 sweep에서도 계속 pending으로 남음을 실제 재현) → GREEN(같은 시나리오가
+  이제 처리됨). `PYTHONPATH=. python -m pytest tests/test_newsdom_worker.py -q`
+  → 32 passed.
 - **(Devin 리뷰 대응, 🔴 실제 결함, `backend/services/newsdom_worker.py:531-533`) 한 PDF의
   organization에 provider가 설정되어 있지 않으면 `_sweep_attachments`가 매 pass마다 그
   행 앞에서 커서를 다시 고정해, 그 배치보다 뒤에 있는 PDF들이 무기한 pending으로
