@@ -529,6 +529,9 @@ export function SettingsLayout() {
   const [passwordLoginForm, setPasswordLoginForm] = useState({ email: '', password: '' });
   const [passwordLoginSubmitting, setPasswordLoginSubmitting] = useState(false);
   const [passwordLoginError, setPasswordLoginError] = useState<string | null>(null);
+  const [passwordSignupForm, setPasswordSignupForm] = useState({ email: '', password: '', firstName: '' });
+  const [passwordSignupSubmitting, setPasswordSignupSubmitting] = useState(false);
+  const [passwordSignupError, setPasswordSignupError] = useState<string | null>(null);
   const smtpPasswordInputRef = useRef<HTMLInputElement>(null);
   const imapPasswordInputRef = useRef<HTMLInputElement>(null);
   const pop3PasswordInputRef = useRef<HTMLInputElement>(null);
@@ -628,6 +631,44 @@ export function SettingsLayout() {
       setPasswordLoginError('로그인 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setPasswordLoginSubmitting(false);
+    }
+  };
+
+  const handlePasswordSignup = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordSignupError(null);
+    setPasswordSignupSubmitting(true);
+    try {
+      // Same zero-Keycloak-HTML constraint as login: naruon's own form posts
+      // to naruon's own backend, which creates the account through Keyverse's
+      // scoped account-unification API and logs the new session straight in.
+      const response = await fetch('/auth/password/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          email: passwordSignupForm.email,
+          password: passwordSignupForm.password,
+          first_name: passwordSignupForm.firstName || undefined,
+          return_to: window.location.pathname,
+        }),
+      });
+      if (!response.ok) {
+        const body: unknown = await response.json().catch(() => null);
+        const errorCode = body && typeof body === 'object' && 'error_code' in body ? String((body as { error_code: unknown }).error_code) : null;
+        setPasswordSignupError(
+          errorCode === 'password_signup_email_taken'
+            ? '이미 등록된 이메일입니다.'
+            : '계정을 만들 수 없습니다. 입력값을 확인하고 다시 시도해 주세요.',
+        );
+        return;
+      }
+      setPasswordSignupForm({ email: '', password: '', firstName: '' });
+      await refreshOidcSessionClaims();
+    } catch {
+      setPasswordSignupError('회원가입 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setPasswordSignupSubmitting(false);
     }
   };
 
@@ -1693,6 +1734,66 @@ export function SettingsLayout() {
                       className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {passwordLoginSubmitting ? '로그인 중…' : '로그인'}
+                    </button>
+                  </form>
+                </section>
+
+                <section aria-label="Naruon 계정 만들기" className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Shield className="size-5 text-blue-500" />
+                    <h3 className="font-bold text-lg">Naruon 계정 만들기</h3>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    계정을 만들면 Keyverse에 비밀번호 자격 증명이 등록되고, 바로 로그인된 상태로
+                    이어집니다. 이메일 인증과 악용 방지는 아직 제공되지 않습니다 — 자세한 내용은
+                    ADR-0005를 참고하세요.
+                  </p>
+                  <form onSubmit={handlePasswordSignup} className="mt-4 grid gap-3 sm:max-w-sm">
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground" htmlFor="naruon-password-signup-name">
+                      이름 (선택)
+                    </label>
+                    <input
+                      id="naruon-password-signup-name"
+                      type="text"
+                      autoComplete="given-name"
+                      value={passwordSignupForm.firstName}
+                      onChange={(event) => setPasswordSignupForm((current) => ({ ...current, firstName: event.target.value }))}
+                      className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    />
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground" htmlFor="naruon-password-signup-email">
+                      이메일
+                    </label>
+                    <input
+                      id="naruon-password-signup-email"
+                      type="email"
+                      required
+                      autoComplete="username"
+                      value={passwordSignupForm.email}
+                      onChange={(event) => setPasswordSignupForm((current) => ({ ...current, email: event.target.value }))}
+                      className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    />
+                    <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground" htmlFor="naruon-password-signup-password">
+                      비밀번호 (12자 이상)
+                    </label>
+                    <input
+                      id="naruon-password-signup-password"
+                      type="password"
+                      required
+                      minLength={12}
+                      autoComplete="new-password"
+                      value={passwordSignupForm.password}
+                      onChange={(event) => setPasswordSignupForm((current) => ({ ...current, password: event.target.value }))}
+                      className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    />
+                    {passwordSignupError ? (
+                      <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{passwordSignupError}</p>
+                    ) : null}
+                    <button
+                      type="submit"
+                      disabled={passwordSignupSubmitting}
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {passwordSignupSubmitting ? '계정 만드는 중…' : '계정 만들기'}
                     </button>
                   </form>
                 </section>

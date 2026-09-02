@@ -120,18 +120,39 @@ registration validator.
 
 ## What this does not yet deliver
 
-**Login does not work end-to-end yet.** No account in Keyverse's `cwl` realm
-has a password credential today — `POST /registration/accounts` explicitly
+**Update (2026-09-02): login and signup now both work end-to-end.** The gap
+described below — no `cwl`-realm account had a password credential, so every
+Direct Access Grants attempt failed closed — is closed by a companion
+Keyverse change,
+[keyverse#0015](https://github.com/ContextualWisdomLab/keyverse/blob/main/docs/adr/0015-naruon-password-credential-issuance.md):
+`POST /registration/accounts/password`, a scoped account-unification
+endpoint (gated by its own third bearer token, naruon-only) that creates a
+`cwl` user with an immediately usable password credential. naruon's signup
+form ("Naruon 계정 만들기") calls it through a new
+`frontend/src/app/auth/password/signup/route.ts`, then immediately reuses
+`exchangePasswordForSessionResponse` (the same exchange login uses) so
+signup ends with a signed session, not a second manual login step.
+
+What is still genuinely deferred, per keyverse#0015: email verification
+(accounts are created with `emailVerified: false` and no verification
+required action), CAPTCHA-equivalent abuse hardening beyond a per-peer rate
+limit, self-service password reset, and merging a password-created identity
+with an existing passwordless one for the same person. naruon's signup form
+copy states this plainly to the user rather than implying full production
+completeness.
+
+The paragraph below is kept for the historical record of what this ADR's
+first slice did and did not deliver before keyverse#0015 landed.
+
+Login did not work end-to-end at first. No account in Keyverse's `cwl` realm
+had a password credential — `POST /registration/accounts` explicitly
 refuses to accept or create one, and self-service password reset stays off.
-Every Direct Access Grants attempt against the current realm fails closed
-with a generic invalid-credentials error, correctly, because there is
-nothing to authenticate against — not because naruon's integration is wrong.
-Making this functional needs one more, separately-reviewable Keyverse
-change (a credential-issuance path: self-service, migration, or an extended
-registration endpoint) that keyverse#0014 explicitly defers as its own,
-bigger, separately-reviewable follow-up. **Signup is not implemented in this
-slice** for the same reason: there is no Keyverse API today that accepts a
-password at account-creation time for naruon to call.
+Every Direct Access Grants attempt against the realm failed closed with a
+generic invalid-credentials error, correctly, because there was nothing to
+authenticate against — not because naruon's integration was wrong. Making
+this functional needed one more, separately-reviewable Keyverse change (a
+credential-issuance path) that keyverse#0014 explicitly deferred as its own,
+bigger, separately-reviewable follow-up — the follow-up keyverse#0015 is.
 
 ## Alternatives rejected
 
