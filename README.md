@@ -95,15 +95,16 @@ mail/calendar/file systems.
 
 ## Agentic Ontology & Auto-Organization
 
-- **Sender ontology**: The backend classifies sender relationships and returns a
-  deterministic next-action hint, such as reply/task tracking for colleagues or
-  summary-first handling for newsletters. Relationship graph reads can be
-  filtered by source message/thread ids so the Search workspace can show the
-  sender DAG beside the originating mail context. If no relationship exists for
-  the selected search result, the browser can call signed
-  `/api/ontology/relationships/capture-source`; the backend re-reads the source
-  email under owner/organization scope and derives the thread provenance
-  server-side before storing the relationship.
+- **Sender ontology**: Naruon reads owner/organization-scoped, source-backed
+  sender relationship records and shows their message/thread provenance beside
+  Context Search results. Automatic relationship type, confidence, and
+  next-action judgments are unavailable until a validated semantic/model
+  authority is configured. The signed
+  `/api/ontology/relationships/capture-source` endpoint re-reads the source email
+  under owner/organization scope and derives thread provenance server-side, but
+  it persists no relationship when validated classification evidence is absent;
+  repository-authored keyword, sender-domain, local-part, language, or phrase
+  rules are not semantic relationship evidence.
 - **Self-sent knowledge capture**: IMAP-imported emails sent from a user to the
   same address now create one idempotent, source-linked `self_sent_knowledge`
   ticket task with a plain-text memo title. The Tasks workspace can request a
@@ -516,6 +517,11 @@ Errors should tell a contributor what failed and avoid leaking internals:
   raw exceptions are intentionally not returned to clients.
 - Missing thread: `404 {"detail":"Thread not found"}`. Re-import fixtures or
   verify the URL uses the normalized thread id.
+- Automatic sender relationship capture without validated classification
+  evidence: `503 {"detail":"Automatic sender classification is unavailable until validated relationship evidence is configured."}`.
+  Treat this as an explicit abstention: no relationship row or guessed
+  confidence is persisted, and the Search UI keeps the existing mail/thread
+  context usable.
 - Task creation from a missing or unauthorized source email:
   `404 {"detail":"Source email not found"}`.
 - Task creation without usable execution items:
@@ -660,6 +666,7 @@ cd frontend && npm test -- \
   src/lib/api-client.test.ts \
   src/lib/workspace-preferences.test.ts \
   src/components/DashboardLayout.test.tsx \
+  src/components/SearchLayout.relationship-unavailable.test.tsx \
   src/app/calendar/page.test.tsx \
   src/app/tasks/page.test.tsx \
   src/app/search/page.test.tsx \
