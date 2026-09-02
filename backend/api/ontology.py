@@ -9,7 +9,11 @@ from typing import List
 from db.session import get_db
 from db.models import Email, SenderRelationship
 from api.auth import get_auth_context, AuthContext
-from services.ontology_service import RelationshipData, ontology_service
+from services.ontology_service import (
+    RelationshipClassificationUnavailable,
+    RelationshipData,
+    ontology_service,
+)
 from services.text_safety import strip_html_markup
 from services.threading_service import normalize_message_id
 
@@ -177,6 +181,13 @@ async def capture_relationship_from_source(
     auth_ctx: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ):
+    """Capture source provenance without inventing a sender classification.
+
+    The source message lookup remains owner/organization scoped. When no validated
+    relationship classifier is configured, the endpoint returns an explicit
+    service-unavailable response instead of persisting lexical/domain guesses or
+    leaking an internal exception as an opaque server failure.
+    """
     result = await db.execute(
         select(Email).where(
             *Email.owner_filters(auth_ctx.user_id, auth_ctx.organization_id),
@@ -189,18 +200,27 @@ async def capture_relationship_from_source(
 
     source_thread_id = _canonical_thread_id(email_row)
     sender_email = _relationship_sender_label(email_row.sender)
-    analysis = await ontology_service.save_relationship(
-        db,
-        data=RelationshipData(
-            user_email=_relationship_user_email(auth_ctx),
-            sender_email=sender_email,
-            email_content=email_row.body or "",
-            user_id=auth_ctx.user_id,
-            organization_id=auth_ctx.organization_id,
-            source_message_id=email_row.message_id,
-            source_thread_id=source_thread_id,
-        ),
-    )
+    try:
+        analysis = await ontology_service.save_relationship(
+            db,
+            data=RelationshipData(
+                user_email=_relationship_user_email(auth_ctx),
+                sender_email=sender_email,
+                email_content=email_row.body or "",
+                user_id=auth_ctx.user_id,
+                organization_id=auth_ctx.organization_id,
+                source_message_id=email_row.message_id,
+                source_thread_id=source_thread_id,
+            ),
+        )
+    except RelationshipClassificationUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Automatic sender classification is unavailable until validated "
+                "relationship evidence is configured."
+            ),
+        ) from exc
     await db.commit()
 
     return RelationshipResponse(
