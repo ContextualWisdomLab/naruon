@@ -29,6 +29,27 @@
   통일했습니다. 검증: `backend/tests/test_project_graph_extractor_registry.py`
   전체 통과(26개, 신규 회귀 테스트 4개 포함), 전체 backend suite 1810
   passed/33 skipped, `ruff check` clean.
+- **정정 (owner 직접 지적, 같은 PR #1525):** 위 항목이 도입한 `ORCHESTRATOR_POOL_MODEL =
+  "orchestrator/free"` 하드코딩 자체가 경계 위반이었습니다. `.github`
+  ADR-0003의 `orchestrator/free` 고정은 GitHub Actions 모델 백엔드 워크플로
+  경계에서만 유효한 운영 규칙(`docs/product-goal-directive.md` 8항: "GitHub
+  Actions Workflow 이용에 관해")이며, naruon 같은 제품 runtime 소비자가 동일한
+  풀 선택 권한을 자체 코드에 복제해도 된다는 근거가 아닙니다. 게다가 2026-09-03
+  기준 `ContextualWisdomLab/contextual-orchestrator`의 GitHub Releases는
+  비어 있어, naruon이 따를 수 있는 불변 released consumer contract 자체가
+  아직 없습니다. `ORCHESTRATOR_POOL_MODEL` 상수를 완전히 제거하고,
+  `KgExtractorContext`에 `model`(직접 공급자 전용, `email_import_service.py`가
+  selector와 무관하게 `settings.OPENAI_MODEL`로 채움)과 분리된 신규 필드
+  `orchestrator_model`을 추가했습니다. `LlmGroundedExtractor._resolve_model()`은
+  이제 두 모드 모두에서 해당 필드를 그대로 전달할 뿐 아무 값도 스스로 선택하지
+  않습니다 — 오늘은 어떤 caller도 `orchestrator_model`을 채우지 않으므로
+  orchestrator 경로는 (의도대로) 항상 keyword fallback으로 fail closed됩니다.
+  `docs/adr/0005-kg-extraction-orchestrator-free-pool-pin.md`에 Revision 7으로
+  전체 근거와 대안 검토를 기록했고, 문서 Status를 "Accepted"에서 "Proposed"로
+  되돌렸습니다(PR 미병합 상태에서의 조기 Accepted 표기 정정,
+  `docs/product-goal-directive.md`의 repair-not-close PR 수명주기 정책 준수).
+  검증: `backend/tests/test_project_graph_extractor_registry.py` 전체 통과
+  (27개, 정정된/신규 회귀 테스트 포함), `ruff check` clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 

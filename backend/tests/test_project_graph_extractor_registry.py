@@ -216,8 +216,9 @@ async def test_orchestrator_routing_targets_the_orchestrator_base_url(monkeypatc
     context = KgExtractorContext(
         api_key="key",
         base_url="https://direct-provider.example",
-        model="gpt-test",
+        model="tenant-direct-provider-model",
         orchestrator_base_url="https://orchestrator.example/v1",
+        orchestrator_model="co-contract-resolved-model",
     )
     result = await run_extraction(
         [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
@@ -228,13 +229,15 @@ async def test_orchestrator_routing_targets_the_orchestrator_base_url(monkeypatc
     # provider base URL — this is what "route LLM extraction through
     # contextual-orchestrator" means at the transport seam.
     assert llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
-    # The model sent must be the fixed virtual pool id, never the caller's
-    # direct-provider model string — the orchestrator gateway resolves
-    # "orchestrator/free" itself to a zero-cost/ZDR route; forwarding a
-    # literal provider model would bypass that governed pool selection
-    # entirely (ContextualWisdomLab/.github docs/adr/
-    # 0003-contextual-orchestrator-vendored-free-zdr.md).
-    assert llm_mock.await_args.kwargs["model"] == "orchestrator/free"
+    # The model sent is exactly context.orchestrator_model, forwarded
+    # verbatim -- never context.model (the tenant's unrelated direct-provider
+    # setting) and never a Naruon-hardcoded pool id. ADR-0005 Revision 7:
+    # hardcoding a pool id here was a boundary violation, since that
+    # authority belongs to contextual-orchestrator's own released consumer
+    # contract; reusing context.model would have been the same violation by
+    # another name, since email_import_service.py sets it to
+    # settings.OPENAI_MODEL regardless of selector.
+    assert llm_mock.await_args.kwargs["model"] == context.orchestrator_model
     assert llm_mock.await_args.kwargs["model"] != context.model
 
 
@@ -308,19 +311,25 @@ async def test_orchestrator_extractor_requires_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_routing_succeeds_without_context_model(monkeypatch):
-    """Orchestrator routing must not require context.model.
+async def test_orchestrator_routing_fails_closed_without_a_configured_model(monkeypatch):
+    """Orchestrator routing has no hardcoded model to fall back on.
 
-    _resolve_model always supplies the fixed ORCHESTRATOR_POOL_MODEL for
-    orchestrator-routed requests, regardless of context.model. Gating
-    availability on context.model (as the extractor previously did via
-    ``has_llm_credentials``) made an otherwise-valid orchestrator request
-    unavailable -- and silently degrade to keyword extraction -- whenever the
-    unrelated direct-provider model setting was unconfigured.
+    A prior revision of this extractor substituted a Naruon-hardcoded virtual
+    pool id ("orchestrator/free") whenever the model was unset, so
+    orchestrator-routed requests always "succeeded" regardless of whether a
+    real model was configured. That was itself the bug ADR-0005 Revision 7
+    corrects: this extractor has no provider/model/pool selection authority
+    in either mode, and contextual-orchestrator has published no released
+    consumer contract yet (0 GitHub Releases), so nothing legitimately
+    populates context.orchestrator_model today. The correct behavior is to
+    fail closed to the deterministic fallback, exactly like direct-provider
+    mode does on a missing model.
     """
-    sentinel = object()
-    llm_mock = AsyncMock(return_value=sentinel)
-    _patch_cores(monkeypatch, llm=llm_mock, keyword=Mock())
+    keyword_sentinel = object()
+    llm_mock = AsyncMock()
+    _patch_cores(
+        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
+    )
 
     context = KgExtractorContext(
         api_key="key",
@@ -330,9 +339,39 @@ async def test_orchestrator_routing_succeeds_without_context_model(monkeypatch):
         [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
     )
 
-    assert result is sentinel
-    llm_mock.assert_awaited_once()
-    assert llm_mock.await_args.kwargs["model"] == "orchestrator/free"
+    assert result is keyword_sentinel
+    llm_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_routing_does_not_leak_the_direct_provider_model(monkeypatch):
+    """A configured context.model must not substitute for orchestrator_model.
+
+    email_import_service.py's caller sets context.model to
+    settings.OPENAI_MODEL unconditionally, regardless of which extractor
+    selector is active -- so a populated context.model is the realistic
+    orchestrator-mode scenario today, not an empty context. Orchestrator mode
+    must still fail closed rather than forward that unrelated
+    direct-provider setting to the orchestrator gateway as a substitute
+    model/pool id.
+    """
+    keyword_sentinel = object()
+    llm_mock = AsyncMock()
+    _patch_cores(
+        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
+    )
+
+    context = KgExtractorContext(
+        api_key="key",
+        model="tenant-direct-provider-model",
+        orchestrator_base_url="https://orchestrator.example/v1",
+    )
+    result = await run_extraction(
+        [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
+    )
+
+    assert result is keyword_sentinel
+    llm_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio

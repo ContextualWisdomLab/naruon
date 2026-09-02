@@ -1,6 +1,14 @@
 # ADR-0005: Pin orchestrator-routed KG extraction to the `orchestrator/free` pool
 
-**Status:** Accepted (Naruon-local policy)
+**Status:** Proposed — Revision 7 (below) reverses this ADR's original point-1/2
+mechanism. The title and file identity are kept stable for cross-reference (naruon
+`extractor_registry.py`, `ContextualWisdomLab/contextual-orchestrator` ADR-0007, and
+`ContextualWisdomLab/.github`'s gap-baseline all cite this path); read Revision 7
+before treating anything in Context/Decision points 1–3 as current behavior. This PR
+(naruon#1525) has not merged, so this ADR was never more than a same-PR proposal —
+"Accepted" here before Revision 7 was itself a premature status marking, corrected
+per `ContextualWisdomLab/.github` `docs/product-goal-directive.md`'s repair-not-close
+PR-lifecycle policy.
 **Date:** 2026-09-02
 **Decision owner:** Naruon maintainers
 **Scope:** `backend/services/project_graph/extractor_registry.py::LlmGroundedExtractor` when
@@ -118,8 +126,66 @@ since KG extraction runs over real customer email content, not code.
    blank-string fix. Fixed by checking `not model or not model.strip()`,
    which rejects `None`, `""`, and whitespace-only strings alike while
    still accepting `ORCHESTRATOR_POOL_MODEL` (a non-whitespace literal).
+7. **Revision 7 (2026-09-02, owner-directed correction) — reverses points 1–2.**
+   The org owner reviewed this PR's exact head (`badf985e`) directly and
+   identified that decision points 1–2 above are themselves a boundary
+   violation, not a fix: hardcoding `ORCHESTRATOR_POOL_MODEL =
+   "orchestrator/free"` inside naruon's own `LlmGroundedExtractor` gives
+   naruon product-runtime code the same provider/model/pool selection
+   authority `ContextualWisdomLab/.github`
+   `docs/product-goal-directive.md` §8 explicitly reserves for
+   contextual-orchestrator's released API/client/schema — "LLM Provider
+   group 이름을 코드·설정·테스트·라우팅 조건에 하드코딩하지 않는다." The
+   `.github` ADR-0003 precedent this ADR's Context/point-2 cited as
+   justification governs a different boundary: it pins **GitHub Actions
+   model-backed CI workflows** (Strix/OpenCode/Noema), which
+   `docs/product-goal-directive.md`'s own item 10 scopes explicitly to
+   "GitHub Actions Workflow 이용" — it was never a license for a product
+   **runtime** service to make the same hardcoded choice on its own
+   consumers' behalf. Naruon's role per the directive's Core-foundation map
+   is a **consumer** of contextual-orchestrator, not a co-owner of its
+   routing policy; a consumer's job is to pass capability/privacy/ZDR
+   requirements to the owner's released contract and fail closed if the
+   owner is immature or the capability is unsupported, never to duplicate
+   the owner's selection logic locally (§9).
+
+   That immaturity is not hypothetical here: as of 2026-09-03, `GET
+   /repos/ContextualWisdomLab/contextual-orchestrator/releases` returns an
+   empty list — there is no immutable released consumer contract for
+   naruon to conform to yet, for `orchestrator/free` or any other pool
+   value. Per the directive's boundary rule ("guard the boundary with
+   ports/ACL/feature-flags/test-doubles and never read the owner's
+   source/DB/temp branches directly" until a release exists), the correct
+   interim state is that orchestrator-routed KG extraction stays
+   unavailable, not that it "succeeds" against a value naruon invented.
+
+   **Corrected decision:** `ORCHESTRATOR_POOL_MODEL` is removed entirely —
+   no hardcoded pool id exists anywhere in `extractor_registry.py`.
+   `KgExtractorContext` gains a new field, `orchestrator_model`, kept
+   strictly separate from the pre-existing `model` field (which is, and
+   remains, `email_import_service.py`'s tenant direct-provider setting,
+   `settings.OPENAI_MODEL` — populated unconditionally regardless of
+   selector, so it must never be forwarded to the orchestrator gateway as
+   a substitute). `LlmGroundedExtractor._resolve_model()` now reads
+   `context.model` in direct-provider mode and `context.orchestrator_model`
+   in orchestrator mode, forwarding whichever verbatim — the extractor
+   itself picks nothing. No caller populates `orchestrator_model` today,
+   so orchestrator-routed extraction correctly and unconditionally fails
+   closed to the deterministic keyword fallback, exactly like a missing
+   credential does. This is not a regression from points 1–2's
+   "`orchestrator/free` always succeeds" behavior; that behavior was the
+   defect. When contextual-orchestrator ships its first release defining a
+   real consumer contract, the follow-up work is entirely in
+   `email_import_service.py` (resolve `orchestrator_model` from that
+   contract) — `extractor_registry.py` needs no further change, because it
+   was never supposed to own this decision.
 
 ## Alternatives rejected
+
+**The three entries immediately below predate Revision 7 and evaluate the
+original (now-reversed) "hardcode `orchestrator/free` in naruon" design; kept
+as historical record, not current guidance. Revision 7's own alternatives
+follow in a separate subsection.**
 
 ### Leave the model configurable via a new settings field, defaulted to `orchestrator/free`
 
@@ -146,19 +212,56 @@ exception, no price-attestation evidence collection, and no security-analysis
 justification for admitting priced routes — `orchestrator/free`'s "zero-cost,
 ZDR-first" guarantee is the correct default absent a documented reason to widen it.
 
+### Revision 7 alternatives
+
+#### Keep the `orchestrator/free` hardcode, just relabel it as "temporary"
+
+Rejected. A hardcoded pool id in naruon's own code is a boundary violation
+regardless of how it is labeled or how long it is meant to last — the
+directive's core-foundation ownership model (`docs/CWL-MASTER-CONTEXT.md`
+§9) does not have a "temporary exception" carve-out for a consumer
+duplicating an owner's routing authority, and a "temporary" hardcode has no
+forcing function to actually get removed once contextual-orchestrator ships.
+
+#### Reuse `context.model` for orchestrator mode instead of adding `orchestrator_model`
+
+Rejected. `context.model` is unconditionally `settings.OPENAI_MODEL` at
+naruon's only call site (`email_import_service.py`), regardless of which
+selector is active — reusing it would silently forward a tenant's
+direct-provider model id to the orchestrator gateway as a pool/model
+substitute, the exact bypass this ADR's original §Context already
+identified as unsafe (§Context: "asks the gateway to proxy that specific
+model directly, bypassing the free/ZDR policy entirely"). A dedicated field
+is the only design where the two concerns cannot collide.
+
+#### Remove the `orchestrator` selector entirely until contextual-orchestrator ships a release
+
+Rejected as unnecessarily destructive. The registry's own architecture
+(`build_default_registry`) is designed as a stable seam precisely so a
+selector can exist and be structurally correct — registered, protocol-
+conformant, falling back to keyword extraction like any other unavailable
+extractor — before it is operationally complete. Removing the selector
+would require re-adding it later with no functional difference from simply
+leaving it in its current, correctly-fails-closed state now.
+
 ## Consequences
 
-- `PROJECT_GRAPH_EXTRACTOR=orchestrator` now actually invokes contextual-orchestrator's
+**[Superseded by Revision 7 — see the addendum below for current behavior.]**
+The next two bullets describe points 1–2's reversed design and are kept as
+historical record only.
+
+- ~~`PROJECT_GRAPH_EXTRACTOR=orchestrator` now actually invokes contextual-orchestrator's
   governed free/ZDR pool selection instead of silently attempting to proxy a
-  literal provider model id through it. Tests:
+  literal provider model id through it.~~ Tests:
   `test_orchestrator_routing_pins_the_free_pool_model` (implicit in the extended
   `test_orchestrator_routing_targets_the_orchestrator_base_url`) and
   `test_direct_llm_routing_uses_provider_base_url`'s extended model assertion in
   `backend/tests/test_project_graph_extractor_registry.py` cover both branches.
 - Decision point 4's availability-gating fix is covered by
-  `test_orchestrator_routing_succeeds_without_context_model` (orchestrator
-  routing proceeds and still sends `orchestrator/free` with `context.model`
-  unset) and `test_direct_llm_routing_requires_model_even_with_api_key`
+  ~~`test_orchestrator_routing_succeeds_without_context_model`~~ (renamed
+  `test_orchestrator_routing_fails_closed_without_a_configured_model` under
+  Revision 7, with its assertion inverted to match) and
+  `test_direct_llm_routing_requires_model_even_with_api_key`
   (direct-provider mode still fails closed without a model, confirming the
   gating narrowed correctly rather than being removed).
 - Decision point 5's blank-model fix is covered by
@@ -168,6 +271,29 @@ ZDR-first" guarantee is the correct default absent a documented reason to widen 
 - Decision point 6's whitespace-model fix is covered by
   `test_direct_llm_routing_rejects_whitespace_only_model` (a
   whitespace-only `context.model` still fails closed).
+
+**Revision 7 consequences (current behavior):**
+
+- `PROJECT_GRAPH_EXTRACTOR=orchestrator` unconditionally fails closed to the
+  deterministic keyword extractor today — no caller populates
+  `context.orchestrator_model`, and this extractor has no authority to
+  invent a value. This is intentional, not a bug: it is the correct state
+  until `ContextualWisdomLab/contextual-orchestrator` ships a release
+  naruon can conform to. Covered by
+  `test_orchestrator_routing_fails_closed_without_a_configured_model` and
+  the new `test_orchestrator_routing_does_not_leak_the_direct_provider_model`
+  (proves a populated `context.model` — the realistic case, since
+  `email_import_service.py` always sets it — is not substituted) in
+  `backend/tests/test_project_graph_extractor_registry.py`.
+- `test_orchestrator_routing_targets_the_orchestrator_base_url` still covers
+  the transport-only distinction (orchestrator mode hits
+  `context.orchestrator_base_url`, never the raw provider `base_url`) using
+  a synthetic `context.orchestrator_model`, so the base-URL-routing logic
+  stays verified even though no real caller can supply that field yet.
+- Operators must not work around the fail-closed state by manually setting
+  `context.model` for orchestrator-mode requests, by adding an
+  `orchestrator/free`-defaulted settings field, or by any other means that
+  reintroduces points 1–2's hardcode — see "Revision 7 alternatives" above.
 - **Open follow-up, deliberately out of this ADR's scope:**
   `backend/services/batch_embedding_service.py::_run_orchestrator_batch` sends a
   separate, tenant-configurable `settings.model` (`BatchEmbeddingSettings.model`,

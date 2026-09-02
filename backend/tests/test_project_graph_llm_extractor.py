@@ -716,9 +716,29 @@ async def test_import_selection_defaults_to_keyword(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_import_selection_routes_through_orchestrator_when_configured(monkeypatch):
+async def test_import_selection_orchestrator_fails_closed_pending_a_co_release(
+    monkeypatch,
+):
+    """The end-to-end import path cannot yet complete an orchestrator-routed
+    extraction, even with an endpoint configured.
+
+    A prior revision of this test asserted the opposite: that configuring
+    PROJECT_GRAPH_ORCHESTRATOR_BASE_URL alone was sufficient for orchestrator
+    routing to succeed, because LlmGroundedExtractor substituted a
+    Naruon-hardcoded pool id ("orchestrator/free") for the model. ADR-0005
+    Revision 7 corrects that: this extractor has no provider/model/pool
+    selection authority, and _extract_project_semantics_for_import (below)
+    never populates KgExtractorContext.orchestrator_model -- there is no
+    released contextual-orchestrator consumer contract yet to resolve it
+    from. So the orchestrator selector correctly and unconditionally falls
+    back to the deterministic keyword extractor today, exactly like a
+    missing credential would.
+    """
     llm_mock = AsyncMock(return_value="orchestrator-result")
-    _patch_extractor_cores(monkeypatch, llm=llm_mock, keyword=Mock())
+    keyword_result = types.SimpleNamespace(objects=(), edges=())
+    _patch_extractor_cores(
+        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_result)
+    )
     monkeypatch.setattr(
         import_service.settings, "PROJECT_GRAPH_EXTRACTOR", "orchestrator", raising=False
     )
@@ -736,11 +756,8 @@ async def test_import_selection_routes_through_orchestrator_when_configured(monk
         [_segment("seg1", "text")], embedding_provider=provider
     )
 
-    assert result == "orchestrator-result"
-    # Extraction is routed at the orchestrator endpoint, not the raw provider.
-    assert (
-        llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
-    )
+    assert result is keyword_result
+    llm_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio

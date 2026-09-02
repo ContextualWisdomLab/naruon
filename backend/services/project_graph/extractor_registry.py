@@ -17,13 +17,24 @@ seam:
   only" structurally rather than in an ad-hoc branch.
 
 Routing LLM extraction through **contextual-orchestrator** is modelled as a
-transport concern: the orchestrator is an OpenAI-compatible gateway, so the
-``orchestrator`` selector reuses the same grounded LLM extractor but points its
-SSRF-allowlisted client at the orchestrator base URL resolved by the caller
-(:class:`KgExtractorContext`). If that endpoint is unset or the provider
-credentials are missing, the extractor raises :class:`ExtractorUnavailableError`
-and the runner fails closed to the deterministic reference extractor — the
-projection is best-effort and never lost.
+transport concern only: the orchestrator is an OpenAI-compatible gateway, so
+the ``orchestrator`` selector reuses the same grounded LLM extractor but
+points its SSRF-allowlisted client at the orchestrator base URL resolved by
+the caller (:class:`KgExtractorContext`). This module does **not** choose a
+provider, model, or virtual pool id on the caller's behalf in either mode —
+that authority belongs to whatever populates ``context.model`` (a direct
+provider config, read only by :data:`SELECTOR_LLM`) or ``context.
+orchestrator_model`` (a contextual-orchestrator consumer contract's
+resolved value, read only by :data:`SELECTOR_ORCHESTRATOR` — the two fields
+are kept separate precisely so a direct-provider setting can never leak into
+an orchestrator-routed request as a substitute model id). As of this
+module's last revision, ``ContextualWisdomLab/contextual-orchestrator`` has
+published no release, so no caller populates ``orchestrator_model`` and the
+extractor correctly stays unavailable. If the endpoint is unset, the
+resolved model is blank, or the provider credentials are missing, the
+extractor raises :class:`ExtractorUnavailableError` and the runner fails
+closed to the deterministic reference extractor — the projection is
+best-effort and never lost.
 """
 
 from __future__ import annotations
@@ -51,17 +62,6 @@ SELECTOR_KEYWORD = "keyword"
 SELECTOR_LLM = "llm"
 SELECTOR_ORCHESTRATOR = "orchestrator"
 
-# The contextual-orchestrator gateway resolves this fixed virtual model id to
-# a zero-cost, ZDR-first provider route at request time (ContextualWisdomLab/
-# .github docs/adr/0003-contextual-orchestrator-vendored-free-zdr.md); it is
-# not a literal provider model name. Every orchestrator-routed caller in the
-# org (Strix/OpenCode/Noema CI review, per that ADR's 2026-08-30 amendment)
-# is pinned to this same id rather than left operator-configurable, because
-# the whole point is that production/CI traffic cannot silently drift onto a
-# non-ZDR or paid route through a misconfigured setting. Hardcoded, not a
-# settings field, for the same fail-closed reason.
-ORCHESTRATOR_POOL_MODEL = "orchestrator/free"
-
 
 class ExtractorUnavailableError(RuntimeError):
     """An extractor cannot run in the current context.
@@ -84,12 +84,24 @@ class KgExtractorContext:
     endpoint a direct LLM extractor calls; ``orchestrator_base_url`` is the
     OpenAI-compatible contextual-orchestrator gateway an orchestrator-routed
     extractor targets instead of the raw provider.
+
+    ``model`` and ``orchestrator_model`` are deliberately separate fields, not
+    one field reused across modes: ``model`` is the caller's direct-provider
+    setting (e.g. the tenant's configured OpenAI model) and must never reach
+    the orchestrator gateway, which resolves its own model/pool id from a
+    contextual-orchestrator consumer contract instead. ``orchestrator_model``
+    is that contract-resolved value; today no caller populates it, because
+    contextual-orchestrator has published no release for Naruon to consume
+    (see ADR-0005 Revision 7), so orchestrator-routed extraction correctly
+    stays unavailable until both a release exists and a caller resolves this
+    field from it.
     """
 
     api_key: str | None = None
     base_url: str | None = None
     model: str | None = None
     orchestrator_base_url: str | None = None
+    orchestrator_model: str | None = None
 
 
 @runtime_checkable
@@ -148,7 +160,13 @@ class LlmGroundedExtractor:
     they differ only in which OpenAI-compatible endpoint the request is routed
     to. When ``routed_via_orchestrator`` is set the request targets the
     contextual-orchestrator gateway resolved into the context; otherwise it hits
-    the tenant's provider directly.
+    the tenant's provider directly. This class has no provider/model/pool
+    selection authority of its own in either mode — direct-provider mode
+    forwards ``context.model`` (the caller's own configuration) verbatim,
+    orchestrator mode forwards ``context.orchestrator_model`` (a contextual-
+    orchestrator released consumer contract's resolved value, once one
+    exists) verbatim, and the two fields are never substituted for each
+    other.
     """
 
     name = LLM_EXTRACTOR_NAME
@@ -167,14 +185,19 @@ class LlmGroundedExtractor:
         return context.base_url
 
     def _resolve_model(self, context: KgExtractorContext) -> str | None:
-        # Orchestrator-routed requests must name the fixed virtual pool id,
-        # never the direct-provider model the context otherwise carries: the
-        # orchestrator gateway resolves ``ORCHESTRATOR_POOL_MODEL`` itself to
-        # a zero-cost/ZDR route, and forwarding a literal provider model id
-        # instead would ask it to proxy that specific model directly,
-        # bypassing the governed pool selection entirely.
+        # Neither mode picks a model on the caller's behalf, and the two modes
+        # deliberately read different fields: context.model is the caller's
+        # direct-provider setting and must never be forwarded to the
+        # orchestrator gateway as a substitute model/pool id (that would be
+        # the exact bypass ADR-0005 Revision 7 closes -- see
+        # email_import_service.py, which sets context.model to
+        # settings.OPENAI_MODEL unconditionally, regardless of selector).
+        # context.orchestrator_model is the contextual-orchestrator
+        # consumer-contract value instead; no caller populates it today
+        # because no contract has been released, so this correctly resolves
+        # to None and orchestrator-routed extraction fails closed.
         if self.routed_via_orchestrator:
-            return ORCHESTRATOR_POOL_MODEL
+            return context.orchestrator_model
         return context.model
 
     async def extract(
@@ -188,14 +211,15 @@ class LlmGroundedExtractor:
         base_url = self._resolve_base_url(context)
         model = self._resolve_model(context)
         if not model or not model.strip():
-            # Only reachable in direct-provider mode: orchestrator mode's
-            # _resolve_model always returns the fixed ORCHESTRATOR_POOL_MODEL,
-            # never context.model, so an unset, blank, or whitespace-only
-            # context.model must not gate orchestrator-routed requests --
-            # only the direct-provider model setting they'd otherwise
-            # silently send as an invalid model id to the provider (and
-            # only fall back after a network round-trip fails) or fall
-            # back to keyword extraction for.
+            # Applies uniformly to both modes: an unset, blank, or
+            # whitespace-only model must fail closed rather than be sent as
+            # an invalid model id (only discovered after a network
+            # round-trip) or silently substituted with a hardcoded value.
+            # For orchestrator mode specifically, this is presently *always*
+            # the outcome -- contextual-orchestrator has no released
+            # consumer contract yet (0 GitHub Releases as of ADR-0005
+            # Revision 7), so context.orchestrator_model is never populated,
+            # and this extractor has no authority to invent a value for it.
             raise ExtractorUnavailableError("LLM provider credentials are not resolved")
         return await extract_project_semantics_llm(
             segments,
