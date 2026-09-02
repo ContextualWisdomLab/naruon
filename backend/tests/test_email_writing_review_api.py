@@ -155,6 +155,7 @@ def test_review_api_passes_authorized_scope_and_returns_advisory_status(
         ("email_unavailable", 404),
         ("review_owner_scope_unavailable", 403),
         ("review_evidence_unavailable", 503),
+        ("review_timeout", 503),
         ("provider_unavailable", 503),
     ],
 )
@@ -171,6 +172,19 @@ def test_review_api_maps_redacted_service_failures_without_raw_exception_text(
     assert response.status_code == expected_status
     assert response.json() == {"error_code": error_code}
     assert "Traceback" not in response.text
+
+
+def test_review_api_masks_unknown_service_error_codes(
+    client: TestClient,
+    review_service: _ReviewService,
+) -> None:
+    review_service.error_code = "database_password=not-for-browser"
+
+    response = client.post(_ROUTE, json=_request_payload())
+
+    assert response.status_code == 503
+    assert response.json() == {"error_code": "review_unavailable"}
+    assert "not-for-browser" not in response.text
 
 
 def test_review_api_fails_closed_when_runtime_is_not_assembled() -> None:
@@ -211,6 +225,19 @@ def test_review_api_rejects_invalid_transport_before_service_call(
 
     assert response.status_code == 422
     assert review_service.calls == []
+
+
+def test_review_api_documents_bounded_error_responses() -> None:
+    application = FastAPI()
+    application.include_router(router)
+
+    operation = application.openapi()["paths"][_ROUTE]["post"]
+
+    for status_code in ("403", "404", "503"):
+        schema = operation["responses"][status_code]["content"]["application/json"][
+            "schema"
+        ]
+        assert schema["$ref"].endswith("/EmailWritingReviewErrorResponse")
 
 
 def test_production_application_registers_the_review_route() -> None:
