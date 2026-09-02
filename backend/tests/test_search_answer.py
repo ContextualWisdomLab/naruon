@@ -1,9 +1,65 @@
 """Tests for the grounded-answer endpoint and RAG citation enforcement."""
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import services.rag_service as rag_service
+
+
+@pytest.mark.asyncio
+async def test_call_llm_sends_openai_json_schema_response_format():
+    """`_call_llm` must request OpenAI structured output for the answer shape.
+
+    The openai SDK's `.beta.chat.completions.parse()` helper turns a Pydantic
+    `response_format=` model into the standard OpenAI
+    `{"type": "json_schema", "json_schema": {...}}` request envelope, so
+    asserting the kwarg here is asserting the wire format.
+    """
+    mock_client = MagicMock()
+    mock_client.close = AsyncMock()
+    mock_response = MagicMock()
+    mock_message = MagicMock()
+    mock_message.parsed = rag_service.GroundedAnswerPayload(
+        answer="grounded", cited_email_ids=[1]
+    )
+    mock_response.choices = [MagicMock(message=mock_message)]
+    mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
+
+    with patch("services.rag_service.AsyncOpenAI", return_value=mock_client):
+        result = await rag_service._call_llm(
+            api_key="k",
+            base_url=None,
+            model="gpt-test",
+            question="q",
+            emails_json="{}",
+        )
+
+    assert result.answer == "grounded"
+    call_kwargs = mock_client.beta.chat.completions.parse.call_args.kwargs
+    assert call_kwargs["response_format"] is rag_service.GroundedAnswerPayload
+    assert call_kwargs["model"] == "gpt-test"
+
+
+@pytest.mark.asyncio
+async def test_call_llm_raises_on_unparsable_response():
+    """A schema-violating completion must fail closed, not return corrupted data."""
+    mock_client = MagicMock()
+    mock_client.close = AsyncMock()
+    mock_response = MagicMock()
+    mock_message = MagicMock()
+    mock_message.parsed = None
+    mock_response.choices = [MagicMock(message=mock_message)]
+    mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
+
+    with patch("services.rag_service.AsyncOpenAI", return_value=mock_client):
+        with pytest.raises(RuntimeError, match="unparsable payload"):
+            await rag_service._call_llm(
+                api_key="k",
+                base_url=None,
+                model="gpt-test",
+                question="q",
+                emails_json="{}",
+            )
 
 
 def _context(email_id: int, content: str = "body") -> dict:

@@ -3,7 +3,7 @@
 import types
 
 import pytest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import services.email_import_service as import_service
 import services.project_graph.extractor_registry as extractor_registry
@@ -177,6 +177,62 @@ async def test_empty_segments_short_circuit_without_llm_call(monkeypatch):
 
     call.assert_not_awaited()
     assert result.objects == ()
+
+
+@pytest.mark.asyncio
+async def test_call_llm_sends_openai_json_schema_response_format():
+    """`_call_llm` must request OpenAI structured output for the extraction shape.
+
+    The openai SDK's `.beta.chat.completions.parse()` helper turns a Pydantic
+    `response_format=` model into the standard OpenAI
+    `{"type": "json_schema", "json_schema": {...}}` request envelope, so
+    asserting the kwarg here is asserting the wire format.
+    """
+    mock_client = Mock()
+    mock_client.close = AsyncMock()
+    mock_response = Mock()
+    mock_message = Mock()
+    mock_message.parsed = llm_extractor.ExtractionPayload(objects=[])
+    mock_response.choices = [Mock(message=mock_message)]
+    mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
+
+    with patch(
+        "services.project_graph.llm_extractor.AsyncOpenAI", return_value=mock_client
+    ):
+        result = await llm_extractor._call_llm(
+            api_key="key",
+            base_url=None,
+            model="gpt-test",
+            segments_json="{}",
+        )
+
+    assert result.objects == []
+    call_kwargs = mock_client.beta.chat.completions.parse.call_args.kwargs
+    assert call_kwargs["response_format"] is llm_extractor.ExtractionPayload
+    assert call_kwargs["model"] == "gpt-test"
+
+
+@pytest.mark.asyncio
+async def test_call_llm_raises_on_unparsable_response():
+    """A schema-violating completion must fail closed, not return corrupted data."""
+    mock_client = Mock()
+    mock_client.close = AsyncMock()
+    mock_response = Mock()
+    mock_message = Mock()
+    mock_message.parsed = None
+    mock_response.choices = [Mock(message=mock_message)]
+    mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
+
+    with patch(
+        "services.project_graph.llm_extractor.AsyncOpenAI", return_value=mock_client
+    ):
+        with pytest.raises(RuntimeError, match="unparsable payload"):
+            await llm_extractor._call_llm(
+                api_key="key",
+                base_url=None,
+                model="gpt-test",
+                segments_json="{}",
+            )
 
 
 def _object(

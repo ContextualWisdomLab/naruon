@@ -276,6 +276,32 @@ async def test_extract_action_items_and_summary_success(mock_openai):
         mock_openai.beta.chat.completions.parse.call_args.kwargs["model"]
         == settings.OPENAI_MODEL
     )
+    # OpenAI structured outputs: the openai SDK's `.parse()` helper converts the
+    # Pydantic `response_format=ExtractionResult` kwarg into the standard
+    # `{"type": "json_schema", "json_schema": {"name", "strict", "schema"}}`
+    # envelope before it ever reaches the wire, so passing the model class here
+    # *is* sending the correct OpenAI structured-output request shape.
+    assert (
+        mock_openai.beta.chat.completions.parse.call_args.kwargs["response_format"]
+        is ExtractionResult
+    )
+
+
+@pytest.mark.asyncio
+async def test_extract_action_items_and_summary_raises_on_unparsable_response(
+    mock_openai,
+):
+    """A schema-violating/empty completion must fail closed, not pass through."""
+    mock_response = MagicMock()
+    mock_message = MagicMock()
+    mock_message.parsed = None
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+    mock_response.choices = [mock_choice]
+    mock_openai.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
+
+    with pytest.raises(RuntimeError, match="Failed to parse LLM response"):
+        await extract_action_items_and_summary("Test email", "test-key")
 
 
 @pytest.mark.asyncio
