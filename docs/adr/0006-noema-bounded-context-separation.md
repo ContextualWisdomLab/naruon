@@ -53,6 +53,37 @@ The naruon#1486/#1384 code-sharing analysis, and the `#1437`/`#1438` force-push/
 lesson below, remain valid observations and are not being retracted — only the "therefore, keep them
 permanently separate" conclusion is.
 
+### Update (same day): the follow-up design has landed
+
+The "follow-up work" referenced above is no longer an open promise — it is
+`ContextualWisdomLab/noema`'s **ADR-0012**
+(`docs/adr/0012-shared-noema-core-package.md`, currently `Proposed` in
+[`noema#536`](https://github.com/ContextualWisdomLab/noema/pull/536)). It
+records the actual shared-runtime design: three candidates evaluated
+(shared-package, shared-service, contract-only), shared-package chosen on
+evidence, and its scope kept deliberately minimal — a `noema-core` package
+holding only the pydantic-ai `Agent`-construction wiring
+(`AsyncOpenAI`→`OpenAIChatModel`→`OpenAIProvider`→`Agent(...)`) plus a shared
+`NOEMA_PERSONA` identity fragment, extracted from `noema`'s `reviewer/`
+first (self-consumption only, zero behavior change). It does **not** move
+verdict schema, gating, tool/deps machinery, tenant isolation, or credential
+policy into any shared kernel — this repository's `noema_agent.py` keeps its
+own tools, `NoemaAgentDeps`, and `resolve_runtime_llm_provider()` exactly as
+they are.
+
+Naruon's own adoption (importing `noema-core`, replacing
+`noema_agent.py:473-497`'s inline `AsyncOpenAI`/`OpenAIChatModel`/
+`OpenAIProvider`/`Agent(...)` construction with it) is that ADR's explicit
+**PR #2**, sequenced *after* `noema#536` merges and *after* this repository's
+own `naruon#1486`/`#1384` merge-order conflict (both editing `noema_agent.py`
+and colliding `docs/adr/0005-*.md`, per the original investigation below) is
+resolved — not something this ADR or `noema#536` does on naruon's behalf.
+ADR-0012 also flags, as an open risk for the owner, that naruon is not yet
+`contextual-orchestrator`-gateway-routed (`#1384` is still stalled), so an
+orchestrator-client piece is deliberately *not* part of `noema-core` v1 —
+only the Agent-construction wiring naruon and `noema`'s `reviewer/` already
+both build today.
+
 ---
 
 ## Original text (2026-09-02, superseded above)
@@ -192,7 +223,10 @@ chat.
   `contextual-orchestrator` as the shared LLM-orchestration layer underneath
   it (per `docs/product-goal-directive.md` §8-9), with `.github`'s diff-review
   logic and naruon's multi-tool agent logic as two callers of that shared
-  core rather than either being rewritten to imitate the other.
+  core rather than either being rewritten to imitate the other. **This is no
+  longer unscheduled**: see "Update (same day): the follow-up design has
+  landed" above — `ContextualWisdomLab/noema` ADR-0012 / `noema#536` is that
+  design, and naruon's adoption of it is that ADR's explicit PR #2.
 - `naruon#1486` and `naruon#1384` both independently add a `docs/adr/0005-*.md`
   file; whichever merges second must renumber against whatever is on
   `develop` at that time, and against this ADR's `0006`. This collision risk
