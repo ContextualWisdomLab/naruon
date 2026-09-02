@@ -98,7 +98,7 @@ type RelationshipState = {
 };
 
 type ResultFilter = "all" | "thread" | "single";
-type CaptureStatus = "idle" | "loading" | "success" | "error";
+type CaptureStatus = "idle" | "loading" | "success" | "error" | "unavailable";
 type DetailTab = "context" | "source" | "assist";
 
 const resultFilters: { key: ResultFilter; label: string }[] = [
@@ -212,25 +212,33 @@ function SenderDagPanel({
         {canCapture ? (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs">
-              원본 메일의 sender/thread 근거로 관계와 다음 액션을 캡처합니다.
+              원본 메일의 sender/thread 출처를 확인한 뒤, 검증된 관계 분류 근거가 있을 때만 관계를 저장합니다.
             </p>
             <button
               type="button"
               onClick={onCapture}
-              disabled={captureStatus === "loading"}
+              disabled={captureStatus === "loading" || captureStatus === "unavailable"}
               aria-busy={captureStatus === "loading"}
-              className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-wait disabled:opacity-60 sm:w-auto inline-flex items-center justify-center"
+              className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto inline-flex items-center justify-center"
             >
               {captureStatus === "loading" && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
               )}
-              {captureStatus === "loading" ? "캡처 중" : "발신자 관계 캡처"}
+              {captureStatus === "loading"
+                ? "캡처 중"
+                : captureStatus === "unavailable"
+                  ? "분류 근거 없음"
+                  : "검증된 관계 캡처"}
             </button>
           </div>
         ) : null}
-        {captureStatus === "error" ? (
-          <p className="mt-2 text-xs font-bold text-destructive">
-            발신자 관계 캡처에 실패했습니다.
+        {captureStatus === "unavailable" ? (
+          <p role="status" className="mt-2 text-xs font-bold text-muted-foreground">
+            검증된 관계 분류 근거가 없어 저장하지 않았습니다.
+          </p>
+        ) : captureStatus === "error" ? (
+          <p role="alert" className="mt-2 text-xs font-bold text-destructive">
+            관계 분류 근거를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.
           </p>
         ) : null}
       </div>
@@ -588,10 +596,14 @@ export function SearchLayout() {
           source_backlink_present: Boolean(actionResult.source_message_id),
         });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        const status =
+          typeof error === "object" && error !== null && "status" in error
+            ? (error as { status?: number }).status
+            : undefined;
         setCaptureState({
           sourceKey: actionSourceKey,
-          status: "error",
+          status: status === 503 ? "unavailable" : "error",
         });
       });
   };
@@ -819,7 +831,7 @@ export function SearchLayout() {
                     <button
                       type="button"
                       onClick={captureSenderRelationship}
-                      disabled={!canCaptureRelationship || captureStatus === "loading"}
+                      disabled={!canCaptureRelationship || captureStatus === "loading" || captureStatus === "unavailable"}
                       aria-busy={captureStatus === "loading"}
                       className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                     >
@@ -828,7 +840,11 @@ export function SearchLayout() {
                       ) : (
                         <Network className="size-4" aria-hidden="true" />
                       )}
-                      {captureStatus === "loading" ? "관계 캡처 중" : "관계 캡처"}
+                      {captureStatus === "loading"
+                        ? "관계 캡처 중"
+                        : captureStatus === "unavailable"
+                          ? "분류 근거 없음"
+                          : "검증된 관계 캡처"}
                     </button>
                   </div>
 
@@ -911,7 +927,7 @@ export function SearchLayout() {
                                     : "관계 원본 없음"}
                             </p>
                             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                              관계가 없으면 원본 메시지 기준 캡처를 실행해 판단 근거를 생성합니다.
+                              관계가 없으면 원본 메시지를 기준으로 검증된 분류 근거가 있는지 확인합니다. 근거가 없으면 관계를 저장하지 않습니다.
                             </p>
                           </div>
                         </div>
