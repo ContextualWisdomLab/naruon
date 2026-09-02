@@ -147,6 +147,24 @@ that is the point to re-evaluate a dedicated library against this policy.
   a PR whose stated purpose is a calendar-conflict-check tool. Recorded here
   rather than silently worked around; the fix belongs in its own dedicated PR.
 
+## Research grounding
+
+The content-graph follow-up is grounded in Edge et al.'s GraphRAG work, which
+separates graph-based indexing from later graph-guided answer construction and
+reports benefits for query-focused summarization over large private corpora.
+That supports preserving the same document topology when content enters the
+index through reparse as when it enters through initial import; this ADR does
+not claim that Naruon implements the paper's entity extraction or community
+summarization pipeline.
+
+- Darren Edge, Ha Trinh, Newman Cheng, Joshua Bradley, Alex Chao, Apurva Mody,
+  Steven Truitt, and Jonathan Larson. 2024. “From Local to Global: A Graph RAG
+  Approach to Query-Focused Summarization.” arXiv:2404.16130.
+  https://arxiv.org/abs/2404.16130
+
+No paper PDF is copied into this repository: the stable source citation is
+linked instead, avoiding an unsupported redistribution assumption.
+
 ## Revisions
 
 Two real gaps were found and fixed after initial review, both narrowing rather
@@ -342,6 +360,89 @@ than reversing the original decision:
   actually-enforced invariant" for every `workspace_id`-scoped table are
   narrowed by this reversal to: the claim is *present and well-formed*, not
   that it's provably derived from or consistent with `organization_id`.
+
+- **Attachment reparse never indexed a successfully re-recognized
+  attachment's content into the content graph, unlike the initial import
+  path — flagged as informational by Devin Review on this PR ("confirm this
+  is intended"), confirmed real but out of scope for this PR, and closed
+  here as the tracked follow-up.**
+  `services/email_import_service.py::_append_email_content_graph` already
+  builds a `ContentNodeRecord`/`ContentSegmentRecord` graph for an
+  attachment that parses cleanly on first import, but
+  `attachment_reparse_worker.py::apply_reparsed_result` only ever updated
+  the `Attachment` row's own columns — a previously-quarantined attachment
+  that later reparses to `"parsed"` stayed invisible to content-graph-backed
+  search/AI-hub features even after successful recognition, despite
+  `AttachmentParseResult` carrying the same `parse_content` field the import
+  path indexes. Fixed by calling a new
+  `_append_reparsed_attachment_content_graph` from `apply_reparsed_result`
+  whenever the reparse result lands on `"parsed"`. It reuses the same
+  `services.content_graph.parse_content` helper the import path already
+  calls, plus a newly shared `content_graph_source_record_uid` (moved out of
+  `email_import_service.py`, where it was a private function, into
+  `services/content_graph/parser.py` as a public helper both call sites
+  import) — not a second indexing path, the same one with a second caller.
+  Since a persisted attachment's original position among its email's
+  siblings is not reliably reproducible after import, the reparse path keys
+  `source_record_uid` on the attachment's permanent `attachment_uid` alone
+  instead of the import path's message-id + list-position convention, and
+  sets the new records' `email_id` directly from the attachment's
+  already-loaded `email_id` column rather than through a transient `Email`
+  relationship append (the attachment here is already a persisted row,
+  unlike at import time, so there is no transient parent to defer FK
+  resolution through). New tests:
+  `test_reparse_that_lands_on_parsed_indexes_the_content_graph`,
+  `test_reparse_that_lands_on_parsed_with_blank_content_does_not_index_content_graph`,
+  `test_reparse_that_does_not_land_on_parsed_does_not_index_content_graph`.
+  Verification: full backend suite 1908 passed / 40 skipped, ruff clean.
+
+- **CodeRabbit's full review of the content-graph-indexing follow-up above
+  found two real correctness gaps in it, both fixed here.** (1) The reparse
+  embedding refresh regenerated `attachment.embedding` from
+  `attachment.content` rather than the resolved parse source text.
+  `apply_reparsed_result` only overwrites `attachment.content` when
+  `result.content` (a markup-stripped *display* string) is non-empty; a
+  `"parsed"` result whose display text strips to empty while its raw
+  `result.parse_content` does not (e.g. an attachment that is only markup,
+  no visible text nodes) left `attachment.content` at its stale,
+  still-base64-encoded retained value, so the embedding was generated from
+  base64 noise instead of the actual reparsed text — while the content graph
+  indexed the correct text, since `_append_reparsed_attachment_content_graph`
+  already resolved `result.parse_content or result.content` itself, matching
+  `email_import_service._extract_and_generate_embeddings`'s identical
+  resolution at import time. `process_reparse_pending_attachment` now
+  returns a `ReparseOutcome(parse_status, embedding_source_text)` instead of
+  a bare status string, carrying that same resolved text through to the
+  embedding refresh explicitly rather than re-deriving it (unreliably) from
+  the attachment row. New test:
+  `test_reparse_that_lands_on_parsed_with_markup_only_content_still_embeds_parse_content`.
+  (2) `0011_email_read_state.py`'s `downgrade()` dropped `emails.is_read`
+  unconditionally whenever the column and legacy `emails` table were both
+  present — including a same-named `is_read` column that predated this
+  revision entirely, which this revision's own `NOT EXISTS`-guarded
+  `upgrade()` therefore never touched, destroying that unrelated column and
+  its data on downgrade. `upgrade()` now tags the column it creates with a
+  `COMMENT ON COLUMN` provenance marker
+  (`_IS_READ_PROVENANCE_MARKER = "0011_email_read_state:added"`);
+  `downgrade()` drops the column only when that exact marker is present via
+  `col_description`, so it drops what this revision added and nothing else.
+  New real-Postgres test:
+  `test_legacy_email_read_state_downgrade_preserves_a_preexisting_column`
+  (pre-seeds a legacy `emails.is_read` column with data, runs upgrade then
+  downgrade, asserts both the column and its data survive). Also renamed
+  `email_import_service._generate_source_embedding` to the public
+  `generate_source_embedding` (CodeRabbit nitpick): it is a third
+  cross-module dependency `attachment_reparse_worker.py` imports, alongside
+  `content_graph_source_record_uid` and `append_knowledge_graph_edges`, so
+  the module boundary stays consistent when every cross-module helper is
+  public. Verification: full backend suite 1911 passed / 43 skipped
+  (`DATABASE_URL` unset, matching CI), and every test touched by this fix
+  passes in isolation against a real PostgreSQL 16 + pgvector database; ruff
+  clean. Running the full suite against that same real database in one
+  process reproduces one pre-existing, already-reported cross-file
+  test-ordering failure (`test_0001_initial_upgrade_succeeds_against_a_
+  fresh_database` drops and recreates `email_records` mid-suite) —
+  orthogonal to this fix, not caused by it.
 
 ## References (APA 7th)
 

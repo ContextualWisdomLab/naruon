@@ -736,6 +736,195 @@ def test_merge_revision_reconciles_email_read_state_branch():
     assert "op.drop_column(" not in revision_text
 
 
+def test_legacy_email_read_state_branch_defers_check_to_sql(monkeypatch):
+    revision_path = (
+        BACKEND_ROOT / "alembic" / "versions" / "0011_email_read_state.py"
+    )
+    revision_text = revision_path.read_text()
+
+    # The legacy-table check must be evaluated in SQL (at apply time), not in
+    # Python at generation time: offline SQL generation (`alembic upgrade
+    # --sql`, a real flag `scripts/migrate_db.py` exposes) has no live
+    # connection to introspect with, and the one generated script is meant to
+    # later be applied against whichever database a DBA chooses -- a
+    # Python-side sa.inspect(op.get_bind()) check can only ever bake in one
+    # fixed answer, which is wrong for whichever kind of target it didn't
+    # assume (silently skips the real column on a legacy target while
+    # `alembic_version` still advances, or crashes outright against a fresh
+    # one). upgrade()/downgrade() themselves must contain no such check --
+    # only op.execute(<static SQL>) calls -- so this can't regress into
+    # either failure mode.
+    assert "def upgrade" in revision_text
+    upgrade_and_after = revision_text.split("def upgrade", 1)[1]
+    assert "sa.inspect(op.get_bind())" not in upgrade_and_after
+    assert "context.is_offline_mode()" not in upgrade_and_after
+
+    module = _load_revision_module("0011_email_read_state.py")
+    # to_regclass('emails'), not information_schema.tables by bare
+    # table_name: the latter ignores search_path and can match an unrelated
+    # same-named table in a different accessible schema than the one the
+    # unqualified ALTER TABLE below actually resolves to. Checked on the
+    # loaded module's own SQL constants, not the raw file text, so this
+    # can't be fooled by a comment mentioning either string for context.
+    assert "DO $$" in module._UPGRADE_SQL
+    assert "DO $$" in module._DOWNGRADE_SQL
+    assert "to_regclass('emails')" in module._UPGRADE_SQL
+    assert "to_regclass('emails')" in module._DOWNGRADE_SQL
+    assert "information_schema.tables" not in module._UPGRADE_SQL
+    assert "information_schema.tables" not in module._DOWNGRADE_SQL
+    assert "ALTER TABLE emails ADD COLUMN is_read" in module._UPGRADE_SQL
+    # CodeRabbit (naruon#1501): downgrade must drop emails.is_read only when
+    # this revision's own upgrade created it, not whenever the column merely
+    # happens to be present -- an unconditional DROP would also destroy a
+    # pre-existing, unrelated is_read column and its data. upgrade() tags the
+    # column it creates with a provenance marker comment; downgrade() checks
+    # that exact marker via col_description before dropping.
+    assert "COMMENT ON COLUMN emails.is_read" in module._UPGRADE_SQL
+    assert module._IS_READ_PROVENANCE_MARKER in module._UPGRADE_SQL
+    assert "col_description" in module._DOWNGRADE_SQL
+    assert module._IS_READ_PROVENANCE_MARKER in module._DOWNGRADE_SQL
+
+    calls = []
+    monkeypatch.setattr(module.op, "execute", lambda sql: calls.append(sql))
+    module.upgrade()
+    module.downgrade()
+    assert len(calls) == 2
+    assert "ADD COLUMN is_read" in calls[0]
+    assert "DROP COLUMN IF EXISTS is_read" in calls[1]
+
+
+def _run_0011_upgrade(sync_conn) -> None:
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    module = _load_revision_module("0011_email_read_state.py")
+    context = MigrationContext.configure(sync_conn, opts={"target_metadata": None})
+    with Operations.context(context):
+        module.upgrade()
+
+
+def _run_0011_downgrade(sync_conn) -> None:
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    module = _load_revision_module("0011_email_read_state.py")
+    context = MigrationContext.configure(sync_conn, opts={"target_metadata": None})
+    with Operations.context(context):
+        module.downgrade()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_legacy_email_read_state_real_postgres_smoke():
+    """Both directions this migration must get right against a real database:
+    a legacy target (still has the ``emails`` table) gets the column added and
+    later removed; a fresh-baseline target (no ``emails`` table at all, the
+    now-common case) is left untouched rather than erroring.
+    """
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        try:
+            async with engine.connect() as probe_conn:
+                await probe_conn.execute(text("SELECT 1"))
+        except (
+            ConnectionRefusedError,
+            OSError,
+            OperationalError,
+            asyncpg.CannotConnectNowError,
+            asyncpg.InvalidAuthorizationSpecificationError,
+            asyncpg.InvalidCatalogNameError,
+            asyncpg.InvalidPasswordError,
+        ):
+            pytest.skip("PostgreSQL smoke path unavailable")
+
+        async with engine.begin() as conn:
+            # Fresh-baseline case first, on a connection with no "emails"
+            # table anywhere in scope: must no-op, not raise.
+            await conn.run_sync(_run_0011_upgrade)
+
+            await conn.execute(
+                text("CREATE TEMP TABLE emails (id serial primary key) ON COMMIT DROP")
+            )
+
+            def _has_is_read(sync_conn):
+                return any(
+                    column["name"] == "is_read"
+                    for column in inspect(sync_conn).get_columns("emails")
+                )
+
+            assert not await conn.run_sync(_has_is_read)
+            await conn.run_sync(_run_0011_upgrade)
+            assert await conn.run_sync(_has_is_read)
+
+            await conn.run_sync(_run_0011_downgrade)
+            assert not await conn.run_sync(_has_is_read)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_legacy_email_read_state_downgrade_preserves_a_preexisting_column():
+    """downgrade() must not drop an ``emails.is_read`` column (or its data)
+    that predates this revision -- CodeRabbit flagged the earlier
+    unconditional ``DROP COLUMN IF EXISTS`` on naruon#1501: since upgrade()'s
+    ``NOT EXISTS`` guard already leaves a pre-existing column untouched
+    (never adding its own provenance marker to it), downgrade() must
+    symmetrically leave it alone too, distinguishing "this revision added it"
+    from "it merely happens to be present" via the marker set on the
+    ``COMMENT ON COLUMN`` this revision's own upgrade() applies.
+    """
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        try:
+            async with engine.connect() as probe_conn:
+                await probe_conn.execute(text("SELECT 1"))
+        except (
+            ConnectionRefusedError,
+            OSError,
+            OperationalError,
+            asyncpg.CannotConnectNowError,
+            asyncpg.InvalidAuthorizationSpecificationError,
+            asyncpg.InvalidCatalogNameError,
+            asyncpg.InvalidPasswordError,
+        ):
+            pytest.skip("PostgreSQL smoke path unavailable")
+
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TEMP TABLE emails (id serial primary key, "
+                    "is_read boolean NOT NULL DEFAULT false) ON COMMIT DROP"
+                )
+            )
+            await conn.execute(text("INSERT INTO emails (is_read) VALUES (false)"))
+
+            def _has_is_read(sync_conn):
+                return any(
+                    column["name"] == "is_read"
+                    for column in inspect(sync_conn).get_columns("emails")
+                )
+
+            # upgrade() must be a no-op here: the column already exists, so
+            # its NOT EXISTS guard skips both the ADD COLUMN and the marker
+            # COMMENT -- this pre-existing column is never tagged as "added
+            # by this revision".
+            assert await conn.run_sync(_has_is_read)
+            await conn.run_sync(_run_0011_upgrade)
+            assert await conn.run_sync(_has_is_read)
+
+            # downgrade() must leave the untagged, pre-existing column (and
+            # its data) alone rather than dropping it.
+            await conn.run_sync(_run_0011_downgrade)
+            assert await conn.run_sync(_has_is_read)
+            preserved_value = (
+                await conn.execute(text("SELECT is_read FROM emails"))
+            ).scalar_one()
+            assert preserved_value is False
+    finally:
+        await engine.dispose()
+
+
 def test_merge_revision_reconciles_newsdom_provider_branch():
     revision_path = (
         BACKEND_ROOT / "alembic" / "versions" / "0015_merge_newsdom_email_heads.py"

@@ -18,17 +18,25 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from dataclasses import dataclass
 
 from sqlalchemy import bindparam, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
-from db.models import Attachment
+from db.models import Attachment, ContentNodeRecord, ContentSegmentRecord
 from db.session import AsyncSessionLocal, engine
 from services.attachment_parser import (
     AttachmentParseResult,
     decode_quarantined_attachment_payload,
     parse_email_attachment,
 )
+from services.content_graph import content_graph_source_record_uid, parse_content
+from services.email_import_service import (
+    EmailImportEmbeddingProvider,
+    append_knowledge_graph_edges,
+    generate_source_embedding,
+)
+from services.llm_provider_selection import resolve_runtime_llm_provider
 
 logger = logging.getLogger(__name__)
 _sysrand = random.SystemRandom()
@@ -83,6 +91,13 @@ def apply_reparsed_result(*, attachment: Attachment, result: AttachmentParseResu
     ``content=""`` by design -- storing that would destroy the only retained
     copy of the original quarantined bytes, permanently losing a file that
     later parser support could otherwise still recover.
+
+    A reparse that lands on ``"parsed"`` also indexes the recognized content
+    into the content graph, mirroring what the initial import path already
+    does for an attachment that parses cleanly on first import
+    (``email_import_service._append_email_content_graph``) -- without this, a
+    previously-quarantined attachment stayed invisible to content-graph-backed
+    search/AI-hub features even after successful reparse recognition.
     """
     if result.content:
         attachment.content = result.content
@@ -90,16 +105,150 @@ def apply_reparsed_result(*, attachment: Attachment, result: AttachmentParseResu
     attachment.parser_key = result.parser_key
     attachment.parse_status = result.parse_status
     attachment.parse_error_code = result.parse_error_code
+    if result.parse_status == "parsed":
+        _append_reparsed_attachment_content_graph(attachment=attachment, result=result)
 
 
-def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
+def _append_reparsed_attachment_content_graph(
+    *, attachment: Attachment, result: AttachmentParseResult
+) -> None:
+    """Build content graph records for a successfully reparsed attachment.
+
+    Reuses the same ``parse_content`` helper and ``source_record_uid``
+    identity convention (``content_graph_source_record_uid``) the import path
+    uses in ``email_import_service._append_email_content_graph`` -- this is
+    not a second indexing path, just a second call site for the same one.
+
+    It differs only in how the new records attach to their parents. The
+    import path appends to a transient ``Email``/``Attachment`` pair (neither
+    has a real id yet) and lets SQLAlchemy's relationship cascade resolve
+    ``email_id``/``attachment_id`` at flush time. Here ``attachment`` is
+    already a persisted row with a stable, permanent ``attachment_uid``, so
+    ``source_record_uid`` is keyed on that uid alone (not the message-id +
+    list-position convention the import path uses, since a persisted
+    attachment's position among its email's siblings is not reliably
+    reproducible) and ``email_id`` is taken directly from the attachment's
+    already-loaded ``email_id`` column instead of an ``Email`` relationship
+    append.
+    """
+    parse_source_content = result.parse_content or result.content
+    if not parse_source_content.strip():
+        return
+
+    parse_result = parse_content(
+        source_kind="attachment",
+        source_record_uid=content_graph_source_record_uid(
+            "attachment", attachment.attachment_uid
+        ),
+        content=parse_source_content,
+        content_type=result.parse_content_type or result.content_type or "text/plain",
+        display_name=attachment.filename,
+    )
+
+    node_records_by_uid: dict[str, ContentNodeRecord] = {}
+    for parsed_node in parse_result.nodes:
+        node_record = ContentNodeRecord(
+            email_id=attachment.email_id,
+            content_node_uid=parsed_node.content_node_uid,
+            source_kind=parsed_node.source_kind,
+            source_record_uid=parsed_node.source_record_uid,
+            parent_node_uid=parsed_node.parent_node_uid,
+            node_kind=parsed_node.node_kind,
+            node_path=parsed_node.node_path,
+            ordinal_index=parsed_node.ordinal_index,
+            display_label=parsed_node.display_label,
+            safe_text_content=parsed_node.safe_text_content,
+            content_hash=parsed_node.content_hash,
+        )
+        attachment.content_nodes.append(node_record)
+        node_records_by_uid[parsed_node.content_node_uid] = node_record
+
+    segment_records: list[ContentSegmentRecord] = []
+    for parsed_segment in parse_result.segments:
+        segment_record = ContentSegmentRecord(
+            email_id=attachment.email_id,
+            content_segment_uid=parsed_segment.content_segment_uid,
+            source_kind=parsed_segment.source_kind,
+            source_record_uid=parsed_segment.source_record_uid,
+            segment_kind=parsed_segment.segment_kind,
+            segment_path=parsed_segment.segment_path,
+            ordinal_index=parsed_segment.ordinal_index,
+            heading_path=parsed_segment.heading_path,
+            safe_text_content=parsed_segment.safe_text_content,
+            content_hash=parsed_segment.content_hash,
+            word_count=parsed_segment.word_count,
+        )
+        node_records_by_uid[parsed_segment.content_node_uid].segments.append(
+            segment_record
+        )
+        attachment.content_segments.append(segment_record)
+        segment_records.append(segment_record)
+
+    append_knowledge_graph_edges(
+        nodes=list(node_records_by_uid.values()),
+        segments=segment_records,
+        attachment_obj=attachment,
+    )
+
+
+async def _refresh_reparsed_attachment_embedding(
+    session: AsyncSession, attachment: Attachment, *, source_text: str
+) -> None:
+    """Regenerate the attachment vector through its tenant's active provider.
+
+    ``source_text`` must be the caller's already-resolved embedding source
+    (see ``ReparseOutcome.embedding_source_text``), not read from
+    ``attachment.content``: ``apply_reparsed_result`` only overwrites that
+    column when ``result.content`` is non-empty (see its docstring), so a
+    "parsed" result whose *display* text strips to empty while its *parse*
+    text does not (e.g. markup-only content) would leave ``attachment.content``
+    stale and this would otherwise embed unrelated, already-superseded bytes.
+    """
+    provider = await resolve_runtime_llm_provider(
+        session,
+        user_id=attachment.email.user_id,
+        organization_id=attachment.email.organization_id,
+    )
+    embedding_provider = (
+        EmailImportEmbeddingProvider(
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+            embedding_model=provider.embedding_model,
+        )
+        if provider is not None
+        else None
+    )
+    attachment.embedding = await generate_source_embedding(
+        source_text,
+        embedding_provider=embedding_provider,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ReparseOutcome:
+    """Result of one ``process_reparse_pending_attachment`` call.
+
+    ``embedding_source_text`` mirrors the exact source-text resolution
+    ``_append_reparsed_attachment_content_graph`` uses (``parse_content``
+    preferred over ``content``) and the import path's
+    ``email_import_service._extract_and_generate_embeddings`` already uses
+    for the same reason -- it is meaningful only when ``parse_status ==
+    "parsed"``, but is always populated for a uniform return shape.
+    """
+
+    parse_status: str
+    embedding_source_text: str
+
+
+def process_reparse_pending_attachment(*, attachment: Attachment) -> ReparseOutcome:
     """Re-evaluate one ``reparse_pending`` attachment in place.
 
-    Returns the resulting ``parse_status`` on a successful re-evaluation
-    (``"parsed"``, the quarantine status again, or any other terminal status
-    ``parse_email_attachment`` can return), or ``RESULT_DECODE_FAILED`` when
-    the retained payload itself is not valid base64 -- moved to a dedicated
-    failure status so the sweep does not retry it forever.
+    Returns a :class:`ReparseOutcome` carrying the resulting ``parse_status``
+    on a successful re-evaluation (``"parsed"``, the quarantine status again,
+    or any other terminal status ``parse_email_attachment`` can return), or
+    ``RESULT_DECODE_FAILED`` when the retained payload itself is not valid
+    base64 -- moved to a dedicated failure status so the sweep does not retry
+    it forever.
     """
     try:
         raw_content = decode_quarantined_attachment_payload(attachment.content)
@@ -111,7 +260,9 @@ def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
             getattr(attachment, "id", "?"),
             exc,
         )
-        return RESULT_DECODE_FAILED
+        return ReparseOutcome(
+            parse_status=RESULT_DECODE_FAILED, embedding_source_text=""
+        )
 
     result = parse_email_attachment(
         filename=attachment.filename,
@@ -119,7 +270,10 @@ def process_reparse_pending_attachment(*, attachment: Attachment) -> str:
         raw_content=raw_content,
     )
     apply_reparsed_result(attachment=attachment, result=result)
-    return result.parse_status
+    return ReparseOutcome(
+        parse_status=result.parse_status,
+        embedding_source_text=result.parse_content or result.content,
+    )
 
 
 def _engine_uses_postgresql() -> bool:
@@ -323,12 +477,31 @@ class AttachmentReparseWorker:
                 attachment = await session.get(Attachment, attachment_id)
                 if attachment is None:
                     continue
-                result = process_reparse_pending_attachment(attachment=attachment)
+                # ``apply_reparsed_result`` appends graph rows through these
+                # relationships.  Load them explicitly at the async boundary;
+                # implicit lazy IO from the synchronous parser path raises
+                # MissingGreenlet for persisted attachments.
+                await session.refresh(
+                    attachment,
+                    attribute_names=[
+                        "email",
+                        "content_nodes",
+                        "content_segments",
+                        "knowledge_graph_edges",
+                    ],
+                )
+                outcome = process_reparse_pending_attachment(attachment=attachment)
+                if outcome.parse_status == "parsed":
+                    await _refresh_reparsed_attachment_embedding(
+                        session,
+                        attachment,
+                        source_text=outcome.embedding_source_text,
+                    )
                 await session.commit()
                 logger.info(
                     "Attachment %s reparse result: %s",
                     attachment_id,
-                    result,
+                    outcome.parse_status,
                 )
             except Exception:
                 await session.rollback()

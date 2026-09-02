@@ -1,7 +1,8 @@
-"""Unit tests for the attachment reparse worker's per-item processing.
+"""Tests for attachment reparse classification and persisted worker processing.
 
-Fully mocked: in-memory ``Attachment`` instances and a fake async session --
-no database, no network. Covers the fail-closed outcome (invalid retained
+Most tests use in-memory ``Attachment`` instances and a fake async session;
+one PostgreSQL smoke test covers the real async persistence boundary. Covers
+the fail-closed outcome (invalid retained
 payload -> a dedicated terminal status) alongside the two "successful
 re-evaluation" outcomes: a previously-quarantined attachment whose
 disagreement is now recognized as legitimate (escapes quarantine), and one
@@ -10,12 +11,28 @@ whose disagreement is still genuine (stays quarantined).
 
 import asyncio
 import base64
+import datetime
 from types import SimpleNamespace
+import uuid
 
+import asyncpg
 import pytest
+from sqlalchemy import delete, select, text
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import selectinload, undefer
 
-from db.models import Attachment
+from core.config import settings
+from db.models import (
+    Attachment,
+    ContentNodeRecord,
+    ContentSegmentRecord,
+    Email,
+    KnowledgeGraphEdgeRecord,
+)
+from db.session import AsyncSessionLocal
 import services.attachment_reparse_worker as attachment_reparse_worker_module
+import services.email_import_service as email_import_service_module
+from services.content_graph import content_graph_source_record_uid
 
 AttachmentReparseWorker = attachment_reparse_worker_module.AttachmentReparseWorker
 ATTACHMENT_REPARSE_PENDING_STATUS = (
@@ -32,15 +49,153 @@ process_reparse_pending_attachment = (
 _QUARANTINED_STATUS = "content_type_mismatch_quarantined"
 
 
+@pytest.mark.asyncio
+@pytest.mark.postgres
+async def test_persisted_reparse_commits_topology_and_provider_embedding(monkeypatch):
+    """Exercise the real AsyncSession relationship and pgvector persistence path."""
+    if not settings.DATABASE_URL:
+        pytest.skip("PostgreSQL smoke path unavailable")
+    try:
+        async with AsyncSessionLocal() as probe_session:
+            await probe_session.execute(text("SELECT 1"))
+    except (
+        ConnectionRefusedError,
+        OSError,
+        OperationalError,
+        asyncpg.CannotConnectNowError,
+        asyncpg.InvalidAuthorizationSpecificationError,
+        asyncpg.InvalidCatalogNameError,
+        asyncpg.InvalidPasswordError,
+    ):
+        pytest.skip("PostgreSQL smoke path unavailable")
+
+    suffix = uuid.uuid4().hex
+    long_content = ("alpha " * 400) + "\n\n" + ("beta " * 400)
+    provider_batches: list[list[str]] = []
+
+    async def runtime_provider(*_args, **_kwargs):
+        return SimpleNamespace(
+            api_key="test-provider-key",
+            base_url="https://provider.example/v1",
+            embedding_model="embedding-test-model",
+        )
+
+    async def generated_embeddings(texts, *, embedding_provider, batch_context=None):
+        assert embedding_provider.base_url == "https://provider.example/v1"
+        assert embedding_provider.embedding_model == "embedding-test-model"
+        assert batch_context is None
+        start = sum(len(batch) for batch in provider_batches)
+        provider_batches.append(list(texts))
+        return [
+            [float(start + index + 1)] * 1536 for index in range(len(texts))
+        ]
+
+    monkeypatch.setattr(
+        attachment_reparse_worker_module,
+        "resolve_runtime_llm_provider",
+        runtime_provider,
+    )
+    monkeypatch.setattr(
+        email_import_service_module,
+        "_generate_import_embeddings",
+        generated_embeddings,
+    )
+
+    async with AsyncSessionLocal() as session:
+        email = Email(
+            user_id=f"reparse-user-{suffix}",
+            organization_id=f"reparse-org-{suffix}",
+            workspace_id=f"reparse-workspace-{suffix}",
+            message_id=f"reparse-message-{suffix}",
+            sender="sender@example.com",
+            recipients="recipient@example.com",
+            subject="Reparse persistence smoke",
+            date=datetime.datetime.now(datetime.timezone.utc),
+            body="body",
+            embedding=[0.0] * 1536,
+        )
+        attachment = _reparse_pending_attachment(
+            content_type="text/plain",
+            payload=long_content.encode(),
+            attachment_uid=f"attachment_{suffix}",
+        )
+        email.attachments.append(attachment)
+        session.add(email)
+        await session.commit()
+        attachment_id = attachment.id
+        email_id = email.id
+
+        worker = AttachmentReparseWorker(batch_limit=1)
+        worker._attachment_cursor = attachment.id - 1
+        try:
+            await worker._sweep_attachments(session)
+            persisted = (
+                await session.execute(
+                    select(Attachment)
+                    .where(Attachment.attachment_uid == attachment.attachment_uid)
+                    .options(
+                        selectinload(Attachment.content_nodes),
+                        selectinload(Attachment.content_segments),
+                        selectinload(Attachment.knowledge_graph_edges),
+                        undefer(Attachment.embedding),
+                    )
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one()
+            assert persisted.parse_status == "parsed"
+            assert len(persisted.content_nodes) == 3
+            assert len(persisted.content_segments) == 2
+            assert {edge.edge_kind for edge in persisted.knowledge_graph_edges} == {
+                "node_contains_node",
+                "node_has_segment",
+                "segment_next",
+            }
+            chunk_count = sum(len(batch) for batch in provider_batches)
+            assert chunk_count > 1
+            assert all(
+                0 < len(batch) <= email_import_service_module.MAX_EMBEDDING_CHUNKS_PER_WINDOW
+                for batch in provider_batches
+            )
+            expected_value = sum(range(1, chunk_count + 1)) / chunk_count
+            expected_embedding = [expected_value] * 1536
+            assert list(persisted.embedding) == expected_embedding
+        finally:
+            await session.rollback()
+            await session.execute(
+                delete(KnowledgeGraphEdgeRecord).where(
+                    KnowledgeGraphEdgeRecord.attachment_id == attachment_id
+                )
+            )
+            await session.execute(
+                delete(ContentSegmentRecord).where(
+                    ContentSegmentRecord.attachment_id == attachment_id
+                )
+            )
+            await session.execute(
+                delete(ContentNodeRecord).where(
+                    ContentNodeRecord.attachment_id == attachment_id
+                )
+            )
+            await session.execute(
+                delete(Attachment).where(Attachment.id == attachment_id)
+            )
+            await session.execute(delete(Email).where(Email.id == email_id))
+            await session.commit()
+
+
 def _reparse_pending_attachment(
     *,
     content_type: str,
     payload: bytes,
     filename: str = "attachment.bin",
     attachment_id: int | None = None,
+    email_id: int | None = None,
+    attachment_uid: str = "attachment_test-uid",
 ) -> Attachment:
     return Attachment(
         id=attachment_id,
+        email_id=email_id,
+        attachment_uid=attachment_uid,
         filename=filename,
         content_type=content_type,
         content=base64.b64encode(payload).decode("ascii"),
@@ -66,9 +221,9 @@ def test_reparse_escapes_a_now_recognized_false_positive():
         filename="report.docx",
     )
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == "unsupported_content_type"
+    assert outcome.parse_status == "unsupported_content_type"
     assert attachment.parse_status == "unsupported_content_type"
     assert attachment.parse_error_code == "unsupported_content_type"
     assert attachment.parse_status != _QUARANTINED_STATUS
@@ -92,9 +247,9 @@ def test_reparse_to_unsupported_content_type_preserves_retained_bytes():
     )
     retained_content = attachment.content
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == "unsupported_content_type"
+    assert outcome.parse_status == "unsupported_content_type"
     assert attachment.content == retained_content
     assert base64.b64decode(attachment.content) == payload
 
@@ -108,9 +263,9 @@ def test_reparse_of_a_genuine_mismatch_returns_to_quarantine():
         filename="invoice.pdf",
     )
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == _QUARANTINED_STATUS
+    assert outcome.parse_status == _QUARANTINED_STATUS
     assert attachment.parse_status == _QUARANTINED_STATUS
     assert attachment.parse_error_code == _QUARANTINED_STATUS
     assert attachment.parse_content_type == "image/png"
@@ -122,9 +277,9 @@ def test_reparse_rejects_an_invalid_retained_payload():
     )
     attachment.content = "not@@base64!!"
 
-    result = process_reparse_pending_attachment(attachment=attachment)
+    outcome = process_reparse_pending_attachment(attachment=attachment)
 
-    assert result == RESULT_DECODE_FAILED
+    assert outcome.parse_status == RESULT_DECODE_FAILED
     assert attachment.parse_status == ATTACHMENT_REPARSE_PAYLOAD_INVALID_STATUS
     assert attachment.parse_error_code == ATTACHMENT_REPARSE_PAYLOAD_INVALID_STATUS
 
@@ -140,6 +295,122 @@ def test_reparse_preserves_filename_and_declared_content_type():
 
     assert attachment.filename == "invoice.pdf"
     assert attachment.content_type == "application/pdf"
+
+
+def test_reparse_that_lands_on_parsed_indexes_the_content_graph():
+    # Unlike the OOXML/PDF/PNG scenarios above, plain text is never
+    # magic-byte-sniffed (see attachment_parser._MAGIC_BYTE_SIGNATURES), so
+    # this reparse lands on the ordinary "parsed" status -- exactly the
+    # outcome email_import_service._append_email_content_graph already
+    # builds a content graph record for on a cleanly-first-parsed attachment.
+    # apply_reparsed_result must do the same on this path, or a reparsed
+    # attachment stays invisible to content-graph-backed search/AI-hub
+    # features even after successful recognition.
+    attachment = _reparse_pending_attachment(
+        content_type="text/plain",
+        payload=b"Meeting notes\n\nDiscuss the roadmap.",
+        filename="notes.txt",
+        email_id=42,
+        attachment_uid="attachment_notes-uid",
+    )
+
+    outcome = process_reparse_pending_attachment(attachment=attachment)
+
+    assert outcome.parse_status == "parsed"
+    assert outcome.embedding_source_text == "Meeting notes\n\nDiscuss the roadmap."
+    assert attachment.parse_status == "parsed"
+    assert [node.node_kind for node in attachment.content_nodes] == [
+        "document",
+        "paragraph",
+        "paragraph",
+    ]
+    assert [
+        segment.safe_text_content for segment in attachment.content_segments
+    ] == ["Meeting notes", "Discuss the roadmap."]
+    assert {node.source_kind for node in attachment.content_nodes} == {"attachment"}
+    assert {segment.source_kind for segment in attachment.content_segments} == {
+        "attachment"
+    }
+    expected_source_record_uid = content_graph_source_record_uid(
+        "attachment", "attachment_notes-uid"
+    )
+    assert {node.source_record_uid for node in attachment.content_nodes} == {
+        expected_source_record_uid
+    }
+    assert {node.email_id for node in attachment.content_nodes} == {42}
+    assert {segment.email_id for segment in attachment.content_segments} == {42}
+    # Every segment is linked back to its parent node's own segments list too
+    # (the same node<->segment wiring _append_parse_result_records builds).
+    assert sum(len(node.segments) for node in attachment.content_nodes) == 2
+    assert {edge.edge_kind for edge in attachment.knowledge_graph_edges} == {
+        "node_contains_node",
+        "node_has_segment",
+        "segment_next",
+    }
+
+
+def test_reparse_that_lands_on_parsed_with_blank_content_does_not_index_content_graph():
+    # A reparse can land on "parsed" with nothing displayable (an empty or
+    # whitespace-only retained payload) -- parse_email_attachment does not
+    # special-case that. Indexing an empty content graph record for it would
+    # be pure noise, so this must be skipped exactly like
+    # _append_email_content_graph skips a blank attachment on import.
+    attachment = _reparse_pending_attachment(
+        content_type="text/plain",
+        payload=b"   ",
+        filename="blank.txt",
+        email_id=42,
+    )
+
+    outcome = process_reparse_pending_attachment(attachment=attachment)
+
+    assert outcome.parse_status == "parsed"
+    assert attachment.content_nodes == []
+    assert attachment.content_segments == []
+
+
+def test_reparse_that_lands_on_parsed_with_markup_only_content_still_embeds_parse_content():
+    # A "parsed" result whose *display* text (content) strips down to empty
+    # while its *parse* text (parse_content) does not -- e.g. an attachment
+    # that is only markup with no visible text nodes. apply_reparsed_result's
+    # `if result.content:` guard (see its docstring) then leaves
+    # attachment.content untouched, so the embedding source must come from
+    # ReparseOutcome.embedding_source_text (parse_content preferred over
+    # content, matching _append_reparsed_attachment_content_graph and
+    # email_import_service._extract_and_generate_embeddings), never from
+    # attachment.content directly -- CodeRabbit flagged this exact mismatch
+    # on naruon#1501.
+    attachment = _reparse_pending_attachment(
+        content_type="text/plain",
+        payload=b"<div></div>",
+        filename="markup-only.txt",
+        email_id=42,
+    )
+
+    outcome = process_reparse_pending_attachment(attachment=attachment)
+
+    assert outcome.parse_status == "parsed"
+    # result.content ("") is falsy, so apply_reparsed_result's `if
+    # result.content:` guard leaves attachment.content at its retained,
+    # still-base64-encoded original value -- exactly why the embedding
+    # source cannot come from attachment.content.
+    assert attachment.content == base64.b64encode(b"<div></div>").decode("ascii")
+    assert outcome.embedding_source_text == "<div></div>"
+
+
+def test_reparse_that_does_not_land_on_parsed_does_not_index_content_graph():
+    attachment = _reparse_pending_attachment(
+        content_type="application/pdf",
+        payload=b"\x89PNG\r\n\x1a\n" + b"real png bytes",
+        filename="invoice.pdf",
+        email_id=42,
+    )
+
+    outcome = process_reparse_pending_attachment(attachment=attachment)
+
+    assert outcome.parse_status == _QUARANTINED_STATUS
+    assert attachment.content_nodes == []
+    assert attachment.content_segments == []
 
 
 class _RowsResult:
@@ -174,6 +445,7 @@ class _SequenceSession:
         self.statements = []
         self.commit_count = 0
         self.rollback_count = 0
+        self.refresh_calls = []
 
     async def execute(self, statement):
         self.statements.append(statement)
@@ -181,6 +453,9 @@ class _SequenceSession:
 
     async def get(self, _model, attachment_id):
         return self._by_id.get(attachment_id)
+
+    async def refresh(self, attachment, *, attribute_names):
+        self.refresh_calls.append((attachment.id, tuple(attribute_names)))
 
     async def commit(self):
         self.commit_count += 1
@@ -321,6 +596,10 @@ async def test_sweep_advances_the_cursor_across_batches():
     assert second.parse_status == _QUARANTINED_STATUS
     assert session.commit_count == 2
     assert session.rollback_count == 0
+    assert session.refresh_calls == [
+        (1, ("email", "content_nodes", "content_segments", "knowledge_graph_edges")),
+        (2, ("email", "content_nodes", "content_segments", "knowledge_graph_edges")),
+    ]
 
 
 @pytest.mark.asyncio
@@ -460,6 +739,14 @@ class _LiveReparsePendingSession:
 
     async def get(self, _model, attachment_id):
         return self._table.get(attachment_id)
+
+    async def refresh(self, _attachment, *, attribute_names):
+        # No-op: the fake table already holds the live, fully-populated
+        # instances (see _SequenceSession.refresh for the sibling fake that
+        # records calls instead -- this one has no need to, since nothing
+        # here asserts on refresh() itself, only on the resulting sweep
+        # behavior across many sweeps).
+        del attribute_names
 
     async def commit(self):
         self.commit_count += 1
