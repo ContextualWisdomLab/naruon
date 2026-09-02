@@ -1,10 +1,10 @@
 # ADR-0005: Pin orchestrator-routed KG extraction to the `orchestrator/free` pool
 
-**Status:** Proposed — Revisions 7 and 8 (below) reverse and then extend this ADR's
+**Status:** Proposed — Revisions 7 through 9 (below) reverse and then extend this ADR's
 original point-1/2 mechanism. The title and file identity are kept stable for
 cross-reference (naruon `extractor_registry.py`, `ContextualWisdomLab/contextual-orchestrator`
 ADR-0007, and `ContextualWisdomLab/.github`'s gap-baseline all cite this path); read
-Revisions 7 and 8 before treating anything in Context/Decision points 1–3 as current
+Revisions 7 through 9 before treating anything in Context/Decision points 1–3 as current
 behavior. This PR (naruon#1525) has not merged, so this ADR was never more than a
 same-PR proposal — "Accepted" here before Revision 7 was itself a premature status
 marking, corrected per `ContextualWisdomLab/.github` `docs/product-goal-directive.md`'s
@@ -270,6 +270,47 @@ since KG extraction runs over real customer email content, not code.
      behavior change (fewer graph nodes persisted in the currently-
      unavailable-LLM case) but not a crash, data-loss, or import-failure
      risk.
+9. **Revision 9 (2026-09-02, Devin Review on the Revision 8 commit) — closes
+   two gaps Revision 8 left in the same masquerading problem.**
+   - An unrecognized `PROJECT_GRAPH_EXTRACTOR` value (a typo, most
+     plausibly) still silently resolved to keyword extraction —
+     `KgExtractorRegistry.resolve_chain()` treated "not a registered
+     selector" the same as "explicit keyword request." That is the same
+     masquerading Revision 8 closes for `llm`/`orchestrator`, left open for
+     misconfiguration. `resolve_chain()` now raises
+     `ExtractorUnavailableError` for a selector it does not recognize,
+     distinct from the pre-existing `KeyError` raised when the registry
+     itself lacks a keyword extractor at all. Only an explicit
+     `SELECTOR_KEYWORD` resolves to the deterministic extractor now.
+   - `requires_llm_capability` lived only on `LlmGroundedExtractor`, not on
+     the `KgExtractor` Protocol — a future LLM-backed plugin author could
+     easily not discover the attribute and silently keep the dangerous
+     fallback. Added it to the Protocol with no default. **A follow-up
+     Devin Review on this exact fix then caught that the enforcement was
+     still incomplete**: `resolve_chain()` read the attribute via
+     `getattr(primary, "requires_llm_capability", False)`, so a
+     non-conforming extractor still silently inherited the unsafe default
+     despite the Protocol declaring it required. Changed to direct
+     attribute access (`primary.requires_llm_capability`): a plugin that
+     omits the attribute now raises `AttributeError` at resolution time
+     instead of silently keeping the fallback. This is the same "explicit
+     over implicit, no getattr default that reintroduces the exact risk
+     just closed" pattern this ADR's own Revision 8 alternatives section
+     already applied to `context.orchestrator_model` vs. a settings-field
+     default — the lesson generalizes to attribute lookups, not just
+     configuration fields.
+   - Also corrected two now-stale documentation surfaces Devin flagged in
+     the same round: `core/config.py`'s `PROJECT_GRAPH_EXTRACTOR` /
+     `PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` field comments still described
+     "every selection falls back to keyword" and "unset routing fails
+     closed to the deterministic keyword extractor" — both rewritten to
+     match Revision 8's actual behavior.
+   - Tests: `test_unknown_selector_raises_instead_of_defaulting_to_keyword`,
+     `test_llm_backed_custom_extractor_also_gets_no_fallback` (a
+     third-party plugin gets the same guarantee as the built-ins), and
+     `test_non_conforming_plugin_fails_loudly_instead_of_inheriting_unsafe_default`
+     (proves the `getattr` gap is closed) in
+     `backend/tests/test_project_graph_extractor_registry.py`.
 
 ## Alternatives rejected
 

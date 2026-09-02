@@ -98,14 +98,23 @@ class ExtractorUnavailableError(RuntimeError):
 
     Raised for a precondition the extractor cannot satisfy — missing LLM
     credentials, an unconfigured orchestrator endpoint, a policy-disabled
-    mode. What :func:`run_extraction` does with it depends on the resolved
-    chain: for :data:`SELECTOR_KEYWORD` or an unrecognized selector, the
-    chain has no other member, so this (or any exception) simply propagates;
-    for a plugin extractor that does not set ``requires_llm_capability``,
-    the runner advances to the deterministic fallback instead. Neither
-    :data:`SELECTOR_LLM` nor :data:`SELECTOR_ORCHESTRATOR` falls back —
-    both set ``requires_llm_capability = True`` specifically so this error
-    (or any other) propagates rather than being silently absorbed.
+    mode — and also, from :meth:`KgExtractorRegistry.resolve_chain` itself,
+    for an unrecognized ``PROJECT_GRAPH_EXTRACTOR`` selector (a
+    misconfiguration, not an implicit request for keyword mode). What
+    :func:`run_extraction` does with an instance of this raised by an
+    extractor's ``extract`` depends on the resolved chain: for
+    :data:`SELECTOR_KEYWORD`, the chain has no other member, so this (or any
+    exception) simply propagates; for a plugin extractor whose
+    ``requires_llm_capability`` is ``False``, the runner advances to the
+    deterministic fallback instead. Neither :data:`SELECTOR_LLM` nor
+    :data:`SELECTOR_ORCHESTRATOR` falls back — both set
+    ``requires_llm_capability = True`` specifically so this error (or any
+    other) propagates rather than being silently absorbed. A plugin that
+    omits ``requires_llm_capability`` entirely does not get a default
+    either way: :meth:`KgExtractorRegistry.resolve_chain` reads the
+    attribute directly and raises :class:`AttributeError`, not this
+    exception, so a non-conforming extractor fails loudly rather than
+    silently inheriting the fallback-permitting behavior.
     """
 
 
@@ -293,7 +302,12 @@ class KgExtractorRegistry:
     or failed request propagates instead of silently degrading. An
     unrecognized selector is treated as a misconfiguration, not an implicit
     request for ``keyword`` mode: only an explicit :data:`SELECTOR_KEYWORD`
-    resolves to the deterministic extractor.
+    resolves to the deterministic extractor. A registered extractor that
+    omits ``requires_llm_capability`` (despite the :class:`KgExtractor`
+    Protocol declaring it with no default) is *not* treated as
+    ``False`` -- resolution raises :class:`AttributeError` instead, so a
+    non-conforming plugin fails loudly rather than silently keeping the
+    fallback its author may not have intended.
     """
 
     def __init__(self) -> None:
@@ -329,7 +343,15 @@ class KgExtractorRegistry:
         primary = self._by_selector[selector]
         if primary is fallback:
             return [fallback]
-        if getattr(primary, "requires_llm_capability", False):
+        # Direct attribute access, not getattr(..., False): the Protocol
+        # declares requires_llm_capability with no default specifically so
+        # a non-conforming extractor (a dynamically loaded plugin that
+        # forgot to declare it, most plausibly) fails loudly with
+        # AttributeError at resolution time instead of silently inheriting
+        # the unsafe "keeps the keyword fallback" default (Devin Review,
+        # naruon#1525, exact-head 5857c7f follow-up: a getattr default here
+        # made the "no default" contract purely aspirational).
+        if primary.requires_llm_capability:
             return [primary]
         return [primary, fallback]
 

@@ -85,6 +85,25 @@
   검증: `backend/tests/test_project_graph_extractor_registry.py`,
   `test_project_graph_llm_extractor.py`, `test_email_import_service.py`
   전체 통과, 전체 backend suite 1810 passed/32 skipped, `ruff check` clean.
+- **정정 3 (같은 PR #1525, Devin Review가 위 커밋을 다시 검토):** 정정 2가 남긴
+  두 문제를 마저 닫았습니다. (1) 인식하지 못하는 `PROJECT_GRAPH_EXTRACTOR`
+  값(오타 등)이 여전히 keyword로 조용히 대체됐습니다 — `resolve_chain()`이
+  이제 등록되지 않은 selector에 `ExtractorUnavailableError`를 던집니다(레지스트리
+  자체에 keyword extractor가 없을 때의 기존 `KeyError`와는 구분됩니다). (2)
+  `requires_llm_capability`가 `LlmGroundedExtractor`에만 있고 `KgExtractor`
+  Protocol에는 없어 향후 LLM 기반 plugin 작성자가 이 속성을 놓칠 수 있었습니다.
+  Protocol에 기본값 없이 추가했는데, **같은 커밋을 다시 검토한 Devin Review가
+  이 enforcement 자체가 미완성이라고 지적**했습니다 — `resolve_chain()`이
+  `getattr(primary, "requires_llm_capability", False)`로 읽고 있어 속성을
+  누락한 plugin이 여전히 안전하지 않은 기본값을 조용히 물려받았습니다. 직접
+  속성 접근(`primary.requires_llm_capability`)으로 바꿔 규격을 지키지 않는
+  extractor는 이제 resolve 시점에 `AttributeError`로 즉시 실패합니다. 같은
+  라운드에서 Devin이 지적한 오래된 문서(`core/config.py`의
+  `PROJECT_GRAPH_EXTRACTOR`/`PROJECT_GRAPH_ORCHESTRATOR_BASE_URL` 주석이
+  여전히 "모든 선택이 keyword로 fallback"이라고 서술)도 함께 고쳤습니다.
+  `docs/adr/0005-kg-extraction-orchestrator-free-pool-pin.md`에 Revision 9로
+  기록했습니다. 검증: 전체 backend suite 1811 passed/32 skipped, `ruff check`
+  clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 

@@ -453,3 +453,31 @@ def test_llm_backed_custom_extractor_also_gets_no_fallback():
     assert isinstance(registry.get("custom_llm"), KgExtractor)
     chain = registry.resolve_chain("custom_llm")
     assert [e.name for e in chain] == ["custom_llm_project_graph"]
+
+
+def test_non_conforming_plugin_fails_loudly_instead_of_inheriting_unsafe_default():
+    """requires_llm_capability's "no default" is enforced, not aspirational.
+
+    A prior revision read this attribute via getattr(primary,
+    "requires_llm_capability", False) -- so a dynamically loaded plugin that
+    forgot to declare it (despite the Protocol requiring it) would silently
+    inherit the unsafe "keep the keyword fallback" default, exactly the
+    masquerading risk this whole chain of fixes closes for everything else
+    (Devin Review, naruon#1525, exact-head 5857c7f follow-up). resolve_chain
+    now reads the attribute directly, so a non-conforming extractor fails
+    with AttributeError at resolution time instead.
+    """
+
+    class _NonConformingExtractor:
+        name = "forgot_the_contract"
+        version = "1.0.0"
+        routed_via_orchestrator = False
+        # requires_llm_capability deliberately omitted.
+
+        async def extract(self, segments, *, context):  # pragma: no cover - shape only
+            raise NotImplementedError
+
+    registry = build_default_registry()
+    registry.register("non_conforming", _NonConformingExtractor())
+    with pytest.raises(AttributeError, match="requires_llm_capability"):
+        registry.resolve_chain("non_conforming")
