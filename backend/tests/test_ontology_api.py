@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
-from datetime import datetime, timezone
-from main import app
+
 from db.models import Email, SenderRelationship
 from db.session import get_db
+from main import app
 
 pytestmark = pytest.mark.usefixtures("dev_auth_dependency_overrides")
 
@@ -60,9 +62,6 @@ class MockSession:
     async def execute(self, stmt):
         self.statements.append(stmt)
         compiled = str(stmt)
-        # SQLAlchemy select compiled string won't contain vendor@example.com literally.
-        # But we can check if it's the GET request by looking at the statement.
-        # A safer mock for the test is to just return empty list if we detect a specific query.
         if "sender_email =" in compiled:
             return MockResult([])
         return MockResult(self.items)
@@ -148,7 +147,10 @@ def test_get_relationships(client: TestClient):
     assert items[0]["source_message_id"] == "<q2@example.com>"
     assert items[0]["source_thread_id"] == "thread-q2"
     assert items[0]["relationship_type"] == "manager"
-    assert items[0]["next_action"] == "classify_sender"
+    assert items[0]["next_action"] == "unavailable"
+    assert items[0]["action_reason"] == (
+        "No validated relationship action policy is configured."
+    )
 
 
 def test_get_relationships_filters_by_source_and_owner_scope():
@@ -197,7 +199,8 @@ def test_create_relationship(client: TestClient):
     assert data["source_message_id"] == "<vendor@example.com>"
     assert data["source_thread_id"] == "thread-vendor"
     assert data["relationship_type"] == "vendor"
-    assert data["next_action"] == "prepare_response_draft"
+    assert data["next_action"] == "unavailable"
+    assert data["action_reason"] == "No validated relationship action policy is configured."
 
 
 def test_update_relationship_preserves_existing_parent_when_omitted():
@@ -223,9 +226,10 @@ def test_update_relationship_preserves_existing_parent_when_omitted():
     assert data["sender_email"] == "vendor@example.com"
     assert data["parent_sender_email"] == "buyer@example.com"
     assert data["relationship_type"] == "customer"
+    assert data["next_action"] == "unavailable"
 
 
-def test_capture_relationship_from_source_email_uses_signed_owner_scope():
+def test_capture_relationship_from_source_fails_closed_without_validated_classifier():
     session = CaptureRelationshipSession()
 
     async def override_capture_get_db():
@@ -239,6 +243,7 @@ def test_capture_relationship_from_source_email_uses_signed_owner_scope():
                 "X-User-Id": "owner@example.com",
                 "X-Organization-Id": "org-acme",
             },
+            raise_server_exceptions=False,
         ) as test_client:
             resp = test_client.post(
                 "/api/ontology/relationships/capture-source",
@@ -247,21 +252,15 @@ def test_capture_relationship_from_source_email_uses_signed_owner_scope():
     finally:
         app.dependency_overrides.clear()
 
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["sender_email"] == "teammate@example.com"
-    assert data["source_message_id"] == "<q2@example.com>"
-    assert data["source_thread_id"] == "thread-q2"
-    assert data["relationship_type"] == "Colleague"
-    assert data["next_action"] == "track_reply_and_tasks"
-    assert session.committed is True
-    assert len(session.added) == 1
-    added = session.added[0]
-    assert isinstance(added, SenderRelationship)
-    assert added.user_id == "owner@example.com"
-    assert added.organization_id == "org-acme"
-    assert added.source_message_id == "<q2@example.com>"
-    assert added.source_thread_id == "thread-q2"
+    assert resp.status_code == 503, resp.text
+    assert resp.json() == {
+        "detail": (
+            "Automatic sender classification is unavailable until validated "
+            "relationship evidence is configured."
+        )
+    }
+    assert session.committed is False
+    assert session.added == []
     query_text = str(session.statements[0]).lower()
     assert "email_records.user_id" in query_text
     assert "email_records.organization_id" in query_text

@@ -1,55 +1,56 @@
-from services.ontology_service import ontology_service
+import pytest
+
+from services.ontology_service import (
+    RelationshipClassificationUnavailable,
+    ontology_service,
+)
 
 
-def test_analyze_sender_relationship():
-    result1 = ontology_service.analyze_sender_relationship(
-        "seongho@company.com", "newsletter@marketing.com", "Please unsubscribe here"
-    )
-    assert result1["type"] == "Newsletter"
-    assert result1["confidence"] == 0.9
-    assert result1["next_action"] == "summarize_then_archive"
-
-    result2 = ontology_service.analyze_sender_relationship(
-        "seongho@company.com", "boss@company.com", "Hello"
-    )
-    assert result2["type"] == "Colleague"
-    assert result2["confidence"] == 0.85
-    assert result2["next_action"] == "track_reply_and_tasks"
-
-    result3 = ontology_service.analyze_sender_relationship(
-        "seongho@company.com", "Boss@Company.com", "Hello"
-    )
-    assert result3["type"] == "Colleague"
-    assert result3["confidence"] == 0.85
-    assert result3["next_action"] == "track_reply_and_tasks"
+@pytest.mark.parametrize(
+    ("user_email", "sender_email", "content"),
+    [
+        (
+            "seongho@company.com",
+            "newsletter@marketing.com",
+            "Please unsubscribe here",
+        ),
+        ("seongho@company.com", "boss@company.com", "Hello"),
+        ("seongho@company.com", "Boss@Company.com", "Hello"),
+    ],
+)
+def test_analyze_sender_relationship_abstains_without_validated_model(
+    user_email: str,
+    sender_email: str,
+    content: str,
+) -> None:
+    with pytest.raises(RelationshipClassificationUnavailable):
+        ontology_service.analyze_sender_relationship(user_email, sender_email, content)
 
 
-def test_analyze_sender_relationship_uses_business_signals():
-    vendor = ontology_service.analyze_sender_relationship(
-        "buyer@company.com",
-        "billing@saas.example",
-        "Invoice and payment receipt for your subscription renewal.",
-    )
-    assert vendor["type"] == "Vendor"
-    assert vendor["confidence"] >= 0.78
-    assert vendor["next_action"] == "prepare_response_draft"
-    assert "vendor_commercial_terms" in vendor["signals"]
-
-    client = ontology_service.analyze_sender_relationship(
-        "seller@company.com",
-        "lead@customer.example",
-        "Please review the proposal, pricing, and statement of work.",
-    )
-    assert client["type"] == "Client"
-    assert client["confidence"] >= 0.82
-    assert client["next_action"] == "prepare_response_draft"
-    assert "client_commercial_terms" in client["signals"]
-
-    business_domain = ontology_service.analyze_sender_relationship(
-        "operator@company.com",
-        "ops@vendor.example",
-        "Can you confirm the implementation window?",
-    )
-    assert business_domain["type"] == "Vendor"
-    assert business_domain["confidence"] == 0.62
-    assert business_domain["signals"] == ["external_business_domain"]
+@pytest.mark.parametrize(
+    ("user_email", "sender_email", "content"),
+    [
+        (
+            "buyer@company.com",
+            "billing@saas.example",
+            "Invoice and payment receipt for your subscription renewal.",
+        ),
+        (
+            "seller@company.com",
+            "lead@customer.example",
+            "Please review the proposal, pricing, and statement of work.",
+        ),
+        (
+            "operator@company.com",
+            "ops@vendor.example",
+            "Can you confirm the implementation window?",
+        ),
+    ],
+)
+def test_business_terms_and_domains_are_not_relationship_ground_truth(
+    user_email: str,
+    sender_email: str,
+    content: str,
+) -> None:
+    with pytest.raises(RelationshipClassificationUnavailable):
+        ontology_service.analyze_sender_relationship(user_email, sender_email, content)
