@@ -8,9 +8,11 @@ on:
     paths:
       - backend/services/email_writing_judge.py
       - backend/tests/test_email_writing_judge.py
+      - backend/tests/test_email_writing_judge_review_regressions.py
       - backend/tests/test_email_writing_judge_terminal_coverage.py
       - backend/tests/fixtures/email_writing/judge_outputs.json
       - backend/requirements-hashes.txt
+      - scripts/ci/reject_terminal_output.sh
       - .github/workflows/email-writing-judge-tdd.yml
   workflow_dispatch:
 
@@ -41,7 +43,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-hashes.txt
       - name: Install hash-locked application dependencies
-        run: python -m pip install --disable-pip-version-check --require-hashes -r backend/requirements-hashes.txt
+        run: >-
+          bash scripts/ci/reject_terminal_output.sh
+          python -m pip install --disable-pip-version-check --require-hashes
+          -r backend/requirements-hashes.txt
       - name: Install hash-verified coverage tool
         run: |
           set -euo pipefail
@@ -49,40 +54,47 @@ jobs:
           cat >/tmp/coverage-lock.txt <<'EOF'
           coverage==7.15.2 --hash=sha256:eb6bcae8d1a9d305351ecb108232441d11c5cfe9de840a04388ba5d2db8d735c
           EOF
-          python -m pip download \
-            --disable-pip-version-check \
-            --require-hashes \
-            --no-deps \
-            --only-binary=:all: \
-            --platform any \
-            --python-version 3.14 \
-            --implementation py \
-            --abi none \
-            --dest /tmp/coverage-wheel \
-            -r /tmp/coverage-lock.txt
-          python -m pip install --disable-pip-version-check --no-deps \
-            /tmp/coverage-wheel/coverage-7.15.2-py3-none-any.whl
+          bash scripts/ci/reject_terminal_output.sh \
+            python -m pip download \
+              --disable-pip-version-check \
+              --require-hashes \
+              --no-deps \
+              --only-binary=:all: \
+              --platform any \
+              --python-version 3.14 \
+              --implementation py \
+              --abi none \
+              --dest /tmp/coverage-wheel \
+              -r /tmp/coverage-lock.txt
+          bash scripts/ci/reject_terminal_output.sh \
+            python -m pip install --disable-pip-version-check --no-deps \
+              /tmp/coverage-wheel/coverage-7.15.2-py3-none-any.whl
       - name: Run Task 7 independent-Judge tests
         run: |
           cd backend
-          python -m pytest -q \
-            tests/test_email_writing_judge.py \
-            tests/test_email_writing_judge_terminal_coverage.py
+          bash ../scripts/ci/reject_terminal_output.sh \
+            python -m pytest -q \
+              tests/test_email_writing_judge.py \
+              tests/test_email_writing_judge_review_regressions.py \
+              tests/test_email_writing_judge_terminal_coverage.py
       - name: Verify Task 7 statement and branch coverage
         run: |
           cd backend
-          python -m coverage erase
-          python -m coverage run --branch \
-            --include='services/email_writing_judge.py' \
-            -m pytest -q \
-            tests/test_email_writing_judge.py \
-            tests/test_email_writing_judge_terminal_coverage.py
-          python -m coverage report --show-missing --fail-under=100 \
-            services/email_writing_judge.py
+          bash ../scripts/ci/reject_terminal_output.sh python -m coverage erase
+          bash ../scripts/ci/reject_terminal_output.sh \
+            python -m coverage run --branch \
+              --include='services/email_writing_judge.py' \
+              -m pytest -q \
+              tests/test_email_writing_judge.py \
+              tests/test_email_writing_judge_review_regressions.py \
+              tests/test_email_writing_judge_terminal_coverage.py
+          bash ../scripts/ci/reject_terminal_output.sh \
+            python -m coverage report --show-missing --fail-under=100 \
+              services/email_writing_judge.py
       - name: Verify shipped Python docstrings
         run: |
-          cd backend
-          python - <<'PY'
+          set -euo pipefail
+          cat >/tmp/check_task7_docstrings.py <<'PY'
           import ast
           from pathlib import Path
 
@@ -102,16 +114,23 @@ jobs:
               raise SystemExit("Missing shipped docstrings:\n" + "\n".join(missing))
           print(f"Docstring gate passed for {len(paths)} shipped modules")
           PY
+          cd backend
+          bash ../scripts/ci/reject_terminal_output.sh \
+            python /tmp/check_task7_docstrings.py
       - name: Lint Task 7 source and tests
         run: |
           cd backend
-          python -m ruff check \
-            services/email_writing_judge.py \
-            tests/test_email_writing_judge.py \
-            tests/test_email_writing_judge_terminal_coverage.py
+          bash ../scripts/ci/reject_terminal_output.sh \
+            python -m ruff check \
+              services/email_writing_judge.py \
+              tests/test_email_writing_judge.py \
+              tests/test_email_writing_judge_review_regressions.py \
+              tests/test_email_writing_judge_terminal_coverage.py
       - name: Compile Task 7 source and tests
         run: |
-          python -m compileall -q \
-            backend/services/email_writing_judge.py \
-            backend/tests/test_email_writing_judge.py \
-            backend/tests/test_email_writing_judge_terminal_coverage.py
+          bash scripts/ci/reject_terminal_output.sh \
+            python -m compileall -q \
+              backend/services/email_writing_judge.py \
+              backend/tests/test_email_writing_judge.py \
+              backend/tests/test_email_writing_judge_review_regressions.py \
+              backend/tests/test_email_writing_judge_terminal_coverage.py
