@@ -761,8 +761,8 @@ async def hash_generator_handler(params: Dict[str, Any]) -> Dict[str, str]:
 
     encoded = text.encode("utf-8")
     return {
-        "md5": hashlib.md5(encoded, usedforsecurity=False).hexdigest(),
-        "sha1": hashlib.sha1(encoded, usedforsecurity=False).hexdigest(),
+        "md5": hashlib.md5(encoded, usedforsecurity=False).hexdigest(),  # nosec B324
+        "sha1": hashlib.sha1(encoded, usedforsecurity=False).hexdigest(),  # nosec B324
         "sha256": hashlib.sha256(encoded).hexdigest(),
     }
 
