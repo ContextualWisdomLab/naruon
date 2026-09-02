@@ -1,4 +1,39 @@
 ## [Unreleased]
+- **(Devin 리뷰 대응, 🔴 실제 결함, `backend/services/newsdom_worker.py:531-533`) 한 PDF의
+  organization에 provider가 설정되어 있지 않으면 `_sweep_attachments`가 매 pass마다 그
+  행 앞에서 커서를 다시 고정해, 그 배치보다 뒤에 있는 PDF들이 무기한 pending으로
+  남을 수 있었습니다.** 먼저 실제로 재현해 검증: 300건 중 영구히 막힌 행 1건만 있는
+  경우는 (상태 필터가 이미 해결된 행을 자연히 제외하므로) 결국 수렴하지만,
+  batch_limit(50)보다 많은 60건이 연속으로 영구 pending 상태가 되면 매 sweep이 항상
+  같은 첫 50건만 재선택해 나머지 60건이 14 sweep이 지나도 전혀 처리되지 않음을
+  확인했습니다(한 organization이 provider를 설정하기 전에 PDF를 대량으로 import하는
+  경우 등으로 batch_limit을 넘는 연속 pending 행이 실제로 발생할 수 있음). 근본
+  수정: 커서를 "첫 미해결 행 직전"에 고정하는 대신, 커서(`_attachment_cursor`)는
+  본 적 있는 가장 큰 id로 단조 증가만 시키고, 아직 미해결인 행의 id는 별도의
+  영속적인 재시도 집합(`_attachment_retry_ids`)에 담아 커서와 무관하게 매 sweep
+  `id IN (...)` 조건으로 재시도합니다. 두 조건을 단순히 OR로 묶으면(정렬이
+  id 오름차순이라) 재시도 집합이 batch_limit만큼 쌓였을 때 오히려 재시도 행들이
+  매번 전체 슬롯을 차지해 신규 전진(forward) 행을 다시 굶길 수 있어, 두 조건이
+  모두 있을 때는 CASE 버킷으로 forward 행을 항상 retry 행보다 먼저 정렬되도록
+  했습니다(신규 전진이 충분하지 않을 때만 재시도 행이 남은 슬롯을 채움 — 지속적으로
+  포화 상태인 forward 부하 아래서는 재시도 행이 더 오래 기다릴 수 있다는 트레이드오프를
+  의도적으로 받아들였는데, 이는 파이프라인 전체가 멈추는 이전 실패 모드보다 명백히
+  낫습니다). `_sweep_documents`(문자열 키 `document_id`, 사전식 최대값)에도 동일한
+  근본 원인이 있어 동일하게 수정했습니다. `services/attachment_reparse_worker.py`의
+  `_sweep_attachments`도 (재사용 가능한) 동일한 커서-고정 패턴을 상속하고 있어(이전에
+  CodeRabbit이 지적해 도입된 "첫 실패에서 고정" 수정 자체가 이 취약점의 원인이었음),
+  동일한 원인·수정을 적용했습니다. 더 이상 쿼리가 0건을 반환할 때 커서를 `None`으로
+  되돌려 전체를 재스캔하는 방식(계속 새 행이 커서 뒤에 들어오는 한 절대 발동하지
+  않음)에 의존하지 않으므로, 두 워커의 `_load_pending_attachments`/
+  `_load_reparse_pending_attachments`에서 wrap-to-None 분기를 제거했습니다. 검증:
+  RED로 두 워커 모두에서 정확히 이 실패(60건 연속 pending, batch_limit=50, 14
+  sweep 후에도 미수렴)를 먼저 재현한 뒤, 수정 후 동일 테스트가 6~7 sweep 안에
+  수렴함을 확인. 기존 커서-고정 계약을 전제로 작성된 6개 테스트(`test_newsdom_worker.py`
+  5개, `test_attachment_reparse_worker.py` 1개)를 새 계약(커서는 항상 전진, 재시도는
+  별도 집합)에 맞게 재작성했습니다. `PYTHONPATH=. python -m pytest
+  tests/test_newsdom_worker.py tests/test_attachment_reparse_worker.py -q` → 31 +
+  22 passed; 전체 백엔드 스위트 `PYTHONWARNINGS=error DISABLE_BACKGROUND_WORKERS=1
+  python -m pytest -q` → 1911 passed, 39 skipped, ruff clean.
 - **(Devin 리뷰 대응, 🟡 실제 결함 2건) stacked-PR 트리거 수정(`a4e01191`)이 4개 워크플로의
   `pull_request:` 트리거에서 `branches:` 제한을 제거하면서, 그 값(`release/**`, `develop`)을
   리터럴로 assert하던 기존 계약 테스트 2개(`test_app_ci_runs_backend_and_frontend_checks_without_duplicate_release_pushes`,

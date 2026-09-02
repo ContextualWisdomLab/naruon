@@ -17,7 +17,7 @@ import logging
 import random
 from collections.abc import Awaitable, Callable
 
-from sqlalchemy import bindparam, func, select
+from sqlalchemy import bindparam, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -411,6 +411,11 @@ class NewsdomRecognitionWorker:
         self._is_running = False
         self._attachment_cursor: int | None = None
         self._document_cursor: str | None = None
+        # Rows a past sweep saw as still-pending (RESULT_PENDING or a raised
+        # exception). Retried every sweep via an explicit id filter,
+        # independent of the forward cursor below -- see _sweep_attachments.
+        self._attachment_retry_ids: set[int] = set()
+        self._document_retry_ids: set[str] = set()
 
     async def start(self) -> None:
         """Start the recognition loop once."""
@@ -489,30 +494,44 @@ class NewsdomRecognitionWorker:
     async def _sweep_attachments(self, session: AsyncSession) -> None:
         """Process a bounded, starvation-free batch of pending attachments.
 
-        The cursor only advances past a row once it is confirmed resolved:
-        its processing did not raise, AND it did not return
-        ``RESULT_PENDING``. A row whose processing raised, or that came back
-        ``RESULT_PENDING`` (e.g. no active provider configured for its
-        organization yet), keeps its ``pdf_dom_recognition_pending`` status
-        untouched, so if the cursor advanced past it anyway it would never
-        be reselected by ``_load_pending_attachments``'s ``id > cursor``
-        filter until the whole forward queue happens to drain to empty --
-        silent, indefinite starvation of that one row under continuous
-        inbound attachment traffic. Capping the cursor at the first
-        unresolved row (failure or still-pending) keeps that row in range
-        for the next sweep, while later rows in the same batch are still
-        processed normally. Each row is also re-fetched fresh by id rather
-        than reusing the bulk-loaded instance: ``AsyncSession.rollback()``
-        expires every object already loaded in this session, and
-        ``process_pending_attachment`` reads attachment/email attributes
-        synchronously, so a stale, expired instance from an earlier item's
-        failure would raise on that read instead of just isolating the one
-        failure. Mirrors
+        Two independent pieces of state make progress unconditional:
+
+        * ``_attachment_cursor`` is a forward-scan position that only ever
+          advances (to the highest id seen in a batch) -- so rows the
+          worker has never looked at are always reached eventually, no
+          matter how many earlier rows stay stuck.
+        * ``_attachment_retry_ids`` is the set of ids a past sweep saw as
+          still-pending (raised, or returned ``RESULT_PENDING`` -- e.g. no
+          active provider configured for its organization yet). These are
+          retried every sweep via an explicit ``id IN (...)`` filter,
+          independent of the cursor, and dropped from the set once they
+          resolve.
+
+        An earlier version capped the cursor itself at the first unresolved
+        row instead of tracking a separate retry set. That avoided losing
+        track of one stuck row, but pinned the *entire batch window* behind
+        it: once more than ``batch_limit`` consecutive rows were
+        permanently stuck (e.g. one organization bulk-imports a burst of
+        PDFs before ever configuring a provider), the same stuck rows filled
+        every batch forever and nothing past them was ever reached --
+        confirmed by reproduction, not merely suspected (300 rows, one
+        permanently-stuck row: converges; 60 consecutive permanently-stuck
+        rows with batch_limit=50: never converges). Decoupling "retry this
+        stuck row" from "where the forward scan has reached" fixes both
+        shapes of starvation at once. Each row is also re-fetched fresh by
+        id rather than reusing the bulk-loaded instance:
+        ``AsyncSession.rollback()`` expires every object already loaded in
+        this session, and ``process_pending_attachment`` reads
+        attachment/email attributes synchronously, so a stale, expired
+        instance from an earlier item's failure would raise on that read
+        instead of just isolating the one failure. Mirrors
         ``services.attachment_reparse_worker.AttachmentReparseWorker._sweep_attachments``.
         """
         rows = await self._load_pending_attachments(session)
-        first_unresolved_id = None
+        processed_ids: set[int] = set()
+        unresolved_ids: set[int] = set()
         for attachment_id in [attachment.id for attachment in rows]:
+            processed_ids.add(attachment_id)
             try:
                 attachment = await session.get(
                     Attachment,
@@ -529,8 +548,7 @@ class NewsdomRecognitionWorker:
                 )
                 await session.commit()
                 if result == RESULT_PENDING:
-                    if first_unresolved_id is None:
-                        first_unresolved_id = attachment_id
+                    unresolved_ids.add(attachment_id)
                 else:
                     logger.info(
                         "NewsDOM attachment %s recognition result: %s",
@@ -544,24 +562,55 @@ class NewsdomRecognitionWorker:
                     attachment_id,
                     exc_info=True,
                 )
-                if first_unresolved_id is None:
-                    first_unresolved_id = attachment_id
+                unresolved_ids.add(attachment_id)
         if rows:
+            highest_seen = max(attachment.id for attachment in rows)
             self._attachment_cursor = (
-                first_unresolved_id - 1
-                if first_unresolved_id is not None
-                else rows[-1].id
+                highest_seen
+                if self._attachment_cursor is None
+                else max(self._attachment_cursor, highest_seen)
             )
+        self._attachment_retry_ids = (
+            self._attachment_retry_ids - processed_ids
+        ) | unresolved_ids
 
-    def _pending_attachment_statement(self, after_id: int | None):
-        """Build the next deterministic attachment batch query."""
+    def _pending_attachment_statement(
+        self, after_id: int | None, retry_ids: set[int]
+    ):
+        """Build the next deterministic attachment batch query.
+
+        Selects rows past the forward cursor OR still tracked in
+        ``retry_ids``, so a persistently-stuck row keeps getting retried
+        without pinning the forward scan behind it. When both are present,
+        never-yet-seen forward rows sort before already-tracked retry rows
+        (a ``CASE`` bucket ahead of the plain id order) -- otherwise, once
+        ``retry_ids`` alone reached ``batch_limit`` in size, ``ORDER BY id``
+        would let those (necessarily smaller, already-seen) ids win every
+        slot in the ``LIMIT``, starving forward progress right back into the
+        bug this is fixing. This does mean retry rows can wait longer under
+        sustained, saturating forward load -- a deliberate trade-off, since
+        that only delays retrying a handful of already-known-stuck rows,
+        never blocks the rest of the pipeline the way the reverse priority
+        did.
+        """
         statement = select(Attachment).where(
             Attachment.parse_status == PDF_DOM_RECOGNITION_PENDING_STATUS
         )
+        conditions = []
         if after_id is not None:
-            statement = statement.where(Attachment.id > after_id)
+            conditions.append(Attachment.id > after_id)
+        if retry_ids:
+            conditions.append(Attachment.id.in_(retry_ids))
+        if conditions:
+            statement = statement.where(
+                conditions[0] if len(conditions) == 1 else or_(*conditions)
+            )
+        order_columns = []
+        if after_id is not None and retry_ids:
+            order_columns.append(case((Attachment.id > after_id, 0), else_=1))
+        order_columns.append(Attachment.id)
         return (
-            statement.order_by(Attachment.id)
+            statement.order_by(*order_columns)
             .options(selectinload(Attachment.email))
             .limit(self.batch_limit)
         )
@@ -569,54 +618,43 @@ class NewsdomRecognitionWorker:
     async def _load_pending_attachments(
         self, session: AsyncSession
     ) -> list[Attachment]:
-        """Load after the last attempted row, wrapping at the table tail.
-
-        Advancing over rows that remain pending prevents an unconfigured
-        organization's first batch from permanently starving configured rows.
-        """
-        rows = (
+        """Load the next batch: past the cursor, plus any known-stuck rows."""
+        return (
             (
                 await session.execute(
-                    self._pending_attachment_statement(self._attachment_cursor)
+                    self._pending_attachment_statement(
+                        self._attachment_cursor, self._attachment_retry_ids
+                    )
                 )
             )
             .scalars()
             .all()
         )
-        if not rows and self._attachment_cursor is not None:
-            self._attachment_cursor = None
-            rows = (
-                (await session.execute(self._pending_attachment_statement(None)))
-                .scalars()
-                .all()
-            )
-        return rows
 
     async def _sweep_documents(self, session: AsyncSession) -> None:
         """Process a bounded, starvation-free batch of pending documents.
 
-        Same starvation/staleness fix as ``_sweep_attachments`` -- a row that
-        raised, or that came back ``RESULT_PENDING`` (no active provider
-        configured for its organization yet), must not advance the cursor
-        past it -- adapted for ``Document.document_id`` being an opaque
-        string primary key rather than an auto-incrementing integer: there
-        is no ``id - 1`` to fall back on, so instead of capping at "first
-        unresolved row minus one" this tracks the id of the last row
-        actually confirmed resolved before any unresolved row, and never
-        advances the cursor past that point. This is equivalent to the
-        integer case for a contiguous key (both stop the cursor exactly at
-        the position before the first unresolved row) and remains correct
-        for a non-contiguous or non-numeric key.
+        Same design as ``_sweep_attachments`` -- a monotonically-advancing
+        forward cursor (``_document_cursor``, the highest ``document_id``
+        seen in a batch) plus a persistent ``_document_retry_ids`` set for
+        rows that raised or came back ``RESULT_PENDING`` (no active provider
+        configured for its organization yet), retried every sweep
+        independent of the cursor. See ``_sweep_attachments`` for why a
+        cursor that instead capped itself at the first unresolved row let
+        more than ``batch_limit`` consecutive stuck rows starve everything
+        past them -- the same fix applies here, adapted for
+        ``Document.document_id`` being an opaque string primary key: "the
+        highest id seen" is a lexicographic max rather than an integer one,
+        which remains correct for a non-contiguous or non-numeric key.
         """
         rows = await self._load_pending_documents(session)
-        last_resolved_id = self._document_cursor
-        unresolved = False
+        processed_ids: set[str] = set()
+        unresolved_ids: set[str] = set()
         for document_id in [document.document_id for document in rows]:
+            processed_ids.add(document_id)
             try:
                 document = await session.get(Document, document_id)
                 if document is None:
-                    if not unresolved:
-                        last_resolved_id = document_id
                     continue
                 result = await process_pending_document(
                     session=session,
@@ -626,10 +664,8 @@ class NewsdomRecognitionWorker:
                 )
                 await session.commit()
                 if result == RESULT_PENDING:
-                    unresolved = True
+                    unresolved_ids.add(document_id)
                 else:
-                    if not unresolved:
-                        last_resolved_id = document_id
                     logger.info(
                         "NewsDOM document %s recognition result: %s",
                         document_id,
@@ -642,37 +678,58 @@ class NewsdomRecognitionWorker:
                     document_id,
                     exc_info=True,
                 )
-                unresolved = True
+                unresolved_ids.add(document_id)
         if rows:
+            highest_seen = max(document.document_id for document in rows)
             self._document_cursor = (
-                last_resolved_id if unresolved else rows[-1].document_id
+                highest_seen
+                if self._document_cursor is None
+                else max(self._document_cursor, highest_seen)
             )
+        self._document_retry_ids = (
+            self._document_retry_ids - processed_ids
+        ) | unresolved_ids
 
-    def _pending_document_statement(self, after_id: str | None):
-        """Build the next deterministic workspace-document batch query."""
+    def _pending_document_statement(
+        self, after_id: str | None, retry_ids: set[str]
+    ):
+        """Build the next deterministic workspace-document batch query.
+
+        Selects rows past the forward cursor OR still tracked in
+        ``retry_ids``, and orders forward rows ahead of retry rows when both
+        are present, exactly like ``_pending_attachment_statement`` (see its
+        docstring for why the priority must run that way).
+        """
         statement = select(Document).where(
             Document.document_status == PDF_DOM_RECOGNITION_PENDING_STATUS
         )
+        conditions = []
         if after_id is not None:
-            statement = statement.where(Document.document_id > after_id)
-        return statement.order_by(Document.document_id).limit(self.batch_limit)
+            conditions.append(Document.document_id > after_id)
+        if retry_ids:
+            conditions.append(Document.document_id.in_(retry_ids))
+        if conditions:
+            statement = statement.where(
+                conditions[0] if len(conditions) == 1 else or_(*conditions)
+            )
+        order_columns = []
+        if after_id is not None and retry_ids:
+            order_columns.append(
+                case((Document.document_id > after_id, 0), else_=1)
+            )
+        order_columns.append(Document.document_id)
+        return statement.order_by(*order_columns).limit(self.batch_limit)
 
     async def _load_pending_documents(self, session: AsyncSession) -> list[Document]:
-        """Load after the last attempted document and wrap at the tail."""
-        rows = (
+        """Load the next batch: past the cursor, plus any known-stuck rows."""
+        return (
             (
                 await session.execute(
-                    self._pending_document_statement(self._document_cursor)
+                    self._pending_document_statement(
+                        self._document_cursor, self._document_retry_ids
+                    )
                 )
             )
             .scalars()
             .all()
         )
-        if not rows and self._document_cursor is not None:
-            self._document_cursor = None
-            rows = (
-                (await session.execute(self._pending_document_statement(None)))
-                .scalars()
-                .all()
-            )
-        return rows

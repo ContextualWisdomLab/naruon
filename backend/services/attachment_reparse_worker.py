@@ -19,7 +19,7 @@ import asyncio
 import logging
 import random
 
-from sqlalchemy import bindparam, func, select
+from sqlalchemy import bindparam, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from db.models import Attachment
@@ -190,6 +190,10 @@ class AttachmentReparseWorker:
         self._task: asyncio.Task | None = None
         self._is_running = False
         self._attachment_cursor: int | None = None
+        # Rows a past sweep saw raise. Retried every sweep via an explicit
+        # id filter, independent of the forward cursor -- see
+        # _sweep_attachments.
+        self._attachment_retry_ids: set[int] = set()
 
     async def start(self) -> None:
         """Start the reparse loop once."""
@@ -266,22 +270,26 @@ class AttachmentReparseWorker:
     async def _sweep_attachments(self, session: AsyncSession) -> None:
         """Process a bounded, starvation-free batch of reparse-pending rows.
 
-        The cursor only advances past a row once it is confirmed resolved
-        (its status actually left ``reparse_pending``, whether to a parsed
-        state or back to quarantine). A row whose processing raised keeps its
-        ``reparse_pending`` status untouched, so if the cursor advanced past
-        it anyway it would never be reselected by
-        ``_load_reparse_pending_attachments``'s ``id > cursor`` filter until
-        the whole forward queue happens to drain to empty -- silent,
-        indefinite starvation of that one row under continuous inbound
-        reparse-intent traffic. Capping the cursor at the first failure keeps
-        that row (and, harmlessly, any already-resolved rows after it that
-        the ``parse_status`` filter will simply skip) in range for the next
-        sweep.
+        ``_attachment_cursor`` is a forward-scan position that only ever
+        advances (to the highest id seen in a batch), and
+        ``_attachment_retry_ids`` is the set of ids a past sweep saw raise,
+        retried every sweep via an explicit ``id IN (...)`` filter
+        independent of the cursor -- the same design as
+        ``services.newsdom_worker.NewsdomRecognitionWorker._sweep_attachments``
+        (see its docstring for the full rationale). An earlier version
+        instead capped the cursor itself at the first failure: that kept one
+        failing row selectable, but pinned the whole batch window behind it
+        once more than ``batch_limit`` consecutive rows failed at once
+        (e.g. a systematic classification bug affecting a burst of
+        simultaneous reparse-intent requests) -- nothing past them would
+        ever be reached. Decoupling retry tracking from the forward cursor
+        fixes that.
         """
         rows = await self._load_reparse_pending_attachments(session)
-        first_failed_id = None
+        processed_ids: set[int] = set()
+        unresolved_ids: set[int] = set()
         for attachment_id in [attachment.id for attachment in rows]:
+            processed_ids.add(attachment_id)
             try:
                 # Re-fetch fresh rather than reusing the bulk-loaded instance:
                 # AsyncSession.rollback() expires every object already loaded
@@ -308,47 +316,59 @@ class AttachmentReparseWorker:
                     attachment_id,
                     exc_info=True,
                 )
-                if first_failed_id is None:
-                    first_failed_id = attachment_id
+                unresolved_ids.add(attachment_id)
         if rows:
+            highest_seen = max(attachment.id for attachment in rows)
             self._attachment_cursor = (
-                first_failed_id - 1 if first_failed_id is not None else rows[-1].id
+                highest_seen
+                if self._attachment_cursor is None
+                else max(self._attachment_cursor, highest_seen)
             )
+        self._attachment_retry_ids = (
+            self._attachment_retry_ids - processed_ids
+        ) | unresolved_ids
 
-    def _reparse_pending_statement(self, after_id: int | None):
-        """Build the next deterministic reparse-pending batch query."""
+    def _reparse_pending_statement(
+        self, after_id: int | None, retry_ids: set[int]
+    ):
+        """Build the next deterministic reparse-pending batch query.
+
+        Selects rows past the forward cursor OR still tracked in
+        ``retry_ids``, forward rows ordered ahead of retry rows when both
+        are present -- identical shape to
+        ``services.newsdom_worker.NewsdomRecognitionWorker._pending_attachment_statement``
+        (see its docstring for why the priority must run that way).
+        """
         statement = select(Attachment).where(
             Attachment.parse_status == ATTACHMENT_REPARSE_PENDING_STATUS
         )
+        conditions = []
         if after_id is not None:
-            statement = statement.where(Attachment.id > after_id)
-        return statement.order_by(Attachment.id).limit(self.batch_limit)
+            conditions.append(Attachment.id > after_id)
+        if retry_ids:
+            conditions.append(Attachment.id.in_(retry_ids))
+        if conditions:
+            statement = statement.where(
+                conditions[0] if len(conditions) == 1 else or_(*conditions)
+            )
+        order_columns = []
+        if after_id is not None and retry_ids:
+            order_columns.append(case((Attachment.id > after_id, 0), else_=1))
+        order_columns.append(Attachment.id)
+        return statement.order_by(*order_columns).limit(self.batch_limit)
 
     async def _load_reparse_pending_attachments(
         self, session: AsyncSession
     ) -> list[Attachment]:
-        """Load after the last attempted row, wrapping at the table tail.
-
-        Every row this worker touches is fully resolved on its first sweep
-        (see the class docstring), so wrapping only matters when a batch
-        landed exactly on the cursor's row -- it still keeps the cursor
-        logic identical to the NewsDOM worker's, rather than a subtly
-        different variant for one fewer edge case.
-        """
-        rows = (
+        """Load the next batch: past the cursor, plus any known-stuck rows."""
+        return (
             (
                 await session.execute(
-                    self._reparse_pending_statement(self._attachment_cursor)
+                    self._reparse_pending_statement(
+                        self._attachment_cursor, self._attachment_retry_ids
+                    )
                 )
             )
             .scalars()
             .all()
         )
-        if not rows and self._attachment_cursor is not None:
-            self._attachment_cursor = None
-            rows = (
-                (await session.execute(self._reparse_pending_statement(None)))
-                .scalars()
-                .all()
-            )
-        return rows
