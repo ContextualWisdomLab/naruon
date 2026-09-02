@@ -16,11 +16,11 @@ actually one shared agent runtime (Pydantic-AI/Codex-Python) consumed by
 naruon, the ``.github`` CI review agent, and wardnet's AI SOC quarantine
 sandbox — the per-deployment credential scoping here is a security choice
 for this module, not a claim that the deployments are permanently separate
-or share nothing beyond a name; see
-``docs/adr/0006-noema-bounded-context-separation.md``
-(``ContextualWisdomLab/naruon#1527``) for the corrected reasoning. It is
-given a small set of tools that plug into the existing service and runner
-seams:
+or share nothing beyond a name; see ``ContextualWisdomLab/naruon#1527`` for
+the corrected reasoning (its ``docs/adr/0006-noema-bounded-context-separation.md``
+lives on that PR's own branch, not this one — this docstring cannot resolve
+it as a local path until that PR merges). It is given a small set of tools
+that plug into the existing service and runner seams:
 
 * **read/search mail** and **content-graph queries** are workspace-scoped SQL reads.
 * **task actions** update ``TicketTask`` rows and are audit-logged.

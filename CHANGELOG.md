@@ -620,10 +620,12 @@
   에이전트·wardnet AI SOC 격리 샌드박스가 함께 소비하는 **단일 공유 에이전트
   런타임**(Pydantic-AI/Codex-Python)으로 명시적으로 정의하고 있으며, 이는
   이름만 같은 우연이 아니라 처음부터 의도된 설계였다고 owner가 직접
-  확인했습니다. `docs/adr/0006-noema-bounded-context-separation.md`
-  (naruon#1527)가 "영구적으로 분리 유지" 결론을 superseded-on-arrival로
-  갱신했습니다 — 코드 수준 조사(각 저장소가 현재 실제로 무엇을 하는지) 자체는
-  유효하지만, "그러므로 영구히 분리한다"는 결론은 철회되었습니다. 이 파일의
+  확인했습니다. naruon#1527이 자신의 `docs/adr/0006-noema-bounded-context-separation.md`
+  (해당 PR 자신의 브랜치에만 존재하며, 병합 전인 이 브랜치에서는 아직 로컬
+  경로로 열람할 수 없음)에서 "영구적으로 분리 유지" 결론을
+  superseded-on-arrival로 갱신했습니다 — 코드 수준 조사(각 저장소가 현재
+  실제로 무엇을 하는지) 자체는 유효하지만, "그러므로 영구히 분리한다"는
+  결론은 철회되었습니다. 이 파일의
   `noema_orchestrator_base_url`/`noema_orchestrator_token`을 `.github`의
   CI 리뷰 자격증명과 별도로 두는 것은 여전히 유효한 이 모듈의 보안 스코핑
   선택이지만, 두 배포가 영구히 분리되어 있거나 이름 외에 아무것도 공유하지
@@ -695,8 +697,9 @@
   영구히 분리된 별개 에이전트라는 뜻은 아닙니다. **(2026-09-02 owner 코멘트로
   정정)** `docs/CWL-MASTER-CONTEXT.md`에 따르면 Noema는 naruon·`.github` CI
   리뷰 에이전트·wardnet AI SOC 격리 샌드박스가 공유하는 단일 에이전트
-  런타임이며, 실제 공유 런타임 설계는 `docs/adr/0006-noema-bounded-context-separation.md`
-  (naruon#1527)가 확정하지 않은 별도 후속 과제입니다.
+  런타임이며, 실제 공유 런타임 설계는 naruon#1527(자신의
+  `docs/adr/0006-noema-bounded-context-separation.md`에서, 병합 전에는 그
+  PR 자신의 브랜치에만 존재)이 확정하지 않은 별도 후속 과제입니다.
   검증: RED(패치 전 `resolve_runtime_llm_provider` 참조가 실제로 존재함을
   spy로 확인) → GREEN(픽스 후 같은 스파이는 `AttributeError`로 실패 —
   `resolve_runtime_llm_provider`가 모듈에서 완전히 사라졌다는 가장 강한

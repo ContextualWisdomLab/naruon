@@ -22,8 +22,9 @@ actually one shared agent runtime (Pydantic-AI/Codex-Python) consumed by
 naruon, the ``.github`` CI review agent, and wardnet's AI SOC quarantine
 sandbox -- the credential scoping above is a security choice for this module,
 not a claim that the deployments are permanently separate or share nothing
-beyond a name; see ``docs/adr/0006-noema-bounded-context-separation.md``
-(``ContextualWisdomLab/naruon#1527``) for the corrected reasoning.
+beyond a name; see ``ContextualWisdomLab/naruon#1527`` for the corrected
+reasoning (its ``docs/adr/0006-noema-bounded-context-separation.md`` lives
+on that PR's own branch, not this one, until it merges).
 """
 
 from __future__ import annotations
