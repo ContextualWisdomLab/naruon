@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .text_safety import strip_html_markup
+from .text_safety import contains_html_markup, strip_html_markup
 
 _GENERIC_CONTENT_TYPES = {
     "",
@@ -265,14 +265,17 @@ def _parser_key_for(parse_content_type: str, parse_status: str) -> str:
 
 
 def _safe_filename(filename: str | None) -> str:
-    """Return a basename-only attachment display filename without URL decoding.
+    """Return a basename-only MIME filename without semantic re-decoding.
 
-    MIME filename parameters are already decoded by the email parser and are not
-    URL paths. Percent-decoding them here can change a literal filename extension
-    and therefore select a different attachment parser. Strip markup/NULs and
-    literal path separators only; preserve percent text as attachment identity.
+    MIME filename parameters reach this boundary as filename identity, not HTML
+    or URL text. Re-decoding percent escapes or character references can change
+    a literal suffix and therefore select a different parser for a generic MIME
+    type. Reject markup-looking names, remove only NULs and literal path
+    segments, and preserve all other filename text exactly.
     """
-    display_filename = strip_html_markup(_sanitize_nul(filename or "attachment"))
+    display_filename = _sanitize_nul(filename or "attachment")
+    if contains_html_markup(display_filename):
+        return "attachment"
     display_filename = Path(display_filename.replace("\\", "/")).name.strip()
     if display_filename in {"", ".", ".."}:
         return "attachment"
