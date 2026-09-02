@@ -18,6 +18,7 @@ from services.email_writing_judge import (
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _OUTPUT_GUARD = _REPOSITORY_ROOT / "scripts" / "ci" / "reject_terminal_output.sh"
+_TASK7_WORKFLOW = _REPOSITORY_ROOT / ".github" / "workflows" / "email-writing-judge-tdd.yml"
 
 
 class _UnserializableMappingRunner:
@@ -118,6 +119,14 @@ def test_timed_out_judge_runner_uses_a_daemon_worker() -> None:
         assert runner.worker_daemon is True
     finally:
         release.set()
+
+
+def test_task7_workflow_does_not_bootstrap_background_workers_from_environment() -> None:
+    """Focused Judge tests must not import the application solely to disable workers."""
+    workflow = _TASK7_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "DISABLE_BACKGROUND_WORKERS" not in workflow
+    assert workflow.count("--noconftest") >= 2
 
 
 def test_terminal_output_guard_preserves_success_and_rejects_policy_tokens() -> None:
