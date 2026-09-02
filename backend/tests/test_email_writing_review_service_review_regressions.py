@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from api.auth import AuthContext
+import services.email_writing_review_service as review_service_module
 from services.email_writing_candidate_review import (
     EmailWritingCandidateDiagnostic,
     EmailWritingCandidateOutput,
@@ -185,6 +186,22 @@ class _Session:
             await asyncio.Event().wait()
 
 
+class _SlowCommitSession(_Session):
+    """Evidence session whose commit is slow enough to expose cancellation leaks."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.commit_cancelled = 0
+
+    async def commit(self) -> None:
+        self.commits += 1
+        try:
+            await asyncio.sleep(0.05)
+        except asyncio.CancelledError:
+            self.commit_cancelled += 1
+            raise
+
+
 def _runtime(*, total_wall_seconds: float = 5.0) -> EmailWritingReviewRuntimeProfile:
     return EmailWritingReviewRuntimeProfile(
         workflow_identifier="email_writing_review",
@@ -294,4 +311,34 @@ async def test_timeout_finalization_bounds_commit_and_rollback_cleanup(
 
     assert caught.value.code == "review_evidence_unavailable"
     assert session.commits == 1
+    assert session.rollbacks == 1
+
+
+@pytest.mark.asyncio
+async def test_external_cancellation_bounds_terminal_evidence_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancellation must not wait indefinitely for a shielded evidence commit."""
+    monkeypatch.setattr(
+        review_service_module,
+        "EMAIL_WRITING_REVIEW_TIMEOUT_EVIDENCE_SECONDS",
+        0.01,
+    )
+    request = _request()
+    session = _SlowCommitSession()
+    service = _service(
+        request,
+        _CandidatePort(_candidate_result(), delay_seconds=1.0),
+        _JudgeMustNotRun(),
+    )
+
+    task = asyncio.create_task(service.review(session, _auth(), request))
+    await asyncio.sleep(0)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert session.commits == 1
+    assert session.commit_cancelled == 1
     assert session.rollbacks == 1
