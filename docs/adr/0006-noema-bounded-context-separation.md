@@ -1,12 +1,61 @@
-# ADR-0006: Noema is two separate Bounded Contexts, not one shared Agent core
+# ADR-0006: Noema's naruon and `.github` implementations have drifted apart — correcting toward the org's one-shared-runtime design
 
-**Status:** Accepted (Naruon-local boundary policy)
-**Date:** 2026-09-02
-**Decision owner:** Naruon maintainers
-**Scope:** Naruon's own dependency and reuse boundary toward
-`ContextualWisdomLab/.github`'s CI review automation. This ADR records only
-what Naruon does and does not consume from `.github`; it cannot assign
-authority to, or accept a decision for, `.github` or `contextual-orchestrator`.
+**Status:** Superseded-on-arrival — see "2026-09-02 correction" below. Kept (not deleted) per this
+org's traceability convention: the investigation that produced the original text below is accurate
+about the *current code*, and the correction explains why that current code is a drift to fix, not a
+boundary to ratify.
+
+**Date:** 2026-09-02 (original text), corrected same day after owner review
+**Decision owner:** Naruon maintainers — **correction below overrides the original decision**
+**Scope:** Naruon's dependency and reuse boundary toward `ContextualWisdomLab/.github`'s CI review
+automation and `ContextualWisdomLab/quarantine-sandbox-runtime`.
+
+## 2026-09-02 correction (read this first)
+
+The original version of this ADR (below, kept verbatim for the record) concluded that `.github`'s
+Noema and Naruon's Noema are "two separate Bounded Contexts... intentionally shar[ing] only a name,"
+and recommended never sharing code between them. **That conclusion is wrong and is hereby withdrawn.**
+It was reached by reading only the *current code* in both repos and never checking this org's
+canonical architecture document, which is unambiguous on original intent:
+
+> `docs/CWL-MASTER-CONTEXT.md` (ContextualWisdomLab/.github), §3, line 36: **"noema — agent runtime
+> (Pydantic-AI / Codex-Python): a GitHub Review Agent in CI + a do-anything agent inside naruon + the
+> lightweight quarantine sandbox."**
+>
+> Same file, §"Reading it" (line 230): **"`noema` is the shared agent runtime + quarantine sandbox
+> (used by naruon, the GitHub review agent, and wardnet's AI SOC)."**
+
+This is the org's standing, canonical architecture statement, not a proposal — Noema was designed from
+the start to be **one shared agent runtime** with three consumers (`.github`'s CI review, naruon's
+general-purpose workspace agent, wardnet's AI SOC artifact analysis), built on Pydantic-AI, and
+including the quarantine sandbox (the `ContextualWisdomLab/quarantine-sandbox-runtime` repository) as
+a first-class shared capability, not a bolt-on integration task separate from "Noema" itself.
+
+What the original investigation below got right, and what remains true: `.github`'s
+`noema_review_gate.py` core (`call_llm`/verdict-schema) is diff-review-shaped and cannot be adapted to
+naruon's mail/calendar/task tool-use shape by simple code sharing, and naruon's `noema_agent.py`
+(`backend/services/noema_agent.py`) is a real, independently useful `pydantic-ai` agent already in
+active development (`naruon#1486`, `naruon#1384`). **The fix is not to force today's two divergent
+implementations into one file** — it's to design the actual shared runtime the master context
+describes (a common Pydantic-AI-based Noema core + quarantine-sandbox capability that both the CI
+review path and naruon's agent path build on, per `docs/product-goal-directive.md` §5's Anti-Corruption
+Layer / minimal-Shared-Kernel DDD convention — shared where it's genuinely the same capability,
+per-context where the domain logic genuinely differs) rather than accept permanent divergence.
+
+Concretely, until the real design lands: **do not cite this ADR's original "intentionally separate,
+never share" framing as settled architecture.** The correct current status is "drifted apart from the
+intended shared-runtime design; a corrected design is in progress" — see the follow-up work tracked
+from this correction (check `docs/product-technical-gap-baseline.md` in `ContextualWisdomLab/.github`
+and this repo's own issue tracker for the current state of that follow-up before assuming either
+"still separate" or "already unified").
+
+The naruon#1486/#1384 code-sharing analysis, and the `#1437`/`#1438` force-push/branch-reuse traceability
+lesson below, remain valid observations and are not being retracted — only the "therefore, keep them
+permanently separate" conclusion is.
+
+---
+
+## Original text (2026-09-02, superseded above)
 
 ## Context
 
@@ -75,7 +124,8 @@ This second Noema is not something this ADR proposes — it already exists on
   (backing `POST /api/calendar/conflicts/evaluate`) as a Noema tool, and
   states explicitly in its description that Naruon's Noema and `.github`'s
   review-bot Noema "are two separate agents that intentionally share only a
-  name."
+  name." **(2026-09-02 correction above: that framing is not this org's
+  actual design intent — see `docs/CWL-MASTER-CONTEXT.md`.)**
 - `ContextualWisdomLab/naruon#1384` ("feat(noema): route LLM through
   contextual-orchestrator", 18 commits, last commit 2026-08-21) is a
   narrower, currently-stalled slice that would route `run_noema_agent`'s
@@ -90,57 +140,27 @@ independently added a `docs/adr/0005-*.md`, colliding with each other and
 with this ADR's numbering) whenever either lands first. That collision is
 this ADR's one flagged follow-up, not something this ADR resolves.
 
-## Decision
+## Decision (superseded — see correction above)
 
-Naruon's Noema does **not** import, vendor, or route through
+~~Naruon's Noema does **not** import, vendor, or route through
 `.github`'s `scripts/ci/noema_review_gate.py`/`noema_review_handoff.py`, and
-will not depend on a future "extracted" package built directly from them.
+will not depend on a future "extracted" package built directly from them.~~
 
-1. **Two Bounded Contexts, not one Shared Kernel.** `.github`'s Noema is a PR
-   diff-review Domain Service in the CI-governance context: one prompt, one
-   verdict schema, GitHub as its only I/O. Naruon's Noema is a
-   general-purpose workspace-assistant Domain Service in Naruon's own
-   product context: multiple tools, tenant-scoped data, a
-   `pydantic-ai` agent loop. Forcing them onto one shared "Noema core"
-   package would be exactly the monolithic Shared Kernel
-   `docs/product-goal-directive.md` §5 says to minimize — the two verdict
-   shapes, prompts, and I/O surfaces do not overlap enough to share code
-   without one side distorting the other.
-2. **What can be shared is the LLM-orchestration gateway, not the agent
-   logic** — and even that is intentionally not wired the same way in both
-   repos today. `contextual-orchestrator` (`ContextualWisdomLab/
-   contextual-orchestrator`) is already its own repository and the org's
-   designated shared LLM-orchestration product
-   (`docs/product-goal-directive.md` §8-9). `.github`'s Noema calls it
-   through a CI-only sidecar credentialed from GitHub Secrets
-   (`scripts/ci/contextual_orchestrator_review_sidecar.sh`, fail-closed
-   `orchestrator/free` pool). Naruon's Noema, as merged on `develop`, calls
-   whatever LLM provider the tenant configured — deliberately never the
-   CI-scoped review gateway, so one tenant's workspace data is never sent
-   through org-shared review infrastructure. `naruon#1384`'s open, stalled
-   proposal to add a *tenant-scoped* `contextual-orchestrator` gateway
-   option is a Naruon-side product decision about which upstream providers a
-   tenant may pick from; it does not reopen sharing `.github`'s review logic,
-   prompts, or credentials, and this ADR takes no position on whether
-   `#1384` should land.
-3. **No fabricated consumer.** This ADR does not add a new naruon call site
-   for `.github`'s review core, because none is needed: Naruon's own,
-   already-in-flight Noema work (`#1486`) supplies the actual naruon-side
-   need (a calendar-aware workspace assistant) using Naruon's own domain
-   logic (`calendar_conflict_policy.py`), not a copy of PR-review code.
+This decision is withdrawn per the 2026-09-02 correction above. The actual
+decision — how the shared Pydantic-AI Noema runtime + quarantine sandbox
+described in `docs/CWL-MASTER-CONTEXT.md` should be designed so it serves
+`.github`'s diff-review shape, naruon's multi-tool workspace-agent shape, and
+wardnet's AI SOC shape without a monolithic Shared Kernel — is tracked as
+follow-up work, not settled by this ADR.
 
-## Alternatives rejected
+## Alternatives rejected (context for the withdrawn decision — not current guidance)
 
 ### Extract `noema_review_gate.py`'s `call_llm`/verdict-schema pair into a shared library both repos depend on
 
-Rejected. The extractable core is diff-review-shaped (one diff, one fixed
-JSON verdict schema keyed on changed-diff line locations). Naruon's Noema
-needs a multi-tool, multi-turn agent over mail/calendar/tasks — adapting the
-diff-review schema to that shape would require rewriting most of it, at
-which point nothing meaningful is actually shared. The instruction author's
-own fallback applies here directly: no genuine Naruon need for this specific
-core was found, because Naruon already built (and is actively extending) its
-own, better-fitted agent instead.
+This was rejected in the original analysis on the grounds that the extractable core is diff-review-shaped
+and naruon's need is multi-tool. That specific code-sharing shape is still probably wrong (see
+correction above) — but "no shared runtime should exist at all" does not follow from it, and is not
+this ADR's position after correction.
 
 ### Have Naruon's Noema route through `.github`'s CI-scoped `contextual-orchestrator` sidecar
 
@@ -149,34 +169,37 @@ Rejected as a cross-tenant data-boundary violation: that sidecar's KV and
 traffic, not for customer workspace data. `naruon#1486`'s description states
 this explicitly. A tenant-scoped `contextual-orchestrator` gateway
 (`naruon#1384`) is a distinct, still-open question this ADR does not settle.
+This specific rejection (CI-scoped credentials should not carry tenant
+workspace traffic) is unaffected by the correction above and remains valid.
 
 ### Do nothing / record no ADR
 
 Rejected per `docs/product-goal-directive.md`'s own preamble and §5: this
-decision — whether to extract a shared Noema core — needed to be made and
-recorded durably in the repo, not left as unrecorded reasoning in PR prose
-that a future force-push or branch reuse could lose (observed directly in
-this investigation: `.github#1437`/`#1438` are closed PRs whose branches were
-later force-pushed to unrelated topics, which is exactly the failure mode a
-committed ADR avoids).
+decision needed to be made and recorded durably in the repo, not left as
+unrecorded reasoning in PR prose that a future force-push or branch reuse
+could lose (observed directly in this investigation: `.github#1437`/`#1438`
+are closed PRs whose branches were later force-pushed to unrelated topics,
+which is exactly the failure mode a committed ADR avoids). This observation
+motivates writing the *correction* durably here too, rather than only in
+chat.
 
 ## Consequences
 
-- `backend/services/noema_agent.py` keeps evolving independently of
-  `.github/scripts/ci/noema_review_gate.py`; a reviewer should not expect or
-  request code sharing between them on the strength of the shared "Noema"
-  name.
-- If a genuine cross-repo reuse need is found later, the correct extension
-  point is `contextual-orchestrator` itself (already its own repository), not
-  either product's Noema module — e.g., a new orchestrator-side capability
-  both callers invoke with their own prompts/schemas, never a shared Python
-  package imported by both `.github` and Naruon.
+- The original "keep permanently separate" consequences listed here are
+  withdrawn. Do not cite them.
+- The real follow-up: design the shared Pydantic-AI Noema runtime +
+  quarantine-sandbox capability `docs/CWL-MASTER-CONTEXT.md` describes, using
+  `contextual-orchestrator` as the shared LLM-orchestration layer underneath
+  it (per `docs/product-goal-directive.md` §8-9), with `.github`'s diff-review
+  logic and naruon's multi-tool agent logic as two callers of that shared
+  core rather than either being rewritten to imitate the other.
 - `naruon#1486` and `naruon#1384` both independently add a `docs/adr/0005-*.md`
   file; whichever merges second must renumber against whatever is on
-  `develop` at that time, and against this ADR's `0006`.
-- This ADR does not authorize, and does not itself implement, `#1384`'s
-  tenant-scoped `contextual-orchestrator` gateway option; that remains a
-  separate, already-open decision.
+  `develop` at that time, and against this ADR's `0006`. This collision risk
+  is unaffected by the correction and still needs resolving.
+- `naruon#1486`'s PR description text asserting permanent separation should
+  be corrected or annotated to point at this ADR's correction before that PR
+  merges, so the wrong framing doesn't become the merged historical record.
 
 ## References (APA 7th)
 
