@@ -24,8 +24,9 @@
   `""` 모두 막도록 고쳤습니다. 곧이어 Devin Review가 한 번 더, 공백 문자열
   (`"   "`)은 `not model`도 통과해 여전히 provider에 유효하지 않은 model id로
   전달될 수 있다고 지적해, `not model or not model.strip()`으로 `None`·빈
-  문자열·공백 문자열을 모두 막도록 고쳤습니다. 검증:
-  `backend/tests/test_project_graph_extractor_registry.py`
+  문자열·공백 문자열을 모두 막도록 고쳤습니다. `docs/adr/0005-kg-extraction-orchestrator-free-pool-pin.md`의
+  구현 경로 참조도 CodeRabbit 지적대로 저장소 루트 기준(`backend/` 접두)으로
+  통일했습니다. 검증: `backend/tests/test_project_graph_extractor_registry.py`
   전체 통과(26개, 신규 회귀 테스트 4개 포함), 전체 backend suite 1810
   passed/33 skipped, `ruff check` clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.

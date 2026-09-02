@@ -3,10 +3,10 @@
 **Status:** Accepted (Naruon-local policy)
 **Date:** 2026-09-02
 **Decision owner:** Naruon maintainers
-**Scope:** `services/project_graph/extractor_registry.py::LlmGroundedExtractor` when
+**Scope:** `backend/services/project_graph/extractor_registry.py::LlmGroundedExtractor` when
 `routed_via_orchestrator=True` (the `PROJECT_GRAPH_EXTRACTOR=orchestrator` selector).
 This ADR does not change the direct-provider `PROJECT_GRAPH_EXTRACTOR=llm` path, and
-it does not cover `services/batch_embedding_service.py`'s separate orchestrator
+it does not cover `backend/services/batch_embedding_service.py`'s separate orchestrator
 batch-embedding call site (see Consequences).
 
 ## Context
@@ -20,7 +20,7 @@ already swaps the HTTP target to `context.orchestrator_base_url` when
 
 What that swap did **not** do, before this ADR, is change which `model` string the
 request carries. `extract()` always sent `context.model`, which
-`services/email_import_service.py::_extract_project_semantics_for_import` sets to
+`backend/services/email_import_service.py::_extract_project_semantics_for_import` sets to
 `settings.OPENAI_MODEL` — naruon's general-purpose direct-provider model setting —
 for both the direct and orchestrator-routed cases alike, because `KgExtractorContext`
 is built once per import and handed to `run_extraction()` regardless of which
@@ -81,7 +81,7 @@ since KG extraction runs over real customer email content, not code.
    direct-provider `PROJECT_GRAPH_EXTRACTOR=llm` selector (customers who point
    naruon straight at their own OpenAI-compatible endpoint keep full control of
    the model they configured), and it does not touch
-   `services/batch_embedding_service.py::_run_orchestrator_batch` (see
+   `backend/services/batch_embedding_service.py::_run_orchestrator_batch` (see
    Consequences).
 4. **Revision (same PR, pre-merge):** `extract()`'s original availability
    check, `KgExtractorContext.has_llm_credentials` (`bool(self.api_key and
@@ -169,7 +169,7 @@ ZDR-first" guarantee is the correct default absent a documented reason to widen 
   `test_direct_llm_routing_rejects_whitespace_only_model` (a
   whitespace-only `context.model` still fails closed).
 - **Open follow-up, deliberately out of this ADR's scope:**
-  `services/batch_embedding_service.py::_run_orchestrator_batch` sends a
+  `backend/services/batch_embedding_service.py::_run_orchestrator_batch` sends a
   separate, tenant-configurable `settings.model` (`BatchEmbeddingSettings.model`,
   a DB-backed per-tenant column) to the orchestrator's batch-submission endpoint
   for embeddings, not chat completions. Whether contextual-orchestrator exposes
