@@ -26,17 +26,20 @@ A successful HTTP response can still contain an advisory review state such as `a
 
 ## Error contract
 
-The API exposes only bounded error codes and never raw exception text:
+The API exposes a typed `EmailWritingReviewErrorResponse` for 403, 404, and 503 responses and never returns raw causal service text:
 
 | Condition | HTTP | Stable response |
 | --- | ---: | --- |
 | source email is unavailable under the authorized scope | 404 | `{"error_code":"email_unavailable"}` |
 | authenticated owner scope cannot be established | 403 | `{"error_code":"review_owner_scope_unavailable"}` |
-| review evidence/runtime/provider execution cannot safely complete | 503 | the stable service error code |
+| allowlisted review evidence/runtime/provider failure | 503 | the corresponding bounded public error code |
 | production review runtime has not been admitted | 503 | `{"error_code":"review_runtime_unavailable"}` |
+| non-allowlisted service error code | 503 | `{"error_code":"review_unavailable"}` |
 | request transport/schema is invalid | 422 | FastAPI/Pydantic validation response |
 
-The endpoint does not return raw prompts, raw model/Judge output, provider credentials, source email bodies, or internal stack traces as error evidence.
+The allowlist contains only codes intentionally admitted to the browser contract. A future internal `EmailWritingReviewServiceError` code is not automatically public: unknown values collapse to `review_unavailable`. This prevents a later lower-level error string from becoming browser-visible merely because it was wrapped in the service error type.
+
+The endpoint does not return raw prompts, raw model/Judge output, provider credentials, source email bodies, internal exception text, or stack traces as error evidence.
 
 ## Current runtime assembly gate
 
@@ -59,6 +62,8 @@ Task-10 acceptance requires current-head evidence for:
 - authenticated scope and database-session pass-through to Task 9;
 - advisory response preservation;
 - stable redacted 404/403/503 error mapping;
+- unknown internal service-code masking;
+- OpenAPI declaration of the bounded 403/404/503 error envelope;
 - fail-closed unassembled runtime;
 - invalid request rejection before service execution;
 - exactly one registered production POST route;
