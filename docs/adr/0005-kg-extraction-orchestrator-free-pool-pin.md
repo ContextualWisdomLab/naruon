@@ -149,7 +149,7 @@ since KG extraction runs over real customer email content, not code.
    owner is immature or the capability is unsupported, never to duplicate
    the owner's selection logic locally (§9).
 
-   That immaturity is not hypothetical here: as of 2026-09-03, `GET
+   That immaturity is not hypothetical here: as of 2026-09-02, `GET
    /repos/ContextualWisdomLab/contextual-orchestrator/releases` returns an
    empty list — there is no immutable released consumer contract for
    naruon to conform to yet, for `orchestrator/free` or any other pool

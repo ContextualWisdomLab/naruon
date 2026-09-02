@@ -34,7 +34,7 @@
   ADR-0003의 `orchestrator/free` 고정은 GitHub Actions 모델 백엔드 워크플로
   경계에서만 유효한 운영 규칙(`docs/product-goal-directive.md` 8항: "GitHub
   Actions Workflow 이용에 관해")이며, naruon 같은 제품 runtime 소비자가 동일한
-  풀 선택 권한을 자체 코드에 복제해도 된다는 근거가 아닙니다. 게다가 2026-09-03
+  풀 선택 권한을 자체 코드에 복제해도 된다는 근거가 아닙니다. 게다가 2026-09-02
   기준 `ContextualWisdomLab/contextual-orchestrator`의 GitHub Releases는
   비어 있어, naruon이 따를 수 있는 불변 released consumer contract 자체가
   아직 없습니다. `ORCHESTRATOR_POOL_MODEL` 상수를 완전히 제거하고,
