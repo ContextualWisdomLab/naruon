@@ -772,16 +772,17 @@ async def _extract_project_semantics_for_import(
 
     Resolution goes through the named+versioned KG extractor registry
     (``services.project_graph.extractor_registry``) keyed by
-    ``settings.PROJECT_GRAPH_EXTRACTOR``. The LLM extractors reuse the import's
-    OpenAI-compatible provider credentials and enforce segment citations, so
-    they cannot introduce uncited claims; a missing credential, an unconfigured
-    orchestrator endpoint, or any provider/parse failure degrades down the chain
-    to the deterministic keyword baseline instead of losing the projection.
+    ``settings.PROJECT_GRAPH_EXTRACTOR``. Explicit ``keyword`` selection is a
+    deterministic, always-available product mode. ``llm`` (direct-provider)
+    is policy-disabled and ``orchestrator`` is not yet operational pending a
+    contextual-orchestrator release (extractor_registry.py ADR-0005 Revision
+    8) -- selecting either today always raises, which this function does not
+    catch: the caller (``_persist_project_graph_projection``) already treats
+    project-graph population as best-effort, so this never fails the email
+    import itself, only its graph projection.
     """
     context = KgExtractorContext(
         api_key=embedding_provider.api_key if embedding_provider else None,
-        base_url=embedding_provider.base_url if embedding_provider else None,
-        model=settings.OPENAI_MODEL,
         orchestrator_base_url=settings.PROJECT_GRAPH_ORCHESTRATOR_BASE_URL,
     )
     return await run_extraction(

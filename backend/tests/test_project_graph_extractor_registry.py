@@ -4,13 +4,21 @@ The seam turns what used to be a hardcoded ``if/else`` extractor selection into 
 registry keyed by the stable ``PROJECT_GRAPH_EXTRACTOR`` selector value. Two
 invariants are load-bearing and asserted here:
 
-1. **The deterministic keyword extractor is the structural fallback.** Every
-   resolved chain ends at it, so "rule-based extraction is fallback/reference
-   only" is guaranteed by construction, not by an ad-hoc branch.
-2. **LLM-backed extractors degrade, never fail the projection.** A missing
-   credential or unconfigured orchestrator endpoint raises
-   ``ExtractorUnavailableError`` so the runner advances down the chain rather
-   than propagating.
+1. **The deterministic keyword extractor is available as its own product
+   mode, and as a fallback only for extractors that opt into degrading.**
+   ``SELECTOR_KEYWORD`` (and an unrecognized selector) always resolves to it
+   directly.
+2. **LLM-backed extractors (``requires_llm_capability = True``) never
+   degrade.** An unavailable or failed :data:`SELECTOR_LLM` or
+   :data:`SELECTOR_ORCHESTRATOR` request propagates through
+   :func:`run_extraction` rather than silently resolving to a
+   keyword-derived result (ADR-0005 Revision 8: a deterministic semantic
+   substitute must not masquerade as successful LLM work). Today both are
+   also unconditionally unavailable: ``llm`` is policy-disabled (Naruon
+   holds no direct-provider LLM authority outside contextual-orchestrator's
+   released consumer contract, which does not exist), and ``orchestrator``
+   has nothing to populate ``context.orchestrator_model`` from until that
+   contract ships.
 """
 
 from __future__ import annotations
@@ -55,8 +63,15 @@ def _segment(uid: str = "seg1", text: str = "The system must support export.") -
     )
 
 
-def _llm_context() -> KgExtractorContext:
-    return KgExtractorContext(api_key="key", base_url=None, model="gpt-test")
+def _orchestrator_context(**overrides) -> KgExtractorContext:
+    """A fully-configured, valid orchestrator-mode context for success-path tests."""
+    defaults = dict(
+        api_key="key",
+        orchestrator_base_url="https://orchestrator.example/v1",
+        orchestrator_model="co-contract-resolved-model",
+    )
+    defaults.update(overrides)
+    return KgExtractorContext(**defaults)
 
 
 def _patch_cores(monkeypatch, *, llm, keyword):
@@ -85,15 +100,18 @@ def test_registered_extractors_conform_to_protocol():
 def test_extractor_identity_matches_module_constants():
     registry = build_default_registry()
     assert registry.get(SELECTOR_KEYWORD).name == DETERMINISTIC_EXTRACTOR_NAME
+    assert registry.get(SELECTOR_KEYWORD).requires_llm_capability is False
     assert registry.get(SELECTOR_LLM).name == LLM_EXTRACTOR_NAME
     # The orchestrator-routed variant is the same grounded LLM extractor
     # (identity/provenance is the extractor, not the transport).
     assert registry.get(SELECTOR_ORCHESTRATOR).name == LLM_EXTRACTOR_NAME
     assert registry.get(SELECTOR_ORCHESTRATOR).routed_via_orchestrator is True
     assert registry.get(SELECTOR_LLM).routed_via_orchestrator is False
+    assert registry.get(SELECTOR_ORCHESTRATOR).requires_llm_capability is True
+    assert registry.get(SELECTOR_LLM).requires_llm_capability is True
 
 
-# --- Chain resolution: deterministic is always the terminal fallback --------
+# --- Chain resolution --------------------------------------------------------
 
 
 def test_keyword_chain_is_deterministic_only():
@@ -101,16 +119,16 @@ def test_keyword_chain_is_deterministic_only():
     assert [e.name for e in chain] == [DETERMINISTIC_EXTRACTOR_NAME]
 
 
-def test_llm_chain_falls_back_to_deterministic():
+def test_llm_chain_has_no_fallback():
+    """requires_llm_capability=True means the chain is the extractor alone."""
     chain = resolve_extractor_chain(SELECTOR_LLM)
-    assert [e.name for e in chain] == [LLM_EXTRACTOR_NAME, DETERMINISTIC_EXTRACTOR_NAME]
+    assert [e.name for e in chain] == [LLM_EXTRACTOR_NAME]
 
 
-def test_orchestrator_chain_falls_back_to_deterministic():
+def test_orchestrator_chain_has_no_fallback():
     chain = resolve_extractor_chain(SELECTOR_ORCHESTRATOR)
-    assert chain[0].name == LLM_EXTRACTOR_NAME
+    assert [e.name for e in chain] == [LLM_EXTRACTOR_NAME]
     assert chain[0].routed_via_orchestrator is True
-    assert chain[-1].name == DETERMINISTIC_EXTRACTOR_NAME
 
 
 def test_unknown_selector_falls_back_to_deterministic_only():
@@ -118,24 +136,29 @@ def test_unknown_selector_falls_back_to_deterministic_only():
     assert [e.name for e in chain] == [DETERMINISTIC_EXTRACTOR_NAME]
 
 
-@pytest.mark.parametrize(
-    "selector",
-    [SELECTOR_KEYWORD, SELECTOR_LLM, SELECTOR_ORCHESTRATOR, "unknown"],
-)
-def test_deterministic_is_always_the_terminal_fallback(selector):
+@pytest.mark.parametrize("selector", [SELECTOR_KEYWORD, "unknown"])
+def test_deterministic_selectors_resolve_only_to_the_keyword_extractor(selector):
     chain = resolve_extractor_chain(selector)
-    assert chain, "chain must never be empty"
-    assert chain[-1].name == DETERMINISTIC_EXTRACTOR_NAME
+    assert [e.name for e in chain] == [DETERMINISTIC_EXTRACTOR_NAME]
+
+
+@pytest.mark.parametrize("selector", [SELECTOR_LLM, SELECTOR_ORCHESTRATOR])
+def test_llm_backed_selectors_never_resolve_to_the_keyword_extractor(selector):
+    chain = resolve_extractor_chain(selector)
+    assert DETERMINISTIC_EXTRACTOR_NAME not in [e.name for e in chain]
 
 
 def test_registry_never_drops_the_keyword_fallback():
     registry = KgExtractorRegistry()
-    # A registry without the keyword fallback is a programming error.
+    # A registry without the keyword fallback is a programming error --
+    # resolve_chain looks it up unconditionally before deciding whether the
+    # resolved extractor is LLM-backed, so this still raises regardless of
+    # selector.
     with pytest.raises(KeyError):
         registry.resolve_chain(SELECTOR_LLM)
 
 
-# --- run_extraction: selection + graceful degradation -----------------------
+# --- run_extraction: selection + truthful unavailability --------------------
 
 
 @pytest.mark.asyncio
@@ -146,7 +169,7 @@ async def test_run_extraction_uses_primary_on_success(monkeypatch):
     _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
 
     result = await run_extraction(
-        [_segment()], selector=SELECTOR_LLM, context=_llm_context()
+        [_segment()], selector=SELECTOR_ORCHESTRATOR, context=_orchestrator_context()
     )
 
     assert result is sentinel
@@ -155,37 +178,51 @@ async def test_run_extraction_uses_primary_on_success(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_extraction_falls_back_when_llm_raises(monkeypatch):
-    keyword_sentinel = object()
+async def test_run_extraction_propagates_when_orchestrator_extraction_raises(monkeypatch):
+    """A genuine extraction failure must not become a keyword result."""
     _patch_cores(
         monkeypatch,
         llm=AsyncMock(side_effect=RuntimeError("provider down")),
-        keyword=Mock(return_value=keyword_sentinel),
+        keyword=Mock(return_value=object()),
     )
 
-    result = await run_extraction(
-        [_segment()], selector=SELECTOR_LLM, context=_llm_context()
-    )
-
-    assert result is keyword_sentinel
+    with pytest.raises(RuntimeError, match="provider down"):
+        await run_extraction(
+            [_segment()], selector=SELECTOR_ORCHESTRATOR, context=_orchestrator_context()
+        )
 
 
 @pytest.mark.asyncio
-async def test_run_extraction_falls_back_when_credentials_missing(monkeypatch):
-    keyword_sentinel = object()
+async def test_run_extraction_propagates_when_orchestrator_credentials_missing(monkeypatch):
     llm_mock = AsyncMock()
-    _patch_cores(
-        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
-    )
+    keyword_mock = Mock(return_value=object())
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
 
-    # No api_key/model -> the LLM extractor is unavailable and the chain
-    # advances to the deterministic fallback without a network call.
-    result = await run_extraction(
-        [_segment()], selector=SELECTOR_LLM, context=KgExtractorContext()
-    )
-
-    assert result is keyword_sentinel
+    # No api_key -> the orchestrator extractor is unavailable, and with no
+    # fallback in its chain, run_extraction propagates rather than degrading.
+    with pytest.raises(ExtractorUnavailableError):
+        await run_extraction(
+            [_segment()], selector=SELECTOR_ORCHESTRATOR, context=KgExtractorContext()
+        )
     llm_mock.assert_not_awaited()
+    keyword_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_extraction_propagates_when_direct_llm_selected(monkeypatch):
+    """SELECTOR_LLM is policy-disabled and never falls back to keyword either."""
+    llm_mock = AsyncMock()
+    keyword_mock = Mock(return_value=object())
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
+
+    with pytest.raises(ExtractorUnavailableError, match="disabled"):
+        await run_extraction(
+            [_segment()],
+            selector=SELECTOR_LLM,
+            context=KgExtractorContext(api_key="key"),
+        )
+    llm_mock.assert_not_awaited()
+    keyword_mock.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -197,7 +234,7 @@ async def test_keyword_selector_never_calls_llm(monkeypatch):
     )
 
     result = await run_extraction(
-        [_segment()], selector=SELECTOR_KEYWORD, context=_llm_context()
+        [_segment()], selector=SELECTOR_KEYWORD, context=_orchestrator_context()
     )
 
     assert result is keyword_sentinel
@@ -213,70 +250,67 @@ async def test_orchestrator_routing_targets_the_orchestrator_base_url(monkeypatc
     llm_mock = AsyncMock(return_value=sentinel)
     _patch_cores(monkeypatch, llm=llm_mock, keyword=Mock())
 
-    context = KgExtractorContext(
-        api_key="key",
-        base_url="https://direct-provider.example",
-        model="tenant-direct-provider-model",
-        orchestrator_base_url="https://orchestrator.example/v1",
-        orchestrator_model="co-contract-resolved-model",
-    )
+    context = _orchestrator_context()
     result = await run_extraction(
         [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
     )
 
     assert result is sentinel
-    # The extraction call is routed at the orchestrator endpoint, NOT the raw
-    # provider base URL — this is what "route LLM extraction through
-    # contextual-orchestrator" means at the transport seam.
+    # The extraction call is routed at the orchestrator endpoint — this is
+    # what "route LLM extraction through contextual-orchestrator" means at
+    # the transport seam.
     assert llm_mock.await_args.kwargs["base_url"] == "https://orchestrator.example/v1"
     # The model sent is exactly context.orchestrator_model, forwarded
-    # verbatim -- never context.model (the tenant's unrelated direct-provider
-    # setting) and never a Naruon-hardcoded pool id. ADR-0005 Revision 7:
-    # hardcoding a pool id here was a boundary violation, since that
-    # authority belongs to contextual-orchestrator's own released consumer
-    # contract; reusing context.model would have been the same violation by
-    # another name, since email_import_service.py sets it to
-    # settings.OPENAI_MODEL regardless of selector.
+    # verbatim -- this extractor picks nothing itself (ADR-0005 Revision 7:
+    # hardcoding a pool id here was a boundary violation).
     assert llm_mock.await_args.kwargs["model"] == context.orchestrator_model
-    assert llm_mock.await_args.kwargs["model"] != context.model
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_routing_falls_back_when_unconfigured(monkeypatch):
-    keyword_sentinel = object()
+async def test_orchestrator_routing_propagates_when_unconfigured(monkeypatch):
     llm_mock = AsyncMock()
-    _patch_cores(
-        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
-    )
+    keyword_mock = Mock(return_value=object())
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
 
     # orchestrator selector but no orchestrator_base_url resolved -> unavailable,
-    # so it fails closed to the deterministic fallback without a network call.
-    context = KgExtractorContext(api_key="key", model="gpt-test")
-    result = await run_extraction(
-        [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
-    )
-
-    assert result is keyword_sentinel
+    # and with no fallback in its chain, this propagates rather than degrading.
+    context = KgExtractorContext(api_key="key", orchestrator_model="some-model")
+    with pytest.raises(ExtractorUnavailableError, match="endpoint is not configured"):
+        await run_extraction(
+            [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
+        )
     llm_mock.assert_not_awaited()
+    keyword_mock.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_direct_llm_routing_uses_provider_base_url(monkeypatch):
-    llm_mock = AsyncMock(return_value=object())
-    _patch_cores(monkeypatch, llm=llm_mock, keyword=Mock())
+async def test_orchestrator_routing_propagates_without_a_configured_model(monkeypatch):
+    """No hardcoded model to fall back on, and no keyword fallback either.
+
+    A prior revision of this extractor substituted a Naruon-hardcoded virtual
+    pool id ("orchestrator/free") whenever the model was unset, so
+    orchestrator-routed requests always "succeeded" regardless of whether a
+    real model was configured -- itself the bug ADR-0005 Revision 7
+    corrects. A later revision (8) additionally stopped silently degrading
+    to a keyword-derived result: contextual-orchestrator has published no
+    released consumer contract yet (0 GitHub Releases), so nothing
+    legitimately populates context.orchestrator_model today, and the correct
+    behavior is to propagate that unavailability, not mask it.
+    """
+    llm_mock = AsyncMock()
+    keyword_mock = Mock(return_value=object())
+    _patch_cores(monkeypatch, llm=llm_mock, keyword=keyword_mock)
 
     context = KgExtractorContext(
         api_key="key",
-        base_url="https://direct-provider.example",
-        model="gpt-test",
         orchestrator_base_url="https://orchestrator.example/v1",
     )
-    await run_extraction([_segment()], selector=SELECTOR_LLM, context=context)
-
-    # The non-orchestrator LLM selector keeps hitting the raw provider base URL
-    # and its own configured model — the pool-id pin is orchestrator-only.
-    assert llm_mock.await_args.kwargs["base_url"] == "https://direct-provider.example"
-    assert llm_mock.await_args.kwargs["model"] == "gpt-test"
+    with pytest.raises(ExtractorUnavailableError, match="no consumer release"):
+        await run_extraction(
+            [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
+        )
+    llm_mock.assert_not_awaited()
+    keyword_mock.assert_not_called()
 
 
 # --- Extractor units --------------------------------------------------------
@@ -294,10 +328,16 @@ async def test_deterministic_extractor_ignores_llm_context(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_llm_extractor_requires_credentials():
+async def test_direct_llm_extractor_is_unconditionally_disabled():
+    """Policy-disabled means no context can make it available.
+
+    Not a missing-configuration gate: even a fully "valid-looking" context
+    (credentials present) must still fail, and for the disabled-by-policy
+    reason specifically, not a credentials/model complaint.
+    """
     extractor = LlmGroundedExtractor(routed_via_orchestrator=False)
-    with pytest.raises(ExtractorUnavailableError):
-        await extractor.extract([_segment()], context=KgExtractorContext())
+    with pytest.raises(ExtractorUnavailableError, match="disabled"):
+        await extractor.extract([_segment()], context=KgExtractorContext(api_key="key"))
 
 
 @pytest.mark.asyncio
@@ -306,113 +346,62 @@ async def test_orchestrator_extractor_requires_endpoint():
     # Credentials present, but no orchestrator endpoint -> unavailable.
     with pytest.raises(ExtractorUnavailableError):
         await extractor.extract(
-            [_segment()], context=KgExtractorContext(api_key="key", model="gpt-test")
+            [_segment()], context=KgExtractorContext(api_key="key")
         )
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_routing_fails_closed_without_a_configured_model(monkeypatch):
-    """Orchestrator routing has no hardcoded model to fall back on.
-
-    A prior revision of this extractor substituted a Naruon-hardcoded virtual
-    pool id ("orchestrator/free") whenever the model was unset, so
-    orchestrator-routed requests always "succeeded" regardless of whether a
-    real model was configured. That was itself the bug ADR-0005 Revision 7
-    corrects: this extractor has no provider/model/pool selection authority
-    in either mode, and contextual-orchestrator has published no released
-    consumer contract yet (0 GitHub Releases), so nothing legitimately
-    populates context.orchestrator_model today. The correct behavior is to
-    fail closed to the deterministic fallback, exactly like direct-provider
-    mode does on a missing model.
-    """
-    keyword_sentinel = object()
-    llm_mock = AsyncMock()
-    _patch_cores(
-        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
-    )
-
-    context = KgExtractorContext(
-        api_key="key",
-        orchestrator_base_url="https://orchestrator.example/v1",
-    )
-    result = await run_extraction(
-        [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
-    )
-
-    assert result is keyword_sentinel
-    llm_mock.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_routing_does_not_leak_the_direct_provider_model(monkeypatch):
-    """A configured context.model must not substitute for orchestrator_model.
-
-    email_import_service.py's caller sets context.model to
-    settings.OPENAI_MODEL unconditionally, regardless of which extractor
-    selector is active -- so a populated context.model is the realistic
-    orchestrator-mode scenario today, not an empty context. Orchestrator mode
-    must still fail closed rather than forward that unrelated
-    direct-provider setting to the orchestrator gateway as a substitute
-    model/pool id.
-    """
-    keyword_sentinel = object()
-    llm_mock = AsyncMock()
-    _patch_cores(
-        monkeypatch, llm=llm_mock, keyword=Mock(return_value=keyword_sentinel)
-    )
-
-    context = KgExtractorContext(
-        api_key="key",
-        model="tenant-direct-provider-model",
-        orchestrator_base_url="https://orchestrator.example/v1",
-    )
-    result = await run_extraction(
-        [_segment()], selector=SELECTOR_ORCHESTRATOR, context=context
-    )
-
-    assert result is keyword_sentinel
-    llm_mock.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_direct_llm_routing_requires_model_even_with_api_key():
-    # Direct-provider mode still fails closed on a missing model: unlike
-    # orchestrator mode, _resolve_model returns context.model verbatim here,
-    # so an api_key alone is not sufficient.
-    extractor = LlmGroundedExtractor(routed_via_orchestrator=False)
+async def test_orchestrator_extractor_requires_credentials():
+    extractor = LlmGroundedExtractor(routed_via_orchestrator=True)
     with pytest.raises(ExtractorUnavailableError):
-        await extractor.extract([_segment()], context=KgExtractorContext(api_key="key"))
+        await extractor.extract([_segment()], context=KgExtractorContext())
 
 
 @pytest.mark.asyncio
-async def test_direct_llm_routing_rejects_blank_model():
-    # A blank (non-None) context.model must fail closed too, not be sent to
-    # the provider as an empty-string model id: `if model is None` alone
-    # would let "" through and only discover the problem after a failed
-    # network round-trip. Devin Review caught this in review of
-    # ContextualWisdomLab/naruon#1525.
-    extractor = LlmGroundedExtractor(routed_via_orchestrator=False)
+async def test_orchestrator_routing_rejects_blank_model():
+    # A blank (non-None) orchestrator_model must fail closed too, not be
+    # sent as an empty-string model id: `if model is None` alone would let
+    # "" through and only discover the problem after a failed network
+    # round-trip. (Originally caught by Devin Review against context.model
+    # in direct-provider mode, ContextualWisdomLab/naruon#1525; the same
+    # validation now lives on context.orchestrator_model, the only field
+    # still reachable by extract().)
+    extractor = LlmGroundedExtractor(routed_via_orchestrator=True)
     with pytest.raises(ExtractorUnavailableError):
         await extractor.extract(
-            [_segment()], context=KgExtractorContext(api_key="key", model="")
+            [_segment()],
+            context=KgExtractorContext(
+                api_key="key",
+                orchestrator_base_url="https://orchestrator.example/v1",
+                orchestrator_model="",
+            ),
         )
 
 
 @pytest.mark.asyncio
-async def test_direct_llm_routing_rejects_whitespace_only_model():
-    # A whitespace-only context.model ("   ") is truthy so `if not model`
-    # alone lets it through as an invalid model id sent straight to the
-    # provider, only failing after a network round-trip. Devin Review
-    # caught this in the same PR, one round after the blank-string fix.
-    extractor = LlmGroundedExtractor(routed_via_orchestrator=False)
+async def test_orchestrator_routing_rejects_whitespace_only_model():
+    # A whitespace-only orchestrator_model ("   ") is truthy so `if not
+    # model` alone lets it through as an invalid model id sent straight to
+    # the gateway, only failing after a network round-trip.
+    extractor = LlmGroundedExtractor(routed_via_orchestrator=True)
     with pytest.raises(ExtractorUnavailableError):
         await extractor.extract(
-            [_segment()], context=KgExtractorContext(api_key="key", model="   ")
+            [_segment()],
+            context=KgExtractorContext(
+                api_key="key",
+                orchestrator_base_url="https://orchestrator.example/v1",
+                orchestrator_model="   ",
+            ),
         )
 
 
 def test_custom_extractor_can_register_into_the_seam():
-    """A plugin/extractor registers by selector without editing core ingest."""
+    """A plugin/extractor registers by selector without editing core ingest.
+
+    A custom extractor that does not opt into requires_llm_capability keeps
+    the deterministic fallback behind it -- opting out of the fallback is a
+    deliberate choice an extractor makes, not the registry's default.
+    """
 
     class _CustomExtractor:
         name = "custom_project_graph"
@@ -425,7 +414,6 @@ def test_custom_extractor_can_register_into_the_seam():
     registry = build_default_registry()
     registry.register("custom", _CustomExtractor())
     assert registry.get("custom").name == "custom_project_graph"
-    # It still falls back to the deterministic reference extractor.
     chain = registry.resolve_chain("custom")
     assert chain[0].name == "custom_project_graph"
     assert chain[-1].name == DETERMINISTIC_EXTRACTOR_NAME

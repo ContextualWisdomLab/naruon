@@ -13,7 +13,7 @@ govern implementation.
 | [ADR-0002](0002-fitted-topic-artifact-consumption.md) | Conditionally consume only a versioned fitted topic artifact through a fail-closed adapter | Proposed | Target `PLANNED`; runtime `BLOCKED-UPSTREAM` |
 | [ADR-0003](0003-separate-topic-measurement-from-agenda-generation.md) | Keep statistical measurement separate from agenda generation | Proposed | Target and future capability `PLANNED`; no implementation authorization |
 | [ADR-0004](0004-status-weighted-calendar-conflicts.md) | Evaluate CalDAV VEVENT overlaps by occupying status; cancelled does not occupy | Accepted | `ACCEPTED-NARUON-POLICY`; advisory evaluate API only |
-| [ADR-0005](0005-kg-extraction-orchestrator-free-pool-pin.md) | Route KG extraction through contextual-orchestrator without Naruon choosing the pool/model itself; fails closed until contextual-orchestrator ships a released consumer contract (Revision 7) | Proposed | Target `PLANNED`; runtime `BLOCKED-UPSTREAM` (0 contextual-orchestrator releases as of 2026-09-02) |
+| [ADR-0005](0005-kg-extraction-orchestrator-free-pool-pin.md) | Route KG extraction through contextual-orchestrator without Naruon choosing the pool/model itself; LLM-backed selectors propagate unavailability instead of degrading to a keyword-derived result; direct-provider mode is policy-disabled (Revision 8) | Proposed | Target `PLANNED`; runtime `BLOCKED-UPSTREAM` (0 contextual-orchestrator releases as of 2026-09-02) |
 
 The complete topic-intelligence requirements, architecture, contract, UML,
 conceptual ERD, security, test, and operability graph is indexed at

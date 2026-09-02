@@ -11,39 +11,55 @@ seam:
   selector value, into which additional extractors (including future plugins,
   per the platform plan's ``kg.extractor`` extension point) register without
   editing core ingest,
-* :func:`resolve_extractor_chain` / :func:`run_extraction`, which build an
-  ordered fallback chain whose **terminal element is always the deterministic
-  keyword extractor** — encoding "rule-based extraction is fallback/reference
-  only" structurally rather than in an ad-hoc branch.
+* :func:`resolve_extractor_chain` / :func:`run_extraction`, which resolve an
+  extractor chain per selector.
 
-**The** ``orchestrator`` **selector is not operational yet.** Configuring
-``context.orchestrator_base_url`` alone is not sufficient to route a request
-through it: as of this module's last revision,
-``ContextualWisdomLab/contextual-orchestrator`` has published no release, so
-no caller can also resolve a legitimate ``context.orchestrator_model``, and
-every orchestrator-routed request fails closed to the deterministic keyword
-extractor as a result (see :func:`LlmGroundedExtractor.extract` and ADR-0005
-Revision 7). Configuring the endpoint now is still useful groundwork — it is
-the transport half of a two-part precondition — but it does not by itself
-enable extraction.
+**Fallback is opt-in per extractor kind, not universal.** An extractor that
+sets ``requires_llm_capability = True`` (both :data:`SELECTOR_LLM` and
+:data:`SELECTOR_ORCHESTRATOR` today) resolves to a chain containing *only
+itself* — if it is unavailable or fails, :func:`run_extraction` propagates
+that error rather than silently substituting the deterministic keyword
+extractor's output. This is deliberate product policy, not an oversight: a
+keyword-derived semantic result must never masquerade as successful LLM
+work (naruon#1525, exact-head review 2026-09-02). Only :data:`SELECTOR_KEYWORD`
+(explicit, or an unrecognized selector value) resolves to the deterministic
+extractor — that remains an intentional, always-available, non-LLM product
+mode, not a hidden fallback for a failed LLM request.
+
+**Neither LLM-backed selector is operational right now**, for related but
+distinct reasons:
+
+* :data:`SELECTOR_LLM` (direct-provider mode) is **disabled by policy**.
+  Naruon holds no production LLM provider/model authority outside a released
+  contextual-orchestrator consumer contract (see ADR-0005 Revision 8); every
+  call unconditionally raises :class:`ExtractorUnavailableError`, regardless
+  of any credentials or model configured in :class:`KgExtractorContext`.
+* :data:`SELECTOR_ORCHESTRATOR` is **not yet operational**, pending
+  contextual-orchestrator's first release. Configuring
+  ``context.orchestrator_base_url`` alone is not sufficient: as of this
+  module's last revision, ``ContextualWisdomLab/contextual-orchestrator`` has
+  published no release, so no caller can also resolve a legitimate
+  ``context.orchestrator_model``, and every orchestrator-routed request fails
+  closed as a result (see :func:`LlmGroundedExtractor.extract` and ADR-0005
+  Revisions 7–8). Configuring the endpoint now is still useful groundwork —
+  it is the transport half of a two-part precondition — but it does not by
+  itself enable extraction.
 
 Routing LLM extraction through **contextual-orchestrator** is modelled as a
 transport concern only: the orchestrator is an OpenAI-compatible gateway, so
 the ``orchestrator`` selector reuses the same grounded LLM extractor but
 points its SSRF-allowlisted client at the orchestrator base URL resolved by
 the caller (:class:`KgExtractorContext`). This module does **not** choose a
-provider, model, or virtual pool id on the caller's behalf in either mode —
-that authority belongs to whatever populates ``context.model`` (a direct
-provider config, read only by :data:`SELECTOR_LLM`) or ``context.
-orchestrator_model`` (a contextual-orchestrator consumer contract's
-resolved value, read only by :data:`SELECTOR_ORCHESTRATOR` — the two fields
-are kept separate precisely so a direct-provider setting can never leak into
-an orchestrator-routed request as a substitute model id). If the endpoint is
-unset, the resolved model is blank, or the provider credentials are
-missing, the extractor raises :class:`ExtractorUnavailableError` and the
-runner fails
-closed to the deterministic reference extractor — the projection is
-best-effort and never lost.
+provider, model, or virtual pool id on the caller's behalf — that authority
+belongs to whatever populates ``context.orchestrator_model`` (a contextual-
+orchestrator consumer contract's resolved value, once one exists); nothing
+populates it today. If the endpoint is unset, the resolved model is blank,
+or the provider credentials are missing, the extractor raises
+:class:`ExtractorUnavailableError`, and :func:`run_extraction` propagates it
+rather than substituting a different algorithm's output — the caller
+(``email_import_service.py::_persist_project_graph_projection``) already
+treats project-graph population as best-effort at a higher layer, so this
+does not fail the email import itself, only its graph projection.
 """
 
 from __future__ import annotations
@@ -75,11 +91,16 @@ SELECTOR_ORCHESTRATOR = "orchestrator"
 class ExtractorUnavailableError(RuntimeError):
     """An extractor cannot run in the current context.
 
-    Raised for a *recoverable* precondition — missing LLM credentials, an
-    unconfigured orchestrator endpoint — so :func:`run_extraction` advances to
-    the next extractor in the fallback chain instead of propagating. It is not
-    used for genuine extraction failures (those surface as ordinary exceptions,
-    which the runner also treats as fall-through).
+    Raised for a precondition the extractor cannot satisfy — missing LLM
+    credentials, an unconfigured orchestrator endpoint, a policy-disabled
+    mode. What :func:`run_extraction` does with it depends on the resolved
+    chain: for :data:`SELECTOR_KEYWORD` or an unrecognized selector, the
+    chain has no other member, so this (or any exception) simply propagates;
+    for a plugin extractor that does not set ``requires_llm_capability``,
+    the runner advances to the deterministic fallback instead. Neither
+    :data:`SELECTOR_LLM` nor :data:`SELECTOR_ORCHESTRATOR` falls back —
+    both set ``requires_llm_capability = True`` specifically so this error
+    (or any other) propagates rather than being silently absorbed.
     """
 
 
@@ -89,26 +110,22 @@ class KgExtractorContext:
 
     Deliberately small and provider-agnostic so extractors stay decoupled from
     import-service internals (no ambient session/settings authority).
-    ``api_key``/``base_url``/``model`` describe the OpenAI-compatible LLM
-    endpoint a direct LLM extractor calls; ``orchestrator_base_url`` is the
-    OpenAI-compatible contextual-orchestrator gateway an orchestrator-routed
-    extractor targets instead of the raw provider.
+    ``api_key`` is the shared credential presented to whichever endpoint is
+    targeted; ``orchestrator_base_url`` is the OpenAI-compatible contextual-
+    orchestrator gateway an orchestrator-routed extractor targets, and
+    ``orchestrator_model`` is a contextual-orchestrator consumer contract's
+    resolved model/pool value for that request — nothing populates it today
+    because no such contract has been released yet (ADR-0005 Revision 8), so
+    orchestrator-routed extraction correctly stays unavailable until both a
+    release exists and a caller resolves this field from it.
 
-    ``model`` and ``orchestrator_model`` are deliberately separate fields, not
-    one field reused across modes: ``model`` is the caller's direct-provider
-    setting (e.g. the tenant's configured OpenAI model) and must never reach
-    the orchestrator gateway, which resolves its own model/pool id from a
-    contextual-orchestrator consumer contract instead. ``orchestrator_model``
-    is that contract-resolved value; today no caller populates it, because
-    contextual-orchestrator has published no release for Naruon to consume
-    (see ADR-0005 Revision 7), so orchestrator-routed extraction correctly
-    stays unavailable until both a release exists and a caller resolves this
-    field from it.
+    There is deliberately no direct-provider ``base_url``/``model`` field:
+    :data:`SELECTOR_LLM` (direct-provider mode) is policy-disabled (ADR-0005
+    Revision 8) and never reads either, so carrying them here would be dead
+    configuration that could be mistaken for a live capability.
     """
 
     api_key: str | None = None
-    base_url: str | None = None
-    model: str | None = None
     orchestrator_base_url: str | None = None
     orchestrator_model: str | None = None
 
@@ -141,16 +158,20 @@ class KgExtractor(Protocol):
 
 
 class DeterministicKeywordExtractor:
-    """The deterministic keyword baseline — the structural fallback extractor.
+    """The deterministic keyword baseline — always available, never an LLM proxy.
 
     Pure and dependency-free: it needs no credentials and always produces a
-    result, which is exactly why the registry keeps it as the terminal element
-    of every fallback chain.
+    result. It is the terminal element of any chain that permits a fallback
+    (see :attr:`requires_llm_capability`) and the sole element of a chain
+    explicitly requesting :data:`SELECTOR_KEYWORD` — an intentional,
+    always-on, non-LLM product mode in its own right, not merely a rescue
+    path for a failed LLM request.
     """
 
     name = DETERMINISTIC_EXTRACTOR_NAME
     version = DETERMINISTIC_EXTRACTOR_VERSION
     routed_via_orchestrator = False
+    requires_llm_capability = False
 
     async def extract(
         self,
@@ -164,50 +185,40 @@ class DeterministicKeywordExtractor:
 class LlmGroundedExtractor:
     """The grounded LLM extractor, in direct-provider or orchestrator-routed mode.
 
-    Both modes run the identical grounded extraction core
-    (:func:`extract_project_semantics_llm`, which enforces segment citations);
-    they differ only in which OpenAI-compatible endpoint the request is routed
-    to. When ``routed_via_orchestrator`` is set the request targets the
-    contextual-orchestrator gateway resolved into the context; otherwise it hits
-    the tenant's provider directly. This class has no provider/model/pool
-    selection authority of its own in either mode — direct-provider mode
-    forwards ``context.model`` (the caller's own configuration) verbatim,
-    orchestrator mode forwards ``context.orchestrator_model`` (a contextual-
-    orchestrator released consumer contract's resolved value, once one
-    exists) verbatim, and the two fields are never substituted for each
-    other.
+    Both modes would run the identical grounded extraction core
+    (:func:`extract_project_semantics_llm`, which enforces segment citations)
+    over whichever OpenAI-compatible endpoint the request is routed to — but
+    as of ADR-0005 Revision 8, direct-provider mode (``routed_via_orchestrator
+    = False``) is policy-disabled outright: Naruon holds no production LLM
+    provider/model authority outside a released contextual-orchestrator
+    consumer contract, so :meth:`extract` raises unconditionally for it,
+    before looking at any other context field. Orchestrator mode targets the
+    contextual-orchestrator gateway resolved into the context and forwards
+    ``context.orchestrator_model`` verbatim — this class has no model
+    selection authority of its own even there; nothing populates that field
+    until contextual-orchestrator ships a release.
+
+    ``requires_llm_capability = True`` on every instance of this class tells
+    :meth:`KgExtractorRegistry.resolve_chain` not to append the deterministic
+    keyword extractor behind it: an unavailable or failed LLM-backed request
+    must propagate, never silently resolve to a different algorithm's output.
     """
 
     name = LLM_EXTRACTOR_NAME
     version = LLM_EXTRACTOR_VERSION
+    requires_llm_capability = True
 
     def __init__(self, *, routed_via_orchestrator: bool = False) -> None:
         self.routed_via_orchestrator = routed_via_orchestrator
 
     def _resolve_base_url(self, context: KgExtractorContext) -> str | None:
-        if self.routed_via_orchestrator:
-            if not context.orchestrator_base_url:
-                raise ExtractorUnavailableError(
-                    "contextual-orchestrator endpoint is not configured"
-                )
-            return context.orchestrator_base_url
-        return context.base_url
-
-    def _resolve_model(self, context: KgExtractorContext) -> str | None:
-        # Neither mode picks a model on the caller's behalf, and the two modes
-        # deliberately read different fields: context.model is the caller's
-        # direct-provider setting and must never be forwarded to the
-        # orchestrator gateway as a substitute model/pool id (that would be
-        # the exact bypass ADR-0005 Revision 7 closes -- see
-        # email_import_service.py, which sets context.model to
-        # settings.OPENAI_MODEL unconditionally, regardless of selector).
-        # context.orchestrator_model is the contextual-orchestrator
-        # consumer-contract value instead; no caller populates it today
-        # because no contract has been released, so this correctly resolves
-        # to None and orchestrator-routed extraction fails closed.
-        if self.routed_via_orchestrator:
-            return context.orchestrator_model
-        return context.model
+        # Only ever reached in orchestrator mode: extract() raises before
+        # calling this in direct-provider mode.
+        if not context.orchestrator_base_url:
+            raise ExtractorUnavailableError(
+                "contextual-orchestrator endpoint is not configured"
+            )
+        return context.orchestrator_base_url
 
     async def extract(
         self,
@@ -215,31 +226,35 @@ class LlmGroundedExtractor:
         *,
         context: KgExtractorContext,
     ) -> ProjectSemanticExtractionResult:
+        if not self.routed_via_orchestrator:
+            # Unconditional: no credential, model, or endpoint in `context`
+            # can make direct-provider mode available. This is a policy
+            # disable, not a missing-configuration gate -- see ADR-0005
+            # Revision 8 (naruon#1525, exact-head review 2026-09-02).
+            raise ExtractorUnavailableError(
+                "direct-provider LLM extraction is disabled: all LLM-backed "
+                "KG extraction must route through contextual-orchestrator's "
+                "released consumer contract (none exists yet), and Naruon "
+                "holds no production LLM provider/model authority outside "
+                "that boundary (see ADR-0005 Revision 8)"
+            )
         if not context.api_key:
             raise ExtractorUnavailableError("LLM provider credentials are not resolved")
         base_url = self._resolve_base_url(context)
-        model = self._resolve_model(context)
+        model = context.orchestrator_model
         if not model or not model.strip():
             # An unset, blank, or whitespace-only model must fail closed
-            # rather than be sent as an invalid model id (only discovered
-            # after a network round-trip) or silently substituted with a
-            # hardcoded value -- but the two modes fail for genuinely
-            # different reasons, so the message says which, truthfully
-            # (Devin Review flagged the previous shared "credentials are not
-            # resolved" message as misleading here: api_key can easily be
-            # present while only the model is unresolved). For orchestrator
-            # mode this is presently *always* the outcome -- contextual-
-            # orchestrator has no released consumer contract yet (0 GitHub
-            # Releases as of ADR-0005 Revision 7), so no caller populates
-            # context.orchestrator_model, and this extractor has no
-            # authority to invent a value for it.
-            if self.routed_via_orchestrator:
-                raise ExtractorUnavailableError(
-                    "contextual-orchestrator has published no consumer "
-                    "release yet, so no orchestrator_model is available to "
-                    "route this request (see ADR-0005 Revision 7)"
-                )
-            raise ExtractorUnavailableError("LLM provider model is not configured")
+            # rather than be sent as an invalid model id, only discovered
+            # after a network round-trip. This is presently *always* the
+            # outcome -- contextual-orchestrator has no released consumer
+            # contract yet (0 GitHub Releases as of ADR-0005 Revision 7), so
+            # no caller populates context.orchestrator_model, and this
+            # extractor has no authority to invent a value for it.
+            raise ExtractorUnavailableError(
+                "contextual-orchestrator has published no consumer "
+                "release yet, so no orchestrator_model is available to "
+                "route this request (see ADR-0005 Revision 7)"
+            )
         return await extract_project_semantics_llm(
             segments,
             api_key=context.api_key,
@@ -254,8 +269,11 @@ class KgExtractorRegistry:
     The registry is the pluggable seam: a plugin or a new extractor registers a
     :class:`KgExtractor` under a selector key and becomes selectable via
     ``PROJECT_GRAPH_EXTRACTOR`` without touching the ingest pipeline. Chain
-    resolution always appends the deterministic keyword extractor as the
-    terminal fallback.
+    resolution appends the deterministic keyword extractor as a terminal
+    fallback *unless* the resolved extractor sets
+    ``requires_llm_capability = True`` (see :class:`LlmGroundedExtractor`),
+    in which case the chain contains only that extractor and an unavailable
+    or failed request propagates instead of silently degrading.
     """
 
     def __init__(self) -> None:
@@ -281,6 +299,8 @@ class KgExtractorRegistry:
         primary = self._by_selector.get(selector, fallback)
         if primary is fallback:
             return [fallback]
+        if getattr(primary, "requires_llm_capability", False):
+            return [primary]
         return [primary, fallback]
 
 
@@ -319,9 +339,15 @@ async def run_extraction(
 
     Each extractor that raises :class:`ExtractorUnavailableError` (recoverable
     precondition) or any other exception (extraction failure) is skipped in
-    favour of the next. Because the chain always ends at the pure deterministic
-    keyword extractor, a result is effectively always produced; the trailing
-    raise only guards a misconfigured registry with no fallback.
+    favour of the next member of the chain, if one exists. Whether one exists
+    depends on the resolved extractor: :meth:`KgExtractorRegistry.
+    resolve_chain` appends the deterministic keyword extractor only behind an
+    extractor that does *not* set ``requires_llm_capability = True``. For
+    :data:`SELECTOR_LLM` and :data:`SELECTOR_ORCHESTRATOR` the chain has no
+    other member, so the loop below ends immediately and the trailing
+    ``raise`` propagates the real failure -- not a "no extractor available"
+    placeholder -- because both branches below now always record it as
+    ``last_error``, whichever kind of exception it was.
     """
     chain = resolve_extractor_chain(selector, registry=registry)
     segment_list = list(segments)
@@ -337,12 +363,13 @@ async def run_extraction(
             )
             last_error = exc
             continue
-        except Exception:  # noqa: BLE001 - degrade to the next extractor
+        except Exception as exc:  # noqa: BLE001 - degrade to the next extractor
             logger.warning(
                 "Extractor %s failed; falling back to the next extractor",
                 extractor.name,
                 exc_info=True,
             )
+            last_error = exc
             continue
     if last_error is not None:
         raise last_error

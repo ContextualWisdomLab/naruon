@@ -50,6 +50,41 @@
   `docs/product-goal-directive.md`의 repair-not-close PR 수명주기 정책 준수).
   검증: `backend/tests/test_project_graph_extractor_registry.py` 전체 통과
   (27개, 정정된/신규 회귀 테스트 포함), `ruff check` clean.
+- **정정 2 (owner 직접 지적, 같은 PR #1525, exact-head `bb889797` 재검토):** 위
+  정정이 `orchestrator_model` 미해결 시 keyword fallback으로 fail closed된다고
+  기록했으나, 이 fallback 자체가 남은 경계 위반이었습니다. `run_extraction`은
+  선택자와 무관하게 모든 chain 뒤에 deterministic keyword extractor를 붙이고
+  `ExtractorUnavailableError`와 임의 예외를 모두 잡아 다음 단계로 넘어갔습니다.
+  결과적으로 LLM 의미 추출 요청이 조용히 알고리즘을 바꿔 keyword 기반 결과를
+  반환했습니다 — `docs/product-goal-directive.md` 8항의 "missing/incompatible/
+  unreleased capability는 fail closed해야 하고, deterministic 대체가 성공한
+  LLM 작업으로 위장해서는 안 된다"는 원칙 위반입니다. 또한 직접 공급자
+  `PROJECT_GRAPH_EXTRACTOR=llm` 경로가 CO 경계 밖의 두 번째 Naruon 소유 LLM
+  라우팅 경로로 그대로 남아 있었습니다(이전 Revision 7은 orchestrator 경로만
+  다뤘습니다).
+
+  `LlmGroundedExtractor`에 `requires_llm_capability = True` 클래스 속성을
+  추가하고 `KgExtractorRegistry.resolve_chain()`이 이 속성을 가진 extractor
+  뒤에는 keyword fallback을 붙이지 않도록 고쳤습니다 — `llm`/`orchestrator`
+  선택자는 이제 단일 요소 chain이라 실패가 그대로 전파됩니다(`run_extraction`의
+  일반 예외 분기도 `last_error`를 기록하도록 고쳐 진짜 실패 사유가 전파되게
+  했습니다). `PROJECT_GRAPH_EXTRACTOR=llm`(직접 공급자 경로)은 정책적으로
+  비활성화했습니다 — `LlmGroundedExtractor.extract()`가 `routed_via_orchestrator`
+  가 `False`일 때 어떤 자격 증명·모델 필드와도 무관하게 무조건 예외를 던집니다.
+  코드는 삭제가 아니라 비활성화만 했습니다(가역성 유지). 도달 불가능해진
+  `KgExtractorContext.base_url`/`.model` 필드는 완전히 제거했고,
+  `email_import_service.py`는 더 이상 이를 채우지 않습니다.
+
+  구현 전 영향 범위를 확인했습니다: 유일한 호출자
+  `_persist_project_graph_projection`은 이미 추출 전체를 "best-effort" 로
+  문서화된 `try/except Exception`으로 감싸 이메일 수신 자체는 절대 실패하지
+  않습니다 — 이번 변경으로 이메일 가져오기가 깨지는 일은 없고, 다만 LLM/
+  orchestrator를 쓸 수 없는 상황에서 keyword 기반 낮은 품질의 project graph가
+  더 이상 만들어지지 않을 뿐입니다. `docs/adr/0005-kg-extraction-orchestrator-free-pool-pin.md`에
+  Revision 8으로 전체 근거·대안 검토·영향 범위 확인 내역을 기록했습니다.
+  검증: `backend/tests/test_project_graph_extractor_registry.py`,
+  `test_project_graph_llm_extractor.py`, `test_email_import_service.py`
+  전체 통과, 전체 backend suite 1810 passed/32 skipped, `ruff check` clean.
 - 긴 이메일·첨부 본문을 의미 단위 청크로 임베딩한 뒤 기존 email/attachment 벡터 계약으로 평균화하고, 청크 요청·벡터 누적을 제한된 창으로 처리합니다. OpenAI `text-embedding-3-*`에는 저장 차원(`1536`)을 직접 요청하도록 보강했습니다. 합성 메일 fixture 5건(70청크)과 provider 요청 계약으로 1,536차원 벡터 경로를 검증했으며, 실행 시 선택한 임베딩 제공자에 본문·파싱된 첨부 텍스트를 전송할 수 있습니다. 회사 기밀 데이터는 fixture·commit·PR·log에 포함하지 않습니다.
 - EmailDetail 테스트가 지원하지 않는 스레드 병합/분리 버튼을 `textContent`뿐 아니라 `aria-label`과 `title` 접근 가능 이름으로도 검출하도록 바꿔, 아이콘 전용 버튼 회귀를 놓치지 않습니다.
 
