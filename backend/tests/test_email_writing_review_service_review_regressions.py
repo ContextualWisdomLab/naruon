@@ -159,11 +159,17 @@ class _JudgeExecutor:
 
 
 class _Session:
-    def __init__(self, *, block_commit: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        block_commit: bool = False,
+        block_rollback: bool = False,
+    ) -> None:
         self.added: list[object] = []
         self.commits = 0
         self.rollbacks = 0
         self.block_commit = block_commit
+        self.block_rollback = block_rollback
 
     def add(self, value: object) -> None:
         self.added.append(value)
@@ -175,6 +181,8 @@ class _Session:
 
     async def rollback(self) -> None:
         self.rollbacks += 1
+        if self.block_rollback:
+            await asyncio.Event().wait()
 
 
 def _runtime(*, total_wall_seconds: float = 5.0) -> EmailWritingReviewRuntimeProfile:
@@ -268,9 +276,12 @@ async def test_injected_candidate_port_is_revalidated_against_authorized_bundle(
 
 
 @pytest.mark.asyncio
-async def test_timeout_finalization_does_not_wait_unbounded_for_evidence_commit() -> None:
+@pytest.mark.parametrize("block_rollback", [False, True])
+async def test_timeout_finalization_bounds_commit_and_rollback_cleanup(
+    block_rollback: bool,
+) -> None:
     request = _request()
-    session = _Session(block_commit=True)
+    session = _Session(block_commit=True, block_rollback=block_rollback)
     service = _service(
         request,
         _CandidatePort(_candidate_result(), delay_seconds=0.02),
