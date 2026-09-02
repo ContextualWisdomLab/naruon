@@ -255,6 +255,9 @@ if [ "$1" = "api" ] && [[ "$args" == *repos/*/issues/42/comments* ]]; then
       coderabbit_approval_pending|missing_coderabbit_adversarial_approval_with_pending_notice)
         printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->CodeRabbit has no unresolved comments, but it has not reviewed the latest commit. CodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} --><!-- approval_notice_end -->"}]'
         ;;
+      coderabbit_approval_pending_with_separate_blocking_warning)
+        printf '[{"id":777,"user":{"login":"coderabbitai[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"<!-- approval_notice_start -->CodeRabbit has no unresolved comments, but it has not reviewed the latest commit. CodeRabbit will approve the changes if it finds no blocking issues. <!-- {\\"headCommitId\\":\\"0123456789abcdef0123456789abcdef01234567\\"} --><!-- approval_notice_end -->\\n\\nSeparately: Pre-merge blocking warning for 0123456789abcdef0123456789abcdef01234567."}]'
+        ;;
       github_code_quality_blocking_comment)
         printf '[{"id":777,"user":{"login":"github-code-quality[bot]"},"created_at":"2026-05-19T00:01:00Z","body":"Potential issue for 0123456789abcdef0123456789abcdef01234567"}]'
         ;;
@@ -568,16 +571,40 @@ assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval() {
   assert_in_file 'conclusion=success' "$temp_dir/gh.log"
 }
 
-assert_missing_coderabbit_adversarial_approval_survives_pending_notice() {
+assert_missing_coderabbit_adversarial_approval_still_waits_for_pending_coderabbit_notice() {
+  # CodeRabbit has no check-run yet, but its own approval-pending issue
+  # comment shows it is actively reviewing this exact head -- it is not
+  # absent, so a structured OpenCode adversarial approval must not
+  # substitute for CodeRabbit's own terminal verdict. Governance must stay
+  # non-terminal (waiting), never publish conclusion=success, on this
+  # combination.
   local temp_dir
   temp_dir="$(mktemp -d)"
   run_gate missing_coderabbit_adversarial_approval_with_pending_notice "$temp_dir"
 
   assert_exit_code 0 "$temp_dir"
-  assert_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
-  assert_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
-  assert_not_in_file 'Waiting for CodeRabbit to review the latest commit' "$temp_dir/output.txt"
-  assert_in_file 'conclusion=success' "$temp_dir/gh.log"
+  assert_in_file 'Waiting for CodeRabbit to review the latest commit' "$temp_dir/output.txt"
+  assert_not_in_file 'accepted current-head OpenCode App adversarial approval' "$temp_dir/output.txt"
+  assert_not_in_file 'PR governance metadata gate is ready' "$temp_dir/output.txt"
+  assert_not_in_file 'conclusion=success' "$temp_dir/gh.log"
+  assert_in_file 'status=in_progress' "$temp_dir/gh.log"
+}
+
+assert_coderabbit_approval_pending_notice_does_not_hide_separate_blocking_warning() {
+  # A CodeRabbit issue comment can legitimately carry both the boilerplate
+  # approval-pending notice and a separate, genuine pre-merge blocking
+  # warning in the same body. Excluding the whole comment from the
+  # blocking-evidence scan whenever the pending-notice marker appears
+  # anywhere in it would hide that second, real finding -- only the
+  # marker-delimited span itself should be exempted.
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  run_gate coderabbit_approval_pending_with_separate_blocking_warning "$temp_dir"
+
+  assert_exit_code 0 "$temp_dir"
+  assert_in_file 'Current-head CodeRabbit issue comment has blocking warning/failure evidence' "$temp_dir/gh.log"
+  assert_in_file 'conclusion=failure' "$temp_dir/gh.log"
+  assert_not_in_file '^pr merge' "$temp_dir/gh.log"
 }
 
 assert_missing_coderabbit_rejects_non_authoritative_opencode_evidence() {
@@ -976,7 +1003,7 @@ assert_coderabbit_failed_commit_status_blocks
 assert_coderabbit_unknown_commit_status_fails_closed
 assert_missing_coderabbit_waits_for_adversarial_opencode_approval
 assert_missing_coderabbit_accepts_exact_head_adversarial_opencode_approval
-assert_missing_coderabbit_adversarial_approval_survives_pending_notice
+assert_missing_coderabbit_adversarial_approval_still_waits_for_pending_coderabbit_notice
 assert_missing_coderabbit_rejects_non_authoritative_opencode_evidence
 assert_opencode_review_lookup_error_is_logged_but_not_published_verbatim
 assert_completed_gate_check_is_republished_as_new_run
@@ -995,6 +1022,7 @@ assert_coderabbit_review_limit_issue_comment_does_not_block
 assert_coderabbit_no_actionable_summary_does_not_block
 assert_coderabbit_no_actionable_summary_with_blocker_still_blocks
 assert_coderabbit_approval_pending_waits_without_blocking
+assert_coderabbit_approval_pending_notice_does_not_hide_separate_blocking_warning
 assert_coderabbit_current_review_comment_blocks
 assert_coderabbit_resolved_current_review_comment_does_not_block
 assert_truncated_review_thread_metadata_blocks
