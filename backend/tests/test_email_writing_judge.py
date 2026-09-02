@@ -148,16 +148,7 @@ def _task_request_payload(task: EmailWritingJudgeTask) -> dict[str, Any]:
     return json.loads(task.task_text[start_at:end_at])
 
 
-def test_released_judge_package_is_unavailable_and_fails_closed() -> None:
-    def _missing_package(_name: str) -> object:
-        raise ImportError("fast_mlsirm")
-
-    with pytest.raises(EmailWritingJudgeError) as captured:
-        load_released_judge_symbols(module_importer=_missing_package)
-    assert captured.value.code == "judge_package_unavailable"
-
-
-def test_criterion_ids_are_independently_observable_two_word_snake_case() -> None:
+def test_criterion_ids_match_canonical_rubric_and_stable_snake_case() -> None:
     assert EMAIL_WRITING_JUDGE_CRITERION_IDS == (
         "issue_support",
         "span_fidelity",
@@ -167,12 +158,22 @@ def test_criterion_ids_are_independently_observable_two_word_snake_case() -> Non
         "request_strength_preservation",
         "audience_pragmatics",
         "technical_precision",
-        "actionability_support",
+        "actionability",
         "explanation_quality",
     )
     for criterion_id in EMAIL_WRITING_JUDGE_CRITERION_IDS:
-        assert "_" in criterion_id
         assert criterion_id == criterion_id.lower()
+        assert criterion_id.replace("_", "").isalpha()
+    assert "actionability_support" not in EMAIL_WRITING_JUDGE_CRITERION_IDS
+
+
+def test_released_judge_package_is_unavailable_and_fails_closed() -> None:
+    def _missing_package(_name: str) -> object:
+        raise ImportError("fast_mlsirm")
+
+    with pytest.raises(EmailWritingJudgeError) as captured:
+        load_released_judge_symbols(module_importer=_missing_package)
+    assert captured.value.code == "judge_package_unavailable"
 
 
 def test_required_criteria_depend_on_candidate_kind_without_changing_ids() -> None:
