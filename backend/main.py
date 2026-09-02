@@ -18,6 +18,7 @@ from api.tenant_config import router as tenant_config_router
 from api.email_writing_orchestrator_config import (
     router as email_writing_orchestrator_config_router,
 )
+from api.email_writing_review import router as email_writing_review_router
 from api.runtime_config import router as runtime_config_router
 from api.llm_providers import router as llm_providers_router
 from api.prompts import router as prompts_router
@@ -228,6 +229,10 @@ app.include_router(runner_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(tenant_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
 app.include_router(
     email_writing_orchestrator_config_router,
+    dependencies=PRIVATE_API_DEPENDENCIES,
+)
+app.include_router(
+    email_writing_review_router,
     dependencies=PRIVATE_API_DEPENDENCIES,
 )
 app.include_router(runtime_config_router, dependencies=PRIVATE_API_DEPENDENCIES)
