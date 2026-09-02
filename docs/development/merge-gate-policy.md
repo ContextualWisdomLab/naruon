@@ -2,9 +2,10 @@
 
 This repository's merge gate is evidence-based: required checks must pass,
 review threads must be resolved, robot-review evidence must be current-head, and
-the live organization ruleset currently requires one qualifying independent
-approval. Robot-review evidence does not replace the GitHub approval requirement
-unless that evidence is itself carried by a qualifying `APPROVED` review object.
+the live rulesets currently require one qualifying independent approval after
+the last push. Robot-review evidence does not replace the GitHub approval
+requirement unless that evidence is itself carried by a qualifying `APPROVED`
+review object.
 
 ## Required gate contract
 
@@ -26,10 +27,15 @@ unless that evidence is itself carried by a qualifying `APPROVED` review object.
 - The active organization ruleset `CWL Central required workflows` currently
   sets `required_approving_review_count=1`. Do not lower that count, add a
   bypass, or reinterpret robot status/check evidence as an approval merely to
-  land a PR. A merge therefore needs one qualifying independent approval in
-  addition to the other live gates. If the canonical organization owner later
-  changes this contract, refetch the ruleset first and update this document and
-  the robot-review skill in the same evidence-backed change.
+  land a PR.
+- The active repository ruleset `Lock default branch` independently sets
+  `required_approving_review_count=1`, `require_last_push_approval=true`, and
+  `required_review_thread_resolution=true`, with no repository-ruleset bypass
+  actor. The qualifying independent approval must therefore be current after
+  the last push. Any later push invalidates predecessor approval evidence.
+- If a canonical ruleset owner later changes these contracts, refetch every
+  active ruleset first and update this document and the robot-review skill from
+  that live evidence. Historical repository settings are not current authority.
 - PR Governance automation is metadata-only: it must not checkout pull request
   code, clone the head branch, dismiss reviews, enable auto-merge, or use admin
   merge. It may read PR/check/review-thread metadata and post blocker comments;
@@ -66,7 +72,7 @@ unless that evidence is itself carried by a qualifying `APPROVED` review object.
   evaluated by required checks and PR Governance; duplicating that gate inside
   CodeRabbit can strand stale GitHub `CHANGES_REQUESTED` review objects when an
   unrelated scanner is temporarily failing.
-- Bypass actors must not be configured for routine delivery.
+- Bypass actors must not be configured or used for routine delivery.
 - Security workflows and scanners are required gates, not optional paths.
 
 ## Evidence commands
@@ -92,11 +98,12 @@ approval rule only when GitHub records it as a qualifying current-head
 `APPROVED` review; a check-run, walkthrough, overview comment, or
 `github-actions` review is not a substitute.
 
-The active organization ruleset currently requires
-`required_approving_review_count=1`. Do not lower the rule to unblock a PR.
-Refetch the ruleset before each lifecycle decision, then require the current
-approval count together with current-head robot evidence, required checks, and
-thread resolution.
+The effective live rules currently require
+`required_approving_review_count=1`, and the repository rule additionally sets
+`require_last_push_approval=true`. Do not lower either rule to unblock a PR.
+Refetch every active ruleset before each lifecycle decision, then require one
+qualifying independent approval after the last push together with current-head
+robot evidence, required checks, and thread resolution.
 
 ## Stale required contexts
 
@@ -117,13 +124,17 @@ Handling policy:
    successfully on the protected branch.
 4. Re-run required-check and live-ruleset evidence after restore.
 
+The approval count and `require_last_push_approval=true` are not stale status
+contexts and must not be weakened by this procedure.
+
 ## PR #108/#109 historical evidence
 
 PR #108 and issue #109 record an earlier repository policy in which the expected
 approval count was zero while robot-review evidence was handled separately.
 That history explains the old guidance but is not current merge authority. The
-active organization ruleset now requires one approval, so current delivery must
-follow the live ruleset rather than replaying the historical setting.
+active rulesets now require one approval, including a repository rule requiring
+that approval after the last push, so current delivery must follow live ruleset
+evidence rather than replaying historical settings.
 
 The durable lesson from #108/#109 still applies: distinguish robot-review
 evidence from GitHub approval objects, preserve review-thread resolution, and
@@ -134,7 +145,8 @@ is waiting.
 ## Rollback and recovery
 
 - Do not add bypass actors, disable security checks, dismiss reviews, use admin
-  merge, or lower the live approval count for normal delivery.
+  merge, lower the live approval count, or disable post-last-push approval for
+  normal delivery.
 - Any explicitly authorized temporary required-context change must have captured
   before/after ruleset JSON, owner, expiry, current head SHA, equivalent
   temporary evidence, and a named restore condition.
