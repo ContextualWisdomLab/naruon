@@ -1,8 +1,12 @@
-"""Regression contract for evidence-based sender relationship classification."""
+"""Regression contract for evidence-based sender relationship decisions."""
 
 import pytest
 
-from services.ontology_service import OntologyService, RelationshipClassificationUnavailable
+from services.ontology_service import (
+    OntologyService,
+    RelationshipActionPolicyUnavailable,
+    RelationshipClassificationUnavailable,
+)
 
 
 def test_content_and_sender_names_cannot_synthesize_relationship_type_or_confidence() -> None:
@@ -23,3 +27,9 @@ def test_same_domain_is_not_relationship_ground_truth() -> None:
             "unknown@company.example",
             "Hello",
         )
+
+
+def test_relationship_label_cannot_trigger_local_priority_action_policy() -> None:
+    service = OntologyService()
+    with pytest.raises(RelationshipActionPolicyUnavailable):
+        service.next_action_for_relationship("Newsletter")
